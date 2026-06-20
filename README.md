@@ -47,7 +47,15 @@ PANDAR_AGENT_NAME=local-agent
 PANDAR_AGENT_VERSION=0.1.0
 ```
 
-Phase 2 only establishes the hub-agent reverse control channel and command ledger flow. It does not open Bambu machine MQTT or file-transfer sockets.
+Agent-local Bambu printers are configured explicitly with `PANDAR_PRINTERS`:
+
+```bash
+PANDAR_PRINTERS='[{"host":"192.0.2.10","serial":"01S00EXAMPLE","access_code":"12345678","model":"A1 Mini","name":"garage-a1"}]'
+```
+
+The value is a JSON array. `host`, `serial`, and `access_code` are required; `model` and `name` are optional. Empty, whitespace, or `[]` means no configured printers and the agent will not open Bambu machine sockets. Invalid printer config fails at startup with `PANDAR_PRINTERS` context.
+
+Phase 3 adds the agent-side MQTT boundary, `RefreshPrinters` gateway path, and machine file-transfer boundary. Bambu LAN MQTT uses printer-local TLS certificates, so the MQTT adapter uses a Bambu-specific rustls verifier policy instead of platform CA/hostname validation. Unit tests use fakes and must not open real Bambu MQTT or FTPS sockets.
 
 ```bash
 cargo fmt

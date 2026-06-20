@@ -7,9 +7,14 @@ repository.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
 clap.workspace = true
 pandar-core.workspace = true
 prost.workspace = true
+rumqttc.workspace = true
+rustls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 tokio.workspace = true
 tokio-stream.workspace = true
 tonic.workspace = true

@@ -21,6 +21,9 @@
 - Added Phase 2 generated gRPC protocol plumbing through build scripts so protobuf Rust output stays under Cargo `target`.
 - Added the hub reverse gRPC service, live session registry, command ledger transitions, HTTP+gRPC startup, and the agent reverse client.
 - Added SQLite-backed gRPC tests for session lifecycle, command dispatch, acknowledgement, result handling, stale stream protection, and replacement sessions.
+- Added Phase 3 agent-side Bambu MQTT models, payload builders, fake/runtime transport boundary, refresh gateway, and `RefreshPrinters` snapshot/result sequencing.
+- Added Phase 3 agent-local `PANDAR_PRINTERS` parsing with startup validation and no-network empty config behavior.
+- Added Phase 3 machine file-transfer boundary with FTPS-derived constants, request shapes, protected/clear mode policy, success-only cache behavior, and fake no-network tests.
 
 ## Phase 1: Foundation
 
@@ -64,20 +67,21 @@ Exit criteria:
 
 ## Phase 3: Bambu Machine Transport
 
-- Implement agent-side MQTT transport based on the reference facts:
+- Completed agent-side MQTT transport boundary based on the reference facts:
   - TLS port 8883.
+  - Bambu LAN self-signed certificate policy isolated to the agent MQTT adapter.
   - username `bblp`, password access code.
   - subscribe `device/{serial}/report`.
   - publish `device/{serial}/request`.
   - QoS 1 for publishes.
-- Implement state refresh via `pushing.pushall`.
-- Implement basic commands: pause, resume, stop, print speed, raw diagnostics command.
-- Implement machine file transfer abstraction based on the reference FTPS behavior:
+- Completed state refresh via `pushing.pushall` through the `RefreshPrinters` gateway path.
+- Completed basic command payload builders: pause, resume, stop, print speed, raw diagnostics command, and reserved `project_file` shape.
+- Completed machine file transfer abstraction based on the reference FTPS behavior:
   - implicit TLS port 990.
   - username `bblp`, password access code.
   - upload, download, list, delete.
   - protected data mode first, model-specific fallback where needed.
-- Add targeted tests for command JSON construction, topic naming, and file-transfer mode selection.
+- Completed targeted tests for command JSON construction, topic naming, fake MQTT refresh, printer config parsing, command event sequencing, and file-transfer mode selection/fallback.
 
 ## Phase 4: Printer Inventory And State
 
@@ -116,6 +120,6 @@ Exit criteria:
 
 ## Immediate Next
 
-- Start Phase 3 by implementing the agent-side Bambu MQTT transport boundary and tests for topic naming, TLS port, credentials, QoS, and `pushall`.
-- Implement the machine file-transfer abstraction from the reference FTPS behavior without exposing protocol-specific details through hub APIs.
-- Add hub command variants for the first real printer controls after the transport boundary is tested locally.
+- Select and implement the concrete FTPS runtime adapter for the existing `MachineFileTransfer` trait.
+- Validate live-printer MQTT/FTPS compatibility against A1/A1 Mini and at least one non-A1 model using explicit local credentials.
+- Add hub command variants for the first real printer controls after live compatibility is verified.

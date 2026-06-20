@@ -8,14 +8,21 @@ use tokio::{
 use tokio_stream::{StreamExt, wrappers::ReceiverStream};
 use tonic::Request;
 
+pub mod commands;
+pub mod machine;
 pub mod protocol;
 
+use commands::{handle_command_with_gateway, parse_printer_config};
+use machine::{
+    BambuPrinterEndpoint, ConfiguredBambuMachineGateway, NoopMachineGateway,
+    mqtt::RumqttcBambuMqttTransport,
+};
 use protocol::agent::v1::{
-    AgentEvent, AgentHeartbeat, AgentHello, CommandAck, CommandResult, HubCommand,
-    agent_control_client::AgentControlClient, agent_event, hub_command,
+    AgentEvent, AgentHeartbeat, AgentHello, agent_control_client::AgentControlClient, agent_event,
 };
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
+const DEFAULT_REPORT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone, Parser, PartialEq, Eq)]
 #[command(
@@ -41,28 +48,8 @@ pub struct AgentConfig {
         default_value = env!("CARGO_PKG_VERSION")
     )]
     pub agent_version: String,
-}
-
-pub trait BambuMachineGateway {
-    fn label(&self) -> &str;
-}
-
-pub struct ReferenceBackedGateway {
-    label: String,
-}
-
-impl ReferenceBackedGateway {
-    pub fn new(label: impl Into<String>) -> Self {
-        Self {
-            label: label.into(),
-        }
-    }
-}
-
-impl BambuMachineGateway for ReferenceBackedGateway {
-    fn label(&self) -> &str {
-        &self.label
-    }
+    #[arg(long, env = "PANDAR_PRINTERS", default_value = "[]")]
+    pub printers: String,
 }
 
 pub fn startup_summary(config: &AgentConfig) -> String {
@@ -93,34 +80,11 @@ pub fn heartbeat_event(config: &AgentConfig) -> AgentEvent {
     )
 }
 
-pub fn ack_event(config: &AgentConfig, command_id: &str) -> AgentEvent {
-    event(
-        config,
-        "ack",
-        agent_event::Event::CommandAck(CommandAck {
-            command_id: command_id.to_owned(),
-            accepted: true,
-            error: String::new(),
-        }),
-    )
-}
-
-pub fn success_event(config: &AgentConfig, command_id: &str) -> AgentEvent {
-    event(
-        config,
-        "success",
-        agent_event::Event::CommandResult(CommandResult {
-            command_id: command_id.to_owned(),
-            success: true,
-            error: String::new(),
-        }),
-    )
-}
-
 pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
+    let printers = startup_printers(&config)?;
     let mut backoff = ReconnectBackoff::new();
     loop {
-        match run_once(config.clone()).await {
+        match run_once(config.clone(), printers.clone()).await {
             Ok(RunOutcome::ConnectedThenEnded) => backoff.reset(),
             Err(err) => {
                 tracing::error!(error = %format!("{err:#}"), "agent reverse connection failed");
@@ -136,7 +100,14 @@ pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
     }
 }
 
-async fn run_once(config: AgentConfig) -> anyhow::Result<RunOutcome> {
+fn startup_printers(config: &AgentConfig) -> anyhow::Result<Vec<BambuPrinterEndpoint>> {
+    parse_printer_config(&config.printers)
+}
+
+async fn run_once(
+    config: AgentConfig,
+    printers: Vec<BambuPrinterEndpoint>,
+) -> anyhow::Result<RunOutcome> {
     let mut client = AgentControlClient::connect(config.hub_grpc_url.clone())
         .await
         .with_context(|| format!("connect to hub gRPC at {}", config.hub_grpc_url))?;
@@ -167,45 +138,38 @@ async fn run_once(config: AgentConfig) -> anyhow::Result<RunOutcome> {
     });
 
     let mut commands = response.into_inner();
-    while let Some(command) = commands
-        .next()
-        .await
-        .transpose()
-        .context("read hub command from reverse stream")?
-    {
-        handle_command(&config, &sender, command).await?;
+    if printers.is_empty() {
+        let gateway = NoopMachineGateway;
+        while let Some(command) = commands
+            .next()
+            .await
+            .transpose()
+            .context("read hub command from reverse stream")?
+        {
+            handle_command_with_gateway(&config, &gateway, &sender, command).await?;
+        }
+    } else {
+        let gateway = ConfiguredBambuMachineGateway::new(
+            printers
+                .into_iter()
+                .map(|endpoint| {
+                    let transport = RumqttcBambuMqttTransport::connect(&endpoint);
+                    (endpoint, transport)
+                })
+                .collect(),
+            DEFAULT_REPORT_TIMEOUT,
+        );
+        while let Some(command) = commands
+            .next()
+            .await
+            .transpose()
+            .context("read hub command from reverse stream")?
+        {
+            handle_command_with_gateway(&config, &gateway, &sender, command).await?;
+        }
     }
 
     Ok(RunOutcome::ConnectedThenEnded)
-}
-
-async fn handle_command(
-    config: &AgentConfig,
-    sender: &mpsc::Sender<AgentEvent>,
-    command: HubCommand,
-) -> anyhow::Result<()> {
-    match command.command {
-        Some(hub_command::Command::RefreshPrinters(_)) => {
-            emit_refresh_printers_events(config, sender, &command.command_id).await
-        }
-        None => Ok(()),
-    }
-}
-
-async fn emit_refresh_printers_events(
-    config: &AgentConfig,
-    sender: &mpsc::Sender<AgentEvent>,
-    command_id: &str,
-) -> anyhow::Result<()> {
-    sender
-        .send(ack_event(config, command_id))
-        .await
-        .context("queue refresh-printers command ack")?;
-    sender
-        .send(success_event(config, command_id))
-        .await
-        .context("queue refresh-printers command success")?;
-    Ok(())
 }
 
 #[derive(Debug)]
@@ -271,6 +235,8 @@ mod tests {
             &tenant_id,
             "--agent-version",
             "9.8.7",
+            "--printers",
+            r#"[{"host":"192.0.2.10","serial":"SERIAL","access_code":"12345678"}]"#,
         ]);
 
         assert_eq!(config.hub_grpc_url, "http://hub.internal:50051");
@@ -278,6 +244,23 @@ mod tests {
         assert_eq!(config.agent_id, agent_id);
         assert_eq!(config.tenant_id, tenant_id);
         assert_eq!(config.agent_version, "9.8.7");
+        assert_eq!(
+            config.printers,
+            r#"[{"host":"192.0.2.10","serial":"SERIAL","access_code":"12345678"}]"#
+        );
+    }
+
+    #[test]
+    fn invalid_printer_config_fails_before_reconnect_loop() {
+        let config = AgentConfig {
+            printers: r#"[{"host":"192.0.2.10","serial":"","access_code":"12345678"}]"#.to_owned(),
+            ..test_config()
+        };
+
+        let err = startup_printers(&config).unwrap_err();
+
+        assert!(format!("{err:#}").contains("PANDAR_PRINTERS"));
+        assert!(format!("{err:#}").contains("serial"));
     }
 
     #[test]
@@ -288,6 +271,7 @@ mod tests {
             agent_id: "agent-id".to_owned(),
             tenant_id: "tenant-id".to_owned(),
             agent_version: env!("CARGO_PKG_VERSION").to_owned(),
+            printers: "[]".to_owned(),
         };
 
         assert_eq!(
@@ -312,31 +296,6 @@ mod tests {
                 version: "9.8.7".to_owned(),
             }))
         );
-    }
-
-    #[tokio::test]
-    async fn refresh_printers_emits_ack_and_success() {
-        let config = test_config();
-        let command_id = uuid::Uuid::new_v4().to_string();
-        let (sender, mut receiver) = mpsc::channel(2);
-
-        handle_command(
-            &config,
-            &sender,
-            HubCommand {
-                command_id: command_id.clone(),
-                command: Some(hub_command::Command::RefreshPrinters(Default::default())),
-            },
-        )
-        .await
-        .unwrap();
-        drop(sender);
-
-        let ack = receiver.recv().await.unwrap();
-        let success = receiver.recv().await.unwrap();
-        assert!(receiver.recv().await.is_none());
-        assert_eq!(ack, ack_event(&config, &command_id));
-        assert_eq!(success, success_event(&config, &command_id));
     }
 
     #[test]
@@ -383,6 +342,7 @@ mod tests {
             agent_id: "agent-id".to_owned(),
             tenant_id: "tenant-id".to_owned(),
             agent_version: "9.8.7".to_owned(),
+            printers: "[]".to_owned(),
         }
     }
 }
