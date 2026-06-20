@@ -17,21 +17,6 @@ impl PrinterRepository {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct CommandRepository {
-    database: Database,
-}
-
-impl CommandRepository {
-    pub fn new(database: Database) -> Self {
-        Self { database }
-    }
-
-    pub async fn count(&self) -> RepositoryResult<i64> {
-        count_table(&self.database, "commands", "failed to count commands").await
-    }
-}
-
 async fn count_table(
     database: &Database,
     table: &str,

@@ -1,9 +1,11 @@
 mod agents;
+mod commands;
 mod counts;
 mod tenants;
 
 pub use agents::AgentRepository;
-pub use counts::{CommandRepository, PrinterRepository};
+pub use commands::CommandRepository;
+pub use counts::PrinterRepository;
 pub use tenants::TenantRepository;
 
 use thiserror::Error;
@@ -16,8 +18,18 @@ pub enum RepositoryError {
     DuplicateAgentName,
     #[error("tenant not found")]
     MissingTenant,
+    #[error("agent not found")]
+    MissingAgent,
+    #[error("command not found")]
+    MissingCommand,
+    #[error("command belongs to a different tenant or agent")]
+    CommandOwnershipMismatch,
+    #[error("cannot {action} command from {from}")]
+    InvalidCommandTransition { from: String, action: &'static str },
     #[error("invalid persisted agent status: {0}")]
     InvalidPersistedStatus(String),
+    #[error("invalid persisted command status: {0}")]
+    InvalidPersistedCommandStatus(String),
     #[error(transparent)]
     Database(#[from] anyhow::Error),
 }

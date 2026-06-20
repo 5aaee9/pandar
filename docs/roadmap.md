@@ -17,6 +17,10 @@
 - Added a minimal Next.js frontend skeleton using `APP_API_URL`.
 - Added `docs/architecture.md` with the target component split and reference-derived machine communication notes.
 - Added Phase 1 SQLx persistence for SQLite and PostgreSQL with migrations, repository tests, SQLite durability coverage, and optional PostgreSQL tests behind `PANDAR_TEST_POSTGRES_URL`.
+- Pushed the Phase 1 foundation to `main` at commit `1b02636`.
+- Added Phase 2 generated gRPC protocol plumbing through build scripts so protobuf Rust output stays under Cargo `target`.
+- Added the hub reverse gRPC service, live session registry, command ledger transitions, HTTP+gRPC startup, and the agent reverse client.
+- Added SQLite-backed gRPC tests for session lifecycle, command dispatch, acknowledgement, result handling, stale stream protection, and replacement sessions.
 
 ## Phase 1: Foundation
 
@@ -28,13 +32,35 @@
 
 ## Phase 2: Agent Reverse Connection
 
-- Define hub-agent gRPC service messages for agent hello, heartbeat, printer snapshot, command dispatch, command acknowledgement, and command result.
-- Implement hub-side agent session registry and heartbeat timeout handling.
-- Implement tonic-based `pandar-agent` reverse connection to `pandar-hub`.
-- Add agent registration and tenant binding flow.
-- Persist agent identity and last-seen metadata in hub.
-- Add reconnect/backoff behavior in agent.
-- Add integration tests for hub command dispatch to a connected agent session.
+Goal: establish the durable reverse-control channel between locally deployed agents and `pandar-hub`.
+
+- Expand `proto/pandar/agent/v1/agent.proto` for:
+  - agent hello
+  - heartbeat
+  - printer snapshot
+  - hub command dispatch
+  - agent command acknowledgement
+  - command result
+- Completed tonic build/runtime dependencies in the hub and agent crate boundaries that own gRPC.
+- Completed hub-side gRPC service for reverse agent sessions.
+- Completed hub-side agent session registry with tenant/agent identity, connected status, heartbeat updates, stale-session protection, and replacement-session shutdown.
+- Completed persisted agent version, last-seen, and status updates through the existing repository/database boundary.
+- Completed `pandar-agent` outbound connection to `pandar-hub` with hello, heartbeat, refresh-printers ack/result, and reconnect/backoff.
+- Add tenant binding or registration token placeholder flow sufficient for local development without introducing full auth yet.
+- Completed local-development tenant/agent binding through explicit `PANDAR_TENANT_ID` and `PANDAR_AGENT_ID` values.
+- Completed integration tests for:
+  - agent hello registers a live session
+  - heartbeat updates last-seen state
+  - disconnected or timed-out agents become unavailable
+  - hub command dispatch reaches the connected agent stream
+  - command acknowledgement/result updates the command ledger
+
+Exit criteria:
+
+- A local `pandar-agent` can connect outward to a local `pandar-hub`.
+- Hub can distinguish offline, connecting, and online agent state from persisted metadata plus live sessions.
+- Hub can enqueue a command and receive an acknowledgement/result over the reverse stream.
+- No Bambu machine network sockets are opened in Phase 2.
 
 ## Phase 3: Bambu Machine Transport
 
@@ -90,7 +116,6 @@
 
 ## Immediate Next
 
-- Expand `proto/pandar/agent/v1/agent.proto` for the Phase 2 reverse session.
-- Implement the hub agent-session registry and heartbeat timeout handling.
-- Wire `pandar-agent` to open a tonic reverse connection with reconnect/backoff.
-- Add integration tests for command dispatch to a connected agent session.
+- Start Phase 3 by implementing the agent-side Bambu MQTT transport boundary and tests for topic naming, TLS port, credentials, QoS, and `pushall`.
+- Implement the machine file-transfer abstraction from the reference FTPS behavior without exposing protocol-specific details through hub APIs.
+- Add hub command variants for the first real printer controls after the transport boundary is tested locally.

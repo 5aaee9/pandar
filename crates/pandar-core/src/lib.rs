@@ -59,6 +59,33 @@ impl fmt::Display for AgentId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct CommandId(Uuid);
+
+impl CommandId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    pub fn parse(value: &str) -> Result<Self, CoreError> {
+        Uuid::parse_str(value)
+            .map(Self)
+            .map_err(|_| CoreError::InvalidCommandId)
+    }
+}
+
+impl Default for CommandId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl fmt::Display for CommandId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Tenant {
     pub id: TenantId,
@@ -155,6 +182,98 @@ pub struct Agent {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CommandStatus {
+    Queued,
+    Sent,
+    Acknowledged,
+    Succeeded,
+    Failed,
+}
+
+impl CommandStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Sent => "sent",
+            Self::Acknowledged => "acknowledged",
+            Self::Succeeded => "succeeded",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+impl fmt::Display for CommandStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for CommandStatus {
+    type Err = CoreError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "queued" => Ok(Self::Queued),
+            "sent" => Ok(Self::Sent),
+            "acknowledged" => Ok(Self::Acknowledged),
+            "succeeded" => Ok(Self::Succeeded),
+            "failed" => Ok(Self::Failed),
+            value => Err(CoreError::InvalidCommandStatus(value.to_string())),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommandRecord {
+    pub id: CommandId,
+    pub tenant_id: TenantId,
+    pub agent_id: AgentId,
+    pub printer_id: Option<String>,
+    pub kind: String,
+    pub status: CommandStatus,
+    pub payload_json: String,
+    pub error: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandRecordParts {
+    pub id: CommandId,
+    pub tenant_id: TenantId,
+    pub agent_id: AgentId,
+    pub printer_id: Option<String>,
+    pub kind: String,
+    pub status: String,
+    pub payload_json: String,
+    pub error: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl CommandRecord {
+    pub fn from_parts(parts: CommandRecordParts) -> Result<Self, CoreError> {
+        let kind = parts.kind;
+        if kind.trim().is_empty() {
+            return Err(CoreError::EmptyCommandKind);
+        }
+
+        Ok(Self {
+            id: parts.id,
+            tenant_id: parts.tenant_id,
+            agent_id: parts.agent_id,
+            printer_id: parts.printer_id,
+            kind,
+            status: parts.status.parse()?,
+            payload_json: parts.payload_json,
+            error: parts.error,
+            created_at: parts.created_at,
+            updated_at: parts.updated_at,
+        })
+    }
+}
+
 impl Agent {
     pub fn new(tenant_id: TenantId, name: impl Into<String>) -> Result<Self, CoreError> {
         let name = name.into();
@@ -199,97 +318,27 @@ pub enum CoreError {
     InvalidTenantId,
     #[error("agent id must be a UUID")]
     InvalidAgentId,
+    #[error("command id must be a UUID")]
+    InvalidCommandId,
     #[error("tenant slug cannot be empty")]
     EmptyTenantSlug,
     #[error("tenant display name cannot be empty")]
     EmptyTenantDisplayName,
     #[error("agent name cannot be empty")]
     EmptyAgentName,
+    #[error("command kind cannot be empty")]
+    EmptyCommandKind,
     #[error("invalid agent status: {0}")]
     InvalidAgentStatus(String),
+    #[error("invalid command status: {0}")]
+    InvalidCommandStatus(String),
 }
 
-fn created_at_now() -> String {
+pub fn created_at_now() -> String {
     OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .expect("RFC3339 formatting should succeed")
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tenant_id_parse_rejects_invalid_uuid() {
-        let err = TenantId::parse("not-a-uuid").unwrap_err();
-
-        assert_eq!(err, CoreError::InvalidTenantId);
-    }
-
-    #[test]
-    fn agent_id_parse_rejects_invalid_uuid() {
-        let err = AgentId::parse("not-a-uuid").unwrap_err();
-
-        assert_eq!(err, CoreError::InvalidAgentId);
-    }
-
-    #[test]
-    fn tenant_requires_slug() {
-        let err = Tenant::new(" ", "Acme").unwrap_err();
-
-        assert_eq!(err, CoreError::EmptyTenantSlug);
-    }
-
-    #[test]
-    fn tenant_requires_display_name() {
-        let err = Tenant::new("acme", " ").unwrap_err();
-
-        assert_eq!(err, CoreError::EmptyTenantDisplayName);
-    }
-
-    #[test]
-    fn tenant_new_sets_iso_utc_created_at() {
-        let tenant = Tenant::new("acme", "Acme").unwrap();
-
-        assert!(tenant.created_at.ends_with('Z'));
-        assert!(OffsetDateTime::parse(&tenant.created_at, &Rfc3339).is_ok());
-    }
-
-    #[test]
-    fn tenant_from_parts_requires_display_name() {
-        let err =
-            Tenant::from_parts(TenantId::new(), "acme", " ", "2026-06-20T00:00:00Z").unwrap_err();
-
-        assert_eq!(err, CoreError::EmptyTenantDisplayName);
-    }
-
-    #[test]
-    fn agent_requires_name() {
-        let err = Agent::new(TenantId::new(), " ").unwrap_err();
-
-        assert_eq!(err, CoreError::EmptyAgentName);
-    }
-
-    #[test]
-    fn agent_starts_offline_for_a_tenant() {
-        let tenant = Tenant::new("acme", "Acme").unwrap();
-        let agent = Agent::new(tenant.id, "garage").unwrap();
-
-        assert_eq!(agent.tenant_id, tenant.id);
-        assert_eq!(agent.status, AgentStatus::Offline);
-    }
-
-    #[test]
-    fn agent_status_round_trips_persisted_strings() {
-        assert_eq!(AgentStatus::Offline.as_str(), "offline");
-        assert_eq!(AgentStatus::Connecting.as_str(), "connecting");
-        assert_eq!(AgentStatus::Online.as_str(), "online");
-        assert_eq!("offline".parse(), Ok(AgentStatus::Offline));
-        assert_eq!("connecting".parse(), Ok(AgentStatus::Connecting));
-        assert_eq!("online".parse(), Ok(AgentStatus::Online));
-        assert_eq!(
-            "retired".parse::<AgentStatus>(),
-            Err(CoreError::InvalidAgentStatus("retired".to_string()))
-        );
-    }
-}
+mod tests;

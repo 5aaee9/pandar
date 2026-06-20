@@ -89,6 +89,19 @@ Phase 1 currently implements the hub HTTP foundation with repository-backed pers
 
 `pandar-hub` reads `PANDAR_DATABASE_URL`, defaults to `sqlite://pandar.db`, connects through the backend-neutral `Database` boundary, and runs SQLx migrations before serving. SQLite and PostgreSQL use separate migration directories with equivalent Phase 1 tables and repository behavior.
 
+Phase 2 adds the reverse gRPC control plane:
+
+- The hub starts its HTTP listener from `PANDAR_HUB_BIND` and its gRPC listener from `PANDAR_HUB_GRPC_BIND`.
+- `pandar-agent` connects outward to the hub through `AgentControl/ReverseConnect`.
+- The first agent event must be `AgentHello` with tenant ID, agent ID, name, and version.
+- The hub validates tenant/agent ownership, marks the persisted agent online, and registers a live session token.
+- Heartbeats update both live session metadata and persisted agent last-seen/version fields.
+- Hub commands are first written to the durable command ledger, then dispatched to the active session and marked sent.
+- Agent acknowledgement and result events update the command ledger through token-scoped session handling so stale replaced streams cannot mutate current state.
+- Replacing a live session closes the previous response stream while preserving the newer session.
+
+The session registry is intentionally in-memory and only represents currently connected agents. The command ledger is durable and remains the source of truth for queued, sent, acknowledged, succeeded, and failed commands across hub restarts.
+
 ### pandar-agent
 
 - gRPC client that keeps a long-lived reverse session to `pandar-hub`.
@@ -98,6 +111,8 @@ Phase 1 currently implements the hub HTTP foundation with repository-backed pers
 - Command executor that maps hub commands to printer operations.
 - State normalizer that converts raw printer reports into stable Pandar events.
 - Reconnect manager with backoff and stale-session detection.
+
+Phase 2 agent behavior is limited to the reverse-control client. It sends hello and heartbeat events, handles `RefreshPrinters` by returning an accepted acknowledgement and successful result, and reconnects with capped backoff. Bambu MQTT and machine file-transfer sockets remain Phase 3 work.
 
 ### pandar-core
 

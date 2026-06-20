@@ -1,12 +1,17 @@
 pub mod db;
+pub mod grpc;
+pub mod protocol;
 pub mod repositories;
 mod routes;
+pub mod runtime;
+pub mod sessions;
 
 use anyhow::Context;
 
 use crate::{
     db::{Database, DatabaseConfig},
     repositories::{AgentRepository, CommandRepository, PrinterRepository, TenantRepository},
+    sessions::SessionRegistry,
 };
 
 #[derive(Debug, Clone)]
@@ -17,6 +22,7 @@ pub struct AppState {
     agents: AgentRepository,
     printers: PrinterRepository,
     commands: CommandRepository,
+    sessions: SessionRegistry,
 }
 
 impl AppState {
@@ -37,6 +43,7 @@ impl AppState {
             agents: AgentRepository::new(database.clone()),
             printers: PrinterRepository::new(database.clone()),
             commands: CommandRepository::new(database),
+            sessions: SessionRegistry::new(),
         }
     }
 
@@ -60,6 +67,10 @@ impl AppState {
 
     pub fn commands(&self) -> &CommandRepository {
         &self.commands
+    }
+
+    pub fn sessions(&self) -> &SessionRegistry {
+        &self.sessions
     }
 
     #[cfg(test)]

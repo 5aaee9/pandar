@@ -31,9 +31,23 @@ Communication with Bambu machines should be implemented from the behavior in `re
 sqlite://pandar.db
 ```
 
+`pandar-hub` listens for HTTP/WebSocket traffic on `PANDAR_HUB_BIND` and defaults to `0.0.0.0:8080`. The reverse agent gRPC listener uses `PANDAR_HUB_GRPC_BIND` and defaults to `0.0.0.0:50051`.
+
 The hub runs backend-specific SQLx migrations automatically when it connects. SQLite migrations live under `crates/pandar-hub/migrations/sqlite`; PostgreSQL migrations live under `crates/pandar-hub/migrations/postgres`.
 
 Repository and HTTP tests use SQLite by default, including `sqlite::memory:` for API tests. Optional PostgreSQL repository tests run only when `PANDAR_TEST_POSTGRES_URL` points at a disposable PostgreSQL database.
+
+`pandar-agent` connects outward to the hub gRPC endpoint. Required local-development identity values are:
+
+```bash
+PANDAR_HUB_GRPC_URL=http://127.0.0.1:50051
+PANDAR_TENANT_ID=<tenant uuid>
+PANDAR_AGENT_ID=<agent uuid>
+PANDAR_AGENT_NAME=local-agent
+PANDAR_AGENT_VERSION=0.1.0
+```
+
+Phase 2 only establishes the hub-agent reverse control channel and command ledger flow. It does not open Bambu machine MQTT or file-transfer sockets.
 
 ```bash
 cargo fmt

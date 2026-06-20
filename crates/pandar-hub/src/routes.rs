@@ -204,8 +204,22 @@ impl From<RepositoryError> for ApiError {
                 Self::new(StatusCode::CONFLICT, "agent_name_exists")
             }
             RepositoryError::MissingTenant => Self::new(StatusCode::NOT_FOUND, "tenant_not_found"),
+            RepositoryError::MissingAgent => Self::new(StatusCode::NOT_FOUND, "agent_not_found"),
+            RepositoryError::MissingCommand => {
+                Self::new(StatusCode::NOT_FOUND, "command_not_found")
+            }
+            RepositoryError::CommandOwnershipMismatch => {
+                Self::new(StatusCode::FORBIDDEN, "command_ownership_mismatch")
+            }
+            RepositoryError::InvalidCommandTransition { .. } => {
+                Self::new(StatusCode::CONFLICT, "invalid_command_transition")
+            }
             RepositoryError::InvalidPersistedStatus(status) => {
                 tracing::error!(%status, "invalid persisted agent status");
+                Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
+            }
+            RepositoryError::InvalidPersistedCommandStatus(status) => {
+                tracing::error!(%status, "invalid persisted command status");
                 Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
             }
             RepositoryError::Database(err) => {

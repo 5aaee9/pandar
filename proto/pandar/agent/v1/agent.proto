@@ -3,26 +3,47 @@ syntax = "proto3";
 package pandar.agent.v1;
 
 service AgentControl {
-  rpc Connect(stream AgentEvent) returns (stream HubCommand);
+  rpc ReverseConnect(stream AgentEvent) returns (stream HubCommand);
 }
 
 message AgentEvent {
   string agent_id = 1;
   string tenant_id = 2;
+  string event_id = 3;
   oneof event {
     AgentHello hello = 10;
-    PrinterSnapshot printer_snapshot = 11;
+    AgentHeartbeat heartbeat = 11;
+    PrinterSnapshot printer_snapshot = 12;
+    CommandAck command_ack = 13;
+    CommandResult command_result = 14;
   }
 }
 
 message AgentHello {
   string name = 1;
+  string version = 2;
+}
+
+message AgentHeartbeat {
+  string observed_at = 1;
 }
 
 message PrinterSnapshot {
   string serial = 1;
   string name = 2;
   string state = 3;
+}
+
+message CommandAck {
+  string command_id = 1;
+  bool accepted = 2;
+  string error = 3;
+}
+
+message CommandResult {
+  string command_id = 1;
+  bool success = 2;
+  string error = 3;
 }
 
 message HubCommand {

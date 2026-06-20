@@ -129,6 +129,106 @@ impl AgentRepository {
         }
     }
 
+    pub async fn get(&self, agent_id: AgentId) -> RepositoryResult<Option<Agent>> {
+        match &self.database {
+            Database::Sqlite(pool) => {
+                let row = sqlx::query(
+                    "SELECT id, tenant_id, name, status, created_at
+                     FROM agents
+                     WHERE id = ?1",
+                )
+                .bind(agent_id.to_string())
+                .fetch_optional(pool)
+                .await
+                .context("failed to get SQLite agent")?;
+                row.map(|row| {
+                    agent_from_parts(
+                        row.get("id"),
+                        row.get("tenant_id"),
+                        row.get("name"),
+                        row.get("status"),
+                        row.get("created_at"),
+                    )
+                })
+                .transpose()
+            }
+            Database::Postgres(pool) => {
+                let row = sqlx::query(
+                    "SELECT id, tenant_id, name, status, created_at
+                     FROM agents
+                     WHERE id = $1",
+                )
+                .bind(agent_id.to_string())
+                .fetch_optional(pool)
+                .await
+                .context("failed to get PostgreSQL agent")?;
+                row.map(|row| {
+                    agent_from_parts(
+                        row.get("id"),
+                        row.get("tenant_id"),
+                        row.get("name"),
+                        row.get("status"),
+                        row.get("created_at"),
+                    )
+                })
+                .transpose()
+            }
+        }
+    }
+
+    pub async fn update_connection(
+        &self,
+        agent_id: AgentId,
+        status: AgentStatus,
+        version: Option<&str>,
+        last_seen_at: &str,
+    ) -> RepositoryResult<Agent> {
+        let rows_affected = match &self.database {
+            Database::Sqlite(pool) => sqlx::query(
+                "UPDATE agents
+                     SET status = ?2, version = COALESCE(?3, version), last_seen_at = ?4
+                     WHERE id = ?1",
+            )
+            .bind(agent_id.to_string())
+            .bind(status.as_str())
+            .bind(version)
+            .bind(last_seen_at)
+            .execute(pool)
+            .await
+            .map(|result| result.rows_affected()),
+            Database::Postgres(pool) => sqlx::query(
+                "UPDATE agents
+                     SET status = $2, version = COALESCE($3, version), last_seen_at = $4
+                     WHERE id = $1",
+            )
+            .bind(agent_id.to_string())
+            .bind(status.as_str())
+            .bind(version)
+            .bind(last_seen_at)
+            .execute(pool)
+            .await
+            .map(|result| result.rows_affected()),
+        }
+        .context("failed to update agent connection")?;
+
+        if rows_affected == 0 {
+            return Err(RepositoryError::MissingAgent);
+        }
+
+        self.get(agent_id)
+            .await?
+            .ok_or(RepositoryError::MissingAgent)
+    }
+
+    pub async fn mark_offline(
+        &self,
+        agent_id: AgentId,
+        last_seen_at: &str,
+    ) -> RepositoryResult<Agent> {
+        self.update_connection(agent_id, AgentStatus::Offline, None, last_seen_at)
+            .await
+    }
+
     pub async fn count(&self) -> RepositoryResult<i64> {
         let count = match &self.database {
             Database::Sqlite(pool) => {

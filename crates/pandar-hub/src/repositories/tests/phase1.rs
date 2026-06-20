@@ -1,34 +1,10 @@
-use pandar_core::TenantId;
+use pandar_core::{AgentId, AgentStatus, TenantId};
 
-use super::{
-    AgentRepository, CommandRepository, PrinterRepository, RepositoryError, TenantRepository,
-    test_helpers::{insert_command_fixture, insert_printer_fixture},
+use super::*;
+use crate::{
+    db::{Database, DatabaseBackend, DatabaseConfig},
+    repositories::test_helpers::{insert_command_fixture, insert_printer_fixture},
 };
-use crate::db::{Database, DatabaseBackend, DatabaseConfig};
-
-async fn sqlite_database() -> Database {
-    let config = DatabaseConfig::from_url("sqlite::memory:").unwrap();
-    let database = Database::connect(&config).await.unwrap();
-    database.migrate().await.unwrap();
-    database
-}
-
-async fn repositories() -> (
-    Database,
-    TenantRepository,
-    AgentRepository,
-    PrinterRepository,
-    CommandRepository,
-) {
-    let database = sqlite_database().await;
-    (
-        database.clone(),
-        TenantRepository::new(database.clone()),
-        AgentRepository::new(database.clone()),
-        PrinterRepository::new(database.clone()),
-        CommandRepository::new(database),
-    )
-}
 
 #[tokio::test]
 async fn sqlite_migrations_create_phase_1_schema() {
@@ -55,6 +31,14 @@ async fn sqlite_migrations_create_phase_1_schema() {
     .await
     .unwrap();
     assert_eq!(index_count, 1);
+
+    let command_index_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_commands_agent_status'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(command_index_count, 1);
 }
 
 #[tokio::test]
@@ -64,9 +48,7 @@ async fn tenant_create_list_and_count_work() {
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
     assert_eq!(tenant.slug, "acme");
     assert_eq!(tenants.count().await.unwrap(), 1);
-
-    let listed = tenants.list().await.unwrap();
-    assert_eq!(listed, vec![tenant]);
+    assert_eq!(tenants.list().await.unwrap(), vec![tenant]);
 }
 
 #[tokio::test]
@@ -140,6 +122,32 @@ async fn invalid_persisted_agent_status_is_reported() {
 }
 
 #[tokio::test]
+async fn agent_get_update_connection_and_mark_offline_work() {
+    let (_, tenants, agents, _, _) = repositories().await;
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+
+    assert_eq!(agents.get(agent.id).await.unwrap(), Some(agent.clone()));
+    let online = agents
+        .update_connection(
+            agent.id,
+            AgentStatus::Online,
+            Some("0.2.0"),
+            "2026-06-20T01:00:00Z",
+        )
+        .await
+        .unwrap();
+    assert_eq!(online.status, AgentStatus::Online);
+
+    let offline = agents
+        .mark_offline(agent.id, "2026-06-20T01:01:00Z")
+        .await
+        .unwrap();
+    assert_eq!(offline.status, AgentStatus::Offline);
+    assert_eq!(agents.get(AgentId::new()).await.unwrap(), None);
+}
+
+#[tokio::test]
 async fn summary_counts_include_printer_and_command_fixtures() {
     let (database, tenants, agents, printers, commands) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
@@ -190,92 +198,4 @@ async fn sqlite_memory_keeps_migrations_and_queries_on_same_database() {
     assert_eq!(database.backend(), DatabaseBackend::Sqlite);
     tenants.create("acme", "Acme Labs").await.unwrap();
     assert_eq!(tenants.count().await.unwrap(), 1);
-}
-
-async fn postgres_database() -> Option<Database> {
-    let url = match std::env::var("PANDAR_TEST_POSTGRES_URL") {
-        Ok(url) => url,
-        Err(_) => return None,
-    };
-    let config = DatabaseConfig::from_url(url).unwrap();
-    let database = Database::connect(&config).await.unwrap();
-    database.migrate().await.unwrap();
-    clear_postgres(&database).await;
-    Some(database)
-}
-
-async fn clear_postgres(database: &Database) {
-    let Database::Postgres(pool) = database else {
-        panic!("expected PostgreSQL database");
-    };
-    sqlx::query("TRUNCATE commands, printers, agents, users, tenants")
-        .execute(pool)
-        .await
-        .unwrap();
-}
-
-#[tokio::test]
-async fn postgres_core_repository_behavior_when_configured() {
-    let Some(database) = postgres_database().await else {
-        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
-        return;
-    };
-
-    let tenants = TenantRepository::new(database.clone());
-    let agents = AgentRepository::new(database.clone());
-    let printers = PrinterRepository::new(database.clone());
-    let commands = CommandRepository::new(database.clone());
-
-    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
-    let agent = agents.create(tenant.id, "agent").await.unwrap();
-    let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)
-        .await
-        .unwrap();
-    insert_command_fixture(&database, tenant.id, agent.id, Some(&printer_id))
-        .await
-        .unwrap();
-
-    assert_eq!(tenants.list().await.unwrap(), vec![tenant.clone()]);
-    assert_eq!(
-        agents.list_for_tenant(tenant.id).await.unwrap(),
-        vec![agent]
-    );
-    assert!(matches!(
-        tenants.create("acme", "Acme Again").await.unwrap_err(),
-        RepositoryError::DuplicateTenantSlug
-    ));
-    assert_eq!(printers.count().await.unwrap(), 1);
-    assert_eq!(commands.count().await.unwrap(), 1);
-}
-
-#[tokio::test]
-async fn postgres_records_survive_reconnect_when_configured() {
-    let url = match std::env::var("PANDAR_TEST_POSTGRES_URL") {
-        Ok(url) => url,
-        Err(_) => {
-            eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
-            return;
-        }
-    };
-    let config = DatabaseConfig::from_url(&url).unwrap();
-    let database = Database::connect(&config).await.unwrap();
-    database.migrate().await.unwrap();
-    clear_postgres(&database).await;
-
-    let tenants = TenantRepository::new(database.clone());
-    let agents = AgentRepository::new(database.clone());
-    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
-    agents.create(tenant.id, "agent").await.unwrap();
-    drop(database);
-
-    let database = Database::connect(&config).await.unwrap();
-    database.migrate().await.unwrap();
-    assert_eq!(
-        TenantRepository::new(database.clone())
-            .count()
-            .await
-            .unwrap(),
-        1
-    );
-    assert_eq!(AgentRepository::new(database).count().await.unwrap(), 1);
 }
