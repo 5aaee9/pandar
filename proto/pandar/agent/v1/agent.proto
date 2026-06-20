@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package pandar.agent.v1;
+
+service AgentControl {
+  rpc Connect(stream AgentEvent) returns (stream HubCommand);
+}
+
+message AgentEvent {
+  string agent_id = 1;
+  string tenant_id = 2;
+  oneof event {
+    AgentHello hello = 10;
+    PrinterSnapshot printer_snapshot = 11;
+  }
+}
+
+message AgentHello {
+  string name = 1;
+}
+
+message PrinterSnapshot {
+  string serial = 1;
+  string name = 2;
+  string state = 3;
+}
+
+message HubCommand {
+  string command_id = 1;
+  oneof command {
+    RefreshPrinters refresh_printers = 10;
+  }
+}
+
+message RefreshPrinters {}
