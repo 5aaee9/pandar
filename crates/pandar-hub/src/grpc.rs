@@ -7,6 +7,7 @@ use tonic::{Request, Response, Status};
 
 use crate::{
     AppState,
+    grpc::printer_snapshots::handle_snapshot,
     protocol::agent::v1::{
         AgentEvent, AgentHello, CommandAck, CommandResult, HubCommand, RefreshPrinters,
         agent_control_server::AgentControl, agent_event, hub_command,
@@ -15,6 +16,7 @@ use crate::{
     sessions::{AgentSession, SessionToken},
 };
 
+pub mod printer_snapshots;
 #[cfg(test)]
 mod tests;
 
@@ -217,9 +219,19 @@ async fn handle_event(
                 None => Ok(()),
             }
         }
-        Some(agent_event::Event::PrinterSnapshot(_))
-        | Some(agent_event::Event::Hello(_))
-        | None => Ok(()),
+        Some(agent_event::Event::PrinterSnapshot(snapshot)) => {
+            match state
+                .sessions()
+                .while_current(agent_id, token, || {
+                    handle_snapshot(state, tenant_id, agent_id, snapshot)
+                })
+                .await
+            {
+                Some(result) => result,
+                None => Ok(()),
+            }
+        }
+        Some(agent_event::Event::Hello(_)) | None => Ok(()),
     }
 }
 

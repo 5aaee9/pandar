@@ -39,6 +39,14 @@ async fn sqlite_migrations_create_phase_1_schema() {
     .await
     .unwrap();
     assert_eq!(command_index_count, 1);
+
+    let printer_last_seen_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM pragma_table_info('printers') WHERE name = ?1")
+            .bind("last_seen_at")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(printer_last_seen_count, 1);
 }
 
 #[tokio::test]

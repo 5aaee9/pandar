@@ -63,6 +63,84 @@ fn agent_status_round_trips_persisted_strings() {
 }
 
 #[test]
+fn printer_from_parts_builds_valid_record() {
+    let tenant_id = TenantId::new();
+    let agent_id = AgentId::new();
+    let printer = Printer::from_parts(PrinterParts {
+        id: "printer-1".to_owned(),
+        tenant_id,
+        agent_id,
+        serial_number: "SERIAL1".to_owned(),
+        name: "garage".to_owned(),
+        model: Some("A1 Mini".to_owned()),
+        status: "online".to_owned(),
+        last_seen_at: "2026-06-20T00:00:00Z".to_owned(),
+        created_at: "2026-06-19T00:00:00Z".to_owned(),
+    })
+    .unwrap();
+
+    assert_eq!(printer.id, "printer-1");
+    assert_eq!(printer.tenant_id, tenant_id);
+    assert_eq!(printer.agent_id, agent_id);
+    assert_eq!(printer.serial_number, "SERIAL1");
+    assert_eq!(printer.name, "garage");
+    assert_eq!(printer.model, Some("A1 Mini".to_owned()));
+    assert_eq!(printer.status, "online");
+}
+
+#[test]
+fn printer_from_parts_validates_required_fields() {
+    let build = |id: &str, serial_number: &str, name: &str, status: &str| {
+        Printer::from_parts(PrinterParts {
+            id: id.to_owned(),
+            tenant_id: TenantId::new(),
+            agent_id: AgentId::new(),
+            serial_number: serial_number.to_owned(),
+            name: name.to_owned(),
+            model: None,
+            status: status.to_owned(),
+            last_seen_at: "2026-06-20T00:00:00Z".to_owned(),
+            created_at: "2026-06-19T00:00:00Z".to_owned(),
+        })
+    };
+
+    assert_eq!(
+        build(" ", "SERIAL1", "garage", "online").unwrap_err(),
+        CoreError::EmptyPrinterId
+    );
+    assert_eq!(
+        build("printer-1", " ", "garage", "online").unwrap_err(),
+        CoreError::EmptyPrinterSerialNumber
+    );
+    assert_eq!(
+        build("printer-1", "SERIAL1", " ", "online").unwrap_err(),
+        CoreError::EmptyPrinterName
+    );
+    assert_eq!(
+        build("printer-1", "SERIAL1", "garage", " ").unwrap_err(),
+        CoreError::EmptyPrinterStatus
+    );
+}
+
+#[test]
+fn printer_from_parts_normalizes_blank_model() {
+    let printer = Printer::from_parts(PrinterParts {
+        id: "printer-1".to_owned(),
+        tenant_id: TenantId::new(),
+        agent_id: AgentId::new(),
+        serial_number: "SERIAL1".to_owned(),
+        name: "garage".to_owned(),
+        model: Some("  ".to_owned()),
+        status: "online".to_owned(),
+        last_seen_at: "2026-06-20T00:00:00Z".to_owned(),
+        created_at: "2026-06-19T00:00:00Z".to_owned(),
+    })
+    .unwrap();
+
+    assert_eq!(printer.model, None);
+}
+
+#[test]
 fn command_id_parse_round_trips_uuid_strings() {
     let id = CommandId::new();
 

@@ -1,5 +1,6 @@
 pub mod db;
 pub mod grpc;
+pub mod printer_events;
 pub mod protocol;
 pub mod repositories;
 mod routes;
@@ -10,6 +11,7 @@ use anyhow::Context;
 
 use crate::{
     db::{Database, DatabaseConfig},
+    printer_events::PrinterEventHub,
     repositories::{AgentRepository, CommandRepository, PrinterRepository, TenantRepository},
     sessions::SessionRegistry,
 };
@@ -22,6 +24,7 @@ pub struct AppState {
     agents: AgentRepository,
     printers: PrinterRepository,
     commands: CommandRepository,
+    printer_events: PrinterEventHub,
     sessions: SessionRegistry,
 }
 
@@ -43,6 +46,7 @@ impl AppState {
             agents: AgentRepository::new(database.clone()),
             printers: PrinterRepository::new(database.clone()),
             commands: CommandRepository::new(database),
+            printer_events: PrinterEventHub::new(),
             sessions: SessionRegistry::new(),
         }
     }
@@ -67,6 +71,10 @@ impl AppState {
 
     pub fn commands(&self) -> &CommandRepository {
         &self.commands
+    }
+
+    pub fn printer_events(&self) -> &PrinterEventHub {
+        &self.printer_events
     }
 
     pub fn sessions(&self) -> &SessionRegistry {

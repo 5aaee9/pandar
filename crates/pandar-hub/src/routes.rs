@@ -4,12 +4,15 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post},
 };
 use pandar_core::{Agent, Tenant, TenantId};
 use serde::{Deserialize, Serialize};
 
 use crate::{AppState, repositories::RepositoryError};
+
+mod printer_events;
+mod printers;
 
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -19,6 +22,22 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/v1/tenants/{tenant_id}/agents",
             get(list_agents).post(create_agent),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/printers",
+            get(printers::list_printers),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/printers/{printer_id}",
+            get(printers::get_printer),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/agents/{agent_id}/refresh-printers",
+            post(printers::refresh_printers),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/printer-events",
+            get(printer_events::printer_events),
         )
         .with_state(state)
 }
@@ -155,7 +174,7 @@ async fn list_agents(
     Ok(Json(AgentListResponse { agents }))
 }
 
-fn parse_tenant_id(value: &str) -> Result<TenantId, ApiError> {
+pub(super) fn parse_tenant_id(value: &str) -> Result<TenantId, ApiError> {
     TenantId::parse(value).map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid_tenant_id"))
 }
 
@@ -183,14 +202,22 @@ impl From<Agent> for AgentResponse {
 }
 
 #[derive(Debug)]
-struct ApiError {
+pub(super) struct ApiError {
     status: StatusCode,
     code: &'static str,
 }
 
 impl ApiError {
-    fn new(status: StatusCode, code: &'static str) -> Self {
+    pub(super) fn new(status: StatusCode, code: &'static str) -> Self {
         Self { status, code }
+    }
+
+    pub(super) fn bad_request(code: &'static str) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, code)
+    }
+
+    pub(super) fn not_found(code: &'static str) -> Self {
+        Self::new(StatusCode::NOT_FOUND, code)
     }
 }
 

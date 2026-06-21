@@ -183,6 +183,57 @@ pub struct Agent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Printer {
+    pub id: String,
+    pub tenant_id: TenantId,
+    pub agent_id: AgentId,
+    pub serial_number: String,
+    pub name: String,
+    pub model: Option<String>,
+    pub status: String,
+    pub last_seen_at: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrinterParts {
+    pub id: String,
+    pub tenant_id: TenantId,
+    pub agent_id: AgentId,
+    pub serial_number: String,
+    pub name: String,
+    pub model: Option<String>,
+    pub status: String,
+    pub last_seen_at: String,
+    pub created_at: String,
+}
+
+impl Printer {
+    pub fn from_parts(parts: PrinterParts) -> Result<Self, CoreError> {
+        required(&parts.id, CoreError::EmptyPrinterId)?;
+        required(&parts.serial_number, CoreError::EmptyPrinterSerialNumber)?;
+        required(&parts.name, CoreError::EmptyPrinterName)?;
+        required(&parts.status, CoreError::EmptyPrinterStatus)?;
+
+        Ok(Self {
+            id: parts.id,
+            tenant_id: parts.tenant_id,
+            agent_id: parts.agent_id,
+            serial_number: parts.serial_number,
+            name: parts.name,
+            model: parts.model.filter(|model| !model.trim().is_empty()),
+            status: parts.status,
+            last_seen_at: parts.last_seen_at,
+            created_at: parts.created_at,
+        })
+    }
+}
+
+fn required(value: &str, error: CoreError) -> Result<(), CoreError> {
+    (!value.trim().is_empty()).then_some(()).ok_or(error)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CommandStatus {
     Queued,
     Sent,
@@ -275,19 +326,9 @@ impl CommandRecord {
 }
 
 impl Agent {
+    #[rustfmt::skip]
     pub fn new(tenant_id: TenantId, name: impl Into<String>) -> Result<Self, CoreError> {
-        let name = name.into();
-        if name.trim().is_empty() {
-            return Err(CoreError::EmptyAgentName);
-        }
-
-        Self::from_parts(
-            AgentId::new(),
-            tenant_id,
-            name,
-            AgentStatus::Offline,
-            created_at_now(),
-        )
+        Self::from_parts(AgentId::new(), tenant_id, name, AgentStatus::Offline, created_at_now())
     }
 
     pub fn from_parts(
@@ -326,6 +367,14 @@ pub enum CoreError {
     EmptyTenantDisplayName,
     #[error("agent name cannot be empty")]
     EmptyAgentName,
+    #[error("printer id cannot be empty")]
+    EmptyPrinterId,
+    #[error("printer serial number cannot be empty")]
+    EmptyPrinterSerialNumber,
+    #[error("printer name cannot be empty")]
+    EmptyPrinterName,
+    #[error("printer status cannot be empty")]
+    EmptyPrinterStatus,
     #[error("command kind cannot be empty")]
     EmptyCommandKind,
     #[error("invalid agent status: {0}")]

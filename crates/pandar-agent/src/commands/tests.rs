@@ -82,7 +82,7 @@ async fn refresh_printers_no_configured_noop_emits_ack_and_success_only() {
 async fn refresh_printers_one_snapshot_emits_ack_snapshot_success() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
-    let gateway = FakeGateway::ok([snapshot("SERIAL1", "garage", "READY")]);
+    let gateway = FakeGateway::ok([snapshot("SERIAL1", "garage", Some("A1 Mini"), "READY")]);
     let (sender, mut receiver) = mpsc::channel(3);
 
     handle_command_with_gateway(
@@ -99,7 +99,13 @@ async fn refresh_printers_one_snapshot_emits_ack_snapshot_success() {
         receiver.recv().await.unwrap(),
         ack_event(&config, &command_id)
     );
-    assert_snapshot(receiver.recv().await.unwrap(), "SERIAL1", "garage", "READY");
+    assert_snapshot(
+        receiver.recv().await.unwrap(),
+        "SERIAL1",
+        "garage",
+        "A1 Mini",
+        "READY",
+    );
     assert_eq!(
         receiver.recv().await.unwrap(),
         success_event(&config, &command_id)
@@ -112,8 +118,8 @@ async fn refresh_printers_multiple_snapshots_stay_ordered() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
     let gateway = FakeGateway::ok([
-        snapshot("SERIAL1", "first", "READY"),
-        snapshot("SERIAL2", "second", "RUNNING"),
+        snapshot("SERIAL1", "first", Some("A1 Mini"), "READY"),
+        snapshot("SERIAL2", "second", None, "RUNNING"),
     ]);
     let (sender, mut receiver) = mpsc::channel(4);
 
@@ -131,11 +137,18 @@ async fn refresh_printers_multiple_snapshots_stay_ordered() {
         receiver.recv().await.unwrap(),
         ack_event(&config, &command_id)
     );
-    assert_snapshot(receiver.recv().await.unwrap(), "SERIAL1", "first", "READY");
+    assert_snapshot(
+        receiver.recv().await.unwrap(),
+        "SERIAL1",
+        "first",
+        "A1 Mini",
+        "READY",
+    );
     assert_snapshot(
         receiver.recv().await.unwrap(),
         "SERIAL2",
         "second",
+        "",
         "RUNNING",
     );
     assert_eq!(
@@ -198,21 +211,23 @@ fn test_config() -> AgentConfig {
     }
 }
 
-fn snapshot(serial: &str, name: &str, state: &str) -> MachineSnapshot {
+fn snapshot(serial: &str, name: &str, model: Option<&str>, state: &str) -> MachineSnapshot {
     MachineSnapshot {
         serial: serial.to_owned(),
         name: name.to_owned(),
+        model: model.map(str::to_owned),
         state: state.to_owned(),
     }
 }
 
-fn assert_snapshot(event: AgentEvent, serial: &str, name: &str, state: &str) {
+fn assert_snapshot(event: AgentEvent, serial: &str, name: &str, model: &str, state: &str) {
     assert_eq!(event.agent_id, "agent-id");
     assert_eq!(event.tenant_id, "tenant-id");
     match event.event.unwrap() {
         agent_event::Event::PrinterSnapshot(snapshot) => {
             assert_eq!(snapshot.serial, serial);
             assert_eq!(snapshot.name, name);
+            assert_eq!(snapshot.model, model);
             assert_eq!(snapshot.state, state);
         }
         other => panic!("expected printer snapshot, got {other:?}"),

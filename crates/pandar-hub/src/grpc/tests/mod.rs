@@ -8,6 +8,7 @@ use crate::protocol::agent::v1::{AgentHeartbeat, agent_event, hub_command};
 
 mod commands;
 mod lifecycle;
+mod printer_snapshots;
 
 #[tokio::test]
 async fn grpc_non_hello_first_event_rejected() {

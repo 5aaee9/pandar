@@ -8,6 +8,8 @@ use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+mod printers;
+
 async fn state() -> AppState {
     AppState::sqlite_for_tests().await.unwrap()
 }
@@ -49,6 +51,21 @@ async fn create_tenant_for_test(app: Router) -> (StatusCode, Value) {
         })),
     )
     .await
+}
+
+async fn tenant_and_agent(app: Router) -> (Value, Value) {
+    let (status, tenant) = create_tenant_for_test(app.clone()).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let tenant_id = tenant["id"].as_str().unwrap();
+    let (status, agent) = request(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/agents"),
+        Some(json!({ "name": "shop-agent" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    (tenant, agent)
 }
 
 #[tokio::test]

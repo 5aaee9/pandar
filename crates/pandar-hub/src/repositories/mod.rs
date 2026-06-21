@@ -1,11 +1,11 @@
 mod agents;
 mod commands;
-mod counts;
+mod printers;
 mod tenants;
 
 pub use agents::AgentRepository;
 pub use commands::CommandRepository;
-pub use counts::PrinterRepository;
+pub use printers::{PrinterRepository, PrinterSnapshotUpsert};
 pub use tenants::TenantRepository;
 
 use thiserror::Error;
@@ -72,12 +72,12 @@ pub(crate) mod test_helpers {
         tenant_id: TenantId,
         agent_id: AgentId,
     ) -> anyhow::Result<String> {
-        let id = format!("printer-{agent_id}");
+        let id = uuid::Uuid::new_v4().to_string();
         match database {
             Database::Sqlite(pool) => {
                 sqlx::query(
-                    "INSERT INTO printers (id, tenant_id, agent_id, serial_number, name, model, status, created_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7)",
+                    "INSERT INTO printers (id, tenant_id, agent_id, serial_number, name, model, status, last_seen_at, created_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?7)",
                 )
                 .bind(&id)
                 .bind(tenant_id.to_string())
@@ -92,8 +92,8 @@ pub(crate) mod test_helpers {
             }
             Database::Postgres(pool) => {
                 sqlx::query(
-                    "INSERT INTO printers (id, tenant_id, agent_id, serial_number, name, model, status, created_at)
-                     VALUES ($1, $2, $3, $4, $5, NULL, $6, $7)",
+                    "INSERT INTO printers (id, tenant_id, agent_id, serial_number, name, model, status, last_seen_at, created_at)
+                     VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $7)",
                 )
                 .bind(&id)
                 .bind(tenant_id.to_string())

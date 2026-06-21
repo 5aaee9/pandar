@@ -11,6 +11,7 @@ axum.workspace = true
 pandar-core.workspace = true
 prost.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 time.workspace = true
@@ -28,6 +29,6 @@ tonic-prost-build.workspace = true
 
 [dev-dependencies]
 http-body-util.workspace = true
-serde_json.workspace = true
 tempfile.workspace = true
+tokio-tungstenite = "0.29"
 tower = { workspace = true, features = ["util"] }

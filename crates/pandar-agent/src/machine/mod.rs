@@ -19,6 +19,7 @@ pub struct BambuPrinterEndpoint {
 pub struct MachineSnapshot {
     pub serial: String,
     pub name: String,
+    pub model: Option<String>,
     pub state: String,
 }
 
@@ -114,11 +115,13 @@ mod tests {
                 MachineSnapshot {
                     serial: "SERIAL1".to_string(),
                     name: "printer-SERIAL1".to_string(),
+                    model: Some("A1 Mini".to_string()),
                     state: "READY".to_string(),
                 },
                 MachineSnapshot {
                     serial: "SERIAL2".to_string(),
                     name: "printer-SERIAL2".to_string(),
+                    model: Some("A1 Mini".to_string()),
                     state: "IDLE".to_string(),
                 },
             ]

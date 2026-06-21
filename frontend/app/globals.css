@@ -1,6 +1,22 @@
 @import 'tailwindcss';
 
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: #f1f5f9;
+}
+
 body {
   margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+}
+
+::selection {
+  background: #0e7490;
+  color: #ffffff;
 }

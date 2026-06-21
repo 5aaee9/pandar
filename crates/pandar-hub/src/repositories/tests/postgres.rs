@@ -224,6 +224,58 @@ async fn postgres_command_repository_behavior_when_configured() {
 }
 
 #[tokio::test]
+async fn postgres_printer_repository_upsert_list_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    let tenants = TenantRepository::new(database.clone());
+    let agents = AgentRepository::new(database.clone());
+    let printers = PrinterRepository::new(database);
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+
+    let created = printers
+        .upsert_snapshot(
+            tenant.id,
+            agent.id,
+            PrinterSnapshotUpsert {
+                serial_number: "SN-001".to_string(),
+                name: "Garage A1".to_string(),
+                model: Some("A1 Mini".to_string()),
+                status: "idle".to_string(),
+                observed_at: "2026-06-21T00:00:00Z".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+    let updated = printers
+        .upsert_snapshot(
+            tenant.id,
+            agent.id,
+            PrinterSnapshotUpsert {
+                serial_number: "SN-001".to_string(),
+                name: "Garage A1".to_string(),
+                model: Some("A1 Mini".to_string()),
+                status: "printing".to_string(),
+                observed_at: "2026-06-21T00:05:00Z".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(updated.id, created.id);
+    assert_eq!(updated.created_at, created.created_at);
+    assert_eq!(updated.status, "printing");
+    assert_eq!(updated.last_seen_at, "2026-06-21T00:05:00Z");
+    assert_eq!(
+        printers.list_for_tenant(tenant.id).await.unwrap(),
+        vec![updated]
+    );
+}
+
+#[tokio::test]
 async fn postgres_records_survive_reconnect_when_configured() {
     let url = match std::env::var("PANDAR_TEST_POSTGRES_URL") {
         Ok(url) => url,

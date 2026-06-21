@@ -1,11 +1,13 @@
 mod commands;
 mod phase1;
 mod postgres;
+mod printers;
 
 use pandar_core::{AgentId, CommandId, TenantId};
 
 use super::{
-    AgentRepository, CommandRepository, PrinterRepository, RepositoryError, TenantRepository,
+    AgentRepository, CommandRepository, PrinterRepository, PrinterSnapshotUpsert, RepositoryError,
+    TenantRepository,
 };
 use crate::db::{Database, DatabaseConfig};
 

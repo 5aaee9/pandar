@@ -57,6 +57,15 @@ The value is a JSON array. `host`, `serial`, and `access_code` are required; `mo
 
 Phase 3 adds the agent-side MQTT boundary, `RefreshPrinters` gateway path, and machine file-transfer boundary. Bambu LAN MQTT uses printer-local TLS certificates, so the MQTT adapter uses a Bambu-specific rustls verifier policy instead of platform CA/hostname validation. Unit tests use fakes and must not open real Bambu MQTT or FTPS sockets.
 
+Phase 4 adds hub-owned printer inventory/state APIs:
+
+- `GET /api/v1/tenants/{tenant_id}/printers` lists the latest printers reported for a tenant.
+- `GET /api/v1/tenants/{tenant_id}/printers/{printer_id}` returns one tenant-scoped printer.
+- `POST /api/v1/tenants/{tenant_id}/agents/{agent_id}/refresh-printers` queues a `refresh_printers` command for a live agent through the command ledger.
+- `GET /api/v1/tenants/{tenant_id}/printer-events` upgrades to a tenant-scoped WebSocket for future `printer_snapshot` events. It does not replay historical state; clients should load initial state with the HTTP printer list and treat WebSocket delivery as best-effort live updates.
+
+The frontend reads the hub through `APP_API_URL`, defaulting to `http://localhost:8080` when unset. Its Phase 4 dashboard uses HTTP only and fetches summary, tenants, and the first tenant's printers with uncached server-side requests.
+
 ```bash
 cargo fmt
 cargo clippy --workspace

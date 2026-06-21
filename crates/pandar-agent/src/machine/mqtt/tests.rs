@@ -122,6 +122,7 @@ fn report_maps_to_snapshot_with_config_identity() {
         MachineSnapshot {
             serial: "01S00EXAMPLE".to_string(),
             name: "garage-a1".to_string(),
+            model: Some("A1 Mini".to_string()),
             state: "RUNNING".to_string(),
         }
     );
@@ -181,6 +182,7 @@ async fn refresh_subscribes_publishes_and_maps_report() {
         MachineSnapshot {
             serial: "01S00EXAMPLE".to_string(),
             name: "garage-a1".to_string(),
+            model: Some("A1 Mini".to_string()),
             state: "RUNNING".to_string(),
         }
     );

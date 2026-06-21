@@ -297,6 +297,7 @@ pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> 
             .name
             .clone()
             .unwrap_or_else(|| endpoint.serial.clone()),
+        model: endpoint.model.clone(),
         state: state.to_string(),
     }
 }

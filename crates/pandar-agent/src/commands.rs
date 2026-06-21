@@ -97,6 +97,7 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
             serial: snapshot.serial,
             name: snapshot.name,
             state: snapshot.state,
+            model: snapshot.model.unwrap_or_default(),
         }),
     )
 }

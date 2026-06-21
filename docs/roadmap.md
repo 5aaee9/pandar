@@ -24,6 +24,7 @@
 - Added Phase 3 agent-side Bambu MQTT models, payload builders, fake/runtime transport boundary, refresh gateway, and `RefreshPrinters` snapshot/result sequencing.
 - Added Phase 3 agent-local `PANDAR_PRINTERS` parsing with startup validation and no-network empty config behavior.
 - Added Phase 3 machine file-transfer boundary with FTPS-derived constants, request shapes, protected/clear mode policy, success-only cache behavior, and fake no-network tests.
+- Added Phase 4 hub printer inventory persistence, tenant-scoped printer HTTP APIs, refresh-printers command dispatch endpoint, future-only printer WebSocket events, and the read-only frontend operations dashboard.
 
 ## Phase 1: Foundation
 
@@ -85,11 +86,12 @@ Exit criteria:
 
 ## Phase 4: Printer Inventory And State
 
-- Add hub APIs for registering printers under an agent and tenant.
-- Add agent-local printer config loading and hub assignment sync.
-- Normalize MQTT reports into stable printer state events.
-- Persist latest printer state in hub and broadcast state changes over WebSocket.
-- Add frontend printer inventory and live state views.
+- Completed hub persistence for latest tenant-scoped printer state reported by agents.
+- Completed tenant-scoped printer list/detail HTTP APIs.
+- Completed refresh-printers HTTP command dispatch through the command ledger.
+- Completed future-only tenant WebSocket broadcasts for printer snapshots; historical state is loaded through HTTP.
+- Completed frontend summary, tenant, and printer inventory dashboard using uncached server-side HTTP reads from `APP_API_URL`.
+- Deferred frontend WebSocket consumption until authentication and tenant selection are stronger.
 
 ## Phase 5: Print Dispatch
 
@@ -120,6 +122,7 @@ Exit criteria:
 
 ## Immediate Next
 
-- Select and implement the concrete FTPS runtime adapter for the existing `MachineFileTransfer` trait.
-- Validate live-printer MQTT/FTPS compatibility against A1/A1 Mini and at least one non-A1 model using explicit local credentials.
-- Add hub command variants for the first real printer controls after live compatibility is verified.
+- Begin Phase 5 print dispatch: model job artifacts and print jobs in the hub.
+- Add hub-to-agent print command variants through the existing command ledger.
+- Implement artifact upload through the existing machine file-transfer boundary before publishing MQTT `project_file`.
+- Reconcile print start, progress, completion, failure, and cancellation from printer reports.

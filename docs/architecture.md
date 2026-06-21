@@ -102,6 +102,14 @@ Phase 2 adds the reverse gRPC control plane:
 
 The session registry is intentionally in-memory and only represents currently connected agents. The command ledger is durable and remains the source of truth for queued, sent, acknowledged, succeeded, and failed commands across hub restarts.
 
+Phase 4 adds tenant-scoped printer inventory and state:
+
+- Agent `PrinterSnapshot` events are accepted only from the current live session token, persisted as latest printer state, and ignored from stale replaced streams.
+- The printer repository stores latest name, serial, optional model, normalized status, owning agent, and last-seen time behind the backend-neutral SQLite/PostgreSQL boundary.
+- `GET /api/v1/tenants/{tenant_id}/printers` and `GET /api/v1/tenants/{tenant_id}/printers/{printer_id}` expose tenant-scoped inventory.
+- `POST /api/v1/tenants/{tenant_id}/agents/{agent_id}/refresh-printers` writes a durable refresh command before dispatching it to the live agent session.
+- `GET /api/v1/tenants/{tenant_id}/printer-events` broadcasts future printer snapshot updates over an in-memory tenant WebSocket channel. It does not replay historical state; HTTP listing remains the initial-state source.
+
 ### pandar-agent
 
 - gRPC client that keeps a long-lived reverse session to `pandar-hub`.
@@ -123,6 +131,8 @@ Phase 3 adds the agent-side machine transport boundary:
 - Machine file transfer is modeled as a protocol-neutral boundary derived from the reference FTPS behavior: implicit TLS port `990`, username `bblp`, 64 KiB upload chunks, list/download/upload/delete requests, protected data mode first, and A1/A1 Mini clear-data fallback with success-only mode caching.
 - Phase 3 does not change hub persistence. The hub still receives normalized agent events over the existing gRPC stream.
 
+Phase 4 carries configured printer model values into normalized snapshots. `RefreshPrinters` remains the explicit snapshot path: empty printer config stays no-network, configured printers publish `pushall`, one report is normalized, and the hub persists the latest state plus broadcasts a tenant event.
+
 ### pandar-core
 
 - IDs and domain records: tenant, user, agent, printer, job, command.
@@ -137,6 +147,8 @@ Phase 3 adds the agent-side machine transport boundary:
 - Printer inventory and live state.
 - Job dispatch and command controls.
 - Operational settings for database-independent hub behavior.
+
+Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. The frontend does not consume the printer WebSocket yet; live subscription is left for a later phase after stronger auth and tenant selection are in place.
 
 ## Data Model Draft
 
