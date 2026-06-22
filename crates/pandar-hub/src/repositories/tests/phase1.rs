@@ -65,6 +65,20 @@ async fn sqlite_migrations_create_phase_1_schema() {
     assert_eq!(jobs_command_id_count, 1);
 }
 
+#[test]
+fn phase_13_command_result_migrations_are_backend_equivalent() {
+    let sqlite =
+        include_str!("../../../migrations/sqlite/20260623000000_phase_13_command_results.sql");
+    let postgres =
+        include_str!("../../../migrations/postgres/20260623000000_phase_13_command_results.sql");
+
+    assert_eq!(
+        sqlite.trim(),
+        "ALTER TABLE commands ADD COLUMN result_json TEXT;"
+    );
+    assert_eq!(postgres.trim(), sqlite.trim());
+}
+
 #[tokio::test]
 async fn tenant_create_list_and_count_work() {
     let (_, tenants, _, _, _, _) = repositories().await;

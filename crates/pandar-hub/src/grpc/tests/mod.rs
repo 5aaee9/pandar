@@ -179,6 +179,7 @@ async fn grpc_ack_and_result_update_command_status() {
             command_id: command.id.to_string(),
             success: true,
             error: String::new(),
+            result_json: String::new(),
         },
     )
     .await
@@ -294,6 +295,7 @@ pub(super) fn success_event(
             command_id: command_id.to_string(),
             success: true,
             error: String::new(),
+            result_json: String::new(),
         })),
     }
 }

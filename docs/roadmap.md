@@ -36,6 +36,7 @@
 - Added Phase 10 external identity authentication with local `user_identities`, Clerk/Logto-compatible JWT verification through configured JWKS, API-token-first tenant route auth, local tenant role enforcement, local JWKS route tests, and frontend bearer forwarding from request cookies/static tokens.
 - Added Phase 11 provisioning/admin boundaries with bootstrap-only cross-tenant APIs, atomic tenant-admin bootstrap, tenant-admin user/token/identity management, API-token revocation, provisioning audit events, agent pairing bundles, and tenant-bound frontend reads.
 - Added Phase 12 full SeaORM repository migration coverage for auth, audit, agents, printers, commands, jobs, print reports, machine events, and documented the remaining atomic printer snapshot SQLx adapter.
+- Added Phase 13 LAN discovery, printer diagnostics, structured command result persistence, conservative compatibility matrix ownership, hub diagnostic APIs, and frontend diagnostic result rendering.
 
 ## Phase 1: Foundation
 
@@ -253,16 +254,20 @@ Exit criteria:
 
 Goal: make real printer operation debuggable across Bambu printer families.
 
-- Add agent-side LAN discovery from the reference SSDP behavior on multicast `239.255.255.250:2021`.
-- Add diagnostics for wrong serial number, wrong access code, stale MQTT sessions, no MQTT report, no FTPS listener, missing SD card, full SD card, and upload verification failure.
-- Build a compatibility matrix from reference behavior and live captures.
-- Add model-specific feature gates for chamber temperature, drying, dual nozzle, flow/vibration/nozzle-offset calibration, and firmware-specific FTPS behavior.
-- Keep unsupported or uncertain features visibly unavailable instead of adding silent fallbacks.
+- Completed agent-side LAN discovery from the reference SSDP behavior on multicast `239.255.255.250:2021`.
+- Completed structured diagnostics for configured-printer validation, MQTT reachability/report flow, FTPS reachability, storage write probe, and compatibility.
+- Completed command `result_json` persistence and tenant-scoped command detail reads for structured discovery/diagnostic output.
+- Completed hub APIs for discovery and diagnostics with operator authorization, tenant scoping, audit events, and wake-agent dispatch.
+- Completed a centralized conservative compatibility matrix for model aliases, FTPS TLS/profile policy, clear-data fallback, external storage, and feature availability.
+- Completed print-time rejection for unsupported or unknown flow calibration before artifact upload.
+- Completed frontend linked-agent controls and command result rendering for discovery rows, diagnostic checks, and compatibility availability without Bambu access-code inputs.
 
 Exit criteria:
 
-- Operators can discover local printers, validate credentials, and see actionable diagnostics before dispatching a print.
-- Compatibility rules are centralized and referenced by MQTT command building, FTPS runtime policy, and UI availability.
+- Completed: operators can discover local printers, validate configured credentials indirectly, and see actionable diagnostics before dispatching a print.
+- Completed: expected printer or environment problems are successful diagnostic command results with `overall = "problem"` instead of failed hub commands.
+- Completed: compatibility rules are centralized and referenced by print command building, FTPS runtime policy, diagnostics, and UI availability.
+- Completed: Bambu access codes remain agent-local and are not accepted by hub diagnostic APIs or frontend forms.
 
 ## Phase 14: AMS, Filament, And Spool Operations
 
@@ -300,4 +305,4 @@ Exit criteria:
 
 ## Immediate Next
 
-- Start Phase 13 discovery, diagnostics, and compatibility work.
+- Start Phase 14 AMS, filament, and spool operations.

@@ -11,6 +11,7 @@ pub struct Model {
     pub kind: String,
     pub status: String,
     pub payload_json: String,
+    pub result_json: Option<String>,
     pub error: Option<String>,
     pub created_at: String,
     pub updated_at: String,

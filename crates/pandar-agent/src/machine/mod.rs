@@ -1,3 +1,6 @@
+pub mod compatibility;
+pub mod diagnostics;
+pub mod discovery;
 pub mod file_transfer;
 pub mod ftps;
 pub mod mqtt;
@@ -6,6 +9,9 @@ use std::time::Duration;
 
 use anyhow::{Context, bail};
 use async_trait::async_trait;
+use compatibility::flow_calibration_supported;
+use diagnostics::{DiagnosticCheck, DiagnosticStatus, PrinterDiagnosticResult};
+use discovery::PrinterDiscoveryResult;
 use file_transfer::{MachineFileTransfer, TransferModeCache, run_with_transfer_mode};
 use ftps::FtpsMachineFileTransfer;
 use mqtt::{
@@ -34,6 +40,15 @@ pub struct MachineSnapshot {
 
 #[async_trait]
 pub trait BambuMachineGateway: Send + Sync {
+    fn redact_error(&self, message: &str) -> String;
+    async fn discover_printers(
+        &self,
+        timeout_seconds: u32,
+    ) -> anyhow::Result<PrinterDiscoveryResult>;
+    async fn diagnose_printer(
+        &self,
+        serial_number: &str,
+    ) -> anyhow::Result<PrinterDiagnosticResult>;
     async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>>;
     async fn validate_printer(&self, serial_number: &str) -> anyhow::Result<()>;
     async fn print_project_file(
@@ -49,6 +64,37 @@ pub struct NoopMachineGateway;
 
 #[async_trait]
 impl BambuMachineGateway for NoopMachineGateway {
+    fn redact_error(&self, message: &str) -> String {
+        message.to_owned()
+    }
+
+    async fn discover_printers(
+        &self,
+        timeout_seconds: u32,
+    ) -> anyhow::Result<PrinterDiscoveryResult> {
+        discovery::discover_printers(timeout_seconds).await
+    }
+
+    async fn diagnose_printer(
+        &self,
+        serial_number: &str,
+    ) -> anyhow::Result<PrinterDiagnosticResult> {
+        Ok(PrinterDiagnosticResult {
+            result_type: "printer_diagnostic",
+            serial_number: serial_number.to_owned(),
+            host: None,
+            model: None,
+            overall: DiagnosticStatus::Problem,
+            checks: vec![DiagnosticCheck {
+                id: "configured_printer",
+                status: DiagnosticStatus::Problem,
+                message: "No configured printer matches the requested serial number.".to_owned(),
+                details: None,
+            }],
+            compatibility: None,
+        })
+    }
+
     async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
         Ok(Vec::new())
     }
@@ -96,6 +142,35 @@ where
     T: BambuMqttTransport + Send + Sync,
     F: MachineFileTransfer + Send + Sync,
 {
+    fn redact_error(&self, message: &str) -> String {
+        diagnostics::redact_known_access_codes(
+            message,
+            self.printers
+                .iter()
+                .map(|(endpoint, _, _)| endpoint.access_code.clone()),
+        )
+    }
+
+    async fn discover_printers(
+        &self,
+        timeout_seconds: u32,
+    ) -> anyhow::Result<PrinterDiscoveryResult> {
+        discovery::discover_printers(timeout_seconds).await
+    }
+
+    async fn diagnose_printer(
+        &self,
+        serial_number: &str,
+    ) -> anyhow::Result<PrinterDiagnosticResult> {
+        Ok(diagnostics::diagnose_printer(
+            &self.printers,
+            &self.transfer_cache,
+            self.report_timeout,
+            serial_number,
+        )
+        .await)
+    }
+
     async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
         let mut snapshots = Vec::with_capacity(self.printers.len());
         for (endpoint, transport, _) in &self.printers {
@@ -211,6 +286,13 @@ where
     F: MachineFileTransfer + Send + Sync,
     T: BambuMqttTransport + Send + Sync,
 {
+    if command.flow_cali && !flow_calibration_supported(endpoint.model.as_deref()) {
+        bail!(
+            "flow calibration is not supported for model {}",
+            endpoint.model.as_deref().unwrap_or("unknown")
+        );
+    }
+
     let remote_path = command.filename.clone();
     run_with_transfer_mode(endpoint, cache, false, |mode| {
         let remote_path = remote_path.clone();

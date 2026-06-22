@@ -9,7 +9,10 @@ use crate::{
         ArtifactReader, FilesystemArtifactReader, ack_event, handle_command_with_reader,
         success_event,
     },
-    machine::{BambuMachineGateway, MachineSnapshot},
+    machine::{
+        BambuMachineGateway, MachineSnapshot, diagnostics::PrinterDiagnosticResult,
+        discovery::PrinterDiscoveryResult,
+    },
     protocol::agent::v1::{AgentEvent, HubCommand, PrintProjectFile, agent_event, hub_command},
 };
 
@@ -283,6 +286,32 @@ impl FakePrintGateway {
 
 #[async_trait]
 impl BambuMachineGateway for FakePrintGateway {
+    fn redact_error(&self, message: &str) -> String {
+        message.to_owned()
+    }
+
+    async fn discover_printers(
+        &self,
+        _timeout_seconds: u32,
+    ) -> anyhow::Result<PrinterDiscoveryResult> {
+        Ok(PrinterDiscoveryResult::new(Vec::new()))
+    }
+
+    async fn diagnose_printer(
+        &self,
+        serial_number: &str,
+    ) -> anyhow::Result<PrinterDiagnosticResult> {
+        Ok(PrinterDiagnosticResult {
+            result_type: "printer_diagnostic",
+            serial_number: serial_number.to_owned(),
+            host: None,
+            model: None,
+            overall: crate::machine::diagnostics::DiagnosticStatus::Problem,
+            checks: Vec::new(),
+            compatibility: None,
+        })
+    }
+
     async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
         Ok(Vec::new())
     }

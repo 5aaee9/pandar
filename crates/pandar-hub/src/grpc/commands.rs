@@ -3,8 +3,13 @@ use tonic::Status;
 
 use crate::{
     AppState,
-    protocol::agent::v1::{HubCommand, PrintProjectFile, RefreshPrinters, hub_command},
-    repositories::{PrintProjectFilePayload, RepositoryError},
+    protocol::agent::v1::{
+        DiagnosePrinter, DiscoverPrinters, HubCommand, PrintProjectFile, RefreshPrinters,
+        hub_command,
+    },
+    repositories::{
+        DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, RepositoryError,
+    },
 };
 
 pub async fn mark_sent_and_job(
@@ -80,6 +85,7 @@ pub async fn handle_result_and_job(
     command_id: CommandId,
     success: bool,
     error: String,
+    result_json: String,
 ) -> Result<(), Status> {
     let command = state
         .commands()
@@ -96,7 +102,12 @@ pub async fn handle_result_and_job(
         } else {
             state
                 .commands()
-                .mark_succeeded(command_id, tenant_id, agent_id)
+                .mark_succeeded_with_result(
+                    command_id,
+                    tenant_id,
+                    agent_id,
+                    optional_result_json(result_json),
+                )
                 .await
                 .map_err(repository_status)?;
         }
@@ -110,7 +121,13 @@ pub async fn handle_result_and_job(
         } else {
             state
                 .commands()
-                .mark_failed(command_id, tenant_id, agent_id, error)
+                .mark_failed_with_result(
+                    command_id,
+                    tenant_id,
+                    agent_id,
+                    error,
+                    optional_result_json(result_json),
+                )
                 .await
                 .map_err(repository_status)?;
         }
@@ -122,6 +139,34 @@ pub fn hub_command_from_record(command: CommandRecord) -> Result<HubCommand, Sta
     let command_id = command.id.to_string();
     let command = match command.kind.as_str() {
         "refresh_printers" => hub_command::Command::RefreshPrinters(RefreshPrinters {}),
+        "discover_printers" => {
+            let payload: DiscoverPrintersPayload = serde_json::from_str(&command.payload_json)
+                .map_err(|err| {
+                    tracing::error!(
+                        command_id = %command.id,
+                        error = %format!("{err:#}"),
+                        "failed to deserialize discover printers command payload"
+                    );
+                    Status::internal("invalid discover printers command payload")
+                })?;
+            hub_command::Command::DiscoverPrinters(DiscoverPrinters {
+                timeout_seconds: payload.timeout_seconds,
+            })
+        }
+        "diagnose_printer" => {
+            let payload: DiagnosePrinterPayload = serde_json::from_str(&command.payload_json)
+                .map_err(|err| {
+                    tracing::error!(
+                        command_id = %command.id,
+                        error = %format!("{err:#}"),
+                        "failed to deserialize diagnose printer command payload"
+                    );
+                    Status::internal("invalid diagnose printer command payload")
+                })?;
+            hub_command::Command::DiagnosePrinter(DiagnosePrinter {
+                serial_number: payload.serial_number,
+            })
+        }
         "print_project_file" => {
             let payload: PrintProjectFilePayload = serde_json::from_str(&command.payload_json)
                 .map_err(|err| {
@@ -156,6 +201,10 @@ pub fn hub_command_from_record(command: CommandRecord) -> Result<HubCommand, Sta
         command_id,
         command: Some(command),
     })
+}
+
+fn optional_result_json(result_json: String) -> Option<String> {
+    (!result_json.is_empty()).then_some(result_json)
 }
 
 pub fn parse_command_id(command_id: &str) -> Result<CommandId, Status> {

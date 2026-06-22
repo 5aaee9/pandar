@@ -28,6 +28,7 @@ where
         kind: Set(input.kind.to_owned()),
         status: Set(CommandStatus::Queued.as_str().to_owned()),
         payload_json: Set(input.payload_json.to_owned()),
+        result_json: Set(None),
         error: Set(None),
         created_at: Set(input.created_at.to_owned()),
         updated_at: Set(input.created_at.to_owned()),

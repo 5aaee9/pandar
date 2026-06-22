@@ -4,12 +4,12 @@ use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder}
 use serde::{Deserialize, Serialize};
 
 mod audit;
+mod enqueue;
 pub mod inserts;
 mod ownership;
 pub(crate) mod rows;
 mod transitions;
 
-use inserts::InsertCommand;
 use rows::command_from_model;
 
 use crate::{
@@ -31,6 +31,16 @@ pub struct PrintProjectFilePayload {
     pub use_ams: bool,
     pub flow_cali: bool,
     pub timelapse: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiscoverPrintersPayload {
+    pub timeout_seconds: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiagnosePrinterPayload {
+    pub serial_number: String,
 }
 
 #[derive(Debug, Clone)]
@@ -57,26 +67,7 @@ impl CommandRepository {
         tenant_id: TenantId,
         agent_id: AgentId,
     ) -> RepositoryResult<CommandRecord> {
-        ownership::verify_agent_owner(&self.database, tenant_id, agent_id).await?;
-
-        let id = CommandId::new();
-        let now = pandar_core::created_at_now();
-        inserts::insert(
-            &self.database.sea_orm_connection(),
-            InsertCommand {
-                id,
-                tenant_id,
-                agent_id,
-                printer_id: None,
-                kind: "refresh_printers",
-                payload_json: "{}",
-                created_at: &now,
-            },
-        )
-        .await
-        .context("failed to enqueue refresh printers command")?;
-
-        self.get(id).await?.ok_or(RepositoryError::MissingCommand)
+        enqueue::refresh_printers(&self.database, tenant_id, agent_id).await
     }
 
     pub async fn enqueue_refresh_printers_with_audit(
@@ -89,6 +80,40 @@ impl CommandRepository {
             .await
     }
 
+    pub async fn enqueue_discover_printers_with_audit(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        payload: DiscoverPrintersPayload,
+        user_id: String,
+    ) -> RepositoryResult<CommandRecord> {
+        audit::enqueue_discover_printers_with_audit(
+            &self.database,
+            tenant_id,
+            agent_id,
+            payload,
+            user_id,
+        )
+        .await
+    }
+
+    pub async fn enqueue_diagnose_printer_with_audit(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        payload: DiagnosePrinterPayload,
+        user_id: String,
+    ) -> RepositoryResult<CommandRecord> {
+        audit::enqueue_diagnose_printer_with_audit(
+            &self.database,
+            tenant_id,
+            agent_id,
+            payload,
+            user_id,
+        )
+        .await
+    }
+
     pub async fn enqueue_print_project_file(
         &self,
         tenant_id: TenantId,
@@ -96,30 +121,25 @@ impl CommandRepository {
         printer_id: &str,
         payload: PrintProjectFilePayload,
     ) -> RepositoryResult<CommandRecord> {
-        ownership::verify_agent_owner(&self.database, tenant_id, agent_id).await?;
-        ownership::printer_serial_for_agent(&self.database, tenant_id, agent_id, printer_id)
-            .await?;
+        enqueue::print_project_file(&self.database, tenant_id, agent_id, printer_id, payload).await
+    }
 
-        let id = CommandId::new();
-        let now = pandar_core::created_at_now();
-        let payload_json =
-            serde_json::to_string(&payload).context("failed to serialize print command payload")?;
-        inserts::insert(
-            &self.database.sea_orm_connection(),
-            InsertCommand {
-                id,
-                tenant_id,
-                agent_id,
-                printer_id: Some(printer_id),
-                kind: "print_project_file",
-                payload_json: &payload_json,
-                created_at: &now,
-            },
-        )
-        .await
-        .context("failed to enqueue print project file command")?;
+    pub async fn enqueue_discover_printers(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        payload: DiscoverPrintersPayload,
+    ) -> RepositoryResult<CommandRecord> {
+        enqueue::discover_printers(&self.database, tenant_id, agent_id, payload).await
+    }
 
-        self.get(id).await?.ok_or(RepositoryError::MissingCommand)
+    pub async fn enqueue_diagnose_printer(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        payload: DiagnosePrinterPayload,
+    ) -> RepositoryResult<CommandRecord> {
+        enqueue::diagnose_printer(&self.database, tenant_id, agent_id, payload).await
     }
 
     pub async fn next_queued_for_agent(
@@ -182,14 +202,26 @@ impl CommandRepository {
         tenant_id: TenantId,
         agent_id: AgentId,
     ) -> RepositoryResult<CommandRecord> {
-        self.guard_terminal_transition(
+        self.mark_succeeded_with_result(command_id, tenant_id, agent_id, None)
+            .await
+    }
+
+    pub async fn mark_succeeded_with_result(
+        &self,
+        command_id: CommandId,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        result_json: Option<String>,
+    ) -> RepositoryResult<CommandRecord> {
+        self.guard_terminal_transition(TerminalCommandTransition {
             command_id,
             tenant_id,
             agent_id,
-            CommandStatus::Succeeded,
-            None,
-            "succeed",
-        )
+            terminal_status: CommandStatus::Succeeded,
+            error: None,
+            result_json,
+            action: "succeed",
+        })
         .await
     }
 
@@ -200,14 +232,27 @@ impl CommandRepository {
         agent_id: AgentId,
         error: impl Into<String>,
     ) -> RepositoryResult<CommandRecord> {
-        self.guard_terminal_transition(
+        self.mark_failed_with_result(command_id, tenant_id, agent_id, error, None)
+            .await
+    }
+
+    pub async fn mark_failed_with_result(
+        &self,
+        command_id: CommandId,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        error: impl Into<String>,
+        result_json: Option<String>,
+    ) -> RepositoryResult<CommandRecord> {
+        self.guard_terminal_transition(TerminalCommandTransition {
             command_id,
             tenant_id,
             agent_id,
-            CommandStatus::Failed,
-            Some(error.into()),
-            "fail",
-        )
+            terminal_status: CommandStatus::Failed,
+            error: Some(error.into()),
+            result_json,
+            action: "fail",
+        })
         .await
     }
 
@@ -217,12 +262,15 @@ impl CommandRepository {
     ) -> RepositoryResult<CommandRecord> {
         let updated = transitions::update_status_if_current(
             &self.database,
-            transition.command_id,
-            transition.tenant_id,
-            transition.agent_id,
-            transition.next_status,
-            transition.error,
-            transition.allowed_statuses,
+            transitions::StatusTransition {
+                command_id: transition.command_id,
+                tenant_id: transition.tenant_id,
+                agent_id: transition.agent_id,
+                status: transition.next_status,
+                error: transition.error,
+                result_json: None,
+                allowed_statuses: transition.allowed_statuses,
+            },
         )
         .await?;
         if updated {
@@ -250,30 +298,34 @@ impl CommandRepository {
 
     async fn guard_terminal_transition(
         &self,
-        command_id: CommandId,
-        tenant_id: TenantId,
-        agent_id: AgentId,
-        terminal_status: CommandStatus,
-        error: Option<String>,
-        action: &'static str,
+        transition: TerminalCommandTransition,
     ) -> RepositoryResult<CommandRecord> {
         let updated = transitions::update_status_if_current(
             &self.database,
-            command_id,
-            tenant_id,
-            agent_id,
-            terminal_status.clone(),
-            error,
-            &[CommandStatus::Sent, CommandStatus::Acknowledged],
+            transitions::StatusTransition {
+                command_id: transition.command_id,
+                tenant_id: transition.tenant_id,
+                agent_id: transition.agent_id,
+                status: transition.terminal_status.clone(),
+                error: transition.error,
+                result_json: transition.result_json,
+                allowed_statuses: &[CommandStatus::Sent, CommandStatus::Acknowledged],
+            },
         )
         .await?;
-        let command = self.load_owned(command_id, tenant_id, agent_id).await?;
+        let command = self
+            .load_owned(
+                transition.command_id,
+                transition.tenant_id,
+                transition.agent_id,
+            )
+            .await?;
 
-        if updated || command.status == terminal_status {
+        if updated || command.status == transition.terminal_status {
             return Ok(command);
         }
 
-        Err(invalid_transition(command.status, action))
+        Err(invalid_transition(command.status, transition.action))
     }
 
     pub(crate) async fn load_owned(
@@ -293,6 +345,20 @@ impl CommandRepository {
         Ok(command)
     }
 
+    pub async fn get_for_tenant(
+        &self,
+        tenant_id: TenantId,
+        command_id: CommandId,
+    ) -> RepositoryResult<Option<CommandRecord>> {
+        commands::Entity::find_by_id(command_id.to_string())
+            .filter(commands::Column::TenantId.eq(tenant_id.to_string()))
+            .one(&self.database.sea_orm_connection())
+            .await
+            .context("failed to load tenant command")?
+            .map(command_from_model)
+            .transpose()
+    }
+
     async fn get(&self, command_id: CommandId) -> RepositoryResult<Option<CommandRecord>> {
         commands::Entity::find_by_id(command_id.to_string())
             .one(&self.database.sea_orm_connection())
@@ -310,6 +376,16 @@ struct CommandTransition<'a> {
     next_status: CommandStatus,
     error: Option<String>,
     allowed_statuses: &'a [CommandStatus],
+    action: &'static str,
+}
+
+struct TerminalCommandTransition {
+    command_id: CommandId,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    terminal_status: CommandStatus,
+    error: Option<String>,
+    result_json: Option<String>,
     action: &'static str,
 }
 

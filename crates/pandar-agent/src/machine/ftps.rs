@@ -15,6 +15,7 @@ use tokio::{
 
 use crate::machine::{
     BambuPrinterEndpoint,
+    compatibility::ftps_tls_1_2_cap,
     file_transfer::{
         BAMBU_FILE_TRANSFER_CHUNK_SIZE, BAMBU_FILE_TRANSFER_PORT, BAMBU_FILE_TRANSFER_USERNAME,
         MachineFileTransfer, TransferProtectionMode,
@@ -90,17 +91,8 @@ pub(crate) struct FtpsProfile {
 #[allow(dead_code)]
 impl FtpsProfile {
     pub(crate) fn for_model(model: Option<&str>) -> Self {
-        let Some(model) = model else {
-            return Self { cap_tls_1_2: false };
-        };
-        let key = model.trim().to_ascii_uppercase();
-        let key = match key.as_str() {
-            "N7" => "P2S",
-            "N6" => "X2D",
-            _ => key.as_str(),
-        };
         Self {
-            cap_tls_1_2: matches!(key, "P2S" | "X2D"),
+            cap_tls_1_2: ftps_tls_1_2_cap(model),
         }
     }
 }

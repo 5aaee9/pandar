@@ -126,23 +126,3 @@ async fn refresh_printers_returns_command_record() {
             .any(|event| event.action == "agent.refresh_printers")
     );
 }
-
-#[tokio::test]
-async fn invalid_agent_id_on_refresh_returns_bad_request() {
-    let state = state().await;
-    let app = router(state.clone());
-    let (tenant, _, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-
-    let (status, body) = request_as(
-        app,
-        Method::POST,
-        &format!("/api/v1/tenants/{tenant_id}/agents/not-a-uuid/refresh-printers"),
-        None,
-        &token,
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_agent_id" }));
-}

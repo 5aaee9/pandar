@@ -166,6 +166,52 @@ async fn configured_print_project_file_unknown_serial_rejects_before_upload() {
     assert!(mqtt.published_commands().await.is_empty());
 }
 
+#[tokio::test]
+async fn configured_print_project_file_rejects_unknown_flow_cali_before_upload() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let mut endpoint = endpoint("SERIAL1");
+    endpoint.model = None;
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint, mqtt.clone(), transfer.clone())],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+    let mut command = print_project_file();
+    command.flow_cali = true;
+
+    let err = gateway
+        .print_project_file("SERIAL1", &command, b"abc".to_vec())
+        .await
+        .unwrap_err();
+
+    assert!(format!("{err:#}").contains("flow calibration"));
+    assert!(transfer.recorded_requests().is_empty());
+    assert!(mqtt.published_commands().await.is_empty());
+}
+
+#[tokio::test]
+async fn configured_print_project_file_rejects_a1_flow_cali_before_upload() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer.clone())],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+    let mut command = print_project_file();
+    command.flow_cali = true;
+
+    let err = gateway
+        .print_project_file("SERIAL1", &command, b"abc".to_vec())
+        .await
+        .unwrap_err();
+
+    assert!(format!("{err:#}").contains("flow calibration"));
+    assert!(transfer.recorded_requests().is_empty());
+    assert!(mqtt.published_commands().await.is_empty());
+}
+
 fn print_project_file() -> PrintProjectFile {
     PrintProjectFile {
         job_id: "job-1".to_string(),

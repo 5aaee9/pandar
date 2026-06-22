@@ -46,6 +46,7 @@ message CommandResult {
   string command_id = 1;
   bool success = 2;
   string error = 3;
+  string result_json = 4;
 }
 
 message PrintJobReport {
@@ -81,10 +82,20 @@ message HubCommand {
   oneof command {
     RefreshPrinters refresh_printers = 10;
     PrintProjectFile print_project_file = 11;
+    DiscoverPrinters discover_printers = 12;
+    DiagnosePrinter diagnose_printer = 13;
   }
 }
 
 message RefreshPrinters {}
+
+message DiscoverPrinters {
+  uint32 timeout_seconds = 1;
+}
+
+message DiagnosePrinter {
+  string serial_number = 1;
+}
 
 message PrintProjectFile {
   string job_id = 1;

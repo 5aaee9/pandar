@@ -13,6 +13,7 @@ use tower::ServiceExt;
 mod agents;
 mod bootstrap;
 mod jobs;
+mod printer_commands;
 mod printer_events_ws;
 mod printers;
 mod provisioning;

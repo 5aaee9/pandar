@@ -7,7 +7,7 @@ use std::{
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 
-use crate::machine::BambuPrinterEndpoint;
+use crate::machine::{BambuPrinterEndpoint, compatibility::ftps_clear_data_fallback};
 
 pub const BAMBU_FILE_TRANSFER_PORT: u16 = 990;
 pub const BAMBU_FILE_TRANSFER_USERNAME: &str = "bblp";
@@ -29,10 +29,7 @@ impl TransferProtectionMode {
 }
 
 pub fn is_a1_model(model: Option<&str>) -> bool {
-    model.is_some_and(|model| {
-        let model = model.to_ascii_lowercase();
-        model == "a1" || model.contains("a1 mini")
-    })
+    ftps_clear_data_fallback(model)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -118,7 +115,7 @@ pub fn transfer_attempt_order(
         return vec![TransferProtectionMode::ClearData];
     }
 
-    if is_a1_model(endpoint.model.as_deref()) {
+    if ftps_clear_data_fallback(endpoint.model.as_deref()) {
         vec![
             TransferProtectionMode::ProtectedData,
             TransferProtectionMode::ClearData,

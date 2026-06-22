@@ -8,8 +8,8 @@ use crate::{
     AgentConfig,
     machine::{BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot},
     protocol::agent::v1::{
-        AgentEvent, CommandAck, CommandResult, PrintProjectFile, PrinterSnapshot, agent_event,
-        hub_command,
+        AgentEvent, CommandAck, CommandResult, DiagnosePrinter, DiscoverPrinters, PrintProjectFile,
+        PrinterSnapshot, agent_event, hub_command,
     },
 };
 
@@ -78,6 +78,14 @@ where
             )
             .await
         }
+        Some(hub_command::Command::DiscoverPrinters(discovery)) => {
+            emit_discover_printers_events(config, gateway, sender, &command.command_id, discovery)
+                .await
+        }
+        Some(hub_command::Command::DiagnosePrinter(diagnostic)) => {
+            emit_diagnose_printer_events(config, gateway, sender, &command.command_id, diagnostic)
+                .await
+        }
         None => Ok(()),
     }
 }
@@ -134,11 +142,19 @@ fn command_ack_event(
 }
 
 pub fn success_event(config: &AgentConfig, command_id: &str) -> AgentEvent {
-    result_event(config, command_id, true, String::new())
+    result_event(config, command_id, true, String::new(), String::new())
 }
 
 fn failure_event(config: &AgentConfig, command_id: &str, error: String) -> AgentEvent {
-    result_event(config, command_id, false, error)
+    result_event(config, command_id, false, error, String::new())
+}
+
+fn success_event_with_result(
+    config: &AgentConfig,
+    command_id: &str,
+    result_json: String,
+) -> AgentEvent {
+    result_event(config, command_id, true, String::new(), result_json)
 }
 
 fn result_event(
@@ -146,6 +162,7 @@ fn result_event(
     command_id: &str,
     success: bool,
     error: String,
+    result_json: String,
 ) -> AgentEvent {
     event(
         config,
@@ -154,6 +171,7 @@ fn result_event(
             command_id: command_id.to_owned(),
             success,
             error,
+            result_json,
         }),
     )
 }
@@ -199,8 +217,9 @@ where
                 .context("queue refresh-printers command success")?;
         }
         Err(err) => {
+            let error = gateway.redact_error(&format!("{err:#}"));
             sender
-                .send(failure_event(config, command_id, format!("{err:#}")))
+                .send(failure_event(config, command_id, error))
                 .await
                 .context("queue refresh-printers command failure")?;
         }
@@ -222,8 +241,9 @@ where
     R: ArtifactReader,
 {
     if let Err(err) = gateway.validate_printer(&command.serial_number).await {
+        let error = gateway.redact_error(&format!("{err:#}"));
         sender
-            .send(rejected_ack_event(config, command_id, format!("{err:#}")))
+            .send(rejected_ack_event(config, command_id, error))
             .await
             .context("queue print-project-file rejected ack")?;
         return Ok(());
@@ -254,10 +274,97 @@ where
                 .context("queue print-project-file command success")?;
         }
         Err(err) => {
+            let error = gateway.redact_error(&format!("{err:#}"));
             sender
-                .send(failure_event(config, command_id, format!("{err:#}")))
+                .send(failure_event(config, command_id, error))
                 .await
                 .context("queue print-project-file command failure")?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn emit_discover_printers_events<G>(
+    config: &AgentConfig,
+    gateway: &G,
+    sender: &mpsc::Sender<AgentEvent>,
+    command_id: &str,
+    command: DiscoverPrinters,
+) -> anyhow::Result<()>
+where
+    G: BambuMachineGateway,
+{
+    sender
+        .send(ack_event(config, command_id))
+        .await
+        .context("queue discover-printers command ack")?;
+
+    let result = async {
+        let discovery = gateway
+            .discover_printers(command.timeout_seconds)
+            .await
+            .context("run printer discovery")?;
+        serde_json::to_string(&discovery).context("serialize printer discovery result")
+    }
+    .await;
+
+    match result {
+        Ok(result_json) => {
+            sender
+                .send(success_event_with_result(config, command_id, result_json))
+                .await
+                .context("queue discover-printers command success")?;
+        }
+        Err(err) => {
+            let error = gateway.redact_error(&format!("{err:#}"));
+            sender
+                .send(failure_event(config, command_id, error))
+                .await
+                .context("queue discover-printers command failure")?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn emit_diagnose_printer_events<G>(
+    config: &AgentConfig,
+    gateway: &G,
+    sender: &mpsc::Sender<AgentEvent>,
+    command_id: &str,
+    command: DiagnosePrinter,
+) -> anyhow::Result<()>
+where
+    G: BambuMachineGateway,
+{
+    sender
+        .send(ack_event(config, command_id))
+        .await
+        .context("queue diagnose-printer command ack")?;
+
+    let result = async {
+        let diagnostic = gateway
+            .diagnose_printer(&command.serial_number)
+            .await
+            .context("run printer diagnostic")?;
+        serde_json::to_string(&diagnostic).context("serialize printer diagnostic result")
+    }
+    .await;
+
+    match result {
+        Ok(result_json) => {
+            sender
+                .send(success_event_with_result(config, command_id, result_json))
+                .await
+                .context("queue diagnose-printer command success")?;
+        }
+        Err(err) => {
+            let error = gateway.redact_error(&format!("{err:#}"));
+            sender
+                .send(failure_event(config, command_id, error))
+                .await
+                .context("queue diagnose-printer command failure")?;
         }
     }
 

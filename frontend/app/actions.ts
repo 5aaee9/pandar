@@ -33,6 +33,51 @@ export async function createPrintJob(formData: FormData) {
   redirect(`/?tenant=${encodeURIComponent(tenantId)}`)
 }
 
+export async function discoverPrinters(formData: FormData) {
+  const tenantId = stringField(formData, 'tenant_id')
+  const agentId = stringField(formData, 'agent_id')
+  const timeoutValue = stringField(formData, 'timeout_seconds')
+  const response = await fetch(
+    `${apiUrl}/api/v1/tenants/${tenantId}/agents/${agentId}/discover-printers`,
+    {
+      method: 'POST',
+      headers: await apiHeaders('application/json'),
+      body: JSON.stringify({
+        timeout_seconds: Number(timeoutValue || '5'),
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(`Discover printers returned ${response.status}`)
+  }
+
+  const command = (await response.json()) as { id: string }
+  redirect(`/?tenant=${encodeURIComponent(tenantId)}&command=${encodeURIComponent(command.id)}`)
+}
+
+export async function diagnosePrinter(formData: FormData) {
+  const tenantId = stringField(formData, 'tenant_id')
+  const agentId = stringField(formData, 'agent_id')
+  const response = await fetch(
+    `${apiUrl}/api/v1/tenants/${tenantId}/agents/${agentId}/diagnose-printer`,
+    {
+      method: 'POST',
+      headers: await apiHeaders('application/json'),
+      body: JSON.stringify({
+        serial_number: stringField(formData, 'serial_number'),
+      }),
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(`Diagnose printer returned ${response.status}`)
+  }
+
+  const command = (await response.json()) as { id: string }
+  redirect(`/?tenant=${encodeURIComponent(tenantId)}&command=${encodeURIComponent(command.id)}`)
+}
+
 function stringField(formData: FormData, name: string) {
   const value = formData.get(name)
   return typeof value === 'string' ? value : ''

@@ -91,6 +91,18 @@ pub fn router(state: AppState) -> Router {
             post(printers::refresh_printers),
         )
         .route(
+            "/api/v1/tenants/{tenant_id}/agents/{agent_id}/discover-printers",
+            post(printers::discover_printers),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/agents/{agent_id}/diagnose-printer",
+            post(printers::diagnose_printer),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/commands/{command_id}",
+            get(printers::get_command),
+        )
+        .route(
             "/api/v1/tenants/{tenant_id}/printer-events",
             get(printer_events::printer_events),
         )

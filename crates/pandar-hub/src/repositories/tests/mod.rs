@@ -1,8 +1,10 @@
 mod auth;
+mod command_results;
 mod commands;
 mod jobs;
 mod phase1;
 mod postgres;
+mod postgres_commands;
 mod postgres_persistence;
 mod printers;
 

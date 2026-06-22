@@ -10,7 +10,9 @@ mod tenants;
 pub use agents::AgentRepository;
 pub use audit::{AuditEvent, AuditEventRepository, RecordAuditEvent};
 pub use auth::{ApiToken, AuthRepository, AuthenticatedUser, User, UserIdentity, UserRole};
-pub use commands::{CommandRepository, PrintProjectFilePayload};
+pub use commands::{
+    CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
+};
 pub use jobs::{
     AppliedPrintReport, ApplyPrintReport, CreatePrintJob, JobRepository, JobWithArtifact,
     PrintReportDiagnostic,

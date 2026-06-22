@@ -1,12 +1,19 @@
-use axum::{Json, extract::Path, extract::State, http::HeaderMap};
-use pandar_core::{AgentId, CommandRecord, Printer};
-use serde::Serialize;
+use axum::{
+    Json, body::Bytes, extract::Path, extract::State, extract::rejection::JsonRejection,
+    http::HeaderMap,
+};
+use pandar_core::{AgentId, CommandId, CommandRecord, Printer};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
-    repositories::UserRole,
+    repositories::{DiagnosePrinterPayload, DiscoverPrintersPayload, UserRole},
     routes::{ApiError, auth},
 };
+
+const DEFAULT_DISCOVERY_TIMEOUT_SECONDS: u32 = 5;
+const MIN_DISCOVERY_TIMEOUT_SECONDS: u32 = 1;
+const MAX_DISCOVERY_TIMEOUT_SECONDS: u32 = 15;
 
 #[derive(Debug, Serialize)]
 pub(super) struct PrinterResponse {
@@ -36,8 +43,20 @@ pub(super) struct CommandResponse {
     status: String,
     payload_json: String,
     error: Option<String>,
+    result_json: Option<String>,
     created_at: String,
     updated_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct DiscoverPrintersRequest {
+    timeout_seconds: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct DiagnosePrinterRequest {
+    serial_number: String,
 }
 
 pub(super) async fn list_printers(
@@ -94,8 +113,92 @@ pub(super) async fn refresh_printers(
     Ok(Json(CommandResponse::from(command)))
 }
 
+pub(super) async fn discover_printers(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((tenant_id, agent_id)): Path<(String, String)>,
+    payload: Bytes,
+) -> Result<Json<CommandResponse>, ApiError> {
+    let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    let auth = auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let agent_id = parse_agent_id(&agent_id)?;
+    let timeout_seconds = if payload.is_empty() {
+        DEFAULT_DISCOVERY_TIMEOUT_SECONDS
+    } else {
+        serde_json::from_slice::<DiscoverPrintersRequest>(&payload)
+            .map_err(|_| ApiError::bad_request("bad_request"))?
+            .timeout_seconds
+            .unwrap_or(DEFAULT_DISCOVERY_TIMEOUT_SECONDS)
+    };
+    if !(MIN_DISCOVERY_TIMEOUT_SECONDS..=MAX_DISCOVERY_TIMEOUT_SECONDS).contains(&timeout_seconds) {
+        return Err(ApiError::bad_request("invalid_discovery_timeout"));
+    }
+
+    let command = state
+        .commands()
+        .enqueue_discover_printers_with_audit(
+            tenant_id,
+            agent_id,
+            DiscoverPrintersPayload { timeout_seconds },
+            auth.user.id,
+        )
+        .await?;
+    state.sessions().wake_agent(tenant_id, agent_id).await;
+
+    Ok(Json(CommandResponse::from(command)))
+}
+
+pub(super) async fn diagnose_printer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((tenant_id, agent_id)): Path<(String, String)>,
+    payload: Result<Json<DiagnosePrinterRequest>, JsonRejection>,
+) -> Result<Json<CommandResponse>, ApiError> {
+    let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    let auth = auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let agent_id = parse_agent_id(&agent_id)?;
+    let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
+    let command = state
+        .commands()
+        .enqueue_diagnose_printer_with_audit(
+            tenant_id,
+            agent_id,
+            DiagnosePrinterPayload {
+                serial_number: payload.serial_number,
+            },
+            auth.user.id,
+        )
+        .await?;
+    state.sessions().wake_agent(tenant_id, agent_id).await;
+
+    Ok(Json(CommandResponse::from(command)))
+}
+
+pub(super) async fn get_command(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((tenant_id, command_id)): Path<(String, String)>,
+) -> Result<Json<CommandResponse>, ApiError> {
+    let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
+    let command_id = parse_command_id(&command_id)?;
+    let Some(command) = state
+        .commands()
+        .get_for_tenant(tenant_id, command_id)
+        .await?
+    else {
+        return Err(ApiError::not_found("command_not_found"));
+    };
+
+    Ok(Json(CommandResponse::from(command)))
+}
+
 fn parse_agent_id(value: &str) -> Result<AgentId, ApiError> {
     AgentId::parse(value).map_err(|_| ApiError::bad_request("invalid_agent_id"))
+}
+
+fn parse_command_id(value: &str) -> Result<CommandId, ApiError> {
+    CommandId::parse(value).map_err(|_| ApiError::bad_request("invalid_command_id"))
 }
 
 fn parse_printer_id(value: &str) -> Result<&str, ApiError> {
@@ -130,6 +233,7 @@ impl From<CommandRecord> for CommandResponse {
             status: command.status.to_string(),
             payload_json: command.payload_json,
             error: command.error,
+            result_json: command.result_json,
             created_at: command.created_at,
             updated_at: command.updated_at,
         }

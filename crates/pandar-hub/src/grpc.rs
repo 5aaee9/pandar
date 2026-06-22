@@ -285,6 +285,7 @@ async fn handle_result(
         command_id,
         result.success,
         result.error,
+        result.result_json,
     )
     .await
 }

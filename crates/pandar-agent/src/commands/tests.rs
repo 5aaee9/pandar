@@ -1,3 +1,4 @@
+mod diagnostics;
 mod print;
 
 use std::sync::Arc;
@@ -8,8 +9,11 @@ use tokio::{sync::Mutex, sync::mpsc};
 
 use super::*;
 use crate::{
-    machine::{BambuMachineGateway, NoopMachineGateway},
-    protocol::agent::v1::{HubCommand, RefreshPrinters},
+    machine::{
+        BambuMachineGateway, MachineSnapshot, NoopMachineGateway,
+        diagnostics::PrinterDiagnosticResult, discovery::PrinterDiscoveryResult,
+    },
+    protocol::agent::v1::{DiagnosePrinter, DiscoverPrinters, HubCommand, RefreshPrinters},
 };
 
 #[test]
@@ -202,6 +206,24 @@ fn refresh_command(command_id: String) -> HubCommand {
     }
 }
 
+pub(super) fn discover_command(command_id: String) -> HubCommand {
+    HubCommand {
+        command_id,
+        command: Some(hub_command::Command::DiscoverPrinters(DiscoverPrinters {
+            timeout_seconds: 1,
+        })),
+    }
+}
+
+pub(super) fn diagnose_command(command_id: String, serial_number: &str) -> HubCommand {
+    HubCommand {
+        command_id,
+        command: Some(hub_command::Command::DiagnosePrinter(DiagnosePrinter {
+            serial_number: serial_number.to_owned(),
+        })),
+    }
+}
+
 pub(super) fn test_config() -> AgentConfig {
     AgentConfig {
         hub_grpc_url: "http://hub.internal:50051".to_owned(),
@@ -249,14 +271,16 @@ pub(super) fn assert_failure_contains(event: AgentEvent, command_id: &str, needl
 }
 
 #[derive(Debug, Clone)]
-struct FakeGateway {
+pub(super) struct FakeGateway {
     result: Arc<Mutex<anyhow::Result<Vec<MachineSnapshot>>>>,
+    access_code: Option<String>,
 }
 
 impl FakeGateway {
-    fn ok(snapshots: impl IntoIterator<Item = MachineSnapshot>) -> Self {
+    pub(super) fn ok(snapshots: impl IntoIterator<Item = MachineSnapshot>) -> Self {
         Self {
             result: Arc::new(Mutex::new(Ok(snapshots.into_iter().collect()))),
+            access_code: None,
         }
     }
 
@@ -265,12 +289,51 @@ impl FakeGateway {
             result: Arc::new(Mutex::new(
                 Err(anyhow::anyhow!("transport unavailable")).context("refresh failed"),
             )),
+            access_code: None,
+        }
+    }
+
+    fn fail_with_access_code(access_code: &str) -> Self {
+        Self {
+            result: Arc::new(Mutex::new(
+                Err(anyhow::anyhow!("bad access code {access_code}")).context("refresh failed"),
+            )),
+            access_code: Some(access_code.to_owned()),
         }
     }
 }
 
 #[async_trait]
 impl BambuMachineGateway for FakeGateway {
+    fn redact_error(&self, message: &str) -> String {
+        match &self.access_code {
+            Some(access_code) => message.replace(access_code, "[REDACTED_ACCESS_CODE]"),
+            None => message.to_owned(),
+        }
+    }
+
+    async fn discover_printers(
+        &self,
+        _timeout_seconds: u32,
+    ) -> anyhow::Result<PrinterDiscoveryResult> {
+        Ok(PrinterDiscoveryResult::new(Vec::new()))
+    }
+
+    async fn diagnose_printer(
+        &self,
+        serial_number: &str,
+    ) -> anyhow::Result<PrinterDiagnosticResult> {
+        Ok(PrinterDiagnosticResult {
+            result_type: "printer_diagnostic",
+            serial_number: serial_number.to_owned(),
+            host: None,
+            model: None,
+            overall: crate::machine::diagnostics::DiagnosticStatus::Problem,
+            checks: Vec::new(),
+            compatibility: None,
+        })
+    }
+
     async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
         let mut result = self.result.lock().await;
         std::mem::replace(&mut *result, Ok(Vec::new()))
@@ -287,5 +350,38 @@ impl BambuMachineGateway for FakeGateway {
         _artifact: Vec<u8>,
     ) -> anyhow::Result<()> {
         unreachable!("refresh tests do not dispatch print commands")
+    }
+}
+
+#[tokio::test]
+async fn command_failure_redacts_access_code() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let access_code = "ACCESS-CODE-UNIQUE";
+    let gateway = FakeGateway::fail_with_access_code(access_code);
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        refresh_command(command_id.clone()),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(!result.success);
+            assert!(!result.error.contains(access_code));
+            assert!(result.error.contains("[REDACTED_ACCESS_CODE]"));
+            assert_eq!(result.result_json, "");
+        }
+        other => panic!("expected command result, got {other:?}"),
     }
 }

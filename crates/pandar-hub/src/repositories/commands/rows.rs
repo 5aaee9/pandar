@@ -15,6 +15,7 @@ pub fn command_from_model(model: commands::Model) -> RepositoryResult<CommandRec
         kind: model.kind,
         status: model.status,
         payload_json: model.payload_json,
+        result_json: model.result_json,
         error: model.error,
         created_at: model.created_at,
         updated_at: model.updated_at,
