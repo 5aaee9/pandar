@@ -19,6 +19,102 @@ async fn missing_token_on_agent_list_returns_unauthorized() {
 }
 
 #[tokio::test]
+async fn linked_external_jwt_can_read_tenant_resource() {
+    let state = state().await;
+    let app = router(external_auth_state(state.clone()));
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let token = external_auth_token_for_role(
+        &state,
+        tenant.id,
+        crate::repositories::UserRole::Viewer,
+        "linked-viewer-read",
+    )
+    .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::GET,
+        &format!("/api/v1/tenants/{}/agents", tenant.id),
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({ "agents": [] }));
+}
+
+#[tokio::test]
+async fn external_jwt_with_unknown_kid_returns_unauthorized() {
+    let token = jwt_for(
+        "unknown-kid-user",
+        TEST_ISSUER,
+        TEST_AUDIENCE,
+        "unknown-key",
+        300,
+    );
+
+    let (status, body) = external_jwt_agent_list_response(&token).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+}
+
+#[tokio::test]
+async fn external_jwt_with_wrong_issuer_returns_unauthorized() {
+    let token = jwt_for(
+        "wrong-issuer-user",
+        "https://other-issuer.example.test",
+        TEST_AUDIENCE,
+        "test-key",
+        300,
+    );
+
+    let (status, body) = external_jwt_agent_list_response(&token).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+}
+
+#[tokio::test]
+async fn external_jwt_with_wrong_audience_returns_unauthorized() {
+    let token = jwt_for(
+        "wrong-audience-user",
+        TEST_ISSUER,
+        "api://other-audience",
+        "test-key",
+        300,
+    );
+
+    let (status, body) = external_jwt_agent_list_response(&token).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+}
+
+#[tokio::test]
+async fn expired_external_jwt_returns_unauthorized() {
+    let token = jwt_for("expired-user", TEST_ISSUER, TEST_AUDIENCE, "test-key", -120);
+
+    let (status, body) = external_jwt_agent_list_response(&token).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+}
+
+#[tokio::test]
+async fn valid_unlinked_external_jwt_returns_tenant_forbidden() {
+    let token = jwt_for(
+        "unlinked-viewer",
+        TEST_ISSUER,
+        TEST_AUDIENCE,
+        "test-key",
+        300,
+    );
+
+    let (status, body) = external_jwt_agent_list_response(&token).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
+}
+
+#[tokio::test]
 async fn viewer_cannot_create_agent() {
     let state = state().await;
     let app = router(state.clone());
@@ -28,6 +124,32 @@ async fn viewer_cannot_create_agent() {
         &tenant.id.to_string(),
         crate::repositories::UserRole::Viewer,
         "viewer-agent-token",
+    )
+    .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{}/agents", tenant.id),
+        Some(json!({ "name": "shop-agent" })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "role_forbidden" }));
+}
+
+#[tokio::test]
+async fn linked_viewer_jwt_cannot_create_agent() {
+    let state = state().await;
+    let app = router(external_auth_state(state.clone()));
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let token = external_auth_token_for_role(
+        &state,
+        tenant.id,
+        crate::repositories::UserRole::Viewer,
+        "linked-viewer-create-agent",
     )
     .await;
 
@@ -259,4 +381,19 @@ async fn duplicate_agent_name_returns_conflict() {
 
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body, json!({ "error": "agent_name_exists" }));
+}
+
+async fn external_jwt_agent_list_response(token: &str) -> (StatusCode, serde_json::Value) {
+    let state = state().await;
+    let app = router(external_auth_state(state.clone()));
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+
+    request_as(
+        app,
+        Method::GET,
+        &format!("/api/v1/tenants/{}/agents", tenant.id),
+        None,
+        token,
+    )
+    .await
 }

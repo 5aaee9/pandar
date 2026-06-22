@@ -57,6 +57,66 @@ async fn job_create_writes_artifact_queues_command_and_returns_created_job() {
 }
 
 #[tokio::test]
+async fn linked_operator_jwt_can_create_print_job() {
+    let state = state().await;
+    let app = router(external_auth_state(state.clone()));
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let token = external_auth_token_for_role(
+        &state,
+        tenant.id,
+        crate::repositories::UserRole::Operator,
+        "linked-job-operator",
+    )
+    .await;
+    let agent = state.agents().create(tenant.id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant.id, agent.id)
+        .await
+        .unwrap();
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{}/printers/{printer_id}/jobs", tenant.id),
+        Some(valid_request()),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["status"], "queued");
+}
+
+#[tokio::test]
+async fn linked_viewer_jwt_cannot_create_print_job() {
+    let state = state().await;
+    let app = router(external_auth_state(state.clone()));
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let token = external_auth_token_for_role(
+        &state,
+        tenant.id,
+        crate::repositories::UserRole::Viewer,
+        "linked-job-viewer",
+    )
+    .await;
+    let agent = state.agents().create(tenant.id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant.id, agent.id)
+        .await
+        .unwrap();
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{}/printers/{printer_id}/jobs", tenant.id),
+        Some(valid_request()),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "role_forbidden" }));
+}
+
+#[tokio::test]
 async fn job_create_rejects_invalid_tenant_printer_and_job_ids() {
     let state = state().await;
     let app = router(state.clone());

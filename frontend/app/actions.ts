@@ -2,8 +2,9 @@
 
 import { redirect } from 'next/navigation'
 
+import { apiHeaders } from './api-auth'
+
 const apiUrl = process.env.APP_API_URL ?? 'http://localhost:8080'
-const apiToken = process.env.APP_API_TOKEN
 
 export async function createPrintJob(formData: FormData) {
   const tenantId = stringField(formData, 'tenant_id')
@@ -12,7 +13,7 @@ export async function createPrintJob(formData: FormData) {
     `${apiUrl}/api/v1/tenants/${tenantId}/printers/${printerId}/jobs`,
     {
       method: 'POST',
-      headers: apiHeaders(),
+      headers: await apiHeaders('application/json'),
       body: JSON.stringify({
         filename: stringField(formData, 'filename'),
         content_type: stringField(formData, 'content_type'),
@@ -30,14 +31,6 @@ export async function createPrintJob(formData: FormData) {
   }
 
   redirect(`/?tenant=${encodeURIComponent(tenantId)}`)
-}
-
-function apiHeaders() {
-  const headers: Record<string, string> = { 'content-type': 'application/json' }
-  if (apiToken) {
-    headers.authorization = `Bearer ${apiToken}`
-  }
-  return headers
 }
 
 function stringField(formData: FormData, name: string) {

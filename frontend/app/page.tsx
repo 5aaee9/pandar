@@ -1,8 +1,8 @@
+import { apiHeaders } from './api-auth'
 import { DispatchForm } from './dispatch-form'
 import { formatLayers, formatProgress, formatRemaining } from './job-format'
 
 const apiUrl = process.env.APP_API_URL ?? 'http://localhost:8080'
-const apiToken = process.env.APP_API_TOKEN
 const configuredTenantId = process.env.APP_TENANT_ID
 
 type Summary = {
@@ -94,7 +94,7 @@ async function fetchJson<T>(path: string, label: string): Promise<FetchResult<T>
   try {
     const response = await fetch(`${apiUrl}${path}`, {
       cache: 'no-store',
-      headers: apiHeaders(),
+      headers: await apiHeaders(),
     })
     if (!response.ok) {
       return { data: null, error: `${label} returned ${response.status}` }
@@ -107,10 +107,6 @@ async function fetchJson<T>(path: string, label: string): Promise<FetchResult<T>
       error: `${label} failed: ${error instanceof Error ? error.message : 'unknown error'}`,
     }
   }
-}
-
-function apiHeaders() {
-  return apiToken ? { authorization: `Bearer ${apiToken}` } : undefined
 }
 
 export default async function Page({ searchParams }: PageProps) {

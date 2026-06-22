@@ -110,6 +110,17 @@ Pandar's contract:
 4. Authorize tenant access through Pandar-managed `users`/membership/role records.
 5. Preserve Phase 6 tenant API tokens as service credentials for automation and non-browser clients.
 
+Phase 10 implements this contract in `pandar-hub` with one configured external identity profile per hub process. The hub parses `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, optional audience, RS-family algorithm allow-list, optional Clerk-style authorized parties, optional Logto-style required scopes, and clock leeway at startup. Partial external-auth configuration is a startup error.
+
+Tenant route authentication checks bearer credentials in this order:
+
+1. Existing Phase 6 API token lookup.
+2. External JWT verification against cached JWKS when configured.
+3. Local `{tenant_id, provider, subject}` lookup in `user_identities`.
+4. Local tenant role check from the linked Pandar user.
+
+JWT verification failures return `401 invalid_auth_token`. A cryptographically valid identity-provider token without a tenant-local identity link returns `403 tenant_forbidden`. Insufficient Pandar tenant role still returns `403 role_forbidden`.
+
 ## Target Components
 
 ### pandar-hub
@@ -173,11 +184,19 @@ Phase 9 adds physical print reconciliation while preserving that Phase 5 dispatc
 - `/api/v1/tenants/{tenant_id}/printer-events` now broadcasts future `job_progress` events with the same job response shape after a print report changes a job or inserts job-scoped machine events. It still does not provide durable replay; HTTP job list/detail remains the initial-state source.
 - SQLite and PostgreSQL migrations add equivalent job print-lifecycle columns, metric constraints, `machine_events`, and indexes. Repository hydration uses checked integer conversion for progress fields.
 
+Phase 10 adds external identity authentication while preserving API-token automation:
+
+- `user_identities` links provider subjects such as Clerk or Logto user ids to existing tenant-scoped Pandar users.
+- The hub verifies RS256/RS384/RS512 JWTs through configured JWKS, issuer, optional audience, expiration, optional not-before, optional authorized-party, and optional scope rules.
+- HTTP tenant routes and `/printer-events` WebSocket authorization share the same API-token-first then external-JWT flow.
+- The verifier caches JWKS and refreshes when a token references an unknown `kid`.
+- Route tests use local RSA/JWKS fixtures and do not contact Clerk, Logto, or external JWKS endpoints.
+
 Planned hub phases after Phase 7:
 
 - Phase 8 keeps hub behavior mostly unchanged while the agent gains real FTPS upload; hub command/job status still records dispatch success or failure.
 - Phase 9 added physical print reconciliation, persistent progress fields, normalized machine events, and tenant WebSocket job progress broadcasts.
-- Phase 10 adds Clerk/Logto-compatible JWT verification, provider-subject-to-local-user mapping, and Pandar-owned tenant membership checks for HTTP and WebSocket auth.
+- Phase 10 added Clerk/Logto-compatible JWT verification, provider-subject-to-local-user mapping, and Pandar-owned tenant membership checks for HTTP and WebSocket auth.
 - Phase 11 adds first-user/bootstrap, tenant user/token management, explicit global admin/bootstrap boundaries, provisioning audit events, and identity linking flows.
 - Phase 12 completes the staged SeaORM repository migration while preserving SQLite/PostgreSQL behavior and existing SQLx schema migrations.
 
@@ -235,12 +254,12 @@ Agent phase status after Phase 7:
 - Job dispatch and command controls.
 - Operational settings for database-independent hub behavior.
 
-Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. The frontend does not consume the printer WebSocket yet; live subscription is left for Phase 15 after stronger auth and tenant selection are in place.
+Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. Phase 10 centralizes frontend bearer forwarding: request cookie `APP_AUTH_COOKIE_NAME` defaulting to `pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. The frontend still does not consume the printer WebSocket; live subscription is left for Phase 15.
 
 Planned frontend phases after Phase 7:
 
 - Phase 9 exposes job progress and terminal print failure/success state from HTTP job history; hub live `job_progress` events are available for Phase 15 consumption.
-- Phase 10 integrates Clerk or Logto sign-in and forwards identity-provider bearer tokens to the Rust API.
+- Phase 10 forwards Clerk or Logto identity-provider bearer tokens to the Rust API through server-side cookie/static-token helpers. Provider SDK sign-in UI remains out of scope.
 - Phase 11 adds provisioning, identity linking, and tenant token/user management screens.
 - Phase 13 exposes discovery and compatibility diagnostics.
 - Phase 15 consumes authenticated WebSocket events for day-to-day monitoring and notifications.

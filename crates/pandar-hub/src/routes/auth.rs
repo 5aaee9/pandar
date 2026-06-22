@@ -29,7 +29,24 @@ pub(super) async fn authorize_tenant(
         ));
     };
 
-    let Some(authenticated) = state.auth().authenticate_bearer(token).await? else {
+    let authenticated = if let Some(authenticated) = state.auth().authenticate_bearer(token).await?
+    {
+        authenticated
+    } else if let Some(verifier) = state.external_auth() {
+        let verified = verifier.verify(token).await.map_err(|err| {
+            let error = anyhow::Error::from(err);
+            tracing::debug!(
+                error = %format!("{error:#}"),
+                "external bearer token verification failed"
+            );
+            ApiError::new(StatusCode::UNAUTHORIZED, "invalid_auth_token")
+        })?;
+        state
+            .auth()
+            .authenticate_external_identity(tenant_id, &verified.provider, &verified.subject)
+            .await?
+            .ok_or_else(|| ApiError::new(StatusCode::FORBIDDEN, "tenant_forbidden"))?
+    } else {
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
             "invalid_auth_token",

@@ -33,6 +33,7 @@
 - Added Phase 6 tenant API token authentication, tenant role authorization, audit events, WebSocket auth, frontend server-side token forwarding, and SQLite/PostgreSQL Docker Compose examples.
 - Added Phase 7 staged SeaORM 2.0 migration groundwork with SQLx 0.9 alignment, a shared SeaORM connection accessor, a hand-written `tenants` entity, and SeaORM-backed tenant repository operations.
 - Added Phase 9 print report reconciliation with agent MQTT `PrintJobReport` forwarding, hub-side physical print lifecycle persistence, normalized machine events, tenant `job_progress` WebSocket broadcasts, nested `job.print` HTTP responses, and frontend job progress display.
+- Added Phase 10 external identity authentication with local `user_identities`, Clerk/Logto-compatible JWT verification through configured JWKS, API-token-first tenant route auth, local tenant role enforcement, local JWKS route tests, and frontend bearer forwarding from request cookies/static tokens.
 
 ## Phase 1: Foundation
 
@@ -186,20 +187,21 @@ Exit criteria:
 
 Goal: let users sign in with Clerk or Logto while keeping Pandar's tenant membership and role model in Rust.
 
-- Add a provider-neutral OIDC/JWT verifier in `pandar-hub` for HTTP and WebSocket bearer tokens.
-- Support Clerk and Logto through configuration, not provider-specific authorization logic:
+- Completed equivalent SQLite and PostgreSQL `user_identities` migrations for external provider subject links.
+- Completed repository methods for linking and resolving external identities to existing tenant-scoped Pandar users.
+- Completed a provider-neutral OIDC/JWT verifier in `pandar-hub` for HTTP and WebSocket bearer tokens.
+- Completed Clerk and Logto support through configuration, not provider-specific authorization logic:
   - issuer URL
-  - JWKS URL or discoverable JWKS
+  - JWKS URL
   - expected audience/API resource
   - accepted algorithms
   - optional authorized parties/origins for Clerk-style session tokens
   - optional scope checks for Logto API-resource tokens
-- Validate token signature, `iss`, `aud`, `exp`, `nbf` where present, token type where needed, and provider subject.
-- Map verified `{provider, subject}` identities to local Pandar users.
-- Manage user-to-tenant membership and tenant role assignments in Pandar tables; do not trust Clerk organizations or Logto organizations as the tenant authorization source.
-- Keep tenant API tokens from Phase 6 for service/agent/admin automation, but make browser user flows use external identity tokens.
-- Add frontend auth integration points so the UI can obtain a Clerk/Logto token and forward it to the Rust API as `Authorization: Bearer`.
-- Add tests with local JWKS fixtures for valid token, unknown key, bad issuer, bad audience, expired token, missing membership, and insufficient tenant role.
+- Completed token validation for signature, `iss`, `aud`, `exp`, optional `nbf`, allowed algorithms, `kid`, optional `azp`, optional scopes, and provider subject.
+- Completed API-token-first route authentication so Phase 6 service/automation tokens remain valid when external identity auth is configured.
+- Completed local Pandar tenant role enforcement for linked external identities; provider organizations are not trusted as tenant authorization.
+- Completed frontend auth integration points so server components/actions forward request-cookie bearer tokens, `APP_AUTH_BEARER_TOKEN`, or `APP_API_TOKEN` to the Rust API.
+- Completed tests with local JWKS fixtures for valid token, unknown key, bad issuer, bad audience, expired token, missing membership, insufficient tenant role, print job authorization, and WebSocket authorization.
 
 Exit criteria:
 
@@ -292,6 +294,5 @@ Exit criteria:
 
 ## Immediate Next
 
-- Start Phase 10 before browser-facing multi-tenant installs so Clerk/Logto users are authenticated by Rust and authorized through local tenant memberships.
 - Do Phase 11 before exposing broader multi-tenant administration.
 - Continue SeaORM repository migration as Phase 12 after identity/provisioning/auth/audit boundaries are stable.

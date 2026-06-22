@@ -5,12 +5,21 @@ use axum::{
     http::{Method, Request, header::AUTHORIZATION},
 };
 use http_body_util::BodyExt;
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode, jwk::JwkSet};
+use serde::Serialize;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
 mod agents;
 mod jobs;
+mod printer_events_ws;
 mod printers;
+
+const TEST_PRIVATE_KEY_PEM: &str = include_str!("tests/fixtures/external_auth_private.pem");
+const TEST_PUBLIC_JWK_JSON: &str = include_str!("tests/fixtures/external_auth_jwks.json");
+const TEST_ISSUER: &str = "https://identity.example.test";
+const TEST_AUDIENCE: &str = "https://api.pandar.test";
+const TEST_PROVIDER: &str = "clerk";
 
 async fn state() -> AppState {
     AppState::sqlite_for_tests().await.unwrap()
@@ -126,12 +135,112 @@ async fn auth_token_for_role(
     token.to_owned()
 }
 
+fn external_auth_state(state: AppState) -> AppState {
+    let config = crate::identity::ExternalAuthConfig {
+        provider: TEST_PROVIDER.to_owned(),
+        issuer: TEST_ISSUER.to_owned(),
+        jwks_url: "https://identity.example.test/.well-known/jwks.json".to_owned(),
+        audience: Some(TEST_AUDIENCE.to_owned()),
+        algorithms: vec![Algorithm::RS256],
+        authorized_parties: Vec::new(),
+        required_scopes: Vec::new(),
+        leeway_seconds: 60,
+    };
+    let jwks = serde_json::from_str::<JwkSet>(TEST_PUBLIC_JWK_JSON).unwrap();
+    state.with_external_auth(crate::identity::JwtVerifier::static_jwks(config, jwks))
+}
+
+fn jwt_for(
+    subject: &str,
+    issuer: &str,
+    audience: &str,
+    kid: &str,
+    exp_offset_seconds: i64,
+) -> String {
+    let mut header = Header::new(Algorithm::RS256);
+    header.kid = Some(kid.to_owned());
+    let now = jsonwebtoken::get_current_timestamp() as i64;
+    let exp = now.saturating_add(exp_offset_seconds).max(0) as u64;
+    let nbf = now.saturating_sub(30).max(0) as u64;
+    encode(
+        &header,
+        &ExternalAuthClaims {
+            iss: issuer,
+            sub: subject,
+            aud: audience,
+            exp,
+            nbf,
+        },
+        &EncodingKey::from_rsa_pem(TEST_PRIVATE_KEY_PEM.as_bytes()).unwrap(),
+    )
+    .unwrap()
+}
+
+async fn external_auth_token_for_role(
+    state: &AppState,
+    tenant_id: TenantId,
+    role: crate::repositories::UserRole,
+    subject: &str,
+) -> String {
+    let user = state
+        .auth()
+        .create_user(
+            tenant_id,
+            format!("{subject}@example.test"),
+            "External Test User",
+            role,
+        )
+        .await
+        .unwrap();
+    state
+        .auth()
+        .link_external_identity(tenant_id, &user.id, TEST_PROVIDER, subject)
+        .await
+        .unwrap();
+    jwt_for(subject, TEST_ISSUER, TEST_AUDIENCE, "test-key", 3600)
+}
+
+#[derive(Serialize)]
+struct ExternalAuthClaims<'a> {
+    iss: &'a str,
+    sub: &'a str,
+    aud: &'a str,
+    exp: u64,
+    nbf: u64,
+}
+
 #[tokio::test]
 async fn health_check_reports_ok() {
     let (status, body) = request(app().await, Method::GET, "/healthz", None).await;
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, json!({ "status": "ok" }));
+}
+
+#[tokio::test]
+async fn api_token_auth_still_succeeds_when_external_auth_is_configured() {
+    let state = state().await;
+    let app = router(external_auth_state(state.clone()));
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "api-token-with-external-auth",
+    )
+    .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::GET,
+        &format!("/api/v1/tenants/{}/agents", tenant.id),
+        None,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({ "agents": [] }));
 }
 
 #[tokio::test]

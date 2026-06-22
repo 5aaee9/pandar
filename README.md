@@ -84,7 +84,32 @@ Phase 6 adds tenant-scoped API token authentication for tenant APIs. HTTP and We
 Authorization: Bearer <tenant api token>
 ```
 
-Roles are `tenant_admin`, `operator`, and `viewer`. Tenant-scoped read APIs and printer event WebSockets require at least `viewer`; print jobs and refresh commands require `operator`; agent creation requires `tenant_admin`. The Next.js frontend reads `APP_API_TOKEN` server-side and forwards it to `pandar-hub`. Set `APP_TENANT_ID` in deployed frontends to bind the dashboard to one tenant without relying on global tenant discovery.
+Roles are `tenant_admin`, `operator`, and `viewer`. Tenant-scoped read APIs and printer event WebSockets require at least `viewer`; print jobs and refresh commands require `operator`; agent creation requires `tenant_admin`.
+
+Phase 10 adds optional Clerk/Logto-style external identity authentication. `pandar-hub` still accepts Phase 6 tenant API tokens first; when no API token matches and external auth is configured, it verifies the bearer token as a JWT and resolves `{provider, subject}` through local Pandar user identity links. Clerk/Logto authenticate the user identity only. Pandar's database remains the source of truth for tenant access and tenant roles.
+
+External identity configuration:
+
+```bash
+PANDAR_EXTERNAL_AUTH_PROVIDER=clerk
+PANDAR_EXTERNAL_AUTH_ISSUER=https://example.clerk.accounts.dev
+PANDAR_EXTERNAL_AUTH_JWKS_URL=https://example.clerk.accounts.dev/.well-known/jwks.json
+PANDAR_EXTERNAL_AUTH_AUDIENCE=<optional audience>
+PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256
+PANDAR_EXTERNAL_AUTH_AUTHORIZED_PARTIES=<optional comma-separated origins>
+PANDAR_EXTERNAL_AUTH_REQUIRED_SCOPES=<optional comma-separated scopes>
+PANDAR_EXTERNAL_AUTH_LEEWAY_SECONDS=60
+```
+
+If `PANDAR_EXTERNAL_AUTH_PROVIDER` is unset, external identity auth is disabled. Partial external-auth configuration fails hub startup instead of silently falling back.
+
+The Next.js frontend reads bearer credentials server-side with this precedence:
+
+1. Request cookie named by `APP_AUTH_COOKIE_NAME`, default `pandar_auth_token`.
+2. Static deployment bridge `APP_AUTH_BEARER_TOKEN`.
+3. Existing service token `APP_API_TOKEN`.
+
+`APP_AUTH_BEARER_TOKEN` is useful for smoke tests or single-user deployments, but it is not a per-browser identity source and should not be used for multi-user browser deployments. Set `APP_TENANT_ID` in deployed frontends to bind the dashboard to one tenant without relying on global tenant discovery. Provider SDK wiring, sign-in UI, invite flows, and user-facing identity-link management are later product phases.
 
 Hub audit records are stored in `audit_events` for successful user-triggered mutations such as agent creation, refresh commands, and print job creation. Bambu printer access codes remain agent-local in `PANDAR_PRINTERS`; do not store them in hub database rows or frontend environment variables.
 
