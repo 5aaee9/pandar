@@ -5,12 +5,7 @@ use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     entities::{jobs, printers},
-    repositories::{
-        JobWithArtifact, RepositoryResult,
-        jobs::{
-            artifact_for_job, hydrate_jobs_with_artifacts, rows::job_with_artifact_from_models,
-        },
-    },
+    repositories::{JobWithArtifact, RepositoryResult, jobs::hydrate_jobs_with_artifacts},
 };
 
 use super::ApplyPrintReport;
@@ -81,8 +76,10 @@ where
         return Ok(None);
     };
 
-    let artifact = artifact_for_job(connection, &job).await?;
-    Ok(Some(job_with_artifact_from_models(job, artifact)?))
+    Ok(hydrate_jobs_with_artifacts(connection, vec![job])
+        .await?
+        .into_iter()
+        .next())
 }
 
 async fn job_by_id_for_printer<C>(
@@ -105,8 +102,10 @@ where
         return Ok(None);
     };
 
-    let artifact = artifact_for_job(connection, &job).await?;
-    Ok(Some(job_with_artifact_from_models(job, artifact)?))
+    Ok(hydrate_jobs_with_artifacts(connection, vec![job])
+        .await?
+        .into_iter()
+        .next())
 }
 
 async fn job_by_artifact<C>(
@@ -133,8 +132,10 @@ where
         return Ok(None);
     };
 
-    let artifact = artifact_for_job(connection, &job).await?;
-    Ok(Some(job_with_artifact_from_models(job, artifact)?))
+    Ok(hydrate_jobs_with_artifacts(connection, vec![job])
+        .await?
+        .into_iter()
+        .next())
 }
 
 async fn job_by_active_file<C>(

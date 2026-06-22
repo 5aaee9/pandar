@@ -21,7 +21,7 @@ use crate::{
 };
 
 pub use print_reports::{AppliedPrintReport, ApplyPrintReport, PrintReportDiagnostic};
-use rows::{job_from_model, job_with_artifact_from_models};
+use rows::{job_from_model_loading_usage, job_with_artifact_from_models};
 
 #[derive(Debug, Clone)]
 pub struct JobRepository {
@@ -42,6 +42,8 @@ pub struct CreatePrintJob {
     pub use_ams: bool,
     pub flow_cali: bool,
     pub timelapse: bool,
+    pub ams_mapping_json: Option<String>,
+    pub ams_mapping2_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -228,13 +230,38 @@ impl JobRepository {
     }
 
     async fn get_by_command(&self, command_id: CommandId) -> RepositoryResult<Option<Job>> {
-        jobs::Entity::find()
+        let Some(job) = jobs::Entity::find()
             .filter(jobs::Column::CommandId.eq(command_id.to_string()))
             .one(&self.database.sea_orm_connection())
             .await
             .context("failed to get job by command")?
-            .map(job_from_model)
-            .transpose()
+        else {
+            return Ok(None);
+        };
+
+        job_from_model_loading_usage(&self.database.sea_orm_connection(), job)
+            .await
+            .map(Some)
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn filament_usage_count(
+        &self,
+        tenant_id: TenantId,
+        job_id: JobId,
+    ) -> RepositoryResult<i64> {
+        let count = crate::entities::job_filament_usages::Entity::find()
+            .filter(
+                crate::entities::job_filament_usages::Column::TenantId.eq(tenant_id.to_string()),
+            )
+            .filter(crate::entities::job_filament_usages::Column::JobId.eq(job_id.to_string()))
+            .count(&self.database.sea_orm_connection())
+            .await
+            .context("failed to count job filament usage")?;
+
+        Ok(count
+            .try_into()
+            .expect("filament usage count should fit in i64"))
     }
 
     pub async fn apply_print_report(
@@ -268,8 +295,11 @@ pub(crate) async fn job_with_artifact_by_id(
         return Ok(None);
     };
 
-    let artifact = artifact_for_job(&database.sea_orm_connection(), &job).await?;
-    Ok(Some(job_with_artifact_from_models(job, artifact)?))
+    let connection = database.sea_orm_connection();
+    let artifact = artifact_for_job(&connection, &job).await?;
+    let mut with_artifact = job_with_artifact_from_models(job.clone(), artifact)?;
+    with_artifact.job = job_from_model_loading_usage(&connection, job).await?;
+    Ok(Some(with_artifact))
 }
 
 pub(crate) async fn artifact_for_job<C>(
@@ -316,6 +346,26 @@ where
         .map(|artifact| (artifact.id.clone(), artifact))
         .collect::<HashMap<_, _>>();
 
+    let usage_models = crate::entities::job_filament_usages::Entity::find()
+        .filter(
+            crate::entities::job_filament_usages::Column::JobId.is_in(
+                job_models
+                    .iter()
+                    .map(|job| job.id.clone())
+                    .collect::<Vec<_>>(),
+            ),
+        )
+        .all(connection)
+        .await
+        .context("failed to bulk load job filament usage")?;
+    let mut usage_by_job = HashMap::new();
+    for usage in usage_models {
+        usage_by_job
+            .entry(usage.job_id.clone())
+            .or_insert_with(Vec::new)
+            .push(usage);
+    }
+
     job_models
         .into_iter()
         .map(|job| {
@@ -326,7 +376,16 @@ where
                     job.artifact_id
                 ))
             })?;
-            job_with_artifact_from_models(job, artifact)
+            let usage = usage_by_job
+                .remove(&job.id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(rows::usage_from_model)
+                .collect::<RepositoryResult<Vec<_>>>()?;
+            job_with_artifact_from_models(job, artifact).map(|mut with_artifact| {
+                with_artifact.job.filament_usage = usage;
+                with_artifact
+            })
         })
         .collect()
 }

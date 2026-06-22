@@ -103,6 +103,8 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
         use_ams: true,
         flow_cali: true,
         timelapse: false,
+        ams_mapping_json: None,
+        ams_mapping2_json: None,
     })
     .payload();
 
@@ -123,6 +125,108 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
             }
         })
     );
+}
+
+#[test]
+fn project_file_payload_omits_mapping_keys_when_no_mapping_supplied() {
+    let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        filename: "job.3mf".to_string(),
+        plate_id: 2,
+        task_id: "task-1".to_string(),
+        subtask_id: "subtask-1".to_string(),
+        use_ams: false,
+        flow_cali: false,
+        timelapse: false,
+        ams_mapping_json: None,
+        ams_mapping2_json: None,
+    })
+    .payload();
+
+    assert!(payload["print"].get("ams_mapping").is_none());
+    assert!(payload["print"].get("ams_mapping_2").is_none());
+    assert_eq!(payload["print"]["use_ams"], false);
+}
+
+#[test]
+fn project_file_payload_includes_ams_mapping_only_when_supplied() {
+    let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        filename: "job.3mf".to_string(),
+        plate_id: 2,
+        task_id: "task-1".to_string(),
+        subtask_id: "subtask-1".to_string(),
+        use_ams: true,
+        flow_cali: false,
+        timelapse: false,
+        ams_mapping_json: Some("[0,-1,4]".to_string()),
+        ams_mapping2_json: None,
+    })
+    .payload();
+
+    assert_eq!(payload["print"]["ams_mapping"], json!([0, -1, 4]));
+    assert!(payload["print"].get("ams_mapping_2").is_none());
+    assert_eq!(payload["print"]["use_ams"], true);
+}
+
+#[test]
+fn project_file_payload_includes_ams_mapping2_only_when_supplied() {
+    let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        filename: "job.3mf".to_string(),
+        plate_id: 2,
+        task_id: "task-1".to_string(),
+        subtask_id: "subtask-1".to_string(),
+        use_ams: true,
+        flow_cali: false,
+        timelapse: false,
+        ams_mapping_json: None,
+        ams_mapping2_json: Some(r#"[{"ams_id":255,"slot_id":0}]"#.to_string()),
+    })
+    .payload();
+
+    assert!(payload["print"].get("ams_mapping").is_none());
+    assert_eq!(
+        payload["print"]["ams_mapping_2"],
+        json!([{"ams_id": 255, "slot_id": 0}])
+    );
+}
+
+#[test]
+fn project_file_payload_includes_both_mapping_keys_when_supplied() {
+    let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        filename: "job.3mf".to_string(),
+        plate_id: 2,
+        task_id: "task-1".to_string(),
+        subtask_id: "subtask-1".to_string(),
+        use_ams: true,
+        flow_cali: false,
+        timelapse: false,
+        ams_mapping_json: Some("[0,1]".to_string()),
+        ams_mapping2_json: Some(r#"[{"ams_id":0,"slot_id":1}]"#.to_string()),
+    })
+    .payload();
+
+    assert_eq!(payload["print"]["ams_mapping"], json!([0, 1]));
+    assert_eq!(
+        payload["print"]["ams_mapping_2"],
+        json!([{"ams_id": 0, "slot_id": 1}])
+    );
+}
+
+#[test]
+fn project_file_payload_rewrites_flat_external_mapping_values() {
+    let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        filename: "job.3mf".to_string(),
+        plate_id: 2,
+        task_id: "task-1".to_string(),
+        subtask_id: "subtask-1".to_string(),
+        use_ams: true,
+        flow_cali: false,
+        timelapse: false,
+        ams_mapping_json: Some("[254,255,15]".to_string()),
+        ams_mapping2_json: None,
+    })
+    .payload();
+
+    assert_eq!(payload["print"]["ams_mapping"], json!([-1, -1, 15]));
 }
 
 #[test]
@@ -315,6 +419,7 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
         subtask_name: None,
         diagnostics: Vec::new(),
         observed_at: "2026-06-22T00:00:00Z".to_owned(),
+        printer_materials_json: String::new(),
     };
 
     let event = print_job_report_event(&config, progress);
@@ -330,6 +435,7 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
         has_current_layer,
         total_layers,
         has_total_layers,
+        printer_materials_json,
         ..
     })) = event.event
     else {
@@ -343,6 +449,28 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
     assert!(has_current_layer);
     assert_eq!(total_layers, 0);
     assert!(!has_total_layers);
+    assert!(printer_materials_json.is_empty());
+}
+
+#[test]
+fn print_report_from_report_populates_printer_materials_json() {
+    let report = json!({
+        "print": {
+            "ams": {
+                "tray_now": 254,
+                "vt_tray": {"tray_info_idx": "GFL05", "tray_color": "#abcdef"}
+            }
+        }
+    });
+
+    let progress = print_report_from_report(&endpoint(), &report);
+    let materials: serde_json::Value =
+        serde_json::from_str(&progress.printer_materials_json).unwrap();
+
+    assert_eq!(materials["external_spools"][0]["external_id"], "254");
+    assert_eq!(materials["external_spools"][0]["filament_id"], "GFL05");
+    assert_eq!(materials["external_spools"][0]["color"], "ABCDEF");
+    assert_eq!(materials["active_tray"]["kind"], "external");
 }
 
 #[tokio::test]
@@ -395,6 +523,7 @@ async fn forward_print_reports_uses_transport_without_live_socket() {
     assert_eq!(report.subtask_id, "artifact-456");
     assert_eq!(report.percent, 55);
     assert!(report.has_percent);
+    assert!(report.printer_materials_json.is_empty());
     assert_eq!(
         transport.subscriptions().await,
         ["device/01S00EXAMPLE/report".to_string()]

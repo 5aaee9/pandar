@@ -21,7 +21,7 @@ use crate::{
     printer_events::PrinterEventHub,
     repositories::{
         AgentRepository, AuditEventRepository, AuthRepository, CommandRepository, JobRepository,
-        PrinterRepository, TenantRepository,
+        MaterialRepository, PrinterRepository, TenantRepository,
     },
     sessions::SessionRegistry,
 };
@@ -37,6 +37,7 @@ pub struct AppState {
     printers: PrinterRepository,
     commands: CommandRepository,
     jobs: JobRepository,
+    materials: MaterialRepository,
     job_storage: JobStorageConfig,
     external_auth: Option<JwtVerifier>,
     bootstrap_token: Option<String>,
@@ -87,7 +88,8 @@ impl AppState {
             agents: AgentRepository::new(database.clone()),
             printers: PrinterRepository::new(database.clone()),
             commands: CommandRepository::new(database.clone()),
-            jobs: JobRepository::new(database),
+            jobs: JobRepository::new(database.clone()),
+            materials: MaterialRepository::new(database),
             job_storage,
             external_auth: None,
             bootstrap_token: None,
@@ -153,6 +155,10 @@ impl AppState {
 
     pub fn jobs(&self) -> &JobRepository {
         &self.jobs
+    }
+
+    pub fn materials(&self) -> &MaterialRepository {
+        &self.materials
     }
 
     pub fn job_storage(&self) -> &JobStorageConfig {

@@ -4,6 +4,7 @@ mod audit;
 mod auth;
 mod commands;
 mod jobs;
+mod materials;
 mod printers;
 mod tenants;
 
@@ -17,6 +18,7 @@ pub use jobs::{
     AppliedPrintReport, ApplyPrintReport, CreatePrintJob, JobRepository, JobWithArtifact,
     PrintReportDiagnostic,
 };
+pub use materials::{MaterialPatchInput, MaterialRepository, MaterialSnapshot};
 pub use printers::{PrinterRepository, PrinterSnapshotUpsert};
 pub use tenants::TenantRepository;
 

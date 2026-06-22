@@ -45,6 +45,68 @@ async fn grpc_dispatch_print_project_file_sends_payload_and_marks_job_sent() {
 }
 
 #[tokio::test]
+async fn grpc_dispatch_print_project_file_sends_mapping_strings() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let created = create_print_job_with_mappings(
+        &state,
+        tenant_id,
+        agent_id,
+        "artifact-1",
+        Some("[0,254]".to_string()),
+        Some(r#"[{"ams_id":254,"slot_id":1}]"#.to_string()),
+    )
+    .await;
+    let (mut stream, _sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+
+    let hub_command = stream.next().await.unwrap().unwrap();
+
+    assert_eq!(hub_command.command_id, created.job.command_id.to_string());
+    let Some(hub_command::Command::PrintProjectFile(print)) = hub_command.command else {
+        panic!("expected print project file command");
+    };
+    assert_eq!(print.ams_mapping_json, "[0,254]");
+    assert_eq!(print.ams_mapping2_json, r#"[{"ams_id":254,"slot_id":1}]"#);
+}
+
+#[tokio::test]
+async fn grpc_corrupt_persisted_mapping_streams_internal_error() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let created = create_print_job_with_mappings(
+        &state,
+        tenant_id,
+        agent_id,
+        "artifact-1",
+        Some("[0]".to_string()),
+        None,
+    )
+    .await;
+    corrupt_command_mapping(&state, created.job.command_id).await;
+    let (mut stream, _sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+
+    let err = stream.next().await.unwrap().unwrap_err();
+
+    assert_eq!(err.code(), Code::Internal);
+    assert_eq!(err.message(), "invalid print command mapping payload");
+    assert_eq!(
+        state
+            .jobs()
+            .get_for_tenant(tenant_id, created.job.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .job
+            .status,
+        JobStatus::Sent
+    );
+}
+
+#[tokio::test]
 async fn grpc_print_ack_and_result_update_linked_job() {
     let state = fixture_state().await;
     let (tenant_id, agent_id) = tenant_agent(&state).await;
@@ -168,6 +230,17 @@ async fn create_print_job(
     agent_id: AgentId,
     artifact_id: &str,
 ) -> crate::repositories::JobWithArtifact {
+    create_print_job_with_mappings(state, tenant_id, agent_id, artifact_id, None, None).await
+}
+
+async fn create_print_job_with_mappings(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    artifact_id: &str,
+    ams_mapping_json: Option<String>,
+    ams_mapping2_json: Option<String>,
+) -> crate::repositories::JobWithArtifact {
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
@@ -187,6 +260,8 @@ async fn create_print_job(
             use_ams: true,
             flow_cali: false,
             timelapse: true,
+            ams_mapping_json,
+            ams_mapping2_json,
         })
         .await
         .unwrap()
@@ -206,6 +281,28 @@ async fn corrupt_command_payload(state: &AppState, command_id: pandar_core::Comm
             sqlx::query("UPDATE commands SET payload_json = $2 WHERE id = $1")
                 .bind(command_id.to_string())
                 .bind("{")
+                .execute(pool)
+                .await
+                .unwrap();
+        }
+    }
+}
+
+async fn corrupt_command_mapping(state: &AppState, command_id: pandar_core::CommandId) {
+    let payload = r#"{"job_id":"job","artifact_id":"artifact","printer_id":"printer","serial_number":"serial","filename":"plate.3mf","storage_path":"tenant/artifact/plate.3mf","size_bytes":42,"plate_id":1,"use_ams":true,"flow_cali":false,"timelapse":true,"ams_mapping_json":"[{}]","ams_mapping2_json":null}"#;
+    match state.database() {
+        Database::Sqlite(pool) => {
+            sqlx::query("UPDATE commands SET payload_json = ?2 WHERE id = ?1")
+                .bind(command_id.to_string())
+                .bind(payload)
+                .execute(pool)
+                .await
+                .unwrap();
+        }
+        Database::Postgres(pool) => {
+            sqlx::query("UPDATE commands SET payload_json = $2 WHERE id = $1")
+                .bind(command_id.to_string())
+                .bind(payload)
                 .execute(pool)
                 .await
                 .unwrap();

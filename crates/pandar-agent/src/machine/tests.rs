@@ -225,5 +225,7 @@ fn print_project_file() -> PrintProjectFile {
         use_ams: true,
         flow_cali: false,
         timelapse: true,
+        ams_mapping_json: String::new(),
+        ams_mapping2_json: String::new(),
     }
 }

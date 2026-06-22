@@ -192,6 +192,9 @@ fn job_from_parts_validates_required_fields_and_status() {
             print_started_at: None,
             print_finished_at: None,
             print_updated_at: None,
+            ams_mapping_json: None,
+            ams_mapping2_json: None,
+            filament_usage: Vec::new(),
             created_at: created_at.clone(),
             updated_at: created_at.clone(),
         })
@@ -239,6 +242,9 @@ fn job_from_parts_rehydrates_print_state() {
         print_started_at: Some("2026-06-22T00:01:00Z".to_string()),
         print_finished_at: None,
         print_updated_at: Some("2026-06-22T00:02:00Z".to_string()),
+        ams_mapping_json: None,
+        ams_mapping2_json: None,
+        filament_usage: Vec::new(),
         created_at: created_at.clone(),
         updated_at: created_at,
     })
@@ -281,6 +287,9 @@ fn job_from_parts_rejects_invalid_print_status() {
             print_started_at: None,
             print_finished_at: None,
             print_updated_at: None,
+            ams_mapping_json: None,
+            ams_mapping2_json: None,
+            filament_usage: Vec::new(),
             created_at: created_at.clone(),
             updated_at: created_at,
         })

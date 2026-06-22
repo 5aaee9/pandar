@@ -205,6 +205,8 @@ fn print_command(command_id: String, serial_number: &str, storage_path: &str) ->
             use_ams: true,
             flow_cali: false,
             timelapse: true,
+            ams_mapping_json: String::new(),
+            ams_mapping2_json: String::new(),
         })),
     }
 }

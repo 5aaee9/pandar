@@ -2,6 +2,7 @@ mod auth;
 mod command_results;
 mod commands;
 mod jobs;
+mod materials;
 mod phase1;
 mod postgres;
 mod postgres_commands;
@@ -12,7 +13,8 @@ use pandar_core::{AgentId, CommandId, TenantId};
 
 use super::{
     AgentRepository, AuditEventRepository, AuthRepository, CommandRepository, JobRepository,
-    PrinterRepository, PrinterSnapshotUpsert, RepositoryError, TenantRepository,
+    MaterialRepository, PrinterRepository, PrinterSnapshotUpsert, RepositoryError,
+    TenantRepository,
 };
 use crate::db::{Database, DatabaseConfig};
 
@@ -69,4 +71,21 @@ async fn enqueue_sent(
         .await
         .unwrap();
     command.id
+}
+
+async fn material_repositories() -> (
+    Database,
+    TenantRepository,
+    AgentRepository,
+    PrinterRepository,
+    MaterialRepository,
+) {
+    let database = sqlite_database().await;
+    (
+        database.clone(),
+        TenantRepository::new(database.clone()),
+        AgentRepository::new(database.clone()),
+        PrinterRepository::new(database.clone()),
+        MaterialRepository::new(database),
+    )
 }

@@ -180,8 +180,32 @@ pub struct Job {
     pub status: JobStatus,
     pub error: Option<String>,
     pub print: JobPrintState,
+    pub ams_mapping_json: Option<String>,
+    pub ams_mapping2_json: Option<String>,
+    pub filament_usage: Vec<JobFilamentUsage>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobFilamentUsage {
+    pub id: String,
+    pub tenant_id: TenantId,
+    pub job_id: JobId,
+    pub slot_index: u32,
+    pub source: String,
+    pub ams_id: Option<String>,
+    pub tray_id: Option<String>,
+    pub global_tray_id: Option<u32>,
+    pub external_id: Option<String>,
+    pub filament_id: Option<String>,
+    pub setting_id: Option<String>,
+    pub filament_type: Option<String>,
+    pub color: Option<String>,
+    pub used_mm: Option<String>,
+    pub used_grams: Option<String>,
+    pub confidence: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -207,6 +231,9 @@ pub struct JobParts {
     pub print_started_at: Option<String>,
     pub print_finished_at: Option<String>,
     pub print_updated_at: Option<String>,
+    pub ams_mapping_json: Option<String>,
+    pub ams_mapping2_json: Option<String>,
+    pub filament_usage: Vec<JobFilamentUsage>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -240,6 +267,9 @@ impl Job {
                 finished_at: parts.print_finished_at,
                 updated_at: parts.print_updated_at,
             },
+            ams_mapping_json: parts.ams_mapping_json,
+            ams_mapping2_json: parts.ams_mapping2_json,
+            filament_usage: parts.filament_usage,
             created_at: parts.created_at,
             updated_at: parts.updated_at,
         })

@@ -201,6 +201,15 @@ Phase 11 adds explicit provisioning and bootstrap boundaries:
 - Provisioning actions are represented in `audit_events` with actions such as `tenant.bootstrap`, `tenant.create`, `user.create`, `user.role_update`, `user_identity.link`, `api_token.create`, `api_token.revoke`, and `agent.pairing_bundle`.
 - Agent pairing bundles return `PANDAR_TENANT_ID`, `PANDAR_AGENT_ID`, and `PANDAR_AGENT_NAME` for deployment. The future token-rotation protocol will add short-lived pairing secrets and authenticated gRPC agent credential rotation.
 
+Phase 14 adds material-state persistence and reporting:
+
+- The agent sends normalized material patch JSON on `PrintJobReport.printer_materials_json`. Empty strings are treated as no material update so older agents remain compatible.
+- The hub owns tenant-scoped material state in `printer_material_snapshots`. It merges normalized AMS units, external spools, active tray evidence, and observed timestamps behind the backend-neutral repository boundary.
+- Print job creation accepts optional `ams_mapping` and `ams_mapping2` arrays, persists omitted fields as `NULL`, persists present empty arrays as `[]`, and dispatches valid JSON to agents through `PrintProjectFile`.
+- Terminal physical print reports derive `job_filament_usages` from persisted mappings plus the latest printer material snapshot. Mapping2 takes precedence per slot; external spool identity is canonicalized to `(external_id = "254", tray_id)`.
+- HTTP printer responses expose response-safe `materials` summaries. HTTP job responses expose persisted mapping JSON plus derived filament usage rows. Corrupt persisted mapping JSON is a repository error with parse context, not a partially rendered response.
+- Phase 14 deliberately does not add Spoolman, inventory purchasing, spool weight tracking, catalog sync, or any external material-inventory system. It establishes Pandar's internal material state first.
+
 Bootstrap a fresh tenant:
 
 ```bash
@@ -249,6 +258,7 @@ Planned hub phases after Phase 7:
 - Phase 11 added first-user/bootstrap, tenant user/token management, explicit bootstrap boundaries, provisioning audit events, and identity linking flows.
 - Phase 12 completed the staged repository layer migration to SeaORM while preserving SQLite/PostgreSQL behavior and existing SQLx schema migrations.
 - Phase 13 added structured command `result_json` persistence, tenant-scoped discovery/diagnostic command APIs, and command detail reads for frontend diagnostics. `result_json` is for structured agent output such as discovery rows and diagnostic checks; it must not contain Bambu access codes.
+- Phase 14 added normalized AMS/external-spool material snapshots, persisted print mappings, derived filament usage rows, HTTP material responses, and dashboard material summaries. Spoolman-style external inventory remains out of scope.
 
 Phase 12 persistence boundary:
 
@@ -294,7 +304,7 @@ Agent phase status after Phase 7:
 - Phase 8 added the real file-transfer runtime with implicit FTPS on port `990`, post-upload size verification, model/profile transport policy, and actionable upload diagnostics.
 - Phase 9 converts continuous MQTT reports into normalized job progress and terminal print events that can be correlated to hub jobs. Configured printers use a separate report MQTT client id from command transport so long-running subscriptions do not collide with command sessions.
 - Phase 13 adds LAN discovery, credential validation, printer diagnostics, and centralized compatibility rules for feature availability and transport policy. Discovery uses agent-local SSDP and can run without configured printers. Diagnostics run only for agent-configured serials, keep access codes agent-local, and return structured checks for MQTT reachability/report flow, FTPS reachability/storage probe, configured-printer status, and compatibility. Expected printer or environment problems are represented as successful command results with `overall = "problem"` instead of failed hub commands.
-- Phase 14 promotes AMS, external-spool, tray-change, and filament usage data into stable Pandar models.
+- Phase 14 promotes AMS, external-spool, tray-change, and filament usage data into stable Pandar models. The agent remains responsible for Bambu MQTT shape normalization, credential-key filtering, `tray_exist_bits` cleanup, `vir_slot`/`vt_tray` external-spool handling, active-tray derivation, and Bambu MQTT `ams_mapping_2` spelling. It does not persist material inventory locally.
 
 ### pandar-core
 
@@ -311,7 +321,7 @@ Agent phase status after Phase 7:
 - Job dispatch and command controls.
 - Operational settings for database-independent hub behavior.
 
-Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. Phase 10 centralizes frontend bearer forwarding: request cookie `APP_AUTH_COOKIE_NAME` defaulting to `pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. Phase 11 keeps configured tenant dashboards on tenant-scoped APIs when `APP_TENANT_ID` is set, so ordinary tenant tokens do not need bootstrap authority. Phase 13 exposes linked agents, discovery commands, diagnostic commands, and selected command details. It renders discovery rows, diagnostic checks, and compatibility capability availability from hub command `result_json`; it does not accept or display Bambu access codes. The frontend still does not consume the printer WebSocket; live subscription is left for Phase 15.
+Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. Phase 10 centralizes frontend bearer forwarding: request cookie `APP_AUTH_COOKIE_NAME` defaulting to `pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. Phase 11 keeps configured tenant dashboards on tenant-scoped APIs when `APP_TENANT_ID` is set, so ordinary tenant tokens do not need bootstrap authority. Phase 13 exposes linked agents, discovery commands, diagnostic commands, and selected command details. It renders discovery rows, diagnostic checks, and compatibility capability availability from hub command `result_json`; it does not accept or display Bambu access codes. Phase 14 renders printer material summaries and job material mapping/usage rows from Rust API response shapes while keeping dispatch-form mapping fields API-client-only. The frontend still does not consume the printer WebSocket; live subscription is left for Phase 15.
 
 Planned frontend phases after Phase 7:
 
@@ -319,6 +329,7 @@ Planned frontend phases after Phase 7:
 - Phase 10 forwards Clerk or Logto identity-provider bearer tokens to the Rust API through server-side cookie/static-token helpers. Provider SDK sign-in UI remains out of scope.
 - Phase 11 adds provisioning, identity linking, and tenant token/user management screens.
 - Phase 13 exposes discovery and compatibility diagnostics.
+- Phase 14 exposes material summaries and job material rows from HTTP responses.
 - Phase 15 consumes authenticated WebSocket events for day-to-day monitoring and notifications.
 
 ## Data Model Draft
@@ -333,6 +344,8 @@ Planned frontend phases after Phase 7:
 - `printer_state_snapshots`: latest normalized state and raw state pointer for diagnostics.
 - `jobs`: user-requested print jobs and dispatch metadata.
 - `job_artifacts`: uploaded 3MF/G-code metadata and storage location.
+- `printer_material_snapshots`: latest tenant-scoped normalized AMS/external-spool material state per printer.
+- `job_filament_usages`: derived print-time mapping rows for terminal physical jobs.
 - `commands`: durable hub-to-agent command ledger.
 - `machine_events`: normalized printer and agent events for audit/debug history.
 
@@ -351,6 +364,8 @@ Agent-machine file transfer should be encapsulated behind a trait such as `Machi
 Model-specific printer behavior should be encapsulated in the agent compatibility matrix. FTPS TLS/profile decisions, clear-data fallback, print option gates, diagnostics, and frontend availability should all consume the same conservative capability output. Unknown capability means unavailable in user-facing controls unless a future reference-backed phase upgrades it.
 
 Hub persistence should be encapsulated behind repositories that are tested against SQLite and PostgreSQL.
+
+Material-state semantics should stay split by boundary: raw Bambu report parsing in `pandar-agent`, tenant-scoped merge/persistence and usage derivation in `pandar-hub`, and response-safe summaries in `frontend`. External inventory systems such as Spoolman require a future explicit integration phase.
 
 ## Open Questions
 

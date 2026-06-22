@@ -22,6 +22,37 @@ export type Printer = {
   status: string
   last_seen_at: string
   created_at: string
+  materials: PrinterMaterials | null
+}
+
+export type PrinterMaterials = {
+  ams_units: Array<{
+    unit_id?: string
+    trays?: Array<{
+      tray_id?: string
+      type?: string | null
+      color?: string | null
+      filament_id?: string | null
+      name?: string | null
+      exists?: boolean | null
+    }>
+  }>
+  external_spools: Array<{
+    external_id?: string
+    tray_id?: string
+    type?: string | null
+    color?: string | null
+    filament_id?: string | null
+    name?: string | null
+    exists?: boolean | null
+  }>
+  active_tray: {
+    kind?: string
+    ams_id?: string | null
+    tray_id?: string | null
+    global_tray_id?: number | null
+  } | null
+  observed_at: string
 }
 
 export type Agent = {
@@ -126,6 +157,28 @@ export type Job = {
     filename: string
     content_type: string
     size_bytes: number
+  }
+  material: {
+    ams_mapping: number[] | null
+    ams_mapping2: Array<{
+      ams_id: number
+      slot_id: number
+    }> | null
+    filament_usage: Array<{
+      slot_index: number
+      source: string
+      ams_id: string | null
+      tray_id: string | null
+      global_tray_id: number | null
+      external_id: string | null
+      filament_id: string | null
+      setting_id: string | null
+      filament_type: string | null
+      color: string | null
+      used_mm: string | null
+      used_grams: string | null
+      confidence: string
+    }>
   }
 }
 

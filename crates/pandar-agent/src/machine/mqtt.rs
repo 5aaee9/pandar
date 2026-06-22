@@ -19,7 +19,7 @@ use tokio::sync::{Mutex, mpsc};
 
 use crate::{
     AgentConfig,
-    machine::{BambuPrinterEndpoint, MachineSnapshot},
+    machine::{BambuPrinterEndpoint, MachineSnapshot, materials::normalize_material_patch},
     protocol::agent::v1::{AgentEvent, MachineDiagnostic, PrintJobReport, agent_event},
 };
 
@@ -68,6 +68,8 @@ pub struct ProjectFileCommand {
     pub use_ams: bool,
     pub flow_cali: bool,
     pub timelapse: bool,
+    pub ams_mapping_json: Option<String>,
+    pub ams_mapping2_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -85,6 +87,7 @@ pub struct PrintReportProgress {
     pub subtask_name: Option<String>,
     pub diagnostics: Vec<MachineReportDiagnostic>,
     pub observed_at: String,
+    pub printer_materials_json: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -118,22 +121,65 @@ impl BambuMqttCommand {
                 json!({"print": {"command": "print_speed", "param": speed.as_u8().to_string(), "sequence_id": "0"}})
             }
             Self::RawJson(payload) => payload.clone(),
-            Self::ProjectFile(command) => json!({
-                "print": {
-                    "command": "project_file",
-                    "sequence_id": "20000",
-                    "param": format!("Metadata/plate_{}.gcode", command.plate_id),
-                    "url": format!("ftp://{}", command.filename),
-                    "file": command.filename,
-                    "task_id": command.task_id,
-                    "subtask_id": command.subtask_id,
-                    "use_ams": command.use_ams,
-                    "flow_cali": command.flow_cali,
-                    "timelapse": command.timelapse,
-                }
-            }),
+            Self::ProjectFile(command) => project_file_payload(command),
         }
     }
+}
+
+fn project_file_payload(command: &ProjectFileCommand) -> Value {
+    let mut print = serde_json::Map::new();
+    print.insert("command".to_owned(), json!("project_file"));
+    print.insert("sequence_id".to_owned(), json!("20000"));
+    print.insert(
+        "param".to_owned(),
+        json!(format!("Metadata/plate_{}.gcode", command.plate_id)),
+    );
+    print.insert(
+        "url".to_owned(),
+        json!(format!("ftp://{}", command.filename)),
+    );
+    print.insert("file".to_owned(), json!(command.filename));
+    print.insert("task_id".to_owned(), json!(command.task_id));
+    print.insert("subtask_id".to_owned(), json!(command.subtask_id));
+    print.insert("use_ams".to_owned(), json!(command.use_ams));
+    print.insert("flow_cali".to_owned(), json!(command.flow_cali));
+    print.insert("timelapse".to_owned(), json!(command.timelapse));
+
+    if let Some(mapping) = command
+        .ams_mapping_json
+        .as_deref()
+        .and_then(project_file_ams_mapping)
+    {
+        print.insert("ams_mapping".to_owned(), mapping);
+    }
+    if let Some(mapping) = command
+        .ams_mapping2_json
+        .as_deref()
+        .and_then(project_file_mapping_value)
+    {
+        print.insert("ams_mapping_2".to_owned(), mapping);
+    }
+
+    json!({ "print": print })
+}
+
+fn project_file_ams_mapping(raw: &str) -> Option<Value> {
+    let Value::Array(values) = project_file_mapping_value(raw)? else {
+        return None;
+    };
+    Some(Value::Array(
+        values
+            .into_iter()
+            .map(|value| match value.as_i64() {
+                Some(254 | 255) => json!(-1),
+                _ => value,
+            })
+            .collect(),
+    ))
+}
+
+fn project_file_mapping_value(raw: &str) -> Option<Value> {
+    serde_json::from_str(raw).ok()
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -360,6 +406,11 @@ pub fn print_report_from_report(
     }
     collect_hms_diagnostics(report, &mut diagnostics);
 
+    let observed_at = created_at_now();
+    let printer_materials_json = normalize_material_patch(report, &observed_at)
+        .and_then(|patch| serde_json::to_string(&patch).ok())
+        .unwrap_or_default();
+
     PrintReportProgress {
         serial: endpoint.serial.clone(),
         job_id: trimmed_string(print.get("task_id")),
@@ -373,7 +424,8 @@ pub fn print_report_from_report(
         gcode_file: trimmed_string(print.get("gcode_file")),
         subtask_name: trimmed_string(print.get("subtask_name")),
         diagnostics,
-        observed_at: created_at_now(),
+        observed_at,
+        printer_materials_json,
     }
 }
 
@@ -411,6 +463,7 @@ pub fn print_job_report_event(config: &AgentConfig, progress: PrintReportProgres
                 })
                 .collect(),
             observed_at: progress.observed_at,
+            printer_materials_json: progress.printer_materials_json,
         })),
     }
 }

@@ -79,6 +79,37 @@ fn phase_13_command_result_migrations_are_backend_equivalent() {
     assert_eq!(postgres.trim(), sqlite.trim());
 }
 
+#[test]
+fn phase_14_material_migrations_are_backend_equivalent() {
+    let sqlite = include_str!("../../../migrations/sqlite/20260623010000_phase_14_materials.sql");
+    let postgres =
+        include_str!("../../../migrations/postgres/20260623010000_phase_14_materials.sql");
+
+    assert_eq!(postgres.trim(), sqlite.trim());
+    for required in [
+        "ALTER TABLE jobs ADD COLUMN ams_mapping_json TEXT;",
+        "ALTER TABLE jobs ADD COLUMN ams_mapping2_json TEXT;",
+        "CREATE TABLE printer_material_snapshots",
+        "ams_json TEXT NOT NULL",
+        "external_spools_json TEXT NOT NULL",
+        "active_tray_json TEXT",
+        "UNIQUE (tenant_id, printer_id)",
+        "idx_printer_material_snapshots_tenant_printer",
+        "idx_printer_material_snapshots_tenant_serial",
+        "CREATE TABLE job_filament_usages",
+        "source TEXT NOT NULL CHECK (source IN ('ams_mapping2', 'ams_mapping'))",
+        "confidence TEXT NOT NULL CHECK (confidence IN ('mapped_no_quantity', 'report_estimate'))",
+        "UNIQUE (tenant_id, job_id, slot_index, source)",
+        "idx_job_filament_usages_tenant_job",
+        "idx_job_filament_usages_tenant_job_slot",
+    ] {
+        assert!(
+            sqlite.contains(required),
+            "missing migration fragment: {required}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn tenant_create_list_and_count_work() {
     let (_, tenants, _, _, _, _) = repositories().await;

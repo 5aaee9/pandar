@@ -175,6 +175,8 @@ fn print_payload(printer_id: &str, serial_number: &str) -> PrintProjectFilePaylo
         use_ams: true,
         flow_cali: false,
         timelapse: true,
+        ams_mapping_json: None,
+        ams_mapping2_json: None,
     }
 }
 

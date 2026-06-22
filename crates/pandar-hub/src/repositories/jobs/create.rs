@@ -22,6 +22,8 @@ pub async fn create_print_job<C>(
 where
     C: ConnectionTrait,
 {
+    validate_mapping_json(&input.ams_mapping_json, "ams_mapping_json")?;
+    validate_mapping_json(&input.ams_mapping2_json, "ams_mapping2_json")?;
     let serial_number = printer_for_agent(connection, &input).await?;
     let now = pandar_core::created_at_now();
     let job_id = JobId::new();
@@ -46,6 +48,31 @@ where
     .await?;
     insert_job(connection, &input, job_id, command_id, &now).await?;
     build_created_job(input, job_id, command_id, now)
+}
+
+fn validate_mapping_json(value: &Option<String>, field: &'static str) -> RepositoryResult<()> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    let len = match field {
+        "ams_mapping_json" => serde_json::from_str::<Vec<i32>>(value)
+            .with_context(|| format!("failed to validate {field}"))?
+            .len(),
+        "ams_mapping2_json" => {
+            let entries = serde_json::from_str::<
+                Vec<crate::repositories::jobs::print_reports::usage::Mapping2Entry>,
+            >(value)
+            .with_context(|| format!("failed to validate {field}"))?;
+            entries.len()
+        }
+        _ => unreachable!("validated mapping field should be known"),
+    };
+    if len > 32 {
+        return Err(RepositoryError::Database(anyhow::anyhow!(
+            "{field} must not contain more than 32 entries"
+        )));
+    }
+    Ok(())
 }
 
 async fn printer_for_agent<C>(connection: &C, input: &CreatePrintJob) -> RepositoryResult<String>
@@ -107,6 +134,8 @@ where
         created_at: Set(now.to_owned()),
         updated_at: Set(now.to_owned()),
         print_status: Set(PrintStatus::Pending.as_str().to_owned()),
+        ams_mapping_json: Set(input.ams_mapping_json.clone()),
+        ams_mapping2_json: Set(input.ams_mapping2_json.clone()),
         ..Default::default()
     }
     .insert(connection)
@@ -128,6 +157,8 @@ fn payload(input: &CreatePrintJob, job_id: JobId, serial_number: &str) -> PrintP
         use_ams: input.use_ams,
         flow_cali: input.flow_cali,
         timelapse: input.timelapse,
+        ams_mapping_json: input.ams_mapping_json.clone(),
+        ams_mapping2_json: input.ams_mapping2_json.clone(),
     }
 }
 
@@ -171,6 +202,9 @@ fn build_created_job(
             print_started_at: None,
             print_finished_at: None,
             print_updated_at: None,
+            ams_mapping_json: input.ams_mapping_json,
+            ams_mapping2_json: input.ams_mapping2_json,
+            filament_usage: Vec::new(),
             created_at: now.clone(),
             updated_at: now,
         })

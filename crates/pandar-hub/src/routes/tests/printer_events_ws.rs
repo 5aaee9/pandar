@@ -204,6 +204,8 @@ async fn printer_events_websocket_receives_job_progress_from_grpc_stream() {
             use_ams: true,
             flow_cali: false,
             timelapse: true,
+            ams_mapping_json: None,
+            ams_mapping2_json: None,
         })
         .await
         .unwrap();
@@ -336,6 +338,7 @@ fn print_report_event(
             total_layers: 8,
             has_total_layers: true,
             diagnostics: Vec::new(),
+            printer_materials_json: String::new(),
             observed_at: "2026-06-22T10:00:00Z".to_string(),
         })),
     }

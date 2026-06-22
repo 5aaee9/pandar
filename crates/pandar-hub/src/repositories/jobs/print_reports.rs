@@ -1,19 +1,21 @@
 use anyhow::Context;
 use pandar_core::{AgentId, JobId, TenantId};
-use sea_orm::{ConnectionTrait, TransactionTrait};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, TransactionTrait};
 
 use crate::{
     db::Database,
-    repositories::{JobWithArtifact, RepositoryResult},
+    repositories::{JobWithArtifact, RepositoryError, RepositoryResult},
 };
 
 mod correlation;
 mod events;
 mod state;
+pub(crate) mod usage;
 
 use correlation::{correlate_job, job_by_id, printer_for_serial};
 use events::{insert_job_events, insert_printer_events};
 use state::{reconciled_update, update_from_job, update_job_print};
+use usage::derive_terminal_usage;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApplyPrintReport {
@@ -31,6 +33,7 @@ pub struct ApplyPrintReport {
     pub current_layer: Option<u32>,
     pub total_layers: Option<u32>,
     pub diagnostics: Vec<PrintReportDiagnostic>,
+    pub printer_materials_json: String,
     pub observed_at: String,
 }
 
@@ -82,6 +85,17 @@ where
             inserted_printer_events: false,
         });
     };
+    crate::repositories::materials::upsert_from_patch_in_connection(
+        transaction,
+        crate::repositories::MaterialPatchInput {
+            tenant_id: input.tenant_id,
+            agent_id: input.agent_id,
+            printer_id: printer.id.clone(),
+            serial_number: input.serial.clone(),
+            printer_materials_json: input.printer_materials_json.clone(),
+        },
+    )
+    .await?;
     let job = correlate_job(transaction, &input, &printer).await?;
     let Some(job) = job else {
         let inserted = insert_printer_events(transaction, &input, &printer).await?;
@@ -102,6 +116,21 @@ where
     } else {
         false
     };
+    let job = job_by_id(transaction, input.tenant_id, job_id).await?;
+    if let Some(job) = job.as_ref()
+        && matches!(
+            desired.print_status.as_str(),
+            "completed" | "failed" | "cancelled"
+        )
+    {
+        let persisted = crate::entities::jobs::Entity::find_by_id(job.job.id.to_string())
+            .filter(crate::entities::jobs::Column::TenantId.eq(input.tenant_id.to_string()))
+            .one(transaction)
+            .await
+            .context("failed to reload terminal job for usage derivation")?
+            .ok_or(RepositoryError::MissingJob)?;
+        derive_terminal_usage(transaction, &persisted).await?;
+    }
     let job = job_by_id(transaction, input.tenant_id, job_id).await?;
     let inserted_job_events = if !changed || wrote {
         if let Some(job) = job.as_ref() {

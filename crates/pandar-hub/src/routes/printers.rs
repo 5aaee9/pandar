@@ -4,10 +4,12 @@ use axum::{
 };
 use pandar_core::{AgentId, CommandId, CommandRecord, Printer};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::{
     AppState,
-    repositories::{DiagnosePrinterPayload, DiscoverPrintersPayload, UserRole},
+    repositories::{DiagnosePrinterPayload, DiscoverPrintersPayload, MaterialSnapshot, UserRole},
     routes::{ApiError, auth},
 };
 
@@ -26,6 +28,15 @@ pub(super) struct PrinterResponse {
     status: String,
     last_seen_at: String,
     created_at: String,
+    materials: Option<PrinterMaterialsResponse>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(super) struct PrinterMaterialsResponse {
+    ams_units: Value,
+    external_spools: Value,
+    active_tray: Option<Value>,
+    observed_at: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -66,12 +77,27 @@ pub(super) async fn list_printers(
 ) -> Result<Json<PrinterListResponse>, ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
     auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
+    let materials = state
+        .materials()
+        .list_for_tenant(tenant_id)
+        .await?
+        .into_iter()
+        .map(|snapshot| {
+            (
+                snapshot.printer_id.clone(),
+                PrinterMaterialsResponse::from(snapshot),
+            )
+        })
+        .collect::<HashMap<_, _>>();
     let printers = state
         .printers()
         .list_for_tenant(tenant_id)
         .await?
         .into_iter()
-        .map(PrinterResponse::from)
+        .map(|printer| {
+            let materials = materials.get(&printer.id).cloned();
+            PrinterResponse::from_parts(printer, materials)
+        })
         .collect();
 
     Ok(Json(PrinterListResponse { printers }))
@@ -92,8 +118,13 @@ pub(super) async fn get_printer(
     else {
         return Err(ApiError::not_found("printer_not_found"));
     };
+    let materials = state
+        .materials()
+        .latest_for_printer(tenant_id, printer_id)
+        .await?
+        .map(PrinterMaterialsResponse::from);
 
-    Ok(Json(PrinterResponse::from(printer)))
+    Ok(Json(PrinterResponse::from_parts(printer, materials)))
 }
 
 pub(super) async fn refresh_printers(
@@ -206,8 +237,8 @@ fn parse_printer_id(value: &str) -> Result<&str, ApiError> {
     Ok(value)
 }
 
-impl From<Printer> for PrinterResponse {
-    fn from(printer: Printer) -> Self {
+impl PrinterResponse {
+    fn from_parts(printer: Printer, materials: Option<PrinterMaterialsResponse>) -> Self {
         Self {
             id: printer.id,
             tenant_id: printer.tenant_id.to_string(),
@@ -218,8 +249,41 @@ impl From<Printer> for PrinterResponse {
             status: printer.status,
             last_seen_at: printer.last_seen_at,
             created_at: printer.created_at,
+            materials,
         }
     }
+}
+
+impl From<MaterialSnapshot> for PrinterMaterialsResponse {
+    fn from(snapshot: MaterialSnapshot) -> Self {
+        Self {
+            ams_units: scrub_material_json(snapshot.ams_units),
+            external_spools: scrub_material_json(snapshot.external_spools),
+            active_tray: snapshot.active_tray.map(scrub_material_json),
+            observed_at: snapshot.observed_at,
+        }
+    }
+}
+
+fn scrub_material_json(value: Value) -> Value {
+    match value {
+        Value::Array(values) => Value::Array(values.into_iter().map(scrub_material_json).collect()),
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .filter_map(|(key, value)| {
+                    (!credential_key(&key)).then(|| (key, scrub_material_json(value)))
+                })
+                .collect(),
+        ),
+        value => value,
+    }
+}
+
+fn credential_key(key: &str) -> bool {
+    let key = key.to_ascii_lowercase();
+    ["access_code", "password", "passwd", "token", "auth"]
+        .iter()
+        .any(|needle| key.contains(needle))
 }
 
 impl From<CommandRecord> for CommandResponse {

@@ -141,6 +141,8 @@ async fn create_print_job(
             use_ams: true,
             flow_cali: false,
             timelapse: true,
+            ams_mapping_json: None,
+            ams_mapping2_json: None,
         })
         .await
         .unwrap();
@@ -171,6 +173,7 @@ fn report(serial: String, job_id: String, artifact_id: String) -> PrintJobReport
             message: "fan warning".to_string(),
             payload_json: r#"{"code":"HMS_123"}"#.to_string(),
         }],
+        printer_materials_json: String::new(),
         observed_at: "2026-06-22T10:00:00Z".to_string(),
     }
 }

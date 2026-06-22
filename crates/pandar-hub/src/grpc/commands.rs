@@ -189,6 +189,16 @@ pub fn hub_command_from_record(command: CommandRecord) -> Result<HubCommand, Sta
                 use_ams: payload.use_ams,
                 flow_cali: payload.flow_cali,
                 timelapse: payload.timelapse,
+                ams_mapping_json: mapping_payload_string(
+                    payload.ams_mapping_json.as_deref(),
+                    "ams_mapping_json",
+                    &command_id,
+                )?,
+                ams_mapping2_json: mapping_payload_string(
+                    payload.ams_mapping2_json.as_deref(),
+                    "ams_mapping2_json",
+                    &command_id,
+                )?,
             })
         }
         kind => {
@@ -200,6 +210,55 @@ pub fn hub_command_from_record(command: CommandRecord) -> Result<HubCommand, Sta
     Ok(HubCommand {
         command_id,
         command: Some(command),
+    })
+}
+
+fn mapping_payload_string(
+    value: Option<&str>,
+    field: &'static str,
+    command_id: &str,
+) -> Result<String, Status> {
+    let Some(value) = value else {
+        return Ok(String::new());
+    };
+    match field {
+        "ams_mapping_json" => {
+            parse_mapping::<Vec<i32>>(value, field, command_id)?;
+        }
+        "ams_mapping2_json" => {
+            let entries = parse_mapping::<Vec<Mapping2Payload>>(value, field, command_id)?;
+            for entry in entries {
+                let _ = (entry.ams_id, entry.slot_id);
+            }
+        }
+        _ => unreachable!("print mapping field should be known"),
+    }
+    Ok(value.to_string())
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Mapping2Payload {
+    ams_id: i32,
+    slot_id: i32,
+}
+
+fn parse_mapping<T: serde::de::DeserializeOwned>(
+    value: &str,
+    field: &'static str,
+    command_id: &str,
+) -> Result<T, Status> {
+    serde_json::from_str::<T>(value).map_err(|err| {
+        let err = anyhow::Error::from(err).context(format!(
+            "failed to parse persisted {field} for print command"
+        ));
+        tracing::error!(
+            %command_id,
+            %field,
+            error = %format!("{err:#}"),
+            "failed to serialize print command mapping"
+        );
+        Status::internal("invalid print command mapping payload")
     })
 }
 

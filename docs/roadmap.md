@@ -37,6 +37,7 @@
 - Added Phase 11 provisioning/admin boundaries with bootstrap-only cross-tenant APIs, atomic tenant-admin bootstrap, tenant-admin user/token/identity management, API-token revocation, provisioning audit events, agent pairing bundles, and tenant-bound frontend reads.
 - Added Phase 12 full SeaORM repository migration coverage for auth, audit, agents, printers, commands, jobs, print reports, machine events, and documented the remaining atomic printer snapshot SQLx adapter.
 - Added Phase 13 LAN discovery, printer diagnostics, structured command result persistence, conservative compatibility matrix ownership, hub diagnostic APIs, and frontend diagnostic result rendering.
+- Added Phase 14 AMS/external-spool material normalization, tenant-scoped material snapshots, print mapping persistence/dispatch, terminal filament usage derivation, HTTP material responses, and dashboard material summaries.
 
 ## Phase 1: Foundation
 
@@ -273,16 +274,18 @@ Exit criteria:
 
 Goal: promote AMS/external-spool data from raw report details into first-class tenant-visible state.
 
-- Normalize AMS units, tray IDs, external spool identifiers, active tray, tray changes, filament type/color/material fields, and remaining estimates from MQTT reports.
-- Preserve `ams_mapping` and `ams_mapping2` semantics used by `project_file` commands.
-- Add job-level filament usage records once Phase 9 supplies reliable start/completion boundaries.
-- Evaluate optional Spoolman-style external inventory integration only after Pandar's internal state model is stable.
+- Completed agent-side normalization for AMS units, tray IDs, external spool identifiers, active tray, filament type/color/material fields, remaining estimates, credential filtering, and Bambu mapping payloads.
+- Completed SQLite/PostgreSQL migrations, SeaORM entities, and repositories for tenant-scoped material snapshots plus derived job filament usage rows.
+- Completed preservation of `ams_mapping` and `ams_mapping2` semantics used by `project_file` commands, including strict API shape validation, null-vs-empty persistence, external spool canonicalization, and dispatch to agents.
+- Completed terminal job filament usage derivation from persisted mappings and the latest material snapshot with clear `mapped_no_quantity` uncertainty boundaries.
+- Completed printer/job HTTP response shapes and frontend dashboard rendering for material summaries and job material rows.
+- Kept Spoolman-style external inventory, spool weight tracking, catalog sync, and purchasing out of scope until Pandar's internal state model is stable.
 
 Exit criteria:
 
-- The printer view exposes current AMS/external-spool state without raw MQTT payload knowledge.
-- Print dispatch can show and persist the mapping used for each job.
-- Filament usage can be derived from completed or failed jobs with clear uncertainty boundaries.
+- Completed: the printer view exposes current AMS/external-spool state without raw MQTT payload knowledge.
+- Completed: print dispatch can persist and show the mapping used for each job.
+- Completed: filament usage can be derived from completed or failed jobs with clear uncertainty boundaries.
 
 ## Phase 15: Product Runtime UX And Notifications
 
@@ -305,4 +308,4 @@ Exit criteria:
 
 ## Immediate Next
 
-- Start Phase 14 AMS, filament, and spool operations.
+- Start Phase 15 product runtime UX and notifications.

@@ -7,12 +7,15 @@ use axum::{
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use pandar_core::{Job, JobArtifact, JobId, JobPrintState};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{
     AppState,
-    repositories::{CreatePrintJob, JobWithArtifact, UserRole},
+    repositories::{CreatePrintJob, JobWithArtifact, RepositoryError, UserRole},
     routes::{ApiError, auth, parse_tenant_id},
 };
+
+mod material;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateJobRequest {
@@ -23,6 +26,8 @@ pub struct CreateJobRequest {
     use_ams: bool,
     flow_cali: bool,
     timelapse: bool,
+    ams_mapping: Option<Value>,
+    ams_mapping2: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -40,6 +45,7 @@ pub struct JobResponse {
     print: JobPrintResponse,
     command: JobCommandResponse,
     artifact: JobArtifactResponse,
+    material: material::JobMaterialResponse,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -81,7 +87,6 @@ pub struct JobCommandResponse {
 pub struct JobListResponse {
     jobs: Vec<JobResponse>,
 }
-
 pub async fn create_job(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -116,6 +121,8 @@ pub async fn create_job(
             "artifact_too_large",
         ));
     }
+    let ams_mapping_json = material::mapping_json(payload.ams_mapping, "ams_mapping")?;
+    let ams_mapping2_json = material::mapping_json(payload.ams_mapping2, "ams_mapping2")?;
 
     let Some(printer) = state
         .printers()
@@ -150,13 +157,15 @@ pub async fn create_job(
                 use_ams: payload.use_ams,
                 flow_cali: payload.flow_cali,
                 timelapse: payload.timelapse,
+                ams_mapping_json,
+                ams_mapping2_json,
             },
             auth.user.id,
         )
         .await;
 
     match created {
-        Ok(created) => Ok((StatusCode::CREATED, Json(JobResponse::from(created)))),
+        Ok(created) => Ok((StatusCode::CREATED, Json(JobResponse::try_from(created)?))),
         Err(err) => {
             if let Err(cleanup_err) = state
                 .job_storage()
@@ -178,7 +187,6 @@ fn parse_printer_id(value: &str) -> Result<(), ApiError> {
     uuid::Uuid::parse_str(value).map_err(|_| ApiError::bad_request("invalid_printer_id"))?;
     Ok(())
 }
-
 pub async fn list_jobs(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -191,8 +199,8 @@ pub async fn list_jobs(
         .list_for_tenant(tenant_id)
         .await?
         .into_iter()
-        .map(JobResponse::from)
-        .collect();
+        .map(JobResponse::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(Json(JobListResponse { jobs }))
 }
@@ -209,18 +217,21 @@ pub async fn get_job(
         return Err(ApiError::not_found("job_not_found"));
     };
 
-    Ok(Json(JobResponse::from(job)))
+    Ok(Json(JobResponse::try_from(job)?))
 }
 
-impl From<JobWithArtifact> for JobResponse {
-    fn from(value: JobWithArtifact) -> Self {
+impl TryFrom<JobWithArtifact> for JobResponse {
+    type Error = RepositoryError;
+
+    fn try_from(value: JobWithArtifact) -> Result<Self, Self::Error> {
         Self::from_parts(value.job, value.artifact)
     }
 }
 
 impl JobResponse {
-    fn from_parts(job: Job, artifact: JobArtifact) -> Self {
-        Self {
+    fn from_parts(job: Job, artifact: JobArtifact) -> Result<Self, RepositoryError> {
+        let material = material::JobMaterialResponse::from_job(&job)?;
+        Ok(Self {
             id: job.id.to_string(),
             tenant_id: job.tenant_id.to_string(),
             printer_id: job.printer_id,
@@ -238,7 +249,8 @@ impl JobResponse {
                 status: job.status.to_string(),
             },
             artifact: JobArtifactResponse::from(artifact),
-        }
+            material,
+        })
     }
 }
 

@@ -3,6 +3,7 @@ pub mod diagnostics;
 pub mod discovery;
 pub mod file_transfer;
 pub mod ftps;
+pub mod materials;
 pub mod mqtt;
 
 use std::time::Duration;
@@ -312,12 +313,18 @@ where
             use_ams: command.use_ams,
             flow_cali: command.flow_cali,
             timelapse: command.timelapse,
+            ams_mapping_json: non_empty_string(&command.ams_mapping_json),
+            ams_mapping2_json: non_empty_string(&command.ams_mapping2_json),
         })
         .payload(),
         qos: BAMBU_MQTT_QOS,
     })
     .await
     .with_context(|| format!("publish project_file to {}", endpoint.serial))
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    (!value.is_empty()).then(|| value.to_owned())
 }
 
 #[cfg(test)]

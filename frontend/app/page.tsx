@@ -24,6 +24,47 @@ type PageProps = {
   }>
 }
 
+function formatPrinterMaterials(printer: PrinterList['printers'][number]) {
+  const materials = printer.materials
+  if (!materials) {
+    return { summary: 'No material state', detail: 'Awaiting printer report' }
+  }
+  const amsTrays = materials.ams_units.reduce(
+    (count, unit) => count + (unit.trays?.filter((tray) => tray.exists !== false).length ?? 0),
+    0,
+  )
+  const external = materials.external_spools.filter((spool) => spool.exists !== false).length
+  const active = materials.active_tray
+    ? materials.active_tray.kind === 'external'
+      ? 'External spool'
+      : `AMS ${materials.active_tray.ams_id ?? '-'}:${materials.active_tray.tray_id ?? '-'}`
+    : 'No active tray'
+  return {
+    summary: `${amsTrays} AMS tray${amsTrays === 1 ? '' : 's'}, ${external} external`,
+    detail: `${active} · ${formatDate(materials.observed_at)}`,
+  }
+}
+
+function formatJobMaterial(job: JobList['jobs'][number]) {
+  const usage = job.material.filament_usage
+  if (usage.length > 0) {
+    return usage
+      .map((row) => {
+        const slot =
+          row.external_id !== null
+            ? `external ${row.tray_id ?? '-'}`
+            : `AMS ${row.ams_id ?? '-'}:${row.tray_id ?? '-'}`
+        return `${row.slot_index}: ${slot} ${row.filament_type ?? row.filament_id ?? ''}`.trim()
+      })
+      .join(', ')
+  }
+  const mappings = [
+    job.material.ams_mapping ? `ams_mapping ${job.material.ams_mapping.length}` : null,
+    job.material.ams_mapping2 ? `ams_mapping2 ${job.material.ams_mapping2.length}` : null,
+  ].filter(Boolean)
+  return mappings.length > 0 ? mappings.join(', ') : 'No material mapping'
+}
+
 async function fetchJson<T>(path: string, label: string): Promise<FetchResult<T>> {
   try {
     const response = await fetch(`${apiUrl}${path}`, {
@@ -187,13 +228,16 @@ export default async function Page({ searchParams }: PageProps) {
                     <th className="px-4 py-2">Serial</th>
                     <th className="px-4 py-2">Model</th>
                     <th className="px-4 py-2">Status</th>
+                    <th className="px-4 py-2">Materials</th>
                     <th className="px-4 py-2">Dispatch API</th>
                     <th className="px-4 py-2">Agent ID</th>
                     <th className="px-4 py-2">Last seen</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
-                  {printers.map((printer) => (
+                  {printers.map((printer) => {
+                    const material = formatPrinterMaterials(printer)
+                    return (
                     <tr key={printer.id}>
                       <td className="px-4 py-3 font-medium text-slate-950">{printer.name}</td>
                       <td className="px-4 py-3 font-mono text-xs text-slate-700">
@@ -205,6 +249,10 @@ export default async function Page({ searchParams }: PageProps) {
                           {printer.status}
                         </span>
                       </td>
+                      <td className="px-4 py-3">
+                        <div className="text-slate-800">{material.summary}</div>
+                        <div className="text-xs text-slate-600">{material.detail}</div>
+                      </td>
                       <td className="px-4 py-3 font-mono text-xs text-slate-700">
                         POST /api/v1/tenants/{selectedTenant.id}/printers/{printer.id}/jobs
                       </td>
@@ -215,7 +263,8 @@ export default async function Page({ searchParams }: PageProps) {
                         {formatDate(printer.last_seen_at)}
                       </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -259,6 +308,7 @@ export default async function Page({ searchParams }: PageProps) {
                     <th className="px-4 py-2">Printer</th>
                     <th className="px-4 py-2">Dispatch</th>
                     <th className="px-4 py-2">Print</th>
+                    <th className="px-4 py-2">Material</th>
                     <th className="px-4 py-2">Progress</th>
                     <th className="px-4 py-2">Created</th>
                   </tr>
@@ -294,6 +344,9 @@ export default async function Page({ searchParams }: PageProps) {
                         {job.print.error ? (
                           <div className="mt-1 text-xs text-red-700">{job.print.error}</div>
                         ) : null}
+                      </td>
+                      <td className="max-w-72 px-4 py-3 text-slate-700">
+                        <div className="text-sm">{formatJobMaterial(job)}</div>
                       </td>
                       <td className="px-4 py-3 text-slate-700">
                         <div>{formatProgress(job)}</div>

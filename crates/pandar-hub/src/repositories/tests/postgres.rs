@@ -23,7 +23,7 @@ pub(super) async fn clear_postgres(database: &Database) {
         panic!("expected PostgreSQL database");
     };
     sqlx::query(
-        "TRUNCATE audit_events, api_tokens, user_identities, jobs, job_artifacts, commands, printers, agents, users, tenants",
+        "TRUNCATE audit_events, api_tokens, user_identities, job_filament_usages, printer_material_snapshots, jobs, job_artifacts, commands, printers, agents, users, tenants",
     )
         .execute(pool)
         .await
@@ -96,6 +96,8 @@ async fn postgres_job_repository_behavior_when_configured() {
             use_ams: true,
             flow_cali: false,
             timelapse: false,
+            ams_mapping_json: None,
+            ams_mapping2_json: None,
         })
         .await
         .unwrap();
@@ -133,6 +135,8 @@ async fn postgres_job_repository_behavior_when_configured() {
             use_ams: false,
             flow_cali: false,
             timelapse: false,
+            ams_mapping_json: None,
+            ams_mapping2_json: None,
         })
         .await
         .unwrap_err();
@@ -182,6 +186,8 @@ async fn postgres_print_report_reconciliation_when_configured() {
             use_ams: true,
             flow_cali: false,
             timelapse: false,
+            ams_mapping_json: None,
+            ams_mapping2_json: None,
         })
         .await
         .unwrap();
@@ -200,6 +206,7 @@ async fn postgres_print_report_reconciliation_when_configured() {
         current_layer: Some(4),
         total_layers: Some(8),
         diagnostics: Vec::new(),
+        printer_materials_json: String::new(),
         observed_at: "2026-06-22T00:00:00Z".to_string(),
     };
 

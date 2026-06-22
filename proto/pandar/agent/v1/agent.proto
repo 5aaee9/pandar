@@ -67,6 +67,7 @@ message PrintJobReport {
   bool has_total_layers = 15;
   repeated MachineDiagnostic diagnostics = 16;
   string observed_at = 17;
+  string printer_materials_json = 18;
 }
 
 message MachineDiagnostic {
@@ -109,4 +110,6 @@ message PrintProjectFile {
   bool use_ams = 9;
   bool flow_cali = 10;
   bool timelapse = 11;
+  string ams_mapping_json = 12;
+  string ams_mapping2_json = 13;
 }

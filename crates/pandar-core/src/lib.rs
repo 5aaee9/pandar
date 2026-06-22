@@ -12,7 +12,8 @@ pub use agent::{Agent, AgentStatus};
 pub use command::{CommandRecord, CommandRecordParts, CommandStatus};
 pub use ids::{AgentId, CommandId, JobId, TenantId};
 pub use job::{
-    Job, JobArtifact, JobArtifactParts, JobParts, JobPrintState, JobStatus, PrintStatus,
+    Job, JobArtifact, JobArtifactParts, JobFilamentUsage, JobParts, JobPrintState, JobStatus,
+    PrintStatus,
 };
 pub use printer::{Printer, PrinterParts};
 pub use tenant::Tenant;

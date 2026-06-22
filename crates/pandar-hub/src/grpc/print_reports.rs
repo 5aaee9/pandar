@@ -31,7 +31,7 @@ pub async fn handle_print_report(
             .publish(
                 tenant_id,
                 PrinterEvent::JobProgress {
-                    job: Box::new(JobResponse::from(job)),
+                    job: Box::new(JobResponse::try_from(job).map_err(repository_status)?),
                 },
             )
             .await;
@@ -83,6 +83,7 @@ fn apply_input(
             .then_some(report.total_layers)
             .filter(|value| *value <= 100_000),
         diagnostics,
+        printer_materials_json: report.printer_materials_json,
         observed_at,
     })
 }
