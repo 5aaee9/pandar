@@ -18,6 +18,8 @@ pandar-agent -(MQTT + file transfer)-> Bambu machines
 
 `frontend` is the product UI. It should talk only to `pandar-hub`, never directly to agents or printers.
 
+End-user authentication can be delegated to Clerk or Logto, but tenant authorization remains inside Pandar. The hub verifies identity-provider JWTs, maps provider subjects to local users, and checks Rust-managed user-to-tenant membership plus tenant roles for every tenant-scoped operation.
+
 ## Reference Scan
 
 The Bambu machine implementation should be derived from `reference/BambuStudio` and `reference/bambuddy`, without copying unrelated application code.
@@ -49,6 +51,7 @@ Evidence from `reference/bambuddy/backend/app/services/bambu_ftp.py`:
 - Uploads use manual `STOR` transfer chunks instead of `storbinary()` for A1 compatibility.
 - Upload completion should wait for the printer's transfer response or verify server-side size before issuing the print command.
 - Downloads and uploads cache the working mode per printer IP.
+- Model profiles are needed for firmware-specific transport quirks such as TLS 1.2 caps on affected printers.
 
 The user-facing architecture currently names this channel "SFTP / MQTT". The reference projects show Bambu-compatible file transfer behavior as implicit FTPS. Pandar should keep the public abstraction as "machine file transfer" until the exact supported protocol set is implemented and tested.
 
@@ -67,6 +70,45 @@ Pandar should preserve this split:
 3. Send MQTT print command.
 4. Track state transitions from MQTT reports.
 5. Persist dispatch identity so reconnects and hub restarts can reconcile job state.
+
+### Print Report Reconciliation
+
+Evidence from `reference/bambuddy/backend/app/services/bambu_mqtt.py`:
+
+- `project_file` commands should carry unique `project_id`, `task_id`, and `subtask_id` values so repeated prints are not mistaken for stale continuations by firmware or observers.
+- Printer reports expose physical state through fields such as `print.gcode_state`, `print.mc_percent`, `print.mc_remaining_time`, `print.layer_num`, `print.total_layer_num`, `print.subtask_id`, `print.gcode_file`, and `print.subtask_name`.
+- Terminal state should be inferred from transitions:
+  - `RUNNING` marks a physical print in progress.
+  - `FINISH` marks a successful physical completion.
+  - `FAILED` marks a failed print, including some pre-print setup failures.
+  - `IDLE` immediately after `RUNNING` marks an abort/cancel path.
+- `print_error` and HMS-style fields are separate diagnostic channels and should be normalized into machine events rather than flattened into a display-only string.
+
+Phase 5 deliberately stops at dispatch success. Later phases must keep command dispatch state and physical print state separate so a successful MQTT publish is never treated as a completed print.
+
+### Discovery And Compatibility
+
+Evidence from `reference/bambuddy/backend/app/services/discovery.py`:
+
+- Bambu LAN discovery uses SSDP multicast `239.255.255.250:2021`.
+- The search target is `urn:bambulab-com:device:3dprinter:1`.
+- Discovery and compatibility must remain agent-local because they depend on the user's LAN, local credentials, printer firmware, and model-specific transport behavior.
+
+### External Identity Providers
+
+Evidence from Clerk and Logto documentation:
+
+- Clerk session tokens can be verified by backends with a public key or JWKS, expected signing algorithm, token expiration/not-before checks, and optional authorized-party checks for trusted frontend origins.
+- Logto access tokens for APIs are JWTs validated through JWKS, issuer, audience/API resource, expiration, and scope or organization-context checks.
+- Both providers supply authentication identity. Pandar should not use provider organizations as the tenant authorization source unless a future phase explicitly defines a synchronization model.
+
+Pandar's contract:
+
+1. Verify the bearer token cryptographically and validate issuer/audience/time claims.
+2. Extract a stable provider subject and provider identifier.
+3. Resolve that identity to a local Pandar user.
+4. Authorize tenant access through Pandar-managed `users`/membership/role records.
+5. Preserve Phase 6 tenant API tokens as service credentials for automation and non-browser clients.
 
 ## Target Components
 
@@ -120,6 +162,14 @@ Phase 5 adds tenant-scoped print dispatch while preserving the durable command l
 - Command acknowledgement/result events update both command and job state through repository-level transactions, so print job status cannot drift from its durable command status.
 - `succeeded` means dispatch work completed at the agent boundary. It does not mean the printer physically finished the print; MQTT report reconciliation remains a later phase.
 
+Planned hub phases after Phase 7:
+
+- Phase 8 keeps hub behavior mostly unchanged while the agent gains real FTPS upload; hub command/job status still records dispatch success or failure.
+- Phase 9 adds physical print reconciliation, persistent progress fields, normalized machine events, and tenant WebSocket job progress broadcasts.
+- Phase 10 adds Clerk/Logto-compatible JWT verification, provider-subject-to-local-user mapping, and Pandar-owned tenant membership checks for HTTP and WebSocket auth.
+- Phase 11 adds first-user/bootstrap, tenant user/token management, explicit global admin/bootstrap boundaries, provisioning audit events, and identity linking flows.
+- Phase 12 completes the staged SeaORM repository migration while preserving SQLite/PostgreSQL behavior and existing SQLx schema migrations.
+
 ### pandar-agent
 
 - gRPC client that keeps a long-lived reverse session to `pandar-hub`.
@@ -152,6 +202,13 @@ Phase 5 adds the `PrintProjectFile` command executor:
 - Unit tests use fake file-transfer and MQTT transports to prove upload-before-publish behavior and no-publish-on-upload-failure behavior without opening real Bambu sockets.
 - The default runtime file-transfer adapter still returns `Bambu FTPS runtime is not implemented in this phase`; deployments must share hub spool and agent artifact roots for the filesystem artifact reader, but live printer upload awaits the next runtime implementation phase.
 
+Planned agent phases after Phase 7:
+
+- Phase 8 replaces the unavailable file-transfer runtime with real implicit FTPS on port `990`, post-upload verification, model/profile transport policy, and actionable upload diagnostics.
+- Phase 9 converts continuous MQTT reports into normalized job progress and terminal print events that can be correlated to hub jobs.
+- Phase 13 adds LAN discovery, credential validation, printer diagnostics, and centralized compatibility rules for feature availability and transport policy.
+- Phase 14 promotes AMS, external-spool, tray-change, and filament usage data into stable Pandar models.
+
 ### pandar-core
 
 - IDs and domain records: tenant, user, agent, printer, job, command.
@@ -169,10 +226,20 @@ Phase 5 adds the `PrintProjectFile` command executor:
 
 Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. The frontend does not consume the printer WebSocket yet; live subscription is left for a later phase after stronger auth and tenant selection are in place.
 
+Planned frontend phases after Phase 7:
+
+- Phase 9 exposes live job progress and terminal print failure/success state once hub reconciliation exists.
+- Phase 10 integrates Clerk or Logto sign-in and forwards identity-provider bearer tokens to the Rust API.
+- Phase 11 adds provisioning, identity linking, and tenant token/user management screens.
+- Phase 13 exposes discovery and compatibility diagnostics.
+- Phase 15 consumes authenticated WebSocket events for day-to-day monitoring and notifications.
+
 ## Data Model Draft
 
 - `tenants`: tenant identity and display metadata.
 - `users`: tenant users and role assignments.
+- `user_identities`: external identity links such as `{provider, subject, user_id}` for Clerk/Logto users.
+- `tenant_memberships`: local user-to-tenant role assignments owned by Pandar.
 - `agents`: reverse-connection identity, tenant binding, last seen time, version.
 - `printers`: tenant, agent, serial number, name, model, network endpoint metadata, active flag.
 - `printer_credentials`: agent-visible encrypted access code material or agent-local credential references.
@@ -183,6 +250,8 @@ Phase 4 replaces the placeholder landing page with a small operational dashboard
 - `machine_events`: normalized printer and agent events for audit/debug history.
 
 Credentials should not be sent to frontend clients. Prefer keeping printer access codes agent-local when possible; if hub storage is required, encrypt at rest and scope access by tenant and agent.
+
+Identity-provider tokens should not define tenant access by themselves. The frontend may obtain tokens from Clerk or Logto, but Rust must validate the token and then authorize through Pandar-managed local user and tenant membership records.
 
 ## Protocol Boundaries
 
@@ -201,3 +270,4 @@ Hub persistence should be encapsulated behind repositories that are tested again
 - Whether the file channel should expose the term SFTP, FTPS, or a protocol-neutral "file transfer" surface.
 - Which printer families are required for the first compatibility target.
 - Whether virtual-printer/proxy behavior from `bambuddy` is in scope for the first release.
+- Whether SeaORM's migration system should replace SQLx migrations after repository migration is complete, or whether SQLx migrations should remain the schema authority.

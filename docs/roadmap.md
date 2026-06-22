@@ -7,6 +7,10 @@
 - The machine command channel should use MQTT over TLS with `device/{serial}/report` and `device/{serial}/request` topics.
 - The machine file channel should start from the reference's implicit FTPS behavior on port 990, even though the high-level product brief says SFTP. Keep Pandar's public boundary protocol-neutral until implementation confirms final naming.
 - Print dispatch should be modeled as upload artifact, verify artifact, send MQTT `project_file`, then reconcile state from reports.
+- `reference/bambuddy/backend/app/services/bambu_ftp.py` adds details needed for the real runtime: implicit FTPS, username `bblp`, manual 64 KiB `STOR` chunks, protected-data mode first, clear-data fallback for A1-family behavior, post-upload `226`/`SIZE` verification, and model profiles such as TLS 1.2 caps for affected firmware.
+- `reference/bambuddy/backend/app/services/bambu_mqtt.py` shows that physical job state must be reconciled from `gcode_state`, `mc_percent`, remaining time, layer counts, `subtask_id`, `print_error`, and HMS-style errors instead of treating MQTT publish success as print completion.
+- `reference/bambuddy/backend/app/services/discovery.py` shows Bambu LAN discovery through SSDP multicast `239.255.255.250:2021` with search target `urn:bambulab-com:device:3dprinter:1`.
+- Clerk and Logto both support backend API protection through JWT verification against provider JWKS plus issuer, audience, expiration, and optional authorized-party/scope checks. Pandar should treat the identity provider as authentication only; Rust remains the source of truth for user-to-tenant membership and tenant role authorization.
 
 ## Completed
 
@@ -137,19 +141,159 @@ Exit criteria:
 - Completed `TenantRepository` create/list/count migration to SeaORM while preserving the existing repository API and SQLite/PostgreSQL behavior.
 - Deferred auth, audit, agents, printers, commands, jobs, and SeaORM migration-system adoption to later phases.
 
-## Later: Compatibility Expansion
+## Phase 8: Real Machine File Transfer Runtime
 
-- Build a printer model compatibility matrix from the references and live captures.
-- Add AMS and external-spool mapping support.
-- Add model-specific feature gates for chamber temperature, drying, dual nozzle, and calibration commands.
-- Add diagnostics for wrong serial number, wrong access code, stale MQTT sessions, missing SD card, and file-transfer failures.
+Goal: replace the Phase 5 unavailable runtime adapter with real agent-side Bambu-compatible file transfer while keeping the public boundary protocol-neutral.
+
+- Implement implicit FTPS on port `990` behind the existing `MachineFileTransfer` trait.
+- Authenticate with username `bblp` and the agent-local printer access code from `PANDAR_PRINTERS`.
+- Upload with manual 64 KiB chunks and preserve progress/error context for command results.
+- Prefer protected data mode, cache only successful mode selection, and support model/profile fallbacks for clear data mode or TLS 1.2 caps.
+- Verify upload completion before publishing `project_file`: wait for transfer confirmation when possible and verify server-side file size when the printer response is missing or ambiguous.
+- Implement runtime list/download/delete/size support needed by diagnostics and cleanup.
+- Keep tests fake by default; add adapter-level unit coverage for mode policy, verification decisions, and error mapping without requiring live printer sockets.
+
+Exit criteria:
+
+- A configured agent can upload a project artifact to a Bambu printer through the runtime adapter.
+- The configured print gateway still publishes MQTT only after upload verification succeeds.
+- Upload failures preserve enough context to distinguish auth failure, no FTPS listener, missing SD card/path failure, quota/full card, timeout, TLS/profile mismatch, and partial upload.
+
+## Phase 9: Print Report Reconciliation
+
+Goal: make hub job state represent physical printer progress instead of only dispatch success.
+
+- Extend agent MQTT report normalization beyond the current snapshot path to emit print progress/job events.
+- Correlate reports to Pandar jobs using the `project_file` identity fields already sent by Phase 5 (`task_id`, `subtask_id`, artifact/job names) plus Bambu report fields such as `subtask_id`, `gcode_file`, and `subtask_name`.
+- Persist progress fields such as printer state, percent, remaining time, current layer, total layers, active file, last valid progress, and last valid layer.
+- Map `gcode_state` transitions to job state:
+  - `RUNNING` means physical print started or resumed.
+  - `FINISH` means completed.
+  - `FAILED` means failed, including pre-print failures from preparation states.
+  - `IDLE` after `RUNNING` means cancelled or aborted.
+- Capture `print_error` and HMS-style error fields as structured machine events for failure diagnostics.
+- Broadcast job progress over tenant WebSockets and update frontend job history/live printer views.
+- Keep dispatch lifecycle and physical print lifecycle separate in naming and persistence so command success cannot be confused with print completion.
+
+Exit criteria:
+
+- A print job moves from queued/dispatching into running/completed/failed/cancelled from MQTT reports.
+- Hub restarts and agent reconnects can continue reconciling from the latest reports without duplicating completion events.
+- Frontend users can see live progress and terminal failure/success reasons for a tenant job.
+
+## Phase 10: External Identity Authentication
+
+Goal: let users sign in with Clerk or Logto while keeping Pandar's tenant membership and role model in Rust.
+
+- Add a provider-neutral OIDC/JWT verifier in `pandar-hub` for HTTP and WebSocket bearer tokens.
+- Support Clerk and Logto through configuration, not provider-specific authorization logic:
+  - issuer URL
+  - JWKS URL or discoverable JWKS
+  - expected audience/API resource
+  - accepted algorithms
+  - optional authorized parties/origins for Clerk-style session tokens
+  - optional scope checks for Logto API-resource tokens
+- Validate token signature, `iss`, `aud`, `exp`, `nbf` where present, token type where needed, and provider subject.
+- Map verified `{provider, subject}` identities to local Pandar users.
+- Manage user-to-tenant membership and tenant role assignments in Pandar tables; do not trust Clerk organizations or Logto organizations as the tenant authorization source.
+- Keep tenant API tokens from Phase 6 for service/agent/admin automation, but make browser user flows use external identity tokens.
+- Add frontend auth integration points so the UI can obtain a Clerk/Logto token and forward it to the Rust API as `Authorization: Bearer`.
+- Add tests with local JWKS fixtures for valid token, unknown key, bad issuer, bad audience, expired token, missing membership, and insufficient tenant role.
+
+Exit criteria:
+
+- A signed-in Clerk or Logto user can call tenant-scoped APIs only when Rust has a matching local user and tenant membership.
+- A valid identity-provider token without Pandar tenant membership is authenticated but not authorized.
+- Tenant role decisions are fully enforced by Pandar repositories and are independent of provider-side organization membership.
+- Existing API-token auth remains available for non-browser automation.
+
+## Phase 11: Provisioning And Admin Boundaries
+
+Goal: remove development-only tenant/token ergonomics before production multi-tenant exposure.
+
+- Add first-user/bootstrap flow for creating the initial tenant admin and API token without direct repository fixtures.
+- Add user invite/linking flows that bind a verified Clerk/Logto subject to a local Pandar user.
+- Add tenant-scoped user and token management APIs for tenant admins.
+- Add explicit global admin or bootstrap authorization for cross-tenant summary/listing endpoints.
+- Audit provisioning, token creation/revocation, role changes, and agent pairing actions.
+- Define agent pairing/token rotation flow that does not require copying persistent database IDs into agent env by hand.
+
+Exit criteria:
+
+- A fresh deployment can be bootstrapped through documented APIs/CLI without test fixtures.
+- Tenant users cannot list or summarize other tenants unless they hold the explicit global/bootstrap authority.
+- All provisioning actions are represented in audit events.
+
+## Phase 12: Complete SeaORM Repository Migration
+
+Goal: finish the staged SeaORM 2.0 migration without changing external repository behavior.
+
+- Migrate auth, identity, membership, and audit repositories first because Phase 10 and Phase 11 expand those surfaces.
+- Migrate agents/printers next, preserving live-session and printer snapshot semantics.
+- Migrate command/job/artifact repositories last because they have the broadest transaction coupling.
+- Keep SQLx migrations as the schema source until there is a separate, explicit decision to adopt SeaORM migrations.
+- Maintain SQLite and PostgreSQL parity tests for every migrated repository.
+
+Exit criteria:
+
+- All persistent repository operations use SeaORM query/entity APIs or an explicitly documented backend-specific adapter.
+- SQLite and PostgreSQL test coverage remains green for repository behavior and transaction coupling.
+- No mixed SQLx/SeaORM behavior drift remains outside migration/bootstrap plumbing.
+
+## Phase 13: Discovery, Diagnostics, And Compatibility Matrix
+
+Goal: make real printer operation debuggable across Bambu printer families.
+
+- Add agent-side LAN discovery from the reference SSDP behavior on multicast `239.255.255.250:2021`.
+- Add diagnostics for wrong serial number, wrong access code, stale MQTT sessions, no MQTT report, no FTPS listener, missing SD card, full SD card, and upload verification failure.
+- Build a compatibility matrix from reference behavior and live captures.
+- Add model-specific feature gates for chamber temperature, drying, dual nozzle, flow/vibration/nozzle-offset calibration, and firmware-specific FTPS behavior.
+- Keep unsupported or uncertain features visibly unavailable instead of adding silent fallbacks.
+
+Exit criteria:
+
+- Operators can discover local printers, validate credentials, and see actionable diagnostics before dispatching a print.
+- Compatibility rules are centralized and referenced by MQTT command building, FTPS runtime policy, and UI availability.
+
+## Phase 14: AMS, Filament, And Spool Operations
+
+Goal: promote AMS/external-spool data from raw report details into first-class tenant-visible state.
+
+- Normalize AMS units, tray IDs, external spool identifiers, active tray, tray changes, filament type/color/material fields, and remaining estimates from MQTT reports.
+- Preserve `ams_mapping` and `ams_mapping2` semantics used by `project_file` commands.
+- Add job-level filament usage records once Phase 9 supplies reliable start/completion boundaries.
+- Evaluate optional Spoolman-style external inventory integration only after Pandar's internal state model is stable.
+
+Exit criteria:
+
+- The printer view exposes current AMS/external-spool state without raw MQTT payload knowledge.
+- Print dispatch can show and persist the mapping used for each job.
+- Filament usage can be derived from completed or failed jobs with clear uncertainty boundaries.
+
+## Phase 15: Product Runtime UX And Notifications
+
+Goal: turn the operational skeleton into a usable day-to-day cloud replacement surface.
+
+- Consume authenticated printer/job WebSocket events in the frontend.
+- Add focused operator notifications for agent disconnect, printer offline, upload failure, print failure, and print completion.
+- Improve job detail/history views around dispatch status, physical progress, artifact metadata, and machine diagnostics.
+- Add tenant settings for agent pairing, token management, and printer compatibility details.
+
+Exit criteria:
+
+- Common print monitoring workflows can be performed without refreshing the page.
+- Notification and job detail surfaces explain whether a failure happened in hub dispatch, agent upload, MQTT publish, or physical printing.
+
+## Optional Later: Virtual Printer And Proxy
+
 - Decide whether virtual-printer/proxy behavior from `reference/bambuddy` is in scope.
+- If accepted, isolate it as a separate local-agent feature because it changes LAN behavior, port ownership, MQTT/FTPS proxying, and discovery semantics.
 
 ## Immediate Next
 
-- Implement real agent-side FTPS upload and upload verification behind the existing file-transfer boundary.
-- Wire the real runtime FTPS adapter into the configured gateway path that already fake-tests MQTT `project_file` publishing.
-- Reconcile printer MQTT reports into print job progress, terminal success, and terminal failure state.
-- Continue staged SeaORM migration for auth/audit and then command/job repositories only after Phase 7 tenant behavior stays green.
-- Add first-user/bootstrap ergonomics for provisioning tenant users and API tokens without direct repository/test fixtures.
-- Add an explicit global admin/bootstrap boundary for tenant listing and summary before production multi-tenant exposure.
+- Start Phase 8 by implementing the runtime FTPS adapter behind `MachineFileTransfer`.
+- Keep Phase 8 strictly scoped to file transfer, upload verification, gateway wiring, and diagnostics needed to avoid publishing `project_file` for a partial or missing artifact.
+- Follow with Phase 9 so print job state is driven by MQTT report reconciliation instead of dispatch result alone.
+- Do Phase 10 before browser-facing multi-tenant installs so Clerk/Logto users are authenticated by Rust and authorized through local tenant memberships.
+- Do Phase 11 before exposing broader multi-tenant administration.
+- Continue SeaORM repository migration as Phase 12 after identity/provisioning/auth/audit boundaries are stable.
