@@ -34,6 +34,7 @@
 - Added Phase 7 staged SeaORM 2.0 migration groundwork with SQLx 0.9 alignment, a shared SeaORM connection accessor, a hand-written `tenants` entity, and SeaORM-backed tenant repository operations.
 - Added Phase 9 print report reconciliation with agent MQTT `PrintJobReport` forwarding, hub-side physical print lifecycle persistence, normalized machine events, tenant `job_progress` WebSocket broadcasts, nested `job.print` HTTP responses, and frontend job progress display.
 - Added Phase 10 external identity authentication with local `user_identities`, Clerk/Logto-compatible JWT verification through configured JWKS, API-token-first tenant route auth, local tenant role enforcement, local JWKS route tests, and frontend bearer forwarding from request cookies/static tokens.
+- Added Phase 11 provisioning/admin boundaries with bootstrap-only cross-tenant APIs, atomic tenant-admin bootstrap, tenant-admin user/token/identity management, API-token revocation, provisioning audit events, agent pairing bundles, and tenant-bound frontend reads.
 
 ## Phase 1: Foundation
 
@@ -214,18 +215,20 @@ Exit criteria:
 
 Goal: remove development-only tenant/token ergonomics before production multi-tenant exposure.
 
-- Add first-user/bootstrap flow for creating the initial tenant admin and API token without direct repository fixtures.
-- Add user invite/linking flows that bind a verified Clerk/Logto subject to a local Pandar user.
-- Add tenant-scoped user and token management APIs for tenant admins.
-- Add explicit global admin or bootstrap authorization for cross-tenant summary/listing endpoints.
-- Audit provisioning, token creation/revocation, role changes, and agent pairing actions.
-- Define agent pairing/token rotation flow that does not require copying persistent database IDs into agent env by hand.
+- Completed bootstrap-token protection for cross-tenant summary, tenant listing, and tenant creation endpoints using `PANDAR_BOOTSTRAP_TOKEN`.
+- Completed first-user/bootstrap flow for creating a tenant, tenant admin, initial API token, and bootstrap audit events in one SQLite/PostgreSQL transaction.
+- Completed user invite/linking APIs that bind a verified Clerk/Logto subject to a local Pandar user.
+- Completed tenant-scoped user and token management APIs for tenant admins, including role updates and API-token revocation.
+- Completed explicit bootstrap authorization for cross-tenant summary/listing endpoints.
+- Completed audit coverage for provisioning, token creation/revocation, role changes, and agent pairing actions.
+- Completed agent pairing bundle flow that avoids hand-copying persistent database IDs from separate responses, and documented the future token-rotation protocol.
+- Completed frontend tenant-bound dashboard reads so `APP_TENANT_ID` deployments do not require cross-tenant bootstrap authority for normal tenant views.
 
 Exit criteria:
 
-- A fresh deployment can be bootstrapped through documented APIs/CLI without test fixtures.
-- Tenant users cannot list or summarize other tenants unless they hold the explicit global/bootstrap authority.
-- All provisioning actions are represented in audit events.
+- Completed: a fresh deployment can be bootstrapped through documented APIs without test fixtures.
+- Completed: tenant users cannot list or summarize other tenants unless they hold the explicit bootstrap authority.
+- Completed: provisioning actions are represented in audit events.
 
 ## Phase 12: Complete SeaORM Repository Migration
 

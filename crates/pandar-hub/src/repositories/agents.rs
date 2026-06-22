@@ -2,6 +2,8 @@ use anyhow::Context;
 use pandar_core::{Agent, AgentId, AgentStatus, TenantId};
 use sqlx::Row;
 
+mod pairing;
+
 use crate::{
     db::Database,
     repositories::{

@@ -15,10 +15,13 @@ use crate::{
     repositories::{RepositoryError, UserRole},
 };
 
+mod admin;
 mod auth;
+mod bootstrap;
 pub(crate) mod jobs;
 mod printer_events;
 mod printers;
+mod provisioning;
 
 pub fn router(state: AppState) -> Router {
     let body_limit = state
@@ -29,11 +32,42 @@ pub fn router(state: AppState) -> Router {
 
     Router::new()
         .route("/healthz", get(healthz))
-        .route("/api/v1/summary", get(summary))
-        .route("/api/v1/tenants", get(list_tenants).post(create_tenant))
+        .route("/api/v1/summary", get(admin::summary))
+        .route(
+            "/api/v1/tenants",
+            get(admin::list_tenants).post(admin::create_tenant),
+        )
+        .route(
+            "/api/v1/bootstrap/tenant-admin",
+            post(bootstrap::create_tenant_admin),
+        )
         .route(
             "/api/v1/tenants/{tenant_id}/agents",
             get(list_agents).post(create_agent),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/users",
+            get(provisioning::list_users).post(provisioning::create_user),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/users/{user_id}/role",
+            axum::routing::patch(provisioning::update_user_role),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/users/{user_id}/identities",
+            get(provisioning::list_user_identities).post(provisioning::link_user_identity),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/users/{user_id}/api-tokens",
+            get(provisioning::list_api_tokens).post(provisioning::create_api_token),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/api-tokens/{token_id}",
+            axum::routing::delete(provisioning::revoke_api_token),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/agent-pairings",
+            post(provisioning::create_agent_pairing),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/printers",
@@ -70,21 +104,15 @@ struct HealthResponse {
 }
 
 #[derive(Debug, Serialize)]
-struct HubSummary {
+pub(super) struct HubSummary {
     tenants: i64,
     agents: i64,
     printers: i64,
     commands: i64,
 }
 
-#[derive(Debug, Deserialize)]
-struct CreateTenantRequest {
-    slug: String,
-    display_name: String,
-}
-
 #[derive(Debug, Serialize)]
-struct TenantResponse {
+pub(super) struct TenantResponse {
     id: String,
     slug: String,
     display_name: String,
@@ -92,7 +120,7 @@ struct TenantResponse {
 }
 
 #[derive(Debug, Serialize)]
-struct TenantListResponse {
+pub(super) struct TenantListResponse {
     tenants: Vec<TenantResponse>,
 }
 
@@ -102,7 +130,7 @@ struct CreateAgentRequest {
 }
 
 #[derive(Debug, Serialize)]
-struct AgentResponse {
+pub(super) struct AgentResponse {
     id: String,
     tenant_id: String,
     name: String,
@@ -122,45 +150,6 @@ struct ErrorResponse {
 
 async fn healthz() -> Json<HealthResponse> {
     Json(HealthResponse { status: "ok" })
-}
-
-async fn summary(State(state): State<AppState>) -> Result<Json<HubSummary>, ApiError> {
-    Ok(Json(HubSummary {
-        tenants: state.tenants().count().await?,
-        agents: state.agents().count().await?,
-        printers: state.printers().count().await?,
-        commands: state.commands().count().await?,
-    }))
-}
-
-async fn create_tenant(
-    State(state): State<AppState>,
-    payload: Result<Json<CreateTenantRequest>, JsonRejection>,
-) -> Result<(StatusCode, Json<TenantResponse>), ApiError> {
-    let Json(payload) =
-        payload.map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "bad_request"))?;
-    if payload.slug.trim().is_empty() || payload.display_name.trim().is_empty() {
-        return Err(ApiError::new(StatusCode::BAD_REQUEST, "bad_request"));
-    }
-
-    let tenant = state
-        .tenants()
-        .create(payload.slug, payload.display_name)
-        .await?;
-
-    Ok((StatusCode::CREATED, Json(TenantResponse::from(tenant))))
-}
-
-async fn list_tenants(State(state): State<AppState>) -> Result<Json<TenantListResponse>, ApiError> {
-    let tenants = state
-        .tenants()
-        .list()
-        .await?
-        .into_iter()
-        .map(TenantResponse::from)
-        .collect();
-
-    Ok(Json(TenantListResponse { tenants }))
 }
 
 async fn create_agent(
@@ -272,8 +261,14 @@ impl From<RepositoryError> for ApiError {
                 StatusCode::CONFLICT,
                 "user_external_identity_provider_exists",
             ),
+            RepositoryError::DuplicateUserEmail => {
+                Self::new(StatusCode::CONFLICT, "user_email_exists")
+            }
             RepositoryError::MissingTenant => Self::new(StatusCode::NOT_FOUND, "tenant_not_found"),
             RepositoryError::MissingUser => Self::new(StatusCode::NOT_FOUND, "user_not_found"),
+            RepositoryError::MissingApiToken => {
+                Self::new(StatusCode::NOT_FOUND, "api_token_not_found")
+            }
             RepositoryError::MissingAgent => Self::new(StatusCode::NOT_FOUND, "agent_not_found"),
             RepositoryError::MissingCommand => {
                 Self::new(StatusCode::NOT_FOUND, "command_not_found")

@@ -82,6 +82,7 @@ type JobList = {
 
 type FetchResult<T> =
   | { data: T; error: null }
+  | { data: null; error: null }
   | { data: null; error: string }
 
 type PageProps = {
@@ -111,7 +112,12 @@ async function fetchJson<T>(path: string, label: string): Promise<FetchResult<T>
 
 export default async function Page({ searchParams }: PageProps) {
   const [summaryResult, tenantsResult] = await Promise.all([
-    fetchJson<Summary>('/api/v1/summary', 'Summary'),
+    configuredTenantId
+      ? Promise.resolve<FetchResult<Summary>>({
+          data: null,
+          error: null,
+        })
+      : fetchJson<Summary>('/api/v1/summary', 'Summary'),
     configuredTenantId
       ? Promise.resolve<FetchResult<TenantList>>({
           data: { tenants: [] },
@@ -192,9 +198,9 @@ export default async function Page({ searchParams }: PageProps) {
         ) : null}
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="Tenants" value={summaryResult.data?.tenants} />
+          <Metric label="Tenants" value={summaryResult.data?.tenants ?? (configuredTenantId ? 1 : undefined)} />
           <Metric label="Agents" value={summaryResult.data?.agents} />
-          <Metric label="Printers" value={summaryResult.data?.printers} />
+          <Metric label="Printers" value={summaryResult.data?.printers ?? (configuredTenantId ? printers.length : undefined)} />
           <Metric label="Commands" value={summaryResult.data?.commands} />
         </section>
 

@@ -11,7 +11,10 @@ use crate::{
     },
 };
 
+mod bootstrap;
 mod identities;
+mod tokens;
+mod users;
 
 pub use identities::UserIdentity;
 
@@ -71,6 +74,7 @@ pub struct ApiToken {
     pub name: String,
     pub created_at: String,
     pub last_used_at: Option<String>,
+    pub revoked_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,6 +140,15 @@ impl AuthRepository {
 
         match result {
             Ok(_) => Ok(user),
+            Err(err)
+                if is_unique_violation(
+                    &err,
+                    "users.tenant_id, users.email",
+                    "users_tenant_id_email_key",
+                ) =>
+            {
+                Err(RepositoryError::DuplicateUserEmail)
+            }
             Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
             Err(err) => Err(anyhow::Error::new(err)
                 .context("failed to insert user")
@@ -157,6 +170,7 @@ impl AuthRepository {
             name: name.into(),
             created_at: created_at_now(),
             last_used_at: None,
+            revoked_at: None,
         };
         let token_hash = hash_token(plaintext_token);
 
@@ -235,7 +249,7 @@ impl AuthRepository {
                             users.display_name, users.role, users.created_at
                      FROM api_tokens
                      JOIN users ON users.id = api_tokens.user_id AND users.tenant_id = api_tokens.tenant_id
-                     WHERE api_tokens.token_hash = ?1",
+                     WHERE api_tokens.token_hash = ?1 AND api_tokens.revoked_at IS NULL",
                 )
                 .bind(&token_hash)
                 .fetch_optional(pool)
@@ -261,7 +275,7 @@ impl AuthRepository {
                             users.display_name, users.role, users.created_at
                      FROM api_tokens
                      JOIN users ON users.id = api_tokens.user_id AND users.tenant_id = api_tokens.tenant_id
-                     WHERE api_tokens.token_hash = $1",
+                     WHERE api_tokens.token_hash = $1 AND api_tokens.revoked_at IS NULL",
                 )
                 .bind(&token_hash)
                 .fetch_optional(pool)
@@ -285,12 +299,12 @@ impl AuthRepository {
     }
 }
 
-fn hash_token(token: &str) -> String {
+pub(super) fn hash_token(token: &str) -> String {
     let digest = Sha256::digest(token.as_bytes());
     format!("{digest:x}")
 }
 
-fn user_from_row(
+pub(super) fn user_from_row(
     id: String,
     tenant_id: String,
     email: String,

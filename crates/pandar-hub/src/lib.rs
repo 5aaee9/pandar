@@ -1,3 +1,4 @@
+mod bootstrap;
 pub mod db;
 pub mod entities;
 pub mod grpc;
@@ -38,6 +39,7 @@ pub struct AppState {
     jobs: JobRepository,
     job_storage: JobStorageConfig,
     external_auth: Option<JwtVerifier>,
+    bootstrap_token: Option<String>,
     printer_events: PrinterEventHub,
     sessions: SessionRegistry,
 }
@@ -66,7 +68,13 @@ impl AppState {
         let database = Database::connect(&config).await?;
         database.migrate().await?;
 
-        Ok(Self::from_database(database, job_storage).with_external_auth_option(external_auth))
+        let bootstrap_token = std::env::var("PANDAR_BOOTSTRAP_TOKEN")
+            .ok()
+            .filter(|value| !value.trim().is_empty());
+
+        Ok(Self::from_database(database, job_storage)
+            .with_external_auth_option(external_auth)
+            .with_bootstrap_token_option(bootstrap_token))
     }
 
     pub fn from_database(database: Database, job_storage: JobStorageConfig) -> Self {
@@ -82,6 +90,7 @@ impl AppState {
             jobs: JobRepository::new(database),
             job_storage,
             external_auth: None,
+            bootstrap_token: None,
             printer_events: PrinterEventHub::new(),
             sessions: SessionRegistry::new(),
         }
@@ -95,6 +104,16 @@ impl AppState {
     #[cfg(test)]
     pub fn with_external_auth(self, verifier: JwtVerifier) -> Self {
         self.with_external_auth_option(Some(verifier))
+    }
+
+    fn with_bootstrap_token_option(mut self, token: Option<String>) -> Self {
+        self.bootstrap_token = token;
+        self
+    }
+
+    #[cfg(test)]
+    pub fn with_bootstrap_token(self, token: impl Into<String>) -> Self {
+        self.with_bootstrap_token_option(Some(token.into()))
     }
 
     #[cfg(test)]
@@ -142,6 +161,10 @@ impl AppState {
 
     pub fn external_auth(&self) -> Option<&JwtVerifier> {
         self.external_auth.as_ref()
+    }
+
+    pub fn bootstrap_token(&self) -> Option<&str> {
+        self.bootstrap_token.as_deref()
     }
 
     pub fn printer_events(&self) -> &PrinterEventHub {

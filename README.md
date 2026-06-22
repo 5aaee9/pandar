@@ -111,6 +111,60 @@ The Next.js frontend reads bearer credentials server-side with this precedence:
 
 `APP_AUTH_BEARER_TOKEN` is useful for smoke tests or single-user deployments, but it is not a per-browser identity source and should not be used for multi-user browser deployments. Set `APP_TENANT_ID` in deployed frontends to bind the dashboard to one tenant without relying on global tenant discovery. Provider SDK wiring, sign-in UI, invite flows, and user-facing identity-link management are later product phases.
 
+Phase 11 protects cross-tenant administration with `PANDAR_BOOTSTRAP_TOKEN`. Set it on the hub before using `/api/v1/summary`, `/api/v1/tenants`, or the bootstrap endpoint:
+
+```bash
+PANDAR_BOOTSTRAP_TOKEN=<long random token>
+```
+
+Create a tenant, tenant admin, and first tenant API token without database fixtures:
+
+```bash
+curl -sS -X POST "$PANDAR_API/api/v1/bootstrap/tenant-admin" \
+  -H "Authorization: Bearer $PANDAR_BOOTSTRAP_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{
+    "tenant_slug": "acme",
+    "tenant_display_name": "Acme",
+    "admin_email": "admin@example.com",
+    "admin_display_name": "Admin",
+    "api_token_name": "bootstrap-admin"
+  }'
+```
+
+Tenant admins can manage local users, API tokens, and identity links through tenant-scoped APIs. API-token creation returns plaintext only once; revocation makes that token unusable for future bearer authentication.
+
+```bash
+curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"email":"operator@example.com","display_name":"Operator","role":"operator"}'
+
+curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/identities" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"provider":"clerk","subject":"user_123"}'
+
+curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/api-tokens" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"name":"automation"}'
+
+curl -sS -X DELETE "$PANDAR_API/api/v1/tenants/$TENANT_ID/api-tokens/$TOKEN_ID" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN"
+```
+
+Agent setup should use the pairing bundle API instead of hand-copying IDs from separate responses:
+
+```bash
+curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/agent-pairings" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"name":"workshop-agent"}'
+```
+
+The Phase 11 pairing bundle returns `PANDAR_TENANT_ID`, `PANDAR_AGENT_ID`, and `PANDAR_AGENT_NAME`. A later gRPC auth phase will enforce short-lived agent pairing secrets and credential rotation on the reverse connection.
+
 Hub audit records are stored in `audit_events` for successful user-triggered mutations such as agent creation, refresh commands, and print job creation. Bambu printer access codes remain agent-local in `PANDAR_PRINTERS`; do not store them in hub database rows or frontend environment variables.
 
 Deployment examples:

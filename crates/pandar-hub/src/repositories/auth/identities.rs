@@ -10,6 +10,8 @@ use crate::{
     },
 };
 
+mod provisioning;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserIdentity {
     pub id: String,
@@ -169,6 +171,67 @@ impl AuthRepository {
         }
     }
 
+    pub async fn list_external_identities_for_user(
+        &self,
+        tenant_id: TenantId,
+        user_id: &str,
+    ) -> RepositoryResult<Vec<UserIdentity>> {
+        match &self.database {
+            Database::Sqlite(pool) => {
+                ensure_user_exists_sqlite(pool, tenant_id, user_id).await?;
+                let rows = sqlx::query(
+                    "SELECT id, tenant_id, user_id, provider, subject, created_at
+                     FROM user_identities
+                     WHERE tenant_id = ?1 AND user_id = ?2
+                     ORDER BY created_at ASC, id ASC",
+                )
+                .bind(tenant_id.to_string())
+                .bind(user_id)
+                .fetch_all(pool)
+                .await
+                .context("failed to list SQLite user external identities")?;
+                rows.into_iter()
+                    .map(|row| {
+                        user_identity_from_parts(
+                            row.get("id"),
+                            row.get("tenant_id"),
+                            row.get("user_id"),
+                            row.get("provider"),
+                            row.get("subject"),
+                            row.get("created_at"),
+                        )
+                    })
+                    .collect()
+            }
+            Database::Postgres(pool) => {
+                ensure_user_exists_postgres(pool, tenant_id, user_id).await?;
+                let rows = sqlx::query(
+                    "SELECT id, tenant_id, user_id, provider, subject, created_at
+                     FROM user_identities
+                     WHERE tenant_id = $1 AND user_id = $2
+                     ORDER BY created_at ASC, id ASC",
+                )
+                .bind(tenant_id.to_string())
+                .bind(user_id)
+                .fetch_all(pool)
+                .await
+                .context("failed to list PostgreSQL user external identities")?;
+                rows.into_iter()
+                    .map(|row| {
+                        user_identity_from_parts(
+                            row.get("id"),
+                            row.get("tenant_id"),
+                            row.get("user_id"),
+                            row.get("provider"),
+                            row.get("subject"),
+                            row.get("created_at"),
+                        )
+                    })
+                    .collect()
+            }
+        }
+    }
+
     async fn external_identity_exists(&self, identity: &UserIdentity) -> RepositoryResult<bool> {
         match &self.database {
             Database::Sqlite(pool) => sqlx::query(
@@ -199,11 +262,65 @@ impl AuthRepository {
     }
 }
 
-const USER_IDENTITIES_EXTERNAL_UNIQUE_SQLITE: &str =
+async fn ensure_user_exists_sqlite<'e, E>(
+    executor: E,
+    tenant_id: TenantId,
+    user_id: &str,
+) -> RepositoryResult<()>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    let exists =
+        sqlx::query_scalar::<_, i64>("SELECT 1 FROM users WHERE tenant_id = ?1 AND id = ?2")
+            .bind(tenant_id.to_string())
+            .bind(user_id)
+            .fetch_optional(executor)
+            .await
+            .context("failed to check SQLite user identity owner")?;
+    exists.map(|_| ()).ok_or(RepositoryError::MissingUser)
+}
+
+async fn ensure_user_exists_postgres<'e, E>(
+    executor: E,
+    tenant_id: TenantId,
+    user_id: &str,
+) -> RepositoryResult<()>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    let exists =
+        sqlx::query_scalar::<_, i64>("SELECT 1 FROM users WHERE tenant_id = $1 AND id = $2")
+            .bind(tenant_id.to_string())
+            .bind(user_id)
+            .fetch_optional(executor)
+            .await
+            .context("failed to check PostgreSQL user identity owner")?;
+    exists.map(|_| ()).ok_or(RepositoryError::MissingUser)
+}
+
+fn user_identity_from_parts(
+    id: String,
+    tenant_id: String,
+    user_id: String,
+    provider: String,
+    subject: String,
+    created_at: String,
+) -> RepositoryResult<UserIdentity> {
+    Ok(UserIdentity {
+        id,
+        tenant_id: TenantId::parse(&tenant_id).map_err(anyhow::Error::from)?,
+        user_id,
+        provider,
+        subject,
+        created_at,
+    })
+}
+
+pub(super) const USER_IDENTITIES_EXTERNAL_UNIQUE_SQLITE: &str =
     "user_identities.tenant_id, user_identities.provider, user_identities.subject";
-const USER_IDENTITIES_EXTERNAL_UNIQUE_POSTGRES: &str =
+pub(super) const USER_IDENTITIES_EXTERNAL_UNIQUE_POSTGRES: &str =
     "user_identities_tenant_id_provider_subject_key";
-const USER_IDENTITIES_USER_PROVIDER_UNIQUE_SQLITE: &str =
+pub(super) const USER_IDENTITIES_USER_PROVIDER_UNIQUE_SQLITE: &str =
     "user_identities.tenant_id, user_identities.user_id, user_identities.provider";
-const USER_IDENTITIES_USER_PROVIDER_UNIQUE_POSTGRES: &str =
+pub(super) const USER_IDENTITIES_USER_PROVIDER_UNIQUE_POSTGRES: &str =
     "user_identities_tenant_id_user_id_provider_key";

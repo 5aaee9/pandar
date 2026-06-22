@@ -192,12 +192,61 @@ Phase 10 adds external identity authentication while preserving API-token automa
 - The verifier caches JWKS and refreshes when a token references an unknown `kid`.
 - Route tests use local RSA/JWKS fixtures and do not contact Clerk, Logto, or external JWKS endpoints.
 
+Phase 11 adds explicit provisioning and bootstrap boundaries:
+
+- `PANDAR_BOOTSTRAP_TOKEN` is the only credential accepted by cross-tenant endpoints: `GET /api/v1/summary`, `GET /api/v1/tenants`, `POST /api/v1/tenants`, and `POST /api/v1/bootstrap/tenant-admin`.
+- `POST /api/v1/bootstrap/tenant-admin` creates a tenant, tenant admin user, initial API token, and bootstrap audit events in one SQLite/PostgreSQL transaction. The plaintext token is returned once and only its hash is stored.
+- Tenant admins can list/create users, update local user roles, link Clerk/Logto provider subjects, create/list/revoke API tokens, and create agent pairing bundles through tenant-scoped APIs.
+- API-token revocation sets `api_tokens.revoked_at`; revoked tokens are excluded from bearer authentication.
+- Provisioning actions are represented in `audit_events` with actions such as `tenant.bootstrap`, `tenant.create`, `user.create`, `user.role_update`, `user_identity.link`, `api_token.create`, `api_token.revoke`, and `agent.pairing_bundle`.
+- Agent pairing bundles return `PANDAR_TENANT_ID`, `PANDAR_AGENT_ID`, and `PANDAR_AGENT_NAME` for deployment. The future token-rotation protocol will add short-lived pairing secrets and authenticated gRPC agent credential rotation.
+
+Bootstrap a fresh tenant:
+
+```bash
+curl -sS -X POST "$PANDAR_API/api/v1/bootstrap/tenant-admin" \
+  -H "Authorization: Bearer $PANDAR_BOOTSTRAP_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"tenant_slug":"acme","tenant_display_name":"Acme","admin_email":"admin@example.com","admin_display_name":"Admin","api_token_name":"bootstrap-admin"}'
+```
+
+Tenant-admin provisioning examples:
+
+```bash
+curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"email":"operator@example.com","display_name":"Operator","role":"operator"}'
+
+curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/identities" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"provider":"logto","subject":"user_123"}'
+
+curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/api-tokens" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"name":"automation"}'
+
+curl -sS -X DELETE "$PANDAR_API/api/v1/tenants/$TENANT_ID/api-tokens/$TOKEN_ID" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN"
+```
+
+Agent pairing bundle example:
+
+```bash
+curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/agent-pairings" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"name":"workshop-agent"}'
+```
+
 Planned hub phases after Phase 7:
 
 - Phase 8 keeps hub behavior mostly unchanged while the agent gains real FTPS upload; hub command/job status still records dispatch success or failure.
 - Phase 9 added physical print reconciliation, persistent progress fields, normalized machine events, and tenant WebSocket job progress broadcasts.
 - Phase 10 added Clerk/Logto-compatible JWT verification, provider-subject-to-local-user mapping, and Pandar-owned tenant membership checks for HTTP and WebSocket auth.
-- Phase 11 adds first-user/bootstrap, tenant user/token management, explicit global admin/bootstrap boundaries, provisioning audit events, and identity linking flows.
+- Phase 11 added first-user/bootstrap, tenant user/token management, explicit bootstrap boundaries, provisioning audit events, and identity linking flows.
 - Phase 12 completes the staged SeaORM repository migration while preserving SQLite/PostgreSQL behavior and existing SQLx schema migrations.
 
 ### pandar-agent
@@ -254,7 +303,7 @@ Agent phase status after Phase 7:
 - Job dispatch and command controls.
 - Operational settings for database-independent hub behavior.
 
-Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. Phase 10 centralizes frontend bearer forwarding: request cookie `APP_AUTH_COOKIE_NAME` defaulting to `pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. The frontend still does not consume the printer WebSocket; live subscription is left for Phase 15.
+Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. Phase 10 centralizes frontend bearer forwarding: request cookie `APP_AUTH_COOKIE_NAME` defaulting to `pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. Phase 11 keeps configured tenant dashboards on tenant-scoped APIs when `APP_TENANT_ID` is set, so ordinary tenant tokens do not need cross-tenant bootstrap authority. The frontend still does not consume the printer WebSocket; live subscription is left for Phase 15.
 
 Planned frontend phases after Phase 7:
 

@@ -83,6 +83,118 @@ async fn api_tokens_must_belong_to_user_tenant() {
 }
 
 #[tokio::test]
+async fn users_can_be_listed_and_roles_updated() {
+    let database = sqlite_database().await;
+    let tenants = TenantRepository::new(database.clone());
+    let auth = AuthRepository::new(database);
+    let tenant = tenants.create("acme-users", "Acme Users").await.unwrap();
+    let user = auth
+        .create_user(tenant.id, "viewer@example.test", "Viewer", UserRole::Viewer)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        auth.list_users_for_tenant(tenant.id).await.unwrap(),
+        vec![user.clone()]
+    );
+
+    let updated = auth
+        .update_user_role(tenant.id, &user.id, UserRole::Operator)
+        .await
+        .unwrap();
+    assert_eq!(updated.id, user.id);
+    assert_eq!(updated.role, UserRole::Operator);
+    assert_eq!(
+        auth.list_users_for_tenant(tenant.id).await.unwrap()[0].role,
+        UserRole::Operator
+    );
+}
+
+#[tokio::test]
+async fn duplicate_user_email_is_reported() {
+    let database = sqlite_database().await;
+    let tenants = TenantRepository::new(database.clone());
+    let auth = AuthRepository::new(database);
+    let acme = tenants
+        .create("acme-duplicate-email", "Acme Duplicate Email")
+        .await
+        .unwrap();
+    let beta = tenants
+        .create("beta-duplicate-email", "Beta Duplicate Email")
+        .await
+        .unwrap();
+
+    auth.create_user(acme.id, "user@example.test", "User", UserRole::Viewer)
+        .await
+        .unwrap();
+    let duplicate = auth
+        .create_user(acme.id, "user@example.test", "Other", UserRole::Operator)
+        .await
+        .unwrap_err();
+    assert!(matches!(duplicate, RepositoryError::DuplicateUserEmail));
+
+    auth.create_user(beta.id, "user@example.test", "User", UserRole::Viewer)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn api_tokens_can_be_listed_and_revoked() {
+    let database = sqlite_database().await;
+    let tenants = TenantRepository::new(database.clone());
+    let auth = AuthRepository::new(database);
+    let tenant = tenants
+        .create("acme-token-revoke", "Acme Token Revoke")
+        .await
+        .unwrap();
+    let user = auth
+        .create_user(
+            tenant.id,
+            "admin@example.test",
+            "Admin",
+            UserRole::TenantAdmin,
+        )
+        .await
+        .unwrap();
+    let token = auth
+        .create_api_token(tenant.id, &user.id, "admin", "revoked-token")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        auth.list_api_tokens_for_user(tenant.id, &user.id)
+            .await
+            .unwrap(),
+        vec![token.clone()]
+    );
+    assert!(
+        auth.authenticate_bearer("revoked-token")
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    let revoked = auth.revoke_api_token(tenant.id, &token.id).await.unwrap();
+    assert_eq!(revoked.id, token.id);
+    assert!(revoked.revoked_at.is_some());
+    assert!(
+        auth.authenticate_bearer("revoked-token")
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    let revoked_again = auth.revoke_api_token(tenant.id, &token.id).await.unwrap();
+    assert_eq!(revoked_again, revoked);
+
+    let missing = auth
+        .revoke_api_token(tenant.id, "missing-token")
+        .await
+        .unwrap_err();
+    assert!(matches!(missing, RepositoryError::MissingApiToken));
+}
+
+#[tokio::test]
 async fn external_identity_resolves_tenant_user_role() {
     let database = sqlite_database().await;
     let tenants = TenantRepository::new(database.clone());
@@ -162,6 +274,43 @@ async fn external_identity_rejects_missing_and_duplicate_links() {
 }
 
 #[tokio::test]
+async fn external_identities_can_be_listed_for_user() {
+    let database = sqlite_database().await;
+    let tenants = TenantRepository::new(database.clone());
+    let auth = AuthRepository::new(database);
+    let tenant = tenants
+        .create("acme-identity-list", "Acme Identity List")
+        .await
+        .unwrap();
+    let user = auth
+        .create_user(tenant.id, "viewer@example.test", "Viewer", UserRole::Viewer)
+        .await
+        .unwrap();
+    let other_user = auth
+        .create_user(tenant.id, "other@example.test", "Other", UserRole::Viewer)
+        .await
+        .unwrap();
+
+    let identity = auth
+        .link_external_identity(tenant.id, &user.id, "clerk", "user_123")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        auth.list_external_identities_for_user(tenant.id, &user.id)
+            .await
+            .unwrap(),
+        vec![identity]
+    );
+    assert!(
+        auth.list_external_identities_for_user(tenant.id, &other_user.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn postgres_auth_and_audit_repository_behavior_when_configured() {
     let Some(database) = super::postgres::postgres_database().await else {
         eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
@@ -185,6 +334,20 @@ async fn postgres_auth_and_audit_repository_behavior_when_configured() {
         .await
         .unwrap();
 
+    let duplicate_user = auth
+        .create_user(
+            tenant.id,
+            "admin@example.test",
+            "Duplicate",
+            UserRole::Operator,
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        duplicate_user,
+        RepositoryError::DuplicateUserEmail
+    ));
+
     let authenticated = auth
         .authenticate_bearer("postgres-secret")
         .await
@@ -192,6 +355,25 @@ async fn postgres_auth_and_audit_repository_behavior_when_configured() {
         .unwrap();
     assert_eq!(authenticated.user.id, user.id);
     assert_eq!(authenticated.user.role, UserRole::TenantAdmin);
+
+    let token = auth
+        .list_api_tokens_for_user(tenant.id, &user.id)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    let revoked = auth.revoke_api_token(tenant.id, &token.id).await.unwrap();
+    assert!(revoked.revoked_at.is_some());
+    assert!(
+        auth.authenticate_bearer("postgres-secret")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        auth.revoke_api_token(tenant.id, &token.id).await.unwrap(),
+        revoked
+    );
 
     let identity = auth
         .link_external_identity(tenant.id, &user.id, "logto", "logto-user")

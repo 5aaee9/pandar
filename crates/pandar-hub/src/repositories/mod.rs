@@ -29,6 +29,8 @@ pub enum RepositoryError {
     DuplicateApiTokenName,
     #[error("api token hash already exists")]
     DuplicateApiTokenHash,
+    #[error("user email already exists for tenant")]
+    DuplicateUserEmail,
     #[error("external identity already exists for tenant")]
     DuplicateExternalIdentity,
     #[error("external identity provider already linked to user")]
@@ -37,6 +39,8 @@ pub enum RepositoryError {
     MissingTenant,
     #[error("user not found")]
     MissingUser,
+    #[error("api token not found")]
+    MissingApiToken,
     #[error("agent not found")]
     MissingAgent,
     #[error("printer not found")]

@@ -1,5 +1,5 @@
 use super::*;
-use crate::repositories::test_helpers::{insert_command_fixture, insert_printer_fixture};
+use crate::repositories::test_helpers::insert_printer_fixture;
 use axum::{
     body::Body,
     http::{Method, Request, header::AUTHORIZATION},
@@ -11,22 +11,41 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 mod agents;
+mod bootstrap;
 mod jobs;
 mod printer_events_ws;
 mod printers;
+mod provisioning;
 
 const TEST_PRIVATE_KEY_PEM: &str = include_str!("tests/fixtures/external_auth_private.pem");
 const TEST_PUBLIC_JWK_JSON: &str = include_str!("tests/fixtures/external_auth_jwks.json");
 const TEST_ISSUER: &str = "https://identity.example.test";
 const TEST_AUDIENCE: &str = "https://api.pandar.test";
 const TEST_PROVIDER: &str = "clerk";
+const TEST_BOOTSTRAP_TOKEN: &str = "test-bootstrap-token";
 
 async fn state() -> AppState {
+    raw_state().await.with_bootstrap_token(TEST_BOOTSTRAP_TOKEN)
+}
+
+async fn raw_state() -> AppState {
     AppState::sqlite_for_tests().await.unwrap()
 }
 
+async fn bootstrap_state() -> AppState {
+    state().await
+}
+
 async fn app() -> Router {
-    router(state().await)
+    bootstrap_app().await
+}
+
+async fn bootstrap_app() -> Router {
+    router(bootstrap_state().await)
+}
+
+async fn bootstrap_disabled_app() -> Router {
+    router(raw_state().await)
 }
 
 async fn request(
@@ -75,7 +94,7 @@ async fn request_with_token(
 }
 
 async fn create_tenant_for_test(app: Router) -> (StatusCode, Value) {
-    request(
+    request_as(
         app,
         Method::POST,
         "/api/v1/tenants",
@@ -83,6 +102,7 @@ async fn create_tenant_for_test(app: Router) -> (StatusCode, Value) {
             "slug": "acme",
             "display_name": "Acme Labs"
         })),
+        TEST_BOOTSTRAP_TOKEN,
     )
     .await
 }
@@ -241,129 +261,4 @@ async fn api_token_auth_still_succeeds_when_external_auth_is_configured() {
 
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body, json!({ "agents": [] }));
-}
-
-#[tokio::test]
-async fn summary_reports_repository_counts() {
-    let state = state().await;
-    let app = router(state.clone());
-    let (status, _) = create_tenant_for_test(app.clone()).await;
-    assert_eq!(status, StatusCode::CREATED);
-
-    let tenant_id = request(app.clone(), Method::GET, "/api/v1/tenants", None)
-        .await
-        .1["tenants"][0]["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let token = auth_token_for_role(
-        &state,
-        &tenant_id,
-        crate::repositories::UserRole::TenantAdmin,
-        "summary-admin",
-    )
-    .await;
-    let (status, _) = request_as(
-        app.clone(),
-        Method::POST,
-        &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "shop-agent" })),
-        &token,
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED);
-    let agents = state
-        .agents()
-        .list_for_tenant(TenantId::parse(&tenant_id).unwrap())
-        .await
-        .unwrap();
-    let printer_id = insert_printer_fixture(state.database(), agents[0].tenant_id, agents[0].id)
-        .await
-        .unwrap();
-    insert_command_fixture(
-        state.database(),
-        agents[0].tenant_id,
-        agents[0].id,
-        Some(&printer_id),
-    )
-    .await
-    .unwrap();
-
-    let (status, body) = request(app, Method::GET, "/api/v1/summary", None).await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(
-        body,
-        json!({ "tenants": 1, "agents": 1, "printers": 1, "commands": 1 })
-    );
-}
-
-#[tokio::test]
-async fn tenant_create_returns_created_record() {
-    let (status, body) = create_tenant_for_test(app().await).await;
-
-    assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["slug"], "acme");
-    assert_eq!(body["display_name"], "Acme Labs");
-    assert!(body["id"].as_str().is_some());
-    assert!(body["created_at"].as_str().unwrap().ends_with('Z'));
-}
-
-#[tokio::test]
-async fn tenant_list_returns_created_records() {
-    let app = app().await;
-    let (status, created) = create_tenant_for_test(app.clone()).await;
-    assert_eq!(status, StatusCode::CREATED);
-
-    let (status, body) = request(app, Method::GET, "/api/v1/tenants", None).await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "tenants": [created] }));
-}
-
-#[tokio::test]
-async fn duplicate_tenant_slug_returns_conflict() {
-    let app = app().await;
-    let (status, _) = create_tenant_for_test(app.clone()).await;
-    assert_eq!(status, StatusCode::CREATED);
-
-    let (status, body) = create_tenant_for_test(app).await;
-
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body, json!({ "error": "tenant_slug_exists" }));
-}
-
-#[tokio::test]
-async fn empty_tenant_fields_return_bad_request() {
-    let (status, body) = request(
-        app().await,
-        Method::POST,
-        "/api/v1/tenants",
-        Some(json!({ "slug": "", "display_name": "Acme Labs" })),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "bad_request" }));
-}
-
-#[tokio::test]
-async fn malformed_tenant_json_returns_bad_request() {
-    let response = app()
-        .await
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/api/v1/tenants")
-                .header("content-type", "application/json")
-                .body(Body::from("{"))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-    let body = response.into_body().collect().await.unwrap().to_bytes();
-    let body: Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(body, json!({ "error": "bad_request" }));
 }
