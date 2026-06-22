@@ -1,5 +1,6 @@
 use anyhow::Context;
 use pandar_core::{AgentId, CommandId, CommandRecord, CommandStatus, TenantId};
+use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 
 mod audit;
@@ -9,10 +10,11 @@ pub(crate) mod rows;
 mod transitions;
 
 use inserts::InsertCommand;
-use rows::command_from_row;
+use rows::command_from_model;
 
 use crate::{
     db::Database,
+    entities::commands,
     repositories::{RepositoryError, RepositoryResult},
 };
 
@@ -42,21 +44,12 @@ impl CommandRepository {
     }
 
     pub async fn count(&self) -> RepositoryResult<i64> {
-        let count = match &self.database {
-            Database::Sqlite(pool) => {
-                sqlx::query_scalar("SELECT COUNT(*) FROM commands")
-                    .fetch_one(pool)
-                    .await
-            }
-            Database::Postgres(pool) => {
-                sqlx::query_scalar("SELECT COUNT(*) FROM commands")
-                    .fetch_one(pool)
-                    .await
-            }
-        }
-        .context("failed to count commands")?;
+        let count = commands::Entity::find()
+            .count(&self.database.sea_orm_connection())
+            .await
+            .context("failed to count commands")?;
 
-        Ok(count)
+        Ok(count.try_into().expect("command count should fit in i64"))
     }
 
     pub async fn enqueue_refresh_printers(
@@ -69,7 +62,7 @@ impl CommandRepository {
         let id = CommandId::new();
         let now = pandar_core::created_at_now();
         inserts::insert(
-            &self.database,
+            &self.database.sea_orm_connection(),
             InsertCommand {
                 id,
                 tenant_id,
@@ -112,7 +105,7 @@ impl CommandRepository {
         let payload_json =
             serde_json::to_string(&payload).context("failed to serialize print command payload")?;
         inserts::insert(
-            &self.database,
+            &self.database.sea_orm_connection(),
             InsertCommand {
                 id,
                 tenant_id,
@@ -134,40 +127,17 @@ impl CommandRepository {
         tenant_id: TenantId,
         agent_id: AgentId,
     ) -> RepositoryResult<Option<CommandRecord>> {
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let row = sqlx::query(
-                    "SELECT id, tenant_id, agent_id, printer_id, kind, status, payload_json, error, created_at, updated_at
-                     FROM commands
-                     WHERE tenant_id = ?1 AND agent_id = ?2 AND status = ?3
-                     ORDER BY created_at ASC, id ASC
-                     LIMIT 1",
-                )
-                .bind(tenant_id.to_string())
-                .bind(agent_id.to_string())
-                .bind(CommandStatus::Queued.as_str())
-                .fetch_optional(pool)
-                .await
-                .context("failed to load next queued SQLite command")?;
-                row.map(command_from_row).transpose()
-            }
-            Database::Postgres(pool) => {
-                let row = sqlx::query(
-                    "SELECT id, tenant_id, agent_id, printer_id, kind, status, payload_json, error, created_at, updated_at
-                     FROM commands
-                     WHERE tenant_id = $1 AND agent_id = $2 AND status = $3
-                     ORDER BY created_at ASC, id ASC
-                     LIMIT 1",
-                )
-                .bind(tenant_id.to_string())
-                .bind(agent_id.to_string())
-                .bind(CommandStatus::Queued.as_str())
-                .fetch_optional(pool)
-                .await
-                .context("failed to load next queued PostgreSQL command")?;
-                row.map(command_from_row).transpose()
-            }
-        }
+        commands::Entity::find()
+            .filter(commands::Column::TenantId.eq(tenant_id.to_string()))
+            .filter(commands::Column::AgentId.eq(agent_id.to_string()))
+            .filter(commands::Column::Status.eq(CommandStatus::Queued.as_str()))
+            .order_by_asc(commands::Column::CreatedAt)
+            .order_by_asc(commands::Column::Id)
+            .one(&self.database.sea_orm_connection())
+            .await
+            .context("failed to load next queued command")?
+            .map(command_from_model)
+            .transpose()
     }
 
     pub async fn mark_sent(
@@ -324,32 +294,12 @@ impl CommandRepository {
     }
 
     async fn get(&self, command_id: CommandId) -> RepositoryResult<Option<CommandRecord>> {
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let row = sqlx::query(
-                    "SELECT id, tenant_id, agent_id, printer_id, kind, status, payload_json, error, created_at, updated_at
-                     FROM commands
-                     WHERE id = ?1",
-                )
-                .bind(command_id.to_string())
-                .fetch_optional(pool)
-                .await
-                .context("failed to load SQLite command")?;
-                row.map(command_from_row).transpose()
-            }
-            Database::Postgres(pool) => {
-                let row = sqlx::query(
-                    "SELECT id, tenant_id, agent_id, printer_id, kind, status, payload_json, error, created_at, updated_at
-                     FROM commands
-                     WHERE id = $1",
-                )
-                .bind(command_id.to_string())
-                .fetch_optional(pool)
-                .await
-                .context("failed to load PostgreSQL command")?;
-                row.map(command_from_row).transpose()
-            }
-        }
+        commands::Entity::find_by_id(command_id.to_string())
+            .one(&self.database.sea_orm_connection())
+            .await
+            .context("failed to load command")?
+            .map(command_from_model)
+            .transpose()
     }
 }
 

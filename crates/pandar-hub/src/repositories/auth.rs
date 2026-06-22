@@ -1,13 +1,17 @@
 use anyhow::Context;
 use pandar_core::{TenantId, created_at_now};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
+};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use sqlx::Row;
 
 use crate::{
     db::Database,
+    entities::{api_tokens, users as user_entities},
     repositories::{
-        RepositoryError, RepositoryResult, is_foreign_key_violation, is_unique_violation,
+        RepositoryError, RepositoryResult, is_sea_orm_foreign_key_violation,
+        is_sea_orm_unique_violation,
     },
 };
 
@@ -109,51 +113,13 @@ impl AuthRepository {
             created_at: created_at_now(),
         };
 
-        let result = match &self.database {
-            Database::Sqlite(pool) => sqlx::query(
-                "INSERT INTO users (id, tenant_id, email, display_name, role, created_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            )
-            .bind(&user.id)
-            .bind(user.tenant_id.to_string())
-            .bind(&user.email)
-            .bind(&user.display_name)
-            .bind(user.role.as_str())
-            .bind(&user.created_at)
-            .execute(pool)
-            .await
-            .map(|_| ()),
-            Database::Postgres(pool) => sqlx::query(
-                "INSERT INTO users (id, tenant_id, email, display_name, role, created_at)
-                     VALUES ($1, $2, $3, $4, $5, $6)",
-            )
-            .bind(&user.id)
-            .bind(user.tenant_id.to_string())
-            .bind(&user.email)
-            .bind(&user.display_name)
-            .bind(user.role.as_str())
-            .bind(&user.created_at)
-            .execute(pool)
-            .await
-            .map(|_| ()),
-        };
-
-        match result {
-            Ok(_) => Ok(user),
-            Err(err)
-                if is_unique_violation(
-                    &err,
-                    "users.tenant_id, users.email",
-                    "users_tenant_id_email_key",
-                ) =>
-            {
-                Err(RepositoryError::DuplicateUserEmail)
-            }
-            Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
-            Err(err) => Err(anyhow::Error::new(err)
-                .context("failed to insert user")
-                .into()),
-        }
+        insert_user(
+            &self.database.sea_orm_connection(),
+            &user,
+            "failed to insert user",
+        )
+        .await?;
+        Ok(user)
     }
 
     pub async fn create_api_token(
@@ -174,67 +140,14 @@ impl AuthRepository {
         };
         let token_hash = hash_token(plaintext_token);
 
-        let result = match &self.database {
-            Database::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO api_tokens (id, tenant_id, user_id, name, token_hash, created_at, last_used_at)
-                     SELECT ?1, ?2, ?3, ?4, ?5, ?6, NULL
-                     WHERE EXISTS (SELECT 1 FROM users WHERE id = ?3 AND tenant_id = ?2)",
-                )
-                .bind(&token.id)
-                .bind(token.tenant_id.to_string())
-                .bind(&token.user_id)
-                .bind(&token.name)
-                .bind(&token_hash)
-                .bind(&token.created_at)
-                .execute(pool)
-                .await
-                .map(|result| result.rows_affected())
-            }
-            Database::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO api_tokens (id, tenant_id, user_id, name, token_hash, created_at, last_used_at)
-                     SELECT $1, $2, $3, $4, $5, $6, NULL
-                     WHERE EXISTS (SELECT 1 FROM users WHERE id = $3 AND tenant_id = $2)",
-                )
-                .bind(&token.id)
-                .bind(token.tenant_id.to_string())
-                .bind(&token.user_id)
-                .bind(&token.name)
-                .bind(&token_hash)
-                .bind(&token.created_at)
-                .execute(pool)
-                .await
-                .map(|result| result.rows_affected())
-            }
-        };
-
-        match result {
-            Ok(0) => Err(RepositoryError::MissingUser),
-            Ok(_) => Ok(token),
-            Err(err)
-                if is_unique_violation(
-                    &err,
-                    "api_tokens.tenant_id, api_tokens.name",
-                    "api_tokens_tenant_id_name_key",
-                ) =>
-            {
-                Err(RepositoryError::DuplicateApiTokenName)
-            }
-            Err(err)
-                if is_unique_violation(
-                    &err,
-                    "api_tokens.token_hash",
-                    "api_tokens_token_hash_key",
-                ) =>
-            {
-                Err(RepositoryError::DuplicateApiTokenHash)
-            }
-            Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingUser),
-            Err(err) => Err(anyhow::Error::new(err)
-                .context("failed to insert api token")
-                .into()),
-        }
+        insert_api_token(
+            &self.database.sea_orm_connection(),
+            &token,
+            &token_hash,
+            "failed to insert api token",
+        )
+        .await?;
+        Ok(token)
     }
 
     pub async fn authenticate_bearer(
@@ -242,60 +155,32 @@ impl AuthRepository {
         plaintext_token: &str,
     ) -> RepositoryResult<Option<AuthenticatedUser>> {
         let token_hash = hash_token(plaintext_token);
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let row = sqlx::query(
-                    "SELECT api_tokens.id AS token_id, users.id AS user_id, users.tenant_id, users.email,
-                            users.display_name, users.role, users.created_at
-                     FROM api_tokens
-                     JOIN users ON users.id = api_tokens.user_id AND users.tenant_id = api_tokens.tenant_id
-                     WHERE api_tokens.token_hash = ?1 AND api_tokens.revoked_at IS NULL",
-                )
-                .bind(&token_hash)
-                .fetch_optional(pool)
-                .await
-                .context("failed to authenticate SQLite bearer token")?;
-                let Some(row) = row else {
-                    return Ok(None);
-                };
-                authenticated_from_parts(
-                    row.get("token_id"),
-                    row.get("user_id"),
-                    row.get("tenant_id"),
-                    row.get("email"),
-                    row.get("display_name"),
-                    row.get("role"),
-                    row.get("created_at"),
-                )
-                .map(Some)
-            }
-            Database::Postgres(pool) => {
-                let row = sqlx::query(
-                    "SELECT api_tokens.id AS token_id, users.id AS user_id, users.tenant_id, users.email,
-                            users.display_name, users.role, users.created_at
-                     FROM api_tokens
-                     JOIN users ON users.id = api_tokens.user_id AND users.tenant_id = api_tokens.tenant_id
-                     WHERE api_tokens.token_hash = $1 AND api_tokens.revoked_at IS NULL",
-                )
-                .bind(&token_hash)
-                .fetch_optional(pool)
-                .await
-                .context("failed to authenticate PostgreSQL bearer token")?;
-                let Some(row) = row else {
-                    return Ok(None);
-                };
-                authenticated_from_parts(
-                    row.get("token_id"),
-                    row.get("user_id"),
-                    row.get("tenant_id"),
-                    row.get("email"),
-                    row.get("display_name"),
-                    row.get("role"),
-                    row.get("created_at"),
-                )
-                .map(Some)
-            }
-        }
+        let connection = self.database.sea_orm_connection();
+        let Some(token) = api_tokens::Entity::find()
+            .filter(api_tokens::Column::TokenHash.eq(token_hash))
+            .filter(api_tokens::Column::RevokedAt.is_null())
+            .one(&connection)
+            .await
+            .context("failed to authenticate bearer token")?
+        else {
+            return Ok(None);
+        };
+        let Some(user) = user_entities::Entity::find_by_id(token.user_id.clone())
+            .filter(user_entities::Column::TenantId.eq(token.tenant_id.clone()))
+            .one(&connection)
+            .await
+            .context("failed to load authenticated bearer user")?
+        else {
+            return Ok(None);
+        };
+        let mut active: api_tokens::ActiveModel = token.clone().into();
+        active.last_used_at = Set(Some(created_at_now()));
+        active
+            .update(&connection)
+            .await
+            .context("failed to update bearer token last_used_at")?;
+
+        authenticated_from_models(token, user).map(Some)
     }
 }
 
@@ -322,17 +207,151 @@ pub(super) fn user_from_row(
     })
 }
 
-pub(super) fn authenticated_from_parts(
-    token_id: String,
-    user_id: String,
-    tenant_id: String,
-    email: String,
-    display_name: String,
-    role: String,
-    created_at: String,
+pub(super) fn user_from_model(model: user_entities::Model) -> RepositoryResult<User> {
+    user_from_row(
+        model.id,
+        model.tenant_id,
+        model.email,
+        model.display_name,
+        model.role,
+        model.created_at,
+    )
+}
+
+pub(super) async fn insert_user<C>(
+    connection: &C,
+    user: &User,
+    context: &'static str,
+) -> RepositoryResult<()>
+where
+    C: ConnectionTrait,
+{
+    let result = user_model(user).insert(connection).await.map(|_| ());
+    match result {
+        Ok(()) => Ok(()),
+        Err(err)
+            if is_sea_orm_unique_violation(
+                &err,
+                "users.tenant_id, users.email",
+                "users_tenant_id_email_key",
+            ) =>
+        {
+            Err(RepositoryError::DuplicateUserEmail)
+        }
+        Err(err) if is_sea_orm_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
+        Err(err) => Err(anyhow::Error::new(err).context(context).into()),
+    }
+}
+
+pub(super) async fn user_exists<C>(
+    connection: &C,
+    tenant_id: TenantId,
+    user_id: &str,
+    context: &'static str,
+) -> RepositoryResult<bool>
+where
+    C: ConnectionTrait,
+{
+    user_entities::Entity::find_by_id(user_id)
+        .filter(user_entities::Column::TenantId.eq(tenant_id.to_string()))
+        .one(connection)
+        .await
+        .context(context)
+        .map(|user| user.is_some())
+        .map_err(Into::into)
+}
+
+pub(super) async fn ensure_user_exists<C>(
+    connection: &C,
+    tenant_id: TenantId,
+    user_id: &str,
+    context: &'static str,
+) -> RepositoryResult<()>
+where
+    C: ConnectionTrait,
+{
+    user_exists(connection, tenant_id, user_id, context)
+        .await?
+        .then_some(())
+        .ok_or(RepositoryError::MissingUser)
+}
+
+pub(super) async fn insert_api_token<C>(
+    connection: &C,
+    token: &ApiToken,
+    token_hash: &str,
+    context: &'static str,
+) -> RepositoryResult<()>
+where
+    C: ConnectionTrait,
+{
+    ensure_user_exists(
+        connection,
+        token.tenant_id,
+        &token.user_id,
+        "failed to check api token owner",
+    )
+    .await?;
+
+    let result = api_token_model(token, token_hash)
+        .insert(connection)
+        .await
+        .map(|_| ());
+    match result {
+        Ok(()) => Ok(()),
+        Err(err)
+            if is_sea_orm_unique_violation(
+                &err,
+                "api_tokens.tenant_id, api_tokens.name",
+                "api_tokens_tenant_id_name_key",
+            ) =>
+        {
+            Err(RepositoryError::DuplicateApiTokenName)
+        }
+        Err(err)
+            if is_sea_orm_unique_violation(
+                &err,
+                "api_tokens.token_hash",
+                "api_tokens_token_hash_key",
+            ) =>
+        {
+            Err(RepositoryError::DuplicateApiTokenHash)
+        }
+        Err(err) if is_sea_orm_foreign_key_violation(&err) => Err(RepositoryError::MissingUser),
+        Err(err) => Err(anyhow::Error::new(err).context(context).into()),
+    }
+}
+
+fn user_model(user: &User) -> user_entities::ActiveModel {
+    user_entities::ActiveModel {
+        id: Set(user.id.clone()),
+        tenant_id: Set(user.tenant_id.to_string()),
+        email: Set(user.email.clone()),
+        display_name: Set(user.display_name.clone()),
+        role: Set(user.role.as_str().to_owned()),
+        created_at: Set(user.created_at.clone()),
+    }
+}
+
+fn api_token_model(token: &ApiToken, token_hash: &str) -> api_tokens::ActiveModel {
+    api_tokens::ActiveModel {
+        id: Set(token.id.clone()),
+        tenant_id: Set(token.tenant_id.to_string()),
+        user_id: Set(token.user_id.clone()),
+        name: Set(token.name.clone()),
+        token_hash: Set(token_hash.to_owned()),
+        created_at: Set(token.created_at.clone()),
+        last_used_at: Set(token.last_used_at.clone()),
+        revoked_at: Set(token.revoked_at.clone()),
+    }
+}
+
+pub(super) fn authenticated_from_models(
+    token: api_tokens::Model,
+    user: user_entities::Model,
 ) -> RepositoryResult<AuthenticatedUser> {
     Ok(AuthenticatedUser {
-        token_id,
-        user: user_from_row(user_id, tenant_id, email, display_name, role, created_at)?,
+        token_id: token.id,
+        user: user_from_model(user)?,
     })
 }

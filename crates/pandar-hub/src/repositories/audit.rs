@@ -1,9 +1,12 @@
 use anyhow::Context;
 use pandar_core::{TenantId, created_at_now};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseTransaction,
+    EntityTrait, QueryFilter, QueryOrder,
+};
 use serde::Serialize;
-use sqlx::Row;
 
-use crate::{db::Database, repositories::RepositoryResult};
+use crate::{db::Database, entities::audit_events, repositories::RepositoryResult};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct AuditEvent {
@@ -40,140 +43,45 @@ impl AuditEventRepository {
     }
 
     pub async fn record(&self, event: RecordAuditEvent) -> RepositoryResult<AuditEvent> {
-        let event = AuditEvent {
-            id: uuid::Uuid::new_v4().to_string(),
-            tenant_id: event.tenant_id,
-            actor_type: event.actor_type,
-            user_id: event.user_id,
-            action: event.action,
-            target_type: event.target_type,
-            target_id: event.target_id,
-            metadata_json: event.metadata_json,
-            created_at: created_at_now(),
-        };
-
-        match &self.database {
-            Database::Sqlite(pool) => {
-                insert_audit_event_sqlite(pool, &event).await?;
-            }
-            Database::Postgres(pool) => {
-                insert_audit_event_postgres(pool, &event).await?;
-            }
-        }
+        let event = build_audit_event(event);
+        insert_audit_event(&self.database.sea_orm_connection(), &event).await?;
 
         Ok(event)
     }
 
     pub async fn list_for_tenant(&self, tenant_id: TenantId) -> RepositoryResult<Vec<AuditEvent>> {
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let rows = sqlx::query(
-                    "SELECT id, tenant_id, actor_type, user_id, action, target_type, target_id, metadata_json, created_at
-                     FROM audit_events
-                     WHERE tenant_id = ?1
-                     ORDER BY created_at ASC, id ASC",
-                )
-                .bind(tenant_id.to_string())
-                .fetch_all(pool)
-                .await
-                .context("failed to list SQLite audit events")?;
-                rows.into_iter()
-                    .map(|row| {
-                        audit_event_from_parts(AuditEventParts {
-                            id: row.get("id"),
-                            tenant_id: row.get("tenant_id"),
-                            actor_type: row.get("actor_type"),
-                            user_id: row.get("user_id"),
-                            action: row.get("action"),
-                            target_type: row.get("target_type"),
-                            target_id: row.get("target_id"),
-                            metadata_json: row.get("metadata_json"),
-                            created_at: row.get("created_at"),
-                        })
-                    })
-                    .collect()
-            }
-            Database::Postgres(pool) => {
-                let rows = sqlx::query(
-                    "SELECT id, tenant_id, actor_type, user_id, action, target_type, target_id, metadata_json, created_at
-                     FROM audit_events
-                     WHERE tenant_id = $1
-                     ORDER BY created_at ASC, id ASC",
-                )
-                .bind(tenant_id.to_string())
-                .fetch_all(pool)
-                .await
-                .context("failed to list PostgreSQL audit events")?;
-                rows.into_iter()
-                    .map(|row| {
-                        audit_event_from_parts(AuditEventParts {
-                            id: row.get("id"),
-                            tenant_id: row.get("tenant_id"),
-                            actor_type: row.get("actor_type"),
-                            user_id: row.get("user_id"),
-                            action: row.get("action"),
-                            target_type: row.get("target_type"),
-                            target_id: row.get("target_id"),
-                            metadata_json: row.get("metadata_json"),
-                            created_at: row.get("created_at"),
-                        })
-                    })
-                    .collect()
-            }
-        }
+        audit_events::Entity::find()
+            .filter(audit_events::Column::TenantId.eq(tenant_id.to_string()))
+            .order_by_asc(audit_events::Column::CreatedAt)
+            .order_by_asc(audit_events::Column::Id)
+            .all(&self.database.sea_orm_connection())
+            .await
+            .context("failed to list audit events")?
+            .into_iter()
+            .map(audit_event_from_model)
+            .collect()
     }
 }
 
-pub(crate) async fn insert_audit_event_sqlite<'e, E>(
-    executor: E,
+pub(crate) async fn insert_audit_event<C>(
+    connection: &C,
     event: &AuditEvent,
 ) -> RepositoryResult<()>
 where
-    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    C: ConnectionTrait,
 {
-    sqlx::query(
-        "INSERT INTO audit_events (id, tenant_id, actor_type, user_id, action, target_type, target_id, metadata_json, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-    )
-    .bind(&event.id)
-    .bind(event.tenant_id.to_string())
-    .bind(&event.actor_type)
-    .bind(&event.user_id)
-    .bind(&event.action)
-    .bind(&event.target_type)
-    .bind(&event.target_id)
-    .bind(&event.metadata_json)
-    .bind(&event.created_at)
-    .execute(executor)
-    .await
-    .context("failed to insert SQLite audit event")?;
+    audit_model(event)
+        .insert(connection)
+        .await
+        .context("failed to insert audit event")?;
     Ok(())
 }
 
-pub(crate) async fn insert_audit_event_postgres<'e, E>(
-    executor: E,
+pub(crate) async fn insert_audit_event_tx(
+    tx: &DatabaseTransaction,
     event: &AuditEvent,
-) -> RepositoryResult<()>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    sqlx::query(
-        "INSERT INTO audit_events (id, tenant_id, actor_type, user_id, action, target_type, target_id, metadata_json, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-    )
-    .bind(&event.id)
-    .bind(event.tenant_id.to_string())
-    .bind(&event.actor_type)
-    .bind(&event.user_id)
-    .bind(&event.action)
-    .bind(&event.target_type)
-    .bind(&event.target_id)
-    .bind(&event.metadata_json)
-    .bind(&event.created_at)
-    .execute(executor)
-    .await
-    .context("failed to insert PostgreSQL audit event")?;
-    Ok(())
+) -> RepositoryResult<()> {
+    insert_audit_event(tx, event).await
 }
 
 pub(crate) fn build_audit_event(event: RecordAuditEvent) -> AuditEvent {
@@ -190,28 +98,30 @@ pub(crate) fn build_audit_event(event: RecordAuditEvent) -> AuditEvent {
     }
 }
 
-struct AuditEventParts {
-    id: String,
-    tenant_id: String,
-    actor_type: String,
-    user_id: Option<String>,
-    action: String,
-    target_type: String,
-    target_id: Option<String>,
-    metadata_json: String,
-    created_at: String,
+fn audit_event_from_model(model: audit_events::Model) -> RepositoryResult<AuditEvent> {
+    Ok(AuditEvent {
+        id: model.id,
+        tenant_id: TenantId::parse(&model.tenant_id).map_err(anyhow::Error::from)?,
+        actor_type: model.actor_type,
+        user_id: model.user_id,
+        action: model.action,
+        target_type: model.target_type,
+        target_id: model.target_id,
+        metadata_json: model.metadata_json,
+        created_at: model.created_at,
+    })
 }
 
-fn audit_event_from_parts(parts: AuditEventParts) -> RepositoryResult<AuditEvent> {
-    Ok(AuditEvent {
-        id: parts.id,
-        tenant_id: TenantId::parse(&parts.tenant_id).map_err(anyhow::Error::from)?,
-        actor_type: parts.actor_type,
-        user_id: parts.user_id,
-        action: parts.action,
-        target_type: parts.target_type,
-        target_id: parts.target_id,
-        metadata_json: parts.metadata_json,
-        created_at: parts.created_at,
-    })
+fn audit_model(event: &AuditEvent) -> audit_events::ActiveModel {
+    audit_events::ActiveModel {
+        id: Set(event.id.clone()),
+        tenant_id: Set(event.tenant_id.to_string()),
+        actor_type: Set(event.actor_type.clone()),
+        user_id: Set(event.user_id.clone()),
+        action: Set(event.action.clone()),
+        target_type: Set(event.target_type.clone()),
+        target_id: Set(event.target_id.clone()),
+        metadata_json: Set(event.metadata_json.clone()),
+        created_at: Set(event.created_at.clone()),
+    }
 }

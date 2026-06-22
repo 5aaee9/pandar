@@ -247,7 +247,14 @@ Planned hub phases after Phase 7:
 - Phase 9 added physical print reconciliation, persistent progress fields, normalized machine events, and tenant WebSocket job progress broadcasts.
 - Phase 10 added Clerk/Logto-compatible JWT verification, provider-subject-to-local-user mapping, and Pandar-owned tenant membership checks for HTTP and WebSocket auth.
 - Phase 11 added first-user/bootstrap, tenant user/token management, explicit bootstrap boundaries, provisioning audit events, and identity linking flows.
-- Phase 12 completes the staged SeaORM repository migration while preserving SQLite/PostgreSQL behavior and existing SQLx schema migrations.
+- Phase 12 completed the staged repository layer migration to SeaORM while preserving SQLite/PostgreSQL behavior and existing SQLx schema migrations.
+
+Phase 12 persistence boundary:
+
+- Hub repositories use SeaORM 2.0 hand-written entities and SeaORM transactions for persistent behavior.
+- SQLx remains for database connection setup and migration execution.
+- Raw SQL repository business logic is limited to `crates/pandar-hub/src/repositories/adapters/printers.rs`, which preserves atomic printer snapshot upsert on `(tenant_id, serial_number)` with SQLite/PostgreSQL `ON CONFLICT` semantics and parity tests.
+- SQLx in repository tests remains for backend setup and corruption fixtures.
 
 ### pandar-agent
 

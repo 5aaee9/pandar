@@ -2,6 +2,11 @@ use anyhow::Context;
 use pandar_core::{
     AgentId, CommandId, CommandRecord, CommandStatus, Job, JobArtifact, JobId, JobStatus, TenantId,
 };
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
+    TransactionTrait,
+};
+use std::collections::HashMap;
 
 mod audit;
 mod create;
@@ -11,17 +16,12 @@ mod transitions;
 
 use crate::{
     db::Database,
+    entities::{job_artifacts, jobs, tenants},
     repositories::{RepositoryError, RepositoryResult},
 };
 
-use create::{create_print_job_postgres, create_print_job_sqlite};
 pub use print_reports::{AppliedPrintReport, ApplyPrintReport, PrintReportDiagnostic};
-use rows::{
-    JOB_POSTGRES_BY_COMMAND, JOB_SQLITE_BY_COMMAND, JOB_WITH_ARTIFACT_POSTGRES_GET,
-    JOB_WITH_ARTIFACT_POSTGRES_LIST, JOB_WITH_ARTIFACT_SQLITE_GET, JOB_WITH_ARTIFACT_SQLITE_LIST,
-    job_from_postgres_row, job_from_sqlite_row, job_with_artifact_from_postgres_row,
-    job_with_artifact_from_sqlite_row,
-};
+use rows::{job_from_model, job_with_artifact_from_models};
 
 #[derive(Debug, Clone)]
 pub struct JobRepository {
@@ -59,54 +59,16 @@ impl JobRepository {
         &self,
         input: CreatePrintJob,
     ) -> RepositoryResult<JobWithArtifact> {
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let mut transaction = pool
-                    .begin()
-                    .await
-                    .context("failed to begin SQLite print job transaction")?;
-                let created = create_print_job_sqlite(&mut transaction, input).await;
-                match created {
-                    Ok(created) => {
-                        transaction
-                            .commit()
-                            .await
-                            .context("failed to commit SQLite print job transaction")?;
-                        Ok(created)
-                    }
-                    Err(err) => {
-                        transaction
-                            .rollback()
-                            .await
-                            .context("failed to roll back SQLite print job transaction")?;
-                        Err(err)
-                    }
-                }
-            }
-            Database::Postgres(pool) => {
-                let mut transaction = pool
-                    .begin()
-                    .await
-                    .context("failed to begin PostgreSQL print job transaction")?;
-                let created = create_print_job_postgres(&mut transaction, input).await;
-                match created {
-                    Ok(created) => {
-                        transaction
-                            .commit()
-                            .await
-                            .context("failed to commit PostgreSQL print job transaction")?;
-                        Ok(created)
-                    }
-                    Err(err) => {
-                        transaction
-                            .rollback()
-                            .await
-                            .context("failed to roll back PostgreSQL print job transaction")?;
-                        Err(err)
-                    }
-                }
-            }
-        }
+        let connection = self.database.sea_orm_connection();
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin print job transaction")?;
+        let created = create::create_print_job(&tx, input).await?;
+        tx.commit()
+            .await
+            .context("failed to commit print job transaction")?;
+        Ok(created)
     }
 
     pub async fn create_print_job_with_audit(
@@ -125,28 +87,16 @@ impl JobRepository {
             return Err(RepositoryError::MissingTenant);
         }
 
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let rows = sqlx::query(JOB_WITH_ARTIFACT_SQLITE_LIST)
-                    .bind(tenant_id.to_string())
-                    .fetch_all(pool)
-                    .await
-                    .context("failed to list SQLite print jobs")?;
-                rows.into_iter()
-                    .map(job_with_artifact_from_sqlite_row)
-                    .collect()
-            }
-            Database::Postgres(pool) => {
-                let rows = sqlx::query(JOB_WITH_ARTIFACT_POSTGRES_LIST)
-                    .bind(tenant_id.to_string())
-                    .fetch_all(pool)
-                    .await
-                    .context("failed to list PostgreSQL print jobs")?;
-                rows.into_iter()
-                    .map(job_with_artifact_from_postgres_row)
-                    .collect()
-            }
-        }
+        let connection = self.database.sea_orm_connection();
+        let job_models = jobs::Entity::find()
+            .filter(jobs::Column::TenantId.eq(tenant_id.to_string()))
+            .order_by_desc(jobs::Column::CreatedAt)
+            .order_by_desc(jobs::Column::Id)
+            .all(&connection)
+            .await
+            .context("failed to list print jobs")?;
+
+        hydrate_jobs_with_artifacts(&connection, job_models).await
     }
 
     pub async fn get_for_tenant(
@@ -154,26 +104,7 @@ impl JobRepository {
         tenant_id: TenantId,
         job_id: JobId,
     ) -> RepositoryResult<Option<JobWithArtifact>> {
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let row = sqlx::query(JOB_WITH_ARTIFACT_SQLITE_GET)
-                    .bind(tenant_id.to_string())
-                    .bind(job_id.to_string())
-                    .fetch_optional(pool)
-                    .await
-                    .context("failed to get SQLite print job")?;
-                row.map(job_with_artifact_from_sqlite_row).transpose()
-            }
-            Database::Postgres(pool) => {
-                let row = sqlx::query(JOB_WITH_ARTIFACT_POSTGRES_GET)
-                    .bind(tenant_id.to_string())
-                    .bind(job_id.to_string())
-                    .fetch_optional(pool)
-                    .await
-                    .context("failed to get PostgreSQL print job")?;
-                row.map(job_with_artifact_from_postgres_row).transpose()
-            }
-        }
+        job_with_artifact_by_id(&self.database, tenant_id, job_id).await
     }
 
     pub async fn mark_for_command(
@@ -182,32 +113,19 @@ impl JobRepository {
         status: JobStatus,
         error: Option<String>,
     ) -> RepositoryResult<Option<Job>> {
-        let updated = match &self.database {
-            Database::Sqlite(pool) => sqlx::query(
-                "UPDATE jobs SET status = ?2, error = ?3, updated_at = ?4
-                     WHERE command_id = ?1 AND status NOT IN ('succeeded', 'failed')",
-            )
-            .bind(command_id.to_string())
-            .bind(status.as_str())
-            .bind(error.as_deref())
-            .bind(pandar_core::created_at_now())
-            .execute(pool)
+        let updated = jobs::Entity::update_many()
+            .set(jobs::ActiveModel {
+                status: Set(status.as_str().to_owned()),
+                error: Set(error),
+                updated_at: Set(pandar_core::created_at_now()),
+                ..Default::default()
+            })
+            .filter(jobs::Column::CommandId.eq(command_id.to_string()))
+            .filter(jobs::Column::Status.is_not_in(["succeeded", "failed"]))
+            .exec(&self.database.sea_orm_connection())
             .await
-            .context("failed to update SQLite job for command")?
-            .rows_affected(),
-            Database::Postgres(pool) => sqlx::query(
-                "UPDATE jobs SET status = $2, error = $3, updated_at = $4
-                     WHERE command_id = $1 AND status NOT IN ('succeeded', 'failed')",
-            )
-            .bind(command_id.to_string())
-            .bind(status.as_str())
-            .bind(error.as_deref())
-            .bind(pandar_core::created_at_now())
-            .execute(pool)
-            .await
-            .context("failed to update PostgreSQL job for command")?
-            .rows_affected(),
-        };
+            .context("failed to update job for command")?
+            .rows_affected;
 
         if updated == 0 && self.get_by_command(command_id).await?.is_none() {
             return Ok(None);
@@ -297,77 +215,26 @@ impl JobRepository {
         &self,
         transition: transitions::PrintCommandTransition<'_>,
     ) -> RepositoryResult<CommandRecord> {
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let mut transaction = pool
-                    .begin()
-                    .await
-                    .context("failed to begin SQLite print command transition transaction")?;
-                let command =
-                    transitions::transition_print_command_sqlite(&mut transaction, transition)
-                        .await;
-                match command {
-                    Ok(command) => {
-                        transaction
-                            .commit()
-                            .await
-                            .context("failed to commit SQLite print command transition")?;
-                        Ok(command)
-                    }
-                    Err(err) => {
-                        transaction.rollback().await.context(
-                            "failed to roll back SQLite print command transition transaction",
-                        )?;
-                        Err(err)
-                    }
-                }
-            }
-            Database::Postgres(pool) => {
-                let mut transaction = pool
-                    .begin()
-                    .await
-                    .context("failed to begin PostgreSQL print command transition transaction")?;
-                let command =
-                    transitions::transition_print_command_postgres(&mut transaction, transition)
-                        .await;
-                match command {
-                    Ok(command) => {
-                        transaction
-                            .commit()
-                            .await
-                            .context("failed to commit PostgreSQL print command transition")?;
-                        Ok(command)
-                    }
-                    Err(err) => {
-                        transaction.rollback().await.context(
-                            "failed to roll back PostgreSQL print command transition transaction",
-                        )?;
-                        Err(err)
-                    }
-                }
-            }
-        }
+        let connection = self.database.sea_orm_connection();
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin print command transition transaction")?;
+        let command = transitions::transition_print_command(&tx, transition).await?;
+        tx.commit()
+            .await
+            .context("failed to commit print command transition")?;
+        Ok(command)
     }
 
     async fn get_by_command(&self, command_id: CommandId) -> RepositoryResult<Option<Job>> {
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let row = sqlx::query(JOB_SQLITE_BY_COMMAND)
-                    .bind(command_id.to_string())
-                    .fetch_optional(pool)
-                    .await
-                    .context("failed to get SQLite job by command")?;
-                row.map(|row| job_from_sqlite_row(&row)).transpose()
-            }
-            Database::Postgres(pool) => {
-                let row = sqlx::query(JOB_POSTGRES_BY_COMMAND)
-                    .bind(command_id.to_string())
-                    .fetch_optional(pool)
-                    .await
-                    .context("failed to get PostgreSQL job by command")?;
-                row.map(|row| job_from_postgres_row(&row)).transpose()
-            }
-        }
+        jobs::Entity::find()
+            .filter(jobs::Column::CommandId.eq(command_id.to_string()))
+            .one(&self.database.sea_orm_connection())
+            .await
+            .context("failed to get job by command")?
+            .map(job_from_model)
+            .transpose()
     }
 
     pub async fn apply_print_report(
@@ -379,21 +246,87 @@ impl JobRepository {
 }
 
 async fn tenant_exists(database: &Database, tenant_id: TenantId) -> RepositoryResult<bool> {
-    let exists = match database {
-        Database::Sqlite(pool) => {
-            sqlx::query_scalar::<_, i64>("SELECT 1 FROM tenants WHERE id = ?1")
-                .bind(tenant_id.to_string())
-                .fetch_optional(pool)
-                .await
-        }
-        Database::Postgres(pool) => {
-            sqlx::query_scalar::<_, i64>("SELECT 1 FROM tenants WHERE id = $1")
-                .bind(tenant_id.to_string())
-                .fetch_optional(pool)
-                .await
-        }
-    }
-    .context("failed to check tenant existence for job repository")?;
+    let exists = tenants::Entity::find_by_id(tenant_id.to_string())
+        .count(&database.sea_orm_connection())
+        .await
+        .context("failed to check tenant existence for job repository")?;
 
-    Ok(exists.is_some())
+    Ok(exists > 0)
+}
+
+pub(crate) async fn job_with_artifact_by_id(
+    database: &Database,
+    tenant_id: TenantId,
+    job_id: JobId,
+) -> RepositoryResult<Option<JobWithArtifact>> {
+    let Some(job) = jobs::Entity::find_by_id(job_id.to_string())
+        .filter(jobs::Column::TenantId.eq(tenant_id.to_string()))
+        .one(&database.sea_orm_connection())
+        .await
+        .context("failed to get print job")?
+    else {
+        return Ok(None);
+    };
+
+    let artifact = artifact_for_job(&database.sea_orm_connection(), &job).await?;
+    Ok(Some(job_with_artifact_from_models(job, artifact)?))
+}
+
+pub(crate) async fn artifact_for_job<C>(
+    connection: &C,
+    job: &jobs::Model,
+) -> RepositoryResult<job_artifacts::Model>
+where
+    C: sea_orm::ConnectionTrait,
+{
+    job_artifacts::Entity::find_by_id(&job.artifact_id)
+        .one(connection)
+        .await
+        .context("failed to load job artifact")?
+        .ok_or_else(|| {
+            RepositoryError::Database(anyhow::anyhow!(
+                "job {} references missing artifact {}",
+                job.id,
+                job.artifact_id
+            ))
+        })
+}
+
+pub(crate) async fn hydrate_jobs_with_artifacts<C>(
+    connection: &C,
+    job_models: Vec<jobs::Model>,
+) -> RepositoryResult<Vec<JobWithArtifact>>
+where
+    C: sea_orm::ConnectionTrait,
+{
+    if job_models.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let artifact_ids = job_models
+        .iter()
+        .map(|job| job.artifact_id.clone())
+        .collect::<Vec<_>>();
+    let artifacts = job_artifacts::Entity::find()
+        .filter(job_artifacts::Column::Id.is_in(artifact_ids))
+        .all(connection)
+        .await
+        .context("failed to bulk load job artifacts")?
+        .into_iter()
+        .map(|artifact| (artifact.id.clone(), artifact))
+        .collect::<HashMap<_, _>>();
+
+    job_models
+        .into_iter()
+        .map(|job| {
+            let artifact = artifacts.get(&job.artifact_id).cloned().ok_or_else(|| {
+                RepositoryError::Database(anyhow::anyhow!(
+                    "job {} references missing artifact {}",
+                    job.id,
+                    job.artifact_id
+                ))
+            })?;
+            job_with_artifact_from_models(job, artifact)
+        })
+        .collect()
 }

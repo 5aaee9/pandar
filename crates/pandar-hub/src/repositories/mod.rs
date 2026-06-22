@@ -1,3 +1,4 @@
+mod adapters;
 mod agents;
 mod audit;
 mod auth;
@@ -72,25 +73,31 @@ pub type RepositoryResult<T> = Result<T, RepositoryError>;
 #[cfg(test)]
 mod tests;
 
-fn is_unique_violation(err: &sqlx::Error, sqlite_name: &str, postgres_name: &str) -> bool {
-    let Some(db_err) = err.as_database_error() else {
-        return false;
-    };
-
-    if db_err.constraint() == Some(sqlite_name) || db_err.constraint() == Some(postgres_name) {
+pub fn is_sea_orm_unique_violation(
+    err: &sea_orm::DbErr,
+    sqlite_name: &str,
+    postgres_name: &str,
+) -> bool {
+    if let Some(sea_orm::SqlErr::UniqueConstraintViolation(message)) = err.sql_err()
+        && (message.contains(sqlite_name) || message.contains(postgres_name))
+    {
         return true;
     }
 
-    db_err.message().contains(sqlite_name) || db_err.message().contains(postgres_name)
+    let message = err.to_string();
+    message.contains(sqlite_name) || message.contains(postgres_name)
 }
 
-fn is_foreign_key_violation(err: &sqlx::Error) -> bool {
-    let Some(db_err) = err.as_database_error() else {
-        return false;
-    };
+pub fn is_sea_orm_foreign_key_violation(err: &sea_orm::DbErr) -> bool {
+    if matches!(
+        err.sql_err(),
+        Some(sea_orm::SqlErr::ForeignKeyConstraintViolation(_))
+    ) {
+        return true;
+    }
 
-    db_err.code().as_deref() == Some("23503")
-        || db_err.message().contains("FOREIGN KEY constraint failed")
+    let message = err.to_string();
+    message.contains("23503") || message.contains("FOREIGN KEY constraint failed")
 }
 
 #[cfg(test)]

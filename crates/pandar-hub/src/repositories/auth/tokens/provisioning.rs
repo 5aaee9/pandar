@@ -1,16 +1,12 @@
 use anyhow::Context;
 use pandar_core::{TenantId, created_at_now};
+use sea_orm::TransactionTrait;
 use serde_json::json;
-use sqlx::Row;
 
-use crate::{
-    db::Database,
-    repositories::{
-        ApiToken, AuditEvent, AuthRepository, RepositoryError, RepositoryResult,
-        audit::{build_audit_event, insert_audit_event_postgres, insert_audit_event_sqlite},
-        auth::{hash_token, tokens::api_token_from_parts},
-        is_foreign_key_violation, is_unique_violation,
-    },
+use crate::repositories::{
+    ApiToken, AuditEvent, AuthRepository, RepositoryResult,
+    audit::{build_audit_event, insert_audit_event_tx},
+    auth::{hash_token, insert_api_token, tokens::revoke_api_token},
 };
 
 impl AuthRepository {
@@ -33,35 +29,22 @@ impl AuthRepository {
         };
         let token_hash = hash_token(plaintext_token);
 
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let mut tx = pool
-                    .begin()
-                    .await
-                    .context("failed to begin SQLite token provisioning transaction")?;
-                insert_api_token_sqlite(&mut *tx, &token, &token_hash).await?;
-                insert_audit_event_sqlite(&mut *tx, &api_token_audit_event(&token, actor_user_id))
-                    .await?;
-                tx.commit()
-                    .await
-                    .context("failed to commit SQLite token provisioning transaction")?;
-            }
-            Database::Postgres(pool) => {
-                let mut tx = pool
-                    .begin()
-                    .await
-                    .context("failed to begin PostgreSQL token provisioning transaction")?;
-                insert_api_token_postgres(&mut *tx, &token, &token_hash).await?;
-                insert_audit_event_postgres(
-                    &mut *tx,
-                    &api_token_audit_event(&token, actor_user_id),
-                )
-                .await?;
-                tx.commit()
-                    .await
-                    .context("failed to commit PostgreSQL token provisioning transaction")?;
-            }
-        }
+        let connection = self.database.sea_orm_connection();
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin token provisioning transaction")?;
+        insert_api_token(
+            &tx,
+            &token,
+            &token_hash,
+            "failed to insert provisioned api token",
+        )
+        .await?;
+        insert_audit_event_tx(&tx, &api_token_audit_event(&token, actor_user_id)).await?;
+        tx.commit()
+            .await
+            .context("failed to commit token provisioning transaction")?;
 
         Ok(token)
     }
@@ -72,189 +55,18 @@ impl AuthRepository {
         token_id: &str,
         actor_user_id: String,
     ) -> RepositoryResult<ApiToken> {
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let mut tx = pool
-                    .begin()
-                    .await
-                    .context("failed to begin SQLite token revoke transaction")?;
-                let token = revoke_api_token_sqlite(&mut *tx, tenant_id, token_id).await?;
-                insert_audit_event_sqlite(
-                    &mut *tx,
-                    &api_token_revoke_audit_event(&token, actor_user_id),
-                )
-                .await?;
-                tx.commit()
-                    .await
-                    .context("failed to commit SQLite token revoke transaction")?;
-                Ok(token)
-            }
-            Database::Postgres(pool) => {
-                let mut tx = pool
-                    .begin()
-                    .await
-                    .context("failed to begin PostgreSQL token revoke transaction")?;
-                let token = revoke_api_token_postgres(&mut *tx, tenant_id, token_id).await?;
-                insert_audit_event_postgres(
-                    &mut *tx,
-                    &api_token_revoke_audit_event(&token, actor_user_id),
-                )
-                .await?;
-                tx.commit()
-                    .await
-                    .context("failed to commit PostgreSQL token revoke transaction")?;
-                Ok(token)
-            }
-        }
-    }
-}
+        let connection = self.database.sea_orm_connection();
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin token revoke transaction")?;
+        let token = revoke_api_token(&tx, tenant_id, token_id).await?;
+        insert_audit_event_tx(&tx, &api_token_revoke_audit_event(&token, actor_user_id)).await?;
+        tx.commit()
+            .await
+            .context("failed to commit token revoke transaction")?;
 
-async fn insert_api_token_sqlite<'e, E>(
-    executor: E,
-    token: &ApiToken,
-    token_hash: &str,
-) -> RepositoryResult<()>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
-{
-    map_api_token_insert(
-        sqlx::query(
-            "INSERT INTO api_tokens (id, tenant_id, user_id, name, token_hash, created_at, last_used_at, revoked_at)
-             SELECT ?1, ?2, ?3, ?4, ?5, ?6, NULL, NULL
-             WHERE EXISTS (SELECT 1 FROM users WHERE id = ?3 AND tenant_id = ?2)",
-        )
-        .bind(&token.id)
-        .bind(token.tenant_id.to_string())
-        .bind(&token.user_id)
-        .bind(&token.name)
-        .bind(token_hash)
-        .bind(&token.created_at)
-        .execute(executor)
-        .await
-        .map(|result| result.rows_affected()),
-    )
-}
-
-async fn insert_api_token_postgres<'e, E>(
-    executor: E,
-    token: &ApiToken,
-    token_hash: &str,
-) -> RepositoryResult<()>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    map_api_token_insert(
-        sqlx::query(
-            "INSERT INTO api_tokens (id, tenant_id, user_id, name, token_hash, created_at, last_used_at, revoked_at)
-             SELECT $1, $2, $3, $4, $5, $6, NULL, NULL
-             WHERE EXISTS (SELECT 1 FROM users WHERE id = $3 AND tenant_id = $2)",
-        )
-        .bind(&token.id)
-        .bind(token.tenant_id.to_string())
-        .bind(&token.user_id)
-        .bind(&token.name)
-        .bind(token_hash)
-        .bind(&token.created_at)
-        .execute(executor)
-        .await
-        .map(|result| result.rows_affected()),
-    )
-}
-
-async fn revoke_api_token_sqlite<'e, E>(
-    executor: E,
-    tenant_id: TenantId,
-    token_id: &str,
-) -> RepositoryResult<ApiToken>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
-{
-    let revoked_at = created_at_now();
-    let row = sqlx::query(
-        "UPDATE api_tokens
-         SET revoked_at = COALESCE(revoked_at, ?1)
-         WHERE tenant_id = ?2 AND id = ?3
-         RETURNING id, tenant_id, user_id, name, created_at, last_used_at, revoked_at",
-    )
-    .bind(&revoked_at)
-    .bind(tenant_id.to_string())
-    .bind(token_id)
-    .fetch_optional(executor)
-    .await
-    .context("failed to revoke SQLite api token")?;
-    row.map(|row| {
-        api_token_from_parts(
-            row.get("id"),
-            row.get("tenant_id"),
-            row.get("user_id"),
-            row.get("name"),
-            row.get("created_at"),
-            row.get("last_used_at"),
-            row.get("revoked_at"),
-        )
-    })
-    .transpose()?
-    .ok_or(RepositoryError::MissingApiToken)
-}
-
-async fn revoke_api_token_postgres<'e, E>(
-    executor: E,
-    tenant_id: TenantId,
-    token_id: &str,
-) -> RepositoryResult<ApiToken>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    let revoked_at = created_at_now();
-    let row = sqlx::query(
-        "UPDATE api_tokens
-         SET revoked_at = COALESCE(revoked_at, $1)
-         WHERE tenant_id = $2 AND id = $3
-         RETURNING id, tenant_id, user_id, name, created_at, last_used_at, revoked_at",
-    )
-    .bind(&revoked_at)
-    .bind(tenant_id.to_string())
-    .bind(token_id)
-    .fetch_optional(executor)
-    .await
-    .context("failed to revoke PostgreSQL api token")?;
-    row.map(|row| {
-        api_token_from_parts(
-            row.get("id"),
-            row.get("tenant_id"),
-            row.get("user_id"),
-            row.get("name"),
-            row.get("created_at"),
-            row.get("last_used_at"),
-            row.get("revoked_at"),
-        )
-    })
-    .transpose()?
-    .ok_or(RepositoryError::MissingApiToken)
-}
-
-fn map_api_token_insert(result: Result<u64, sqlx::Error>) -> RepositoryResult<()> {
-    match result {
-        Ok(0) => Err(RepositoryError::MissingUser),
-        Ok(_) => Ok(()),
-        Err(err)
-            if is_unique_violation(
-                &err,
-                "api_tokens.tenant_id, api_tokens.name",
-                "api_tokens_tenant_id_name_key",
-            ) =>
-        {
-            Err(RepositoryError::DuplicateApiTokenName)
-        }
-        Err(err)
-            if is_unique_violation(&err, "api_tokens.token_hash", "api_tokens_token_hash_key") =>
-        {
-            Err(RepositoryError::DuplicateApiTokenHash)
-        }
-        Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingUser),
-        Err(err) => Err(anyhow::Error::new(err)
-            .context("failed to insert provisioned api token")
-            .into()),
+        Ok(token)
     }
 }
 

@@ -1,1 +1,11 @@
+pub mod agents;
+pub mod api_tokens;
+pub mod audit_events;
+pub mod commands;
+pub mod job_artifacts;
+pub mod jobs;
+pub mod machine_events;
+pub mod printers;
 pub mod tenants;
+pub mod user_identities;
+pub mod users;

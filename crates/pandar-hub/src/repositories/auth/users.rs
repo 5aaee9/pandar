@@ -1,68 +1,30 @@
 use anyhow::Context;
 use pandar_core::TenantId;
-use sqlx::Row;
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, QueryOrder,
+};
 
 use crate::{
-    db::Database,
+    entities::users,
     repositories::{AuthRepository, RepositoryError, RepositoryResult, User, UserRole},
 };
 
 mod provisioning;
 
-use super::user_from_row;
+use super::user_from_model;
 
 impl AuthRepository {
     pub async fn list_users_for_tenant(&self, tenant_id: TenantId) -> RepositoryResult<Vec<User>> {
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let rows = sqlx::query(
-                    "SELECT id, tenant_id, email, display_name, role, created_at
-                     FROM users
-                     WHERE tenant_id = ?1
-                     ORDER BY created_at ASC, id ASC",
-                )
-                .bind(tenant_id.to_string())
-                .fetch_all(pool)
-                .await
-                .context("failed to list SQLite tenant users")?;
-                rows.into_iter()
-                    .map(|row| {
-                        user_from_row(
-                            row.get("id"),
-                            row.get("tenant_id"),
-                            row.get("email"),
-                            row.get("display_name"),
-                            row.get("role"),
-                            row.get("created_at"),
-                        )
-                    })
-                    .collect()
-            }
-            Database::Postgres(pool) => {
-                let rows = sqlx::query(
-                    "SELECT id, tenant_id, email, display_name, role, created_at
-                     FROM users
-                     WHERE tenant_id = $1
-                     ORDER BY created_at ASC, id ASC",
-                )
-                .bind(tenant_id.to_string())
-                .fetch_all(pool)
-                .await
-                .context("failed to list PostgreSQL tenant users")?;
-                rows.into_iter()
-                    .map(|row| {
-                        user_from_row(
-                            row.get("id"),
-                            row.get("tenant_id"),
-                            row.get("email"),
-                            row.get("display_name"),
-                            row.get("role"),
-                            row.get("created_at"),
-                        )
-                    })
-                    .collect()
-            }
-        }
+        users::Entity::find()
+            .filter(users::Column::TenantId.eq(tenant_id.to_string()))
+            .order_by_asc(users::Column::CreatedAt)
+            .order_by_asc(users::Column::Id)
+            .all(&self.database.sea_orm_connection())
+            .await
+            .context("failed to list tenant users")?
+            .into_iter()
+            .map(user_from_model)
+            .collect()
     }
 
     pub async fn update_user_role(
@@ -71,55 +33,52 @@ impl AuthRepository {
         user_id: &str,
         role: UserRole,
     ) -> RepositoryResult<User> {
-        match &self.database {
-            Database::Sqlite(pool) => sqlx::query(
-                "UPDATE users
-                 SET role = ?1
-                 WHERE tenant_id = ?2 AND id = ?3
-                 RETURNING id, tenant_id, email, display_name, role, created_at",
-            )
-            .bind(role.as_str())
-            .bind(tenant_id.to_string())
-            .bind(user_id)
-            .fetch_optional(pool)
-            .await
-            .context("failed to update SQLite user role")?
-            .map(|row| {
-                user_from_row(
-                    row.get("id"),
-                    row.get("tenant_id"),
-                    row.get("email"),
-                    row.get("display_name"),
-                    row.get("role"),
-                    row.get("created_at"),
-                )
-            })
-            .transpose()?
-            .ok_or(RepositoryError::MissingUser),
-            Database::Postgres(pool) => sqlx::query(
-                "UPDATE users
-                 SET role = $1
-                 WHERE tenant_id = $2 AND id = $3
-                 RETURNING id, tenant_id, email, display_name, role, created_at",
-            )
-            .bind(role.as_str())
-            .bind(tenant_id.to_string())
-            .bind(user_id)
-            .fetch_optional(pool)
-            .await
-            .context("failed to update PostgreSQL user role")?
-            .map(|row| {
-                user_from_row(
-                    row.get("id"),
-                    row.get("tenant_id"),
-                    row.get("email"),
-                    row.get("display_name"),
-                    row.get("role"),
-                    row.get("created_at"),
-                )
-            })
-            .transpose()?
-            .ok_or(RepositoryError::MissingUser),
-        }
+        let connection = self.database.sea_orm_connection();
+        update_user_role(&connection, tenant_id, user_id, role).await
     }
+}
+
+pub(super) async fn select_user_role<C>(
+    connection: &C,
+    tenant_id: TenantId,
+    user_id: &str,
+) -> RepositoryResult<UserRole>
+where
+    C: sea_orm::ConnectionTrait,
+{
+    users::Entity::find_by_id(user_id)
+        .filter(users::Column::TenantId.eq(tenant_id.to_string()))
+        .one(connection)
+        .await
+        .context("failed to select user role")?
+        .map(|user| UserRole::parse(&user.role))
+        .transpose()?
+        .ok_or(RepositoryError::MissingUser)
+}
+
+pub(super) async fn update_user_role<C>(
+    connection: &C,
+    tenant_id: TenantId,
+    user_id: &str,
+    role: UserRole,
+) -> RepositoryResult<User>
+where
+    C: sea_orm::ConnectionTrait,
+{
+    let Some(user) = users::Entity::find_by_id(user_id)
+        .filter(users::Column::TenantId.eq(tenant_id.to_string()))
+        .one(connection)
+        .await
+        .context("failed to get user before role update")?
+    else {
+        return Err(RepositoryError::MissingUser);
+    };
+    let mut active: users::ActiveModel = user.into();
+    active.role = Set(role.as_str().to_owned());
+    active
+        .update(connection)
+        .await
+        .context("failed to update user role")
+        .map_err(Into::into)
+        .and_then(user_from_model)
 }

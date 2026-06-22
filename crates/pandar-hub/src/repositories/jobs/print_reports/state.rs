@@ -1,8 +1,11 @@
 use anyhow::Context;
 use pandar_core::{JobId, PrintStatus};
-use sqlx::{PgConnection, SqliteConnection};
+use sea_orm::{ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 
-use crate::repositories::{JobWithArtifact, RepositoryResult};
+use crate::{
+    entities::jobs,
+    repositories::{JobWithArtifact, RepositoryResult},
+};
 
 use super::ApplyPrintReport;
 
@@ -106,62 +109,38 @@ pub(super) fn is_terminal_status(status: &PrintStatus) -> bool {
     )
 }
 
-pub(super) async fn sqlite_update_job_print(
-    connection: &mut SqliteConnection,
+pub(super) async fn update_job_print<C>(
+    connection: &C,
     job_id: &JobId,
     update: &PrintUpdate,
-) -> RepositoryResult<bool> {
-    let result = sqlx::query(
-        "UPDATE jobs SET print_status = ?2, printer_state = ?3, progress_percent = ?4, remaining_time_minutes = ?5, current_layer = ?6, total_layers = ?7, active_file = ?8, last_progress_percent = ?9, last_layer = ?10, print_error = ?11, print_started_at = ?12, print_finished_at = ?13, print_updated_at = ?14, updated_at = ?15 WHERE id = ?1 AND print_status NOT IN ('completed', 'failed', 'cancelled')",
-    )
-    .bind(job_id.to_string())
-    .bind(&update.print_status)
-    .bind(update.printer_state.as_deref())
-    .bind(update.progress_percent.map(i64::from))
-    .bind(update.remaining_time_minutes.map(i64::from))
-    .bind(update.current_layer.map(i64::from))
-    .bind(update.total_layers.map(i64::from))
-    .bind(update.active_file.as_deref())
-    .bind(update.last_progress_percent.map(i64::from))
-    .bind(update.last_layer.map(i64::from))
-    .bind(update.print_error.as_deref())
-    .bind(update.print_started_at.as_deref())
-    .bind(update.print_finished_at.as_deref())
-    .bind(update.print_updated_at.as_deref())
-    .bind(pandar_core::created_at_now())
-    .execute(&mut *connection)
-    .await
-    .context("failed to update SQLite job print state")?;
-    Ok(result.rows_affected() > 0)
-}
-
-pub(super) async fn postgres_update_job_print(
-    connection: &mut PgConnection,
-    job_id: &JobId,
-    update: &PrintUpdate,
-) -> RepositoryResult<bool> {
-    let result = sqlx::query(
-        "UPDATE jobs SET print_status = $2, printer_state = $3, progress_percent = $4, remaining_time_minutes = $5, current_layer = $6, total_layers = $7, active_file = $8, last_progress_percent = $9, last_layer = $10, print_error = $11, print_started_at = $12, print_finished_at = $13, print_updated_at = $14, updated_at = $15 WHERE id = $1 AND print_status NOT IN ('completed', 'failed', 'cancelled')",
-    )
-    .bind(job_id.to_string())
-    .bind(&update.print_status)
-    .bind(update.printer_state.as_deref())
-    .bind(update.progress_percent.map(i32::from))
-    .bind(update.remaining_time_minutes.map(|value| value as i32))
-    .bind(update.current_layer.map(|value| value as i32))
-    .bind(update.total_layers.map(|value| value as i32))
-    .bind(update.active_file.as_deref())
-    .bind(update.last_progress_percent.map(i32::from))
-    .bind(update.last_layer.map(|value| value as i32))
-    .bind(update.print_error.as_deref())
-    .bind(update.print_started_at.as_deref())
-    .bind(update.print_finished_at.as_deref())
-    .bind(update.print_updated_at.as_deref())
-    .bind(pandar_core::created_at_now())
-    .execute(&mut *connection)
-    .await
-    .context("failed to update PostgreSQL job print state")?;
-    Ok(result.rows_affected() > 0)
+) -> RepositoryResult<bool>
+where
+    C: ConnectionTrait,
+{
+    let result = jobs::Entity::update_many()
+        .set(jobs::ActiveModel {
+            print_status: Set(update.print_status.clone()),
+            printer_state: Set(update.printer_state.clone()),
+            progress_percent: Set(update.progress_percent.map(i32::from)),
+            remaining_time_minutes: Set(update.remaining_time_minutes.map(|value| value as i32)),
+            current_layer: Set(update.current_layer.map(|value| value as i32)),
+            total_layers: Set(update.total_layers.map(|value| value as i32)),
+            active_file: Set(update.active_file.clone()),
+            last_progress_percent: Set(update.last_progress_percent.map(i32::from)),
+            last_layer: Set(update.last_layer.map(|value| value as i32)),
+            print_error: Set(update.print_error.clone()),
+            print_started_at: Set(update.print_started_at.clone()),
+            print_finished_at: Set(update.print_finished_at.clone()),
+            print_updated_at: Set(update.print_updated_at.clone()),
+            updated_at: Set(pandar_core::created_at_now()),
+            ..Default::default()
+        })
+        .filter(jobs::Column::Id.eq(job_id.to_string()))
+        .filter(jobs::Column::PrintStatus.is_not_in(["completed", "failed", "cancelled"]))
+        .exec(connection)
+        .await
+        .context("failed to update job print state")?;
+    Ok(result.rows_affected > 0)
 }
 
 fn incoming_status(state: Option<&str>, current: Option<&PrintStatus>) -> Option<PrintStatus> {

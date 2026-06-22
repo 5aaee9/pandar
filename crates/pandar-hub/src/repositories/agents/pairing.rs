@@ -1,14 +1,12 @@
 use anyhow::Context;
 use pandar_core::{Agent, TenantId};
+use sea_orm::TransactionTrait;
 use serde_json::json;
 
-use crate::{
-    db::Database,
-    repositories::{
-        AgentRepository, RepositoryResult,
-        agents::{insert_agent_postgres, insert_agent_sqlite, sqlx_err_to_repo},
-        audit::{build_audit_event, insert_audit_event_postgres, insert_audit_event_sqlite},
-    },
+use crate::repositories::{
+    AgentRepository, RepositoryResult,
+    agents::insert_agent,
+    audit::{build_audit_event, insert_audit_event_tx},
 };
 
 impl AgentRepository {
@@ -19,58 +17,18 @@ impl AgentRepository {
         user_id: String,
     ) -> RepositoryResult<Agent> {
         let agent = Agent::new(tenant_id, name).map_err(anyhow::Error::from)?;
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let mut tx = pool
-                    .begin()
-                    .await
-                    .context("failed to begin SQLite agent pairing audit transaction")?;
-                let inserted = insert_agent_sqlite(&mut *tx, &agent)
-                    .await
-                    .map_err(sqlx_err_to_repo);
-                match inserted {
-                    Ok(()) => {
-                        insert_audit_event_sqlite(&mut *tx, &pairing_event(&agent, user_id))
-                            .await?;
-                        tx.commit()
-                            .await
-                            .context("failed to commit SQLite agent pairing audit transaction")?;
-                        Ok(agent)
-                    }
-                    Err(err) => {
-                        tx.rollback().await.context(
-                            "failed to roll back SQLite agent pairing audit transaction",
-                        )?;
-                        Err(err)
-                    }
-                }
-            }
-            Database::Postgres(pool) => {
-                let mut tx = pool
-                    .begin()
-                    .await
-                    .context("failed to begin PostgreSQL agent pairing audit transaction")?;
-                let inserted = insert_agent_postgres(&mut *tx, &agent)
-                    .await
-                    .map_err(sqlx_err_to_repo);
-                match inserted {
-                    Ok(()) => {
-                        insert_audit_event_postgres(&mut *tx, &pairing_event(&agent, user_id))
-                            .await?;
-                        tx.commit().await.context(
-                            "failed to commit PostgreSQL agent pairing audit transaction",
-                        )?;
-                        Ok(agent)
-                    }
-                    Err(err) => {
-                        tx.rollback().await.context(
-                            "failed to roll back PostgreSQL agent pairing audit transaction",
-                        )?;
-                        Err(err)
-                    }
-                }
-            }
-        }
+        let connection = self.database.sea_orm_connection();
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin agent pairing audit transaction")?;
+        insert_agent(&tx, &agent).await?;
+        insert_audit_event_tx(&tx, &pairing_event(&agent, user_id)).await?;
+        tx.commit()
+            .await
+            .context("failed to commit agent pairing audit transaction")?;
+
+        Ok(agent)
     }
 }
 

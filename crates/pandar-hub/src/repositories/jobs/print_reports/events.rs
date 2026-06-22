@@ -1,9 +1,12 @@
 use anyhow::Context;
 use pandar_core::PrintStatus;
+use sea_orm::{ActiveValue::Set, EntityTrait, TryInsertResult};
 use sha2::{Digest, Sha256};
-use sqlx::{PgConnection, SqliteConnection};
 
-use crate::repositories::{JobWithArtifact, RepositoryResult};
+use crate::{
+    entities::machine_events,
+    repositories::{JobWithArtifact, RepositoryResult},
+};
 
 use super::{
     ApplyPrintReport, PrintReportDiagnostic,
@@ -21,16 +24,19 @@ struct MachineEventInsert {
     payload_json: String,
 }
 
-pub(super) async fn sqlite_insert_job_events(
-    connection: &mut SqliteConnection,
+pub(super) async fn insert_job_events<C>(
+    connection: &C,
     input: &ApplyPrintReport,
     printer: &PrinterMatch,
     job: &JobWithArtifact,
     update: &PrintUpdate,
-) -> RepositoryResult<bool> {
+) -> RepositoryResult<bool>
+where
+    C: sea_orm::ConnectionTrait,
+{
     let mut inserted = false;
     if progress_event_key(job, input).is_some() {
-        inserted |= sqlite_insert_event(
+        inserted |= insert_event(
             connection,
             input,
             printer,
@@ -40,124 +46,63 @@ pub(super) async fn sqlite_insert_job_events(
         .await?;
     }
     if let Some(event) = terminal_event(input, job, update) {
-        inserted |= sqlite_insert_event(connection, input, printer, Some(job), event).await?;
+        inserted |= insert_event(connection, input, printer, Some(job), event).await?;
     }
     for event in diagnostic_events(input, printer, Some(job)) {
-        inserted |= sqlite_insert_event(connection, input, printer, Some(job), event).await?;
+        inserted |= insert_event(connection, input, printer, Some(job), event).await?;
     }
     Ok(inserted)
 }
 
-pub(super) async fn postgres_insert_job_events(
-    connection: &mut PgConnection,
+pub(super) async fn insert_printer_events<C>(
+    connection: &C,
     input: &ApplyPrintReport,
     printer: &PrinterMatch,
-    job: &JobWithArtifact,
-    update: &PrintUpdate,
-) -> RepositoryResult<bool> {
-    let mut inserted = false;
-    if progress_event_key(job, input).is_some() {
-        inserted |= postgres_insert_event(
-            connection,
-            input,
-            printer,
-            Some(job),
-            progress_event(input, job)?,
-        )
-        .await?;
-    }
-    if let Some(event) = terminal_event(input, job, update) {
-        inserted |= postgres_insert_event(connection, input, printer, Some(job), event).await?;
-    }
-    for event in diagnostic_events(input, printer, Some(job)) {
-        inserted |= postgres_insert_event(connection, input, printer, Some(job), event).await?;
-    }
-    Ok(inserted)
-}
-
-pub(super) async fn sqlite_insert_printer_events(
-    connection: &mut SqliteConnection,
-    input: &ApplyPrintReport,
-    printer: &PrinterMatch,
-) -> RepositoryResult<bool> {
+) -> RepositoryResult<bool>
+where
+    C: sea_orm::ConnectionTrait,
+{
     let mut inserted = false;
     for event in diagnostic_events(input, printer, None) {
-        inserted |= sqlite_insert_event(connection, input, printer, None, event).await?;
+        inserted |= insert_event(connection, input, printer, None, event).await?;
     }
     Ok(inserted)
 }
 
-pub(super) async fn postgres_insert_printer_events(
-    connection: &mut PgConnection,
-    input: &ApplyPrintReport,
-    printer: &PrinterMatch,
-) -> RepositoryResult<bool> {
-    let mut inserted = false;
-    for event in diagnostic_events(input, printer, None) {
-        inserted |= postgres_insert_event(connection, input, printer, None, event).await?;
-    }
-    Ok(inserted)
-}
-
-async fn sqlite_insert_event(
-    connection: &mut SqliteConnection,
+async fn insert_event<C>(
+    connection: &C,
     input: &ApplyPrintReport,
     printer: &PrinterMatch,
     job: Option<&JobWithArtifact>,
     event: MachineEventInsert,
-) -> RepositoryResult<bool> {
-    let result = sqlx::query(
-        "INSERT OR IGNORE INTO machine_events (id, tenant_id, agent_id, printer_id, job_id, event_key, kind, severity, message, code, payload_json, observed_at, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-    )
-    .bind(uuid::Uuid::new_v4().to_string())
-    .bind(input.tenant_id.to_string())
-    .bind(input.agent_id.to_string())
-    .bind(&printer.id)
-    .bind(job.map(|job| job.job.id.to_string()))
-    .bind(event.event_key)
-    .bind(event.kind)
-    .bind(event.severity)
-    .bind(event.message)
-    .bind(event.code)
-    .bind(event.payload_json)
-    .bind(&input.observed_at)
-    .bind(pandar_core::created_at_now())
-    .execute(&mut *connection)
+) -> RepositoryResult<bool>
+where
+    C: sea_orm::ConnectionTrait,
+{
+    let result = machine_events::Entity::insert(machine_events::ActiveModel {
+        id: Set(uuid::Uuid::new_v4().to_string()),
+        tenant_id: Set(input.tenant_id.to_string()),
+        agent_id: Set(input.agent_id.to_string()),
+        printer_id: Set(printer.id.clone()),
+        job_id: Set(job.map(|job| job.job.id.to_string())),
+        event_key: Set(event.event_key),
+        kind: Set(event.kind),
+        severity: Set(event.severity),
+        message: Set(event.message),
+        code: Set(event.code),
+        payload_json: Set(event.payload_json),
+        observed_at: Set(input.observed_at.clone()),
+        created_at: Set(pandar_core::created_at_now()),
+    })
+    .on_conflict_do_nothing_on([
+        machine_events::Column::TenantId,
+        machine_events::Column::EventKey,
+    ])
+    .exec_without_returning(connection)
     .await
-    .context("failed to insert SQLite machine event")?;
-    Ok(result.rows_affected() > 0)
-}
+    .context("failed to insert machine event")?;
 
-async fn postgres_insert_event(
-    connection: &mut PgConnection,
-    input: &ApplyPrintReport,
-    printer: &PrinterMatch,
-    job: Option<&JobWithArtifact>,
-    event: MachineEventInsert,
-) -> RepositoryResult<bool> {
-    let result = sqlx::query(
-        "INSERT INTO machine_events (id, tenant_id, agent_id, printer_id, job_id, event_key, kind, severity, message, code, payload_json, observed_at, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-         ON CONFLICT (tenant_id, event_key) DO NOTHING",
-    )
-    .bind(uuid::Uuid::new_v4().to_string())
-    .bind(input.tenant_id.to_string())
-    .bind(input.agent_id.to_string())
-    .bind(&printer.id)
-    .bind(job.map(|job| job.job.id.to_string()))
-    .bind(event.event_key)
-    .bind(event.kind)
-    .bind(event.severity)
-    .bind(event.message)
-    .bind(event.code)
-    .bind(event.payload_json)
-    .bind(&input.observed_at)
-    .bind(pandar_core::created_at_now())
-    .execute(&mut *connection)
-    .await
-    .context("failed to insert PostgreSQL machine event")?;
-    Ok(result.rows_affected() > 0)
+    Ok(matches!(result, TryInsertResult::Inserted(rows) if rows > 0))
 }
 
 fn progress_event(

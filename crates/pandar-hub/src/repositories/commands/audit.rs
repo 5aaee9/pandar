@@ -1,15 +1,16 @@
 use anyhow::Context;
 use pandar_core::{AgentId, CommandId, CommandRecord, TenantId};
+use sea_orm::{EntityTrait, TransactionTrait};
 
 use crate::{
     db::Database,
     repositories::{
         RecordAuditEvent, RepositoryError, RepositoryResult,
-        audit::{build_audit_event, insert_audit_event_postgres, insert_audit_event_sqlite},
+        audit::{build_audit_event, insert_audit_event_tx},
         commands::{
             inserts::{self, InsertCommand},
             ownership,
-            rows::command_from_row,
+            rows::command_from_model,
         },
     },
 };
@@ -23,42 +24,17 @@ pub async fn enqueue_refresh_printers_with_audit(
     ownership::verify_agent_owner(database, tenant_id, agent_id).await?;
     let id = CommandId::new();
     let now = pandar_core::created_at_now();
-    match database {
-        Database::Sqlite(pool) => {
-            let mut transaction = pool
-                .begin()
-                .await
-                .context("failed to begin SQLite refresh command audit transaction")?;
-            inserts::insert_sqlite(
-                &mut *transaction,
-                insert_command(id, tenant_id, agent_id, &now),
-            )
-            .await?;
-            let event = refresh_audit_event(tenant_id, agent_id, user_id);
-            insert_audit_event_sqlite(&mut *transaction, &event).await?;
-            transaction
-                .commit()
-                .await
-                .context("failed to commit SQLite refresh command audit transaction")?;
-        }
-        Database::Postgres(pool) => {
-            let mut transaction = pool
-                .begin()
-                .await
-                .context("failed to begin PostgreSQL refresh command audit transaction")?;
-            inserts::insert_postgres(
-                &mut *transaction,
-                insert_command(id, tenant_id, agent_id, &now),
-            )
-            .await?;
-            let event = refresh_audit_event(tenant_id, agent_id, user_id);
-            insert_audit_event_postgres(&mut *transaction, &event).await?;
-            transaction
-                .commit()
-                .await
-                .context("failed to commit PostgreSQL refresh command audit transaction")?;
-        }
-    }
+    let connection = database.sea_orm_connection();
+    let tx = connection
+        .begin()
+        .await
+        .context("failed to begin refresh command audit transaction")?;
+    inserts::insert(&tx, insert_command(id, tenant_id, agent_id, &now)).await?;
+    let event = refresh_audit_event(tenant_id, agent_id, user_id);
+    insert_audit_event_tx(&tx, &event).await?;
+    tx.commit()
+        .await
+        .context("failed to commit refresh command audit transaction")?;
 
     get_command(database, id)
         .await?
@@ -102,30 +78,10 @@ async fn get_command(
     database: &Database,
     command_id: CommandId,
 ) -> RepositoryResult<Option<CommandRecord>> {
-    match database {
-        Database::Sqlite(pool) => {
-            let row = sqlx::query(
-                "SELECT id, tenant_id, agent_id, printer_id, kind, status, payload_json, error, created_at, updated_at
-                 FROM commands
-                 WHERE id = ?1",
-            )
-            .bind(command_id.to_string())
-            .fetch_optional(pool)
-            .await
-            .context("failed to get SQLite command")?;
-            row.map(command_from_row).transpose()
-        }
-        Database::Postgres(pool) => {
-            let row = sqlx::query(
-                "SELECT id, tenant_id, agent_id, printer_id, kind, status, payload_json, error, created_at, updated_at
-                 FROM commands
-                 WHERE id = $1",
-            )
-            .bind(command_id.to_string())
-            .fetch_optional(pool)
-            .await
-            .context("failed to get PostgreSQL command")?;
-            row.map(command_from_row).transpose()
-        }
-    }
+    crate::entities::commands::Entity::find_by_id(command_id.to_string())
+        .one(&database.sea_orm_connection())
+        .await
+        .context("failed to get command")?
+        .map(command_from_model)
+        .transpose()
 }

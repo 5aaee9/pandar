@@ -1,11 +1,16 @@
 use anyhow::Context;
 use pandar_core::{JobId, TenantId};
-use sqlx::{PgConnection, Row, SqliteConnection};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
-use crate::repositories::{
-    JobWithArtifact, RepositoryResult,
-    jobs::rows::{job_with_artifact_from_postgres_row, job_with_artifact_from_sqlite_row},
+use crate::{
+    entities::{jobs, printers},
+    repositories::{
+        JobWithArtifact, RepositoryResult,
+        jobs::{
+            artifact_for_job, hydrate_jobs_with_artifacts, rows::job_with_artifact_from_models,
+        },
+    },
 };
 
 use super::ApplyPrintReport;
@@ -15,252 +20,155 @@ pub(super) struct PrinterMatch {
     pub(super) id: String,
 }
 
-const SQLITE_JOB_BY_ID_FOR_PRINTER: &str = "SELECT j.id, j.tenant_id, j.printer_id, j.agent_id, j.artifact_id, j.command_id, j.status, j.error, j.print_status, j.printer_state, j.progress_percent, j.remaining_time_minutes, j.current_layer, j.total_layers, j.active_file, j.last_progress_percent, j.last_layer, j.print_error, j.print_started_at, j.print_finished_at, j.print_updated_at, j.created_at, j.updated_at, a.id AS artifact_row_id, a.tenant_id AS artifact_tenant_id, a.filename, a.content_type, a.size_bytes, a.storage_path, a.created_at AS artifact_created_at FROM jobs j JOIN job_artifacts a ON a.id = j.artifact_id WHERE j.tenant_id = ?1 AND j.agent_id = ?2 AND j.printer_id = ?3 AND j.id = ?4";
-const POSTGRES_JOB_BY_ID_FOR_PRINTER: &str = "SELECT j.id, j.tenant_id, j.printer_id, j.agent_id, j.artifact_id, j.command_id, j.status, j.error, j.print_status, j.printer_state, j.progress_percent, j.remaining_time_minutes, j.current_layer, j.total_layers, j.active_file, j.last_progress_percent, j.last_layer, j.print_error, j.print_started_at, j.print_finished_at, j.print_updated_at, j.created_at, j.updated_at, a.id AS artifact_row_id, a.tenant_id AS artifact_tenant_id, a.filename, a.content_type, a.size_bytes, a.storage_path, a.created_at AS artifact_created_at FROM jobs j JOIN job_artifacts a ON a.id = j.artifact_id WHERE j.tenant_id = $1 AND j.agent_id = $2 AND j.printer_id = $3 AND j.id = $4";
-const SQLITE_JOB_BY_ARTIFACT: &str = "SELECT j.id, j.tenant_id, j.printer_id, j.agent_id, j.artifact_id, j.command_id, j.status, j.error, j.print_status, j.printer_state, j.progress_percent, j.remaining_time_minutes, j.current_layer, j.total_layers, j.active_file, j.last_progress_percent, j.last_layer, j.print_error, j.print_started_at, j.print_finished_at, j.print_updated_at, j.created_at, j.updated_at, a.id AS artifact_row_id, a.tenant_id AS artifact_tenant_id, a.filename, a.content_type, a.size_bytes, a.storage_path, a.created_at AS artifact_created_at FROM jobs j JOIN job_artifacts a ON a.id = j.artifact_id WHERE j.tenant_id = ?1 AND j.agent_id = ?2 AND j.printer_id = ?3 AND j.artifact_id = ?4";
-const POSTGRES_JOB_BY_ARTIFACT: &str = "SELECT j.id, j.tenant_id, j.printer_id, j.agent_id, j.artifact_id, j.command_id, j.status, j.error, j.print_status, j.printer_state, j.progress_percent, j.remaining_time_minutes, j.current_layer, j.total_layers, j.active_file, j.last_progress_percent, j.last_layer, j.print_error, j.print_started_at, j.print_finished_at, j.print_updated_at, j.created_at, j.updated_at, a.id AS artifact_row_id, a.tenant_id AS artifact_tenant_id, a.filename, a.content_type, a.size_bytes, a.storage_path, a.created_at AS artifact_created_at FROM jobs j JOIN job_artifacts a ON a.id = j.artifact_id WHERE j.tenant_id = $1 AND j.agent_id = $2 AND j.printer_id = $3 AND j.artifact_id = $4";
-const SQLITE_ACTIVE_FILE_CANDIDATES: &str = "SELECT j.id, j.tenant_id, j.printer_id, j.agent_id, j.artifact_id, j.command_id, j.status, j.error, j.print_status, j.printer_state, j.progress_percent, j.remaining_time_minutes, j.current_layer, j.total_layers, j.active_file, j.last_progress_percent, j.last_layer, j.print_error, j.print_started_at, j.print_finished_at, j.print_updated_at, j.created_at, j.updated_at, a.id AS artifact_row_id, a.tenant_id AS artifact_tenant_id, a.filename, a.content_type, a.size_bytes, a.storage_path, a.created_at AS artifact_created_at FROM jobs j JOIN job_artifacts a ON a.id = j.artifact_id WHERE j.tenant_id = ?1 AND j.agent_id = ?2 AND j.printer_id = ?3 AND j.print_status IN ('pending', 'running') AND j.created_at >= ?4";
-const POSTGRES_ACTIVE_FILE_CANDIDATES: &str = "SELECT j.id, j.tenant_id, j.printer_id, j.agent_id, j.artifact_id, j.command_id, j.status, j.error, j.print_status, j.printer_state, j.progress_percent, j.remaining_time_minutes, j.current_layer, j.total_layers, j.active_file, j.last_progress_percent, j.last_layer, j.print_error, j.print_started_at, j.print_finished_at, j.print_updated_at, j.created_at, j.updated_at, a.id AS artifact_row_id, a.tenant_id AS artifact_tenant_id, a.filename, a.content_type, a.size_bytes, a.storage_path, a.created_at AS artifact_created_at FROM jobs j JOIN job_artifacts a ON a.id = j.artifact_id WHERE j.tenant_id = $1 AND j.agent_id = $2 AND j.printer_id = $3 AND j.print_status IN ('pending', 'running') AND j.created_at >= $4";
-const SQLITE_JOB_BY_ID: &str = "SELECT j.id, j.tenant_id, j.printer_id, j.agent_id, j.artifact_id, j.command_id, j.status, j.error, j.print_status, j.printer_state, j.progress_percent, j.remaining_time_minutes, j.current_layer, j.total_layers, j.active_file, j.last_progress_percent, j.last_layer, j.print_error, j.print_started_at, j.print_finished_at, j.print_updated_at, j.created_at, j.updated_at, a.id AS artifact_row_id, a.tenant_id AS artifact_tenant_id, a.filename, a.content_type, a.size_bytes, a.storage_path, a.created_at AS artifact_created_at FROM jobs j JOIN job_artifacts a ON a.id = j.artifact_id WHERE j.tenant_id = ?1 AND j.id = ?2";
-const POSTGRES_JOB_BY_ID: &str = "SELECT j.id, j.tenant_id, j.printer_id, j.agent_id, j.artifact_id, j.command_id, j.status, j.error, j.print_status, j.printer_state, j.progress_percent, j.remaining_time_minutes, j.current_layer, j.total_layers, j.active_file, j.last_progress_percent, j.last_layer, j.print_error, j.print_started_at, j.print_finished_at, j.print_updated_at, j.created_at, j.updated_at, a.id AS artifact_row_id, a.tenant_id AS artifact_tenant_id, a.filename, a.content_type, a.size_bytes, a.storage_path, a.created_at AS artifact_created_at FROM jobs j JOIN job_artifacts a ON a.id = j.artifact_id WHERE j.tenant_id = $1 AND j.id = $2";
-
-pub(super) async fn sqlite_printer_for_serial(
-    connection: &mut SqliteConnection,
+pub(super) async fn printer_for_serial<C>(
+    connection: &C,
     input: &ApplyPrintReport,
-) -> RepositoryResult<Option<PrinterMatch>> {
-    sqlx::query(
-        "SELECT id FROM printers WHERE tenant_id = ?1 AND agent_id = ?2 AND serial_number = ?3",
-    )
-    .bind(input.tenant_id.to_string())
-    .bind(input.agent_id.to_string())
-    .bind(&input.serial)
-    .fetch_optional(&mut *connection)
-    .await
-    .context("failed to resolve SQLite print report printer")
-    .map(|row| row.map(|row| PrinterMatch { id: row.get("id") }))
-    .map_err(Into::into)
+) -> RepositoryResult<Option<PrinterMatch>>
+where
+    C: ConnectionTrait,
+{
+    printers::Entity::find()
+        .filter(printers::Column::TenantId.eq(input.tenant_id.to_string()))
+        .filter(printers::Column::AgentId.eq(input.agent_id.to_string()))
+        .filter(printers::Column::SerialNumber.eq(&input.serial))
+        .one(connection)
+        .await
+        .context("failed to resolve print report printer")
+        .map(|printer| printer.map(|printer| PrinterMatch { id: printer.id }))
+        .map_err(Into::into)
 }
 
-pub(super) async fn postgres_printer_for_serial(
-    connection: &mut PgConnection,
-    input: &ApplyPrintReport,
-) -> RepositoryResult<Option<PrinterMatch>> {
-    sqlx::query(
-        "SELECT id FROM printers WHERE tenant_id = $1 AND agent_id = $2 AND serial_number = $3",
-    )
-    .bind(input.tenant_id.to_string())
-    .bind(input.agent_id.to_string())
-    .bind(&input.serial)
-    .fetch_optional(&mut *connection)
-    .await
-    .context("failed to resolve PostgreSQL print report printer")
-    .map(|row| row.map(|row| PrinterMatch { id: row.get("id") }))
-    .map_err(Into::into)
-}
-
-pub(super) async fn sqlite_correlate_job(
-    connection: &mut SqliteConnection,
+pub(super) async fn correlate_job<C>(
+    connection: &C,
     input: &ApplyPrintReport,
     printer: &PrinterMatch,
-) -> RepositoryResult<Option<JobWithArtifact>> {
+) -> RepositoryResult<Option<JobWithArtifact>>
+where
+    C: ConnectionTrait,
+{
     if let Some(job_id) = input.job_id
-        && let Some(job) = sqlite_job_by_id_for_printer(connection, input, printer, job_id).await?
+        && let Some(job) = job_by_id_for_printer(connection, input, printer, job_id).await?
     {
         return Ok(Some(job));
     }
     if let Some(job) =
-        sqlite_job_by_artifact(connection, input, printer, input.artifact_id.as_deref()).await?
+        job_by_artifact(connection, input, printer, input.artifact_id.as_deref()).await?
     {
         return Ok(Some(job));
     }
     if let Some(job) =
-        sqlite_job_by_artifact(connection, input, printer, input.subtask_id.as_deref()).await?
+        job_by_artifact(connection, input, printer, input.subtask_id.as_deref()).await?
     {
         return Ok(Some(job));
     }
-    sqlite_job_by_active_file(connection, input, printer).await
+    job_by_active_file(connection, input, printer).await
 }
 
-pub(super) async fn postgres_correlate_job(
-    connection: &mut PgConnection,
-    input: &ApplyPrintReport,
-    printer: &PrinterMatch,
-) -> RepositoryResult<Option<JobWithArtifact>> {
-    if let Some(job_id) = input.job_id
-        && let Some(job) =
-            postgres_job_by_id_for_printer(connection, input, printer, job_id).await?
-    {
-        return Ok(Some(job));
-    }
-    if let Some(job) =
-        postgres_job_by_artifact(connection, input, printer, input.artifact_id.as_deref()).await?
-    {
-        return Ok(Some(job));
-    }
-    if let Some(job) =
-        postgres_job_by_artifact(connection, input, printer, input.subtask_id.as_deref()).await?
-    {
-        return Ok(Some(job));
-    }
-    postgres_job_by_active_file(connection, input, printer).await
-}
-
-pub(super) async fn sqlite_job_by_id(
-    connection: &mut SqliteConnection,
+pub(super) async fn job_by_id<C>(
+    connection: &C,
     tenant_id: TenantId,
     job_id: JobId,
-) -> RepositoryResult<Option<JobWithArtifact>> {
-    let row = sqlx::query(SQLITE_JOB_BY_ID)
-        .bind(tenant_id.to_string())
-        .bind(job_id.to_string())
-        .fetch_optional(&mut *connection)
+) -> RepositoryResult<Option<JobWithArtifact>>
+where
+    C: ConnectionTrait,
+{
+    let Some(job) = jobs::Entity::find_by_id(job_id.to_string())
+        .filter(jobs::Column::TenantId.eq(tenant_id.to_string()))
+        .one(connection)
         .await
-        .context("failed to get SQLite print report job")?;
-    row.map(job_with_artifact_from_sqlite_row).transpose()
+        .context("failed to get print report job")?
+    else {
+        return Ok(None);
+    };
+
+    let artifact = artifact_for_job(connection, &job).await?;
+    Ok(Some(job_with_artifact_from_models(job, artifact)?))
 }
 
-pub(super) async fn postgres_job_by_id(
-    connection: &mut PgConnection,
-    tenant_id: TenantId,
-    job_id: JobId,
-) -> RepositoryResult<Option<JobWithArtifact>> {
-    let row = sqlx::query(POSTGRES_JOB_BY_ID)
-        .bind(tenant_id.to_string())
-        .bind(job_id.to_string())
-        .fetch_optional(&mut *connection)
-        .await
-        .context("failed to get PostgreSQL print report job")?;
-    row.map(job_with_artifact_from_postgres_row).transpose()
-}
-
-async fn sqlite_job_by_id_for_printer(
-    connection: &mut SqliteConnection,
+async fn job_by_id_for_printer<C>(
+    connection: &C,
     input: &ApplyPrintReport,
     printer: &PrinterMatch,
     job_id: JobId,
-) -> RepositoryResult<Option<JobWithArtifact>> {
-    let row = sqlx::query(SQLITE_JOB_BY_ID_FOR_PRINTER)
-        .bind(input.tenant_id.to_string())
-        .bind(input.agent_id.to_string())
-        .bind(&printer.id)
-        .bind(job_id.to_string())
-        .fetch_optional(&mut *connection)
+) -> RepositoryResult<Option<JobWithArtifact>>
+where
+    C: ConnectionTrait,
+{
+    let Some(job) = jobs::Entity::find_by_id(job_id.to_string())
+        .filter(jobs::Column::TenantId.eq(input.tenant_id.to_string()))
+        .filter(jobs::Column::AgentId.eq(input.agent_id.to_string()))
+        .filter(jobs::Column::PrinterId.eq(&printer.id))
+        .one(connection)
         .await
-        .context("failed to correlate SQLite print report by job id")?;
-    row.map(job_with_artifact_from_sqlite_row).transpose()
+        .context("failed to correlate print report by job id")?
+    else {
+        return Ok(None);
+    };
+
+    let artifact = artifact_for_job(connection, &job).await?;
+    Ok(Some(job_with_artifact_from_models(job, artifact)?))
 }
 
-async fn postgres_job_by_id_for_printer(
-    connection: &mut PgConnection,
-    input: &ApplyPrintReport,
-    printer: &PrinterMatch,
-    job_id: JobId,
-) -> RepositoryResult<Option<JobWithArtifact>> {
-    let row = sqlx::query(POSTGRES_JOB_BY_ID_FOR_PRINTER)
-        .bind(input.tenant_id.to_string())
-        .bind(input.agent_id.to_string())
-        .bind(&printer.id)
-        .bind(job_id.to_string())
-        .fetch_optional(&mut *connection)
-        .await
-        .context("failed to correlate PostgreSQL print report by job id")?;
-    row.map(job_with_artifact_from_postgres_row).transpose()
-}
-
-async fn sqlite_job_by_artifact(
-    connection: &mut SqliteConnection,
+async fn job_by_artifact<C>(
+    connection: &C,
     input: &ApplyPrintReport,
     printer: &PrinterMatch,
     artifact_id: Option<&str>,
-) -> RepositoryResult<Option<JobWithArtifact>> {
+) -> RepositoryResult<Option<JobWithArtifact>>
+where
+    C: ConnectionTrait,
+{
     let Some(artifact_id) = artifact_id else {
         return Ok(None);
     };
-    let row = sqlx::query(SQLITE_JOB_BY_ARTIFACT)
-        .bind(input.tenant_id.to_string())
-        .bind(input.agent_id.to_string())
-        .bind(&printer.id)
-        .bind(artifact_id)
-        .fetch_optional(&mut *connection)
+    let Some(job) = jobs::Entity::find()
+        .filter(jobs::Column::TenantId.eq(input.tenant_id.to_string()))
+        .filter(jobs::Column::AgentId.eq(input.agent_id.to_string()))
+        .filter(jobs::Column::PrinterId.eq(&printer.id))
+        .filter(jobs::Column::ArtifactId.eq(artifact_id))
+        .one(connection)
         .await
-        .context("failed to correlate SQLite print report by artifact id")?;
-    row.map(job_with_artifact_from_sqlite_row).transpose()
-}
-
-async fn postgres_job_by_artifact(
-    connection: &mut PgConnection,
-    input: &ApplyPrintReport,
-    printer: &PrinterMatch,
-    artifact_id: Option<&str>,
-) -> RepositoryResult<Option<JobWithArtifact>> {
-    let Some(artifact_id) = artifact_id else {
+        .context("failed to correlate print report by artifact id")?
+    else {
         return Ok(None);
     };
-    let row = sqlx::query(POSTGRES_JOB_BY_ARTIFACT)
-        .bind(input.tenant_id.to_string())
-        .bind(input.agent_id.to_string())
-        .bind(&printer.id)
-        .bind(artifact_id)
-        .fetch_optional(&mut *connection)
-        .await
-        .context("failed to correlate PostgreSQL print report by artifact id")?;
-    row.map(job_with_artifact_from_postgres_row).transpose()
+
+    let artifact = artifact_for_job(connection, &job).await?;
+    Ok(Some(job_with_artifact_from_models(job, artifact)?))
 }
 
-async fn sqlite_job_by_active_file(
-    connection: &mut SqliteConnection,
+async fn job_by_active_file<C>(
+    connection: &C,
     input: &ApplyPrintReport,
     printer: &PrinterMatch,
-) -> RepositoryResult<Option<JobWithArtifact>> {
-    let candidates = sqlite_active_file_candidates(connection, input, printer).await?;
+) -> RepositoryResult<Option<JobWithArtifact>>
+where
+    C: ConnectionTrait,
+{
+    let candidates = active_file_candidates(connection, input, printer).await?;
     Ok(single_file_match(candidates, input))
 }
 
-async fn postgres_job_by_active_file(
-    connection: &mut PgConnection,
+async fn active_file_candidates<C>(
+    connection: &C,
     input: &ApplyPrintReport,
     printer: &PrinterMatch,
-) -> RepositoryResult<Option<JobWithArtifact>> {
-    let candidates = postgres_active_file_candidates(connection, input, printer).await?;
-    Ok(single_file_match(candidates, input))
-}
-
-async fn sqlite_active_file_candidates(
-    connection: &mut SqliteConnection,
-    input: &ApplyPrintReport,
-    printer: &PrinterMatch,
-) -> RepositoryResult<Vec<JobWithArtifact>> {
+) -> RepositoryResult<Vec<JobWithArtifact>>
+where
+    C: ConnectionTrait,
+{
     let cutoff = cutoff_observed_at(&input.observed_at)?;
-    let rows = sqlx::query(SQLITE_ACTIVE_FILE_CANDIDATES)
-        .bind(input.tenant_id.to_string())
-        .bind(input.agent_id.to_string())
-        .bind(&printer.id)
-        .bind(cutoff)
-        .fetch_all(&mut *connection)
+    let job_models = jobs::Entity::find()
+        .filter(jobs::Column::TenantId.eq(input.tenant_id.to_string()))
+        .filter(jobs::Column::AgentId.eq(input.agent_id.to_string()))
+        .filter(jobs::Column::PrinterId.eq(&printer.id))
+        .filter(jobs::Column::PrintStatus.is_in(["pending", "running"]))
+        .filter(jobs::Column::CreatedAt.gte(cutoff))
+        .all(connection)
         .await
-        .context("failed to list SQLite active-file print report candidates")?;
-    rows.into_iter()
-        .map(job_with_artifact_from_sqlite_row)
-        .collect()
-}
+        .context("failed to list active-file print report candidates")?;
 
-async fn postgres_active_file_candidates(
-    connection: &mut PgConnection,
-    input: &ApplyPrintReport,
-    printer: &PrinterMatch,
-) -> RepositoryResult<Vec<JobWithArtifact>> {
-    let cutoff = cutoff_observed_at(&input.observed_at)?;
-    let rows = sqlx::query(POSTGRES_ACTIVE_FILE_CANDIDATES)
-        .bind(input.tenant_id.to_string())
-        .bind(input.agent_id.to_string())
-        .bind(&printer.id)
-        .bind(cutoff)
-        .fetch_all(&mut *connection)
-        .await
-        .context("failed to list PostgreSQL active-file print report candidates")?;
-    rows.into_iter()
-        .map(job_with_artifact_from_postgres_row)
-        .collect()
+    hydrate_jobs_with_artifacts(connection, job_models).await
 }
 
 fn single_file_match(

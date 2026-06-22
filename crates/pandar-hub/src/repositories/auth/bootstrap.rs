@@ -1,17 +1,17 @@
 use anyhow::Context;
 use pandar_core::{Tenant, created_at_now};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, ConnectionTrait, TransactionTrait};
 use serde_json::json;
 
 use crate::{
-    db::Database,
+    entities::tenants,
     repositories::{
         ApiToken, AuditEvent, AuthRepository, RepositoryError, RepositoryResult, User, UserRole,
-        audit::{build_audit_event, insert_audit_event_postgres, insert_audit_event_sqlite},
-        is_foreign_key_violation, is_unique_violation,
+        audit::{build_audit_event, insert_audit_event_tx},
+        auth::{hash_token, insert_api_token, insert_user},
+        is_sea_orm_unique_violation,
     },
 };
-
-use super::hash_token;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BootstrappedTenantAdmin {
@@ -50,38 +50,26 @@ impl AuthRepository {
         };
         let token_hash = hash_token(plaintext_token);
 
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let mut tx = pool
-                    .begin()
-                    .await
-                    .context("failed to begin SQLite bootstrap transaction")?;
-                insert_tenant_sqlite(&mut *tx, &tenant).await?;
-                insert_user_sqlite(&mut *tx, &user).await?;
-                insert_api_token_sqlite(&mut *tx, &api_token, &token_hash).await?;
-                for event in bootstrap_audit_events(&tenant, &user, &api_token) {
-                    insert_audit_event_sqlite(&mut *tx, &event).await?;
-                }
-                tx.commit()
-                    .await
-                    .context("failed to commit SQLite bootstrap transaction")?;
-            }
-            Database::Postgres(pool) => {
-                let mut tx = pool
-                    .begin()
-                    .await
-                    .context("failed to begin PostgreSQL bootstrap transaction")?;
-                insert_tenant_postgres(&mut *tx, &tenant).await?;
-                insert_user_postgres(&mut *tx, &user).await?;
-                insert_api_token_postgres(&mut *tx, &api_token, &token_hash).await?;
-                for event in bootstrap_audit_events(&tenant, &user, &api_token) {
-                    insert_audit_event_postgres(&mut *tx, &event).await?;
-                }
-                tx.commit()
-                    .await
-                    .context("failed to commit PostgreSQL bootstrap transaction")?;
-            }
+        let connection = self.database.sea_orm_connection();
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin bootstrap transaction")?;
+        insert_tenant(&tx, &tenant).await?;
+        insert_user(&tx, &user, "failed to insert bootstrap user").await?;
+        insert_api_token(
+            &tx,
+            &api_token,
+            &token_hash,
+            "failed to insert bootstrap api token",
+        )
+        .await?;
+        for event in bootstrap_audit_events(&tenant, &user, &api_token) {
+            insert_audit_event_tx(&tx, &event).await?;
         }
+        tx.commit()
+            .await
+            .context("failed to commit bootstrap transaction")?;
 
         Ok(BootstrappedTenantAdmin {
             tenant,
@@ -91,126 +79,29 @@ impl AuthRepository {
     }
 }
 
-async fn insert_tenant_sqlite<'e, E>(executor: E, tenant: &Tenant) -> RepositoryResult<()>
+async fn insert_tenant<C>(connection: &C, tenant: &Tenant) -> RepositoryResult<()>
 where
-    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    C: ConnectionTrait,
 {
-    let result = sqlx::query(
-        "INSERT INTO tenants (id, slug, display_name, created_at) VALUES (?1, ?2, ?3, ?4)",
-    )
-    .bind(tenant.id.to_string())
-    .bind(&tenant.slug)
-    .bind(&tenant.display_name)
-    .bind(&tenant.created_at)
-    .execute(executor)
+    let result = tenants::ActiveModel {
+        id: Set(tenant.id.to_string()),
+        slug: Set(tenant.slug.clone()),
+        display_name: Set(tenant.display_name.clone()),
+        created_at: Set(tenant.created_at.clone()),
+    }
+    .insert(connection)
     .await
     .map(|_| ());
-    map_tenant_insert_result(result)
-}
 
-async fn insert_tenant_postgres<'e, E>(executor: E, tenant: &Tenant) -> RepositoryResult<()>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    let result = sqlx::query(
-        "INSERT INTO tenants (id, slug, display_name, created_at) VALUES ($1, $2, $3, $4)",
-    )
-    .bind(tenant.id.to_string())
-    .bind(&tenant.slug)
-    .bind(&tenant.display_name)
-    .bind(&tenant.created_at)
-    .execute(executor)
-    .await
-    .map(|_| ());
-    map_tenant_insert_result(result)
-}
-
-async fn insert_user_sqlite<'e, E>(executor: E, user: &User) -> RepositoryResult<()>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
-{
-    let result = sqlx::query(
-        "INSERT INTO users (id, tenant_id, email, display_name, role, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-    )
-    .bind(&user.id)
-    .bind(user.tenant_id.to_string())
-    .bind(&user.email)
-    .bind(&user.display_name)
-    .bind(user.role.as_str())
-    .bind(&user.created_at)
-    .execute(executor)
-    .await
-    .map(|_| ());
-    map_user_insert_result(result)
-}
-
-async fn insert_user_postgres<'e, E>(executor: E, user: &User) -> RepositoryResult<()>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    let result = sqlx::query(
-        "INSERT INTO users (id, tenant_id, email, display_name, role, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6)",
-    )
-    .bind(&user.id)
-    .bind(user.tenant_id.to_string())
-    .bind(&user.email)
-    .bind(&user.display_name)
-    .bind(user.role.as_str())
-    .bind(&user.created_at)
-    .execute(executor)
-    .await
-    .map(|_| ());
-    map_user_insert_result(result)
-}
-
-async fn insert_api_token_sqlite<'e, E>(
-    executor: E,
-    token: &ApiToken,
-    token_hash: &str,
-) -> RepositoryResult<()>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
-{
-    let result = sqlx::query(
-        "INSERT INTO api_tokens (id, tenant_id, user_id, name, token_hash, created_at, last_used_at, revoked_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, NULL, NULL)",
-    )
-    .bind(&token.id)
-    .bind(token.tenant_id.to_string())
-    .bind(&token.user_id)
-    .bind(&token.name)
-    .bind(token_hash)
-    .bind(&token.created_at)
-    .execute(executor)
-    .await
-    .map(|_| ());
-    map_api_token_insert_result(result)
-}
-
-async fn insert_api_token_postgres<'e, E>(
-    executor: E,
-    token: &ApiToken,
-    token_hash: &str,
-) -> RepositoryResult<()>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    let result = sqlx::query(
-        "INSERT INTO api_tokens (id, tenant_id, user_id, name, token_hash, created_at, last_used_at, revoked_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NULL, NULL)",
-    )
-    .bind(&token.id)
-    .bind(token.tenant_id.to_string())
-    .bind(&token.user_id)
-    .bind(&token.name)
-    .bind(token_hash)
-    .bind(&token.created_at)
-    .execute(executor)
-    .await
-    .map(|_| ());
-    map_api_token_insert_result(result)
+    match result {
+        Ok(()) => Ok(()),
+        Err(err) if is_sea_orm_unique_violation(&err, "tenants.slug", "tenants_slug_key") => {
+            Err(RepositoryError::DuplicateTenantSlug)
+        }
+        Err(err) => Err(anyhow::Error::new(err)
+            .context("failed to insert bootstrap tenant")
+            .into()),
+    }
 }
 
 fn bootstrap_audit_events(tenant: &Tenant, user: &User, token: &ApiToken) -> [AuditEvent; 3] {
@@ -243,62 +134,4 @@ fn bootstrap_audit_events(tenant: &Tenant, user: &User, token: &ApiToken) -> [Au
             metadata_json: json!({ "name": token.name, "user_id": token.user_id }).to_string(),
         }),
     ]
-}
-
-fn map_tenant_insert_result(result: Result<(), sqlx::Error>) -> RepositoryResult<()> {
-    match result {
-        Ok(()) => Ok(()),
-        Err(err)
-            if is_unique_violation(&err, "tenants.slug", "tenants_slug_key")
-                || is_unique_violation(&err, "tenants.slug", "tenants_slug_key") =>
-        {
-            Err(RepositoryError::DuplicateTenantSlug)
-        }
-        Err(err) => Err(anyhow::Error::new(err)
-            .context("failed to insert bootstrap tenant")
-            .into()),
-    }
-}
-
-fn map_user_insert_result(result: Result<(), sqlx::Error>) -> RepositoryResult<()> {
-    match result {
-        Ok(()) => Ok(()),
-        Err(err)
-            if is_unique_violation(
-                &err,
-                "users.tenant_id, users.email",
-                "users_tenant_id_email_key",
-            ) =>
-        {
-            Err(RepositoryError::DuplicateUserEmail)
-        }
-        Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
-        Err(err) => Err(anyhow::Error::new(err)
-            .context("failed to insert bootstrap user")
-            .into()),
-    }
-}
-
-fn map_api_token_insert_result(result: Result<(), sqlx::Error>) -> RepositoryResult<()> {
-    match result {
-        Ok(()) => Ok(()),
-        Err(err)
-            if is_unique_violation(
-                &err,
-                "api_tokens.tenant_id, api_tokens.name",
-                "api_tokens_tenant_id_name_key",
-            ) =>
-        {
-            Err(RepositoryError::DuplicateApiTokenName)
-        }
-        Err(err)
-            if is_unique_violation(&err, "api_tokens.token_hash", "api_tokens_token_hash_key") =>
-        {
-            Err(RepositoryError::DuplicateApiTokenHash)
-        }
-        Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingUser),
-        Err(err) => Err(anyhow::Error::new(err)
-            .context("failed to insert bootstrap api token")
-            .into()),
-    }
 }

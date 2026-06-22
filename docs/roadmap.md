@@ -35,6 +35,7 @@
 - Added Phase 9 print report reconciliation with agent MQTT `PrintJobReport` forwarding, hub-side physical print lifecycle persistence, normalized machine events, tenant `job_progress` WebSocket broadcasts, nested `job.print` HTTP responses, and frontend job progress display.
 - Added Phase 10 external identity authentication with local `user_identities`, Clerk/Logto-compatible JWT verification through configured JWKS, API-token-first tenant route auth, local tenant role enforcement, local JWKS route tests, and frontend bearer forwarding from request cookies/static tokens.
 - Added Phase 11 provisioning/admin boundaries with bootstrap-only cross-tenant APIs, atomic tenant-admin bootstrap, tenant-admin user/token/identity management, API-token revocation, provisioning audit events, agent pairing bundles, and tenant-bound frontend reads.
+- Added Phase 12 full SeaORM repository migration coverage for auth, audit, agents, printers, commands, jobs, print reports, machine events, and documented the remaining atomic printer snapshot SQLx adapter.
 
 ## Phase 1: Foundation
 
@@ -234,17 +235,19 @@ Exit criteria:
 
 Goal: finish the staged SeaORM 2.0 migration without changing external repository behavior.
 
-- Migrate auth, identity, membership, and audit repositories first because Phase 10 and Phase 11 expand those surfaces.
-- Migrate agents/printers next, preserving live-session and printer snapshot semantics.
-- Migrate command/job/artifact repositories last because they have the broadest transaction coupling.
-- Keep SQLx migrations as the schema source until there is a separate, explicit decision to adopt SeaORM migrations.
-- Maintain SQLite and PostgreSQL parity tests for every migrated repository.
+- Implemented auth, identity, membership, and audit repository migration.
+- Implemented agents/printers migration while preserving live-session and printer snapshot semantics.
+- Implemented command/job/artifact repository migration and transaction coupling.
+- Completed SQLx escape-hatch audit: repository raw SQL is limited to `crates/pandar-hub/src/repositories/adapters/printers.rs`.
+- Kept SQLx migrations as the schema source until there is a separate, explicit decision to adopt SeaORM migrations.
+- Maintained SQLite and PostgreSQL parity tests for migrated repository behavior, including the printer snapshot adapter.
+- Completed final SDD implementation review and full verification.
 
 Exit criteria:
 
-- All persistent repository operations use SeaORM query/entity APIs or an explicitly documented backend-specific adapter.
-- SQLite and PostgreSQL test coverage remains green for repository behavior and transaction coupling.
-- No mixed SQLx/SeaORM behavior drift remains outside migration/bootstrap plumbing.
+- Completed: all persistent repository operations use SeaORM query/entity APIs or the explicitly documented printer snapshot upsert adapter.
+- Completed: SQLite and PostgreSQL test coverage covers repository behavior and transaction coupling.
+- Completed: no mixed SQLx/SeaORM behavior drift remains outside connection/migration plumbing, tests, and the documented adapter.
 
 ## Phase 13: Discovery, Diagnostics, And Compatibility Matrix
 
@@ -297,5 +300,4 @@ Exit criteria:
 
 ## Immediate Next
 
-- Do Phase 11 before exposing broader multi-tenant administration.
-- Continue SeaORM repository migration as Phase 12 after identity/provisioning/auth/audit boundaries are stable.
+- Start Phase 13 discovery, diagnostics, and compatibility work.

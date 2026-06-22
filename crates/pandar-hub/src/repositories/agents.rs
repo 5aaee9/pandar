@@ -1,15 +1,19 @@
 use anyhow::Context;
 use pandar_core::{Agent, AgentId, AgentStatus, TenantId};
-use sqlx::Row;
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait,
+    QueryFilter, QueryOrder, TransactionTrait,
+};
 
 mod pairing;
 
 use crate::{
     db::Database,
+    entities::{agents, tenants},
     repositories::{
         RepositoryError, RepositoryResult,
-        audit::{build_audit_event, insert_audit_event_postgres, insert_audit_event_sqlite},
-        is_foreign_key_violation, is_unique_violation,
+        audit::{build_audit_event, insert_audit_event_tx},
+        is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
     },
 };
 
@@ -39,194 +43,59 @@ impl AgentRepository {
         user_id: String,
     ) -> RepositoryResult<Agent> {
         let agent = Agent::new(tenant_id, name).map_err(anyhow::Error::from)?;
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let mut transaction = pool
-                    .begin()
-                    .await
-                    .context("failed to begin SQLite agent create audit transaction")?;
-                let inserted = insert_agent_sqlite(&mut *transaction, &agent)
-                    .await
-                    .map_err(sqlx_err_to_repo);
-                match inserted {
-                    Ok(()) => {
-                        let event = build_audit_event(crate::repositories::RecordAuditEvent {
-                            tenant_id,
-                            actor_type: "user".to_owned(),
-                            user_id: Some(user_id),
-                            action: "agent.create".to_owned(),
-                            target_type: "agent".to_owned(),
-                            target_id: Some(agent.id.to_string()),
-                            metadata_json: "{}".to_owned(),
-                        });
-                        insert_audit_event_sqlite(&mut *transaction, &event).await?;
-                        transaction
-                            .commit()
-                            .await
-                            .context("failed to commit SQLite agent create audit transaction")?;
-                        Ok(agent)
-                    }
-                    Err(err) => {
-                        transaction
-                            .rollback()
-                            .await
-                            .context("failed to roll back SQLite agent create audit transaction")?;
-                        Err(err)
-                    }
-                }
-            }
-            Database::Postgres(pool) => {
-                let mut transaction = pool
-                    .begin()
-                    .await
-                    .context("failed to begin PostgreSQL agent create audit transaction")?;
-                let inserted = insert_agent_postgres(&mut *transaction, &agent)
-                    .await
-                    .map_err(sqlx_err_to_repo);
-                match inserted {
-                    Ok(()) => {
-                        let event = build_audit_event(crate::repositories::RecordAuditEvent {
-                            tenant_id,
-                            actor_type: "user".to_owned(),
-                            user_id: Some(user_id),
-                            action: "agent.create".to_owned(),
-                            target_type: "agent".to_owned(),
-                            target_id: Some(agent.id.to_string()),
-                            metadata_json: "{}".to_owned(),
-                        });
-                        insert_audit_event_postgres(&mut *transaction, &event).await?;
-                        transaction.commit().await.context(
-                            "failed to commit PostgreSQL agent create audit transaction",
-                        )?;
-                        Ok(agent)
-                    }
-                    Err(err) => {
-                        transaction.rollback().await.context(
-                            "failed to roll back PostgreSQL agent create audit transaction",
-                        )?;
-                        Err(err)
-                    }
-                }
-            }
-        }
+        let connection = self.database.sea_orm_connection();
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin agent create audit transaction")?;
+        insert_agent(&tx, &agent).await?;
+        let event = build_audit_event(crate::repositories::RecordAuditEvent {
+            tenant_id,
+            actor_type: "user".to_owned(),
+            user_id: Some(user_id),
+            action: "agent.create".to_owned(),
+            target_type: "agent".to_owned(),
+            target_id: Some(agent.id.to_string()),
+            metadata_json: "{}".to_owned(),
+        });
+        insert_audit_event_tx(&tx, &event).await?;
+        tx.commit()
+            .await
+            .context("failed to commit agent create audit transaction")?;
+
+        Ok(agent)
     }
 
     async fn insert_agent(&self, agent: Agent) -> RepositoryResult<Agent> {
-        let result = match &self.database {
-            Database::Sqlite(pool) => insert_agent_sqlite(pool, &agent)
-                .await
-                .map_err(sqlx_err_to_repo),
-            Database::Postgres(pool) => insert_agent_postgres(pool, &agent)
-                .await
-                .map_err(sqlx_err_to_repo),
-        };
-
-        match result {
-            Ok(_) => Ok(agent),
-            Err(err) => Err(err),
-        }
+        insert_agent(&self.database.sea_orm_connection(), &agent).await?;
+        Ok(agent)
     }
 
     pub async fn list_for_tenant(&self, tenant_id: TenantId) -> RepositoryResult<Vec<Agent>> {
-        if !self.tenant_exists(tenant_id).await? {
+        let connection = self.database.sea_orm_connection();
+        if !tenant_exists(&connection, tenant_id).await? {
             return Err(RepositoryError::MissingTenant);
         }
 
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let rows = sqlx::query(
-                    "SELECT id, tenant_id, name, status, created_at
-                     FROM agents
-                     WHERE tenant_id = ?1
-                     ORDER BY created_at ASC, id ASC",
-                )
-                .bind(tenant_id.to_string())
-                .fetch_all(pool)
-                .await
-                .context("failed to list SQLite agents")?;
-                rows.into_iter()
-                    .map(|row| {
-                        agent_from_parts(
-                            row.get("id"),
-                            row.get("tenant_id"),
-                            row.get("name"),
-                            row.get("status"),
-                            row.get("created_at"),
-                        )
-                    })
-                    .collect()
-            }
-            Database::Postgres(pool) => {
-                let rows = sqlx::query(
-                    "SELECT id, tenant_id, name, status, created_at
-                     FROM agents
-                     WHERE tenant_id = $1
-                     ORDER BY created_at ASC, id ASC",
-                )
-                .bind(tenant_id.to_string())
-                .fetch_all(pool)
-                .await
-                .context("failed to list PostgreSQL agents")?;
-                rows.into_iter()
-                    .map(|row| {
-                        agent_from_parts(
-                            row.get("id"),
-                            row.get("tenant_id"),
-                            row.get("name"),
-                            row.get("status"),
-                            row.get("created_at"),
-                        )
-                    })
-                    .collect()
-            }
-        }
+        agents::Entity::find()
+            .filter(agents::Column::TenantId.eq(tenant_id.to_string()))
+            .order_by_asc(agents::Column::CreatedAt)
+            .order_by_asc(agents::Column::Id)
+            .all(&connection)
+            .await
+            .context("failed to list agents")?
+            .into_iter()
+            .map(agent_from_model)
+            .collect()
     }
 
     pub async fn get(&self, agent_id: AgentId) -> RepositoryResult<Option<Agent>> {
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let row = sqlx::query(
-                    "SELECT id, tenant_id, name, status, created_at
-                     FROM agents
-                     WHERE id = ?1",
-                )
-                .bind(agent_id.to_string())
-                .fetch_optional(pool)
-                .await
-                .context("failed to get SQLite agent")?;
-                row.map(|row| {
-                    agent_from_parts(
-                        row.get("id"),
-                        row.get("tenant_id"),
-                        row.get("name"),
-                        row.get("status"),
-                        row.get("created_at"),
-                    )
-                })
-                .transpose()
-            }
-            Database::Postgres(pool) => {
-                let row = sqlx::query(
-                    "SELECT id, tenant_id, name, status, created_at
-                     FROM agents
-                     WHERE id = $1",
-                )
-                .bind(agent_id.to_string())
-                .fetch_optional(pool)
-                .await
-                .context("failed to get PostgreSQL agent")?;
-                row.map(|row| {
-                    agent_from_parts(
-                        row.get("id"),
-                        row.get("tenant_id"),
-                        row.get("name"),
-                        row.get("status"),
-                        row.get("created_at"),
-                    )
-                })
-                .transpose()
-            }
-        }
+        agents::Entity::find_by_id(agent_id.to_string())
+            .one(&self.database.sea_orm_connection())
+            .await
+            .context("failed to get agent")?
+            .map(agent_from_model)
+            .transpose()
     }
 
     pub async fn update_connection(
@@ -236,41 +105,27 @@ impl AgentRepository {
         version: Option<&str>,
         last_seen_at: &str,
     ) -> RepositoryResult<Agent> {
-        let rows_affected = match &self.database {
-            Database::Sqlite(pool) => sqlx::query(
-                "UPDATE agents
-                     SET status = ?2, version = COALESCE(?3, version), last_seen_at = ?4
-                     WHERE id = ?1",
-            )
-            .bind(agent_id.to_string())
-            .bind(status.as_str())
-            .bind(version)
-            .bind(last_seen_at)
-            .execute(pool)
+        let connection = self.database.sea_orm_connection();
+        let Some(agent) = agents::Entity::find_by_id(agent_id.to_string())
+            .one(&connection)
             .await
-            .map(|result| result.rows_affected()),
-            Database::Postgres(pool) => sqlx::query(
-                "UPDATE agents
-                     SET status = $2, version = COALESCE($3, version), last_seen_at = $4
-                     WHERE id = $1",
-            )
-            .bind(agent_id.to_string())
-            .bind(status.as_str())
-            .bind(version)
-            .bind(last_seen_at)
-            .execute(pool)
-            .await
-            .map(|result| result.rows_affected()),
-        }
-        .context("failed to update agent connection")?;
-
-        if rows_affected == 0 {
+            .context("failed to get agent before connection update")?
+        else {
             return Err(RepositoryError::MissingAgent);
-        }
+        };
 
-        self.get(agent_id)
-            .await?
-            .ok_or(RepositoryError::MissingAgent)
+        let mut active: agents::ActiveModel = agent.into();
+        active.status = Set(status.as_str().to_owned());
+        if let Some(version) = version {
+            active.version = Set(Some(version.to_owned()));
+        }
+        active.last_seen_at = Set(Some(last_seen_at.to_owned()));
+        active
+            .update(&connection)
+            .await
+            .context("failed to update agent connection")
+            .map_err(Into::into)
+            .and_then(agent_from_model)
     }
 
     pub async fn mark_offline(
@@ -283,112 +138,73 @@ impl AgentRepository {
     }
 
     pub async fn count(&self) -> RepositoryResult<i64> {
-        let count = match &self.database {
-            Database::Sqlite(pool) => {
-                sqlx::query_scalar("SELECT COUNT(*) FROM agents")
-                    .fetch_one(pool)
-                    .await
-            }
-            Database::Postgres(pool) => {
-                sqlx::query_scalar("SELECT COUNT(*) FROM agents")
-                    .fetch_one(pool)
-                    .await
-            }
-        }
-        .context("failed to count agents")?;
+        let count = agents::Entity::find()
+            .count(&self.database.sea_orm_connection())
+            .await
+            .context("failed to count agents")?;
 
-        Ok(count)
-    }
-
-    async fn tenant_exists(&self, tenant_id: TenantId) -> RepositoryResult<bool> {
-        let exists = match &self.database {
-            Database::Sqlite(pool) => {
-                sqlx::query_scalar::<_, i64>("SELECT 1 FROM tenants WHERE id = ?1")
-                    .bind(tenant_id.to_string())
-                    .fetch_optional(pool)
-                    .await
-            }
-            Database::Postgres(pool) => {
-                sqlx::query_scalar::<_, i64>("SELECT 1 FROM tenants WHERE id = $1")
-                    .bind(tenant_id.to_string())
-                    .fetch_optional(pool)
-                    .await
-            }
-        }
-        .context("failed to check tenant existence")?;
-
-        Ok(exists.is_some())
+        Ok(count.try_into().expect("agent count should fit in i64"))
     }
 }
 
-async fn insert_agent_sqlite<'e, E>(executor: E, agent: &Agent) -> Result<(), sqlx::Error>
+pub(super) async fn insert_agent<C>(connection: &C, agent: &Agent) -> RepositoryResult<()>
 where
-    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+    C: ConnectionTrait,
 {
-    sqlx::query(
-        "INSERT INTO agents (id, tenant_id, name, status, version, last_seen_at, created_at)
-         VALUES (?1, ?2, ?3, ?4, NULL, NULL, ?5)",
-    )
-    .bind(agent.id.to_string())
-    .bind(agent.tenant_id.to_string())
-    .bind(&agent.name)
-    .bind(agent.status.as_str())
-    .bind(&agent.created_at)
-    .execute(executor)
+    let result = agents::ActiveModel {
+        id: Set(agent.id.to_string()),
+        tenant_id: Set(agent.tenant_id.to_string()),
+        name: Set(agent.name.clone()),
+        status: Set(agent.status.as_str().to_owned()),
+        version: Set(None),
+        last_seen_at: Set(None),
+        created_at: Set(agent.created_at.clone()),
+    }
+    .insert(connection)
     .await
-    .map(|_| ())
-}
+    .map(|_| ());
 
-async fn insert_agent_postgres<'e, E>(executor: E, agent: &Agent) -> Result<(), sqlx::Error>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
-{
-    sqlx::query(
-        "INSERT INTO agents (id, tenant_id, name, status, version, last_seen_at, created_at)
-         VALUES ($1, $2, $3, $4, NULL, NULL, $5)",
-    )
-    .bind(agent.id.to_string())
-    .bind(agent.tenant_id.to_string())
-    .bind(&agent.name)
-    .bind(agent.status.as_str())
-    .bind(&agent.created_at)
-    .execute(executor)
-    .await
-    .map(|_| ())
-}
-
-fn sqlx_err_to_repo(err: sqlx::Error) -> RepositoryError {
-    if is_unique_violation(
-        &err,
-        "agents.tenant_id, agents.name",
-        "agents_tenant_id_name_key",
-    ) {
-        RepositoryError::DuplicateAgentName
-    } else if is_foreign_key_violation(&err) {
-        RepositoryError::MissingTenant
-    } else {
-        anyhow::Error::new(err)
+    match result {
+        Ok(()) => Ok(()),
+        Err(err)
+            if is_sea_orm_unique_violation(
+                &err,
+                "agents.tenant_id, agents.name",
+                "agents_tenant_id_name_key",
+            ) =>
+        {
+            Err(RepositoryError::DuplicateAgentName)
+        }
+        Err(err) if is_sea_orm_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
+        Err(err) => Err(anyhow::Error::new(err)
             .context("failed to insert agent")
-            .into()
+            .into()),
     }
 }
 
-fn agent_from_parts(
-    id: String,
-    tenant_id: String,
-    name: String,
-    status: String,
-    created_at: String,
-) -> RepositoryResult<Agent> {
-    let status = status
+async fn tenant_exists<C>(connection: &C, tenant_id: TenantId) -> RepositoryResult<bool>
+where
+    C: ConnectionTrait,
+{
+    tenants::Entity::find_by_id(tenant_id.to_string())
+        .one(connection)
+        .await
+        .context("failed to check tenant existence")
+        .map(|tenant| tenant.is_some())
+        .map_err(Into::into)
+}
+
+fn agent_from_model(model: agents::Model) -> RepositoryResult<Agent> {
+    let status = model
+        .status
         .parse::<AgentStatus>()
-        .map_err(|_| RepositoryError::InvalidPersistedStatus(status.clone()))?;
+        .map_err(|_| RepositoryError::InvalidPersistedStatus(model.status.clone()))?;
     Agent::from_parts(
-        AgentId::parse(&id).map_err(anyhow::Error::from)?,
-        TenantId::parse(&tenant_id).map_err(anyhow::Error::from)?,
-        name,
+        AgentId::parse(&model.id).map_err(anyhow::Error::from)?,
+        TenantId::parse(&model.tenant_id).map_err(anyhow::Error::from)?,
+        model.name,
         status,
-        created_at,
+        model.created_at,
     )
     .map_err(anyhow::Error::from)
     .context("failed to rehydrate agent")
