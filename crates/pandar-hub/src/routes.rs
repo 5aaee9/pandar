@@ -106,6 +106,10 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/tenants/{tenant_id}/printer-events",
             get(printer_events::printer_events),
         )
+        .route(
+            "/api/v1/tenants/{tenant_id}/printer-events/tickets",
+            post(printer_events::create_printer_event_ticket),
+        )
         .layer(DefaultBodyLimit::max(body_limit))
         .with_state(state)
 }

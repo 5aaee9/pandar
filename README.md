@@ -167,6 +167,16 @@ The Phase 11 pairing bundle returns `PANDAR_TENANT_ID`, `PANDAR_AGENT_ID`, and `
 
 Hub audit records are stored in `audit_events` for successful user-triggered mutations such as agent creation, refresh commands, and print job creation. Bambu printer access codes remain agent-local in `PANDAR_PRINTERS`; do not store them in hub database rows or frontend environment variables.
 
+Phase 15 adds browser-safe live runtime updates:
+
+- `POST /api/v1/tenants/{tenant_id}/printer-events/tickets` issues a tenant-scoped, one-use WebSocket ticket for viewers. Tickets expire after 60 seconds, live only in hub memory, and become invalid after hub restart.
+- `GET /api/v1/tenants/{tenant_id}/printer-events` accepts either `Authorization: Bearer <tenant credential>` for non-browser clients or `?ticket=<opaque ticket>` for browser clients. Bearer credentials include tenant API tokens and configured external JWTs that resolve to local tenant users.
+- The Next.js route `POST /api/tenants/{tenantId}/printer-events/ticket` obtains tickets server-side. Browser code receives only auth metadata and the opaque ticket, never `APP_API_TOKEN`, `APP_AUTH_BEARER_TOKEN`, or HttpOnly cookie token values.
+- Fronting proxies and access logs should redact the `ticket` query parameter.
+- The frontend dashboard merges live printer snapshots and job progress without refresh, retries WebSocket connections after 1s, 2s, 5s, and 10s, and marks live status unavailable after 3 failed attempts while continuing to retry.
+- Live notifications cover WebSocket subscription failure/disconnect plus future printer offline, dispatch/job failure, physical print failed, and physical print completed transitions. Cancellation and historical replay events do not create notifications.
+- The dashboard shows live status, printer inventory, job history with artifact/material/progress details, operational notifications, and tenant references for agent pairing, API tokens, and diagnostics without displaying token values.
+
 Deployment examples:
 
 ```bash

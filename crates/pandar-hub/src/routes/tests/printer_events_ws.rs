@@ -87,6 +87,173 @@ async fn printer_events_websocket_accepts_linked_viewer_jwt() {
 }
 
 #[tokio::test]
+async fn printer_events_ticket_requires_linked_viewer() {
+    let state = state().await;
+    let app = router(external_auth_state(state.clone()));
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let linked = external_auth_token_for_role(
+        &state,
+        tenant.id,
+        crate::repositories::UserRole::Viewer,
+        "ticket-viewer",
+    )
+    .await;
+    let unlinked = jwt_for(
+        "unlinked-ticket-viewer",
+        TEST_ISSUER,
+        TEST_AUDIENCE,
+        "test-key",
+        300,
+    );
+
+    let (status, body) = request(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/tenants/{}/printer-events/tickets", tenant.id),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body, json!({ "error": "missing_auth_token" }));
+
+    let (status, body) = request_as(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/tenants/{}/printer-events/tickets", tenant.id),
+        None,
+        &unlinked,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{}/printer-events/tickets", tenant.id),
+        None,
+        &linked,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body["ticket"]
+            .as_str()
+            .is_some_and(|ticket| !ticket.is_empty())
+    );
+    assert!(
+        body["expires_at"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty())
+    );
+}
+
+#[tokio::test]
+async fn printer_events_websocket_accepts_browser_ticket_once() {
+    let state = state().await;
+    let app = router(state.clone());
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "ticket-ws-token",
+    )
+    .await;
+    let http_addr = serve_http(app.clone()).await;
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{}/printer-events/tickets", tenant.id),
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let ticket = body["ticket"].as_str().unwrap();
+
+    let (ws, _) = tokio_tungstenite::connect_async(format!(
+        "ws://{http_addr}/api/v1/tenants/{}/printer-events?ticket={ticket}",
+        tenant.id
+    ))
+    .await
+    .unwrap();
+    drop(ws);
+
+    let err = tokio_tungstenite::connect_async(format!(
+        "ws://{http_addr}/api/v1/tenants/{}/printer-events?ticket={ticket}",
+        tenant.id
+    ))
+    .await
+    .unwrap_err();
+    let message = err.to_string();
+    assert!(
+        message.contains("401") || message.contains("Unauthorized"),
+        "unexpected reused-ticket error: {message}"
+    );
+}
+
+#[tokio::test]
+async fn printer_events_websocket_rejects_invalid_ticket_before_upgrade() {
+    let state = state().await;
+    let app = router(state.clone());
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+
+    let (status, body) = request(
+        app,
+        Method::GET,
+        &format!(
+            "/api/v1/tenants/{}/printer-events?ticket=not-a-ticket",
+            tenant.id
+        ),
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+}
+
+#[tokio::test]
+async fn printer_events_websocket_rejects_wrong_tenant_ticket_before_upgrade() {
+    let state = state().await;
+    let app = router(state.clone());
+    let tenant_a = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let tenant_b = state.tenants().create("beta", "Beta Labs").await.unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_a.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "tenant-a-ticket",
+    )
+    .await;
+    let (status, body) = request_as(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/tenants/{}/printer-events/tickets", tenant_a.id),
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let ticket = body["ticket"].as_str().unwrap();
+
+    let (status, body) = request(
+        app,
+        Method::GET,
+        &format!(
+            "/api/v1/tenants/{}/printer-events?ticket={ticket}",
+            tenant_b.id
+        ),
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+}
+
+#[tokio::test]
 async fn printer_events_unlinked_external_jwt_returns_forbidden_before_upgrade() {
     let state = state().await;
     let app = router(external_auth_state(state.clone()));

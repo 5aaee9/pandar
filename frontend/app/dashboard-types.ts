@@ -75,6 +75,11 @@ export type AgentList = {
   agents: Agent[]
 }
 
+export type AuthMetadata = {
+  source: 'request_cookie' | 'app_auth_bearer_token' | 'app_api_token' | 'none'
+  cookieName: string
+}
+
 export type Command = {
   id: string
   tenant_id: string
@@ -154,9 +159,13 @@ export type Job = {
     status: string
   }
   artifact: {
+    id: string
+    tenant_id: string
     filename: string
     content_type: string
     size_bytes: number
+    storage_path: string
+    created_at: string
   }
   material: {
     ams_mapping: number[] | null
@@ -184,6 +193,21 @@ export type Job = {
 
 export type JobList = {
   jobs: Job[]
+}
+
+export type PrinterEvent =
+  | {
+      type: 'printer_snapshot'
+      printer: Printer
+    }
+  | {
+      type: 'job_progress'
+      job: Job
+    }
+
+export type PrinterEventTicket = {
+  ticket: string
+  expires_at: string
 }
 
 export type FetchResult<T> =

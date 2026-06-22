@@ -1,11 +1,13 @@
 use axum::{
+    Json,
     extract::{
-        FromRequestParts, Path, State,
+        FromRequestParts, Path, Query, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
-    http::{HeaderMap, Request},
+    http::{HeaderMap, Request, StatusCode, header::AUTHORIZATION},
     response::Response,
 };
+use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
@@ -13,14 +15,44 @@ use crate::{
     routes::{ApiError, auth},
 };
 
+#[derive(Debug, Deserialize)]
+pub(super) struct PrinterEventQuery {
+    ticket: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct PrinterEventTicketResponse {
+    ticket: String,
+    expires_at: String,
+}
+
 pub(super) async fn printer_events(
     State(state): State<AppState>,
     Path(tenant_id): Path<String>,
+    Query(query): Query<PrinterEventQuery>,
     headers: HeaderMap,
     request: Request<axum::body::Body>,
 ) -> Result<Response, ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
-    auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
+    if headers.contains_key(AUTHORIZATION) {
+        auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
+    } else if let Some(ticket) = query.ticket {
+        if !state
+            .printer_events()
+            .consume_ticket(tenant_id, &ticket)
+            .await
+        {
+            return Err(ApiError::new(
+                StatusCode::UNAUTHORIZED,
+                "invalid_auth_token",
+            ));
+        }
+    } else {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "missing_auth_token",
+        ));
+    }
     state.printers().list_for_tenant(tenant_id).await?;
     let receiver = state.printer_events().subscribe(tenant_id).await;
     let (mut parts, _) = request.into_parts();
@@ -29,6 +61,22 @@ pub(super) async fn printer_events(
         .map_err(|_| ApiError::bad_request("websocket_upgrade_required"))?;
 
     Ok(upgrade.on_upgrade(move |socket| forward_events(socket, receiver)))
+}
+
+pub(super) async fn create_printer_event_ticket(
+    State(state): State<AppState>,
+    Path(tenant_id): Path<String>,
+    headers: HeaderMap,
+) -> Result<Json<PrinterEventTicketResponse>, ApiError> {
+    let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
+    state.printers().list_for_tenant(tenant_id).await?;
+    let issued = state.printer_events().issue_ticket(tenant_id).await;
+
+    Ok(Json(PrinterEventTicketResponse {
+        ticket: issued.ticket,
+        expires_at: issued.expires_at,
+    }))
 }
 
 async fn forward_events(

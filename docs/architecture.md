@@ -126,7 +126,7 @@ JWT verification failures return `401 invalid_auth_token`. A cryptographically v
 ### pandar-hub
 
 - HTTP API for tenants, users, agents, printers, jobs, and printer commands.
-- WebSocket API for live printer state, job progress, agent status, and notifications.
+- WebSocket API for live printer state and job progress. Agent status streams and hub-originated notification streams are future work.
 - gRPC server for reverse agent sessions.
 - Backend-neutral persistence layer for SQLite and PostgreSQL.
 - Command ledger: durable records for requested commands, dispatch status, agent acknowledgement, printer acknowledgement, timeout, and failure cause.
@@ -210,6 +210,16 @@ Phase 14 adds material-state persistence and reporting:
 - HTTP printer responses expose response-safe `materials` summaries. HTTP job responses expose persisted mapping JSON plus derived filament usage rows. Corrupt persisted mapping JSON is a repository error with parse context, not a partially rendered response.
 - Phase 14 deliberately does not add Spoolman, inventory purchasing, spool weight tracking, catalog sync, or any external material-inventory system. It establishes Pandar's internal material state first.
 
+Phase 15 adds browser-safe live runtime UX:
+
+- `POST /api/v1/tenants/{tenant_id}/printer-events/tickets` issues short-lived in-memory WebSocket tickets after normal tenant viewer authorization. Tickets are tenant-scoped, one-use, expire after 60 seconds, and are invalid after hub restart.
+- `GET /api/v1/tenants/{tenant_id}/printer-events` accepts either an `Authorization` bearer credential or a `ticket` query parameter. Header auth remains the non-browser path; ticket auth is for browser WebSocket clients that cannot set custom upgrade headers.
+- The Next.js ticket route `POST /api/tenants/{tenantId}/printer-events/ticket` calls the hub server-side using the existing frontend credential precedence. The browser receives auth metadata and the opaque ticket only; it never receives `APP_API_TOKEN`, `APP_AUTH_BEARER_TOKEN`, or HttpOnly cookie token values.
+- Fronting proxies and access logs should redact the `ticket` query parameter.
+- The frontend runtime dashboard consumes authenticated `printer_snapshot` and `job_progress` events, merges them into the initial HTTP state, reconnects after 1s, 2s, 5s, and 10s, and shows the live channel as unavailable after 3 failures while retries continue.
+- Notifications cover WebSocket subscription failure/disconnect plus future live transitions: printer offline, dispatch/job failure or error, physical print failed, and physical print completed. Historical replay and cancellation transitions do not notify.
+- The dashboard now exposes live status, printer inventory, job history with artifact/material/progress details, operational notifications, and tenant setting/action references for agent pairing, API tokens, and diagnostics without rendering token values.
+
 Bootstrap a fresh tenant:
 
 ```bash
@@ -259,6 +269,7 @@ Planned hub phases after Phase 7:
 - Phase 12 completed the staged repository layer migration to SeaORM while preserving SQLite/PostgreSQL behavior and existing SQLx schema migrations.
 - Phase 13 added structured command `result_json` persistence, tenant-scoped discovery/diagnostic command APIs, and command detail reads for frontend diagnostics. `result_json` is for structured agent output such as discovery rows and diagnostic checks; it must not contain Bambu access codes.
 - Phase 14 added normalized AMS/external-spool material snapshots, persisted print mappings, derived filament usage rows, HTTP material responses, and dashboard material summaries. Spoolman-style external inventory remains out of scope.
+- Phase 15 added one-use browser WebSocket tickets, live frontend printer/job event consumption, reconnect status, transition notifications, and token-safe tenant operation references.
 
 Phase 12 persistence boundary:
 
@@ -321,16 +332,16 @@ Agent phase status after Phase 7:
 - Job dispatch and command controls.
 - Operational settings for database-independent hub behavior.
 
-Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. Phase 10 centralizes frontend bearer forwarding: request cookie `APP_AUTH_COOKIE_NAME` defaulting to `pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. Phase 11 keeps configured tenant dashboards on tenant-scoped APIs when `APP_TENANT_ID` is set, so ordinary tenant tokens do not need bootstrap authority. Phase 13 exposes linked agents, discovery commands, diagnostic commands, and selected command details. It renders discovery rows, diagnostic checks, and compatibility capability availability from hub command `result_json`; it does not accept or display Bambu access codes. Phase 14 renders printer material summaries and job material mapping/usage rows from Rust API response shapes while keeping dispatch-form mapping fields API-client-only. The frontend still does not consume the printer WebSocket; live subscription is left for Phase 15.
+Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. Phase 10 centralizes frontend bearer forwarding: request cookie `APP_AUTH_COOKIE_NAME` defaulting to `pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. Phase 11 keeps configured tenant dashboards on tenant-scoped APIs when `APP_TENANT_ID` is set, so ordinary tenant tokens do not need bootstrap authority. Phase 13 exposes linked agents, discovery commands, diagnostic commands, and selected command details. It renders discovery rows, diagnostic checks, and compatibility capability availability from hub command `result_json`; it does not accept or display Bambu access codes. Phase 14 renders printer material summaries and job material mapping/usage rows from Rust API response shapes while keeping dispatch-form mapping fields API-client-only. Phase 15 adds ticket-backed browser WebSocket consumption, live status, transition notifications, and token-safe tenant operation references.
 
 Planned frontend phases after Phase 7:
 
-- Phase 9 exposes job progress and terminal print failure/success state from HTTP job history; hub live `job_progress` events are available for Phase 15 consumption.
+- Phase 9 exposes job progress and terminal print failure/success state from HTTP job history and hub live `job_progress` events.
 - Phase 10 forwards Clerk or Logto identity-provider bearer tokens to the Rust API through server-side cookie/static-token helpers. Provider SDK sign-in UI remains out of scope.
 - Phase 11 adds provisioning, identity linking, and tenant token/user management screens.
 - Phase 13 exposes discovery and compatibility diagnostics.
 - Phase 14 exposes material summaries and job material rows from HTTP responses.
-- Phase 15 consumes authenticated WebSocket events for day-to-day monitoring and notifications.
+- Phase 15 consumes authenticated WebSocket events for day-to-day monitoring and notifications through one-use browser tickets.
 
 ## Data Model Draft
 

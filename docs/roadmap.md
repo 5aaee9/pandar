@@ -38,6 +38,7 @@
 - Added Phase 12 full SeaORM repository migration coverage for auth, audit, agents, printers, commands, jobs, print reports, machine events, and documented the remaining atomic printer snapshot SQLx adapter.
 - Added Phase 13 LAN discovery, printer diagnostics, structured command result persistence, conservative compatibility matrix ownership, hub diagnostic APIs, and frontend diagnostic result rendering.
 - Added Phase 14 AMS/external-spool material normalization, tenant-scoped material snapshots, print mapping persistence/dispatch, terminal filament usage derivation, HTTP material responses, and dashboard material summaries.
+- Added Phase 15 browser-safe WebSocket tickets, live runtime dashboard event consumption, reconnect status, transition notifications, and token-safe tenant operation references.
 
 ## Phase 1: Foundation
 
@@ -104,7 +105,7 @@ Exit criteria:
 - Completed refresh-printers HTTP command dispatch through the command ledger.
 - Completed future-only tenant WebSocket broadcasts for printer snapshots; historical state is loaded through HTTP.
 - Completed frontend summary, tenant, and printer inventory dashboard using uncached server-side HTTP reads from `APP_API_URL`.
-- Deferred frontend WebSocket consumption until authentication and tenant selection are stronger.
+- Completed browser WebSocket consumption later in Phase 15 after authentication and tenant selection were stronger.
 
 ## Phase 5: Print Dispatch
 
@@ -185,7 +186,7 @@ Exit criteria:
 
 - A print job can move from queued/dispatching into running/completed/failed/cancelled from MQTT reports without changing dispatch status semantics.
 - Hub restarts and agent reconnects can continue reconciling from latest reports without duplicating terminal events or regressing terminal physical status.
-- Frontend users can see physical progress and terminal failure/success reasons for tenant jobs from HTTP job history. Browser live WebSocket consumption remains Phase 15; the authenticated hub `job_progress` WebSocket event already exists and is tested.
+- Frontend users can see physical progress and terminal failure/success reasons for tenant jobs from HTTP job history. Browser live WebSocket consumption is completed in Phase 15; the authenticated hub `job_progress` WebSocket event already exists and is tested.
 
 ## Phase 10: External Identity Authentication
 
@@ -291,15 +292,26 @@ Exit criteria:
 
 Goal: turn the operational skeleton into a usable day-to-day cloud replacement surface.
 
-- Consume authenticated printer/job WebSocket events in the frontend.
-- Add focused operator notifications for agent disconnect, printer offline, upload failure, print failure, and print completion.
-- Improve job detail/history views around dispatch status, physical progress, artifact metadata, and machine diagnostics.
-- Add tenant settings for agent pairing, token management, and printer compatibility details.
+- Completed hub-issued WebSocket tickets:
+  - `POST /api/v1/tenants/{tenant_id}/printer-events/tickets` issues tenant-scoped viewer tickets.
+  - Tickets are one-use, expire after 60 seconds, live only in hub memory, and are invalid after hub restart.
+  - `GET /api/v1/tenants/{tenant_id}/printer-events` accepts either `Authorization` bearer auth or `ticket` query auth.
+- Completed browser-safe ticket bridging through `POST /api/tenants/{tenantId}/printer-events/ticket`; browser code receives auth metadata and opaque tickets only, not `APP_API_TOKEN`, `APP_AUTH_BEARER_TOKEN`, or HttpOnly cookie token values.
+- Completed authenticated frontend consumption of `printer_snapshot` and `job_progress` events with live state merging and reconnect delays of 1s, 2s, 5s, and 10s. The UI marks the channel unavailable after 3 failures while continuing retries.
+- Completed focused operator notifications for live connection loss and future live transitions:
+  - WebSocket subscription failure or disconnect
+  - printer offline
+  - dispatch/job failure or error
+  - physical print failed
+  - physical print completed
+- Excluded cancellation notifications and historical replay notifications.
+- Completed job history/detail improvements for dispatch status, physical progress, artifact details, material details, and command references.
+- Completed tenant operation references for agent pairing, API token management, and diagnostics without rendering token values.
 
 Exit criteria:
 
-- Common print monitoring workflows can be performed without refreshing the page.
-- Notification and job detail surfaces explain whether a failure happened in hub dispatch, agent upload, MQTT publish, or physical printing.
+- Completed: common print monitoring workflows can be performed without refreshing the page.
+- Completed: notification and job detail surfaces distinguish hub dispatch/job errors from physical print failures and completions.
 
 ## Optional Later: Virtual Printer And Proxy
 
@@ -308,4 +320,4 @@ Exit criteria:
 
 ## Immediate Next
 
-- Start Phase 15 product runtime UX and notifications.
+- Optional later work or next explicit phase discovery. No Phase 16 scope is committed yet.

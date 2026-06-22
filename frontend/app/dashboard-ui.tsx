@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+
 export function StatusBadge({ value }: { value: string }) {
   const normalized = value.toLowerCase()
   const className =
@@ -59,4 +61,34 @@ export function formatBytes(value: number) {
   }
 
   return `${(value / (1024 * 1024)).toFixed(1)} MiB`
+}
+
+export function SectionHeader({ title, subtitle, meta }: { title: string; subtitle: string; meta: string }) {
+  return (
+    <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 className="text-base font-semibold">{title}</h2>
+        <p className="mt-0.5 text-sm text-slate-600">{subtitle}</p>
+      </div>
+      <div className="text-sm text-slate-600">{meta}</div>
+    </div>
+  )
+}
+
+export function DetailGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs font-medium uppercase text-slate-500">{title}</div>
+      <div className="mt-2 grid gap-1">{children}</div>
+    </div>
+  )
+}
+
+export function DetailLine({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="grid gap-1 sm:grid-cols-[7rem_minmax(0,1fr)]">
+      <div className="text-slate-500">{label}</div>
+      <div className={`break-words ${mono ? 'font-mono text-xs text-slate-700' : 'text-slate-900'}`}>{value}</div>
+    </div>
+  )
 }
