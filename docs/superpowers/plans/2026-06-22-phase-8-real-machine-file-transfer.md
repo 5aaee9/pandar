@@ -6,21 +6,21 @@
 
 **Architecture:** Keep `MachineFileTransfer` and transfer-mode cache in `machine/file_transfer.rs`. Add a focused `machine/ftps.rs` runtime adapter that owns `suppaftp` integration, Bambu LAN TLS policy, `PROT P`/`PROT C`, upload verification, and timeout handling. Wire configured printers through a socket-free factory so gateway construction remains cheap and all network I/O happens inside trait calls.
 
-**Tech Stack:** Rust 2024, tokio, async-trait, anyhow, rustls, suppaftp `9.0.0` with `tokio-rustls-aws-lc-rs` and `deprecated`, existing fake MQTT/file-transfer tests, cargo nextest.
+**Tech Stack:** Rust 2024, tokio, async-trait, anyhow, rustls, tokio-rustls, suppaftp `9.0.0` with `tokio-rustls-aws-lc-rs` and `deprecated`, existing fake MQTT/file-transfer tests, cargo nextest.
 
 ---
 
 ## File Structure
 
-- Modify `Cargo.toml`: add workspace `suppaftp` dependency with exact features.
-- Modify `crates/pandar-agent/Cargo.toml`: depend on workspace `suppaftp`.
+- Modify `Cargo.toml`: add workspace `suppaftp` and `tokio-rustls` dependencies with exact features, and enable direct Tokio IO/time helpers needed by the adapter.
+- Modify `crates/pandar-agent/Cargo.toml`: depend on workspace `suppaftp` and `tokio-rustls`.
 - Modify `crates/pandar-agent/src/machine/mqtt.rs`: expose/reuse the Bambu LAN Rustls verifier policy for FTPS without widening its scope outside agent-to-printer TLS.
 - Create `crates/pandar-agent/src/machine/ftps.rs`: runtime FTPS adapter, profile helper, upload verification helper, and unit tests.
 - Modify `crates/pandar-agent/src/machine/mod.rs`: export `ftps`, change configured gateway default file-transfer type from unavailable to runtime FTPS, and add a socket-free factory/helper for tests.
 - Modify `crates/pandar-agent/src/machine/tests.rs`: assert configured gateway construction selects runtime FTPS without opening sockets and existing fake dispatch behavior still works.
 - Modify `docs/roadmap.md` and `docs/architecture.md` after implementation review approval.
 
-## Task 1: Dependency And API Compile Proof
+## Task 1: Dependency And Real API Compile Proof
 
 **Files:**
 - Modify: `Cargo.toml`
@@ -28,37 +28,76 @@
 - Create: `crates/pandar-agent/src/machine/ftps.rs`
 - Modify: `crates/pandar-agent/src/machine/mod.rs`
 
-- [ ] **Step 1: Add `suppaftp` to workspace dependencies**
+- [ ] **Step 1: Add FTPS dependencies and Tokio IO features**
 
-In `/home/indexyz/pandar/Cargo.toml`, add this line under `[workspace.dependencies]`:
+In `/home/indexyz/pandar/Cargo.toml`, add these lines under `[workspace.dependencies]`:
 
 ```toml
 suppaftp = { version = "9.0.0", default-features = false, features = ["tokio-rustls-aws-lc-rs", "deprecated"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["aws-lc-rs", "tls12", "logging"] }
 ```
 
-- [ ] **Step 2: Add `suppaftp` to pandar-agent dependencies**
+In the existing workspace `tokio` dependency, add direct `io-util` and `time` features so the adapter can use `tokio::io::AsyncReadExt`, `tokio::io::AsyncWriteExt`, and `tokio::time::timeout` without relying on transitive feature unification:
+
+```toml
+tokio = { version = "1.48.0", features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "time"] }
+```
+
+- [ ] **Step 2: Add FTPS dependencies to pandar-agent**
 
 In `/home/indexyz/pandar/crates/pandar-agent/Cargo.toml`, add:
 
 ```toml
 suppaftp.workspace = true
+tokio-rustls.workspace = true
 ```
 
-- [ ] **Step 3: Create a minimal FTPS module skeleton**
+- [ ] **Step 3: Create the FTPS module with a real suppaftp API compile proof**
 
 Create `/home/indexyz/pandar/crates/pandar-agent/src/machine/ftps.rs` with:
 
 ```rust
 use async_trait::async_trait;
+use suppaftp::{
+    Status,
+    tokio::{AsyncRustlsConnector, AsyncRustlsFtpStream},
+    types::FileType,
+};
+use tokio::io::AsyncWriteExt;
 
 use crate::machine::{
     BambuPrinterEndpoint,
-    file_transfer::{MachineFileTransfer, TransferProtectionMode},
+    file_transfer::{
+        BAMBU_FILE_TRANSFER_CHUNK_SIZE, BAMBU_FILE_TRANSFER_PORT,
+        BAMBU_FILE_TRANSFER_USERNAME, MachineFileTransfer, TransferProtectionMode,
+    },
 };
 
 #[derive(Debug, Clone)]
 pub struct FtpsMachineFileTransfer {
     endpoint: BambuPrinterEndpoint,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FtpsProfile {
+    cap_tls_1_2: bool,
+}
+
+impl FtpsProfile {
+    pub(crate) fn for_model(model: Option<&str>) -> Self {
+        let Some(model) = model else {
+            return Self { cap_tls_1_2: false };
+        };
+        let key = model.trim().to_ascii_uppercase();
+        let key = match key.as_str() {
+            "N7" => "P2S",
+            "N6" => "X2D",
+            _ => key.as_str(),
+        };
+        Self {
+            cap_tls_1_2: matches!(key, "P2S" | "X2D"),
+        }
+    }
 }
 
 impl FtpsMachineFileTransfer {
@@ -69,6 +108,37 @@ impl FtpsMachineFileTransfer {
     pub fn endpoint(&self) -> &BambuPrinterEndpoint {
         &self.endpoint
     }
+}
+
+#[allow(dead_code)]
+async fn suppaftp_api_compile_proof(
+    host: String,
+    access_code: String,
+    connector: AsyncRustlsConnector,
+) -> suppaftp::FtpResult<()> {
+    let mut stream = AsyncRustlsFtpStream::connect_secure_implicit(
+        (host.as_str(), BAMBU_FILE_TRANSFER_PORT),
+        connector,
+        host.as_str(),
+    )
+    .await?;
+    stream
+        .login(BAMBU_FILE_TRANSFER_USERNAME, access_code.as_str())
+        .await?;
+    stream.custom_command("PBSZ 0", &[Status::CommandOk]).await?;
+    stream.custom_command("PROT P", &[Status::CommandOk]).await?;
+    stream.custom_command("PROT C", &[Status::CommandOk]).await?;
+    stream.transfer_type(FileType::Binary).await?;
+    let mut data = stream.put_with_stream("pandar-api-proof.3mf").await?;
+    for chunk in b"proof".chunks(BAMBU_FILE_TRANSFER_CHUNK_SIZE) {
+        data.write_all(chunk)
+            .await
+            .map_err(suppaftp::FtpError::ConnectionError)?;
+    }
+    stream.finalize_put_stream(data).await?;
+    let _size = stream.size("pandar-api-proof.3mf").await?;
+    stream.rm("pandar-api-proof.3mf").await?;
+    Ok(())
 }
 
 #[async_trait]
@@ -96,6 +166,8 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
 }
 ```
 
+This function is not called by tests because it would open a socket, but Rust still type-checks its body. It proves the selected crate feature set exposes implicit FTPS, login, `PBSZ`, protected/clear data commands, binary type selection, streamed upload, `SIZE`, and delete before deeper adapter work starts.
+
 - [ ] **Step 4: Export the module**
 
 In `/home/indexyz/pandar/crates/pandar-agent/src/machine/mod.rs`, add:
@@ -104,7 +176,7 @@ In `/home/indexyz/pandar/crates/pandar-agent/src/machine/mod.rs`, add:
 pub mod ftps;
 ```
 
-- [ ] **Step 5: Run compile check for dependency integration**
+- [ ] **Step 5: Run compile check for the real API proof**
 
 Run:
 
@@ -112,7 +184,7 @@ Run:
 cargo check -p pandar-agent
 ```
 
-Expected: PASS. If this fails because the `suppaftp` feature set is wrong, fix the dependency features before continuing. Do not proceed to adapter logic until the dependency compiles.
+Expected: PASS. If this fails because a type or feature is wrong, fix the dependency features or the private compile-proof function before continuing. Do not proceed to adapter logic until the real `suppaftp` implicit-FTPS/upload/`PROT` path type-checks.
 
 ## Task 2: Shared Bambu LAN TLS Policy
 
@@ -137,26 +209,44 @@ pub(crate) struct BambuLanCertificateVerifier;
 
 Keep the existing verifier implementation unchanged.
 
-- [ ] **Step 2: Add a Rustls client config helper for FTPS**
+- [ ] **Step 2: Add Rustls client config helpers for FTPS profiles**
 
 In `/home/indexyz/pandar/crates/pandar-agent/src/machine/ftps.rs`, add:
 
 ```rust
 use std::sync::Arc;
 
-use rustls::ClientConfig;
+use rustls::{ClientConfig, version};
 
 use crate::machine::mqtt::BambuLanCertificateVerifier;
 
-pub(crate) fn bambu_lan_ftps_tls_config() -> Arc<ClientConfig> {
-    Arc::new(
-        ClientConfig::builder_with_provider(rustls::crypto::aws_lc_rs::default_provider().into())
+pub(crate) fn bambu_lan_ftps_tls_config(profile: FtpsProfile) -> Arc<ClientConfig> {
+    let builder =
+        ClientConfig::builder_with_provider(rustls::crypto::aws_lc_rs::default_provider().into());
+    let builder = if profile.cap_tls_1_2 {
+        builder
+            .with_protocol_versions(&[&version::TLS12])
+            .expect("aws-lc-rs provider supports TLS 1.2 for Bambu FTPS profiles")
+    } else {
+        builder
             .with_safe_default_protocol_versions()
             .expect("aws-lc-rs provider supports rustls safe default protocol versions")
+    };
+
+    Arc::new(
+        builder
             .dangerous()
             .with_custom_certificate_verifier(Arc::new(BambuLanCertificateVerifier))
             .with_no_client_auth(),
     )
+}
+
+fn bambu_lan_ftps_connector(profile: FtpsProfile) -> AsyncRustlsConnector {
+    tokio_rustls::TlsConnector::from(bambu_lan_ftps_tls_config(profile)).into()
+}
+
+pub(crate) fn bambu_lan_ftps_tls_config_for_default_profile() -> Arc<ClientConfig> {
+    bambu_lan_ftps_tls_config(FtpsProfile::for_model(None))
 }
 ```
 
@@ -166,18 +256,31 @@ In `/home/indexyz/pandar/crates/pandar-agent/src/machine/mqtt/tests.rs`, keep th
 
 ```rust
 #[test]
-fn ftps_lan_tls_uses_bambu_certificate_policy() {
-    let config = crate::machine::ftps::bambu_lan_ftps_tls_config();
+fn ftps_lan_tls_default_profile_config_constructs() {
+    let config = crate::machine::ftps::bambu_lan_ftps_tls_config_for_default_profile();
     assert!(config.alpn_protocols.is_empty());
 }
 ```
+
+Also add a local FTPS profile test in `/home/indexyz/pandar/crates/pandar-agent/src/machine/ftps.rs` after `FtpsProfile` exists:
+
+```rust
+#[test]
+fn p2s_profile_builds_tls_config() {
+    let config = bambu_lan_ftps_tls_config(FtpsProfile::for_model(Some("P2S")));
+    assert!(config.alpn_protocols.is_empty());
+    assert_eq!(config.max_fragment_size, None);
+}
+```
+
+These smoke tests verify the profile-specific helpers construct valid configs without pretending to perform a TLS handshake in unit tests.
 
 - [ ] **Step 4: Run targeted tests**
 
 Run:
 
 ```bash
-cargo test -p pandar-agent machine::mqtt::tests::ftps_lan_tls_uses_bambu_certificate_policy
+cargo test -p pandar-agent machine::mqtt::tests::ftps_lan_tls_default_profile_config_constructs
 ```
 
 Expected: PASS.
@@ -190,32 +293,10 @@ Expected: PASS.
 
 - [ ] **Step 1: Add profile and verification types**
 
-In `/home/indexyz/pandar/crates/pandar-agent/src/machine/ftps.rs`, add below `FtpsMachineFileTransfer`:
+In `/home/indexyz/pandar/crates/pandar-agent/src/machine/ftps.rs`, add below `impl FtpsMachineFileTransfer`:
 
 ```rust
 const DEFAULT_FTPS_TIMEOUT_SECONDS: u64 = 30;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct FtpsProfile {
-    cap_tls_1_2: bool,
-}
-
-impl FtpsProfile {
-    fn for_model(model: Option<&str>) -> Self {
-        let Some(model) = model else {
-            return Self { cap_tls_1_2: false };
-        };
-        let key = model.trim().to_ascii_uppercase();
-        let key = match key.as_str() {
-            "N7" => "P2S",
-            "N6" => "X2D",
-            _ => key.as_str(),
-        };
-        Self {
-            cap_tls_1_2: matches!(key, "P2S" | "X2D"),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UploadVerification {
@@ -301,17 +382,19 @@ Expected: PASS.
 At the top of `/home/indexyz/pandar/crates/pandar-agent/src/machine/ftps.rs`, expand imports to include:
 
 ```rust
-use std::{io::Cursor, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use suppaftp::{
-    async_ftp::FtpStream,
-    types::{FileType, Mode},
+    Status,
+    tokio::AsyncRustlsFtpStream,
+    types::FileType,
 };
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::time::timeout;
 ```
 
-If the exact `suppaftp` async type names differ, inspect `cargo doc`/compiler output and adjust inside this module only. Keep the public adapter API unchanged.
+Use `AsyncRustlsFtpStream` as the session type. Do not use the no-TLS `AsyncFtpStream` alias.
 
 - [ ] **Step 2: Add session helper methods**
 
@@ -321,7 +404,7 @@ Inside `impl FtpsMachineFileTransfer`, add:
     async fn with_session<T, Fut>(
         &self,
         mode: TransferProtectionMode,
-        operation: impl FnOnce(FtpStream) -> Fut,
+        operation: impl FnOnce(AsyncRustlsFtpStream) -> Fut,
     ) -> anyhow::Result<T>
     where
         Fut: std::future::Future<Output = anyhow::Result<T>>,
@@ -330,9 +413,10 @@ Inside `impl FtpsMachineFileTransfer`, add:
         let access_code = self.endpoint.access_code.clone();
         let profile = FtpsProfile::for_model(self.endpoint.model.as_deref());
         timeout(Duration::from_secs(DEFAULT_FTPS_TIMEOUT_SECONDS), async move {
-            let mut stream = FtpStream::connect_secure_implicit(
+            let connector = bambu_lan_ftps_connector(profile);
+            let mut stream = AsyncRustlsFtpStream::connect_secure_implicit(
                 (host.as_str(), crate::machine::file_transfer::BAMBU_FILE_TRANSFER_PORT),
-                bambu_lan_ftps_tls_config(),
+                connector,
                 host.as_str(),
             )
             .await
@@ -344,42 +428,78 @@ Inside `impl FtpsMachineFileTransfer`, add:
             apply_transfer_mode(&mut stream, mode)
                 .await
                 .with_context(|| format!("set Bambu FTPS transfer mode {mode:?} for {host}"))?;
-            let result = operation(stream).await;
-            if profile.cap_tls_1_2 {
-                tracing::debug!(printer_host = %host, "Bambu FTPS profile requests TLS 1.2 cap when supported by adapter");
-            }
-            result
+            operation(stream).await
         })
         .await
         .with_context(|| format!("Bambu FTPS operation timed out for {}", self.endpoint.host))?
     }
 ```
 
-This code may need minor API adjustments after the compile proof. Preserve the behavior: connect implicit FTPS, login, apply mode, run one operation, timeout with context.
+This code uses the profile-specific connector so P2S/X2D aliases cap the Rustls client to TLS 1.2, while other models use Rustls safe defaults.
 
 - [ ] **Step 3: Add mode application helper**
 
 Add below `bambu_lan_ftps_tls_config`:
 
 ```rust
-async fn apply_transfer_mode(stream: &mut FtpStream, mode: TransferProtectionMode) -> anyhow::Result<()> {
+async fn apply_transfer_mode(
+    stream: &mut AsyncRustlsFtpStream,
+    mode: TransferProtectionMode,
+) -> anyhow::Result<()> {
+    stream
+        .custom_command("PBSZ 0", &[Status::CommandOk])
+        .await
+        .context("send PBSZ 0")?;
     match mode {
         TransferProtectionMode::ProtectedData => {
-            stream.prot_p().await.context("send PROT P")?;
+            stream
+                .custom_command("PROT P", &[Status::CommandOk])
+                .await
+                .context("send PROT P")?;
         }
         TransferProtectionMode::ClearData => {
-            stream.prot_c().await.context("send PROT C")?;
+            stream
+                .custom_command("PROT C", &[Status::CommandOk])
+                .await
+                .context("send PROT C")?;
         }
     }
     stream.transfer_type(FileType::Binary).await.context("set binary transfer type")?;
-    stream.mode(Mode::Stream).await.context("set stream transfer mode")?;
     Ok(())
 }
 ```
 
-If `suppaftp` does not expose these exact async helpers, use the crate's equivalent command APIs inside this helper and keep tests focused on callers selecting this helper.
+`suppaftp` does not expose typed async `PROT` helpers; the private adapter helper uses `custom_command` and keeps the raw commands out of the public API.
 
-- [ ] **Step 4: Implement trait methods with verification**
+- [ ] **Step 4: Add a 64 KiB upload helper**
+
+In `/home/indexyz/pandar/crates/pandar-agent/src/machine/ftps.rs`, add:
+
+```rust
+async fn upload_in_bambu_chunks(
+    stream: &mut AsyncRustlsFtpStream,
+    path: &str,
+    bytes: &[u8],
+) -> anyhow::Result<()> {
+    let mut data = stream
+        .put_with_stream(path)
+        .await
+        .with_context(|| format!("start Bambu FTPS upload for {path}"))?;
+    for chunk in bytes.chunks(BAMBU_FILE_TRANSFER_CHUNK_SIZE) {
+        data.write_all(chunk)
+            .await
+            .with_context(|| format!("write Bambu FTPS upload chunk for {path}"))?;
+    }
+    stream
+        .finalize_put_stream(data)
+        .await
+        .with_context(|| format!("finalize Bambu FTPS upload for {path}"))
+}
+```
+
+This intentionally avoids `put_file` because Phase 8 requires Bambuddy-compatible manual upload behavior with 64 KiB chunking.
+
+- [ ] **Step 5: Implement trait methods with verification**
 
 Replace the temporary `MachineFileTransfer` impl with:
 
@@ -390,11 +510,7 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
         let path = path.to_string();
         self.with_session(mode, move |mut stream| async move {
             stream
-                .cwd(&path)
-                .await
-                .with_context(|| format!("change Bambu FTPS directory to {path}"))?;
-            stream
-                .nlst(None)
+                .nlst(Some(&path))
                 .await
                 .with_context(|| format!("list Bambu FTPS directory {path}"))
         })
@@ -404,11 +520,18 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
     async fn download(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<Vec<u8>> {
         let path = path.to_string();
         self.with_session(mode, move |mut stream| async move {
-            let bytes = stream
-                .retr_as_buffer(&path)
+            stream
+                .retr(&path, |mut data| {
+                    Box::pin(async move {
+                        let mut bytes = Vec::new();
+                        data.read_to_end(&mut bytes)
+                            .await
+                            .map_err(suppaftp::FtpError::ConnectionError)?;
+                        Ok((bytes, data))
+                    })
+                })
                 .await
-                .with_context(|| format!("download Bambu FTPS file {path}"))?;
-            Ok(bytes.into_inner())
+                .with_context(|| format!("download Bambu FTPS file {path}"))
         })
         .await
     }
@@ -423,17 +546,12 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
         let bytes = bytes.to_vec();
         self.with_session(mode, move |mut stream| async move {
             let expected = bytes.len();
-            let mut reader = Cursor::new(bytes);
-            stream
-                .put_file(&path, &mut reader)
-                .await
-                .with_context(|| format!("upload Bambu FTPS file {path}"))?;
+            upload_in_bambu_chunks(&mut stream, &path, &bytes).await?;
             let actual = stream
                 .size(&path)
                 .await
-                .with_context(|| format!("verify Bambu FTPS file size for {path}"))?
-                .map(|size| size as usize);
-            verify_uploaded_size(expected, actual, &path)?;
+                .with_context(|| format!("verify Bambu FTPS file size for {path}"))?;
+            verify_uploaded_size(expected, Some(actual), &path)?;
             Ok(())
         })
         .await
@@ -452,9 +570,9 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
 }
 ```
 
-If method names differ, adapt to the actual `suppaftp` API and keep the same contexts and semantics.
+This keeps publish gating strict: `upload` returns `Ok(())` only after the streamed transfer finalizes and `SIZE` exactly equals `bytes.len()`.
 
-- [ ] **Step 5: Run compile check**
+- [ ] **Step 6: Run compile check**
 
 Run:
 
@@ -650,4 +768,4 @@ Expected: only Phase 8 files/docs changed and diff check passes.
 
 - Spec coverage: Tasks cover dependency selection, Bambu LAN TLS policy, runtime adapter, PROT P/C selection, upload verification, socket-free construction, docs, and final verification.
 - Placeholder scan: No task uses TBD/TODO/fill-in placeholders. API mismatch handling is bounded to `ftps.rs` because the dependency API must be compile-proven before adapter logic proceeds.
-- Type consistency: `FtpsMachineFileTransfer`, `MachineFileTransfer`, `TransferProtectionMode`, and `BambuPrinterEndpoint` names match current repo types.
+- Type consistency: `FtpsMachineFileTransfer`, `MachineFileTransfer`, `TransferProtectionMode`, and `BambuPrinterEndpoint` names match current repo types. A throwaway compile check in `/tmp/pandar-suppaftp-proof` verified the planned `suppaftp::tokio::{AsyncRustlsConnector, AsyncRustlsFtpStream}`, `custom_command("PBSZ 0" / "PROT P" / "PROT C")`, `put_with_stream`, `finalize_put_stream`, `size`, `rm`, and `retr` API usage before this plan review.

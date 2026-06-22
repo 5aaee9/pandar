@@ -71,6 +71,17 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
 }
 
 #[tokio::test]
+async fn configured_gateway_construction_uses_runtime_ftps_without_network_io() {
+    let mqtt = FakeMqttTransport::default();
+    let gateway = ConfiguredBambuMachineGateway::new(
+        vec![(endpoint("SERIAL1"), mqtt)],
+        Duration::from_secs(1),
+    );
+
+    assert_eq!(gateway.configured_printer_count(), 1);
+}
+
+#[tokio::test]
 async fn configured_print_project_file_uploads_and_publishes_project_file() {
     let mqtt = FakeMqttTransport::default();
     let transfer = FakeMachineFileTransfer::default();

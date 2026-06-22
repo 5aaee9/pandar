@@ -39,6 +39,13 @@ fn lan_tls_uses_rustls_certificate_policy_for_printer_certificates() {
 }
 
 #[test]
+fn ftps_lan_tls_default_profile_config_constructs() {
+    let config = crate::machine::ftps::bambu_lan_ftps_tls_config_for_default_profile();
+
+    assert!(config.alpn_protocols.is_empty());
+}
+
+#[test]
 fn pushall_payload_matches_reference() {
     assert_eq!(
         BambuMqttCommand::RequestPushAll.payload(),

@@ -188,7 +188,7 @@ pub fn bambu_lan_tls_config() -> TlsConfiguration {
 }
 
 #[derive(Debug)]
-struct BambuLanCertificateVerifier;
+pub(crate) struct BambuLanCertificateVerifier;
 
 impl ServerCertVerifier for BambuLanCertificateVerifier {
     fn verify_server_cert(

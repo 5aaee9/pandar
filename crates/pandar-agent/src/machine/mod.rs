@@ -1,4 +1,5 @@
 pub mod file_transfer;
+pub mod ftps;
 pub mod mqtt;
 
 use std::time::Duration;
@@ -6,6 +7,7 @@ use std::time::Duration;
 use anyhow::{Context, bail};
 use async_trait::async_trait;
 use file_transfer::{MachineFileTransfer, TransferModeCache, run_with_transfer_mode};
+use ftps::FtpsMachineFileTransfer;
 use mqtt::{
     BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, ProjectFileCommand,
     PublishedMqttCommand, refresh_printer,
@@ -66,7 +68,7 @@ impl BambuMachineGateway for NoopMachineGateway {
 }
 
 #[derive(Debug)]
-pub struct ConfiguredBambuMachineGateway<T, F = UnavailableMachineFileTransfer> {
+pub struct ConfiguredBambuMachineGateway<T, F = FtpsMachineFileTransfer> {
     printers: Vec<(BambuPrinterEndpoint, T, F)>,
     report_timeout: Duration,
     transfer_cache: TransferModeCache,
@@ -77,7 +79,10 @@ impl<T> ConfiguredBambuMachineGateway<T> {
         Self {
             printers: printers
                 .into_iter()
-                .map(|(endpoint, mqtt)| (endpoint, mqtt, UnavailableMachineFileTransfer))
+                .map(|(endpoint, mqtt)| {
+                    let transfer = FtpsMachineFileTransfer::new(endpoint.clone());
+                    (endpoint, mqtt, transfer)
+                })
                 .collect(),
             report_timeout,
             transfer_cache: TransferModeCache::default(),
@@ -138,6 +143,10 @@ where
 }
 
 impl<T, F> ConfiguredBambuMachineGateway<T, F> {
+    pub fn configured_printer_count(&self) -> usize {
+        self.printers.len()
+    }
+
     pub fn with_file_transfer(
         printers: Vec<(BambuPrinterEndpoint, T, F)>,
         report_timeout: Duration,

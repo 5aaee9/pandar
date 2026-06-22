@@ -145,13 +145,12 @@ Exit criteria:
 
 Goal: replace the Phase 5 unavailable runtime adapter with real agent-side Bambu-compatible file transfer while keeping the public boundary protocol-neutral.
 
-- Implement implicit FTPS on port `990` behind the existing `MachineFileTransfer` trait.
-- Authenticate with username `bblp` and the agent-local printer access code from `PANDAR_PRINTERS`.
-- Upload with manual 64 KiB chunks and preserve progress/error context for command results.
-- Prefer protected data mode, cache only successful mode selection, and support model/profile fallbacks for clear data mode or TLS 1.2 caps.
-- Verify upload completion before publishing `project_file`: wait for transfer confirmation when possible and verify server-side file size when the printer response is missing or ambiguous.
-- Implement runtime list/download/delete/size support needed by diagnostics and cleanup.
-- Keep tests fake by default; add adapter-level unit coverage for mode policy, verification decisions, and error mapping without requiring live printer sockets.
+- Completed implicit FTPS on port `990` behind the existing `MachineFileTransfer` trait.
+- Completed the Bambu LAN TLS policy for printer-local/self-signed certificates.
+- Completed protected/clear data mode selection with success-only mode caching.
+- Completed server-side upload size verification before publishing MQTT `project_file`.
+- Completed configured gateway wiring so runtime agents use the FTPS adapter for machine file upload.
+- Kept tests fake by default with adapter-level coverage for mode policy, verification decisions, and error mapping without requiring live printer sockets.
 
 Exit criteria:
 
@@ -291,9 +290,8 @@ Exit criteria:
 
 ## Immediate Next
 
-- Start Phase 8 by implementing the runtime FTPS adapter behind `MachineFileTransfer`.
-- Keep Phase 8 strictly scoped to file transfer, upload verification, gateway wiring, and diagnostics needed to avoid publishing `project_file` for a partial or missing artifact.
-- Follow with Phase 9 so print job state is driven by MQTT report reconciliation instead of dispatch result alone.
+- Start Phase 9 so print job state is driven by MQTT report reconciliation instead of dispatch result alone.
+- Keep Phase 9 scoped to physical print progress, completion, failure, and normalized machine events.
 - Do Phase 10 before browser-facing multi-tenant installs so Clerk/Logto users are authenticated by Rust and authorized through local tenant memberships.
 - Do Phase 11 before exposing broader multi-tenant administration.
 - Continue SeaORM repository migration as Phase 12 after identity/provisioning/auth/audit boundaries are stable.

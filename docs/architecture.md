@@ -200,11 +200,11 @@ Phase 5 adds the `PrintProjectFile` command executor:
 - Artifact storage paths must be relative paths below `PANDAR_ARTIFACT_ROOT`; absolute paths, `..`, and prefix escapes are rejected.
 - The configured machine gateway composes machine file upload and MQTT `project_file` publish in order. It uploads the artifact filename through the file-transfer boundary, then publishes to `device/{serial}/request` with QoS `1`, `ftp://{filename}`, `Metadata/plate_{plate_id}.gcode`, job/subtask ids, and print flags.
 - Unit tests use fake file-transfer and MQTT transports to prove upload-before-publish behavior and no-publish-on-upload-failure behavior without opening real Bambu sockets.
-- The default runtime file-transfer adapter still returns `Bambu FTPS runtime is not implemented in this phase`; deployments must share hub spool and agent artifact roots for the filesystem artifact reader, but live printer upload awaits the next runtime implementation phase.
+- Configured runtime agents use the Bambu FTPS adapter for machine file upload. The adapter uses implicit FTPS on port `990`, the Bambu LAN TLS policy for printer-local/self-signed certificates, protected/clear data mode selection, and server-side size verification before MQTT `project_file` publish. Tests use fake transfer transports and do not open live Bambu sockets.
 
-Planned agent phases after Phase 7:
+Agent phase status after Phase 7:
 
-- Phase 8 replaces the unavailable file-transfer runtime with real implicit FTPS on port `990`, post-upload verification, model/profile transport policy, and actionable upload diagnostics.
+- Phase 8 added the real file-transfer runtime with implicit FTPS on port `990`, post-upload size verification, model/profile transport policy, and actionable upload diagnostics.
 - Phase 9 converts continuous MQTT reports into normalized job progress and terminal print events that can be correlated to hub jobs.
 - Phase 13 adds LAN discovery, credential validation, printer diagnostics, and centralized compatibility rules for feature availability and transport policy.
 - Phase 14 promotes AMS, external-spool, tray-change, and filament usage data into stable Pandar models.
