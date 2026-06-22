@@ -1,10 +1,13 @@
 use anyhow::Context;
 use pandar_core::{Tenant, TenantId};
-use sqlx::Row;
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, DbErr, EntityTrait, PaginatorTrait, QueryOrder, SqlErr,
+};
 
 use crate::{
     db::Database,
-    repositories::{RepositoryError, RepositoryResult, is_unique_violation},
+    entities::tenants,
+    repositories::{RepositoryError, RepositoryResult},
 };
 
 #[derive(Debug, Clone)]
@@ -23,34 +26,20 @@ impl TenantRepository {
         display_name: impl Into<String>,
     ) -> RepositoryResult<Tenant> {
         let tenant = Tenant::new(slug, display_name).map_err(anyhow::Error::from)?;
-        let result = match &self.database {
-            Database::Sqlite(pool) => sqlx::query(
-                "INSERT INTO tenants (id, slug, display_name, created_at) VALUES (?1, ?2, ?3, ?4)",
-            )
-            .bind(tenant.id.to_string())
-            .bind(&tenant.slug)
-            .bind(&tenant.display_name)
-            .bind(&tenant.created_at)
-            .execute(pool)
-            .await
-            .map(|_| ()),
-            Database::Postgres(pool) => sqlx::query(
-                "INSERT INTO tenants (id, slug, display_name, created_at) VALUES ($1, $2, $3, $4)",
-            )
-            .bind(tenant.id.to_string())
-            .bind(&tenant.slug)
-            .bind(&tenant.display_name)
-            .bind(&tenant.created_at)
-            .execute(pool)
-            .await
-            .map(|_| ()),
+        let model = tenants::ActiveModel {
+            id: Set(tenant.id.to_string()),
+            slug: Set(tenant.slug.clone()),
+            display_name: Set(tenant.display_name.clone()),
+            created_at: Set(tenant.created_at.clone()),
         };
+        let result = model
+            .insert(&self.database.sea_orm_connection())
+            .await
+            .map(|_| ());
 
         match result {
             Ok(_) => Ok(tenant),
-            Err(err) if is_unique_violation(&err, "tenants.slug", "tenants_slug_key") => {
-                Err(RepositoryError::DuplicateTenantSlug)
-            }
+            Err(err) if is_duplicate_tenant_slug(&err) => Err(RepositoryError::DuplicateTenantSlug),
             Err(err) => Err(anyhow::Error::new(err)
                 .context("failed to insert tenant")
                 .into()),
@@ -58,78 +47,43 @@ impl TenantRepository {
     }
 
     pub async fn list(&self) -> RepositoryResult<Vec<Tenant>> {
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let rows = sqlx::query(
-                    "SELECT id, slug, display_name, created_at FROM tenants ORDER BY created_at ASC, id ASC",
-                )
-                .fetch_all(pool)
-                .await
-                .context("failed to list SQLite tenants")?;
-                rows.into_iter()
-                    .map(|row| {
-                        tenant_from_parts(
-                            row.get("id"),
-                            row.get("slug"),
-                            row.get("display_name"),
-                            row.get("created_at"),
-                        )
-                    })
-                    .collect()
-            }
-            Database::Postgres(pool) => {
-                let rows = sqlx::query(
-                    "SELECT id, slug, display_name, created_at FROM tenants ORDER BY created_at ASC, id ASC",
-                )
-                .fetch_all(pool)
-                .await
-                .context("failed to list PostgreSQL tenants")?;
-                rows.into_iter()
-                    .map(|row| {
-                        tenant_from_parts(
-                            row.get("id"),
-                            row.get("slug"),
-                            row.get("display_name"),
-                            row.get("created_at"),
-                        )
-                    })
-                    .collect()
-            }
-        }
+        tenants::Entity::find()
+            .order_by_asc(tenants::Column::CreatedAt)
+            .order_by_asc(tenants::Column::Id)
+            .all(&self.database.sea_orm_connection())
+            .await
+            .context("failed to list tenants")?
+            .into_iter()
+            .map(tenant_from_model)
+            .collect()
     }
 
     pub async fn count(&self) -> RepositoryResult<i64> {
-        let count = match &self.database {
-            Database::Sqlite(pool) => {
-                sqlx::query_scalar("SELECT COUNT(*) FROM tenants")
-                    .fetch_one(pool)
-                    .await
-            }
-            Database::Postgres(pool) => {
-                sqlx::query_scalar("SELECT COUNT(*) FROM tenants")
-                    .fetch_one(pool)
-                    .await
-            }
-        }
-        .context("failed to count tenants")?;
+        let count = tenants::Entity::find()
+            .count(&self.database.sea_orm_connection())
+            .await
+            .context("failed to count tenants")?;
 
-        Ok(count)
+        Ok(count.try_into().expect("tenant count should fit in i64"))
     }
 }
 
-fn tenant_from_parts(
-    id: String,
-    slug: String,
-    display_name: String,
-    created_at: String,
-) -> RepositoryResult<Tenant> {
+fn tenant_from_model(model: tenants::Model) -> RepositoryResult<Tenant> {
     Tenant::from_parts(
-        TenantId::parse(&id).map_err(anyhow::Error::from)?,
-        slug,
-        display_name,
-        created_at,
+        TenantId::parse(&model.id).map_err(anyhow::Error::from)?,
+        model.slug,
+        model.display_name,
+        model.created_at,
     )
     .map_err(anyhow::Error::from)
     .context("failed to rehydrate tenant")
     .map_err(RepositoryError::from)
+}
+
+fn is_duplicate_tenant_slug(err: &DbErr) -> bool {
+    let Some(SqlErr::UniqueConstraintViolation(message)) = err.sql_err() else {
+        return false;
+    };
+
+    message.contains("tenants.slug") || message.contains("tenants_slug_key")
 }

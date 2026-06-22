@@ -1,6 +1,7 @@
 use std::{str::FromStr, time::Duration};
 
 use anyhow::{Context, bail};
+use sea_orm::{DatabaseConnection, SqlxPostgresConnector, SqlxSqliteConnector};
 use sqlx::{
     PgPool, SqlitePool,
     migrate::Migrator,
@@ -101,6 +102,13 @@ impl Database {
         match self {
             Self::Sqlite(_) => DatabaseBackend::Sqlite,
             Self::Postgres(_) => DatabaseBackend::Postgres,
+        }
+    }
+
+    pub fn sea_orm_connection(&self) -> DatabaseConnection {
+        match self {
+            Self::Sqlite(pool) => SqlxSqliteConnector::from_sqlx_sqlite_pool(pool.clone()),
+            Self::Postgres(pool) => SqlxPostgresConnector::from_sqlx_postgres_pool(pool.clone()),
         }
     }
 

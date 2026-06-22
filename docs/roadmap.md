@@ -27,6 +27,7 @@
 - Added Phase 4 hub printer inventory persistence, tenant-scoped printer HTTP APIs, refresh-printers command dispatch endpoint, future-only printer WebSocket events, and the read-only frontend operations dashboard.
 - Added Phase 5 hub print artifacts/jobs persistence, tenant-scoped print job HTTP APIs, print command gRPC dispatch, command/job status coupling, agent artifact-root handling, frontend job history, and HTTP-only print dispatch form.
 - Added Phase 6 tenant API token authentication, tenant role authorization, audit events, WebSocket auth, frontend server-side token forwarding, and SQLite/PostgreSQL Docker Compose examples.
+- Added Phase 7 staged SeaORM 2.0 migration groundwork with SQLx 0.9 alignment, a shared SeaORM connection accessor, a hand-written `tenants` entity, and SeaORM-backed tenant repository operations.
 
 ## Phase 1: Foundation
 
@@ -128,7 +129,15 @@ Exit criteria:
 - Completed credential policy documentation: Bambu printer access codes remain agent-local in `PANDAR_PRINTERS` and must not be stored in the hub database or frontend env.
 - Completed Docker Compose examples for SQLite and PostgreSQL deployments.
 
-## Phase 7: Compatibility Expansion
+## Phase 7: SeaORM Migration
+
+- Completed the first staged SeaORM 2.0 migration by adding SeaORM `2.0.0-rc.41` behind the existing SQLx pool boundary.
+- Completed workspace SQLx `0.9.0` alignment required by SeaORM 2.0.
+- Completed hand-written SeaORM entity coverage for `tenants`.
+- Completed `TenantRepository` create/list/count migration to SeaORM while preserving the existing repository API and SQLite/PostgreSQL behavior.
+- Deferred auth, audit, agents, printers, commands, jobs, and SeaORM migration-system adoption to later phases.
+
+## Later: Compatibility Expansion
 
 - Build a printer model compatibility matrix from the references and live captures.
 - Add AMS and external-spool mapping support.
@@ -141,5 +150,6 @@ Exit criteria:
 - Implement real agent-side FTPS upload and upload verification behind the existing file-transfer boundary.
 - Wire the real runtime FTPS adapter into the configured gateway path that already fake-tests MQTT `project_file` publishing.
 - Reconcile printer MQTT reports into print job progress, terminal success, and terminal failure state.
+- Continue staged SeaORM migration for auth/audit and then command/job repositories only after Phase 7 tenant behavior stays green.
 - Add first-user/bootstrap ergonomics for provisioning tenant users and API tokens without direct repository/test fixtures.
 - Add an explicit global admin/bootstrap boundary for tenant listing and summary before production multi-tenant exposure.

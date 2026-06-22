@@ -52,6 +52,7 @@ async fn postgres_core_repository_behavior_when_configured() {
         .unwrap();
 
     assert_eq!(tenants.list().await.unwrap(), vec![tenant.clone()]);
+    assert_eq!(tenants.count().await.unwrap(), 1);
     assert_eq!(
         agents.list_for_tenant(tenant.id).await.unwrap(),
         vec![agent]

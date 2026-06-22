@@ -1,4 +1,5 @@
 pub mod db;
+pub mod entities;
 pub mod grpc;
 pub mod jobs;
 pub mod printer_events;
