@@ -83,6 +83,85 @@ async fn api_tokens_must_belong_to_user_tenant() {
 }
 
 #[tokio::test]
+async fn external_identity_resolves_tenant_user_role() {
+    let database = sqlite_database().await;
+    let tenants = TenantRepository::new(database.clone());
+    let auth = AuthRepository::new(database);
+    let tenant = tenants
+        .create("acme-identity", "Acme Identity")
+        .await
+        .unwrap();
+    let user = auth
+        .create_user(tenant.id, "viewer@example.test", "Viewer", UserRole::Viewer)
+        .await
+        .unwrap();
+
+    let identity = auth
+        .link_external_identity(tenant.id, &user.id, "clerk", "user_123")
+        .await
+        .unwrap();
+    let authenticated = auth
+        .authenticate_external_identity(tenant.id, "clerk", "user_123")
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(identity.tenant_id, tenant.id);
+    assert_eq!(identity.user_id, user.id);
+    assert_eq!(authenticated.token_id, identity.id);
+    assert_eq!(authenticated.user.id, user.id);
+    assert_eq!(authenticated.user.role, UserRole::Viewer);
+}
+
+#[tokio::test]
+async fn external_identity_rejects_missing_and_duplicate_links() {
+    let database = sqlite_database().await;
+    let tenants = TenantRepository::new(database.clone());
+    let auth = AuthRepository::new(database);
+    let tenant = tenants
+        .create("acme-identity-duplicates", "Acme Identity")
+        .await
+        .unwrap();
+    let user = auth
+        .create_user(
+            tenant.id,
+            "admin@example.test",
+            "Admin",
+            UserRole::TenantAdmin,
+        )
+        .await
+        .unwrap();
+
+    let missing = auth
+        .link_external_identity(tenant.id, "missing-user", "clerk", "user_missing")
+        .await
+        .unwrap_err();
+    assert!(matches!(missing, RepositoryError::MissingUser));
+
+    auth.link_external_identity(tenant.id, &user.id, "clerk", "user_123")
+        .await
+        .unwrap();
+
+    let duplicate_identity = auth
+        .link_external_identity(tenant.id, &user.id, "clerk", "user_123")
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        duplicate_identity,
+        RepositoryError::DuplicateExternalIdentity
+    ));
+
+    let duplicate_user_provider = auth
+        .link_external_identity(tenant.id, &user.id, "clerk", "user_456")
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        duplicate_user_provider,
+        RepositoryError::DuplicateUserExternalIdentity
+    ));
+}
+
+#[tokio::test]
 async fn postgres_auth_and_audit_repository_behavior_when_configured() {
     let Some(database) = super::postgres::postgres_database().await else {
         eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
@@ -114,6 +193,19 @@ async fn postgres_auth_and_audit_repository_behavior_when_configured() {
     assert_eq!(authenticated.user.id, user.id);
     assert_eq!(authenticated.user.role, UserRole::TenantAdmin);
 
+    let identity = auth
+        .link_external_identity(tenant.id, &user.id, "logto", "logto-user")
+        .await
+        .unwrap();
+    let external_authenticated = auth
+        .authenticate_external_identity(tenant.id, "logto", "logto-user")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(external_authenticated.token_id, identity.id);
+    assert_eq!(external_authenticated.user.id, user.id);
+    assert_eq!(external_authenticated.user.role, UserRole::TenantAdmin);
+
     audit
         .record(RecordAuditEvent {
             tenant_id: tenant.id,
@@ -130,4 +222,56 @@ async fn postgres_auth_and_audit_repository_behavior_when_configured() {
     let events = audit.list_for_tenant(tenant.id).await.unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].action, "job.create");
+}
+
+#[tokio::test]
+async fn postgres_external_identity_error_behavior_when_configured() {
+    let Some(database) = super::postgres::postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    let tenants = TenantRepository::new(database.clone());
+    let auth = AuthRepository::new(database);
+    let tenant = tenants
+        .create("postgres-identity-duplicates", "Postgres Identity")
+        .await
+        .unwrap();
+    let user = auth
+        .create_user(
+            tenant.id,
+            "admin@example.test",
+            "Admin",
+            UserRole::TenantAdmin,
+        )
+        .await
+        .unwrap();
+
+    let missing = auth
+        .link_external_identity(tenant.id, "missing-user", "logto", "missing")
+        .await
+        .unwrap_err();
+    assert!(matches!(missing, RepositoryError::MissingUser));
+
+    auth.link_external_identity(tenant.id, &user.id, "logto", "subject-1")
+        .await
+        .unwrap();
+
+    let duplicate_identity = auth
+        .link_external_identity(tenant.id, &user.id, "logto", "subject-1")
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        duplicate_identity,
+        RepositoryError::DuplicateExternalIdentity
+    ));
+
+    let duplicate_user_provider = auth
+        .link_external_identity(tenant.id, &user.id, "logto", "subject-2")
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        duplicate_user_provider,
+        RepositoryError::DuplicateUserExternalIdentity
+    ));
 }

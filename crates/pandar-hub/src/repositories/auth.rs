@@ -11,6 +11,10 @@ use crate::{
     },
 };
 
+mod identities;
+
+pub use identities::UserIdentity;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum UserRole {
     TenantAdmin,
@@ -304,7 +308,7 @@ fn user_from_row(
     })
 }
 
-fn authenticated_from_parts(
+pub(super) fn authenticated_from_parts(
     token_id: String,
     user_id: String,
     tenant_id: String,

@@ -8,7 +8,7 @@ mod tenants;
 
 pub use agents::AgentRepository;
 pub use audit::{AuditEvent, AuditEventRepository, RecordAuditEvent};
-pub use auth::{ApiToken, AuthRepository, AuthenticatedUser, User, UserRole};
+pub use auth::{ApiToken, AuthRepository, AuthenticatedUser, User, UserIdentity, UserRole};
 pub use commands::{CommandRepository, PrintProjectFilePayload};
 pub use jobs::{
     AppliedPrintReport, ApplyPrintReport, CreatePrintJob, JobRepository, JobWithArtifact,
@@ -29,6 +29,10 @@ pub enum RepositoryError {
     DuplicateApiTokenName,
     #[error("api token hash already exists")]
     DuplicateApiTokenHash,
+    #[error("external identity already exists for tenant")]
+    DuplicateExternalIdentity,
+    #[error("external identity provider already linked to user")]
+    DuplicateUserExternalIdentity,
     #[error("tenant not found")]
     MissingTenant,
     #[error("user not found")]

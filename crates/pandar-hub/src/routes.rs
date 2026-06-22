@@ -265,6 +265,13 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::DuplicateApiTokenHash => {
                 Self::new(StatusCode::CONFLICT, "api_token_hash_exists")
             }
+            RepositoryError::DuplicateExternalIdentity => {
+                Self::new(StatusCode::CONFLICT, "external_identity_exists")
+            }
+            RepositoryError::DuplicateUserExternalIdentity => Self::new(
+                StatusCode::CONFLICT,
+                "user_external_identity_provider_exists",
+            ),
             RepositoryError::MissingTenant => Self::new(StatusCode::NOT_FOUND, "tenant_not_found"),
             RepositoryError::MissingUser => Self::new(StatusCode::NOT_FOUND, "user_not_found"),
             RepositoryError::MissingAgent => Self::new(StatusCode::NOT_FOUND, "agent_not_found"),
