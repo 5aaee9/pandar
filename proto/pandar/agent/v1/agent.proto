@@ -16,6 +16,7 @@ message AgentEvent {
     PrinterSnapshot printer_snapshot = 12;
     CommandAck command_ack = 13;
     CommandResult command_result = 14;
+    PrintJobReport print_job_report = 15;
   }
 }
 
@@ -45,6 +46,34 @@ message CommandResult {
   string command_id = 1;
   bool success = 2;
   string error = 3;
+}
+
+message PrintJobReport {
+  string serial = 1;
+  string job_id = 2;
+  string artifact_id = 3;
+  string subtask_id = 4;
+  string gcode_file = 5;
+  string subtask_name = 6;
+  string gcode_state = 7;
+  uint32 percent = 8;
+  bool has_percent = 9;
+  uint32 remaining_time_minutes = 10;
+  bool has_remaining_time_minutes = 11;
+  uint32 current_layer = 12;
+  bool has_current_layer = 13;
+  uint32 total_layers = 14;
+  bool has_total_layers = 15;
+  repeated MachineDiagnostic diagnostics = 16;
+  string observed_at = 17;
+}
+
+message MachineDiagnostic {
+  string kind = 1;
+  string severity = 2;
+  string code = 3;
+  string message = 4;
+  string payload_json = 5;
 }
 
 message HubCommand {

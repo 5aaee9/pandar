@@ -1,9 +1,14 @@
 use std::time::Duration;
 
 use serde_json::json;
+use tokio::sync::mpsc;
 
 use super::*;
 use crate::machine::BambuPrinterEndpoint;
+use crate::{
+    AgentConfig,
+    protocol::agent::v1::{PrintJobReport, agent_event},
+};
 
 fn endpoint() -> BambuPrinterEndpoint {
     BambuPrinterEndpoint {
@@ -217,4 +222,181 @@ async fn refresh_timeout_error_includes_serial_context() {
 
     assert!(format!("{err:#}").contains("refresh printer 01S00EXAMPLE"));
     assert!(format!("{err:#}").contains("timed out waiting for MQTT report"));
+}
+
+#[test]
+fn print_report_from_report_extracts_progress_and_diagnostics() {
+    let report = json!({
+        "print": {
+            "task_id": "job-123",
+            "subtask_id": "artifact-456",
+            "gcode_state": "RUNNING",
+            "mc_percent": "42",
+            "mc_remaining_time": 87,
+            "layer_num": "12",
+            "total_layer_num": 120,
+            "gcode_file": "plate_1.gcode",
+            "subtask_name": "drawer-organizer",
+            "print_error": "nozzle temperature error",
+            "hms": [
+                {"code": "0300_0A00_0001_0002", "message": "fan speed is low"}
+            ]
+        }
+    });
+
+    let progress = print_report_from_report(&endpoint(), &report);
+
+    assert_eq!(progress.serial, "01S00EXAMPLE");
+    assert_eq!(progress.job_id.as_deref(), Some("job-123"));
+    assert_eq!(progress.artifact_id.as_deref(), Some("artifact-456"));
+    assert_eq!(progress.subtask_id.as_deref(), Some("artifact-456"));
+    assert_eq!(progress.gcode_state.as_deref(), Some("RUNNING"));
+    assert_eq!(progress.percent, Some(42));
+    assert_eq!(progress.remaining_time_minutes, Some(87));
+    assert_eq!(progress.current_layer, Some(12));
+    assert_eq!(progress.total_layers, Some(120));
+    assert_eq!(progress.gcode_file.as_deref(), Some("plate_1.gcode"));
+    assert_eq!(progress.subtask_name.as_deref(), Some("drawer-organizer"));
+    assert_eq!(progress.diagnostics.len(), 2);
+    assert_eq!(progress.diagnostics[0].kind, "print_error");
+    assert_eq!(progress.diagnostics[0].severity, "error");
+    assert_eq!(progress.diagnostics[0].message, "nozzle temperature error");
+    assert_eq!(progress.diagnostics[1].kind, "hms");
+    assert_eq!(progress.diagnostics[1].severity, "warning");
+    assert_eq!(
+        progress.diagnostics[1].code.as_deref(),
+        Some("0300_0A00_0001_0002")
+    );
+    assert_eq!(progress.diagnostics[1].message, "fan speed is low");
+    assert!(!progress.observed_at.is_empty());
+}
+
+#[test]
+fn print_report_from_report_drops_out_of_range_numeric_values() {
+    let report = json!({
+        "print": {
+            "mc_percent": "101",
+            "mc_remaining_time": 4321,
+            "layer_num": "100001",
+            "total_layer_num": -1
+        }
+    });
+
+    let progress = print_report_from_report(&endpoint(), &report);
+
+    assert_eq!(progress.percent, None);
+    assert_eq!(progress.remaining_time_minutes, None);
+    assert_eq!(progress.current_layer, None);
+    assert_eq!(progress.total_layers, None);
+}
+
+#[test]
+fn print_job_report_event_sets_numeric_presence_booleans() {
+    let config = AgentConfig {
+        hub_grpc_url: "http://hub.internal:50051".to_owned(),
+        agent_name: "garage".to_owned(),
+        agent_id: "agent-id".to_owned(),
+        tenant_id: "tenant-id".to_owned(),
+        agent_version: "9.8.7".to_owned(),
+        printers: "[]".to_owned(),
+        artifact_root: ".".into(),
+    };
+    let progress = PrintReportProgress {
+        serial: "01S00EXAMPLE".to_owned(),
+        job_id: Some("job-123".to_owned()),
+        artifact_id: None,
+        subtask_id: None,
+        gcode_state: Some("RUNNING".to_owned()),
+        percent: Some(0),
+        remaining_time_minutes: None,
+        current_layer: Some(7),
+        total_layers: None,
+        gcode_file: None,
+        subtask_name: None,
+        diagnostics: Vec::new(),
+        observed_at: "2026-06-22T00:00:00Z".to_owned(),
+    };
+
+    let event = print_job_report_event(&config, progress);
+
+    assert_eq!(event.agent_id, "agent-id");
+    assert_eq!(event.tenant_id, "tenant-id");
+    let Some(agent_event::Event::PrintJobReport(PrintJobReport {
+        percent,
+        has_percent,
+        remaining_time_minutes,
+        has_remaining_time_minutes,
+        current_layer,
+        has_current_layer,
+        total_layers,
+        has_total_layers,
+        ..
+    })) = event.event
+    else {
+        panic!("expected print job report event");
+    };
+    assert_eq!(percent, 0);
+    assert!(has_percent);
+    assert_eq!(remaining_time_minutes, 0);
+    assert!(!has_remaining_time_minutes);
+    assert_eq!(current_layer, 7);
+    assert!(has_current_layer);
+    assert_eq!(total_layers, 0);
+    assert!(!has_total_layers);
+}
+
+#[tokio::test]
+async fn forward_print_reports_uses_transport_without_live_socket() {
+    let transport = FakeMqttTransport::with_reports([json!({
+        "print": {
+            "task_id": "job-123",
+            "subtask_id": "artifact-456",
+            "gcode_state": "RUNNING",
+            "mc_percent": 55
+        }
+    })]);
+    let (sender, mut receiver) = mpsc::channel(4);
+    let config = AgentConfig {
+        hub_grpc_url: "http://hub.internal:50051".to_owned(),
+        agent_name: "garage".to_owned(),
+        agent_id: "agent-id".to_owned(),
+        tenant_id: "tenant-id".to_owned(),
+        agent_version: "9.8.7".to_owned(),
+        printers: "[]".to_owned(),
+        artifact_root: ".".into(),
+    };
+    let endpoint = endpoint();
+    let forwarder = tokio::spawn({
+        let config = config.clone();
+        let transport = transport.clone();
+        let endpoint = endpoint.clone();
+        async move {
+            forward_print_reports(
+                &config,
+                &transport,
+                &endpoint,
+                Duration::from_millis(1),
+                &sender,
+            )
+            .await
+        }
+    });
+
+    let event = receiver.recv().await.unwrap();
+    drop(receiver);
+    forwarder.await.unwrap().unwrap();
+
+    let Some(agent_event::Event::PrintJobReport(report)) = event.event else {
+        panic!("expected print job report event");
+    };
+    assert_eq!(report.serial, "01S00EXAMPLE");
+    assert_eq!(report.job_id, "job-123");
+    assert_eq!(report.artifact_id, "artifact-456");
+    assert_eq!(report.subtask_id, "artifact-456");
+    assert_eq!(report.percent, 55);
+    assert!(report.has_percent);
+    assert_eq!(
+        transport.subscriptions().await,
+        ["device/01S00EXAMPLE/report".to_string()]
+    );
 }

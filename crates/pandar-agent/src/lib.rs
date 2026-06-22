@@ -15,7 +15,7 @@ pub mod protocol;
 use commands::{handle_command_with_gateway, parse_printer_config};
 use machine::{
     BambuPrinterEndpoint, ConfiguredBambuMachineGateway, NoopMachineGateway,
-    mqtt::RumqttcBambuMqttTransport,
+    mqtt::{RumqttcBambuMqttTransport, forward_print_reports},
 };
 use protocol::agent::v1::{
     AgentEvent, AgentHeartbeat, AgentHello, agent_control_client::AgentControlClient, agent_event,
@@ -151,6 +151,30 @@ async fn run_once(
             handle_command_with_gateway(&config, &gateway, &sender, command).await?;
         }
     } else {
+        for printer in &printers {
+            let report_config = config.clone();
+            let report_sender = sender.clone();
+            let report_printer = printer.clone();
+            tokio::spawn(async move {
+                let transport = RumqttcBambuMqttTransport::connect(&report_printer);
+                if let Err(err) = forward_print_reports(
+                    &report_config,
+                    &transport,
+                    &report_printer,
+                    DEFAULT_REPORT_TIMEOUT,
+                    &report_sender,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        serial = %report_printer.serial,
+                        error = %format!("{err:#}"),
+                        "printer report forwarding ended"
+                    );
+                }
+            });
+        }
+
         let gateway = ConfiguredBambuMachineGateway::new(
             printers
                 .into_iter()

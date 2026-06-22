@@ -47,6 +47,48 @@ impl FromStr for JobStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PrintStatus {
+    Pending,
+    Running,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+impl PrintStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
+        }
+    }
+}
+
+impl fmt::Display for PrintStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for PrintStatus {
+    type Err = CoreError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "pending" => Ok(Self::Pending),
+            "running" => Ok(Self::Running),
+            "completed" => Ok(Self::Completed),
+            "failed" => Ok(Self::Failed),
+            "cancelled" => Ok(Self::Cancelled),
+            value => Err(CoreError::InvalidPrintStatus(value.to_string())),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobArtifact {
     pub id: String,
     pub tenant_id: TenantId,
@@ -91,6 +133,43 @@ impl JobArtifact {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JobPrintState {
+    pub status: PrintStatus,
+    pub printer_state: Option<String>,
+    pub progress_percent: Option<u8>,
+    pub remaining_time_minutes: Option<u32>,
+    pub current_layer: Option<u32>,
+    pub total_layers: Option<u32>,
+    pub active_file: Option<String>,
+    pub last_progress_percent: Option<u8>,
+    pub last_layer: Option<u32>,
+    pub error: Option<String>,
+    pub started_at: Option<String>,
+    pub finished_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+impl JobPrintState {
+    pub fn pending() -> Self {
+        Self {
+            status: PrintStatus::Pending,
+            printer_state: None,
+            progress_percent: None,
+            remaining_time_minutes: None,
+            current_layer: None,
+            total_layers: None,
+            active_file: None,
+            last_progress_percent: None,
+            last_layer: None,
+            error: None,
+            started_at: None,
+            finished_at: None,
+            updated_at: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Job {
     pub id: JobId,
     pub tenant_id: TenantId,
@@ -100,6 +179,7 @@ pub struct Job {
     pub command_id: CommandId,
     pub status: JobStatus,
     pub error: Option<String>,
+    pub print: JobPrintState,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -114,6 +194,19 @@ pub struct JobParts {
     pub command_id: CommandId,
     pub status: String,
     pub error: Option<String>,
+    pub print_status: String,
+    pub printer_state: Option<String>,
+    pub progress_percent: Option<u8>,
+    pub remaining_time_minutes: Option<u32>,
+    pub current_layer: Option<u32>,
+    pub total_layers: Option<u32>,
+    pub active_file: Option<String>,
+    pub last_progress_percent: Option<u8>,
+    pub last_layer: Option<u32>,
+    pub print_error: Option<String>,
+    pub print_started_at: Option<String>,
+    pub print_finished_at: Option<String>,
+    pub print_updated_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -132,6 +225,21 @@ impl Job {
             command_id: parts.command_id,
             status: parts.status.parse()?,
             error: parts.error,
+            print: JobPrintState {
+                status: parts.print_status.parse()?,
+                printer_state: parts.printer_state,
+                progress_percent: parts.progress_percent,
+                remaining_time_minutes: parts.remaining_time_minutes,
+                current_layer: parts.current_layer,
+                total_layers: parts.total_layers,
+                active_file: parts.active_file,
+                last_progress_percent: parts.last_progress_percent,
+                last_layer: parts.last_layer,
+                error: parts.print_error,
+                started_at: parts.print_started_at,
+                finished_at: parts.print_finished_at,
+                updated_at: parts.print_updated_at,
+            },
             created_at: parts.created_at,
             updated_at: parts.updated_at,
         })

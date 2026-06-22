@@ -11,7 +11,9 @@ pub mod tenant;
 pub use agent::{Agent, AgentStatus};
 pub use command::{CommandRecord, CommandRecordParts, CommandStatus};
 pub use ids::{AgentId, CommandId, JobId, TenantId};
-pub use job::{Job, JobArtifact, JobArtifactParts, JobParts, JobStatus};
+pub use job::{
+    Job, JobArtifact, JobArtifactParts, JobParts, JobPrintState, JobStatus, PrintStatus,
+};
 pub use printer::{Printer, PrinterParts};
 pub use tenant::Tenant;
 
@@ -61,6 +63,8 @@ pub enum CoreError {
     InvalidCommandStatus(String),
     #[error("invalid job status: {0}")]
     InvalidJobStatus(String),
+    #[error("invalid print status: {0}")]
+    InvalidPrintStatus(String),
 }
 
 pub fn created_at_now() -> String {
