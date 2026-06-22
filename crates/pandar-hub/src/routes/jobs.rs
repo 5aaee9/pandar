@@ -5,7 +5,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use pandar_core::{Job, JobArtifact, JobId};
+use pandar_core::{Job, JobArtifact, JobId, JobPrintState};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -25,7 +25,7 @@ pub struct CreateJobRequest {
     timelapse: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct JobResponse {
     id: String,
     tenant_id: String,
@@ -37,11 +37,29 @@ pub struct JobResponse {
     error: Option<String>,
     created_at: String,
     updated_at: String,
+    print: JobPrintResponse,
     command: JobCommandResponse,
     artifact: JobArtifactResponse,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
+pub struct JobPrintResponse {
+    status: String,
+    printer_state: Option<String>,
+    progress_percent: Option<u8>,
+    remaining_time_minutes: Option<u32>,
+    current_layer: Option<u32>,
+    total_layers: Option<u32>,
+    active_file: Option<String>,
+    last_progress_percent: Option<u8>,
+    last_layer: Option<u32>,
+    error: Option<String>,
+    started_at: Option<String>,
+    finished_at: Option<String>,
+    updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct JobArtifactResponse {
     id: String,
     tenant_id: String,
@@ -52,7 +70,7 @@ pub struct JobArtifactResponse {
     created_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct JobCommandResponse {
     id: String,
     kind: &'static str,
@@ -213,12 +231,33 @@ impl JobResponse {
             error: job.error,
             created_at: job.created_at,
             updated_at: job.updated_at,
+            print: JobPrintResponse::from(job.print),
             command: JobCommandResponse {
                 id: job.command_id.to_string(),
                 kind: "print_project_file",
                 status: job.status.to_string(),
             },
             artifact: JobArtifactResponse::from(artifact),
+        }
+    }
+}
+
+impl From<JobPrintState> for JobPrintResponse {
+    fn from(print: JobPrintState) -> Self {
+        Self {
+            status: print.status.to_string(),
+            printer_state: print.printer_state,
+            progress_percent: print.progress_percent,
+            remaining_time_minutes: print.remaining_time_minutes,
+            current_layer: print.current_layer,
+            total_layers: print.total_layers,
+            active_file: print.active_file,
+            last_progress_percent: print.last_progress_percent,
+            last_layer: print.last_layer,
+            error: print.error,
+            started_at: print.started_at,
+            finished_at: print.finished_at,
+            updated_at: print.updated_at,
         }
     }
 }

@@ -156,7 +156,7 @@ async fn run_once(
             let report_sender = sender.clone();
             let report_printer = printer.clone();
             tokio::spawn(async move {
-                let transport = RumqttcBambuMqttTransport::connect(&report_printer);
+                let transport = RumqttcBambuMqttTransport::connect_for_reports(&report_printer);
                 if let Err(err) = forward_print_reports(
                     &report_config,
                     &transport,

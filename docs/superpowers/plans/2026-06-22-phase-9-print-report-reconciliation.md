@@ -135,7 +135,7 @@ Expected: both commands compile or fail only on downstream code that has not yet
 - Optional modify: `crates/pandar-agent/src/commands.rs`
 - Test: agent MQTT and runtime tests
 
-- [ ] **Step 1: Add normalized report structs**
+- [x] **Step 1: Add normalized report structs**
 
 In `mqtt.rs`, add public structs:
 
@@ -167,7 +167,7 @@ pub struct MachineReportDiagnostic {
 
 Use existing `pandar_core::created_at_now()` for agent-side `observed_at`.
 
-- [ ] **Step 2: Normalize Bambu report JSON**
+- [x] **Step 2: Normalize Bambu report JSON**
 
 Add `print_report_from_report(endpoint, report) -> PrintReportProgress`.
 
@@ -181,7 +181,7 @@ Extraction rules:
 - Convert `print.print_error` into a `MachineReportDiagnostic { kind: "print_error", severity: "error" }` when present and not empty.
 - Convert array/object HMS fields discovered in reports into diagnostics with `kind: "hms"` when they expose a code/message. Keep this simple and test representative shapes; do not add a broad raw-MQTT parser.
 
-- [ ] **Step 3: Convert normalized reports into proto events**
+- [x] **Step 3: Convert normalized reports into proto events**
 
 Add an event builder that maps `Option` numeric fields into `value + has_*` proto fields. Keep blank optional strings empty for proto transport; the hub trims them.
 
@@ -191,7 +191,7 @@ Expected event variant:
 agent_event::Event::PrintJobReport(report)
 ```
 
-- [ ] **Step 4: Forward continuous reports while connected**
+- [x] **Step 4: Forward continuous reports while connected**
 
 In `run_once`, after the reverse stream opens and when printers are configured, spawn one task per configured printer:
 
@@ -203,7 +203,7 @@ In `run_once`, after the reverse stream opens and when printers are configured, 
 
 Do not change the no-printer path.
 
-- [ ] **Step 5: Agent tests**
+- [x] **Step 5: Agent tests**
 
 Add tests proving:
 
@@ -232,7 +232,7 @@ Expected: targeted agent tests pass.
 - Modify: `crates/pandar-hub/src/repositories/tests/jobs.rs`
 - Modify: `crates/pandar-hub/src/repositories/tests/postgres.rs`
 
-- [ ] **Step 1: Add equivalent migrations**
+- [x] **Step 1: Add equivalent migrations**
 
 SQLite migration:
 
@@ -312,13 +312,13 @@ CREATE INDEX idx_machine_events_printer_id ON machine_events(printer_id);
 CREATE INDEX idx_machine_events_job_id ON machine_events(job_id);
 ```
 
-- [ ] **Step 2: Update repository row mapping**
+- [x] **Step 2: Update repository row mapping**
 
 Select all new `jobs.print_*` columns in list/get/by-command queries. Rehydrate `JobPrintState` and map invalid `print_status` into a new repository error like `InvalidPersistedPrintStatus(String)`.
 
 New job creation sets `print_status = 'pending'`; it can rely on migration default or bind the value explicitly. Prefer explicit binding in `create.rs` so tests prove the behavior.
 
-- [ ] **Step 3: Add reconciliation input/output types**
+- [x] **Step 3: Add reconciliation input/output types**
 
 In `jobs.rs` expose:
 
@@ -359,7 +359,7 @@ pub struct AppliedPrintReport {
 
 Keep proto types out of repositories. Use core ids and plain strings/integers.
 
-- [ ] **Step 4: Implement correlation**
+- [x] **Step 4: Implement correlation**
 
 In `print_reports.rs`:
 
@@ -374,7 +374,7 @@ In `print_reports.rs`:
   - exactly one match required; zero or multiple means no job update.
 - When no job correlates, persist any diagnostics as printer-level `machine_events` with `job_id = NULL`; do not update any job fields.
 
-- [ ] **Step 5: Implement idempotent updates and machine event inserts**
+- [x] **Step 5: Implement idempotent updates and machine event inserts**
 
 Status mapping:
 
@@ -403,7 +403,7 @@ Rules:
 - `AppliedPrintReport.inserted_job_events` is true when at least one job-scoped `machine_events` row was newly inserted.
 - `AppliedPrintReport.inserted_printer_events` is true when at least one printer-level uncorrelated diagnostic row was newly inserted.
 
-- [ ] **Step 6: Repository tests**
+- [x] **Step 6: Repository tests**
 
 Add SQLite tests in `repositories/tests/jobs.rs`:
 
@@ -442,7 +442,7 @@ Expected: SQLite repository tests pass.
 - Modify: `crates/pandar-hub/src/routes/tests/jobs.rs`
 - Modify: `crates/pandar-hub/src/routes/tests/printers.rs`
 
-- [ ] **Step 1: Validate and handle gRPC reports**
+- [x] **Step 1: Validate and handle gRPC reports**
 
 `grpc/print_reports.rs` should:
 
@@ -456,11 +456,11 @@ Expected: SQLite repository tests pass.
 - Publish a tenant `job_progress` WebSocket event only when a job was updated or terminal diagnostics were inserted for a job.
 - Do not publish `job_progress` for uncorrelated printer-level diagnostics because there is no job payload to send.
 
-- [ ] **Step 2: Wire current-session handling**
+- [x] **Step 2: Wire current-session handling**
 
 Add `PrintJobReport` handling to `grpc.rs` inside the same `sessions().while_current(...)` pattern used by snapshots and command events. Stale replaced streams must not mutate repository state.
 
-- [ ] **Step 3: Extend tenant event hub**
+- [x] **Step 3: Extend tenant event hub**
 
 In `printer_events.rs`, add:
 
@@ -471,7 +471,7 @@ JobProgress { job: JobEvent }
 
 Use a route-facing/event DTO that includes the nested `print` object and does not expose credentials. Reuse conversion logic with `routes/jobs.rs` where practical without creating circular dependencies.
 
-- [ ] **Step 4: Extend job HTTP response**
+- [x] **Step 4: Extend job HTTP response**
 
 `routes/jobs.rs` keeps `status` and `command.status` as dispatch status. Add:
 
@@ -481,7 +481,7 @@ print: JobPrintResponse
 
 with the fields from the approved spec.
 
-- [ ] **Step 5: Hub tests**
+- [x] **Step 5: Hub tests**
 
 Add tests proving:
 
@@ -509,7 +509,7 @@ Expected: targeted hub gRPC/routes tests pass.
 - Modify: `docs/roadmap.md`
 - Modify: this plan checklist as tasks complete
 
-- [ ] **Step 1: Update frontend job types**
+- [x] **Step 1: Update frontend job types**
 
 Add nested `print` to the `Job` type in `frontend/app/page.tsx`:
 
@@ -531,7 +531,7 @@ print: {
 }
 ```
 
-- [ ] **Step 2: Render dispatch and print states separately**
+- [x] **Step 2: Render dispatch and print states separately**
 
 In the job table:
 
@@ -545,7 +545,7 @@ In the job table:
 
 Keep styling compact and consistent with the existing operational dashboard.
 
-- [ ] **Step 3: Update architecture and roadmap**
+- [x] **Step 3: Update architecture and roadmap**
 
 `docs/architecture.md`:
 
@@ -559,7 +559,7 @@ Keep styling compact and consistent with the existing operational dashboard.
 - Set Immediate Next to Phase 10 external identity authentication.
 - Keep later phases 11-15 intact unless Phase 9 completion changes wording.
 
-- [ ] **Step 4: Frontend build**
+- [x] **Step 4: Frontend build**
 
 Run:
 
@@ -574,7 +574,7 @@ Expected: Next.js build succeeds.
 **Files:**
 - No feature files unless fixes are required.
 
-- [ ] **Step 1: Required generated-output check**
+- [x] **Step 1: Required generated-output check**
 
 Run:
 
@@ -584,7 +584,7 @@ find . -path ./target -prune -o \( -name '*.pb.rs' -o -name '*.tonic.rs' \) -pri
 
 Expected: no output.
 
-- [ ] **Step 2: Rust formatting**
+- [x] **Step 2: Rust formatting**
 
 Run:
 
@@ -594,7 +594,7 @@ cargo fmt --check
 
 Expected: exit 0.
 
-- [ ] **Step 3: Rust lint**
+- [x] **Step 3: Rust lint**
 
 Run:
 
@@ -604,7 +604,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 Expected: exit 0.
 
-- [ ] **Step 4: Rust tests**
+- [x] **Step 4: Rust tests**
 
 Run:
 
@@ -614,7 +614,7 @@ cargo nextest run --manifest-path "Cargo.toml" --workspace
 
 Expected: all workspace tests pass.
 
-- [ ] **Step 5: Frontend build**
+- [x] **Step 5: Frontend build**
 
 Run:
 
@@ -624,7 +624,7 @@ npm --prefix frontend run build
 
 Expected: exit 0.
 
-- [ ] **Step 6: Diff hygiene**
+- [x] **Step 6: Diff hygiene**
 
 Run:
 
@@ -635,7 +635,7 @@ git status --short
 
 Expected: no whitespace errors; only intended files changed; no generated protobuf output.
 
-- [ ] **Step 7: Independent final implementation review**
+- [x] **Step 7: Independent final implementation review**
 
 Dispatch an independent reviewer with the approved spec, this plan, final diff, and verification output. Required verdict:
 

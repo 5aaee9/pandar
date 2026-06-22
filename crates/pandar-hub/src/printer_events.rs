@@ -4,11 +4,15 @@ use pandar_core::{Printer, TenantId};
 use serde::Serialize;
 use tokio::sync::{Mutex, broadcast};
 
+use crate::routes::jobs::JobResponse;
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type")]
 pub enum PrinterEvent {
     #[serde(rename = "printer_snapshot")]
     PrinterSnapshot { printer: Printer },
+    #[serde(rename = "job_progress")]
+    JobProgress { job: Box<JobResponse> },
 }
 
 #[derive(Debug, Clone)]

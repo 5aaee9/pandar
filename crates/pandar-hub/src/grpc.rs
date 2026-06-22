@@ -11,6 +11,7 @@ use crate::{
         handle_ack_and_job, handle_result_and_job, hub_command_from_record, mark_sent_and_job,
         parse_command_id, repository_status,
     },
+    grpc::print_reports::handle_print_report,
     grpc::printer_snapshots::handle_snapshot,
     protocol::agent::v1::{
         AgentEvent, AgentHello, CommandAck, CommandResult, HubCommand,
@@ -20,6 +21,7 @@ use crate::{
 };
 
 pub mod commands;
+pub mod print_reports;
 pub mod printer_snapshots;
 #[cfg(test)]
 mod tests;
@@ -228,6 +230,18 @@ async fn handle_event(
                 .sessions()
                 .while_current(agent_id, token, || {
                     handle_snapshot(state, tenant_id, agent_id, snapshot)
+                })
+                .await
+            {
+                Some(result) => result,
+                None => Ok(()),
+            }
+        }
+        Some(agent_event::Event::PrintJobReport(report)) => {
+            match state
+                .sessions()
+                .while_current(agent_id, token, || {
+                    handle_print_report(state, tenant_id, agent_id, report)
                 })
                 .await
             {

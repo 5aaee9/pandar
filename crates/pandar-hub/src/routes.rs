@@ -16,7 +16,7 @@ use crate::{
 };
 
 mod auth;
-mod jobs;
+pub(crate) mod jobs;
 mod printer_events;
 mod printers;
 
@@ -291,6 +291,10 @@ impl From<RepositoryError> for ApiError {
             }
             RepositoryError::InvalidPersistedJobStatus(status) => {
                 tracing::error!(%status, "invalid persisted job status");
+                Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
+            }
+            RepositoryError::InvalidPersistedPrintStatus(status) => {
+                tracing::error!(%status, "invalid persisted print status");
                 Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
             }
             RepositoryError::InvalidPersistedUserRole(role) => {

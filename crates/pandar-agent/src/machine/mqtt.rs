@@ -189,11 +189,19 @@ pub struct RumqttcBambuMqttTransport {
 
 impl RumqttcBambuMqttTransport {
     pub fn connect(endpoint: &BambuPrinterEndpoint) -> Self {
-        let mut options = MqttOptions::new(
-            format!("pandar-agent-{}", endpoint.serial),
-            endpoint.host.as_str(),
-            BAMBU_MQTT_PORT,
-        );
+        Self::connect_with_client_suffix(endpoint, None)
+    }
+
+    pub fn connect_for_reports(endpoint: &BambuPrinterEndpoint) -> Self {
+        Self::connect_with_client_suffix(endpoint, Some("reports"))
+    }
+
+    fn connect_with_client_suffix(endpoint: &BambuPrinterEndpoint, suffix: Option<&str>) -> Self {
+        let client_id = match suffix {
+            Some(suffix) => format!("pandar-agent-{}-{suffix}", endpoint.serial),
+            None => format!("pandar-agent-{}", endpoint.serial),
+        };
+        let mut options = MqttOptions::new(client_id, endpoint.host.as_str(), BAMBU_MQTT_PORT);
         options.set_credentials(BAMBU_MQTT_USERNAME, endpoint.access_code.as_str());
         options.set_transport(Transport::tls_with_config(bambu_lan_tls_config()));
         options.set_keep_alive(Duration::from_secs(30));

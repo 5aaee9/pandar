@@ -5,6 +5,7 @@ use pandar_core::{
 
 mod audit;
 mod create;
+mod print_reports;
 pub mod rows;
 mod transitions;
 
@@ -14,6 +15,7 @@ use crate::{
 };
 
 use create::{create_print_job_postgres, create_print_job_sqlite};
+pub use print_reports::{AppliedPrintReport, ApplyPrintReport, PrintReportDiagnostic};
 use rows::{
     JOB_POSTGRES_BY_COMMAND, JOB_SQLITE_BY_COMMAND, JOB_WITH_ARTIFACT_POSTGRES_GET,
     JOB_WITH_ARTIFACT_POSTGRES_LIST, JOB_WITH_ARTIFACT_SQLITE_GET, JOB_WITH_ARTIFACT_SQLITE_LIST,
@@ -366,6 +368,13 @@ impl JobRepository {
                 row.map(|row| job_from_postgres_row(&row)).transpose()
             }
         }
+    }
+
+    pub async fn apply_print_report(
+        &self,
+        input: ApplyPrintReport,
+    ) -> RepositoryResult<AppliedPrintReport> {
+        print_reports::apply_print_report(&self.database, input).await
     }
 }
 

@@ -162,10 +162,21 @@ Phase 5 adds tenant-scoped print dispatch while preserving the durable command l
 - Command acknowledgement/result events update both command and job state through repository-level transactions, so print job status cannot drift from its durable command status.
 - `succeeded` means dispatch work completed at the agent boundary. It does not mean the printer physically finished the print; MQTT report reconciliation remains a later phase.
 
+Phase 9 adds physical print reconciliation while preserving that Phase 5 dispatch contract:
+
+- The agent emits `PrintJobReport` events over the existing reverse gRPC stream. Reports include printer serial, optional job/artifact/subtask ids, active file names, `gcode_state`, progress percent, remaining minutes, layer counters, diagnostics, and an agent-observed RFC3339 timestamp.
+- The hub accepts report events only from the current live session token, rejects blank serials and invalid timestamps, trims optional strings, drops out-of-range transient metrics, and ignores stale replaced streams.
+- `jobs.status` and `command.status` remain dispatch lifecycle fields. Physical state is stored under `jobs.print_status`, `printer_state`, `progress_percent`, `remaining_time_minutes`, layer fields, active file, monotonic last progress/layer fields, `print_error`, and print lifecycle timestamps.
+- `GET /api/v1/tenants/{tenant_id}/jobs` and `GET /api/v1/tenants/{tenant_id}/jobs/{job_id}` include a nested `print` object with physical status, progress, layer, remaining-time, active-file, terminal error, and timestamps.
+- Reconciliation matches reports by exact job id first, artifact/subtask id second, then a same-printer active-file fallback for non-terminal jobs created in the last 24 hours. Ambiguous fallback does not update a job.
+- `machine_events` stores normalized `print_progress`, `print_terminal`, `print_error`, and `hms` diagnostics with replay-stable tenant-scoped event keys. Replayed terminal reports dedupe instead of creating duplicate completion/failure events.
+- `/api/v1/tenants/{tenant_id}/printer-events` now broadcasts future `job_progress` events with the same job response shape after a print report changes a job or inserts job-scoped machine events. It still does not provide durable replay; HTTP job list/detail remains the initial-state source.
+- SQLite and PostgreSQL migrations add equivalent job print-lifecycle columns, metric constraints, `machine_events`, and indexes. Repository hydration uses checked integer conversion for progress fields.
+
 Planned hub phases after Phase 7:
 
 - Phase 8 keeps hub behavior mostly unchanged while the agent gains real FTPS upload; hub command/job status still records dispatch success or failure.
-- Phase 9 adds physical print reconciliation, persistent progress fields, normalized machine events, and tenant WebSocket job progress broadcasts.
+- Phase 9 added physical print reconciliation, persistent progress fields, normalized machine events, and tenant WebSocket job progress broadcasts.
 - Phase 10 adds Clerk/Logto-compatible JWT verification, provider-subject-to-local-user mapping, and Pandar-owned tenant membership checks for HTTP and WebSocket auth.
 - Phase 11 adds first-user/bootstrap, tenant user/token management, explicit global admin/bootstrap boundaries, provisioning audit events, and identity linking flows.
 - Phase 12 completes the staged SeaORM repository migration while preserving SQLite/PostgreSQL behavior and existing SQLx schema migrations.
@@ -205,7 +216,7 @@ Phase 5 adds the `PrintProjectFile` command executor:
 Agent phase status after Phase 7:
 
 - Phase 8 added the real file-transfer runtime with implicit FTPS on port `990`, post-upload size verification, model/profile transport policy, and actionable upload diagnostics.
-- Phase 9 converts continuous MQTT reports into normalized job progress and terminal print events that can be correlated to hub jobs.
+- Phase 9 converts continuous MQTT reports into normalized job progress and terminal print events that can be correlated to hub jobs. Configured printers use a separate report MQTT client id from command transport so long-running subscriptions do not collide with command sessions.
 - Phase 13 adds LAN discovery, credential validation, printer diagnostics, and centralized compatibility rules for feature availability and transport policy.
 - Phase 14 promotes AMS, external-spool, tray-change, and filament usage data into stable Pandar models.
 
@@ -224,11 +235,11 @@ Agent phase status after Phase 7:
 - Job dispatch and command controls.
 - Operational settings for database-independent hub behavior.
 
-Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. The frontend does not consume the printer WebSocket yet; live subscription is left for a later phase after stronger auth and tenant selection are in place.
+Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. The frontend does not consume the printer WebSocket yet; live subscription is left for Phase 15 after stronger auth and tenant selection are in place.
 
 Planned frontend phases after Phase 7:
 
-- Phase 9 exposes live job progress and terminal print failure/success state once hub reconciliation exists.
+- Phase 9 exposes job progress and terminal print failure/success state from HTTP job history; hub live `job_progress` events are available for Phase 15 consumption.
 - Phase 10 integrates Clerk or Logto sign-in and forwards identity-provider bearer tokens to the Rust API.
 - Phase 11 adds provisioning, identity linking, and tenant token/user management screens.
 - Phase 13 exposes discovery and compatibility diagnostics.

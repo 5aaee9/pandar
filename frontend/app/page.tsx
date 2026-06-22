@@ -1,4 +1,5 @@
 import { DispatchForm } from './dispatch-form'
+import { formatLayers, formatProgress, formatRemaining } from './job-format'
 
 const apiUrl = process.env.APP_API_URL ?? 'http://localhost:8080'
 const apiToken = process.env.APP_API_TOKEN
@@ -48,6 +49,21 @@ type Job = {
   error: string | null
   created_at: string
   updated_at: string
+  print: {
+    status: string
+    printer_state: string | null
+    progress_percent: number | null
+    remaining_time_minutes: number | null
+    current_layer: number | null
+    total_layers: number | null
+    active_file: string | null
+    last_progress_percent: number | null
+    last_layer: number | null
+    error: string | null
+    started_at: string | null
+    finished_at: string | null
+    updated_at: string | null
+  }
   command: {
     id: string
     kind: string
@@ -281,8 +297,9 @@ export default async function Page({ searchParams }: PageProps) {
                     <th className="px-4 py-2">Job</th>
                     <th className="px-4 py-2">Artifact</th>
                     <th className="px-4 py-2">Printer</th>
-                    <th className="px-4 py-2">Command</th>
-                    <th className="px-4 py-2">Status</th>
+                    <th className="px-4 py-2">Dispatch</th>
+                    <th className="px-4 py-2">Print</th>
+                    <th className="px-4 py-2">Progress</th>
                     <th className="px-4 py-2">Created</th>
                   </tr>
                 </thead>
@@ -302,12 +319,28 @@ export default async function Page({ searchParams }: PageProps) {
                       <td className="px-4 py-3">
                         <div className="font-mono text-xs text-slate-700">{job.command.id}</div>
                         <div className="text-xs text-slate-600">{job.command.kind}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="rounded bg-slate-800 px-2 py-1 text-xs font-medium text-white">
+                        <span className="mt-1 inline-flex rounded bg-slate-800 px-2 py-1 text-xs font-medium text-white">
                           {job.status}
                         </span>
                         {job.error ? <div className="mt-1 text-xs text-red-700">{job.error}</div> : null}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="rounded bg-cyan-700 px-2 py-1 text-xs font-medium text-white">
+                          {job.print.status}
+                        </span>
+                        {job.print.printer_state ? (
+                          <div className="mt-1 text-xs text-slate-600">{job.print.printer_state}</div>
+                        ) : null}
+                        {job.print.error ? (
+                          <div className="mt-1 text-xs text-red-700">{job.print.error}</div>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700">
+                        <div>{formatProgress(job)}</div>
+                        <div className="text-xs text-slate-600">{formatLayers(job)}</div>
+                        <div className="text-xs text-slate-600">
+                          {formatRemaining(job.print.remaining_time_minutes)}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-slate-700">{formatDate(job.created_at)}</td>
                     </tr>

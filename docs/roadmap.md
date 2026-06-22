@@ -32,6 +32,7 @@
 - Added Phase 5 hub print artifacts/jobs persistence, tenant-scoped print job HTTP APIs, print command gRPC dispatch, command/job status coupling, agent artifact-root handling, frontend job history, and HTTP-only print dispatch form.
 - Added Phase 6 tenant API token authentication, tenant role authorization, audit events, WebSocket auth, frontend server-side token forwarding, and SQLite/PostgreSQL Docker Compose examples.
 - Added Phase 7 staged SeaORM 2.0 migration groundwork with SQLx 0.9 alignment, a shared SeaORM connection accessor, a hand-written `tenants` entity, and SeaORM-backed tenant repository operations.
+- Added Phase 9 print report reconciliation with agent MQTT `PrintJobReport` forwarding, hub-side physical print lifecycle persistence, normalized machine events, tenant `job_progress` WebSocket broadcasts, nested `job.print` HTTP responses, and frontend job progress display.
 
 ## Phase 1: Foundation
 
@@ -162,23 +163,24 @@ Exit criteria:
 
 Goal: make hub job state represent physical printer progress instead of only dispatch success.
 
-- Extend agent MQTT report normalization beyond the current snapshot path to emit print progress/job events.
-- Correlate reports to Pandar jobs using the `project_file` identity fields already sent by Phase 5 (`task_id`, `subtask_id`, artifact/job names) plus Bambu report fields such as `subtask_id`, `gcode_file`, and `subtask_name`.
-- Persist progress fields such as printer state, percent, remaining time, current layer, total layers, active file, last valid progress, and last valid layer.
-- Map `gcode_state` transitions to job state:
+- Completed agent MQTT report normalization beyond the snapshot path to emit `PrintJobReport` events while connected.
+- Completed correlation to Pandar jobs using exact job id, artifact/subtask id, and deterministic active-file fallback.
+- Completed persistence for printer state, percent, remaining time, current layer, total layers, active file, last valid progress, last valid layer, terminal errors, and normalized `machine_events` in both SQLite and PostgreSQL migrations.
+- Completed `gcode_state` transition mapping:
   - `RUNNING` means physical print started or resumed.
   - `FINISH` means completed.
   - `FAILED` means failed, including pre-print failures from preparation states.
   - `IDLE` after `RUNNING` means cancelled or aborted.
-- Capture `print_error` and HMS-style error fields as structured machine events for failure diagnostics.
-- Broadcast job progress over tenant WebSockets and update frontend job history/live printer views.
-- Keep dispatch lifecycle and physical print lifecycle separate in naming and persistence so command success cannot be confused with print completion.
+- Completed `print_error` and HMS-style structured machine event capture with replay-stable dedupe keys.
+- Completed tenant WebSocket `job_progress` broadcasts and nested HTTP `job.print` response fields.
+- Completed frontend job history display for dispatch state, physical print state, progress, layers, remaining time, and terminal reason.
+- Kept dispatch lifecycle and physical print lifecycle separate in naming and persistence so command success cannot be confused with print completion.
 
 Exit criteria:
 
-- A print job moves from queued/dispatching into running/completed/failed/cancelled from MQTT reports.
-- Hub restarts and agent reconnects can continue reconciling from the latest reports without duplicating completion events.
-- Frontend users can see live progress and terminal failure/success reasons for a tenant job.
+- A print job can move from queued/dispatching into running/completed/failed/cancelled from MQTT reports without changing dispatch status semantics.
+- Hub restarts and agent reconnects can continue reconciling from latest reports without duplicating terminal events or regressing terminal physical status.
+- Frontend users can see physical progress and terminal failure/success reasons for tenant jobs from HTTP job history. Browser live WebSocket consumption remains Phase 15; the authenticated hub `job_progress` WebSocket event already exists and is tested.
 
 ## Phase 10: External Identity Authentication
 
@@ -290,8 +292,6 @@ Exit criteria:
 
 ## Immediate Next
 
-- Start Phase 9 so print job state is driven by MQTT report reconciliation instead of dispatch result alone.
-- Keep Phase 9 scoped to physical print progress, completion, failure, and normalized machine events.
-- Do Phase 10 before browser-facing multi-tenant installs so Clerk/Logto users are authenticated by Rust and authorized through local tenant memberships.
+- Start Phase 10 before browser-facing multi-tenant installs so Clerk/Logto users are authenticated by Rust and authorized through local tenant memberships.
 - Do Phase 11 before exposing broader multi-tenant administration.
 - Continue SeaORM repository migration as Phase 12 after identity/provisioning/auth/audit boundaries are stable.

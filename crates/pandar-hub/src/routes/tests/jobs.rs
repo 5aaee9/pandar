@@ -40,6 +40,8 @@ async fn job_create_writes_artifact_queues_command_and_returns_created_job() {
 
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(body["status"], "queued");
+    assert_eq!(body["print"]["status"], "pending");
+    assert_eq!(body["print"]["progress_percent"], serde_json::Value::Null);
     assert_eq!(body["printer_id"], printer_id);
     assert_eq!(body["command"]["kind"], "print_project_file");
     assert_eq!(body["command"]["status"], "queued");
@@ -287,6 +289,7 @@ async fn job_list_and_detail_return_tenant_jobs() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(detail["id"], created["id"]);
     assert_eq!(detail["command"], created["command"]);
+    assert_eq!(detail["print"], created["print"]);
 }
 
 #[tokio::test]

@@ -10,7 +10,10 @@ pub use agents::AgentRepository;
 pub use audit::{AuditEvent, AuditEventRepository, RecordAuditEvent};
 pub use auth::{ApiToken, AuthRepository, AuthenticatedUser, User, UserRole};
 pub use commands::{CommandRepository, PrintProjectFilePayload};
-pub use jobs::{CreatePrintJob, JobRepository, JobWithArtifact};
+pub use jobs::{
+    AppliedPrintReport, ApplyPrintReport, CreatePrintJob, JobRepository, JobWithArtifact,
+    PrintReportDiagnostic,
+};
 pub use printers::{PrinterRepository, PrinterSnapshotUpsert};
 pub use tenants::TenantRepository;
 
@@ -48,6 +51,8 @@ pub enum RepositoryError {
     InvalidPersistedCommandStatus(String),
     #[error("invalid persisted job status: {0}")]
     InvalidPersistedJobStatus(String),
+    #[error("invalid persisted print status: {0}")]
+    InvalidPersistedPrintStatus(String),
     #[error("invalid persisted user role: {0}")]
     InvalidPersistedUserRole(String),
     #[error(transparent)]

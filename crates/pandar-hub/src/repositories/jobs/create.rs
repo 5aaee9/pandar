@@ -1,5 +1,7 @@
 use anyhow::Context;
-use pandar_core::{CommandId, Job, JobArtifact, JobArtifactParts, JobId, JobParts, JobStatus};
+use pandar_core::{
+    CommandId, Job, JobArtifact, JobArtifactParts, JobId, JobParts, JobStatus, PrintStatus,
+};
 use sqlx::Row;
 
 use crate::repositories::{
@@ -162,8 +164,8 @@ async fn insert_job_sqlite(
     now: &str,
 ) -> RepositoryResult<()> {
     sqlx::query(
-        "INSERT INTO jobs (id, tenant_id, printer_id, agent_id, artifact_id, command_id, status, error, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9)",
+        "INSERT INTO jobs (id, tenant_id, printer_id, agent_id, artifact_id, command_id, status, error, print_status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9, ?10)",
     )
     .bind(job_id.to_string())
     .bind(input.tenant_id.to_string())
@@ -172,6 +174,7 @@ async fn insert_job_sqlite(
     .bind(&input.artifact_id)
     .bind(command_id.to_string())
     .bind(JobStatus::Queued.as_str())
+    .bind(PrintStatus::Pending.as_str())
     .bind(now)
     .bind(now)
     .execute(executor)
@@ -188,8 +191,8 @@ async fn insert_job_postgres(
     now: &str,
 ) -> RepositoryResult<()> {
     sqlx::query(
-        "INSERT INTO jobs (id, tenant_id, printer_id, agent_id, artifact_id, command_id, status, error, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9)",
+        "INSERT INTO jobs (id, tenant_id, printer_id, agent_id, artifact_id, command_id, status, error, print_status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, $10)",
     )
     .bind(job_id.to_string())
     .bind(input.tenant_id.to_string())
@@ -198,6 +201,7 @@ async fn insert_job_postgres(
     .bind(&input.artifact_id)
     .bind(command_id.to_string())
     .bind(JobStatus::Queued.as_str())
+    .bind(PrintStatus::Pending.as_str())
     .bind(now)
     .bind(now)
     .execute(executor)
@@ -249,6 +253,19 @@ fn build_created_job(
             command_id,
             status: JobStatus::Queued.as_str().to_string(),
             error: None,
+            print_status: PrintStatus::Pending.as_str().to_string(),
+            printer_state: None,
+            progress_percent: None,
+            remaining_time_minutes: None,
+            current_layer: None,
+            total_layers: None,
+            active_file: None,
+            last_progress_percent: None,
+            last_layer: None,
+            print_error: None,
+            print_started_at: None,
+            print_finished_at: None,
+            print_updated_at: None,
             created_at: now.clone(),
             updated_at: now,
         })
