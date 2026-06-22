@@ -25,6 +25,7 @@
 - Added Phase 3 agent-local `PANDAR_PRINTERS` parsing with startup validation and no-network empty config behavior.
 - Added Phase 3 machine file-transfer boundary with FTPS-derived constants, request shapes, protected/clear mode policy, success-only cache behavior, and fake no-network tests.
 - Added Phase 4 hub printer inventory persistence, tenant-scoped printer HTTP APIs, refresh-printers command dispatch endpoint, future-only printer WebSocket events, and the read-only frontend operations dashboard.
+- Added Phase 5 hub print artifacts/jobs persistence, tenant-scoped print job HTTP APIs, print command gRPC dispatch, command/job status coupling, agent artifact-root handling, frontend job history, and HTTP-only print dispatch form.
 
 ## Phase 1: Foundation
 
@@ -95,13 +96,21 @@ Exit criteria:
 
 ## Phase 5: Print Dispatch
 
-- Model job artifacts in hub.
-- Send print requests from hub to agent through the command ledger.
-- Upload artifact from agent to printer file storage.
-- Verify uploaded artifact before print command.
-- Publish MQTT `project_file` with plate path, calibration flags, AMS mapping, and unique task identity.
-- Reconcile print start, progress, completion, failure, and cancellation from MQTT reports.
-- Add frontend job dispatch and job history views.
+- Completed `JobArtifact` and `Job` core domain models and protobuf `PrintProjectFile` command payload.
+- Completed SQLite and PostgreSQL migrations for `job_artifacts` and `jobs`.
+- Completed hub artifact spool storage with `PANDAR_SPOOL_DIR`, `PANDAR_MAX_ARTIFACT_BYTES`, filename sanitization, and scoped cleanup on repository failure.
+- Completed tenant-scoped print job HTTP APIs:
+  - `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs`
+  - `GET /api/v1/tenants/{tenant_id}/jobs`
+  - `GET /api/v1/tenants/{tenant_id}/jobs/{job_id}`
+- Completed atomic print job creation: artifact metadata, linked command, and job row commit together.
+- Completed print command dispatch over the existing agent reverse gRPC stream, including printer id, Bambu serial number, artifact metadata, and print options.
+- Completed command/job lifecycle coupling for print jobs through repository-level SQLite/PostgreSQL transactions.
+- Completed agent `PANDAR_ARTIFACT_ROOT` handling, safe relative artifact path resolution, missing-artifact failure reporting, and unknown-serial rejection before artifact I/O.
+- Completed configured agent gateway composition for uploading a project artifact through `MachineFileTransfer`, then publishing MQTT `project_file` with job identity and print flags; fake tests verify upload-before-publish and no-publish-on-upload-failure behavior without live Bambu sockets.
+- Completed frontend print job history, per-printer dispatch API visibility, and an HTTP-only dispatch form that posts base64 artifacts through the hub API.
+- Deferred real printer file-transfer runtime upload and upload verification; the default Phase 5 runtime adapter returns an explicit unavailable error after serial selection until the FTPS implementation is completed.
+- Deferred printer-report reconciliation for physical print progress/completion/failure to the next machine-runtime phase.
 
 ## Phase 6: Multi-Tenant Product Hardening
 
@@ -122,7 +131,7 @@ Exit criteria:
 
 ## Immediate Next
 
-- Begin Phase 5 print dispatch: model job artifacts and print jobs in the hub.
-- Add hub-to-agent print command variants through the existing command ledger.
-- Implement artifact upload through the existing machine file-transfer boundary before publishing MQTT `project_file`.
-- Reconcile print start, progress, completion, failure, and cancellation from printer reports.
+- Implement real agent-side FTPS upload and upload verification behind the existing file-transfer boundary.
+- Wire the real runtime FTPS adapter into the configured gateway path that already fake-tests MQTT `project_file` publishing.
+- Reconcile printer MQTT reports into print job progress, terminal success, and terminal failure state.
+- Add authenticated browser-side job creation and tenant/user authorization around the existing HTTP form.

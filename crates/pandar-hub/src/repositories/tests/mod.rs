@@ -1,4 +1,5 @@
 mod commands;
+mod jobs;
 mod phase1;
 mod postgres;
 mod printers;
@@ -6,8 +7,8 @@ mod printers;
 use pandar_core::{AgentId, CommandId, TenantId};
 
 use super::{
-    AgentRepository, CommandRepository, PrinterRepository, PrinterSnapshotUpsert, RepositoryError,
-    TenantRepository,
+    AgentRepository, CommandRepository, JobRepository, PrinterRepository, PrinterSnapshotUpsert,
+    RepositoryError, TenantRepository,
 };
 use crate::db::{Database, DatabaseConfig};
 
@@ -24,6 +25,7 @@ async fn repositories() -> (
     AgentRepository,
     PrinterRepository,
     CommandRepository,
+    JobRepository,
 ) {
     let database = sqlite_database().await;
     (
@@ -31,7 +33,8 @@ async fn repositories() -> (
         TenantRepository::new(database.clone()),
         AgentRepository::new(database.clone()),
         PrinterRepository::new(database.clone()),
-        CommandRepository::new(database),
+        CommandRepository::new(database.clone()),
+        JobRepository::new(database),
     )
 }
 
@@ -42,7 +45,7 @@ async fn command_repositories() -> (
     pandar_core::Tenant,
     pandar_core::Agent,
 ) {
-    let (_, tenants, agents, _, commands) = repositories().await;
+    let (_, tenants, agents, _, commands, _) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
     let agent = agents.create(tenant.id, "agent").await.unwrap();
     (tenants, agents, commands, tenant, agent)

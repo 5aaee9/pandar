@@ -1,0 +1,172 @@
+use std::time::Duration;
+
+use serde_json::json;
+
+use super::*;
+use crate::machine::{
+    file_transfer::{
+        FakeMachineFileTransfer, FileTransferRequest, TransferProtectionMode::ProtectedData,
+    },
+    mqtt::FakeMqttTransport,
+};
+
+fn endpoint(serial: &str) -> BambuPrinterEndpoint {
+    BambuPrinterEndpoint {
+        host: "192.0.2.10".to_string(),
+        serial: serial.to_string(),
+        access_code: "12345678".to_string(),
+        model: Some("A1 Mini".to_string()),
+        name: Some(format!("printer-{serial}")),
+    }
+}
+
+#[tokio::test]
+async fn noop_refresh_printers_returns_no_snapshots() {
+    let gateway = NoopMachineGateway;
+
+    assert_eq!(gateway.refresh_printers().await.unwrap(), Vec::new());
+}
+
+#[tokio::test]
+async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
+    let first = FakeMqttTransport::with_reports([json!({"print": {"state": "READY"}})]);
+    let second = FakeMqttTransport::with_reports([json!({"state": "IDLE"})]);
+    let first_endpoint = endpoint("SERIAL1");
+    let second_endpoint = endpoint("SERIAL2");
+    let gateway = ConfiguredBambuMachineGateway::new(
+        vec![
+            (first_endpoint.clone(), first.clone()),
+            (second_endpoint.clone(), second.clone()),
+        ],
+        Duration::from_secs(1),
+    );
+
+    let snapshots = gateway.refresh_printers().await.unwrap();
+
+    assert_eq!(
+        snapshots,
+        vec![
+            MachineSnapshot {
+                serial: "SERIAL1".to_string(),
+                name: "printer-SERIAL1".to_string(),
+                model: Some("A1 Mini".to_string()),
+                state: "READY".to_string(),
+            },
+            MachineSnapshot {
+                serial: "SERIAL2".to_string(),
+                name: "printer-SERIAL2".to_string(),
+                model: Some("A1 Mini".to_string()),
+                state: "IDLE".to_string(),
+            },
+        ]
+    );
+    assert_eq!(
+        first.subscriptions().await,
+        [format!("device/{}/report", first_endpoint.serial)]
+    );
+    assert_eq!(
+        second.subscriptions().await,
+        [format!("device/{}/report", second_endpoint.serial)]
+    );
+}
+
+#[tokio::test]
+async fn configured_print_project_file_uploads_and_publishes_project_file() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let endpoint = endpoint("SERIAL1");
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint.clone(), mqtt.clone(), transfer.clone())],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .print_project_file("SERIAL1", &print_project_file(), b"abc".to_vec())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        transfer.recorded_requests(),
+        vec![(ProtectedData, FileTransferRequest::upload("plate.3mf", 3))]
+    );
+    assert_eq!(
+        mqtt.published_commands().await,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: json!({
+                "print": {
+                    "command": "project_file",
+                    "sequence_id": "20000",
+                    "param": "Metadata/plate_1.gcode",
+                    "url": "ftp://plate.3mf",
+                    "file": "plate.3mf",
+                    "task_id": "job-1",
+                    "subtask_id": "artifact-1",
+                    "use_ams": true,
+                    "flow_cali": false,
+                    "timelapse": true
+                }
+            }),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn configured_print_project_file_does_not_publish_when_upload_fails() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::with_failures(true, true);
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer.clone())],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    let err = gateway
+        .print_project_file("SERIAL1", &print_project_file(), b"abc".to_vec())
+        .await
+        .unwrap_err();
+    let message = format!("{err:#}");
+
+    assert!(message.contains("upload print artifact to SERIAL1"));
+    assert!(message.contains("fake protected data failure"));
+    assert!(message.contains("fake clear data failure"));
+    assert!(mqtt.published_commands().await.is_empty());
+}
+
+#[tokio::test]
+async fn configured_print_project_file_unknown_serial_rejects_before_upload() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer.clone())],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    let err = gateway
+        .print_project_file("UNKNOWN", &print_project_file(), b"abc".to_vec())
+        .await
+        .unwrap_err();
+
+    assert!(format!("{err:#}").contains("UNKNOWN"));
+    assert!(transfer.recorded_requests().is_empty());
+    assert!(mqtt.published_commands().await.is_empty());
+}
+
+fn print_project_file() -> PrintProjectFile {
+    PrintProjectFile {
+        job_id: "job-1".to_string(),
+        artifact_id: "artifact-1".to_string(),
+        printer_id: "printer-1".to_string(),
+        serial_number: "SERIAL1".to_string(),
+        filename: "plate.3mf".to_string(),
+        storage_path: "tenant/artifact/plate.3mf".to_string(),
+        size_bytes: 3,
+        plate_id: 1,
+        use_ams: true,
+        flow_cali: false,
+        timelapse: true,
+    }
+}

@@ -21,7 +21,7 @@ fn snapshot(
 
 #[tokio::test]
 async fn printer_repository_upserts_and_lists_for_tenant() {
-    let (_, tenants, agents, printers, _) = repositories().await;
+    let (_, tenants, agents, printers, _, _) = repositories().await;
     let acme = tenants.create("acme", "Acme Labs").await.unwrap();
     let beta = tenants.create("beta", "Beta Labs").await.unwrap();
     let acme_agent = agents.create(acme.id, "agent").await.unwrap();
@@ -85,7 +85,7 @@ async fn printer_repository_upserts_and_lists_for_tenant() {
 
 #[tokio::test]
 async fn printer_repository_get_returns_none_for_unknown_printer() {
-    let (_, tenants, _, printers, _) = repositories().await;
+    let (_, tenants, _, printers, _, _) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
 
     assert_eq!(
@@ -99,7 +99,7 @@ async fn printer_repository_get_returns_none_for_unknown_printer() {
 
 #[tokio::test]
 async fn printer_repository_list_rejects_missing_tenant() {
-    let (_, _, _, printers, _) = repositories().await;
+    let (_, _, _, printers, _, _) = repositories().await;
 
     let err = printers.list_for_tenant(TenantId::new()).await.unwrap_err();
 
@@ -108,7 +108,7 @@ async fn printer_repository_list_rejects_missing_tenant() {
 
 #[tokio::test]
 async fn printer_repository_reassigns_serial_to_latest_agent() {
-    let (_, tenants, agents, printers, _) = repositories().await;
+    let (_, tenants, agents, printers, _, _) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
     let first_agent = agents.create(tenant.id, "first").await.unwrap();
     let second_agent = agents.create(tenant.id, "second").await.unwrap();
@@ -136,7 +136,7 @@ async fn printer_repository_reassigns_serial_to_latest_agent() {
 
 #[tokio::test]
 async fn printer_repository_rejects_missing_agent() {
-    let (_, tenants, agents, printers, _) = repositories().await;
+    let (_, tenants, agents, printers, _, _) = repositories().await;
     let acme = tenants.create("acme", "Acme Labs").await.unwrap();
     let beta = tenants.create("beta", "Beta Labs").await.unwrap();
     let beta_agent = agents.create(beta.id, "agent").await.unwrap();
@@ -165,7 +165,7 @@ async fn printer_repository_rejects_missing_agent() {
 
 #[tokio::test]
 async fn invalid_persisted_printer_status_is_reported_with_context() {
-    let (database, tenants, agents, printers, _) = repositories().await;
+    let (database, tenants, agents, printers, _, _) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
     let agent = agents.create(tenant.id, "agent").await.unwrap();
     let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)

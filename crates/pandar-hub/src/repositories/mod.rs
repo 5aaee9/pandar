@@ -1,10 +1,12 @@
 mod agents;
 mod commands;
+mod jobs;
 mod printers;
 mod tenants;
 
 pub use agents::AgentRepository;
-pub use commands::CommandRepository;
+pub use commands::{CommandRepository, PrintProjectFilePayload};
+pub use jobs::{CreatePrintJob, JobRepository, JobWithArtifact};
 pub use printers::{PrinterRepository, PrinterSnapshotUpsert};
 pub use tenants::TenantRepository;
 
@@ -20,8 +22,12 @@ pub enum RepositoryError {
     MissingTenant,
     #[error("agent not found")]
     MissingAgent,
+    #[error("printer not found")]
+    MissingPrinter,
     #[error("command not found")]
     MissingCommand,
+    #[error("job not found")]
+    MissingJob,
     #[error("command belongs to a different tenant or agent")]
     CommandOwnershipMismatch,
     #[error("cannot {action} command from {from}")]
@@ -30,6 +36,8 @@ pub enum RepositoryError {
     InvalidPersistedStatus(String),
     #[error("invalid persisted command status: {0}")]
     InvalidPersistedCommandStatus(String),
+    #[error("invalid persisted job status: {0}")]
+    InvalidPersistedJobStatus(String),
     #[error(transparent)]
     Database(#[from] anyhow::Error),
 }

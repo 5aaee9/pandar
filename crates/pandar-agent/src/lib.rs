@@ -50,6 +50,8 @@ pub struct AgentConfig {
     pub agent_version: String,
     #[arg(long, env = "PANDAR_PRINTERS", default_value = "[]")]
     pub printers: String,
+    #[arg(long, env = "PANDAR_ARTIFACT_ROOT", default_value = ".")]
+    pub artifact_root: std::path::PathBuf,
 }
 
 pub fn startup_summary(config: &AgentConfig) -> String {
@@ -248,6 +250,7 @@ mod tests {
             config.printers,
             r#"[{"host":"192.0.2.10","serial":"SERIAL","access_code":"12345678"}]"#
         );
+        assert_eq!(config.artifact_root, std::path::PathBuf::from("."));
     }
 
     #[test]
@@ -272,6 +275,7 @@ mod tests {
             tenant_id: "tenant-id".to_owned(),
             agent_version: env!("CARGO_PKG_VERSION").to_owned(),
             printers: "[]".to_owned(),
+            artifact_root: ".".into(),
         };
 
         assert_eq!(
@@ -343,6 +347,7 @@ mod tests {
             tenant_id: "tenant-id".to_owned(),
             agent_version: "9.8.7".to_owned(),
             printers: "[]".to_owned(),
+            artifact_root: ".".into(),
         }
     }
 }

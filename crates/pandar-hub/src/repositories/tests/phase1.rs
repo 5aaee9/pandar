@@ -13,7 +13,15 @@ async fn sqlite_migrations_create_phase_1_schema() {
         panic!("expected SQLite database");
     };
 
-    for table in ["tenants", "users", "agents", "printers", "commands"] {
+    for table in [
+        "tenants",
+        "users",
+        "agents",
+        "printers",
+        "commands",
+        "job_artifacts",
+        "jobs",
+    ] {
         let count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
         )
@@ -47,11 +55,19 @@ async fn sqlite_migrations_create_phase_1_schema() {
             .await
             .unwrap();
     assert_eq!(printer_last_seen_count, 1);
+
+    let jobs_command_id_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM pragma_table_info('jobs') WHERE name = ?1")
+            .bind("command_id")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(jobs_command_id_count, 1);
 }
 
 #[tokio::test]
 async fn tenant_create_list_and_count_work() {
-    let (_, tenants, _, _, _) = repositories().await;
+    let (_, tenants, _, _, _, _) = repositories().await;
 
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
     assert_eq!(tenant.slug, "acme");
@@ -61,7 +77,7 @@ async fn tenant_create_list_and_count_work() {
 
 #[tokio::test]
 async fn duplicate_tenant_slug_is_rejected() {
-    let (_, tenants, _, _, _) = repositories().await;
+    let (_, tenants, _, _, _, _) = repositories().await;
 
     tenants.create("acme", "Acme Labs").await.unwrap();
     let err = tenants.create("acme", "Acme Again").await.unwrap_err();
@@ -71,7 +87,7 @@ async fn duplicate_tenant_slug_is_rejected() {
 
 #[tokio::test]
 async fn agent_create_and_list_are_scoped_to_tenant() {
-    let (_, tenants, agents, _, _) = repositories().await;
+    let (_, tenants, agents, _, _, _) = repositories().await;
     let acme = tenants.create("acme", "Acme Labs").await.unwrap();
     let beta = tenants.create("beta", "Beta Labs").await.unwrap();
 
@@ -87,7 +103,7 @@ async fn agent_create_and_list_are_scoped_to_tenant() {
 
 #[tokio::test]
 async fn duplicate_agent_name_is_rejected_within_tenant() {
-    let (_, tenants, agents, _, _) = repositories().await;
+    let (_, tenants, agents, _, _, _) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
 
     agents.create(tenant.id, "shop-floor").await.unwrap();
@@ -98,7 +114,7 @@ async fn duplicate_agent_name_is_rejected_within_tenant() {
 
 #[tokio::test]
 async fn missing_tenant_is_reported_for_agent_create_and_list() {
-    let (_, _, agents, _, _) = repositories().await;
+    let (_, _, agents, _, _, _) = repositories().await;
     let missing = TenantId::new();
 
     let create_err = agents.create(missing, "agent").await.unwrap_err();
@@ -131,7 +147,7 @@ async fn invalid_persisted_agent_status_is_reported() {
 
 #[tokio::test]
 async fn agent_get_update_connection_and_mark_offline_work() {
-    let (_, tenants, agents, _, _) = repositories().await;
+    let (_, tenants, agents, _, _, _) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
     let agent = agents.create(tenant.id, "agent").await.unwrap();
 
@@ -157,7 +173,7 @@ async fn agent_get_update_connection_and_mark_offline_work() {
 
 #[tokio::test]
 async fn summary_counts_include_printer_and_command_fixtures() {
-    let (database, tenants, agents, printers, commands) = repositories().await;
+    let (database, tenants, agents, printers, commands, _) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
     let agent = agents.create(tenant.id, "agent").await.unwrap();
     let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)
@@ -201,7 +217,7 @@ async fn file_sqlite_records_survive_reconnect() {
 
 #[tokio::test]
 async fn sqlite_memory_keeps_migrations_and_queries_on_same_database() {
-    let (database, tenants, _, _, _) = repositories().await;
+    let (database, tenants, _, _, _, _) = repositories().await;
 
     assert_eq!(database.backend(), DatabaseBackend::Sqlite);
     tenants.create("acme", "Acme Labs").await.unwrap();

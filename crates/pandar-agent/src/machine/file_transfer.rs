@@ -192,7 +192,7 @@ impl FakeMachineFileTransfer {
         }
     }
 
-    fn recorded_requests(&self) -> Vec<(TransferProtectionMode, FileTransferRequest)> {
+    pub(crate) fn recorded_requests(&self) -> Vec<(TransferProtectionMode, FileTransferRequest)> {
         self.state.lock().unwrap().recorded.clone()
     }
 

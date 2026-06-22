@@ -1,11 +1,15 @@
-use anyhow::Context;
+use std::path::{Component, Path, PathBuf};
+
+use anyhow::{Context, bail};
+use async_trait::async_trait;
 use tokio::sync::mpsc;
 
 use crate::{
     AgentConfig,
     machine::{BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot},
     protocol::agent::v1::{
-        AgentEvent, CommandAck, CommandResult, PrinterSnapshot, agent_event, hub_command,
+        AgentEvent, CommandAck, CommandResult, PrintProjectFile, PrinterSnapshot, agent_event,
+        hub_command,
     },
 };
 
@@ -44,22 +48,87 @@ pub async fn handle_command_with_gateway<G>(
 where
     G: BambuMachineGateway,
 {
+    let artifact_reader = FilesystemArtifactReader::new(config.artifact_root.clone());
+    handle_command_with_reader(config, gateway, &artifact_reader, sender, command).await
+}
+
+pub async fn handle_command_with_reader<G, R>(
+    config: &AgentConfig,
+    gateway: &G,
+    artifact_reader: &R,
+    sender: &mpsc::Sender<AgentEvent>,
+    command: crate::protocol::agent::v1::HubCommand,
+) -> anyhow::Result<()>
+where
+    G: BambuMachineGateway,
+    R: ArtifactReader,
+{
     match command.command {
         Some(hub_command::Command::RefreshPrinters(_)) => {
             emit_refresh_printers_events(config, gateway, sender, &command.command_id).await
+        }
+        Some(hub_command::Command::PrintProjectFile(print)) => {
+            emit_print_project_file_events(
+                config,
+                gateway,
+                artifact_reader,
+                sender,
+                &command.command_id,
+                print,
+            )
+            .await
         }
         None => Ok(()),
     }
 }
 
+#[async_trait]
+pub trait ArtifactReader: Send + Sync {
+    async fn read_artifact(&self, storage_path: &str) -> anyhow::Result<Vec<u8>>;
+}
+
+pub struct FilesystemArtifactReader {
+    root: PathBuf,
+}
+
+impl FilesystemArtifactReader {
+    pub fn new(root: impl Into<PathBuf>) -> Self {
+        Self { root: root.into() }
+    }
+}
+
+#[async_trait]
+impl ArtifactReader for FilesystemArtifactReader {
+    async fn read_artifact(&self, storage_path: &str) -> anyhow::Result<Vec<u8>> {
+        let artifact_path = resolve_artifact_path(&self.root, storage_path)?;
+        tokio::task::spawn_blocking(move || std::fs::read(&artifact_path))
+            .await
+            .context("join print artifact read task")?
+            .with_context(|| format!("read print artifact {storage_path}"))
+    }
+}
+
 pub fn ack_event(config: &AgentConfig, command_id: &str) -> AgentEvent {
+    command_ack_event(config, command_id, true, String::new())
+}
+
+fn rejected_ack_event(config: &AgentConfig, command_id: &str, error: String) -> AgentEvent {
+    command_ack_event(config, command_id, false, error)
+}
+
+fn command_ack_event(
+    config: &AgentConfig,
+    command_id: &str,
+    accepted: bool,
+    error: String,
+) -> AgentEvent {
     event(
         config,
         "ack",
         agent_event::Event::CommandAck(CommandAck {
             command_id: command_id.to_owned(),
-            accepted: true,
-            error: String::new(),
+            accepted,
+            error,
         }),
     )
 }
@@ -138,6 +207,76 @@ where
     }
 
     Ok(())
+}
+
+async fn emit_print_project_file_events<G, R>(
+    config: &AgentConfig,
+    gateway: &G,
+    artifact_reader: &R,
+    sender: &mpsc::Sender<AgentEvent>,
+    command_id: &str,
+    command: PrintProjectFile,
+) -> anyhow::Result<()>
+where
+    G: BambuMachineGateway,
+    R: ArtifactReader,
+{
+    if let Err(err) = gateway.validate_printer(&command.serial_number).await {
+        sender
+            .send(rejected_ack_event(config, command_id, format!("{err:#}")))
+            .await
+            .context("queue print-project-file rejected ack")?;
+        return Ok(());
+    }
+
+    sender
+        .send(ack_event(config, command_id))
+        .await
+        .context("queue print-project-file command ack")?;
+
+    let result = async {
+        let artifact = artifact_reader
+            .read_artifact(&command.storage_path)
+            .await
+            .with_context(|| format!("read print artifact {}", command.storage_path))?;
+        gateway
+            .print_project_file(&command.serial_number, &command, artifact)
+            .await
+            .with_context(|| format!("dispatch print job {}", command.job_id))
+    }
+    .await;
+
+    match result {
+        Ok(()) => {
+            sender
+                .send(success_event(config, command_id))
+                .await
+                .context("queue print-project-file command success")?;
+        }
+        Err(err) => {
+            sender
+                .send(failure_event(config, command_id, format!("{err:#}")))
+                .await
+                .context("queue print-project-file command failure")?;
+        }
+    }
+
+    Ok(())
+}
+
+fn resolve_artifact_path(root: &Path, storage_path: &str) -> anyhow::Result<PathBuf> {
+    let storage_path = Path::new(storage_path);
+    if storage_path.is_absolute() {
+        bail!("artifact storage path must be relative");
+    }
+    if storage_path
+        .components()
+        .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        bail!("artifact storage path must not contain parent or prefix components");
+    }
+
+    Ok(root.join(storage_path))
 }
 
 fn event(config: &AgentConfig, event_id: &str, event: agent_event::Event) -> AgentEvent {

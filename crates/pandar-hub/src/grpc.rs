@@ -1,21 +1,25 @@
 use std::pin::Pin;
 
-use pandar_core::{AgentId, AgentStatus, CommandId, CommandRecord, TenantId};
+use pandar_core::{AgentId, AgentStatus, TenantId};
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
 use tonic::{Request, Response, Status};
 
 use crate::{
     AppState,
+    grpc::commands::{
+        handle_ack_and_job, handle_result_and_job, hub_command_from_record, mark_sent_and_job,
+        parse_command_id, repository_status,
+    },
     grpc::printer_snapshots::handle_snapshot,
     protocol::agent::v1::{
-        AgentEvent, AgentHello, CommandAck, CommandResult, HubCommand, RefreshPrinters,
-        agent_control_server::AgentControl, agent_event, hub_command,
+        AgentEvent, AgentHello, CommandAck, CommandResult, HubCommand,
+        agent_control_server::AgentControl, agent_event,
     },
-    repositories::RepositoryError,
     sessions::{AgentSession, SessionToken},
 };
 
+pub mod commands;
 pub mod printer_snapshots;
 #[cfg(test)]
 mod tests;
@@ -242,18 +246,15 @@ async fn handle_ack(
     ack: CommandAck,
 ) -> Result<(), Status> {
     let command_id = parse_command_id(&ack.command_id)?;
-    let result = if ack.accepted {
-        state
-            .commands()
-            .mark_acknowledged(command_id, tenant_id, agent_id)
-            .await
-    } else {
-        state
-            .commands()
-            .mark_failed(command_id, tenant_id, agent_id, ack.error)
-            .await
-    };
-    result.map(|_| ()).map_err(repository_status)
+    handle_ack_and_job(
+        state,
+        tenant_id,
+        agent_id,
+        command_id,
+        ack.accepted,
+        ack.error,
+    )
+    .await
 }
 
 async fn handle_result(
@@ -263,18 +264,15 @@ async fn handle_result(
     result: CommandResult,
 ) -> Result<(), Status> {
     let command_id = parse_command_id(&result.command_id)?;
-    let result = if result.success {
-        state
-            .commands()
-            .mark_succeeded(command_id, tenant_id, agent_id)
-            .await
-    } else {
-        state
-            .commands()
-            .mark_failed(command_id, tenant_id, agent_id, result.error)
-            .await
-    };
-    result.map(|_| ()).map_err(repository_status)
+    handle_result_and_job(
+        state,
+        tenant_id,
+        agent_id,
+        command_id,
+        result.success,
+        result.error,
+    )
+    .await
 }
 
 fn spawn_outbound_pump(
@@ -334,17 +332,18 @@ async fn drain_commands(
         let command = match tokio::select! {
             biased;
             Some(()) = close_receiver.recv() => return false,
-            command = state.commands().mark_sent(command.id, tenant_id, agent_id) => command,
+            command = mark_sent_and_job(state, command, tenant_id, agent_id) => command,
         } {
             Ok(command) => command,
-            Err(err) => return send_error(command_sender, repository_status(err)).await,
+            Err(err) => return send_error(command_sender, err).await,
         };
 
-        if command_sender
-            .send(Ok(refresh_command(command)))
-            .await
-            .is_err()
-        {
+        let command = match hub_command_from_record(command) {
+            Ok(command) => command,
+            Err(err) => return send_error(command_sender, err).await,
+        };
+
+        if command_sender.send(Ok(command)).await.is_err() {
             return false;
         }
     }
@@ -357,35 +356,8 @@ async fn send_error(
     command_sender.send(Err(status)).await.is_ok()
 }
 
-fn refresh_command(command: CommandRecord) -> HubCommand {
-    HubCommand {
-        command_id: command.id.to_string(),
-        command: Some(hub_command::Command::RefreshPrinters(RefreshPrinters {})),
-    }
-}
-
-fn parse_command_id(command_id: &str) -> Result<CommandId, Status> {
-    CommandId::parse(command_id).map_err(|_| Status::invalid_argument("command_id must be a UUID"))
-}
-
 fn validate_rfc3339(value: &str) -> Result<(), Status> {
     time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
         .map(|_| ())
         .map_err(|_| Status::invalid_argument("timestamp must be RFC3339"))
-}
-
-fn repository_status(err: RepositoryError) -> Status {
-    match err {
-        RepositoryError::MissingAgent | RepositoryError::MissingCommand => {
-            Status::not_found(err.to_string())
-        }
-        RepositoryError::CommandOwnershipMismatch => Status::permission_denied(err.to_string()),
-        RepositoryError::InvalidCommandTransition { .. } => {
-            Status::failed_precondition(err.to_string())
-        }
-        err => {
-            tracing::error!(error = %format!("{err:#}"), "unexpected repository error");
-            Status::internal("unexpected repository error")
-        }
-    }
 }

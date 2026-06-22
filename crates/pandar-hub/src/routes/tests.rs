@@ -8,6 +8,7 @@ use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+mod jobs;
 mod printers;
 
 async fn state() -> AppState {

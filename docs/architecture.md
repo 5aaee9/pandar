@@ -110,6 +110,16 @@ Phase 4 adds tenant-scoped printer inventory and state:
 - `POST /api/v1/tenants/{tenant_id}/agents/{agent_id}/refresh-printers` writes a durable refresh command before dispatching it to the live agent session.
 - `GET /api/v1/tenants/{tenant_id}/printer-events` broadcasts future printer snapshot updates over an in-memory tenant WebSocket channel. It does not replay historical state; HTTP listing remains the initial-state source.
 
+Phase 5 adds tenant-scoped print dispatch while preserving the durable command ledger:
+
+- `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs` accepts a base64 project artifact plus print options, writes the artifact into the hub spool, then creates artifact metadata, a linked print command, and a job row in one backend-neutral SQLite/PostgreSQL transaction.
+- `GET /api/v1/tenants/{tenant_id}/jobs` and `GET /api/v1/tenants/{tenant_id}/jobs/{job_id}` expose tenant-scoped job history and command status.
+- `PANDAR_SPOOL_DIR` controls the hub artifact root and defaults to `pandar-spool`; `PANDAR_MAX_ARTIFACT_BYTES` controls decoded artifact size and defaults to `10485760`.
+- The hub sends `PrintProjectFile` over the existing reverse gRPC stream with job id, artifact id, printer id, Bambu serial number, artifact metadata, plate id, AMS, flow calibration, and timelapse flags.
+- Print job creation is not exposed as a standalone command enqueue path. Print commands are created only with their linked job and artifact metadata.
+- Command acknowledgement/result events update both command and job state through repository-level transactions, so print job status cannot drift from its durable command status.
+- `succeeded` means dispatch work completed at the agent boundary. It does not mean the printer physically finished the print; MQTT report reconciliation remains a later phase.
+
 ### pandar-agent
 
 - gRPC client that keeps a long-lived reverse session to `pandar-hub`.
@@ -133,6 +143,15 @@ Phase 3 adds the agent-side machine transport boundary:
 
 Phase 4 carries configured printer model values into normalized snapshots. `RefreshPrinters` remains the explicit snapshot path: empty printer config stays no-network, configured printers publish `pushall`, one report is normalized, and the hub persists the latest state plus broadcasts a tenant event.
 
+Phase 5 adds the `PrintProjectFile` command executor:
+
+- `PANDAR_ARTIFACT_ROOT` controls where the agent reads hub-spooled artifacts and defaults to the current directory.
+- The agent validates the requested Bambu serial against configured printers before resolving or reading artifact paths.
+- Artifact storage paths must be relative paths below `PANDAR_ARTIFACT_ROOT`; absolute paths, `..`, and prefix escapes are rejected.
+- The configured machine gateway composes machine file upload and MQTT `project_file` publish in order. It uploads the artifact filename through the file-transfer boundary, then publishes to `device/{serial}/request` with QoS `1`, `ftp://{filename}`, `Metadata/plate_{plate_id}.gcode`, job/subtask ids, and print flags.
+- Unit tests use fake file-transfer and MQTT transports to prove upload-before-publish behavior and no-publish-on-upload-failure behavior without opening real Bambu sockets.
+- The default runtime file-transfer adapter still returns `Bambu FTPS runtime is not implemented in this phase`; deployments must share hub spool and agent artifact roots for the filesystem artifact reader, but live printer upload awaits the next runtime implementation phase.
+
 ### pandar-core
 
 - IDs and domain records: tenant, user, agent, printer, job, command.
@@ -148,7 +167,7 @@ Phase 4 carries configured printer model values into normalized snapshots. `Refr
 - Job dispatch and command controls.
 - Operational settings for database-independent hub behavior.
 
-Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. The frontend does not consume the printer WebSocket yet; live subscription is left for a later phase after stronger auth and tenant selection are in place.
+Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. The frontend does not consume the printer WebSocket yet; live subscription is left for a later phase after stronger auth and tenant selection are in place.
 
 ## Data Model Draft
 

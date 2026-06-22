@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 anyhow.workspace = true
 axum.workspace = true
+base64.workspace = true
 pandar-core.workspace = true
 prost.workspace = true
 serde.workspace = true

@@ -1,16 +1,34 @@
 use anyhow::Context;
 use pandar_core::{AgentId, CommandId, CommandRecord, CommandStatus, TenantId};
-use sqlx::Row;
+use serde::{Deserialize, Serialize};
 
-mod rows;
+pub mod inserts;
+mod ownership;
+pub(crate) mod rows;
 mod transitions;
 
+use inserts::InsertCommand;
 use rows::command_from_row;
 
 use crate::{
     db::Database,
     repositories::{RepositoryError, RepositoryResult},
 };
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrintProjectFilePayload {
+    pub job_id: String,
+    pub artifact_id: String,
+    pub printer_id: String,
+    pub serial_number: String,
+    pub filename: String,
+    pub storage_path: String,
+    pub size_bytes: u64,
+    pub plate_id: u32,
+    pub use_ams: bool,
+    pub flow_cali: bool,
+    pub timelapse: bool,
+}
 
 #[derive(Debug, Clone)]
 pub struct CommandRepository {
@@ -45,47 +63,57 @@ impl CommandRepository {
         tenant_id: TenantId,
         agent_id: AgentId,
     ) -> RepositoryResult<CommandRecord> {
-        self.verify_agent_owner(tenant_id, agent_id).await?;
+        ownership::verify_agent_owner(&self.database, tenant_id, agent_id).await?;
 
         let id = CommandId::new();
         let now = pandar_core::created_at_now();
-        let result = match &self.database {
-            Database::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO commands (id, tenant_id, agent_id, printer_id, kind, status, payload_json, error, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, NULL, ?4, ?5, ?6, NULL, ?7, ?8)",
-                )
-                .bind(id.to_string())
-                .bind(tenant_id.to_string())
-                .bind(agent_id.to_string())
-                .bind("refresh_printers")
-                .bind(CommandStatus::Queued.as_str())
-                .bind("{}")
-                .bind(&now)
-                .bind(&now)
-                .execute(pool)
-                .await
-                .map(|_| ())
-            }
-            Database::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO commands (id, tenant_id, agent_id, printer_id, kind, status, payload_json, error, created_at, updated_at)
-                     VALUES ($1, $2, $3, NULL, $4, $5, $6, NULL, $7, $8)",
-                )
-                .bind(id.to_string())
-                .bind(tenant_id.to_string())
-                .bind(agent_id.to_string())
-                .bind("refresh_printers")
-                .bind(CommandStatus::Queued.as_str())
-                .bind("{}")
-                .bind(&now)
-                .bind(&now)
-                .execute(pool)
-                .await
-                .map(|_| ())
-            }
-        };
-        result.context("failed to enqueue refresh printers command")?;
+        inserts::insert(
+            &self.database,
+            InsertCommand {
+                id,
+                tenant_id,
+                agent_id,
+                printer_id: None,
+                kind: "refresh_printers",
+                payload_json: "{}",
+                created_at: &now,
+            },
+        )
+        .await
+        .context("failed to enqueue refresh printers command")?;
+
+        self.get(id).await?.ok_or(RepositoryError::MissingCommand)
+    }
+
+    pub async fn enqueue_print_project_file(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        printer_id: &str,
+        payload: PrintProjectFilePayload,
+    ) -> RepositoryResult<CommandRecord> {
+        ownership::verify_agent_owner(&self.database, tenant_id, agent_id).await?;
+        ownership::printer_serial_for_agent(&self.database, tenant_id, agent_id, printer_id)
+            .await?;
+
+        let id = CommandId::new();
+        let now = pandar_core::created_at_now();
+        let payload_json =
+            serde_json::to_string(&payload).context("failed to serialize print command payload")?;
+        inserts::insert(
+            &self.database,
+            InsertCommand {
+                id,
+                tenant_id,
+                agent_id,
+                printer_id: Some(printer_id),
+                kind: "print_project_file",
+                payload_json: &payload_json,
+                created_at: &now,
+            },
+        )
+        .await
+        .context("failed to enqueue print project file command")?;
 
         self.get(id).await?.ok_or(RepositoryError::MissingCommand)
     }
@@ -267,7 +295,7 @@ impl CommandRepository {
         Err(invalid_transition(command.status, action))
     }
 
-    async fn load_owned(
+    pub(crate) async fn load_owned(
         &self,
         command_id: CommandId,
         tenant_id: TenantId,
@@ -311,41 +339,6 @@ impl CommandRepository {
                 row.map(command_from_row).transpose()
             }
         }
-    }
-
-    async fn verify_agent_owner(
-        &self,
-        tenant_id: TenantId,
-        agent_id: AgentId,
-    ) -> RepositoryResult<()> {
-        let persisted_tenant_id = match &self.database {
-            Database::Sqlite(pool) => {
-                let row = sqlx::query("SELECT tenant_id FROM agents WHERE id = ?1")
-                    .bind(agent_id.to_string())
-                    .fetch_optional(pool)
-                    .await
-                    .context("failed to verify SQLite command agent ownership")?;
-                row.map(|row| row.get::<String, _>("tenant_id"))
-            }
-            Database::Postgres(pool) => {
-                let row = sqlx::query("SELECT tenant_id FROM agents WHERE id = $1")
-                    .bind(agent_id.to_string())
-                    .fetch_optional(pool)
-                    .await
-                    .context("failed to verify PostgreSQL command agent ownership")?;
-                row.map(|row| row.get::<String, _>("tenant_id"))
-            }
-        };
-
-        let Some(persisted_tenant_id) = persisted_tenant_id else {
-            return Err(RepositoryError::MissingAgent);
-        };
-
-        if persisted_tenant_id != tenant_id.to_string() {
-            return Err(RepositoryError::CommandOwnershipMismatch);
-        }
-
-        Ok(())
     }
 }
 

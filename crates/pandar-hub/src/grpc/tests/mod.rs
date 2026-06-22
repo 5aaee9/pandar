@@ -8,6 +8,7 @@ use crate::protocol::agent::v1::{AgentHeartbeat, agent_event, hub_command};
 
 mod commands;
 mod lifecycle;
+mod print_jobs;
 mod printer_snapshots;
 
 #[tokio::test]

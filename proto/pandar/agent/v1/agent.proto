@@ -51,7 +51,22 @@ message HubCommand {
   string command_id = 1;
   oneof command {
     RefreshPrinters refresh_printers = 10;
+    PrintProjectFile print_project_file = 11;
   }
 }
 
 message RefreshPrinters {}
+
+message PrintProjectFile {
+  string job_id = 1;
+  string artifact_id = 2;
+  string printer_id = 3;
+  string serial_number = 4;
+  string filename = 5;
+  string storage_path = 6;
+  uint64 size_bytes = 7;
+  uint32 plate_id = 8;
+  bool use_ams = 9;
+  bool flow_cali = 10;
+  bool timelapse = 11;
+}

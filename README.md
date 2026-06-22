@@ -66,6 +66,18 @@ Phase 4 adds hub-owned printer inventory/state APIs:
 
 The frontend reads the hub through `APP_API_URL`, defaulting to `http://localhost:8080` when unset. Its Phase 4 dashboard uses HTTP only and fetches summary, tenants, and the first tenant's printers with uncached server-side requests.
 
+Phase 5 adds tenant-scoped print dispatch:
+
+- `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs` accepts `filename`, `content_type`, `artifact_base64`, `plate_id`, `use_ams`, `flow_cali`, and `timelapse`, then creates an artifact, linked command, and job transactionally.
+- `GET /api/v1/tenants/{tenant_id}/jobs` lists tenant print jobs.
+- `GET /api/v1/tenants/{tenant_id}/jobs/{job_id}` returns one tenant-scoped print job.
+
+`pandar-hub` writes uploaded artifacts under `PANDAR_SPOOL_DIR`, defaulting to `pandar-spool`, and rejects decoded artifacts larger than `PANDAR_MAX_ARTIFACT_BYTES`, defaulting to `10485760`. `pandar-agent` reads job artifacts from `PANDAR_ARTIFACT_ROOT`, defaulting to the current directory, plus the hub-provided relative storage path. In local deployments the hub spool root and agent artifact root must point at the same shared filesystem path or print dispatch fails when the agent reads the artifact.
+
+Print job `succeeded` currently means the agent accepted the command path and completed dispatch work, not that the physical printer finished printing. Physical progress and terminal printer outcome still require later MQTT report reconciliation. The default runtime machine gateway validates configured serials but returns an explicit unavailable error for real FTPS upload until the machine file-transfer runtime is implemented; fake tests cover the upload plus MQTT `project_file` composition boundary.
+
+The frontend includes an HTTP-only print dispatch form for the selected tenant's reported printers. It posts through the Rust hub API using `APP_API_URL`; `APP_BASE_URL` remains the frontend's public URL for deployment wiring.
+
 ```bash
 cargo fmt
 cargo clippy --workspace

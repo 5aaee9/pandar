@@ -1,5 +1,6 @@
 use axum::{
     Json, Router,
+    extract::DefaultBodyLimit,
     extract::rejection::JsonRejection,
     extract::{Path, State},
     http::StatusCode,
@@ -11,10 +12,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AppState, repositories::RepositoryError};
 
+mod jobs;
 mod printer_events;
 mod printers;
 
 pub fn router(state: AppState) -> Router {
+    let body_limit = state
+        .job_storage()
+        .max_artifact_bytes()
+        .saturating_mul(2)
+        .saturating_add(4096);
+
     Router::new()
         .route("/healthz", get(healthz))
         .route("/api/v1/summary", get(summary))
@@ -32,6 +40,15 @@ pub fn router(state: AppState) -> Router {
             get(printers::get_printer),
         )
         .route(
+            "/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs",
+            post(jobs::create_job),
+        )
+        .route("/api/v1/tenants/{tenant_id}/jobs", get(jobs::list_jobs))
+        .route(
+            "/api/v1/tenants/{tenant_id}/jobs/{job_id}",
+            get(jobs::get_job),
+        )
+        .route(
             "/api/v1/tenants/{tenant_id}/agents/{agent_id}/refresh-printers",
             post(printers::refresh_printers),
         )
@@ -39,6 +56,7 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/tenants/{tenant_id}/printer-events",
             get(printer_events::printer_events),
         )
+        .layer(DefaultBodyLimit::max(body_limit))
         .with_state(state)
 }
 
@@ -235,6 +253,10 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::MissingCommand => {
                 Self::new(StatusCode::NOT_FOUND, "command_not_found")
             }
+            RepositoryError::MissingPrinter => {
+                Self::new(StatusCode::NOT_FOUND, "printer_not_found")
+            }
+            RepositoryError::MissingJob => Self::new(StatusCode::NOT_FOUND, "job_not_found"),
             RepositoryError::CommandOwnershipMismatch => {
                 Self::new(StatusCode::FORBIDDEN, "command_ownership_mismatch")
             }
@@ -247,6 +269,10 @@ impl From<RepositoryError> for ApiError {
             }
             RepositoryError::InvalidPersistedCommandStatus(status) => {
                 tracing::error!(%status, "invalid persisted command status");
+                Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
+            }
+            RepositoryError::InvalidPersistedJobStatus(status) => {
+                tracing::error!(%status, "invalid persisted job status");
                 Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
             }
             RepositoryError::Database(err) => {

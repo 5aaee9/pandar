@@ -1,3 +1,5 @@
+mod print;
+
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -200,7 +202,7 @@ fn refresh_command(command_id: String) -> HubCommand {
     }
 }
 
-fn test_config() -> AgentConfig {
+pub(super) fn test_config() -> AgentConfig {
     AgentConfig {
         hub_grpc_url: "http://hub.internal:50051".to_owned(),
         agent_name: "garage".to_owned(),
@@ -208,6 +210,7 @@ fn test_config() -> AgentConfig {
         tenant_id: "tenant-id".to_owned(),
         agent_version: "9.8.7".to_owned(),
         printers: "[]".to_owned(),
+        artifact_root: ".".into(),
     }
 }
 
@@ -231,6 +234,17 @@ fn assert_snapshot(event: AgentEvent, serial: &str, name: &str, model: &str, sta
             assert_eq!(snapshot.state, state);
         }
         other => panic!("expected printer snapshot, got {other:?}"),
+    }
+}
+
+pub(super) fn assert_failure_contains(event: AgentEvent, command_id: &str, needle: &str) {
+    match event.event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert_eq!(result.command_id, command_id);
+            assert!(!result.success);
+            assert!(result.error.contains(needle), "{}", result.error);
+        }
+        other => panic!("expected command result, got {other:?}"),
     }
 }
 
@@ -260,5 +274,18 @@ impl BambuMachineGateway for FakeGateway {
     async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
         let mut result = self.result.lock().await;
         std::mem::replace(&mut *result, Ok(Vec::new()))
+    }
+
+    async fn validate_printer(&self, _serial_number: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn print_project_file(
+        &self,
+        _serial_number: &str,
+        _command: &crate::protocol::agent::v1::PrintProjectFile,
+        _artifact: Vec<u8>,
+    ) -> anyhow::Result<()> {
+        unreachable!("refresh tests do not dispatch print commands")
     }
 }
