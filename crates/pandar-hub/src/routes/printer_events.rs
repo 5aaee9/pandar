@@ -3,18 +3,24 @@ use axum::{
         FromRequestParts, Path, State,
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
-    http::Request,
+    http::{HeaderMap, Request},
     response::Response,
 };
 
-use crate::{AppState, routes::ApiError};
+use crate::{
+    AppState,
+    repositories::UserRole,
+    routes::{ApiError, auth},
+};
 
 pub(super) async fn printer_events(
     State(state): State<AppState>,
     Path(tenant_id): Path<String>,
+    headers: HeaderMap,
     request: Request<axum::body::Body>,
 ) -> Result<Response, ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
     state.printers().list_for_tenant(tenant_id).await?;
     let receiver = state.printer_events().subscribe(tenant_id).await;
     let (mut parts, _) = request.into_parts();

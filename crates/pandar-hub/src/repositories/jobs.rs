@@ -3,6 +3,7 @@ use pandar_core::{
     AgentId, CommandId, CommandRecord, CommandStatus, Job, JobArtifact, JobId, JobStatus, TenantId,
 };
 
+mod audit;
 mod create;
 pub mod rows;
 mod transitions;
@@ -104,6 +105,14 @@ impl JobRepository {
                 }
             }
         }
+    }
+
+    pub async fn create_print_job_with_audit(
+        &self,
+        input: CreatePrintJob,
+        user_id: String,
+    ) -> RepositoryResult<JobWithArtifact> {
+        audit::create_print_job_with_audit(&self.database, input, user_id).await
     }
 
     pub async fn list_for_tenant(

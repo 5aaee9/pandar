@@ -1,10 +1,14 @@
 mod agents;
+mod audit;
+mod auth;
 mod commands;
 mod jobs;
 mod printers;
 mod tenants;
 
 pub use agents::AgentRepository;
+pub use audit::{AuditEvent, AuditEventRepository, RecordAuditEvent};
+pub use auth::{ApiToken, AuthRepository, AuthenticatedUser, User, UserRole};
 pub use commands::{CommandRepository, PrintProjectFilePayload};
 pub use jobs::{CreatePrintJob, JobRepository, JobWithArtifact};
 pub use printers::{PrinterRepository, PrinterSnapshotUpsert};
@@ -18,8 +22,14 @@ pub enum RepositoryError {
     DuplicateTenantSlug,
     #[error("agent name already exists for tenant")]
     DuplicateAgentName,
+    #[error("api token name already exists for tenant")]
+    DuplicateApiTokenName,
+    #[error("api token hash already exists")]
+    DuplicateApiTokenHash,
     #[error("tenant not found")]
     MissingTenant,
+    #[error("user not found")]
+    MissingUser,
     #[error("agent not found")]
     MissingAgent,
     #[error("printer not found")]
@@ -38,6 +48,8 @@ pub enum RepositoryError {
     InvalidPersistedCommandStatus(String),
     #[error("invalid persisted job status: {0}")]
     InvalidPersistedJobStatus(String),
+    #[error("invalid persisted user role: {0}")]
+    InvalidPersistedUserRole(String),
     #[error(transparent)]
     Database(#[from] anyhow::Error),
 }

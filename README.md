@@ -78,6 +78,23 @@ Print job `succeeded` currently means the agent accepted the command path and co
 
 The frontend includes an HTTP-only print dispatch form for the selected tenant's reported printers. It posts through the Rust hub API using `APP_API_URL`; `APP_BASE_URL` remains the frontend's public URL for deployment wiring.
 
+Phase 6 adds tenant-scoped API token authentication for tenant APIs. HTTP and WebSocket clients send:
+
+```text
+Authorization: Bearer <tenant api token>
+```
+
+Roles are `tenant_admin`, `operator`, and `viewer`. Tenant-scoped read APIs and printer event WebSockets require at least `viewer`; print jobs and refresh commands require `operator`; agent creation requires `tenant_admin`. The Next.js frontend reads `APP_API_TOKEN` server-side and forwards it to `pandar-hub`. Set `APP_TENANT_ID` in deployed frontends to bind the dashboard to one tenant without relying on global tenant discovery.
+
+Hub audit records are stored in `audit_events` for successful user-triggered mutations such as agent creation, refresh commands, and print job creation. Bambu printer access codes remain agent-local in `PANDAR_PRINTERS`; do not store them in hub database rows or frontend environment variables.
+
+Deployment examples:
+
+```bash
+APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.sqlite.yml up --build
+POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.postgres.yml up --build
+```
+
 ```bash
 cargo fmt
 cargo clippy --workspace

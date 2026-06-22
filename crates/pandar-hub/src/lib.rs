@@ -16,7 +16,8 @@ use crate::{
     jobs::JobStorageConfig,
     printer_events::PrinterEventHub,
     repositories::{
-        AgentRepository, CommandRepository, JobRepository, PrinterRepository, TenantRepository,
+        AgentRepository, AuditEventRepository, AuthRepository, CommandRepository, JobRepository,
+        PrinterRepository, TenantRepository,
     },
     sessions::SessionRegistry,
 };
@@ -26,6 +27,8 @@ pub struct AppState {
     #[cfg(test)]
     database: Database,
     tenants: TenantRepository,
+    auth: AuthRepository,
+    audit_events: AuditEventRepository,
     agents: AgentRepository,
     printers: PrinterRepository,
     commands: CommandRepository,
@@ -58,6 +61,8 @@ impl AppState {
             #[cfg(test)]
             database: database.clone(),
             tenants: TenantRepository::new(database.clone()),
+            auth: AuthRepository::new(database.clone()),
+            audit_events: AuditEventRepository::new(database.clone()),
             agents: AgentRepository::new(database.clone()),
             printers: PrinterRepository::new(database.clone()),
             commands: CommandRepository::new(database.clone()),
@@ -81,6 +86,14 @@ impl AppState {
 
     pub fn tenants(&self) -> &TenantRepository {
         &self.tenants
+    }
+
+    pub fn auth(&self) -> &AuthRepository {
+        &self.auth
+    }
+
+    pub fn audit_events(&self) -> &AuditEventRepository {
+        &self.audit_events
     }
 
     pub fn agents(&self) -> &AgentRepository {

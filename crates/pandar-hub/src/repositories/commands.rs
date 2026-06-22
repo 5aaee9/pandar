@@ -2,6 +2,7 @@ use anyhow::Context;
 use pandar_core::{AgentId, CommandId, CommandRecord, CommandStatus, TenantId};
 use serde::{Deserialize, Serialize};
 
+mod audit;
 pub mod inserts;
 mod ownership;
 pub(crate) mod rows;
@@ -83,6 +84,16 @@ impl CommandRepository {
         .context("failed to enqueue refresh printers command")?;
 
         self.get(id).await?.ok_or(RepositoryError::MissingCommand)
+    }
+
+    pub async fn enqueue_refresh_printers_with_audit(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        user_id: String,
+    ) -> RepositoryResult<CommandRecord> {
+        audit::enqueue_refresh_printers_with_audit(&self.database, tenant_id, agent_id, user_id)
+            .await
     }
 
     pub async fn enqueue_print_project_file(

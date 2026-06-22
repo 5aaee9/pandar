@@ -2,12 +2,13 @@ use super::*;
 use crate::repositories::test_helpers::{insert_command_fixture, insert_printer_fixture};
 use axum::{
     body::Body,
-    http::{Method, Request},
+    http::{Method, Request, header::AUTHORIZATION},
 };
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+mod agents;
 mod jobs;
 mod printers;
 
@@ -25,7 +26,30 @@ async fn request(
     uri: &str,
     body: Option<Value>,
 ) -> (StatusCode, Value) {
+    request_with_token(app, method, uri, body, None).await
+}
+
+async fn request_as(
+    app: Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+    token: &str,
+) -> (StatusCode, Value) {
+    request_with_token(app, method, uri, body, Some(token)).await
+}
+
+async fn request_with_token(
+    app: Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+    token: Option<&str>,
+) -> (StatusCode, Value) {
     let mut builder = Request::builder().method(method).uri(uri);
+    if let Some(token) = token {
+        builder = builder.header(AUTHORIZATION, format!("Bearer {token}"));
+    }
     let body = if let Some(body) = body {
         builder = builder.header("content-type", "application/json");
         Body::from(body.to_string())
@@ -54,19 +78,52 @@ async fn create_tenant_for_test(app: Router) -> (StatusCode, Value) {
     .await
 }
 
-async fn tenant_and_agent(app: Router) -> (Value, Value) {
+async fn tenant_and_agent(state: &AppState, app: Router) -> (Value, Value, String) {
     let (status, tenant) = create_tenant_for_test(app.clone()).await;
     assert_eq!(status, StatusCode::CREATED);
     let tenant_id = tenant["id"].as_str().unwrap();
-    let (status, agent) = request(
+    let token = auth_token_for_role(
+        state,
+        tenant_id,
+        crate::repositories::UserRole::TenantAdmin,
+        "admin-token",
+    )
+    .await;
+    let (status, agent) = request_as(
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
         Some(json!({ "name": "shop-agent" })),
+        &token,
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    (tenant, agent)
+    (tenant, agent, token)
+}
+
+async fn auth_token_for_role(
+    state: &AppState,
+    tenant_id: &str,
+    role: crate::repositories::UserRole,
+    token: &str,
+) -> String {
+    let tenant_id = TenantId::parse(tenant_id).unwrap();
+    let user = state
+        .auth()
+        .create_user(
+            tenant_id,
+            format!("{token}@example.test"),
+            "Test User",
+            role,
+        )
+        .await
+        .unwrap();
+    state
+        .auth()
+        .create_api_token(tenant_id, &user.id, token, token)
+        .await
+        .unwrap();
+    token.to_owned()
 }
 
 #[tokio::test]
@@ -90,11 +147,19 @@ async fn summary_reports_repository_counts() {
         .as_str()
         .unwrap()
         .to_owned();
-    let (status, _) = request(
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id,
+        crate::repositories::UserRole::TenantAdmin,
+        "summary-admin",
+    )
+    .await;
+    let (status, _) = request_as(
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
         Some(json!({ "name": "shop-agent" })),
+        &token,
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
@@ -192,155 +257,4 @@ async fn malformed_tenant_json_returns_bad_request() {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let body: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(body, json!({ "error": "bad_request" }));
-}
-
-#[tokio::test]
-async fn invalid_tenant_id_on_agent_create_returns_bad_request() {
-    let (status, body) = request(
-        app().await,
-        Method::POST,
-        "/api/v1/tenants/not-a-uuid/agents",
-        Some(json!({ "name": "shop-agent" })),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_tenant_id" }));
-}
-
-#[tokio::test]
-async fn missing_tenant_on_agent_create_returns_not_found() {
-    let tenant_id = "00000000-0000-0000-0000-000000000001";
-    let (status, body) = request(
-        app().await,
-        Method::POST,
-        &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "shop-agent" })),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body, json!({ "error": "tenant_not_found" }));
-}
-
-#[tokio::test]
-async fn agent_create_returns_offline_record() {
-    let app = app().await;
-    let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-
-    let (status, body) = request(
-        app,
-        Method::POST,
-        &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "shop-agent" })),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["tenant_id"], tenant_id);
-    assert_eq!(body["name"], "shop-agent");
-    assert_eq!(body["status"], "offline");
-    assert!(body["id"].as_str().is_some());
-    assert!(body["created_at"].as_str().unwrap().ends_with('Z'));
-}
-
-#[tokio::test]
-async fn empty_agent_name_returns_bad_request() {
-    let app = app().await;
-    let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-
-    let (status, body) = request(
-        app,
-        Method::POST,
-        &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "" })),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "bad_request" }));
-}
-
-#[tokio::test]
-async fn agent_list_returns_created_records() {
-    let app = app().await;
-    let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-    let (status, created) = request(
-        app.clone(),
-        Method::POST,
-        &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "shop-agent" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED);
-
-    let (status, body) = request(
-        app,
-        Method::GET,
-        &format!("/api/v1/tenants/{tenant_id}/agents"),
-        None,
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "agents": [created] }));
-}
-
-#[tokio::test]
-async fn invalid_tenant_id_on_agent_list_returns_bad_request() {
-    let (status, body) = request(
-        app().await,
-        Method::GET,
-        "/api/v1/tenants/not-a-uuid/agents",
-        None,
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_tenant_id" }));
-}
-
-#[tokio::test]
-async fn missing_tenant_on_agent_list_returns_not_found() {
-    let tenant_id = "00000000-0000-0000-0000-000000000001";
-    let (status, body) = request(
-        app().await,
-        Method::GET,
-        &format!("/api/v1/tenants/{tenant_id}/agents"),
-        None,
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body, json!({ "error": "tenant_not_found" }));
-}
-
-#[tokio::test]
-async fn duplicate_agent_name_returns_conflict() {
-    let app = app().await;
-    let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-    let uri = format!("/api/v1/tenants/{tenant_id}/agents");
-    let (status, _) = request(
-        app.clone(),
-        Method::POST,
-        &uri,
-        Some(json!({ "name": "shop-agent" })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED);
-
-    let (status, body) = request(
-        app,
-        Method::POST,
-        &uri,
-        Some(json!({ "name": "shop-agent" })),
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body, json!({ "error": "agent_name_exists" }));
 }

@@ -2,7 +2,7 @@ use axum::{
     Json,
     extract::rejection::JsonRejection,
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use pandar_core::{Job, JobArtifact, JobId};
@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
-    repositories::{CreatePrintJob, JobWithArtifact},
-    routes::{ApiError, parse_tenant_id},
+    repositories::{CreatePrintJob, JobWithArtifact, UserRole},
+    routes::{ApiError, auth, parse_tenant_id},
 };
 
 #[derive(Debug, Deserialize)]
@@ -66,10 +66,12 @@ pub struct JobListResponse {
 
 pub async fn create_job(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path((tenant_id, printer_id)): Path<(String, String)>,
     payload: Result<Json<CreateJobRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<JobResponse>), ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
+    let auth = auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Operator).await?;
     parse_printer_id(&printer_id)?;
     let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
     if payload.filename.trim().is_empty() || payload.artifact_base64.trim().is_empty() {
@@ -116,20 +118,23 @@ pub async fn create_job(
 
     let created = state
         .jobs()
-        .create_print_job(CreatePrintJob {
-            tenant_id,
-            printer_id: printer.id,
-            agent_id: printer.agent_id,
-            artifact_id,
-            artifact_filename: stored.filename,
-            artifact_content_type: content_type,
-            artifact_size_bytes: stored.size_bytes,
-            artifact_storage_path: stored.storage_path.clone(),
-            plate_id: payload.plate_id,
-            use_ams: payload.use_ams,
-            flow_cali: payload.flow_cali,
-            timelapse: payload.timelapse,
-        })
+        .create_print_job_with_audit(
+            CreatePrintJob {
+                tenant_id,
+                printer_id: printer.id,
+                agent_id: printer.agent_id,
+                artifact_id,
+                artifact_filename: stored.filename,
+                artifact_content_type: content_type,
+                artifact_size_bytes: stored.size_bytes,
+                artifact_storage_path: stored.storage_path.clone(),
+                plate_id: payload.plate_id,
+                use_ams: payload.use_ams,
+                flow_cali: payload.flow_cali,
+                timelapse: payload.timelapse,
+            },
+            auth.user.id,
+        )
         .await;
 
     match created {
@@ -158,9 +163,11 @@ fn parse_printer_id(value: &str) -> Result<(), ApiError> {
 
 pub async fn list_jobs(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(tenant_id): Path<String>,
 ) -> Result<Json<JobListResponse>, ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
+    auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
     let jobs = state
         .jobs()
         .list_for_tenant(tenant_id)
@@ -174,9 +181,11 @@ pub async fn list_jobs(
 
 pub async fn get_job(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path((tenant_id, job_id)): Path<(String, String)>,
 ) -> Result<Json<JobResponse>, ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
+    auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
     let job_id = JobId::parse(&job_id).map_err(|_| ApiError::bad_request("invalid_job_id"))?;
     let Some(job) = state.jobs().get_for_tenant(tenant_id, job_id).await? else {
         return Err(ApiError::not_found("job_not_found"));

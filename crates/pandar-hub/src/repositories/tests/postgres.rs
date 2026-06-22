@@ -6,7 +6,7 @@ use crate::repositories::{
     test_helpers::{insert_command_fixture, insert_printer_fixture},
 };
 
-async fn postgres_database() -> Option<Database> {
+pub(super) async fn postgres_database() -> Option<Database> {
     let url = match std::env::var("PANDAR_TEST_POSTGRES_URL") {
         Ok(url) => url,
         Err(_) => return None,
@@ -18,11 +18,13 @@ async fn postgres_database() -> Option<Database> {
     Some(database)
 }
 
-async fn clear_postgres(database: &Database) {
+pub(super) async fn clear_postgres(database: &Database) {
     let Database::Postgres(pool) = database else {
         panic!("expected PostgreSQL database");
     };
-    sqlx::query("TRUNCATE jobs, job_artifacts, commands, printers, agents, users, tenants")
+    sqlx::query(
+        "TRUNCATE audit_events, api_tokens, jobs, job_artifacts, commands, printers, agents, users, tenants",
+    )
         .execute(pool)
         .await
         .unwrap();
@@ -364,36 +366,4 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
         printers.list_for_tenant(tenant.id).await.unwrap(),
         vec![updated]
     );
-}
-
-#[tokio::test]
-async fn postgres_records_survive_reconnect_when_configured() {
-    let url = match std::env::var("PANDAR_TEST_POSTGRES_URL") {
-        Ok(url) => url,
-        Err(_) => {
-            eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
-            return;
-        }
-    };
-    let config = DatabaseConfig::from_url(&url).unwrap();
-    let database = Database::connect(&config).await.unwrap();
-    database.migrate().await.unwrap();
-    clear_postgres(&database).await;
-
-    let tenants = TenantRepository::new(database.clone());
-    let agents = AgentRepository::new(database.clone());
-    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
-    agents.create(tenant.id, "agent").await.unwrap();
-    drop(database);
-
-    let database = Database::connect(&config).await.unwrap();
-    database.migrate().await.unwrap();
-    assert_eq!(
-        TenantRepository::new(database.clone())
-            .count()
-            .await
-            .unwrap(),
-        1
-    );
-    assert_eq!(AgentRepository::new(database).count().await.unwrap(), 1);
 }

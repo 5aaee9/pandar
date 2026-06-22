@@ -5,7 +5,9 @@ use sqlx::Row;
 use crate::{
     db::Database,
     repositories::{
-        RepositoryError, RepositoryResult, is_foreign_key_violation, is_unique_violation,
+        RepositoryError, RepositoryResult,
+        audit::{build_audit_event, insert_audit_event_postgres, insert_audit_event_sqlite},
+        is_foreign_key_violation, is_unique_violation,
     },
 };
 
@@ -25,52 +27,101 @@ impl AgentRepository {
         name: impl Into<String>,
     ) -> RepositoryResult<Agent> {
         let agent = Agent::new(tenant_id, name).map_err(anyhow::Error::from)?;
-        let result = match &self.database {
+        self.insert_agent(agent).await
+    }
+
+    pub async fn create_with_audit(
+        &self,
+        tenant_id: TenantId,
+        name: impl Into<String>,
+        user_id: String,
+    ) -> RepositoryResult<Agent> {
+        let agent = Agent::new(tenant_id, name).map_err(anyhow::Error::from)?;
+        match &self.database {
             Database::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO agents (id, tenant_id, name, status, version, last_seen_at, created_at)
-                     VALUES (?1, ?2, ?3, ?4, NULL, NULL, ?5)",
-                )
-                .bind(agent.id.to_string())
-                .bind(agent.tenant_id.to_string())
-                .bind(&agent.name)
-                .bind(agent.status.as_str())
-                .bind(&agent.created_at)
-                .execute(pool)
-                .await
-                .map(|_| ())
+                let mut transaction = pool
+                    .begin()
+                    .await
+                    .context("failed to begin SQLite agent create audit transaction")?;
+                let inserted = insert_agent_sqlite(&mut *transaction, &agent)
+                    .await
+                    .map_err(sqlx_err_to_repo);
+                match inserted {
+                    Ok(()) => {
+                        let event = build_audit_event(crate::repositories::RecordAuditEvent {
+                            tenant_id,
+                            actor_type: "user".to_owned(),
+                            user_id: Some(user_id),
+                            action: "agent.create".to_owned(),
+                            target_type: "agent".to_owned(),
+                            target_id: Some(agent.id.to_string()),
+                            metadata_json: "{}".to_owned(),
+                        });
+                        insert_audit_event_sqlite(&mut *transaction, &event).await?;
+                        transaction
+                            .commit()
+                            .await
+                            .context("failed to commit SQLite agent create audit transaction")?;
+                        Ok(agent)
+                    }
+                    Err(err) => {
+                        transaction
+                            .rollback()
+                            .await
+                            .context("failed to roll back SQLite agent create audit transaction")?;
+                        Err(err)
+                    }
+                }
             }
             Database::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO agents (id, tenant_id, name, status, version, last_seen_at, created_at)
-                     VALUES ($1, $2, $3, $4, NULL, NULL, $5)",
-                )
-                .bind(agent.id.to_string())
-                .bind(agent.tenant_id.to_string())
-                .bind(&agent.name)
-                .bind(agent.status.as_str())
-                .bind(&agent.created_at)
-                .execute(pool)
-                .await
-                .map(|_| ())
+                let mut transaction = pool
+                    .begin()
+                    .await
+                    .context("failed to begin PostgreSQL agent create audit transaction")?;
+                let inserted = insert_agent_postgres(&mut *transaction, &agent)
+                    .await
+                    .map_err(sqlx_err_to_repo);
+                match inserted {
+                    Ok(()) => {
+                        let event = build_audit_event(crate::repositories::RecordAuditEvent {
+                            tenant_id,
+                            actor_type: "user".to_owned(),
+                            user_id: Some(user_id),
+                            action: "agent.create".to_owned(),
+                            target_type: "agent".to_owned(),
+                            target_id: Some(agent.id.to_string()),
+                            metadata_json: "{}".to_owned(),
+                        });
+                        insert_audit_event_postgres(&mut *transaction, &event).await?;
+                        transaction.commit().await.context(
+                            "failed to commit PostgreSQL agent create audit transaction",
+                        )?;
+                        Ok(agent)
+                    }
+                    Err(err) => {
+                        transaction.rollback().await.context(
+                            "failed to roll back PostgreSQL agent create audit transaction",
+                        )?;
+                        Err(err)
+                    }
+                }
             }
+        }
+    }
+
+    async fn insert_agent(&self, agent: Agent) -> RepositoryResult<Agent> {
+        let result = match &self.database {
+            Database::Sqlite(pool) => insert_agent_sqlite(pool, &agent)
+                .await
+                .map_err(sqlx_err_to_repo),
+            Database::Postgres(pool) => insert_agent_postgres(pool, &agent)
+                .await
+                .map_err(sqlx_err_to_repo),
         };
 
         match result {
             Ok(_) => Ok(agent),
-            Err(err)
-                if is_unique_violation(
-                    &err,
-                    "agents.tenant_id, agents.name",
-                    "agents_tenant_id_name_key",
-                ) =>
-            {
-                Err(RepositoryError::DuplicateAgentName)
-            }
-            Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
-            Err(err) => Err(anyhow::Error::new(err)
-                .context("failed to insert agent")
-                .into()),
+            Err(err) => Err(err),
         }
     }
 
@@ -265,6 +316,58 @@ impl AgentRepository {
         .context("failed to check tenant existence")?;
 
         Ok(exists.is_some())
+    }
+}
+
+async fn insert_agent_sqlite<'e, E>(executor: E, agent: &Agent) -> Result<(), sqlx::Error>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    sqlx::query(
+        "INSERT INTO agents (id, tenant_id, name, status, version, last_seen_at, created_at)
+         VALUES (?1, ?2, ?3, ?4, NULL, NULL, ?5)",
+    )
+    .bind(agent.id.to_string())
+    .bind(agent.tenant_id.to_string())
+    .bind(&agent.name)
+    .bind(agent.status.as_str())
+    .bind(&agent.created_at)
+    .execute(executor)
+    .await
+    .map(|_| ())
+}
+
+async fn insert_agent_postgres<'e, E>(executor: E, agent: &Agent) -> Result<(), sqlx::Error>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Postgres>,
+{
+    sqlx::query(
+        "INSERT INTO agents (id, tenant_id, name, status, version, last_seen_at, created_at)
+         VALUES ($1, $2, $3, $4, NULL, NULL, $5)",
+    )
+    .bind(agent.id.to_string())
+    .bind(agent.tenant_id.to_string())
+    .bind(&agent.name)
+    .bind(agent.status.as_str())
+    .bind(&agent.created_at)
+    .execute(executor)
+    .await
+    .map(|_| ())
+}
+
+fn sqlx_err_to_repo(err: sqlx::Error) -> RepositoryError {
+    if is_unique_violation(
+        &err,
+        "agents.tenant_id, agents.name",
+        "agents_tenant_id_name_key",
+    ) {
+        RepositoryError::DuplicateAgentName
+    } else if is_foreign_key_violation(&err) {
+        RepositoryError::MissingTenant
+    } else {
+        anyhow::Error::new(err)
+            .context("failed to insert agent")
+            .into()
     }
 }
 

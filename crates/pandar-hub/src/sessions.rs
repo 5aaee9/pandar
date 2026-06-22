@@ -159,6 +159,21 @@ impl SessionRegistry {
         Ok(command)
     }
 
+    pub async fn wake_agent(&self, tenant_id: TenantId, agent_id: AgentId) {
+        let wake_sender = {
+            self.sessions
+                .lock()
+                .await
+                .get(&agent_id)
+                .filter(|session| session.tenant_id == tenant_id)
+                .map(|session| session.wake_sender.clone())
+        };
+
+        if let Some(wake_sender) = wake_sender {
+            let _ = wake_sender.try_send(());
+        }
+    }
+
     pub async fn expire_stale(
         &self,
         now: &str,

@@ -9,12 +9,19 @@ async fn job_create_writes_artifact_queues_command_and_returns_created_job() {
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
     let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "job-operator",
+    )
+    .await;
     let agent = state.agents().create(tenant_id, "agent").await.unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
         .await
         .unwrap();
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
@@ -27,6 +34,7 @@ async fn job_create_writes_artifact_queues_command_and_returns_created_job() {
             "flow_cali": false,
             "timelapse": true
         })),
+        &token,
     )
     .await;
 
@@ -38,11 +46,26 @@ async fn job_create_writes_artifact_queues_command_and_returns_created_job() {
     assert_eq!(body["artifact"]["filename"], "plate_file.3mf");
     assert_eq!(body["artifact"]["size_bytes"], 3);
     assert_eq!(state.commands().count().await.unwrap(), 1);
+    let events = state
+        .audit_events()
+        .list_for_tenant(tenant_id)
+        .await
+        .unwrap();
+    assert!(events.iter().any(|event| event.action == "job.create"));
 }
 
 #[tokio::test]
 async fn job_create_rejects_invalid_tenant_printer_and_job_ids() {
-    let app = app().await;
+    let state = state().await;
+    let app = router(state.clone());
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "invalid-job-operator",
+    )
+    .await;
     let (status, body) = request(
         app.clone(),
         Method::POST,
@@ -53,38 +76,49 @@ async fn job_create_rejects_invalid_tenant_printer_and_job_ids() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body, json!({ "error": "invalid_tenant_id" }));
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app.clone(),
         Method::POST,
         "/api/v1/tenants/00000000-0000-0000-0000-000000000001/printers/not-a-uuid/jobs",
         Some(valid_request()),
+        &token,
     )
     .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_printer_id" }));
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app,
         Method::GET,
         "/api/v1/tenants/00000000-0000-0000-0000-000000000001/jobs/not-a-uuid",
         None,
+        &token,
     )
     .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_job_id" }));
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
 }
 
 #[tokio::test]
 async fn job_create_rejects_missing_printer() {
-    let app = app().await;
+    let state = state().await;
+    let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
     let tenant_id = tenant["id"].as_str().unwrap();
+    let token = auth_token_for_role(
+        &state,
+        tenant_id,
+        crate::repositories::UserRole::Operator,
+        "missing-printer-operator",
+    )
+    .await;
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/00000000-0000-0000-0000-000000000001/jobs"),
         Some(valid_request()),
+        &token,
     )
     .await;
 
@@ -98,38 +132,48 @@ async fn job_create_rejects_empty_invalid_and_oversized_artifacts() {
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
     let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "invalid-artifact-operator",
+    )
+    .await;
     let agent = state.agents().create(tenant_id, "agent").await.unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
         .await
         .unwrap();
     let uri = format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs");
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app.clone(),
         Method::POST,
         &uri,
         Some(json!({ "filename": "plate.3mf", "content_type": "model/3mf", "artifact_base64": "", "plate_id": 1, "use_ams": false, "flow_cali": false, "timelapse": false })),
+        &token,
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body, json!({ "error": "bad_request" }));
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app.clone(),
         Method::POST,
         &uri,
         Some(json!({ "filename": "plate.3mf", "content_type": "model/3mf", "artifact_base64": "@@@", "plate_id": 1, "use_ams": false, "flow_cali": false, "timelapse": false })),
+        &token,
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body, json!({ "error": "invalid_artifact_base64" }));
 
     let oversized = vec![0_u8; state.job_storage().max_artifact_bytes() + 1];
-    let (status, body) = request(
+    let (status, body) = request_as(
         app,
         Method::POST,
         &uri,
         Some(json!({ "filename": "plate.3mf", "content_type": "model/3mf", "artifact_base64": STANDARD.encode(oversized), "plate_id": 1, "use_ams": false, "flow_cali": false, "timelapse": false })),
+        &token,
     )
     .await;
     assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
@@ -142,13 +186,20 @@ async fn job_create_defaults_content_type_and_rejects_zero_plate() {
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
     let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "default-content-type-operator",
+    )
+    .await;
     let agent = state.agents().create(tenant_id, "agent").await.unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
         .await
         .unwrap();
     let uri = format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs");
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app.clone(),
         Method::POST,
         &uri,
@@ -161,12 +212,13 @@ async fn job_create_defaults_content_type_and_rejects_zero_plate() {
             "flow_cali": false,
             "timelapse": false
         })),
+        &token,
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(body["artifact"]["content_type"], "application/octet-stream");
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app,
         Method::POST,
         &uri,
@@ -179,6 +231,7 @@ async fn job_create_defaults_content_type_and_rejects_zero_plate() {
             "flow_cali": false,
             "timelapse": false
         })),
+        &token,
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -191,34 +244,44 @@ async fn job_list_and_detail_return_tenant_jobs() {
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
     let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "list-job-operator",
+    )
+    .await;
     let agent = state.agents().create(tenant_id, "agent").await.unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
         .await
         .unwrap();
-    let (_, created) = request(
+    let (_, created) = request_as(
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
         Some(valid_request()),
+        &token,
     )
     .await;
     let job_id = created["id"].as_str().unwrap();
 
-    let (status, list) = request(
+    let (status, list) = request_as(
         app.clone(),
         Method::GET,
         &format!("/api/v1/tenants/{tenant_id}/jobs"),
         None,
+        &token,
     )
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(list["jobs"].as_array().unwrap().len(), 1);
 
-    let (status, detail) = request(
+    let (status, detail) = request_as(
         app,
         Method::GET,
         &format!("/api/v1/tenants/{tenant_id}/jobs/{job_id}"),
         None,
+        &token,
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -228,15 +291,24 @@ async fn job_list_and_detail_return_tenant_jobs() {
 
 #[tokio::test]
 async fn missing_job_detail_returns_not_found() {
-    let app = app().await;
+    let state = state().await;
+    let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
     let tenant_id = tenant["id"].as_str().unwrap();
+    let token = auth_token_for_role(
+        &state,
+        tenant_id,
+        crate::repositories::UserRole::Viewer,
+        "missing-job-viewer",
+    )
+    .await;
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app,
         Method::GET,
         &format!("/api/v1/tenants/{tenant_id}/jobs/00000000-0000-0000-0000-000000000001"),
         None,
+        &token,
     )
     .await;
 

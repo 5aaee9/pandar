@@ -26,6 +26,7 @@
 - Added Phase 3 machine file-transfer boundary with FTPS-derived constants, request shapes, protected/clear mode policy, success-only cache behavior, and fake no-network tests.
 - Added Phase 4 hub printer inventory persistence, tenant-scoped printer HTTP APIs, refresh-printers command dispatch endpoint, future-only printer WebSocket events, and the read-only frontend operations dashboard.
 - Added Phase 5 hub print artifacts/jobs persistence, tenant-scoped print job HTTP APIs, print command gRPC dispatch, command/job status coupling, agent artifact-root handling, frontend job history, and HTTP-only print dispatch form.
+- Added Phase 6 tenant API token authentication, tenant role authorization, audit events, WebSocket auth, frontend server-side token forwarding, and SQLite/PostgreSQL Docker Compose examples.
 
 ## Phase 1: Foundation
 
@@ -114,12 +115,18 @@ Exit criteria:
 
 ## Phase 6: Multi-Tenant Product Hardening
 
-- Add authentication and tenant-scoped authorization.
-- Add user roles for tenant admin, operator, and viewer.
-- Add audit events for printer commands and agent actions.
-- Add credential handling policy for printer access codes.
-- Add WebSocket authorization and tenant filtering.
-- Add Docker Compose examples for SQLite and PostgreSQL deployments.
+- Completed API token authentication for tenant-scoped HTTP and WebSocket APIs.
+- Completed tenant role authorization:
+  - `tenant_admin` can create agents and perform operator/viewer actions.
+  - `operator` can create jobs, refresh printers, and perform viewer actions.
+  - `viewer` can read tenant resources and subscribe to printer events.
+- Completed SQLite and PostgreSQL migrations for `api_tokens` and `audit_events`.
+- Completed backend-neutral auth and audit repositories with SQLite default tests and optional PostgreSQL coverage via `PANDAR_TEST_POSTGRES_URL`.
+- Completed audit events for successful agent creation, refresh-printers commands, and print job creation.
+- Completed WebSocket authorization and tenant filtering through the same bearer-token boundary as HTTP.
+- Completed frontend server-side `APP_API_TOKEN` forwarding and optional `APP_TENANT_ID` tenant binding for tenant printer/job reads and print job creation.
+- Completed credential policy documentation: Bambu printer access codes remain agent-local in `PANDAR_PRINTERS` and must not be stored in the hub database or frontend env.
+- Completed Docker Compose examples for SQLite and PostgreSQL deployments.
 
 ## Phase 7: Compatibility Expansion
 
@@ -134,4 +141,5 @@ Exit criteria:
 - Implement real agent-side FTPS upload and upload verification behind the existing file-transfer boundary.
 - Wire the real runtime FTPS adapter into the configured gateway path that already fake-tests MQTT `project_file` publishing.
 - Reconcile printer MQTT reports into print job progress, terminal success, and terminal failure state.
-- Add authenticated browser-side job creation and tenant/user authorization around the existing HTTP form.
+- Add first-user/bootstrap ergonomics for provisioning tenant users and API tokens without direct repository/test fixtures.
+- Add an explicit global admin/bootstrap boundary for tenant listing and summary before production multi-tenant exposure.

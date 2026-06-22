@@ -1,8 +1,12 @@
-use axum::{Json, extract::Path, extract::State};
+use axum::{Json, extract::Path, extract::State, http::HeaderMap};
 use pandar_core::{AgentId, CommandRecord, Printer};
 use serde::Serialize;
 
-use crate::{AppState, routes::ApiError};
+use crate::{
+    AppState,
+    repositories::UserRole,
+    routes::{ApiError, auth},
+};
 
 #[derive(Debug, Serialize)]
 pub(super) struct PrinterResponse {
@@ -38,9 +42,11 @@ pub(super) struct CommandResponse {
 
 pub(super) async fn list_printers(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(tenant_id): Path<String>,
 ) -> Result<Json<PrinterListResponse>, ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
     let printers = state
         .printers()
         .list_for_tenant(tenant_id)
@@ -54,9 +60,11 @@ pub(super) async fn list_printers(
 
 pub(super) async fn get_printer(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path((tenant_id, printer_id)): Path<(String, String)>,
 ) -> Result<Json<PrinterResponse>, ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
     let printer_id = parse_printer_id(&printer_id)?;
     let Some(printer) = state
         .printers()
@@ -71,14 +79,17 @@ pub(super) async fn get_printer(
 
 pub(super) async fn refresh_printers(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path((tenant_id, agent_id)): Path<(String, String)>,
 ) -> Result<Json<CommandResponse>, ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    let auth = auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Operator).await?;
     let agent_id = parse_agent_id(&agent_id)?;
     let command = state
-        .sessions()
-        .dispatch_refresh_printers(tenant_id, agent_id, state.commands())
+        .commands()
+        .enqueue_refresh_printers_with_audit(tenant_id, agent_id, auth.user.id)
         .await?;
+    state.sessions().wake_agent(tenant_id, agent_id).await;
 
     Ok(Json(CommandResponse::from(command)))
 }

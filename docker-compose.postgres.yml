@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: pandar
+      POSTGRES_USER: pandar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - pandar-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pandar -d pandar"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  pandar-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: pandar-api
+    environment:
+      PANDAR_DATABASE_URL: postgres://pandar:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/pandar
+      PANDAR_HUB_BIND: 0.0.0.0:8080
+      PANDAR_HUB_GRPC_BIND: 0.0.0.0:50051
+      PANDAR_SPOOL_DIR: /spool
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    volumes:
+      - pandar-spool:/spool
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  pandar-web:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    image: pandar-web
+    environment:
+      APP_API_URL: http://pandar-api:8080
+      APP_API_TOKEN: ${APP_API_TOKEN:?set APP_API_TOKEN to a tenant API token}
+      APP_TENANT_ID: ${APP_TENANT_ID:-}
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - pandar-api
+
+volumes:
+  pandar-postgres:
+  pandar-spool:

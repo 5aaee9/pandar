@@ -1,6 +1,8 @@
 import { DispatchForm } from './dispatch-form'
 
 const apiUrl = process.env.APP_API_URL ?? 'http://localhost:8080'
+const apiToken = process.env.APP_API_TOKEN
+const configuredTenantId = process.env.APP_TENANT_ID
 
 type Summary = {
   tenants: number
@@ -74,7 +76,10 @@ type PageProps = {
 
 async function fetchJson<T>(path: string, label: string): Promise<FetchResult<T>> {
   try {
-    const response = await fetch(`${apiUrl}${path}`, { cache: 'no-store' })
+    const response = await fetch(`${apiUrl}${path}`, {
+      cache: 'no-store',
+      headers: apiHeaders(),
+    })
     if (!response.ok) {
       return { data: null, error: `${label} returned ${response.status}` }
     }
@@ -88,16 +93,32 @@ async function fetchJson<T>(path: string, label: string): Promise<FetchResult<T>
   }
 }
 
+function apiHeaders() {
+  return apiToken ? { authorization: `Bearer ${apiToken}` } : undefined
+}
+
 export default async function Page({ searchParams }: PageProps) {
   const [summaryResult, tenantsResult] = await Promise.all([
     fetchJson<Summary>('/api/v1/summary', 'Summary'),
-    fetchJson<TenantList>('/api/v1/tenants', 'Tenants'),
+    configuredTenantId
+      ? Promise.resolve<FetchResult<TenantList>>({
+          data: { tenants: [] },
+          error: null,
+        })
+      : fetchJson<TenantList>('/api/v1/tenants', 'Tenants'),
   ])
 
   const tenants = tenantsResult.data?.tenants ?? []
   const params = await searchParams
   const requestedTenant = Array.isArray(params?.tenant) ? params.tenant[0] : params?.tenant
-  const selectedTenant = tenants.find((tenant) => tenant.id === requestedTenant) ?? tenants[0] ?? null
+  const selectedTenant = configuredTenantId
+    ? {
+        id: configuredTenantId,
+        slug: configuredTenantId,
+        display_name: configuredTenantId,
+        created_at: '',
+      }
+    : tenants.find((tenant) => tenant.id === requestedTenant) ?? tenants[0] ?? null
   const printersResult = selectedTenant
     ? await fetchJson<PrinterList>(
         `/api/v1/tenants/${selectedTenant.id}/printers`,

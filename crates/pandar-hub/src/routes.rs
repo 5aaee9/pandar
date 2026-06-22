@@ -3,15 +3,19 @@ use axum::{
     extract::DefaultBodyLimit,
     extract::rejection::JsonRejection,
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
 use pandar_core::{Agent, Tenant, TenantId};
 use serde::{Deserialize, Serialize};
 
-use crate::{AppState, repositories::RepositoryError};
+use crate::{
+    AppState,
+    repositories::{RepositoryError, UserRole},
+};
 
+mod auth;
 mod jobs;
 mod printer_events;
 mod printers;
@@ -161,26 +165,33 @@ async fn list_tenants(State(state): State<AppState>) -> Result<Json<TenantListRe
 
 async fn create_agent(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(tenant_id): Path<String>,
     payload: Result<Json<CreateAgentRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<AgentResponse>), ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
+    let auth = auth::authorize_tenant(&state, &headers, tenant_id, UserRole::TenantAdmin).await?;
     let Json(payload) =
         payload.map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "bad_request"))?;
     if payload.name.trim().is_empty() {
         return Err(ApiError::new(StatusCode::BAD_REQUEST, "bad_request"));
     }
 
-    let agent = state.agents().create(tenant_id, payload.name).await?;
+    let agent = state
+        .agents()
+        .create_with_audit(tenant_id, payload.name, auth.user.id)
+        .await?;
 
     Ok((StatusCode::CREATED, Json(AgentResponse::from(agent))))
 }
 
 async fn list_agents(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(tenant_id): Path<String>,
 ) -> Result<Json<AgentListResponse>, ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
+    auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
     let agents = state
         .agents()
         .list_for_tenant(tenant_id)
@@ -248,7 +259,14 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::DuplicateAgentName => {
                 Self::new(StatusCode::CONFLICT, "agent_name_exists")
             }
+            RepositoryError::DuplicateApiTokenName => {
+                Self::new(StatusCode::CONFLICT, "api_token_name_exists")
+            }
+            RepositoryError::DuplicateApiTokenHash => {
+                Self::new(StatusCode::CONFLICT, "api_token_hash_exists")
+            }
             RepositoryError::MissingTenant => Self::new(StatusCode::NOT_FOUND, "tenant_not_found"),
+            RepositoryError::MissingUser => Self::new(StatusCode::NOT_FOUND, "user_not_found"),
             RepositoryError::MissingAgent => Self::new(StatusCode::NOT_FOUND, "agent_not_found"),
             RepositoryError::MissingCommand => {
                 Self::new(StatusCode::NOT_FOUND, "command_not_found")
@@ -273,6 +291,10 @@ impl From<RepositoryError> for ApiError {
             }
             RepositoryError::InvalidPersistedJobStatus(status) => {
                 tracing::error!(%status, "invalid persisted job status");
+                Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
+            }
+            RepositoryError::InvalidPersistedUserRole(role) => {
+                tracing::error!(%role, "invalid persisted user role");
                 Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
             }
             RepositoryError::Database(err) => {

@@ -1,14 +1,16 @@
+mod auth;
 mod commands;
 mod jobs;
 mod phase1;
 mod postgres;
+mod postgres_persistence;
 mod printers;
 
 use pandar_core::{AgentId, CommandId, TenantId};
 
 use super::{
-    AgentRepository, CommandRepository, JobRepository, PrinterRepository, PrinterSnapshotUpsert,
-    RepositoryError, TenantRepository,
+    AgentRepository, AuditEventRepository, AuthRepository, CommandRepository, JobRepository,
+    PrinterRepository, PrinterSnapshotUpsert, RepositoryError, TenantRepository,
 };
 use crate::db::{Database, DatabaseConfig};
 

@@ -12,25 +12,26 @@ use tokio_stream::{
     StreamExt,
     wrappers::{ReceiverStream, TcpListenerStream},
 };
-use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::{Message, client::IntoClientRequest};
 use tonic::transport::Server;
 
 #[tokio::test]
 async fn printer_list_returns_tenant_printers() {
     let state = state().await;
     let app = router(state.clone());
-    let (tenant, agent) = tenant_and_agent(app.clone()).await;
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
     let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
     let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app,
         Method::GET,
         &format!("/api/v1/tenants/{tenant_id}/printers"),
         None,
+        &token,
     )
     .await;
 
@@ -44,18 +45,19 @@ async fn printer_list_returns_tenant_printers() {
 async fn printer_detail_returns_tenant_printer() {
     let state = state().await;
     let app = router(state.clone());
-    let (tenant, agent) = tenant_and_agent(app.clone()).await;
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
     let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
     let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app,
         Method::GET,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}"),
         None,
+        &token,
     )
     .await;
 
@@ -66,16 +68,18 @@ async fn printer_detail_returns_tenant_printer() {
 
 #[tokio::test]
 async fn missing_printer_detail_returns_not_found() {
-    let app = app().await;
-    let (tenant, _) = tenant_and_agent(app.clone()).await;
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, _, token) = tenant_and_agent(&state, app.clone()).await;
     let tenant_id = tenant["id"].as_str().unwrap();
     let printer_id = uuid::Uuid::new_v4();
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app,
         Method::GET,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}"),
         None,
+        &token,
     )
     .await;
 
@@ -85,15 +89,17 @@ async fn missing_printer_detail_returns_not_found() {
 
 #[tokio::test]
 async fn invalid_printer_id_returns_bad_request() {
-    let app = app().await;
-    let (tenant, _) = tenant_and_agent(app.clone()).await;
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, _, token) = tenant_and_agent(&state, app.clone()).await;
     let tenant_id = tenant["id"].as_str().unwrap();
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app,
         Method::GET,
         &format!("/api/v1/tenants/{tenant_id}/printers/not-a-uuid"),
         None,
+        &token,
     )
     .await;
 
@@ -103,16 +109,18 @@ async fn invalid_printer_id_returns_bad_request() {
 
 #[tokio::test]
 async fn refresh_printers_returns_command_record() {
-    let app = app().await;
-    let (tenant, agent) = tenant_and_agent(app.clone()).await;
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
     let tenant_id = tenant["id"].as_str().unwrap();
     let agent_id = agent["id"].as_str().unwrap();
 
-    let (status, body) = request(
-        app,
+    let (status, body) = request_as(
+        app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/refresh-printers"),
         None,
+        &token,
     )
     .await;
 
@@ -121,19 +129,31 @@ async fn refresh_printers_returns_command_record() {
     assert_eq!(body["agent_id"], agent_id);
     assert_eq!(body["kind"], "refresh_printers");
     assert_eq!(body["status"], "queued");
+    let events = state
+        .audit_events()
+        .list_for_tenant(TenantId::parse(tenant_id).unwrap())
+        .await
+        .unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.action == "agent.refresh_printers")
+    );
 }
 
 #[tokio::test]
 async fn invalid_agent_id_on_refresh_returns_bad_request() {
-    let app = app().await;
-    let (tenant, _) = tenant_and_agent(app.clone()).await;
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, _, token) = tenant_and_agent(&state, app.clone()).await;
     let tenant_id = tenant["id"].as_str().unwrap();
 
-    let (status, body) = request(
+    let (status, body) = request_as(
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents/not-a-uuid/refresh-printers"),
         None,
+        &token,
     )
     .await;
 
@@ -157,18 +177,29 @@ async fn printer_events_invalid_tenant_returns_bad_request_before_upgrade() {
 
 #[tokio::test]
 async fn printer_events_missing_tenant_returns_not_found_before_upgrade() {
+    let state = state().await;
+    let app = router(state.clone());
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "ws-viewer",
+    )
+    .await;
     let tenant_id = TenantId::new();
 
-    let (status, body) = request(
-        app().await,
+    let (status, body) = request_as(
+        app,
         Method::GET,
         &format!("/api/v1/tenants/{tenant_id}/printer-events"),
         None,
+        &token,
     )
     .await;
 
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body, json!({ "error": "tenant_not_found" }));
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
 }
 
 #[tokio::test]
@@ -176,6 +207,13 @@ async fn printer_events_websocket_receives_snapshot_from_grpc_stream() {
     let state = state().await;
     let app = router(state.clone());
     let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "ws-token",
+    )
+    .await;
     let agent = state
         .agents()
         .create(tenant.id, "shop-agent")
@@ -183,12 +221,16 @@ async fn printer_events_websocket_receives_snapshot_from_grpc_stream() {
         .unwrap();
     let http_addr = serve_http(app).await;
     let grpc_addr = serve_grpc(state).await;
-    let (mut ws, _) = tokio_tungstenite::connect_async(format!(
+    let mut request = format!(
         "ws://{http_addr}/api/v1/tenants/{}/printer-events",
         tenant.id
-    ))
-    .await
+    )
+    .into_client_request()
     .unwrap();
+    request
+        .headers_mut()
+        .insert("Authorization", format!("Bearer {token}").parse().unwrap());
+    let (mut ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
     let (sender, receiver) = tokio::sync::mpsc::channel(8);
     sender.send(hello_event(tenant.id, agent.id)).await.unwrap();
     let mut client = AgentControlClient::connect(format!("http://{grpc_addr}"))
