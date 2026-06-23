@@ -4,8 +4,8 @@ use sea_orm::TransactionTrait;
 use crate::{
     db::Database,
     repositories::{
-        CreatePrintJob, JobWithArtifact, RecordAuditEvent, RepositoryResult,
-        audit::{build_audit_event, insert_audit_event_tx},
+        AuditActor, CreatePrintJob, JobWithArtifact, RepositoryResult,
+        audit::{insert_audit_event_tx, record_audit_event},
         jobs::create,
     },
 };
@@ -13,7 +13,7 @@ use crate::{
 pub async fn create_print_job_with_audit(
     database: &Database,
     input: CreatePrintJob,
-    user_id: String,
+    actor: AuditActor,
 ) -> RepositoryResult<JobWithArtifact> {
     let connection = database.sea_orm_connection();
     let tx = connection
@@ -21,15 +21,14 @@ pub async fn create_print_job_with_audit(
         .await
         .context("failed to begin print job audit transaction")?;
     let created = create::create_print_job(&tx, input).await?;
-    let event = build_audit_event(RecordAuditEvent {
-        tenant_id: created.job.tenant_id,
-        actor_type: "user".to_owned(),
-        user_id: Some(user_id),
-        action: "job.create".to_owned(),
-        target_type: "job".to_owned(),
-        target_id: Some(created.job.id.to_string()),
-        metadata_json: "{}".to_owned(),
-    });
+    let event = record_audit_event(
+        created.job.tenant_id,
+        actor,
+        "job.create",
+        "job",
+        Some(created.job.id.to_string()),
+        serde_json::json!({}),
+    );
     insert_audit_event_tx(&tx, &event).await?;
     tx.commit()
         .await

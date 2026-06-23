@@ -17,10 +17,19 @@ use crate::{
 
 mod bootstrap;
 mod identities;
+mod plugin_tickets;
+pub(crate) mod secrets;
+mod tenant_tokens;
 mod tokens;
 mod users;
 
 pub use identities::UserIdentity;
+pub use plugin_tickets::{
+    PluginLoginTicket, PluginLoginTicketExchange, PluginLoginTicketWithPlaintext,
+};
+pub use tenant_tokens::{
+    AuthenticatedTenantToken, TenantToken, TenantTokenScope, TenantTokenWithPlaintext,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum UserRole {
@@ -85,6 +94,12 @@ pub struct ApiToken {
 pub struct AuthenticatedUser {
     pub token_id: String,
     pub user: User,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AuthenticatedPrincipal {
+    User(AuthenticatedUser),
+    TenantToken(AuthenticatedTenantToken),
 }
 
 #[derive(Debug, Clone)]
@@ -184,7 +199,7 @@ impl AuthRepository {
     }
 }
 
-pub(super) fn hash_token(token: &str) -> String {
+pub(crate) fn hash_token(token: &str) -> String {
     let digest = Sha256::digest(token.as_bytes());
     format!("{digest:x}")
 }

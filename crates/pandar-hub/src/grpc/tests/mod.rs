@@ -12,6 +12,8 @@ mod print_jobs;
 mod print_reports;
 mod printer_snapshots;
 
+const TEST_AGENT_CREDENTIAL: &str = "pandar_ac_test";
+
 #[tokio::test]
 async fn grpc_non_hello_first_event_rejected() {
     let state = fixture_state().await;
@@ -40,7 +42,7 @@ async fn grpc_malformed_ids_rejected() {
                 tenant_id: "bad".to_string(),
                 agent_id: "bad".to_string(),
                 event_id: "event".to_string(),
-                event: Some(agent_event::Event::Hello(hello())),
+                event: Some(agent_event::Event::Hello(hello(TEST_AGENT_CREDENTIAL))),
             }],
         )
         .await,
@@ -53,7 +55,15 @@ async fn grpc_malformed_ids_rejected() {
 async fn grpc_missing_agent_rejected() {
     let state = fixture_state().await;
     let err = expect_connect_err(
-        connect(&state, vec![hello_event(TenantId::new(), AgentId::new())]).await,
+        connect(
+            &state,
+            vec![hello_event_with_credential(
+                TenantId::new(),
+                AgentId::new(),
+                TEST_AGENT_CREDENTIAL,
+            )],
+        )
+        .await,
     );
 
     assert_eq!(err.code(), Code::NotFound);
@@ -64,11 +74,143 @@ async fn grpc_tenant_mismatch_rejected() {
     let state = fixture_state().await;
     let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
     let other = state.tenants().create("beta", "Beta Labs").await.unwrap();
-    let agent = state.agents().create(tenant.id, "agent").await.unwrap();
+    let agent = paired_agent(&state, tenant.id, "agent").await;
 
-    let err = expect_connect_err(connect(&state, vec![hello_event(other.id, agent.id)]).await);
+    let err = expect_connect_err(
+        connect(
+            &state,
+            vec![hello_event_with_credential(
+                other.id,
+                agent.id,
+                TEST_AGENT_CREDENTIAL,
+            )],
+        )
+        .await,
+    );
 
     assert_eq!(err.code(), Code::PermissionDenied);
+}
+
+#[tokio::test]
+async fn grpc_missing_credential_rejected() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+
+    let err = expect_connect_err(
+        connect(
+            &state,
+            vec![hello_event_with_credential(tenant_id, agent_id, "")],
+        )
+        .await,
+    );
+
+    assert_eq!(err.code(), Code::Unauthenticated);
+    assert!(state.sessions().get(agent_id).await.is_none());
+}
+
+#[tokio::test]
+async fn grpc_wrong_credential_rejected() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+
+    let err = expect_connect_err(
+        connect(
+            &state,
+            vec![hello_event_with_credential(
+                tenant_id,
+                agent_id,
+                "pandar_ac_wrong",
+            )],
+        )
+        .await,
+    );
+
+    assert_eq!(err.code(), Code::Unauthenticated);
+    assert!(state.sessions().get(agent_id).await.is_none());
+}
+
+#[tokio::test]
+async fn grpc_null_migrated_credential_rejected() {
+    let state = fixture_state().await;
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let agent = state.agents().create(tenant.id, "agent").await.unwrap();
+
+    let err = expect_connect_err(
+        connect(
+            &state,
+            vec![hello_event_with_credential(
+                tenant.id,
+                agent.id,
+                "pandar_ac_any",
+            )],
+        )
+        .await,
+    );
+
+    assert_eq!(err.code(), Code::Unauthenticated);
+    assert!(state.sessions().get(agent.id).await.is_none());
+}
+
+#[tokio::test]
+async fn grpc_rotated_credential_replaces_old_secret() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let new_credential = "pandar_ac_rotated";
+    state
+        .agents()
+        .rotate_credential(tenant_id, agent_id, new_credential, test_audit_actor())
+        .await
+        .unwrap();
+
+    let old_err = expect_connect_err(
+        connect(
+            &state,
+            vec![hello_event_with_credential(
+                tenant_id,
+                agent_id,
+                TEST_AGENT_CREDENTIAL,
+            )],
+        )
+        .await,
+    );
+    assert_eq!(old_err.code(), Code::Unauthenticated);
+
+    let _stream = connect(
+        &state,
+        vec![hello_event_with_credential(
+            tenant_id,
+            agent_id,
+            new_credential,
+        )],
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn grpc_revoked_credential_rejected() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    state
+        .agents()
+        .revoke_credential(tenant_id, agent_id, test_audit_actor())
+        .await
+        .unwrap();
+
+    let err = expect_connect_err(
+        connect(
+            &state,
+            vec![hello_event_with_credential(
+                tenant_id,
+                agent_id,
+                TEST_AGENT_CREDENTIAL,
+            )],
+        )
+        .await,
+    );
+
+    assert_eq!(err.code(), Code::Unauthenticated);
+    assert!(state.sessions().get(agent_id).await.is_none());
 }
 
 #[tokio::test]
@@ -112,6 +254,31 @@ async fn grpc_heartbeat_updates_last_seen_and_session() {
             .last_heartbeat_at,
         "2026-06-20T00:02:00Z"
     );
+}
+
+#[tokio::test]
+async fn grpc_later_event_identity_must_match_authenticated_session() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let other = paired_agent(&state, tenant_id, "other").await;
+    let (mut stream, sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+
+    sender
+        .send(Ok(heartbeat_event(
+            tenant_id,
+            other.id,
+            "2026-06-20T00:03:00Z",
+        )))
+        .await
+        .unwrap();
+    let err = stream.next().await.unwrap().unwrap_err();
+
+    assert_eq!(err.code(), Code::PermissionDenied);
+    assert!(state.sessions().get(agent_id).await.is_none());
+    let other = state.agents().get(other.id).await.unwrap().unwrap();
+    assert_eq!(other.status, AgentStatus::Offline);
 }
 
 #[tokio::test]
@@ -192,8 +359,27 @@ async fn fixture_state() -> AppState {
 
 pub(super) async fn tenant_agent(state: &AppState) -> (TenantId, AgentId) {
     let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
-    let agent = state.agents().create(tenant.id, "agent").await.unwrap();
+    let agent = paired_agent(state, tenant.id, "agent").await;
     (tenant.id, agent.id)
+}
+
+async fn paired_agent(state: &AppState, tenant_id: TenantId, name: &str) -> pandar_core::Agent {
+    let agent = state.agents().create(tenant_id, name).await.unwrap();
+    state
+        .agents()
+        .rotate_credential(
+            tenant_id,
+            agent.id,
+            TEST_AGENT_CREDENTIAL,
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+    agent
+}
+
+fn test_audit_actor() -> crate::repositories::AuditActor {
+    crate::repositories::AuditActor::tenant_token(None, "test-setup-token", vec!["*"])
 }
 
 pub(super) async fn sent_command(
@@ -242,11 +428,19 @@ fn expect_connect_err(result: Result<ResponseStream, Status>) -> Status {
 }
 
 fn hello_event(tenant_id: TenantId, agent_id: AgentId) -> AgentEvent {
+    hello_event_with_credential(tenant_id, agent_id, TEST_AGENT_CREDENTIAL)
+}
+
+pub(super) fn hello_event_with_credential(
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    credential: &str,
+) -> AgentEvent {
     AgentEvent {
         tenant_id: tenant_id.to_string(),
         agent_id: agent_id.to_string(),
         event_id: "event".to_string(),
-        event: Some(agent_event::Event::Hello(hello())),
+        event: Some(agent_event::Event::Hello(hello(credential))),
     }
 }
 
@@ -300,9 +494,10 @@ pub(super) fn success_event(
     }
 }
 
-fn hello() -> AgentHello {
+fn hello(credential: &str) -> AgentHello {
     AgentHello {
         name: "agent".to_string(),
         version: "0.1.0".to_string(),
+        credential: credential.to_string(),
     }
 }

@@ -160,7 +160,7 @@ async fn job_create_rejects_empty_invalid_and_oversized_artifacts() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "bad_request" }));
+    assert_eq!(body, json!({ "error": "artifact_empty" }));
 
     let (status, body) = request_as(
         app.clone(),
@@ -171,7 +171,7 @@ async fn job_create_rejects_empty_invalid_and_oversized_artifacts() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_artifact_base64" }));
+    assert_eq!(body, json!({ "error": "artifact_invalid_base64" }));
 
     let oversized = vec![0_u8; state.job_storage().max_artifact_bytes() + 1];
     let (status, body) = request_as(
@@ -187,7 +187,7 @@ async fn job_create_rejects_empty_invalid_and_oversized_artifacts() {
 }
 
 #[tokio::test]
-async fn job_create_defaults_content_type_and_rejects_zero_plate() {
+async fn job_create_defaults_content_type_and_rejects_invalid_plate() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
@@ -224,6 +224,27 @@ async fn job_create_defaults_content_type_and_rejects_zero_plate() {
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(body["artifact"]["content_type"], "application/octet-stream");
 
+    for plate_id in [0, -1] {
+        let (status, body) = request_as(
+            app.clone(),
+            Method::POST,
+            &uri,
+            Some(json!({
+                "filename": "plate.3mf",
+                "content_type": "model/3mf",
+                "artifact_base64": STANDARD.encode(b"abc"),
+                "plate_id": plate_id,
+                "use_ams": false,
+                "flow_cali": false,
+                "timelapse": false
+            })),
+            &token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body, json!({ "error": "artifact_invalid_plate" }));
+    }
+
     let (status, body) = request_as(
         app,
         Method::POST,
@@ -232,7 +253,7 @@ async fn job_create_defaults_content_type_and_rejects_zero_plate() {
             "filename": "plate.3mf",
             "content_type": "model/3mf",
             "artifact_base64": STANDARD.encode(b"abc"),
-            "plate_id": 0,
+            "plate_id": 4294967296_i64,
             "use_ams": false,
             "flow_cali": false,
             "timelapse": false
@@ -241,5 +262,5 @@ async fn job_create_defaults_content_type_and_rejects_zero_plate() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_plate_id" }));
+    assert_eq!(body, json!({ "error": "artifact_invalid_plate" }));
 }

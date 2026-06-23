@@ -42,6 +42,8 @@ pub struct AgentConfig {
     pub agent_id: String,
     #[arg(long, env = "PANDAR_TENANT_ID")]
     pub tenant_id: String,
+    #[arg(long, env = "PANDAR_AGENT_CREDENTIAL")]
+    pub agent_credential: String,
     #[arg(
         long,
         env = "PANDAR_AGENT_VERSION",
@@ -68,6 +70,7 @@ pub fn hello_event(config: &AgentConfig) -> AgentEvent {
         agent_event::Event::Hello(AgentHello {
             name: config.agent_name.clone(),
             version: config.agent_version.clone(),
+            credential: config.agent_credential.clone(),
         }),
     )
 }
@@ -259,6 +262,8 @@ mod tests {
             &agent_id,
             "--tenant-id",
             &tenant_id,
+            "--agent-credential",
+            "pandar_ac_test",
             "--agent-version",
             "9.8.7",
             "--printers",
@@ -269,6 +274,7 @@ mod tests {
         assert_eq!(config.agent_name, "garage");
         assert_eq!(config.agent_id, agent_id);
         assert_eq!(config.tenant_id, tenant_id);
+        assert_eq!(config.agent_credential, "pandar_ac_test");
         assert_eq!(config.agent_version, "9.8.7");
         assert_eq!(
             config.printers,
@@ -297,6 +303,7 @@ mod tests {
             agent_name: "garage".to_owned(),
             agent_id: "agent-id".to_owned(),
             tenant_id: "tenant-id".to_owned(),
+            agent_credential: "pandar_ac_test".to_owned(),
             agent_version: env!("CARGO_PKG_VERSION").to_owned(),
             printers: "[]".to_owned(),
             artifact_root: ".".into(),
@@ -322,6 +329,7 @@ mod tests {
             Some(agent_event::Event::Hello(AgentHello {
                 name: "garage".to_owned(),
                 version: "9.8.7".to_owned(),
+                credential: "pandar_ac_test".to_owned(),
             }))
         );
     }
@@ -369,6 +377,7 @@ mod tests {
             agent_name: "garage".to_owned(),
             agent_id: "agent-id".to_owned(),
             tenant_id: "tenant-id".to_owned(),
+            agent_credential: "pandar_ac_test".to_owned(),
             agent_version: "9.8.7".to_owned(),
             printers: "[]".to_owned(),
             artifact_root: ".".into(),

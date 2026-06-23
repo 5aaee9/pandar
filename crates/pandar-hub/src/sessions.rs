@@ -106,6 +106,15 @@ impl SessionRegistry {
         None
     }
 
+    pub async fn count(&self) -> i64 {
+        self.sessions
+            .lock()
+            .await
+            .len()
+            .try_into()
+            .expect("session count should fit in i64")
+    }
+
     pub async fn is_current(&self, agent_id: AgentId, token: SessionToken) -> bool {
         self.sessions
             .lock()

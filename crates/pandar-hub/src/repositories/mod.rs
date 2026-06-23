@@ -8,15 +8,21 @@ mod materials;
 mod printers;
 mod tenants;
 
-pub use agents::AgentRepository;
-pub use audit::{AuditEvent, AuditEventRepository, RecordAuditEvent};
-pub use auth::{ApiToken, AuthRepository, AuthenticatedUser, User, UserIdentity, UserRole};
+pub use agents::{AGENT_CREDENTIAL_PREFIX, AgentRepository};
+pub use audit::{
+    AuditActor, AuditEvent, AuditEventListQuery, AuditEventRepository, RecordAuditEvent,
+};
+pub use auth::{
+    ApiToken, AuthRepository, AuthenticatedPrincipal, AuthenticatedTenantToken, AuthenticatedUser,
+    PluginLoginTicket, PluginLoginTicketExchange, PluginLoginTicketWithPlaintext, TenantToken,
+    TenantTokenScope, TenantTokenWithPlaintext, User, UserIdentity, UserRole,
+};
 pub use commands::{
     CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
 };
 pub use jobs::{
-    AppliedPrintReport, ApplyPrintReport, CreatePrintJob, JobRepository, JobWithArtifact,
-    PrintReportDiagnostic,
+    AppliedPrintReport, ApplyPrintReport, CreatePrintJob, DuplicatePrintJob, JobRepository,
+    JobWithArtifact, PrintReportDiagnostic,
 };
 pub use materials::{MaterialPatchInput, MaterialRepository, MaterialSnapshot};
 pub use printers::{PrinterRepository, PrinterSnapshotUpsert};
@@ -34,6 +40,10 @@ pub enum RepositoryError {
     DuplicateApiTokenName,
     #[error("api token hash already exists")]
     DuplicateApiTokenHash,
+    #[error("tenant token hash already exists")]
+    DuplicateTenantTokenHash,
+    #[error("plugin login ticket hash already exists")]
+    DuplicatePluginLoginTicketHash,
     #[error("user email already exists for tenant")]
     DuplicateUserEmail,
     #[error("external identity already exists for tenant")]
@@ -46,6 +56,10 @@ pub enum RepositoryError {
     MissingUser,
     #[error("api token not found")]
     MissingApiToken,
+    #[error("tenant token not found")]
+    MissingTenantToken,
+    #[error("plugin login ticket not found")]
+    MissingPluginLoginTicket,
     #[error("agent not found")]
     MissingAgent,
     #[error("printer not found")]
@@ -68,11 +82,32 @@ pub enum RepositoryError {
     InvalidPersistedPrintStatus(String),
     #[error("invalid persisted user role: {0}")]
     InvalidPersistedUserRole(String),
+    #[error("invalid tenant token scope: {0}")]
+    InvalidTokenScope(String),
+    #[error("invalid plugin redirect URL")]
+    InvalidPluginRedirectUrl,
+    #[error("print job cannot be retried safely")]
+    RetryNotSafe,
+    #[error("print job cannot be reprinted")]
+    ReprintNotAllowed,
     #[error(transparent)]
     Database(#[from] anyhow::Error),
 }
 
 pub type RepositoryResult<T> = Result<T, RepositoryError>;
+
+pub(crate) fn hash_secret(token: &str) -> String {
+    auth::hash_token(token)
+}
+
+pub(crate) fn generate_secret(prefix: &str) -> String {
+    auth::secrets::generate_secret(prefix)
+}
+
+#[cfg(test)]
+pub(crate) fn hash_token_for_test(token: &str) -> String {
+    auth::hash_token(token)
+}
 
 #[cfg(test)]
 mod tests;

@@ -52,6 +52,10 @@ impl JobStorageConfig {
         self.max_artifact_bytes
     }
 
+    pub fn spool_dir(&self) -> &Path {
+        &self.spool_dir
+    }
+
     pub async fn write_artifact(
         &self,
         tenant_id: TenantId,
@@ -103,6 +107,15 @@ impl JobStorageConfig {
             Err(err) => Err(err)
                 .with_context(|| format!("failed to remove artifact file {}", path.display())),
         }
+    }
+
+    pub async fn ensure_spool_dir(&self) -> anyhow::Result<()> {
+        fs::create_dir_all(&*self.spool_dir).await.with_context(|| {
+            format!(
+                "failed to create artifact spool {}",
+                self.spool_dir.display()
+            )
+        })
     }
 }
 

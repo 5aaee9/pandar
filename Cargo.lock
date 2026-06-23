@@ -1969,6 +1969,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "pandar-hub",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -2013,6 +2018,18 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "pandar-network-plugin"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "cc",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

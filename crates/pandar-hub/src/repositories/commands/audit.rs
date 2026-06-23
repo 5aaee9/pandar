@@ -5,8 +5,8 @@ use sea_orm::{EntityTrait, TransactionTrait};
 use crate::{
     db::Database,
     repositories::{
-        RecordAuditEvent, RepositoryError, RepositoryResult,
-        audit::{build_audit_event, insert_audit_event_tx},
+        AuditActor, RepositoryError, RepositoryResult,
+        audit::{insert_audit_event_tx, record_audit_event},
         commands::{
             DiagnosePrinterPayload, DiscoverPrintersPayload,
             inserts::{self, InsertCommand},
@@ -20,7 +20,7 @@ pub async fn enqueue_refresh_printers_with_audit(
     database: &Database,
     tenant_id: TenantId,
     agent_id: AgentId,
-    user_id: String,
+    actor: AuditActor,
 ) -> RepositoryResult<CommandRecord> {
     ownership::verify_agent_owner(database, tenant_id, agent_id).await?;
     let id = CommandId::new();
@@ -35,7 +35,7 @@ pub async fn enqueue_refresh_printers_with_audit(
         insert_command(id, tenant_id, agent_id, "refresh_printers", "{}", &now),
     )
     .await?;
-    let event = refresh_audit_event(tenant_id, agent_id, user_id);
+    let event = refresh_audit_event(tenant_id, agent_id, actor);
     insert_audit_event_tx(&tx, &event).await?;
     tx.commit()
         .await
@@ -51,7 +51,7 @@ pub async fn enqueue_discover_printers_with_audit(
     tenant_id: TenantId,
     agent_id: AgentId,
     payload: DiscoverPrintersPayload,
-    user_id: String,
+    actor: AuditActor,
 ) -> RepositoryResult<CommandRecord> {
     let payload_json = serde_json::to_string(&payload)
         .context("failed to serialize discover printers command payload")?;
@@ -61,7 +61,7 @@ pub async fn enqueue_discover_printers_with_audit(
         agent_id,
         "discover_printers",
         &payload_json,
-        audit_event(tenant_id, agent_id, user_id, "agent.discover_printers"),
+        audit_event(tenant_id, agent_id, actor, "agent.discover_printers"),
         "discover printers",
     )
     .await
@@ -72,7 +72,7 @@ pub async fn enqueue_diagnose_printer_with_audit(
     tenant_id: TenantId,
     agent_id: AgentId,
     payload: DiagnosePrinterPayload,
-    user_id: String,
+    actor: AuditActor,
 ) -> RepositoryResult<CommandRecord> {
     let payload_json = serde_json::to_string(&payload)
         .context("failed to serialize diagnose printer command payload")?;
@@ -82,7 +82,7 @@ pub async fn enqueue_diagnose_printer_with_audit(
         agent_id,
         "diagnose_printer",
         &payload_json,
-        audit_event(tenant_id, agent_id, user_id, "agent.diagnose_printer"),
+        audit_event(tenant_id, agent_id, actor, "agent.diagnose_printer"),
         "diagnose printer",
     )
     .await
@@ -142,26 +142,25 @@ fn insert_command<'a>(
 fn refresh_audit_event(
     tenant_id: TenantId,
     agent_id: AgentId,
-    user_id: String,
+    actor: AuditActor,
 ) -> crate::repositories::AuditEvent {
-    audit_event(tenant_id, agent_id, user_id, "agent.refresh_printers")
+    audit_event(tenant_id, agent_id, actor, "agent.refresh_printers")
 }
 
 fn audit_event(
     tenant_id: TenantId,
     agent_id: AgentId,
-    user_id: String,
+    actor: AuditActor,
     action: &'static str,
 ) -> crate::repositories::AuditEvent {
-    build_audit_event(RecordAuditEvent {
+    record_audit_event(
         tenant_id,
-        actor_type: "user".to_owned(),
-        user_id: Some(user_id),
-        action: action.to_owned(),
-        target_type: "agent".to_owned(),
-        target_id: Some(agent_id.to_string()),
-        metadata_json: "{}".to_owned(),
-    })
+        actor,
+        action,
+        "agent",
+        Some(agent_id.to_string()),
+        serde_json::json!({}),
+    )
 }
 
 async fn get_command(

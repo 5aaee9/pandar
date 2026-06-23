@@ -17,6 +17,7 @@ use crate::{
         AgentEvent, AgentHello, CommandAck, CommandResult, HubCommand,
         agent_control_server::AgentControl, agent_event,
     },
+    repositories::hash_secret,
     sessions::{AgentSession, SessionToken},
 };
 
@@ -54,16 +55,21 @@ impl AgentControlService {
         let agent = self
             .state
             .agents()
-            .get(agent_id)
+            .get_credential_record(agent_id)
             .await
             .map_err(repository_status)?;
         let Some(agent) = agent else {
             return Err(Status::not_found("agent not found"));
         };
-        if agent.tenant_id != tenant_id {
+        if agent.agent.tenant_id != tenant_id {
             return Err(Status::permission_denied(
                 "agent belongs to a different tenant",
             ));
+        }
+        if agent.credential_hash.as_deref() != Some(hash_secret(&hello.credential).as_str())
+            || agent.credential_revoked_at.is_some()
+        {
+            return Err(Status::unauthenticated("invalid agent credential"));
         }
 
         let now = pandar_core::created_at_now();
@@ -184,6 +190,16 @@ async fn handle_event(
     token: SessionToken,
     event: AgentEvent,
 ) -> Result<(), Status> {
+    let event_tenant_id = TenantId::parse(&event.tenant_id)
+        .map_err(|_| Status::invalid_argument("tenant_id must be a UUID"))?;
+    let event_agent_id = AgentId::parse(&event.agent_id)
+        .map_err(|_| Status::invalid_argument("agent_id must be a UUID"))?;
+    if event_tenant_id != tenant_id || event_agent_id != agent_id {
+        return Err(Status::permission_denied(
+            "event identity does not match authenticated session",
+        ));
+    }
+
     match event.event {
         Some(agent_event::Event::Heartbeat(heartbeat)) => {
             validate_rfc3339(&heartbeat.observed_at)?;

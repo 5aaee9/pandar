@@ -19,7 +19,7 @@ Bambu Studio -(network plugin ABI)-> pandar-network-plugin -(HTTP / WebSocket)->
 
 `frontend` is the product UI. It should talk only to `pandar-hub`, never directly to agents or printers.
 
-`pandar-network-plugin` is a planned Bambu Studio dynamic-library plugin replacement. It should expose the Bambu Studio network plugin ABI while connecting only to `pandar-hub`. It must not connect directly to `pandar-agent` or Bambu machines; local machine access remains the agent's responsibility.
+`pandar-network-plugin` is a Bambu Studio dynamic-library plugin replacement scaffold. It exposes the required network plugin ABI symbols while connecting only to `pandar-hub`. It must not connect directly to `pandar-agent` or Bambu machines; local machine access remains the agent's responsibility.
 
 End-user authentication can be delegated to Clerk or Logto, but tenant authorization remains inside Pandar. The hub verifies identity-provider JWTs, maps provider subjects to local users, and checks Rust-managed user-to-tenant membership plus tenant roles for every tenant-scoped operation.
 
@@ -111,13 +111,13 @@ Pandar's contract:
 2. Extract a stable provider subject and provider identifier.
 3. Resolve that identity to a local Pandar user.
 4. Authorize tenant access through Pandar-managed `users`/membership/role records.
-5. Preserve Phase 6 tenant API tokens as service credentials for automation and non-browser clients.
+5. Preserve tenant-owned tokens as service credentials for automation and non-browser clients.
 
 Phase 10 implements this contract in `pandar-hub` with one configured external identity profile per hub process. The hub parses `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, optional audience, RS-family algorithm allow-list, optional Clerk-style authorized parties, optional Logto-style required scopes, and clock leeway at startup. Partial external-auth configuration is a startup error.
 
 Tenant route authentication checks bearer credentials in this order:
 
-1. Existing Phase 6 API token lookup.
+1. Tenant-token lookup.
 2. External JWT verification against cached JWKS when configured.
 3. Local `{tenant_id, provider, subject}` lookup in `user_identities`.
 4. Local tenant role check from the linked Pandar user.
@@ -140,7 +140,7 @@ Evidence from `reference/open-bamboo-networking` and `reference/BambuStudio`:
 - Studio's localhost login handler expects `ticket` and `redirect_url`, calls `agent->get_my_token(ticket)`, then `agent->get_my_profile(access_token)`, constructs login JSON, and calls `agent->change_user(login_info)`.
 - Studio keeps sidebars and WebViews in sync by calling `build_login_cmd` / `build_login_info` and posting `studio_userlogin` or `studio_useroffline` envelopes.
 
-Pandar's planned plugin design:
+Pandar's plugin design:
 
 1. `pandar-network-plugin` returns the Pandar frontend as the plugin host/sign-in URL.
 2. The Pandar frontend page lets the user enter or confirm the Pandar URL when needed, then completes Clerk or Logto authentication.
@@ -149,7 +149,7 @@ Pandar's planned plugin design:
 5. Studio calls the plugin's token/profile ABI. The plugin exchanges the ticket with `pandar-hub` for a tenant-owned plugin credential and returns Bambu-shaped token/profile JSON to Studio.
 6. `change_user` stores enough session state for Studio login UI and future hub API calls.
 
-The plugin credential should be tenant-owned and revocable. It must not be a user-owned API token. It should not receive `agent:register`; a dedicated plugin/studio scope should be added before enabling mutating Studio actions if `*` would otherwise be required.
+The plugin credential is tenant-owned and revocable. It is not a user-owned API token and does not receive `agent:register`.
 
 ## Target Components
 
@@ -225,13 +225,13 @@ Phase 10 adds external identity authentication while preserving API-token automa
 Phase 11 adds explicit provisioning and bootstrap boundaries:
 
 - `PANDAR_BOOTSTRAP_TOKEN` is the only credential accepted by cross-tenant endpoints: `GET /api/v1/summary`, `GET /api/v1/tenants`, `POST /api/v1/tenants`, and `POST /api/v1/bootstrap/tenant-admin`.
-- `POST /api/v1/bootstrap/tenant-admin` creates a tenant, tenant admin user, initial API token, and bootstrap audit events in one SQLite/PostgreSQL transaction. The plaintext token is returned once and only its hash is stored.
-- Tenant admins can list/create users, update local user roles, link Clerk/Logto provider subjects, create/list/revoke API tokens, and create agent pairing bundles through tenant-scoped APIs.
-- API-token revocation sets `api_tokens.revoked_at`; revoked tokens are excluded from bearer authentication.
-- Provisioning actions are represented in `audit_events` with actions such as `tenant.bootstrap`, `tenant.create`, `user.create`, `user.role_update`, `user_identity.link`, `api_token.create`, `api_token.revoke`, and `agent.pairing_bundle`.
-- Agent pairing bundles return `PANDAR_TENANT_ID`, `PANDAR_AGENT_ID`, and `PANDAR_AGENT_NAME` for deployment. The future token-rotation protocol will add short-lived pairing secrets and authenticated gRPC agent credential rotation.
+- `POST /api/v1/bootstrap/tenant-admin` creates a tenant, tenant admin user, initial tenant token, and bootstrap audit events in one SQLite/PostgreSQL transaction. The plaintext token is returned once and only its hash is stored.
+- Tenant admins can list/create users, update local user roles, link Clerk/Logto provider subjects, create/list/revoke tenant tokens, and create agent pairing bundles through tenant-scoped APIs.
+- Tenant-token revocation sets `tenant_tokens.revoked_at`; revoked tokens are excluded from bearer authentication.
+- Provisioning actions are represented in `audit_events` with actions such as `tenant.bootstrap`, `tenant.create`, `user.create`, `user.role_update`, `user_identity.link`, `tenant_token.create`, `tenant_token.revoke`, and `agent.pairing_bundle`.
+- Agent pairing bundles return `PANDAR_TENANT_ID`, `PANDAR_AGENT_ID`, `PANDAR_AGENT_NAME`, and `PANDAR_AGENT_CREDENTIAL` for deployment.
 
-Phase 16 will replace the Phase 6/11 user-owned API token model with tenant-owned tokens:
+Phase 16 replaced the Phase 6/11 user-owned API token model with tenant-owned tokens:
 
 - `tenant_tokens` belong directly to a tenant, not to a user. User records remain for human identity, local roles, and audit actors.
 - Token authorization comes from token `scopes`, not from the creator's current or historical user role.
@@ -239,7 +239,15 @@ Phase 16 will replace the Phase 6/11 user-owned API token model with tenant-owne
 - `["*"]` means all tenant-scoped API and agent-registration capabilities.
 - `["agent:register"]` means the token can register or rotate agents but cannot read or mutate ordinary tenant API resources.
 - `created_by_user_id` remains nullable audit metadata. Bootstrap or system-created tokens may have no creating user.
-- Existing user-scoped API tokens should stop authenticating after the tenant-token migration.
+- Existing user-scoped API tokens no longer authenticate after the tenant-token migration.
+
+Phase 17-20 add the product and operational surfaces over these foundations:
+
+- Tenant admins can manage users, roles, identity links, tenant tokens, agent pairings, and recent audit events from the frontend. Admin API failures render a compact unavailable state.
+- Operators can manually refresh printers, retry dispatch, reprint, and duplicate jobs while the UI keeps dispatch lifecycle wording separate from physical print state. Pause, resume, and stop remain unavailable.
+- `/readyz` and `/metrics` expose deployment readiness and Prometheus metrics with redaction and hashed tenant labels.
+- `pandar cleanup` performs retention cleanup for terminal jobs, commands, machine events, audit rows, expired/used plugin tickets, revoked/expired tenant tokens, and unreferenced artifacts.
+- Artifact upload UX shows selected file, size, conversion state, configured max size, and stable backend error codes. The hub still treats slicer files as opaque artifacts.
 
 Phase 14 adds material-state persistence and reporting:
 
@@ -258,7 +266,7 @@ Phase 15 adds browser-safe live runtime UX:
 - Fronting proxies and access logs should redact the `ticket` query parameter.
 - The frontend runtime dashboard consumes authenticated `printer_snapshot` and `job_progress` events, merges them into the initial HTTP state, reconnects after 1s, 2s, 5s, and 10s, and shows the live channel as unavailable after 3 failures while retries continue.
 - Notifications cover WebSocket subscription failure/disconnect plus future live transitions: printer offline, dispatch/job failure or error, physical print failed, and physical print completed. Historical replay and cancellation transitions do not notify.
-- The dashboard now exposes live status, printer inventory, job history with artifact/material/progress details, operational notifications, and tenant setting/action references for agent pairing, API tokens, and diagnostics without rendering token values.
+- The dashboard now exposes live status, printer inventory, job history with artifact/material/progress details, operational notifications, and tenant setting/action references for agent pairing, tenant tokens, and diagnostics without rendering token values.
 
 Bootstrap a fresh tenant:
 
@@ -285,7 +293,7 @@ curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/identitie
 curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/api-tokens" \
   -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
   -H "content-type: application/json" \
-  -d '{"name":"automation"}'
+  -d '{"name":"automation","scopes":[]}'
 
 curl -sS -X DELETE "$PANDAR_API/api/v1/tenants/$TENANT_ID/api-tokens/$TOKEN_ID" \
   -H "Authorization: Bearer $TENANT_ADMIN_TOKEN"
@@ -311,14 +319,14 @@ Hub phase status after Phase 7:
 - Phase 14 added normalized AMS/external-spool material snapshots, persisted print mappings, derived filament usage rows, HTTP material responses, and dashboard material summaries. Spoolman-style external inventory remains out of scope.
 - Phase 15 added one-use browser WebSocket tickets, live frontend printer/job event consumption, reconnect status, transition notifications, and token-safe tenant operation references.
 
-Planned hub phases after Phase 15:
+Phase 16-21 hub status:
 
-- Phase 16 should introduce tenant-owned scoped tokens that replace user-scoped API tokens. Empty-scope tokens are read-only, `*` tokens have all tenant capabilities, and `agent:register` tokens can issue or rotate agent credentials. Reverse gRPC agent sessions should authenticate with tenant-scoped agent credentials issued through that flow. Plaintext tenant and agent credentials are returned once, stored hashed, rotated or revoked by tenant admins, and required before protected API or gRPC mutations can occur.
-- Phase 17 should expose the existing tenant-admin provisioning surfaces through the product UI without changing Rust-owned tenant authorization.
-- Phase 18 should add typed command-control and recovery APIs where needed for pause, resume, stop, retry, and operator diagnostics, while preserving command auditability and dispatch-vs-physical-state separation.
-- Phase 19 should add operational reliability surfaces: readiness checks, metrics, retention, cleanup, backup guidance, and redaction coverage.
-- Phase 20 should improve artifact and slicer workflow ergonomics while keeping slicer file parsing out of hub core unless a later reference-backed parser phase explicitly adopts it.
-- Phase 21 should add `pandar-network-plugin` and the hub endpoints needed for Studio login-ticket exchange and plugin-scoped access.
+- Phase 16 added tenant-owned scoped tokens, agent enrollment credentials, gRPC agent credential authentication, token rotation/revocation, plugin login tickets, and plugin-scoped tenant credentials.
+- Phase 17 exposed tenant users, identity links, scoped tenant tokens, agent pairings, and audit events in the product UI.
+- Phase 18 added retry/reprint/duplicate recovery APIs and UI controls while leaving pause/resume/stop unavailable.
+- Phase 19 added readiness checks, Prometheus metrics, redaction coverage, retention cleanup, and cleanup CLI behavior.
+- Phase 20 improved artifact upload UX and duplicate/reprint flows without adding slicer-file parsing.
+- Phase 21 added the `pandar-network-plugin` ABI shim crate and export-list verification.
 
 Phase 12 persistence boundary:
 
@@ -366,11 +374,11 @@ Agent phase status after Phase 7:
 - Phase 13 adds LAN discovery, credential validation, printer diagnostics, and centralized compatibility rules for feature availability and transport policy. Discovery uses agent-local SSDP and can run without configured printers. Diagnostics run only for agent-configured serials, keep access codes agent-local, and return structured checks for MQTT reachability/report flow, FTPS reachability/storage probe, configured-printer status, and compatibility. Expected printer or environment problems are represented as successful command results with `overall = "problem"` instead of failed hub commands.
 - Phase 14 promotes AMS, external-spool, tray-change, and filament usage data into stable Pandar models. The agent remains responsible for Bambu MQTT shape normalization, credential-key filtering, `tray_exist_bits` cleanup, `vir_slot`/`vt_tray` external-spool handling, active-tray derivation, and Bambu MQTT `ams_mapping_2` spelling. It does not persist material inventory locally.
 
-Planned agent phases after Phase 15:
+Agent phase status after Phase 15:
 
-- Phase 16 should replace manual `PANDAR_TENANT_ID`/`PANDAR_AGENT_ID` trust with authenticated enrollment credentials issued by tenant tokens carrying `agent:register` or `*` scope.
-- Phase 18 should make command execution recovery explicit, including typed pause/resume/stop paths and retry behavior that cannot accidentally create duplicate physical prints.
-- Phase 19 should expose local health evidence for hub diagnostics without leaking Bambu access codes.
+- Phase 16 replaced manual `PANDAR_TENANT_ID`/`PANDAR_AGENT_ID` trust with authenticated enrollment credentials issued by tenant tokens carrying `agent:register` or `*` scope.
+- Phase 18 made dispatch retry/reprint/duplicate explicit through hub recovery APIs. Direct physical pause/resume/stop are still not implemented.
+- Phase 19 exposes hub-side readiness evidence and redacts Bambu access codes, agent credentials, plugin tickets, WebSocket tickets, bearer tokens, and artifact paths.
 
 ### pandar-network-plugin
 
@@ -381,6 +389,7 @@ Planned agent phases after Phase 15:
 - Presents hub-backed printer/job state to Bambu Studio from cached hub responses where ABI calls are synchronous.
 - Submits print actions to the hub; the hub dispatches through authenticated agents.
 - Does not store Bambu access codes, open printer MQTT/FTPS/SFTP sockets, or call agents directly.
+- Phase 21 is a scaffold: it builds and exports the required symbols, but packaging/signing and real Bambu Studio compatibility testing are not completed.
 
 ### pandar-core
 
@@ -397,7 +406,7 @@ Planned agent phases after Phase 15:
 - Job dispatch and command controls.
 - Operational settings for database-independent hub behavior.
 
-Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. Phase 10 centralizes frontend bearer forwarding: request cookie `APP_AUTH_COOKIE_NAME` defaulting to `pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. Phase 11 keeps configured tenant dashboards on tenant-scoped APIs when `APP_TENANT_ID` is set, so ordinary tenant tokens do not need bootstrap authority. Phase 13 exposes linked agents, discovery commands, diagnostic commands, and selected command details. It renders discovery rows, diagnostic checks, and compatibility capability availability from hub command `result_json`; it does not accept or display Bambu access codes. Phase 14 renders printer material summaries and job material mapping/usage rows from Rust API response shapes while keeping dispatch-form mapping fields API-client-only. Phase 15 adds ticket-backed browser WebSocket consumption, live status, transition notifications, and token-safe tenant operation references.
+Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. Phase 10 centralizes frontend bearer forwarding: request cookie `APP_AUTH_COOKIE_NAME` defaulting to `pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. Phase 11 keeps configured tenant dashboards on tenant-scoped APIs when `APP_TENANT_ID` is set, so ordinary tenant tokens do not need bootstrap authority. Phase 13 exposes linked agents, discovery commands, diagnostic commands, and selected command details. It renders discovery rows, diagnostic checks, and compatibility capability availability from hub command `result_json`; it does not accept or display Bambu access codes. Phase 14 renders printer material summaries and job material mapping/usage rows from Rust API response shapes while keeping dispatch-form mapping fields API-client-only. Phase 15 adds ticket-backed browser WebSocket consumption, live status, transition notifications, and token-safe tenant operation references. Phase 17-20 add tenant administration, recovery controls, browser-side artifact conversion, backend error-code surfacing, and a Studio sign-in page that uses Studio's localhost callback discovery when available.
 
 Frontend phase status after Phase 7:
 
@@ -408,12 +417,10 @@ Frontend phase status after Phase 7:
 - Phase 14 exposes material summaries and job material rows from HTTP responses.
 - Phase 15 consumes authenticated WebSocket events for day-to-day monitoring and notifications through one-use browser tickets.
 
-Planned frontend phases after Phase 15:
+Remaining frontend limitations:
 
-- Phase 17 should add tenant-admin screens for users, roles, identity links, scoped tenant tokens, agent pairings, and audit history.
-- Phase 18 should add operator command controls and recovery flows to the runtime dashboard.
-- Phase 19 should surface deployment health, stale-agent evidence, and retention/cleanup status without exposing secrets.
-- Phase 20 should improve artifact upload, duplication, reprint, and material mapping workflows.
+- Pause/resume/stop controls are intentionally unavailable until live printer control is implemented.
+- Artifact conversion for dispatch still uses form submission to the Next.js server action; production proxies must keep body limits aligned with the configured frontend and hub limits.
 
 ## Data Model Draft
 
@@ -423,7 +430,7 @@ Planned frontend phases after Phase 15:
 - `tenant_memberships`: local user-to-tenant role assignments owned by Pandar.
 - `tenant_tokens`: tenant-owned bearer credentials with hashed token values, scopes, nullable creator audit metadata, last-used timestamps, expiry, and revocation state. These replace user-owned API tokens after Phase 16.
 - `plugin_login_tickets`: short-lived, one-use hub-issued tickets for Bambu Studio network plugin login. These are exchanged through the plugin ABI for tenant-owned plugin credentials and should expire quickly.
-- `plugin_sessions` or plugin-scoped `tenant_tokens`: revocable credentials created from login tickets for Bambu Studio plugin access. The final persistence shape should reuse `tenant_tokens` if scope semantics are sufficient.
+- plugin-scoped `tenant_tokens`: revocable `["plugin:studio"]` credentials created from login tickets for Bambu Studio plugin access.
 - `agents`: reverse-connection identity, tenant binding, last seen time, version.
 - `printers`: tenant, agent, serial number, name, model, network endpoint metadata, active flag.
 - `printer_credentials`: agent-visible encrypted access code material or agent-local credential references.

@@ -5,6 +5,7 @@ use tonic::Status;
 use crate::{
     AppState,
     grpc::commands::repository_status,
+    metrics::PrintReportMetric,
     printer_events::PrinterEvent,
     protocol::agent::v1::PrintJobReport,
     repositories::{ApplyPrintReport, PrintReportDiagnostic},
@@ -17,12 +18,29 @@ pub async fn handle_print_report(
     agent_id: AgentId,
     report: PrintJobReport,
 ) -> Result<(), Status> {
-    let input = apply_input(tenant_id, agent_id, report)?;
-    let applied = state
-        .jobs()
-        .apply_print_report(input)
-        .await
-        .map_err(repository_status)?;
+    let input = match apply_input(tenant_id, agent_id, report) {
+        Ok(input) => input,
+        Err(err) => {
+            state
+                .metrics()
+                .record_print_report(PrintReportMetric::Rejected);
+            return Err(err);
+        }
+    };
+    let applied = match state.jobs().apply_print_report(input).await {
+        Ok(applied) => {
+            state
+                .metrics()
+                .record_print_report(PrintReportMetric::Accepted);
+            applied
+        }
+        Err(err) => {
+            state
+                .metrics()
+                .record_print_report(PrintReportMetric::Rejected);
+            return Err(repository_status(err));
+        }
+    };
     if let Some(job) = applied.job
         && (applied.changed || applied.inserted_job_events)
     {

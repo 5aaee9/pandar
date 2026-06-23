@@ -23,7 +23,7 @@ pub(super) async fn clear_postgres(database: &Database) {
         panic!("expected PostgreSQL database");
     };
     sqlx::query(
-        "TRUNCATE audit_events, api_tokens, user_identities, job_filament_usages, printer_material_snapshots, jobs, job_artifacts, commands, printers, agents, users, tenants",
+        "TRUNCATE audit_events, api_tokens, user_identities, tenant_tokens, plugin_login_tickets, job_filament_usages, printer_material_snapshots, jobs, job_artifacts, commands, printers, agents, users, tenants",
     )
         .execute(pool)
         .await
@@ -220,6 +220,172 @@ async fn postgres_print_report_reconciliation_when_configured() {
     assert_eq!(job.print.status, PrintStatus::Running);
     assert_eq!(job.print.progress_percent, Some(50));
     assert!(!second.inserted_job_events);
+}
+
+#[tokio::test]
+async fn postgres_job_recovery_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    let tenants = TenantRepository::new(database.clone());
+    let agents = AgentRepository::new(database.clone());
+    let jobs = JobRepository::new(database.clone());
+    let commands = CommandRepository::new(database.clone());
+    let tenant = tenants.create("recovery", "Recovery").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)
+        .await
+        .unwrap();
+    let source = jobs
+        .create_print_job(CreatePrintJob {
+            tenant_id: tenant.id,
+            printer_id: printer_id.clone(),
+            agent_id: agent.id,
+            artifact_id: "artifact-1".to_string(),
+            artifact_filename: "plate.3mf".to_string(),
+            artifact_content_type: "model/3mf".to_string(),
+            artifact_size_bytes: 42,
+            artifact_storage_path: format!("{}/artifact-1/plate.3mf", tenant.id),
+            plate_id: 1,
+            use_ams: true,
+            flow_cali: false,
+            timelapse: false,
+            ams_mapping_json: None,
+            ams_mapping2_json: None,
+        })
+        .await
+        .unwrap();
+    jobs.mark_print_sent(source.job.command_id, tenant.id, agent.id)
+        .await
+        .unwrap();
+    jobs.mark_print_failed(
+        source.job.command_id,
+        tenant.id,
+        agent.id,
+        "agent offline".to_owned(),
+    )
+    .await
+    .unwrap();
+
+    let retried = jobs
+        .retry_dispatch_with_audit(
+            tenant.id,
+            source.job.id,
+            None,
+            crate::repositories::AuditActor {
+                actor_type: "system".to_owned(),
+                user_id: None,
+                metadata: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(retried.job.id, source.job.id);
+    assert_ne!(retried.job.command_id, source.job.command_id);
+
+    let completed_source = jobs
+        .create_print_job(CreatePrintJob {
+            tenant_id: tenant.id,
+            printer_id: printer_id.clone(),
+            agent_id: agent.id,
+            artifact_id: "artifact-2".to_string(),
+            artifact_filename: "finished.3mf".to_string(),
+            artifact_content_type: "model/3mf".to_string(),
+            artifact_size_bytes: 84,
+            artifact_storage_path: format!("{}/artifact-2/finished.3mf", tenant.id),
+            plate_id: 1,
+            use_ams: true,
+            flow_cali: false,
+            timelapse: false,
+            ams_mapping_json: None,
+            ams_mapping2_json: None,
+        })
+        .await
+        .unwrap();
+    jobs.apply_print_report(ApplyPrintReport {
+        tenant_id: tenant.id,
+        agent_id: agent.id,
+        serial: format!("serial-{printer_id}"),
+        job_id: Some(completed_source.job.id),
+        artifact_id: None,
+        subtask_id: None,
+        gcode_file: Some("finished.3mf".to_string()),
+        subtask_name: None,
+        gcode_state: Some("FINISH".to_string()),
+        percent: Some(100),
+        remaining_time_minutes: Some(0),
+        current_layer: Some(9),
+        total_layers: Some(9),
+        diagnostics: Vec::new(),
+        printer_materials_json: String::new(),
+        observed_at: "2026-06-22T00:10:00Z".to_string(),
+    })
+    .await
+    .unwrap();
+
+    let reprint = jobs
+        .reprint_with_audit(
+            tenant.id,
+            completed_source.job.id,
+            Some("another copy".to_string()),
+            crate::repositories::AuditActor {
+                actor_type: "system".to_owned(),
+                user_id: None,
+                metadata: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_ne!(reprint.job.id, completed_source.job.id);
+    assert_eq!(reprint.job.status, JobStatus::Queued);
+    assert_eq!(reprint.artifact.id, completed_source.artifact.id);
+    assert_eq!(
+        reprint.artifact.storage_path,
+        completed_source.artifact.storage_path
+    );
+
+    let duplicate = jobs
+        .duplicate_and_print_with_audit(
+            tenant.id,
+            retried.job.id,
+            crate::repositories::DuplicatePrintJob {
+                printer_id: Some(printer_id),
+                plate_id: Some(2),
+                use_ams: Some(false),
+                flow_cali: None,
+                timelapse: None,
+                ams_mapping_json: None,
+                ams_mapping2_json: None,
+            },
+            crate::repositories::AuditActor {
+                actor_type: "system".to_owned(),
+                user_id: None,
+                metadata: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(duplicate.artifact.id, source.artifact.id);
+    assert_eq!(commands.count().await.unwrap(), 5);
+}
+
+#[tokio::test]
+async fn postgres_cleanup_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    crate::repositories::tests::cleanup::exercise_cleanup(
+        database.clone(),
+        TenantRepository::new(database.clone()),
+        AgentRepository::new(database.clone()),
+        CommandRepository::new(database.clone()),
+        JobRepository::new(database),
+    )
+    .await;
 }
 
 #[tokio::test]

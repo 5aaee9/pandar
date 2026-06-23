@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::{
     AppState,
-    repositories::{CreatePrintJob, JobWithArtifact, RepositoryError, UserRole},
+    repositories::{CreatePrintJob, DuplicatePrintJob, JobWithArtifact, RepositoryError, UserRole},
     routes::{ApiError, auth, parse_tenant_id},
 };
 
@@ -22,10 +22,26 @@ pub struct CreateJobRequest {
     filename: String,
     content_type: String,
     artifact_base64: String,
-    plate_id: u32,
+    plate_id: i64,
     use_ams: bool,
     flow_cali: bool,
     timelapse: bool,
+    ams_mapping: Option<Value>,
+    ams_mapping2: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RecoveryReasonRequest {
+    reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DuplicateJobRequest {
+    printer_id: Option<String>,
+    plate_id: Option<i64>,
+    use_ams: Option<bool>,
+    flow_cali: Option<bool>,
+    timelapse: Option<bool>,
     ams_mapping: Option<Value>,
     ams_mapping2: Option<Value>,
 }
@@ -72,7 +88,6 @@ pub struct JobArtifactResponse {
     filename: String,
     content_type: String,
     size_bytes: u64,
-    storage_path: String,
     created_at: String,
 }
 
@@ -85,7 +100,7 @@ pub struct JobCommandResponse {
 
 #[derive(Debug, Serialize)]
 pub struct JobListResponse {
-    jobs: Vec<JobResponse>,
+    pub(in crate::routes) jobs: Vec<JobResponse>,
 }
 pub async fn create_job(
     State(state): State<AppState>,
@@ -94,33 +109,24 @@ pub async fn create_job(
     payload: Result<Json<CreateJobRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<JobResponse>), ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
-    let auth = auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let auth =
+        auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
     parse_printer_id(&printer_id)?;
     let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
-    if payload.filename.trim().is_empty() || payload.artifact_base64.trim().is_empty() {
+    if payload.filename.trim().is_empty() {
         return Err(ApiError::bad_request("bad_request"));
     }
-    if payload.plate_id == 0 {
-        return Err(ApiError::bad_request("invalid_plate_id"));
-    }
+    let plate_id = validated_plate_id(payload.plate_id)?;
     let content_type = if payload.content_type.trim().is_empty() {
         "application/octet-stream".to_string()
     } else {
         payload.content_type
     };
 
-    let artifact_bytes = STANDARD
-        .decode(payload.artifact_base64)
-        .map_err(|_| ApiError::bad_request("invalid_artifact_base64"))?;
-    if artifact_bytes.is_empty() {
-        return Err(ApiError::bad_request("empty_artifact"));
-    }
-    if artifact_bytes.len() > state.job_storage().max_artifact_bytes() {
-        return Err(ApiError::new(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "artifact_too_large",
-        ));
-    }
+    let artifact_bytes = validate_artifact_submission(
+        &payload.artifact_base64,
+        state.job_storage().max_artifact_bytes(),
+    )?;
     let ams_mapping_json = material::mapping_json(payload.ams_mapping, "ams_mapping")?;
     let ams_mapping2_json = material::mapping_json(payload.ams_mapping2, "ams_mapping2")?;
 
@@ -137,7 +143,10 @@ pub async fn create_job(
         .write_artifact(tenant_id, &artifact_id, &payload.filename, &artifact_bytes)
         .await
         .map_err(|err| {
-            tracing::error!(error = %format!("{err:#}"), "failed to write print artifact");
+            tracing::error!(
+                error = %redact_artifact_error(&format!("{err:#}")),
+                "failed to write print artifact"
+            );
             ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
         })?;
 
@@ -153,14 +162,14 @@ pub async fn create_job(
                 artifact_content_type: content_type,
                 artifact_size_bytes: stored.size_bytes,
                 artifact_storage_path: stored.storage_path.clone(),
-                plate_id: payload.plate_id,
+                plate_id,
                 use_ams: payload.use_ams,
                 flow_cali: payload.flow_cali,
                 timelapse: payload.timelapse,
                 ams_mapping_json,
                 ams_mapping2_json,
             },
-            auth.user.id,
+            auth::audit_actor(&auth),
         )
         .await;
 
@@ -173,8 +182,7 @@ pub async fn create_job(
                 .await
             {
                 tracing::warn!(
-                    error = %format!("{cleanup_err:#}"),
-                    storage_path = %stored.storage_path,
+                    error = %redact_artifact_error(&format!("{cleanup_err:#}")),
                     "failed to remove print artifact after repository error"
                 );
             }
@@ -183,9 +191,109 @@ pub async fn create_job(
     }
 }
 
+pub async fn retry_dispatch(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((tenant_id, job_id)): Path<(String, String)>,
+    payload: Result<Json<RecoveryReasonRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<JobResponse>), ApiError> {
+    let tenant_id = parse_tenant_id(&tenant_id)?;
+    let auth =
+        auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let job_id = JobId::parse(&job_id).map_err(|_| ApiError::bad_request("invalid_job_id"))?;
+    let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
+    let reason = payload.reason;
+    let job = state
+        .jobs()
+        .retry_dispatch_with_audit(tenant_id, job_id, reason, auth::audit_actor(&auth))
+        .await?;
+    Ok((StatusCode::CREATED, Json(JobResponse::try_from(job)?)))
+}
+
+pub async fn reprint(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((tenant_id, job_id)): Path<(String, String)>,
+    payload: Result<Json<RecoveryReasonRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<JobResponse>), ApiError> {
+    let tenant_id = parse_tenant_id(&tenant_id)?;
+    let auth =
+        auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let job_id = JobId::parse(&job_id).map_err(|_| ApiError::bad_request("invalid_job_id"))?;
+    let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
+    let reason = payload.reason;
+    let job = state
+        .jobs()
+        .reprint_with_audit(tenant_id, job_id, reason, auth::audit_actor(&auth))
+        .await?;
+    Ok((StatusCode::CREATED, Json(JobResponse::try_from(job)?)))
+}
+
+pub async fn duplicate(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((tenant_id, job_id)): Path<(String, String)>,
+    payload: Result<Json<DuplicateJobRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<JobResponse>), ApiError> {
+    let tenant_id = parse_tenant_id(&tenant_id)?;
+    let auth =
+        auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let job_id = JobId::parse(&job_id).map_err(|_| ApiError::bad_request("invalid_job_id"))?;
+    let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
+    let plate_id = payload.plate_id.map(validated_plate_id).transpose()?;
+    if let Some(printer_id) = &payload.printer_id {
+        parse_printer_id(printer_id)?;
+    }
+    let job = state
+        .jobs()
+        .duplicate_and_print_with_audit(
+            tenant_id,
+            job_id,
+            DuplicatePrintJob {
+                printer_id: payload.printer_id,
+                plate_id,
+                use_ams: payload.use_ams,
+                flow_cali: payload.flow_cali,
+                timelapse: payload.timelapse,
+                ams_mapping_json: material::mapping_json(payload.ams_mapping, "ams_mapping")?,
+                ams_mapping2_json: material::mapping_json(payload.ams_mapping2, "ams_mapping2")?,
+            },
+            auth::audit_actor(&auth),
+        )
+        .await?;
+    Ok((StatusCode::CREATED, Json(JobResponse::try_from(job)?)))
+}
+
+pub fn validate_artifact_submission(payload: &str, max_bytes: usize) -> Result<Vec<u8>, ApiError> {
+    let bytes = STANDARD
+        .decode(payload)
+        .map_err(|_| ApiError::bad_request("artifact_invalid_base64"))?;
+    if bytes.is_empty() {
+        return Err(ApiError::bad_request("artifact_empty"));
+    }
+    if bytes.len() > max_bytes {
+        return Err(ApiError::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "artifact_too_large",
+        ));
+    }
+    Ok(bytes)
+}
+
+pub(super) fn redact_artifact_error(message: &str) -> String {
+    crate::routes::plugin::redact_artifact_error(message)
+}
+
 fn parse_printer_id(value: &str) -> Result<(), ApiError> {
     uuid::Uuid::parse_str(value).map_err(|_| ApiError::bad_request("invalid_printer_id"))?;
     Ok(())
+}
+
+pub(super) fn validated_plate_id(value: i64) -> Result<u32, ApiError> {
+    if value <= 0 {
+        return Err(ApiError::bad_request("artifact_invalid_plate"));
+    }
+    u32::try_from(value).map_err(|_| ApiError::bad_request("artifact_invalid_plate"))
 }
 pub async fn list_jobs(
     State(state): State<AppState>,
@@ -282,7 +390,6 @@ impl From<JobArtifact> for JobArtifactResponse {
             filename: artifact.filename,
             content_type: artifact.content_type,
             size_bytes: artifact.size_bytes,
-            storage_path: artifact.storage_path,
             created_at: artifact.created_at,
         }
     }

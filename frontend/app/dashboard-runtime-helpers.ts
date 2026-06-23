@@ -87,3 +87,35 @@ export function formatJobMaterial(job: Job) {
   ].filter(Boolean)
   return mappings.length > 0 ? mappings.join(', ') : 'No material mapping'
 }
+
+export function formatJobRecoveryState(job: Job) {
+  const dispatch = job.status.toLowerCase()
+  const command = job.command.status.toLowerCase()
+  const physical = job.print.status.toLowerCase()
+  const message = `${job.error ?? ''} ${job.print.error ?? ''}`.toLowerCase()
+
+  if (physical === 'running') {
+    return 'Physical print running'
+  }
+  if (['completed', 'failed', 'cancelled'].includes(physical)) {
+    return `Physical print ${physical}`
+  }
+  if (dispatch === 'queued' || command === 'queued') {
+    return 'Agent offline before dispatch'
+  }
+  if (
+    message.includes('upload') ||
+    message.includes('transfer') ||
+    message.includes('sftp') ||
+    message.includes('file')
+  ) {
+    return 'File transfer failure'
+  }
+  if (message.includes('mqtt') || message.includes('publish')) {
+    return 'MQTT publish failure'
+  }
+  if (dispatch === 'failed' || command === 'failed') {
+    return 'Hub enqueue failure'
+  }
+  return 'Awaiting physical print'
+}

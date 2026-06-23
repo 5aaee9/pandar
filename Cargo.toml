@@ -4,6 +4,7 @@ members = [
     "crates/pandar-app",
     "crates/pandar-core",
     "crates/pandar-hub",
+    "crates/pandar-network-plugin",
 ]
 resolver = "2"
 

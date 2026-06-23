@@ -7,12 +7,15 @@ use sea_orm::{
 
 mod pairing;
 
+pub use pairing::AGENT_CREDENTIAL_PREFIX;
+
 use crate::{
     db::Database,
     entities::{agents, tenants},
     repositories::{
-        RepositoryError, RepositoryResult,
-        audit::{build_audit_event, insert_audit_event_tx},
+        AuditActor, RepositoryError, RepositoryResult,
+        audit::{insert_audit_event_tx, record_audit_event},
+        auth::hash_token,
         is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
     },
 };
@@ -20,6 +23,14 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct AgentRepository {
     database: Database,
+}
+
+#[derive(Debug, Clone)]
+pub struct AgentCredentialRecord {
+    pub agent: Agent,
+    pub credential_hash: Option<String>,
+    pub credential_rotated_at: Option<String>,
+    pub credential_revoked_at: Option<String>,
 }
 
 impl AgentRepository {
@@ -40,7 +51,7 @@ impl AgentRepository {
         &self,
         tenant_id: TenantId,
         name: impl Into<String>,
-        user_id: String,
+        actor: AuditActor,
     ) -> RepositoryResult<Agent> {
         let agent = Agent::new(tenant_id, name).map_err(anyhow::Error::from)?;
         let connection = self.database.sea_orm_connection();
@@ -49,15 +60,14 @@ impl AgentRepository {
             .await
             .context("failed to begin agent create audit transaction")?;
         insert_agent(&tx, &agent).await?;
-        let event = build_audit_event(crate::repositories::RecordAuditEvent {
+        let event = record_audit_event(
             tenant_id,
-            actor_type: "user".to_owned(),
-            user_id: Some(user_id),
-            action: "agent.create".to_owned(),
-            target_type: "agent".to_owned(),
-            target_id: Some(agent.id.to_string()),
-            metadata_json: "{}".to_owned(),
-        });
+            actor,
+            "agent.create",
+            "agent",
+            Some(agent.id.to_string()),
+            serde_json::json!({}),
+        );
         insert_audit_event_tx(&tx, &event).await?;
         tx.commit()
             .await
@@ -95,6 +105,18 @@ impl AgentRepository {
             .await
             .context("failed to get agent")?
             .map(agent_from_model)
+            .transpose()
+    }
+
+    pub async fn get_credential_record(
+        &self,
+        agent_id: AgentId,
+    ) -> RepositoryResult<Option<AgentCredentialRecord>> {
+        agents::Entity::find_by_id(agent_id.to_string())
+            .one(&self.database.sea_orm_connection())
+            .await
+            .context("failed to get agent credential")?
+            .map(agent_credential_from_model)
             .transpose()
     }
 
@@ -145,6 +167,107 @@ impl AgentRepository {
 
         Ok(count.try_into().expect("agent count should fit in i64"))
     }
+
+    pub async fn rotate_credential(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        credential: &str,
+        actor: AuditActor,
+    ) -> RepositoryResult<AgentCredentialRecord> {
+        let connection = self.database.sea_orm_connection();
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin agent credential rotation transaction")?;
+        let Some(agent) = agents::Entity::find_by_id(agent_id.to_string())
+            .one(&tx)
+            .await
+            .context("failed to get agent before credential rotation")?
+        else {
+            return Err(RepositoryError::MissingAgent);
+        };
+        if agent.tenant_id != tenant_id.to_string() {
+            return Err(RepositoryError::MissingAgent);
+        }
+
+        let mut active: agents::ActiveModel = agent.into();
+        active.credential_hash = Set(Some(hash_token(credential)));
+        active.credential_rotated_at = Set(Some(pandar_core::created_at_now()));
+        active.credential_revoked_at = Set(None);
+        let updated = active
+            .update(&tx)
+            .await
+            .context("failed to rotate agent credential")
+            .map_err(RepositoryError::from)
+            .and_then(agent_credential_from_model)?;
+        insert_audit_event_tx(
+            &tx,
+            &record_audit_event(
+                tenant_id,
+                actor,
+                "agent.credential_rotate",
+                "agent",
+                Some(agent_id.to_string()),
+                serde_json::json!({}),
+            ),
+        )
+        .await?;
+        tx.commit()
+            .await
+            .context("failed to commit agent credential rotation transaction")?;
+
+        Ok(updated)
+    }
+
+    pub async fn revoke_credential(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        actor: AuditActor,
+    ) -> RepositoryResult<AgentCredentialRecord> {
+        let connection = self.database.sea_orm_connection();
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin agent credential revocation transaction")?;
+        let Some(agent) = agents::Entity::find_by_id(agent_id.to_string())
+            .one(&tx)
+            .await
+            .context("failed to get agent before credential revocation")?
+        else {
+            return Err(RepositoryError::MissingAgent);
+        };
+        if agent.tenant_id != tenant_id.to_string() {
+            return Err(RepositoryError::MissingAgent);
+        }
+
+        let mut active: agents::ActiveModel = agent.into();
+        active.credential_revoked_at = Set(Some(pandar_core::created_at_now()));
+        let updated = active
+            .update(&tx)
+            .await
+            .context("failed to revoke agent credential")
+            .map_err(RepositoryError::from)
+            .and_then(agent_credential_from_model)?;
+        insert_audit_event_tx(
+            &tx,
+            &record_audit_event(
+                tenant_id,
+                actor,
+                "agent.credential_revoke",
+                "agent",
+                Some(agent_id.to_string()),
+                serde_json::json!({}),
+            ),
+        )
+        .await?;
+        tx.commit()
+            .await
+            .context("failed to commit agent credential revocation transaction")?;
+
+        Ok(updated)
+    }
 }
 
 pub(super) async fn insert_agent<C>(connection: &C, agent: &Agent) -> RepositoryResult<()>
@@ -159,6 +282,9 @@ where
         version: Set(None),
         last_seen_at: Set(None),
         created_at: Set(agent.created_at.clone()),
+        credential_hash: Set(None),
+        credential_rotated_at: Set(None),
+        credential_revoked_at: Set(None),
     }
     .insert(connection)
     .await
@@ -209,4 +335,16 @@ fn agent_from_model(model: agents::Model) -> RepositoryResult<Agent> {
     .map_err(anyhow::Error::from)
     .context("failed to rehydrate agent")
     .map_err(RepositoryError::from)
+}
+
+fn agent_credential_from_model(model: agents::Model) -> RepositoryResult<AgentCredentialRecord> {
+    let credential_hash = model.credential_hash.clone();
+    let credential_rotated_at = model.credential_rotated_at.clone();
+    let credential_revoked_at = model.credential_revoked_at.clone();
+    Ok(AgentCredentialRecord {
+        agent: agent_from_model(model)?,
+        credential_hash,
+        credential_rotated_at,
+        credential_revoked_at,
+    })
 }

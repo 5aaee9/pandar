@@ -6,6 +6,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode, jwk::JwkSet};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::Serialize;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -13,10 +14,14 @@ use tower::ServiceExt;
 mod agents;
 mod bootstrap;
 mod jobs;
+mod plugin;
+mod plugin_redaction;
 mod printer_commands;
 mod printer_events_ws;
 mod printers;
 mod provisioning;
+mod readiness_metrics;
+mod tenant_tokens;
 
 const TEST_PRIVATE_KEY_PEM: &str = include_str!("tests/fixtures/external_auth_private.pem");
 const TEST_PUBLIC_JWK_JSON: &str = include_str!("tests/fixtures/external_auth_jwks.json");
@@ -138,22 +143,136 @@ async fn auth_token_for_role(
     token: &str,
 ) -> String {
     let tenant_id = TenantId::parse(tenant_id).unwrap();
+    let scopes = match role {
+        crate::repositories::UserRole::TenantAdmin | crate::repositories::UserRole::Operator => {
+            vec![crate::repositories::TenantTokenScope::All]
+        }
+        crate::repositories::UserRole::Viewer => Vec::new(),
+    };
     let user = state
         .auth()
         .create_user(
             tenant_id,
             format!("{token}@example.test"),
-            "Test User",
-            role,
+            "Tenant Token Creator",
+            crate::repositories::UserRole::TenantAdmin,
         )
         .await
         .unwrap();
-    state
+    let plaintext = format!("test_tenant_{}_{}", token, uuid::Uuid::new_v4().simple());
+    crate::entities::tenant_tokens::ActiveModel {
+        id: Set(uuid::Uuid::new_v4().to_string()),
+        tenant_id: Set(tenant_id.to_string()),
+        name: Set(token.to_owned()),
+        token_hash: Set(crate::repositories::hash_token_for_test(&plaintext)),
+        scopes_json: Set(tenant_token_scopes_json(&scopes)),
+        created_by_user_id: Set(Some(user.id)),
+        created_at: Set(pandar_core::created_at_now()),
+        last_used_at: Set(None),
+        expires_at: Set(None),
+        revoked_at: Set(None),
+    }
+    .insert(&state.database().sea_orm_connection())
+    .await
+    .unwrap();
+    plaintext
+}
+
+async fn tenant_token_for_scopes(
+    state: &AppState,
+    tenant_id: &str,
+    name: &str,
+    scopes: Vec<crate::repositories::TenantTokenScope>,
+) -> String {
+    let tenant_id = TenantId::parse(tenant_id).unwrap();
+    let user = state
         .auth()
-        .create_api_token(tenant_id, &user.id, token, token)
+        .create_user(
+            tenant_id,
+            format!("{name}@example.test"),
+            "Tenant Token Creator",
+            crate::repositories::UserRole::TenantAdmin,
+        )
         .await
         .unwrap();
-    token.to_owned()
+    let plaintext = format!("test_tenant_{}_{}", name, uuid::Uuid::new_v4().simple());
+    crate::entities::tenant_tokens::ActiveModel {
+        id: Set(uuid::Uuid::new_v4().to_string()),
+        tenant_id: Set(tenant_id.to_string()),
+        name: Set(name.to_owned()),
+        token_hash: Set(crate::repositories::hash_token_for_test(&plaintext)),
+        scopes_json: Set(tenant_token_scopes_json(&scopes)),
+        created_by_user_id: Set(Some(user.id)),
+        created_at: Set(pandar_core::created_at_now()),
+        last_used_at: Set(None),
+        expires_at: Set(None),
+        revoked_at: Set(None),
+    }
+    .insert(&state.database().sea_orm_connection())
+    .await
+    .unwrap();
+    plaintext
+}
+
+fn tenant_token_scopes_json(scopes: &[crate::repositories::TenantTokenScope]) -> String {
+    serde_json::to_string(
+        &scopes
+            .iter()
+            .map(|scope| scope.as_str())
+            .collect::<Vec<_>>(),
+    )
+    .unwrap()
+}
+
+async fn read_only_tenant_token(state: &AppState, tenant_id: &str, name: &str) -> String {
+    tenant_token_for_scopes(state, tenant_id, name, Vec::new()).await
+}
+
+async fn all_scope_tenant_token(state: &AppState, tenant_id: &str, name: &str) -> String {
+    tenant_token_for_scopes(
+        state,
+        tenant_id,
+        name,
+        vec![crate::repositories::TenantTokenScope::All],
+    )
+    .await
+}
+
+async fn agent_register_tenant_token(state: &AppState, tenant_id: &str, name: &str) -> String {
+    tenant_token_for_scopes(
+        state,
+        tenant_id,
+        name,
+        vec![crate::repositories::TenantTokenScope::AgentRegister],
+    )
+    .await
+}
+
+async fn plugin_studio_tenant_token(state: &AppState, tenant_id: &str, name: &str) -> String {
+    tenant_token_for_scopes(
+        state,
+        tenant_id,
+        name,
+        vec![crate::repositories::TenantTokenScope::PluginStudio],
+    )
+    .await
+}
+
+async fn all_and_plugin_studio_tenant_token(
+    state: &AppState,
+    tenant_id: &str,
+    name: &str,
+) -> String {
+    tenant_token_for_scopes(
+        state,
+        tenant_id,
+        name,
+        vec![
+            crate::repositories::TenantTokenScope::All,
+            crate::repositories::TenantTokenScope::PluginStudio,
+        ],
+    )
+    .await
 }
 
 fn external_auth_state(state: AppState) -> AppState {
@@ -239,27 +358,40 @@ async fn health_check_reports_ok() {
 }
 
 #[tokio::test]
-async fn api_token_auth_still_succeeds_when_external_auth_is_configured() {
+async fn retired_api_token_auth_is_rejected_when_external_auth_is_configured() {
     let state = state().await;
     let app = router(external_auth_state(state.clone()));
     let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
-    let token = auth_token_for_role(
-        &state,
-        &tenant.id.to_string(),
-        crate::repositories::UserRole::Viewer,
-        "api-token-with-external-auth",
-    )
-    .await;
+    let user = state
+        .auth()
+        .create_user(
+            tenant.id,
+            "api-token-user@example.test",
+            "API Token User",
+            crate::repositories::UserRole::Viewer,
+        )
+        .await
+        .unwrap();
+    state
+        .auth()
+        .create_api_token(
+            tenant.id,
+            &user.id,
+            "retired-api-token",
+            "retired-api-token",
+        )
+        .await
+        .unwrap();
 
     let (status, body) = request_as(
         app,
         Method::GET,
         &format!("/api/v1/tenants/{}/agents", tenant.id),
         None,
-        &token,
+        "retired-api-token",
     )
     .await;
 
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "agents": [] }));
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
 }

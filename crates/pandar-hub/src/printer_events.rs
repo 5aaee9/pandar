@@ -8,7 +8,10 @@ use pandar_core::{Printer, TenantId};
 use serde::Serialize;
 use tokio::sync::{Mutex, broadcast};
 
-use crate::routes::jobs::JobResponse;
+use crate::{
+    metrics::{MetricsState, SubscriptionGuard, TicketMetric},
+    routes::jobs::JobResponse,
+};
 
 const TICKET_TTL: Duration = Duration::from_secs(60);
 
@@ -37,18 +40,28 @@ pub struct IssuedPrinterEventTicket {
 pub struct PrinterEventHub {
     senders: Arc<Mutex<HashMap<String, broadcast::Sender<PrinterEvent>>>>,
     tickets: Arc<Mutex<HashMap<String, PrinterEventTicket>>>,
+    metrics: MetricsState,
 }
 
 impl PrinterEventHub {
     pub fn new() -> Self {
+        Self::with_metrics(MetricsState::new())
+    }
+
+    pub fn with_metrics(metrics: MetricsState) -> Self {
         Self {
             senders: Arc::new(Mutex::new(HashMap::new())),
             tickets: Arc::new(Mutex::new(HashMap::new())),
+            metrics,
         }
     }
 
     pub async fn subscribe(&self, tenant_id: TenantId) -> broadcast::Receiver<PrinterEvent> {
         self.sender(tenant_id).await.subscribe()
+    }
+
+    pub async fn track_subscription(&self, tenant_id: TenantId) -> SubscriptionGuard {
+        self.metrics.subscription_started(tenant_id).await
     }
 
     pub async fn publish(&self, tenant_id: TenantId, event: PrinterEvent) {
@@ -66,7 +79,11 @@ impl PrinterEventHub {
             .expect("UTC ticket expiry must format as RFC3339");
 
         let mut tickets = self.tickets.lock().await;
+        let before = tickets.len();
         tickets.retain(|_, value| value.expires_at > now);
+        for _ in 0..before.saturating_sub(tickets.len()) {
+            self.metrics.record_ticket(TicketMetric::Expired);
+        }
         tickets.insert(
             ticket.clone(),
             PrinterEventTicket {
@@ -75,6 +92,7 @@ impl PrinterEventHub {
             },
         );
 
+        self.metrics.record_ticket(TicketMetric::Issued);
         IssuedPrinterEventTicket {
             ticket,
             expires_at: expires_at_text,
@@ -84,10 +102,20 @@ impl PrinterEventHub {
     pub async fn consume_ticket(&self, tenant_id: TenantId, ticket: &str) -> bool {
         let now = Instant::now();
         let mut tickets = self.tickets.lock().await;
+        let before = tickets.len();
         tickets.retain(|_, value| value.expires_at > now);
-        tickets
+        for _ in 0..before.saturating_sub(tickets.len()) {
+            self.metrics.record_ticket(TicketMetric::Expired);
+        }
+        let consumed = tickets
             .remove(ticket)
-            .is_some_and(|value| value.tenant_id == tenant_id && value.expires_at > now)
+            .is_some_and(|value| value.tenant_id == tenant_id && value.expires_at > now);
+        self.metrics.record_ticket(if consumed {
+            TicketMetric::Consumed
+        } else {
+            TicketMetric::Invalid
+        });
+        consumed
     }
 
     async fn sender(&self, tenant_id: TenantId) -> broadcast::Sender<PrinterEvent> {

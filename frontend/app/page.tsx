@@ -2,12 +2,16 @@ import { apiHeaders, authSource } from './api-auth'
 import { parseCommandResult } from './command-result-parser'
 import type {
   AgentList,
+  AuditEventList,
   Command,
   FetchResult,
   JobList,
   PrinterList,
   Summary,
   TenantList,
+  TenantTokenList,
+  UserIdentityList,
+  UserList,
 } from './dashboard-types'
 import { DashboardRuntime } from './dashboard-runtime'
 
@@ -18,6 +22,7 @@ type PageProps = {
   searchParams?: Promise<{
     tenant?: string | string[]
     command?: string | string[]
+    status?: string | string[]
   }>
 }
 
@@ -60,6 +65,7 @@ export default async function Page({ searchParams }: PageProps) {
   const params = await searchParams
   const requestedTenant = Array.isArray(params?.tenant) ? params.tenant[0] : params?.tenant
   const requestedCommand = Array.isArray(params?.command) ? params.command[0] : params?.command
+  const actionStatus = Array.isArray(params?.status) ? params.status[0] : params?.status
   const selectedTenant = configuredTenantId
     ? {
         id: configuredTenantId,
@@ -80,6 +86,19 @@ export default async function Page({ searchParams }: PageProps) {
   const jobsResult = selectedTenant
     ? await fetchJson<JobList>(`/api/v1/tenants/${selectedTenant.id}/jobs`, 'Jobs')
     : null
+  const [usersResult, tenantTokensResult, auditEventsResult] = selectedTenant
+    ? await Promise.all([
+        fetchJson<UserList>(`/api/v1/tenants/${selectedTenant.id}/users`, 'Users'),
+        fetchJson<TenantTokenList>(
+          `/api/v1/tenants/${selectedTenant.id}/tenant-tokens`,
+          'Tenant tokens',
+        ),
+        fetchJson<AuditEventList>(
+          `/api/v1/tenants/${selectedTenant.id}/audit-events?limit=20`,
+          'Audit events',
+        ),
+      ])
+    : [null, null, null]
   const commandResult =
     selectedTenant && requestedCommand
       ? await fetchJson<Command>(
@@ -90,6 +109,26 @@ export default async function Page({ searchParams }: PageProps) {
   const printers = printersResult?.data?.printers ?? []
   const agents = agentsResult?.data?.agents ?? []
   const jobs = jobsResult?.data?.jobs ?? []
+  const users = usersResult?.data?.users ?? []
+  const tenantTokens = tenantTokensResult?.data?.tenant_tokens ?? []
+  const auditEvents = auditEventsResult?.data?.audit_events ?? []
+  const identityResults = selectedTenant
+    ? await Promise.all(
+        users.map((user) =>
+          fetchJson<UserIdentityList>(
+            `/api/v1/tenants/${selectedTenant.id}/users/${user.id}/identities`,
+            `Identities for ${user.email}`,
+          ),
+        ),
+      )
+    : []
+  const userIdentities = identityResults.flatMap((result) => result.data?.identities ?? [])
+  const adminUnavailable = Boolean(
+    usersResult?.error ||
+      tenantTokensResult?.error ||
+      auditEventsResult?.error ||
+      identityResults.some((result) => result.error),
+  )
   const selectedCommand = commandResult?.data ?? null
   const commandData = parseCommandResult(selectedCommand)
   const errors = [
@@ -111,6 +150,12 @@ export default async function Page({ searchParams }: PageProps) {
       initialPrinters={printers}
       agents={agents}
       initialJobs={jobs}
+      users={users}
+      userIdentities={userIdentities}
+      tenantTokens={tenantTokens}
+      auditEvents={auditEvents}
+      adminUnavailable={adminUnavailable}
+      actionStatus={actionStatus}
       selectedCommand={selectedCommand}
       commandData={commandData}
       errors={errors}

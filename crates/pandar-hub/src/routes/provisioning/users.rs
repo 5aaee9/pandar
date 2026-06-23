@@ -59,7 +59,7 @@ pub(in crate::routes) async fn create_user(
     payload: Result<Json<CreateUserRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<UserResponse>), ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
-    let auth = auth::authorize_tenant(&state, &headers, tenant_id, UserRole::TenantAdmin).await?;
+    let auth = auth::authorize_tenant_admin_principal(&state, &headers, tenant_id).await?;
     let Json(payload) =
         payload.map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "bad_request"))?;
     if payload.email.trim().is_empty()
@@ -77,7 +77,7 @@ pub(in crate::routes) async fn create_user(
             payload.email,
             payload.display_name,
             role,
-            auth.user.id,
+            auth::audit_actor(&auth),
         )
         .await?;
 
@@ -91,7 +91,7 @@ pub(in crate::routes) async fn update_user_role(
     payload: Result<Json<UpdateUserRoleRequest>, JsonRejection>,
 ) -> Result<Json<UserResponse>, ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
-    let auth = auth::authorize_tenant(&state, &headers, tenant_id, UserRole::TenantAdmin).await?;
+    let auth = auth::authorize_tenant_admin_principal(&state, &headers, tenant_id).await?;
     let Json(payload) =
         payload.map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "bad_request"))?;
     if payload.role.trim().is_empty() {
@@ -101,7 +101,7 @@ pub(in crate::routes) async fn update_user_role(
 
     let user = state
         .auth()
-        .update_user_role_with_audit(tenant_id, &user_id, role, auth.user.id)
+        .update_user_role_with_audit(tenant_id, &user_id, role, auth::audit_actor(&auth))
         .await?;
 
     Ok(Json(UserResponse::from(user)))
@@ -132,7 +132,7 @@ pub(in crate::routes) async fn link_user_identity(
     payload: Result<Json<LinkUserIdentityRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<UserIdentityResponse>), ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
-    let auth = auth::authorize_tenant(&state, &headers, tenant_id, UserRole::TenantAdmin).await?;
+    let auth = auth::authorize_tenant_admin_principal(&state, &headers, tenant_id).await?;
     let Json(payload) =
         payload.map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "bad_request"))?;
     if payload.provider.trim().is_empty() || payload.subject.trim().is_empty() {
@@ -146,7 +146,7 @@ pub(in crate::routes) async fn link_user_identity(
             &user_id,
             payload.provider,
             payload.subject,
-            auth.user.id,
+            auth::audit_actor(&auth),
         )
         .await?;
 

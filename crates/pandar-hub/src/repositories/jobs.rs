@@ -11,13 +11,14 @@ use std::collections::HashMap;
 mod audit;
 mod create;
 mod print_reports;
+mod recovery;
 pub mod rows;
 mod transitions;
 
 use crate::{
     db::Database,
     entities::{job_artifacts, jobs, tenants},
-    repositories::{RepositoryError, RepositoryResult},
+    repositories::{AuditActor, RepositoryError, RepositoryResult},
 };
 
 pub use print_reports::{AppliedPrintReport, ApplyPrintReport, PrintReportDiagnostic};
@@ -42,6 +43,17 @@ pub struct CreatePrintJob {
     pub use_ams: bool,
     pub flow_cali: bool,
     pub timelapse: bool,
+    pub ams_mapping_json: Option<String>,
+    pub ams_mapping2_json: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DuplicatePrintJob {
+    pub printer_id: Option<String>,
+    pub plate_id: Option<u32>,
+    pub use_ams: Option<bool>,
+    pub flow_cali: Option<bool>,
+    pub timelapse: Option<bool>,
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
 }
@@ -76,9 +88,40 @@ impl JobRepository {
     pub async fn create_print_job_with_audit(
         &self,
         input: CreatePrintJob,
-        user_id: String,
+        actor: AuditActor,
     ) -> RepositoryResult<JobWithArtifact> {
-        audit::create_print_job_with_audit(&self.database, input, user_id).await
+        audit::create_print_job_with_audit(&self.database, input, actor).await
+    }
+
+    pub async fn retry_dispatch_with_audit(
+        &self,
+        tenant_id: TenantId,
+        job_id: JobId,
+        reason: Option<String>,
+        actor: AuditActor,
+    ) -> RepositoryResult<JobWithArtifact> {
+        recovery::retry_dispatch_with_audit(&self.database, tenant_id, job_id, reason, actor).await
+    }
+
+    pub async fn reprint_with_audit(
+        &self,
+        tenant_id: TenantId,
+        job_id: JobId,
+        reason: Option<String>,
+        actor: AuditActor,
+    ) -> RepositoryResult<JobWithArtifact> {
+        recovery::reprint_with_audit(&self.database, tenant_id, job_id, reason, actor).await
+    }
+
+    pub async fn duplicate_and_print_with_audit(
+        &self,
+        tenant_id: TenantId,
+        job_id: JobId,
+        input: DuplicatePrintJob,
+        actor: AuditActor,
+    ) -> RepositoryResult<JobWithArtifact> {
+        recovery::duplicate_and_print_with_audit(&self.database, tenant_id, job_id, input, actor)
+            .await
     }
 
     pub async fn list_for_tenant(

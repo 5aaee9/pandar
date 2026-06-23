@@ -15,7 +15,7 @@ use rows::command_from_model;
 use crate::{
     db::Database,
     entities::commands,
-    repositories::{RepositoryError, RepositoryResult},
+    repositories::{AuditActor, RepositoryError, RepositoryResult},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,10 +76,9 @@ impl CommandRepository {
         &self,
         tenant_id: TenantId,
         agent_id: AgentId,
-        user_id: String,
+        actor: AuditActor,
     ) -> RepositoryResult<CommandRecord> {
-        audit::enqueue_refresh_printers_with_audit(&self.database, tenant_id, agent_id, user_id)
-            .await
+        audit::enqueue_refresh_printers_with_audit(&self.database, tenant_id, agent_id, actor).await
     }
 
     pub async fn enqueue_discover_printers_with_audit(
@@ -87,14 +86,14 @@ impl CommandRepository {
         tenant_id: TenantId,
         agent_id: AgentId,
         payload: DiscoverPrintersPayload,
-        user_id: String,
+        actor: AuditActor,
     ) -> RepositoryResult<CommandRecord> {
         audit::enqueue_discover_printers_with_audit(
             &self.database,
             tenant_id,
             agent_id,
             payload,
-            user_id,
+            actor,
         )
         .await
     }
@@ -104,14 +103,14 @@ impl CommandRepository {
         tenant_id: TenantId,
         agent_id: AgentId,
         payload: DiagnosePrinterPayload,
-        user_id: String,
+        actor: AuditActor,
     ) -> RepositoryResult<CommandRecord> {
         audit::enqueue_diagnose_printer_with_audit(
             &self.database,
             tenant_id,
             agent_id,
             payload,
-            user_id,
+            actor,
         )
         .await
     }

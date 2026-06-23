@@ -8,7 +8,7 @@ mod lifecycle;
 mod mapping;
 mod repository;
 
-fn create_input(
+pub(super) fn create_input(
     tenant_id: pandar_core::TenantId,
     agent_id: AgentId,
     printer_id: &str,
@@ -17,7 +17,7 @@ fn create_input(
     create_input_with_filename(tenant_id, agent_id, printer_id, artifact_id, "plate.3mf")
 }
 
-fn create_input_with_filename(
+pub(super) fn create_input_with_filename(
     tenant_id: pandar_core::TenantId,
     agent_id: AgentId,
     printer_id: &str,
@@ -44,7 +44,7 @@ fn create_input_with_filename(
 
 const OBSERVED_AT: &str = "2026-06-22T00:00:00Z";
 
-fn report_input(
+pub(super) fn report_input(
     tenant_id: pandar_core::TenantId,
     agent_id: AgentId,
     printer_id: &str,

@@ -63,6 +63,48 @@ export type Agent = {
   created_at: string
 }
 
+export type User = {
+  id: string
+  tenant_id: string
+  email: string
+  display_name: string
+  role: 'tenant_admin' | 'operator' | 'viewer'
+  created_at: string
+}
+
+export type UserIdentity = {
+  id: string
+  tenant_id: string
+  user_id: string
+  provider: string
+  subject: string
+  created_at: string
+}
+
+export type TenantToken = {
+  id: string
+  tenant_id: string
+  name: string
+  scopes: string[]
+  created_by_user_id: string | null
+  created_at: string
+  last_used_at: string | null
+  expires_at: string | null
+  revoked_at: string | null
+}
+
+export type AuditEvent = {
+  id: string
+  tenant_id: string
+  actor_type: string
+  user_id: string | null
+  action: string
+  target_type: string
+  target_id: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
 export type TenantList = {
   tenants: Tenant[]
 }
@@ -73,6 +115,22 @@ export type PrinterList = {
 
 export type AgentList = {
   agents: Agent[]
+}
+
+export type UserList = {
+  users: User[]
+}
+
+export type UserIdentityList = {
+  identities: UserIdentity[]
+}
+
+export type TenantTokenList = {
+  tenant_tokens: TenantToken[]
+}
+
+export type AuditEventList = {
+  audit_events: AuditEvent[]
 }
 
 export type AuthMetadata = {
@@ -164,7 +222,6 @@ export type Job = {
     filename: string
     content_type: string
     size_bytes: number
-    storage_path: string
     created_at: string
   }
   material: {

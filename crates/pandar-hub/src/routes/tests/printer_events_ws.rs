@@ -296,6 +296,16 @@ async fn printer_events_websocket_receives_snapshot_from_grpc_stream() {
         .create(tenant.id, "shop-agent")
         .await
         .unwrap();
+    state
+        .agents()
+        .rotate_credential(
+            tenant.id,
+            agent.id,
+            TEST_AGENT_CREDENTIAL,
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
     let http_addr = serve_http(app).await;
     let grpc_addr = serve_grpc(state).await;
     let mut request = format!(
@@ -351,6 +361,16 @@ async fn printer_events_websocket_receives_job_progress_from_grpc_stream() {
     let agent = state
         .agents()
         .create(tenant.id, "shop-agent")
+        .await
+        .unwrap();
+    state
+        .agents()
+        .rotate_credential(
+            tenant.id,
+            agent.id,
+            TEST_AGENT_CREDENTIAL,
+            test_audit_actor(),
+        )
         .await
         .unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant.id, agent.id)
@@ -427,6 +447,10 @@ async fn printer_events_websocket_receives_job_progress_from_grpc_stream() {
     drop(stream);
 }
 
+fn test_audit_actor() -> crate::repositories::AuditActor {
+    crate::repositories::AuditActor::tenant_token(None, "test-setup-token", vec!["*"])
+}
+
 const JOB_PROGRESS_ARTIFACT_ID: &str = "22222222-2222-4222-8222-222222222222";
 
 async fn serve_http(app: Router) -> std::net::SocketAddr {
@@ -459,9 +483,12 @@ fn hello_event(tenant_id: TenantId, agent_id: AgentId) -> AgentEvent {
         event: Some(agent_event::Event::Hello(AgentHello {
             name: "agent".to_string(),
             version: "0.1.0".to_string(),
+            credential: TEST_AGENT_CREDENTIAL.to_string(),
         })),
     }
 }
+
+const TEST_AGENT_CREDENTIAL: &str = "pandar_ac_test";
 
 fn snapshot_event(tenant_id: TenantId, agent_id: AgentId) -> AgentEvent {
     AgentEvent {

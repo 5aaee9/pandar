@@ -23,7 +23,7 @@ pandar-agent -(MQTT + machine file transfer)-> Bambu machines
 - `crates/pandar-core` - shared domain types.
 - `crates/pandar-hub` - Axum API server for users and reverse agent connections.
 - `crates/pandar-agent` - deployable local agent for Bambu machine access.
-- `crates/pandar-network-plugin` - planned Bambu Studio network plugin ABI replacement that connects Studio to `pandar-hub`.
+- `crates/pandar-network-plugin` - Bambu Studio network plugin ABI replacement scaffold that connects Studio sign-in to `pandar-hub`.
 - `crates/pandar-app` - operator CLI.
 - `frontend` - Next.js frontend.
 - `proto` - gRPC contracts.
@@ -43,4 +43,5 @@ Communication with Bambu machines should be implemented from reference behavior 
 cargo fmt
 cargo clippy --workspace
 cargo nextest run --manifest-path "Cargo.toml" --workspace
+npm --prefix frontend run build
 ```

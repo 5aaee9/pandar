@@ -1,11 +1,16 @@
 mod bootstrap;
+pub mod cleanup;
 pub mod db;
 pub mod entities;
 pub mod grpc;
 pub mod identity;
 pub mod jobs;
+pub mod metrics;
+mod metrics_export;
 pub mod printer_events;
 pub mod protocol;
+pub mod readiness;
+pub mod redaction;
 pub mod repositories;
 mod routes;
 pub mod runtime;
@@ -18,6 +23,7 @@ use crate::{
     db::{Database, DatabaseConfig},
     identity::{ExternalAuthConfig, JwtVerifier},
     jobs::JobStorageConfig,
+    metrics::MetricsState,
     printer_events::PrinterEventHub,
     repositories::{
         AgentRepository, AuditEventRepository, AuthRepository, CommandRepository, JobRepository,
@@ -28,7 +34,6 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct AppState {
-    #[cfg(test)]
     database: Database,
     tenants: TenantRepository,
     auth: AuthRepository,
@@ -43,6 +48,7 @@ pub struct AppState {
     bootstrap_token: Option<String>,
     printer_events: PrinterEventHub,
     sessions: SessionRegistry,
+    metrics: MetricsState,
 }
 
 impl AppState {
@@ -79,8 +85,8 @@ impl AppState {
     }
 
     pub fn from_database(database: Database, job_storage: JobStorageConfig) -> Self {
+        let metrics = MetricsState::new();
         Self {
-            #[cfg(test)]
             database: database.clone(),
             tenants: TenantRepository::new(database.clone()),
             auth: AuthRepository::new(database.clone()),
@@ -93,8 +99,9 @@ impl AppState {
             job_storage,
             external_auth: None,
             bootstrap_token: None,
-            printer_events: PrinterEventHub::new(),
+            printer_events: PrinterEventHub::with_metrics(metrics.clone()),
             sessions: SessionRegistry::new(),
+            metrics,
         }
     }
 
@@ -181,7 +188,10 @@ impl AppState {
         &self.sessions
     }
 
-    #[cfg(test)]
+    pub fn metrics(&self) -> &MetricsState {
+        &self.metrics
+    }
+
     pub(crate) fn database(&self) -> &Database {
         &self.database
     }

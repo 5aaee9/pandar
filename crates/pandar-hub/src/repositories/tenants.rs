@@ -58,6 +58,15 @@ impl TenantRepository {
             .collect()
     }
 
+    pub async fn get(&self, tenant_id: TenantId) -> RepositoryResult<Option<Tenant>> {
+        tenants::Entity::find_by_id(tenant_id.to_string())
+            .one(&self.database.sea_orm_connection())
+            .await
+            .context("failed to get tenant")?
+            .map(tenant_from_model)
+            .transpose()
+    }
+
     pub async fn count(&self) -> RepositoryResult<i64> {
         let count = tenants::Entity::find()
             .count(&self.database.sea_orm_connection())

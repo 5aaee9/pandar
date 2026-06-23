@@ -198,6 +198,10 @@ impl JwtVerifier {
         verified_identity(&self.config, claims)
     }
 
+    pub async fn check_ready(&self) -> Result<(), JwtVerifyError> {
+        self.cached_or_fetch().await.map(|_| ())
+    }
+
     async fn cached_or_fetch(&self) -> Result<JwkSet, JwtVerifyError> {
         if let Some(jwks) = self.cache.read().await.clone() {
             return Ok(jwks);

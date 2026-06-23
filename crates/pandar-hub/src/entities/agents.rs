@@ -11,6 +11,9 @@ pub struct Model {
     pub version: Option<String>,
     pub last_seen_at: Option<String>,
     pub created_at: String,
+    pub credential_hash: Option<String>,
+    pub credential_rotated_at: Option<String>,
+    pub credential_revoked_at: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

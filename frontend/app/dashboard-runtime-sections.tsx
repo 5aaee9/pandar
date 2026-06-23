@@ -9,7 +9,11 @@ import {
   StatusBadge,
 } from './dashboard-ui'
 import type { LiveState, RuntimeNotification } from './dashboard-runtime-helpers'
-import { formatJobMaterial, formatPrinterMaterials } from './dashboard-runtime-helpers'
+import {
+  formatJobMaterial,
+  formatJobRecoveryState,
+  formatPrinterMaterials,
+} from './dashboard-runtime-helpers'
 import { formatLayers, formatProgress, formatRemaining } from './job-format'
 
 export function RuntimeStatusPanel({
@@ -155,6 +159,7 @@ function JobRow({ job }: { job: Job }) {
         </div>
         <div className="mt-1 truncate font-mono text-xs text-slate-600">Command {job.command.id}</div>
         <div className="truncate text-xs text-slate-600">{job.command.kind}</div>
+        <div className="mt-1 text-xs text-slate-700">{formatJobRecoveryState(job)}</div>
         {job.error ? <div className="mt-1 text-xs text-red-700">{job.error}</div> : null}
         {job.print.error ? <div className="mt-1 text-xs text-red-700">{job.print.error}</div> : null}
       </div>

@@ -41,7 +41,7 @@ pub(super) struct PrinterMaterialsResponse {
 
 #[derive(Debug, Serialize)]
 pub(super) struct PrinterListResponse {
-    printers: Vec<PrinterResponse>,
+    pub(in crate::routes) printers: Vec<PrinterResponse>,
 }
 
 #[derive(Debug, Serialize)]
@@ -133,11 +133,12 @@ pub(super) async fn refresh_printers(
     Path((tenant_id, agent_id)): Path<(String, String)>,
 ) -> Result<Json<CommandResponse>, ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
-    let auth = auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let auth =
+        auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
     let agent_id = parse_agent_id(&agent_id)?;
     let command = state
         .commands()
-        .enqueue_refresh_printers_with_audit(tenant_id, agent_id, auth.user.id)
+        .enqueue_refresh_printers_with_audit(tenant_id, agent_id, auth::audit_actor(&auth))
         .await?;
     state.sessions().wake_agent(tenant_id, agent_id).await;
 
@@ -151,7 +152,8 @@ pub(super) async fn discover_printers(
     payload: Bytes,
 ) -> Result<Json<CommandResponse>, ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
-    let auth = auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let auth =
+        auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
     let agent_id = parse_agent_id(&agent_id)?;
     let timeout_seconds = if payload.is_empty() {
         DEFAULT_DISCOVERY_TIMEOUT_SECONDS
@@ -171,7 +173,7 @@ pub(super) async fn discover_printers(
             tenant_id,
             agent_id,
             DiscoverPrintersPayload { timeout_seconds },
-            auth.user.id,
+            auth::audit_actor(&auth),
         )
         .await?;
     state.sessions().wake_agent(tenant_id, agent_id).await;
@@ -186,7 +188,8 @@ pub(super) async fn diagnose_printer(
     payload: Result<Json<DiagnosePrinterRequest>, JsonRejection>,
 ) -> Result<Json<CommandResponse>, ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
-    let auth = auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let auth =
+        auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
     let agent_id = parse_agent_id(&agent_id)?;
     let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
     let command = state
@@ -197,7 +200,7 @@ pub(super) async fn diagnose_printer(
             DiagnosePrinterPayload {
                 serial_number: payload.serial_number,
             },
-            auth.user.id,
+            auth::audit_actor(&auth),
         )
         .await?;
     state.sessions().wake_agent(tenant_id, agent_id).await;
@@ -238,7 +241,10 @@ fn parse_printer_id(value: &str) -> Result<&str, ApiError> {
 }
 
 impl PrinterResponse {
-    fn from_parts(printer: Printer, materials: Option<PrinterMaterialsResponse>) -> Self {
+    pub(in crate::routes) fn from_parts(
+        printer: Printer,
+        materials: Option<PrinterMaterialsResponse>,
+    ) -> Self {
         Self {
             id: printer.id,
             tenant_id: printer.tenant_id.to_string(),

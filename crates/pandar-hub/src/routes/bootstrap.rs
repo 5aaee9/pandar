@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     AppState,
     bootstrap::authorize_bootstrap,
-    repositories::{ApiToken, User},
+    repositories::{TenantToken, User},
     routes::{ApiError, TenantResponse},
 };
 
@@ -26,7 +26,7 @@ pub(super) struct BootstrapTenantAdminRequest {
 pub(super) struct BootstrapTenantAdminResponse {
     tenant: TenantResponse,
     user: UserResponse,
-    api_token: ApiTokenResponse,
+    tenant_token: TenantTokenResponse,
 }
 
 #[derive(Debug, Serialize)]
@@ -40,14 +40,16 @@ struct UserResponse {
 }
 
 #[derive(Debug, Serialize)]
-struct ApiTokenResponse {
+struct TenantTokenResponse {
     id: String,
     tenant_id: String,
-    user_id: String,
     name: String,
+    scopes: Vec<&'static str>,
+    created_by_user_id: Option<String>,
     token: String,
     created_at: String,
     last_used_at: Option<String>,
+    expires_at: Option<String>,
     revoked_at: Option<String>,
 }
 
@@ -68,7 +70,6 @@ pub(super) async fn create_tenant_admin(
         return Err(ApiError::new(StatusCode::BAD_REQUEST, "bad_request"));
     }
 
-    let plaintext_token = format!("pandar_{}", uuid::Uuid::new_v4().simple());
     let bootstrapped = state
         .auth()
         .bootstrap_tenant_admin_with_plaintext_token(
@@ -77,7 +78,6 @@ pub(super) async fn create_tenant_admin(
             payload.admin_email,
             payload.admin_display_name,
             payload.api_token_name,
-            &plaintext_token,
         )
         .await?;
 
@@ -86,7 +86,10 @@ pub(super) async fn create_tenant_admin(
         Json(BootstrapTenantAdminResponse {
             tenant: TenantResponse::from(bootstrapped.tenant),
             user: UserResponse::from(bootstrapped.user),
-            api_token: ApiTokenResponse::new(bootstrapped.api_token, plaintext_token),
+            tenant_token: TenantTokenResponse::new(
+                bootstrapped.tenant_token,
+                bootstrapped.plaintext_token,
+            ),
         }),
     ))
 }
@@ -104,16 +107,22 @@ impl From<User> for UserResponse {
     }
 }
 
-impl ApiTokenResponse {
-    fn new(token: ApiToken, plaintext_token: String) -> Self {
+impl TenantTokenResponse {
+    fn new(token: TenantToken, plaintext_token: String) -> Self {
         Self {
             id: token.id,
             tenant_id: token.tenant_id.to_string(),
-            user_id: token.user_id,
             name: token.name,
+            scopes: token
+                .scopes
+                .into_iter()
+                .map(|scope| scope.as_str())
+                .collect(),
+            created_by_user_id: token.created_by_user_id,
             token: plaintext_token,
             created_at: token.created_at,
             last_used_at: token.last_used_at,
+            expires_at: token.expires_at,
             revoked_at: token.revoked_at,
         }
     }

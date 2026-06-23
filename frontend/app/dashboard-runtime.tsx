@@ -4,9 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { DiagnosticsSection, LinkedAgentsSection } from './diagnostics-panel'
 import { DispatchForm } from './dispatch-form'
+import { RecoveryActions } from './recovery-actions'
+import { TenantAdminPanel } from './admin-panel'
 import type {
   Agent,
   AuthMetadata,
+  AuditEvent,
   Command,
   CommandResultData,
   Job,
@@ -15,9 +18,13 @@ import type {
   PrinterEventTicket,
   Summary,
   Tenant,
+  TenantToken,
+  User,
+  UserIdentity,
 } from './dashboard-types'
 import {
   formatAuthSource,
+  formatJobRecoveryState,
   mergeJob,
   mergePrinter,
   printerEventWebSocketUrl,
@@ -41,6 +48,12 @@ type DashboardRuntimeProps = {
   initialPrinters: Printer[]
   agents: Agent[]
   initialJobs: Job[]
+  users: User[]
+  userIdentities: UserIdentity[]
+  tenantTokens: TenantToken[]
+  auditEvents: AuditEvent[]
+  adminUnavailable: boolean
+  actionStatus?: string
   selectedCommand: Command | null
   commandData: CommandResultData | null
   errors: string[]
@@ -58,6 +71,12 @@ export function DashboardRuntime({
   initialPrinters,
   agents,
   initialJobs,
+  users,
+  userIdentities,
+  tenantTokens,
+  auditEvents,
+  adminUnavailable,
+  actionStatus,
   selectedCommand,
   commandData,
   errors,
@@ -192,7 +211,7 @@ export function DashboardRuntime({
       ) {
         addNotification({
           key: `job:${job.id}:dispatch:${job.status}:${job.error ?? ''}`,
-          title: 'Dispatch/upload/MQTT',
+          title: formatJobRecoveryState(job),
           detail: job.error ?? `${job.artifact.filename} dispatch ${job.status}`,
           timestamp,
         })
@@ -237,6 +256,12 @@ export function DashboardRuntime({
           </div>
         ) : null}
 
+        {actionStatus ? (
+          <div className="rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-950">
+            {formatActionStatus(actionStatus)}
+          </div>
+        ) : null}
+
         <RuntimeStatusPanel
           auth={auth}
           authLabel={authLabel}
@@ -256,6 +281,7 @@ export function DashboardRuntime({
         <LinkedAgentsSection selectedTenant={selectedTenant} agents={agents} />
         <PrinterInventory selectedTenant={selectedTenant} printers={printers} />
         <DispatchForm selectedTenant={selectedTenant} printers={printers} />
+        <RecoveryActions selectedTenant={selectedTenant} agents={agents} printers={printers} jobs={jobs} />
         <DiagnosticsSection
           selectedTenant={selectedTenant}
           printers={printers}
@@ -270,9 +296,25 @@ export function DashboardRuntime({
           agents={agents}
           printers={printers}
         />
+        <TenantAdminPanel
+          selectedTenant={selectedTenant}
+          users={users}
+          userIdentities={userIdentities}
+          tenantTokens={tenantTokens}
+          agents={agents}
+          auditEvents={auditEvents}
+          unavailable={adminUnavailable}
+        />
       </section>
     </main>
   )
+}
+
+function formatActionStatus(status: string) {
+  return status
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
 }
 
 function Header({

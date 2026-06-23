@@ -253,7 +253,9 @@ async fn diagnose_printer_enqueues_redacted_payload_audits_and_wakes_agent() {
         .iter()
         .find(|event| event.action == "agent.diagnose_printer")
         .expect("diagnostic audit event");
-    assert_eq!(event.metadata_json, "{}");
+    let metadata = serde_json::from_str::<serde_json::Value>(&event.metadata_json).unwrap();
+    assert!(metadata["tenant_token_id"].as_str().is_some());
+    assert_eq!(metadata["tenant_token_scopes"], json!(["*"]));
 }
 
 #[tokio::test]

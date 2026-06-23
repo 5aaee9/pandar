@@ -54,13 +54,14 @@ pub(super) async fn printer_events(
         ));
     }
     state.printers().list_for_tenant(tenant_id).await?;
+    let subscription = state.printer_events().track_subscription(tenant_id).await;
     let receiver = state.printer_events().subscribe(tenant_id).await;
     let (mut parts, _) = request.into_parts();
     let upgrade = WebSocketUpgrade::from_request_parts(&mut parts, &state)
         .await
         .map_err(|_| ApiError::bad_request("websocket_upgrade_required"))?;
 
-    Ok(upgrade.on_upgrade(move |socket| forward_events(socket, receiver)))
+    Ok(upgrade.on_upgrade(move |socket| forward_events(socket, receiver, subscription)))
 }
 
 pub(super) async fn create_printer_event_ticket(
@@ -82,6 +83,7 @@ pub(super) async fn create_printer_event_ticket(
 async fn forward_events(
     mut socket: WebSocket,
     mut receiver: tokio::sync::broadcast::Receiver<crate::printer_events::PrinterEvent>,
+    _subscription: crate::metrics::SubscriptionGuard,
 ) {
     loop {
         let event = match receiver.recv().await {

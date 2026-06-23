@@ -194,10 +194,11 @@ async fn bootstrap_tenant_admin_creates_tenant_user_token_and_audit_events() {
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(body["tenant"]["slug"], "bootstrap-acme");
     assert_eq!(body["user"]["role"], "tenant_admin");
-    assert_eq!(body["api_token"]["name"], "bootstrap-admin");
-    assert_eq!(body["api_token"]["revoked_at"], Value::Null);
-    let token = body["api_token"]["token"].as_str().unwrap();
-    assert!(token.starts_with("pandar_"));
+    assert_eq!(body["tenant_token"]["name"], "bootstrap-admin");
+    assert_eq!(body["tenant_token"]["scopes"], json!(["*"]));
+    assert_eq!(body["tenant_token"]["revoked_at"], Value::Null);
+    let token = body["tenant_token"]["token"].as_str().unwrap();
+    assert!(token.starts_with("pandar_tenant_"));
 
     let tenant_id = body["tenant"]["id"].as_str().unwrap();
     let (status, body) = request_as(
@@ -225,7 +226,7 @@ async fn bootstrap_tenant_admin_creates_tenant_user_token_and_audit_events() {
         vec![
             ("bootstrap", "tenant.bootstrap"),
             ("bootstrap", "user.create"),
-            ("bootstrap", "api_token.create")
+            ("bootstrap", "tenant_token.create")
         ]
     );
 }
@@ -248,22 +249,11 @@ async fn bootstrap_tenant_admin_rolls_back_on_late_failure() {
         )
         .await
         .unwrap();
-    state
-        .auth()
-        .create_api_token(
-            tenant.id,
-            &user.id,
-            "existing-token",
-            "fixed-bootstrap-secret",
-        )
-        .await
-        .unwrap();
-
     let before = rollback_counts(&state, tenant.id, &user.id).await;
-    let err = duplicate_hash_bootstrap(&state, "rolled-back", "fixed-bootstrap-secret").await;
+    let err = duplicate_slug_bootstrap(&state, "existing").await;
     assert!(matches!(
         err,
-        crate::repositories::RepositoryError::DuplicateApiTokenHash
+        crate::repositories::RepositoryError::DuplicateTenantSlug
     ));
     assert_eq!(rollback_counts(&state, tenant.id, &user.id).await, before);
     assert_no_tenant_slug(&state, "rolled-back").await;
@@ -286,13 +276,13 @@ async fn postgres_bootstrap_tenant_admin_transaction_when_configured() {
             "admin@postgres.test",
             "Admin",
             "bootstrap-admin",
-            "postgres-bootstrap-secret",
         )
         .await
         .unwrap();
     assert_eq!(bootstrapped.tenant.slug, "postgres-bootstrap");
     assert_eq!(bootstrapped.user.role.as_str(), "tenant_admin");
-    assert_eq!(bootstrapped.api_token.revoked_at, None);
+    assert_eq!(bootstrapped.tenant_token.revoked_at, None);
+    assert!(bootstrapped.plaintext_token.starts_with("pandar_tenant_"));
     assert_eq!(
         state
             .audit_events()
@@ -304,11 +294,10 @@ async fn postgres_bootstrap_tenant_admin_transaction_when_configured() {
     );
 
     let before_tenants = state.tenants().count().await.unwrap();
-    let err =
-        duplicate_hash_bootstrap(&state, "postgres-rolled-back", "postgres-bootstrap-secret").await;
+    let err = duplicate_slug_bootstrap(&state, "postgres-bootstrap").await;
     assert!(matches!(
         err,
-        crate::repositories::RepositoryError::DuplicateApiTokenHash
+        crate::repositories::RepositoryError::DuplicateTenantSlug
     ));
     assert_eq!(state.tenants().count().await.unwrap(), before_tenants);
     assert_no_tenant_slug(&state, "postgres-rolled-back").await;
@@ -358,10 +347,9 @@ async fn assert_no_tenant_slug(state: &AppState, slug: &str) {
     );
 }
 
-async fn duplicate_hash_bootstrap(
+async fn duplicate_slug_bootstrap(
     state: &AppState,
     tenant_slug: &str,
-    plaintext_token: &str,
 ) -> crate::repositories::RepositoryError {
     state
         .auth()
@@ -371,7 +359,6 @@ async fn duplicate_hash_bootstrap(
             "admin@rolled-back.test",
             "Admin",
             "bootstrap-admin",
-            plaintext_token,
         )
         .await
         .unwrap_err()

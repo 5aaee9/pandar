@@ -1,4 +1,5 @@
 mod auth;
+mod cleanup;
 mod command_results;
 mod commands;
 mod jobs;
@@ -8,6 +9,7 @@ mod postgres;
 mod postgres_commands;
 mod postgres_persistence;
 mod printers;
+mod tenant_tokens;
 
 use pandar_core::{AgentId, CommandId, TenantId};
 

@@ -26,6 +26,7 @@ PANDAR_TENANT_ID=<tenant uuid>
 PANDAR_AGENT_ID=<agent uuid>
 PANDAR_AGENT_NAME=local-agent
 PANDAR_AGENT_VERSION=0.1.0
+PANDAR_AGENT_CREDENTIAL=<agent credential from pairing or rotation>
 ```
 
 Agent-local Bambu printers are configured explicitly with `PANDAR_PRINTERS`:
@@ -36,7 +37,7 @@ PANDAR_PRINTERS='[{"host":"192.0.2.10","serial":"01S00EXAMPLE","access_code":"12
 
 The value is a JSON array. `host`, `serial`, and `access_code` are required; `model` and `name` are optional. Empty, whitespace, or `[]` means no configured printers and the agent will not open Bambu machine sockets. Invalid printer config fails at startup with `PANDAR_PRINTERS` context.
 
-Phase 16 will replace manual `PANDAR_TENANT_ID` / `PANDAR_AGENT_ID` trust with authenticated agent enrollment and credential rotation.
+Reverse sessions require `PANDAR_AGENT_CREDENTIAL`. Tenant admins create or rotate agent credentials through tenant-token-backed pairing and enrollment APIs. Plaintext credentials are returned once and only hashes are stored by the hub.
 
 ## Machine Communication
 
@@ -68,9 +69,18 @@ Tenant-scoped print dispatch:
 - `GET /api/v1/tenants/{tenant_id}/jobs` lists tenant print jobs.
 - `GET /api/v1/tenants/{tenant_id}/jobs/{job_id}` returns one tenant-scoped print job.
 
-`pandar-hub` writes uploaded artifacts under `PANDAR_SPOOL_DIR`, defaulting to `pandar-spool`, and rejects decoded artifacts larger than `PANDAR_MAX_ARTIFACT_BYTES`, defaulting to `10485760`. `pandar-agent` reads job artifacts from `PANDAR_ARTIFACT_ROOT`, defaulting to the current directory, plus the hub-provided relative storage path. In local deployments the hub spool root and agent artifact root must point at the same shared filesystem path or print dispatch fails when the agent reads the artifact.
+`pandar-hub` writes uploaded artifacts under `PANDAR_SPOOL_DIR`, defaulting to `pandar-spool`, and rejects decoded artifacts larger than `PANDAR_MAX_ARTIFACT_BYTES`, defaulting to `10485760`. The frontend displays a 256 MiB artifact cap and configures the Next.js server-action body limit for base64 form submissions. `pandar-agent` reads job artifacts from `PANDAR_ARTIFACT_ROOT`, defaulting to the current directory, plus the hub-provided relative storage path. In local deployments the hub spool root and agent artifact root must point at the same shared filesystem path or print dispatch fails when the agent reads the artifact.
 
 Print job dispatch success means the agent accepted the command path and completed upload/MQTT dispatch work. Physical progress and terminal printer outcome are tracked separately from MQTT reports.
+
+Recovery APIs:
+
+- `POST /api/v1/tenants/{tenant_id}/agents/{agent_id}/refresh-printers` manually refreshes printer state.
+- `POST /api/v1/tenants/{tenant_id}/jobs/{job_id}/retry-dispatch` retries dispatch for a failed or cancelled dispatch lifecycle.
+- `POST /api/v1/tenants/{tenant_id}/jobs/{job_id}/reprint` queues a reprint from the existing artifact and options.
+- `POST /api/v1/tenants/{tenant_id}/jobs/{job_id}/duplicate` creates a new job from the existing artifact with optional printer, plate, and print-flag overrides.
+
+Pause, resume, and stop are not implemented yet; the UI labels them unavailable instead of pretending they are physical-printer controls.
 
 ## Frontend Runtime
 
@@ -92,9 +102,9 @@ Phase 15 browser-safe live runtime updates:
 - Fronting proxies and access logs should redact the `ticket` query parameter.
 - The dashboard merges live printer snapshots and job progress without refresh, retries WebSocket connections after 1s, 2s, 5s, and 10s, and marks live status unavailable after 3 failed attempts while continuing to retry.
 
-## Planned Bambu Studio Network Plugin
+## Bambu Studio Network Plugin
 
-`crates/pandar-network-plugin` is planned as a dynamic-library replacement for Bambu Studio's network plugin ABI. It should be developed from `reference/open-bamboo-networking` for ABI coverage and `reference/BambuStudio` for caller behavior.
+`crates/pandar-network-plugin` builds as a dynamic-library replacement scaffold for Bambu Studio's network plugin ABI. It uses `reference/open-bamboo-networking` for ABI coverage and `reference/BambuStudio` for caller behavior.
 
 Important boundaries:
 
@@ -103,17 +113,35 @@ Important boundaries:
 - The plugin does not store Bambu printer access codes.
 - Bambu LAN MQTT and machine file transfer remain agent-local.
 
-Planned login flow:
+Implemented login flow:
 
 1. Bambu Studio opens the plugin-provided host plus `/sign-in`.
 2. The Pandar sign-in page lets the user enter or confirm the Pandar frontend URL when needed.
-3. The frontend completes Clerk or Logto authentication and tenant selection through Pandar-managed membership.
+3. The frontend relies on the configured Pandar auth token/cookie bridge and tenant selection through Pandar-managed membership.
 4. The hub issues a short-lived one-use plugin login ticket.
 5. The page uses Studio's `get_localhost_url` message and redirects to Studio's local HTTP server with `ticket` and `redirect_url`.
 6. Studio calls the plugin's `get_my_token(ticket)` and `get_my_profile(token)` ABI methods.
-7. The plugin exchanges the ticket with `pandar-hub`, receives a tenant-owned plugin credential/profile, and returns Bambu-shaped token/profile JSON so Studio can call `change_user(login_info)`.
+7. The plugin exchanges the ticket with the hub, creating a tenant-owned `["plugin:studio"]` credential. The ABI shim stores Bambu-shaped login state for Studio UI compatibility.
+8. Hub-backed plugin calls read printers/jobs and submit prints through `/api/v1/plugin/*` routes using the plugin credential.
 
-Plugin credentials should be revocable tenant-owned credentials. They should not carry `agent:register`, and mutating Studio actions should use a dedicated plugin/studio scope instead of `*` unless a future security review explicitly accepts full tenant authority.
+Plugin credentials are revocable tenant-owned credentials. They do not carry `agent:register`. The Phase 21 shim exports all required symbols, delegates login/printer/job/print calls to the hub, and returns stable no-op or unsupported values for direct LAN/printer operations; real Studio compatibility still needs manual Studio testing.
+
+Build and inspect the plugin:
+
+```bash
+cargo test -p pandar-network-plugin
+cargo build -p pandar-network-plugin
+```
+
+The output library is under `target/{debug,release}` as `libpandar_network_plugin.so`, `libpandar_network_plugin.dylib`, or `pandar_network_plugin.dll`.
+
+Typical replacement paths:
+
+- Linux AppImage or extracted builds: replace the bundled Bambu network plugin library next to the extracted Studio libraries, then start Studio from that extracted tree.
+- Windows: replace the Bambu Studio network plugin DLL in the Studio installation's plugin/library directory and keep the original DLL for rollback.
+- macOS: replace the network plugin dylib inside the Bambu Studio `.app` bundle's Frameworks/plugin library area. Gatekeeper signing/notarization for redistributed bundles is not completed by this package.
+
+Packaging and signing are optional and not completed here.
 
 ## Authentication And Provisioning
 
@@ -125,12 +153,13 @@ Authorization: Bearer <tenant api token>
 
 Roles are `tenant_admin`, `operator`, and `viewer`. Tenant-scoped read APIs and printer event WebSockets require at least `viewer`; print jobs and refresh commands require `operator`; agent creation requires `tenant_admin`.
 
-Phase 16 will replace the current user-scoped API token model with tenant-owned scoped tokens. The planned model:
+Tenant-owned scoped tokens are the bearer credential model:
 
 - `tenant_tokens` belong directly to `tenant_id`, not `user_id`.
 - Empty `scopes` means read-only tenant access.
 - `["*"]` means all tenant-scoped API and agent-registration capabilities.
 - `["agent:register"]` means the token can register or rotate agents but cannot read or mutate ordinary tenant API resources.
+- `["plugin:studio"]` is used for Bambu Studio plugin credentials issued from login-ticket exchange.
 - `created_by_user_id` is nullable audit metadata, not an authorization source.
 
 External identity configuration:
@@ -154,7 +183,7 @@ Bootstrap cross-tenant administration with `PANDAR_BOOTSTRAP_TOKEN`:
 PANDAR_BOOTSTRAP_TOKEN=<long random token>
 ```
 
-Create a tenant, tenant admin, and first tenant API token without database fixtures:
+Create a tenant, tenant admin, and first tenant token without database fixtures:
 
 ```bash
 curl -sS -X POST "$PANDAR_API/api/v1/bootstrap/tenant-admin" \
@@ -182,12 +211,17 @@ curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/identitie
   -H "content-type: application/json" \
   -d '{"provider":"clerk","subject":"user_123"}'
 
-curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/api-tokens" \
+curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/tenant-tokens" \
   -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
   -H "content-type: application/json" \
-  -d '{"name":"automation"}'
+  -d '{"name":"automation","scopes":["*"],"expires_at":null}'
 
-curl -sS -X DELETE "$PANDAR_API/api/v1/tenants/$TENANT_ID/api-tokens/$TOKEN_ID" \
+curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/tenant-tokens/$TOKEN_ID/rotate" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"expires_at":null}'
+
+curl -sS -X DELETE "$PANDAR_API/api/v1/tenants/$TENANT_ID/tenant-tokens/$TOKEN_ID" \
   -H "Authorization: Bearer $TENANT_ADMIN_TOKEN"
 ```
 
@@ -200,9 +234,35 @@ curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/agent-pairings" \
   -d '{"name":"workshop-agent"}'
 ```
 
-The Phase 11 pairing bundle returns `PANDAR_TENANT_ID`, `PANDAR_AGENT_ID`, and `PANDAR_AGENT_NAME`. Phase 16 will enforce tenant-token-backed agent enrollment and gRPC credential rotation.
+The pairing bundle returns `PANDAR_TENANT_ID`, `PANDAR_AGENT_ID`, `PANDAR_AGENT_NAME`, and `PANDAR_AGENT_CREDENTIAL`. Store the credential only in the agent runtime environment.
 
 Hub audit records are stored in `audit_events` for successful user-triggered mutations such as agent creation, refresh commands, and print job creation. Bambu printer access codes remain agent-local in `PANDAR_PRINTERS`; do not store them in hub database rows or frontend environment variables.
+
+## Operations
+
+Readiness and metrics:
+
+- `GET /readyz` checks database access, artifact spool access, gRPC bind configuration, and external-auth JWKS readiness when configured. Public details are sanitized.
+- `GET /metrics` exposes Prometheus text metrics for agent sessions, command/job/report counters, WebSocket tickets/subscriptions, and readiness gauges. Tenant labels are hashed before export.
+
+Cleanup CLI:
+
+```bash
+cargo run -p pandar-app -- cleanup --dry-run
+cargo run -p pandar-app -- cleanup --execute
+```
+
+Cleanup removes expired or terminal records according to retention environment variables and removes artifact files before deleting their database rows. A file-removal failure leaves artifact rows for retry.
+
+Backup and restore examples:
+
+```bash
+sqlite3 pandar.db ".backup 'pandar-backup.db'"
+sqlite3 pandar-restored.db ".restore 'pandar-backup.db'"
+
+pg_dump "$PANDAR_DATABASE_URL" > pandar.sql
+psql "$PANDAR_DATABASE_URL" < pandar.sql
+```
 
 ## Deployment Examples
 
@@ -217,6 +277,7 @@ POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tena
 cargo fmt
 cargo clippy --workspace
 cargo nextest run --manifest-path "Cargo.toml" --workspace
+npm --prefix frontend run build
 ```
 
 Focused hub checks:

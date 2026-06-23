@@ -4,8 +4,8 @@ use sea_orm::TransactionTrait;
 use serde_json::json;
 
 use crate::repositories::{
-    AuditEvent, AuthRepository, RepositoryResult, UserIdentity,
-    audit::{build_audit_event, insert_audit_event_tx},
+    AuditActor, AuditEvent, AuthRepository, RepositoryResult, UserIdentity,
+    audit::{insert_audit_event_tx, record_audit_event},
     auth::identities::insert_identity,
 };
 
@@ -16,7 +16,7 @@ impl AuthRepository {
         user_id: &str,
         provider: impl Into<String>,
         subject: impl Into<String>,
-        actor_user_id: String,
+        actor: AuditActor,
     ) -> RepositoryResult<UserIdentity> {
         let identity = UserIdentity {
             id: uuid::Uuid::new_v4().to_string(),
@@ -38,7 +38,7 @@ impl AuthRepository {
             "failed to insert provisioned external identity",
         )
         .await?;
-        insert_audit_event_tx(&tx, &identity_audit_event(&identity, actor_user_id)).await?;
+        insert_audit_event_tx(&tx, &identity_audit_event(&identity, actor)).await?;
         tx.commit()
             .await
             .context("failed to commit identity provisioning transaction")?;
@@ -47,15 +47,13 @@ impl AuthRepository {
     }
 }
 
-fn identity_audit_event(identity: &UserIdentity, actor_user_id: String) -> AuditEvent {
-    build_audit_event(crate::repositories::RecordAuditEvent {
-        tenant_id: identity.tenant_id,
-        actor_type: "user".to_owned(),
-        user_id: Some(actor_user_id),
-        action: "user_identity.link".to_owned(),
-        target_type: "user_identity".to_owned(),
-        target_id: Some(identity.id.clone()),
-        metadata_json: json!({ "provider": identity.provider, "subject": identity.subject })
-            .to_string(),
-    })
+fn identity_audit_event(identity: &UserIdentity, actor: AuditActor) -> AuditEvent {
+    record_audit_event(
+        identity.tenant_id,
+        actor,
+        "user_identity.link",
+        "user_identity",
+        Some(identity.id.clone()),
+        json!({ "provider": identity.provider }),
+    )
 }
