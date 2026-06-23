@@ -67,9 +67,7 @@ pub(in crate::routes) async fn rotate_agent_credential(
         .agents()
         .rotate_credential(tenant_id, agent_id, &credential, auth::audit_actor(&auth))
         .await?;
-    if let Some(session) = state.sessions().remove(agent_id).await {
-        let _ = session.close_sender.try_send(());
-    }
+    state.close_agent(tenant_id, agent_id).await;
 
     Ok(Json(AgentCredentialRotateResponse {
         agent: AgentResponse::from(record.agent),
@@ -91,9 +89,7 @@ pub(in crate::routes) async fn revoke_agent_credential(
         .agents()
         .revoke_credential(tenant_id, agent_id, auth::audit_actor(&auth))
         .await?;
-    if let Some(session) = state.sessions().remove(agent_id).await {
-        let _ = session.close_sender.try_send(());
-    }
+    state.close_agent(tenant_id, agent_id).await;
 
     Ok(Json(AgentResponse::from(record.agent)))
 }

@@ -140,7 +140,7 @@ pub(super) async fn refresh_printers(
         .commands()
         .enqueue_refresh_printers_with_audit(tenant_id, agent_id, auth::audit_actor(&auth))
         .await?;
-    state.sessions().wake_agent(tenant_id, agent_id).await;
+    state.wake_agent(tenant_id, agent_id).await;
 
     Ok(Json(CommandResponse::from(command)))
 }
@@ -176,7 +176,7 @@ pub(super) async fn discover_printers(
             auth::audit_actor(&auth),
         )
         .await?;
-    state.sessions().wake_agent(tenant_id, agent_id).await;
+    state.wake_agent(tenant_id, agent_id).await;
 
     Ok(Json(CommandResponse::from(command)))
 }
@@ -203,7 +203,7 @@ pub(super) async fn diagnose_printer(
             auth::audit_actor(&auth),
         )
         .await?;
-    state.sessions().wake_agent(tenant_id, agent_id).await;
+    state.wake_agent(tenant_id, agent_id).await;
 
     Ok(Json(CommandResponse::from(command)))
 }

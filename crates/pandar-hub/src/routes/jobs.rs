@@ -46,7 +46,7 @@ pub struct DuplicateJobRequest {
     ams_mapping2: Option<Value>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobResponse {
     id: String,
     tenant_id: String,
@@ -64,7 +64,7 @@ pub struct JobResponse {
     material: material::JobMaterialResponse,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobPrintResponse {
     status: String,
     printer_state: Option<String>,
@@ -81,7 +81,7 @@ pub struct JobPrintResponse {
     updated_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobArtifactResponse {
     id: String,
     tenant_id: String,
@@ -91,10 +91,10 @@ pub struct JobArtifactResponse {
     created_at: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobCommandResponse {
     id: String,
-    kind: &'static str,
+    kind: String,
     status: String,
 }
 
@@ -174,7 +174,13 @@ pub async fn create_job(
         .await;
 
     match created {
-        Ok(created) => Ok((StatusCode::CREATED, Json(JobResponse::try_from(created)?))),
+        Ok(created) => {
+            let wake_tenant_id = created.job.tenant_id;
+            let wake_agent_id = created.job.agent_id;
+            let response = JobResponse::try_from(created)?;
+            state.wake_agent(wake_tenant_id, wake_agent_id).await;
+            Ok((StatusCode::CREATED, Json(response)))
+        }
         Err(err) => {
             if let Err(cleanup_err) = state
                 .job_storage()
@@ -207,7 +213,11 @@ pub async fn retry_dispatch(
         .jobs()
         .retry_dispatch_with_audit(tenant_id, job_id, reason, auth::audit_actor(&auth))
         .await?;
-    Ok((StatusCode::CREATED, Json(JobResponse::try_from(job)?)))
+    let wake_tenant_id = job.job.tenant_id;
+    let wake_agent_id = job.job.agent_id;
+    let response = JobResponse::try_from(job)?;
+    state.wake_agent(wake_tenant_id, wake_agent_id).await;
+    Ok((StatusCode::CREATED, Json(response)))
 }
 
 pub async fn reprint(
@@ -226,7 +236,11 @@ pub async fn reprint(
         .jobs()
         .reprint_with_audit(tenant_id, job_id, reason, auth::audit_actor(&auth))
         .await?;
-    Ok((StatusCode::CREATED, Json(JobResponse::try_from(job)?)))
+    let wake_tenant_id = job.job.tenant_id;
+    let wake_agent_id = job.job.agent_id;
+    let response = JobResponse::try_from(job)?;
+    state.wake_agent(wake_tenant_id, wake_agent_id).await;
+    Ok((StatusCode::CREATED, Json(response)))
 }
 
 pub async fn duplicate(
@@ -261,7 +275,11 @@ pub async fn duplicate(
             auth::audit_actor(&auth),
         )
         .await?;
-    Ok((StatusCode::CREATED, Json(JobResponse::try_from(job)?)))
+    let wake_tenant_id = job.job.tenant_id;
+    let wake_agent_id = job.job.agent_id;
+    let response = JobResponse::try_from(job)?;
+    state.wake_agent(wake_tenant_id, wake_agent_id).await;
+    Ok((StatusCode::CREATED, Json(response)))
 }
 
 pub fn validate_artifact_submission(payload: &str, max_bytes: usize) -> Result<Vec<u8>, ApiError> {
@@ -353,7 +371,7 @@ impl JobResponse {
             print: JobPrintResponse::from(job.print),
             command: JobCommandResponse {
                 id: job.command_id.to_string(),
-                kind: "print_project_file",
+                kind: "print_project_file".to_string(),
                 status: job.status.to_string(),
             },
             artifact: JobArtifactResponse::from(artifact),

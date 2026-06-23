@@ -5,6 +5,7 @@ mod auth;
 mod commands;
 mod jobs;
 mod materials;
+pub(crate) mod printer_event_tickets;
 mod printers;
 mod tenants;
 
@@ -25,6 +26,9 @@ pub use jobs::{
     JobWithArtifact, PrintReportDiagnostic,
 };
 pub use materials::{MaterialPatchInput, MaterialRepository, MaterialSnapshot};
+pub use printer_event_tickets::{
+    IssuedPrinterEventTicket, PrinterEventTicketConsumeResult, PrinterEventTicketRepository,
+};
 pub use printers::{PrinterRepository, PrinterSnapshotUpsert};
 pub use tenants::TenantRepository;
 

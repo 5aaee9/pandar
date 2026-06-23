@@ -303,7 +303,7 @@ Goal: turn the operational skeleton into a usable day-to-day cloud replacement s
 
 - Completed hub-issued WebSocket tickets:
   - `POST /api/v1/tenants/{tenant_id}/printer-events/tickets` issues tenant-scoped viewer tickets.
-  - Tickets are one-use, expire after 60 seconds, live only in hub memory, and are invalid after hub restart.
+  - Tickets are one-use, expire after 60 seconds, and are stored hashed in SQLite/PostgreSQL so sibling Hub replicas can consume them.
   - `GET /api/v1/tenants/{tenant_id}/printer-events` accepts either `Authorization` bearer auth or `ticket` query auth.
 - Completed browser-safe ticket bridging through `POST /api/tenants/{tenantId}/printer-events/ticket`; browser code receives auth metadata and opaque tickets only, not `APP_API_TOKEN`, `APP_AUTH_BEARER_TOKEN`, or HttpOnly cookie token values.
 - Completed authenticated frontend consumption of `printer_snapshot` and `job_progress` events with live state merging and reconnect delays of 1s, 2s, 5s, and 10s. The UI marks the channel unavailable after 3 failures while continuing retries.
@@ -445,6 +445,27 @@ Exit criteria:
 - No plugin code opens MQTT, FTPS, SFTP, or direct agent sockets.
 - Tenant-token revocation or plugin-session revocation prevents further hub access from the plugin.
 
+## Phase 22: Hub Horizontal Scaling Control Plane
+
+Goal: support lightweight single-process Hub deployments and horizontally scaled Hub replicas without changing agent authentication or the reverse gRPC model.
+
+- Completed an explicit Hub control-plane boundary:
+  - SQLite and PostgreSQL default to an in-process control plane for single Hub processes.
+  - PostgreSQL can use NATS with `PANDAR_CONTROL_PLANE=nats`, `PANDAR_NATS_URL`, and optional `PANDAR_NATS_SUBJECT`.
+  - SQLite rejects NATS because it is intentionally scoped to lightweight single-process deployments.
+- Completed control messages for agent wake, agent close, and tenant-scoped printer events.
+- Kept `pandar-agent` on the existing Hub-authenticated reverse gRPC connection. Agents, browsers, and tenants do not connect to NATS.
+- Moved browser WebSocket tickets into SQLite/PostgreSQL-backed one-use storage so browser ticket validation works across Hub replicas.
+- Preserved PostgreSQL as the shared fact source for durable tenant, command, job, printer, and ticket state.
+- Added cross-instance tests for agent wake/close, WebSocket ticket consumption, and printer event fanout.
+- Updated PostgreSQL Docker Compose with an optional NATS profile and documented the deployment split.
+
+Exit criteria:
+
+- SQLite + no broker remains the lightweight single-machine deployment path.
+- PostgreSQL + NATS can fan out Hub control messages across replicas while preserving tenant-token authorization at Hub boundaries.
+- Print artifacts still use `PANDAR_SPOOL_DIR`; scaled print-job creation requires shared spool storage until a later object-storage backend exists.
+
 ## Optional Later: Virtual Printer And Proxy
 
 - Decide whether virtual-printer/proxy behavior from `reference/bambuddy` is in scope.
@@ -454,6 +475,8 @@ Exit criteria:
 
 - Run real Bambu Studio compatibility testing for `pandar-network-plugin` on Linux, Windows, and macOS.
 - Harden Phase 21 plugin hub HTTP behavior with live Studio smoke tests, richer error reporting, and compatibility probes beyond symbol exports.
+- Soak-test PostgreSQL + NATS Hub replicas under concurrent agent sessions and WebSocket subscribers.
+- Add an object-storage artifact backend before scheduling print-job creation across arbitrary Hub pods without shared `PANDAR_SPOOL_DIR`.
 - Harden large artifact upload transport beyond server-action form submission if production proxy/body limits become a constraint.
 - Add reference-backed live pause/resume/stop controls only after the agent command path is implemented and audited.
 - Defer virtual-printer/proxy behavior until plugin compatibility, authenticated agent enrollment, and operator recovery workflows are stable.

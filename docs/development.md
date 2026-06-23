@@ -96,7 +96,7 @@ Server-side bearer credential precedence:
 
 Phase 15 browser-safe live runtime updates:
 
-- `POST /api/v1/tenants/{tenant_id}/printer-events/tickets` issues a tenant-scoped, one-use WebSocket ticket for viewers. Tickets expire after 60 seconds, live only in hub memory, and become invalid after hub restart.
+- `POST /api/v1/tenants/{tenant_id}/printer-events/tickets` issues a tenant-scoped, one-use WebSocket ticket for viewers. Tickets expire after 60 seconds and are stored hashed in SQLite/PostgreSQL so another Hub replica can consume a ticket issued by this replica.
 - `GET /api/v1/tenants/{tenant_id}/printer-events` accepts either `Authorization: Bearer <tenant credential>` for non-browser clients or `?ticket=<opaque ticket>` for browser clients.
 - `POST /api/tenants/{tenantId}/printer-events/ticket` obtains tickets server-side through the Next.js app. Browser code receives only auth metadata and the opaque ticket, never `APP_API_TOKEN`, `APP_AUTH_BEARER_TOKEN`, or HttpOnly cookie token values.
 - Fronting proxies and access logs should redact the `ticket` query parameter.
@@ -269,7 +269,12 @@ psql "$PANDAR_DATABASE_URL" < pandar.sql
 ```bash
 APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.sqlite.yml up --build
 POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.postgres.yml up --build
+POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> PANDAR_CONTROL_PLANE=nats docker compose -f docker-compose.postgres.yml --profile nats up --build
 ```
+
+`pandar-hub` defaults to the in-process control plane. Use `PANDAR_CONTROL_PLANE=nats` with PostgreSQL and `PANDAR_NATS_URL` for horizontally scaled Hub replicas. SQLite rejects the NATS control plane because it is intended for lightweight single-process deployments.
+
+NATS is internal Hub infrastructure only: tenants, browsers, and `pandar-agent` still authenticate to Hub over the existing HTTP/WebSocket/gRPC APIs. PostgreSQL remains the shared fact source, and print artifacts still use `PANDAR_SPOOL_DIR`; multi-replica print-job creation needs that directory on shared storage or a later object-storage backend. NATS does not replicate artifacts.
 
 ## Verification
 

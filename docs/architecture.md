@@ -185,6 +185,13 @@ Phase 2 adds the reverse gRPC control plane:
 
 The session registry is intentionally in-memory and only represents currently connected agents. The command ledger is durable and remains the source of truth for queued, sent, acknowledged, succeeded, and failed commands across hub restarts.
 
+Hub replicas use an explicit control-plane split:
+
+- SQLite deployments run as a lightweight single Hub process with the in-process control plane and no broker.
+- PostgreSQL deployments can run either one Hub process with the in-process control plane or multiple Hub replicas with NATS enabled through `PANDAR_CONTROL_PLANE=nats`, `PANDAR_NATS_URL`, and optional `PANDAR_NATS_SUBJECT`.
+- NATS carries only internal Hub wake, close, and live-event fanout messages. Tenants, browsers, and `pandar-agent` continue to authenticate through Hub HTTP/WebSocket/gRPC APIs, and `pandar-agent` keeps the existing reverse gRPC connection.
+- PostgreSQL remains the shared fact source for tenant, agent, command, job, printer, material, audit, plugin-ticket, tenant-token, and WebSocket-ticket state.
+
 Phase 4 adds tenant-scoped printer inventory and state:
 
 - Agent `PrinterSnapshot` events are accepted only from the current live session token, persisted as latest printer state, and ignored from stale replaced streams.
@@ -260,7 +267,7 @@ Phase 14 adds material-state persistence and reporting:
 
 Phase 15 adds browser-safe live runtime UX:
 
-- `POST /api/v1/tenants/{tenant_id}/printer-events/tickets` issues short-lived in-memory WebSocket tickets after normal tenant viewer authorization. Tickets are tenant-scoped, one-use, expire after 60 seconds, and are invalid after hub restart.
+- `POST /api/v1/tenants/{tenant_id}/printer-events/tickets` issues short-lived WebSocket tickets after normal tenant viewer authorization. Tickets are tenant-scoped, one-use, expire after 60 seconds, and are stored hashed in SQLite/PostgreSQL so horizontally scaled Hub replicas can validate tickets issued by a sibling replica.
 - `GET /api/v1/tenants/{tenant_id}/printer-events` accepts either an `Authorization` bearer credential or a `ticket` query parameter. Header auth remains the non-browser path; ticket auth is for browser WebSocket clients that cannot set custom upgrade headers.
 - The Next.js ticket route `POST /api/tenants/{tenantId}/printer-events/ticket` calls the hub server-side using the existing frontend credential precedence. The browser receives auth metadata and the opaque ticket only; it never receives `APP_API_TOKEN`, `APP_AUTH_BEARER_TOKEN`, or HttpOnly cookie token values.
 - Fronting proxies and access logs should redact the `ticket` query parameter.

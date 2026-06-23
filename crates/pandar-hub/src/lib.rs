@@ -1,5 +1,6 @@
 mod bootstrap;
 pub mod cleanup;
+pub mod cluster;
 pub mod db;
 pub mod entities;
 pub mod grpc;
@@ -26,11 +27,11 @@ use crate::{
     identity::{ExternalAuthConfig, JwtVerifier},
     jobs::JobStorageConfig,
     metrics::MetricsState,
-    printer_events::PrinterEventHub,
+    printer_events::{PrinterEvent, PrinterEventHub},
     protocol::agent::v1::agent_control_server::AgentControlServer,
     repositories::{
         AgentRepository, AuditEventRepository, AuthRepository, CommandRepository, JobRepository,
-        MaterialRepository, PrinterRepository, TenantRepository,
+        MaterialRepository, PrinterEventTicketRepository, PrinterRepository, TenantRepository,
     },
     sessions::SessionRegistry,
 };
@@ -46,12 +47,14 @@ pub struct AppState {
     commands: CommandRepository,
     jobs: JobRepository,
     materials: MaterialRepository,
+    printer_event_tickets: PrinterEventTicketRepository,
     job_storage: JobStorageConfig,
     external_auth: Option<JwtVerifier>,
     bootstrap_token: Option<String>,
     printer_events: PrinterEventHub,
     sessions: SessionRegistry,
     metrics: MetricsState,
+    control_plane: cluster::ControlPlane,
 }
 
 impl AppState {
@@ -73,8 +76,37 @@ impl AppState {
         job_storage: JobStorageConfig,
         external_auth: Option<JwtVerifier>,
     ) -> anyhow::Result<Self> {
+        let control_plane = std::env::var("PANDAR_CONTROL_PLANE").ok();
+        let nats_url = std::env::var("PANDAR_NATS_URL").ok();
+        let nats_subject = std::env::var("PANDAR_NATS_SUBJECT").ok();
+        Self::connect_with_config_values(
+            database_url,
+            job_storage,
+            external_auth,
+            control_plane.as_deref(),
+            nats_url.as_deref(),
+            nats_subject.as_deref(),
+        )
+        .await
+    }
+
+    pub async fn connect_with_config_values(
+        database_url: impl Into<String>,
+        job_storage: JobStorageConfig,
+        external_auth: Option<JwtVerifier>,
+        control_plane: Option<&str>,
+        nats_url: Option<&str>,
+        nats_subject: Option<&str>,
+    ) -> anyhow::Result<Self> {
         let database_url = database_url.into();
         let config = DatabaseConfig::from_url(database_url)?;
+        let control_plane_config = cluster::ControlPlaneConfig::from_values(
+            config.backend(),
+            control_plane,
+            nats_url,
+            nats_subject,
+        )?;
+        let control_plane = cluster::ControlPlane::from_config(control_plane_config).await?;
         let database = Database::connect(&config).await?;
         database.migrate().await?;
 
@@ -82,12 +114,26 @@ impl AppState {
             .ok()
             .filter(|value| !value.trim().is_empty());
 
-        Ok(Self::from_database(database, job_storage)
-            .with_external_auth_option(external_auth)
-            .with_bootstrap_token_option(bootstrap_token))
+        Ok(
+            Self::from_database_with_control_plane(database, job_storage, control_plane)
+                .with_external_auth_option(external_auth)
+                .with_bootstrap_token_option(bootstrap_token),
+        )
     }
 
     pub fn from_database(database: Database, job_storage: JobStorageConfig) -> Self {
+        Self::from_database_with_control_plane(
+            database,
+            job_storage,
+            cluster::ControlPlane::in_process(),
+        )
+    }
+
+    pub fn from_database_with_control_plane(
+        database: Database,
+        job_storage: JobStorageConfig,
+        control_plane: cluster::ControlPlane,
+    ) -> Self {
         let metrics = MetricsState::new();
         Self {
             database: database.clone(),
@@ -98,13 +144,15 @@ impl AppState {
             printers: PrinterRepository::new(database.clone()),
             commands: CommandRepository::new(database.clone()),
             jobs: JobRepository::new(database.clone()),
-            materials: MaterialRepository::new(database),
+            materials: MaterialRepository::new(database.clone()),
+            printer_event_tickets: PrinterEventTicketRepository::new(database),
             job_storage,
             external_auth: None,
             bootstrap_token: None,
             printer_events: PrinterEventHub::with_metrics(metrics.clone()),
             sessions: SessionRegistry::new(),
             metrics,
+            control_plane,
         }
     }
 
@@ -134,7 +182,7 @@ impl AppState {
             .context("failed to create temporary job spool directory")?
             .keep();
         let job_storage = JobStorageConfig::new(temp_dir, jobs::DEFAULT_MAX_ARTIFACT_BYTES)?;
-        Self::connect_with_auth_config("sqlite::memory:", job_storage, None)
+        Self::connect_with_config_values("sqlite::memory:", job_storage, None, None, None, None)
             .await
             .context("failed to create SQLite test app state")
     }
@@ -171,6 +219,10 @@ impl AppState {
         &self.materials
     }
 
+    pub fn printer_event_tickets(&self) -> &PrinterEventTicketRepository {
+        &self.printer_event_tickets
+    }
+
     pub fn job_storage(&self) -> &JobStorageConfig {
         &self.job_storage
     }
@@ -195,8 +247,84 @@ impl AppState {
         &self.metrics
     }
 
+    pub fn control_plane(&self) -> &cluster::ControlPlane {
+        &self.control_plane
+    }
+
+    pub async fn wake_agent(
+        &self,
+        tenant_id: pandar_core::TenantId,
+        agent_id: pandar_core::AgentId,
+    ) {
+        if let Err(err) = self
+            .control_plane
+            .publish(cluster::HubControlMessage::AgentWake {
+                tenant_id: tenant_id.to_string(),
+                agent_id: agent_id.to_string(),
+            })
+            .await
+        {
+            tracing::error!(error = %format!("{err:#}"), "failed to publish agent wake control message");
+        }
+    }
+
+    pub async fn close_agent(
+        &self,
+        tenant_id: pandar_core::TenantId,
+        agent_id: pandar_core::AgentId,
+    ) {
+        self.sessions.close_local_agent(tenant_id, agent_id).await;
+        if let Err(err) = self
+            .control_plane
+            .publish(cluster::HubControlMessage::AgentClose {
+                tenant_id: tenant_id.to_string(),
+                agent_id: agent_id.to_string(),
+            })
+            .await
+        {
+            tracing::error!(error = %format!("{err:#}"), "failed to publish agent close control message");
+        }
+    }
+
+    pub async fn publish_printer_event(
+        &self,
+        tenant_id: pandar_core::TenantId,
+        event: PrinterEvent,
+    ) {
+        if let Err(err) = self
+            .control_plane
+            .publish(cluster::HubControlMessage::PrinterEvent {
+                tenant_id: tenant_id.to_string(),
+                event,
+            })
+            .await
+        {
+            tracing::error!(error = %format!("{err:#}"), "failed to publish printer event control message");
+        }
+    }
+
     pub(crate) fn database(&self) -> &Database {
         &self.database
+    }
+
+    #[cfg(test)]
+    pub(crate) fn sibling_for_tests(&self) -> Self {
+        Self::from_database_with_control_plane(
+            self.database.clone(),
+            self.job_storage.clone(),
+            self.control_plane.clone(),
+        )
+        .with_external_auth_option(self.external_auth.clone())
+        .with_bootstrap_token_option(self.bootstrap_token.clone())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_control_plane_for_tests(
+        mut self,
+        control_plane: cluster::ControlPlane,
+    ) -> Self {
+        self.control_plane = control_plane;
+        self
     }
 }
 
@@ -221,6 +349,11 @@ pub async fn run_from_env() -> anyhow::Result<()> {
     tracing::info!(%bind_addr, "pandar-hub listening");
     tracing::info!(%grpc_bind_addr, "pandar-hub gRPC listening");
     let _session_expiry = runtime::spawn_session_expiry(state.clone());
+    let (_control_plane, control_plane_ready) = runtime::spawn_control_plane_ready(state.clone());
+    control_plane_ready
+        .await
+        .context("control plane subscriber stopped before reporting readiness")?
+        .context("failed to start control plane subscriber")?;
     let http = axum::serve(listener, router(state.clone()));
     let grpc = Server::builder()
         .add_service(AgentControlServer::new(AgentControlService::new(state)))

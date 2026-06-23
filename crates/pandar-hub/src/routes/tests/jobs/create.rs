@@ -57,6 +57,93 @@ async fn job_create_writes_artifact_queues_command_and_returns_created_job() {
 }
 
 #[tokio::test]
+async fn print_job_wakes_agent_on_sibling_instance() {
+    let state = state().await;
+    let sibling = sibling_state(&state);
+    let _control_plane = start_control_plane(sibling.clone()).await;
+    let app = router(state.clone());
+    let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "sibling-job-operator",
+    )
+    .await;
+    let agent = state.agents().create(tenant_id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
+        .await
+        .unwrap();
+    let (wake_sender, mut wake_receiver) = tokio::sync::mpsc::channel(1);
+    let (close_sender, _) = tokio::sync::mpsc::channel(1);
+    sibling
+        .sessions()
+        .register(crate::sessions::AgentSession {
+            token: crate::sessions::SessionToken::new(),
+            tenant_id,
+            agent_id: agent.id,
+            name: "agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: pandar_core::created_at_now(),
+            last_heartbeat_at: pandar_core::created_at_now(),
+            wake_sender,
+            close_sender,
+        })
+        .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
+        Some(valid_request()),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["command"]["kind"], "print_project_file");
+    tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
+        .await
+        .expect("sibling agent should be woken")
+        .expect("wake channel should stay open");
+}
+
+#[tokio::test]
+async fn print_job_returns_created_when_agent_wake_publish_fails() {
+    let state = state()
+        .await
+        .with_control_plane_for_tests(crate::cluster::ControlPlane::failing_for_tests());
+    let app = router(state.clone());
+    let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "failed-wake-job-operator",
+    )
+    .await;
+    let agent = state.agents().create(tenant_id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
+        .await
+        .unwrap();
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
+        Some(valid_request()),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["command"]["kind"], "print_project_file");
+    assert_eq!(state.commands().count().await.unwrap(), 1);
+}
+
+#[tokio::test]
 async fn job_create_accepts_optional_material_mappings_and_responses_preserve_null_vs_empty() {
     let state = state().await;
     let app = router(state.clone());

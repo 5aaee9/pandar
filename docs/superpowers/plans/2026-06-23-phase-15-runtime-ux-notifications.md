@@ -4,7 +4,7 @@
 
 **Goal:** Add browser-safe live printer/job monitoring to the Pandar dashboard with short-lived WebSocket tickets, runtime notifications, richer job history, tenant operational settings, and docs.
 
-**Architecture:** Keep initial state loading in the existing Next.js server component, add a client dashboard runtime for future WebSocket events, and add a hub-local in-memory ticket issuer so browsers never receive source bearer tokens. The Rust hub continues to support header-auth WebSocket clients while browser clients use one-use tenant-scoped tickets.
+**Architecture:** Keep initial state loading in the existing Next.js server component, add a client dashboard runtime for future WebSocket events, and add browser WebSocket tickets so browsers never receive source bearer tokens. Phase 22 supersedes the original hub-local in-memory ticket storage with hashed SQLite/PostgreSQL-backed tickets. The Rust hub continues to support header-auth WebSocket clients while browser clients use one-use tenant-scoped tickets.
 
 **Tech Stack:** Rust 2024, axum WebSockets, tokio, time/uuid, Next.js 16 App Router, React 19 client components, TypeScript, Tailwind CSS.
 
@@ -12,7 +12,7 @@
 
 ## File Structure
 
-- Modify `crates/pandar-hub/src/printer_events.rs`: add in-memory ticket issue/consume support alongside the existing broadcast hub.
+- Modify `crates/pandar-hub/src/printer_events.rs`: add ticket issue/consume support alongside the existing broadcast hub. Phase 22 supersedes the original in-memory ticket store with SQLite/PostgreSQL-backed hashed tickets.
 - Modify `crates/pandar-hub/src/routes/printer_events.rs`: add ticket endpoint and accept ticket query auth before upgrade.
 - Modify `crates/pandar-hub/src/routes.rs`: route `POST /api/v1/tenants/{tenant_id}/printer-events/tickets`.
 - Modify `crates/pandar-hub/src/routes/tests/printer_events_ws.rs`: add ticket auth tests and preserve header-auth tests.
@@ -213,7 +213,9 @@ cargo test -p pandar-hub routes::tests::printer_events_ws::printer_events_ticket
 
 Expected before implementation: failure because `/printer-events/tickets` does not exist.
 
-- [ ] **Step 4: Implement ticket storage in `printer_events.rs`**
+- [ ] **Step 4: Implement ticket storage in `printer_events.rs` (superseded by Phase 22)**
+
+Phase 22 supersedes this original in-memory implementation block. Current behavior uses `PrinterEventTicketRepository` with hashed SQLite/PostgreSQL rows, tenant-scoped one-use consume semantics, and cross-replica validation. Do not reintroduce `PrinterEventHub` ticket maps, `issue_ticket`, or `consume_ticket`.
 
 Add ticket fields and methods to `PrinterEventHub` while preserving existing broadcast behavior:
 
@@ -269,7 +271,9 @@ pub async fn consume_ticket(&self, tenant_id: TenantId, ticket: &str) -> bool {
 
 Use `time::Duration` with a fully qualified path if needed to avoid conflicting with `std::time::Duration`.
 
-- [ ] **Step 5: Add ticket route and query auth**
+- [ ] **Step 5: Add ticket route and query auth (superseded by Phase 22)**
+
+Phase 22 supersedes the original route snippets below. Current routes issue plaintext browser tickets only in the HTTP response, store `hash_secret(ticket)` through `state.printer_event_tickets()`, and consume by hashing the query ticket before calling the repository. Do not call `state.printer_events().issue_ticket(...)` or `state.printer_events().consume_ticket(...)`.
 
 In `crates/pandar-hub/src/routes/printer_events.rs`, add:
 
@@ -689,7 +693,7 @@ Update the `printer-events` paragraph to state:
 
 - header bearer auth is supported for service WebSocket clients;
 - browsers should use `POST /api/v1/tenants/{tenant_id}/printer-events/tickets` through the frontend server route;
-- tickets are one-use, short-lived, in-memory, tenant-scoped, and not durable replay.
+- tickets are one-use, short-lived, tenant-scoped, and not durable replay; Phase 22 stores ticket hashes in SQLite/PostgreSQL so sibling Hub replicas can consume them.
 
 Add a deployment note that fronting proxies should redact `ticket` query parameters from logs.
 

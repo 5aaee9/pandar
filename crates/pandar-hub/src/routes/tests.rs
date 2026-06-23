@@ -38,6 +38,16 @@ async fn raw_state() -> AppState {
     AppState::sqlite_for_tests().await.unwrap()
 }
 
+fn sibling_state(state: &AppState) -> AppState {
+    state.sibling_for_tests()
+}
+
+async fn start_control_plane(state: AppState) -> tokio::task::JoinHandle<()> {
+    let (handle, ready) = crate::runtime::spawn_control_plane_ready(state);
+    ready.await.unwrap().unwrap();
+    handle
+}
+
 async fn bootstrap_state() -> AppState {
     state().await
 }

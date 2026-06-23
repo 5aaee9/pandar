@@ -1,17 +1,17 @@
 use pandar_core::{Job, JobFilamentUsage};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{repositories::RepositoryError, routes::ApiError};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobMaterialResponse {
     ams_mapping: Option<Value>,
     ams_mapping2: Option<Value>,
     filament_usage: Vec<JobFilamentUsageResponse>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct JobFilamentUsageResponse {
     slot_index: u32,
     source: String,

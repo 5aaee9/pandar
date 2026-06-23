@@ -13,6 +13,19 @@ services:
       timeout: 5s
       retries: 12
 
+  nats:
+    image: nats:2
+    profiles: ["nats"]
+    command: ["-js", "-m", "8222"]
+    expose:
+      - "4222"
+      - "8222"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   pandar-api:
     build:
       context: .
@@ -23,6 +36,8 @@ services:
       PANDAR_HUB_BIND: 0.0.0.0:8080
       PANDAR_HUB_GRPC_BIND: 0.0.0.0:50051
       PANDAR_SPOOL_DIR: /spool
+      PANDAR_CONTROL_PLANE: ${PANDAR_CONTROL_PLANE:-in-process}
+      PANDAR_NATS_URL: ${PANDAR_NATS_URL:-nats://nats:4222}
     ports:
       - "8080:8080"
       - "50051:50051"

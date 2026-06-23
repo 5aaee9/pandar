@@ -45,8 +45,7 @@ pub async fn handle_print_report(
         && (applied.changed || applied.inserted_job_events)
     {
         state
-            .printer_events()
-            .publish(
+            .publish_printer_event(
                 tenant_id,
                 PrinterEvent::JobProgress {
                     job: Box::new(JobResponse::try_from(job).map_err(repository_status)?),

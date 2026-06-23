@@ -36,8 +36,7 @@ pub async fn handle_snapshot(
         .await
         .map_err(repository_status)?;
     state
-        .printer_events()
-        .publish(tenant_id, PrinterEvent::PrinterSnapshot { printer })
+        .publish_printer_event(tenant_id, PrinterEvent::PrinterSnapshot { printer })
         .await;
 
     Ok(())

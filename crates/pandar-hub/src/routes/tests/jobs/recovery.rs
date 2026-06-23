@@ -168,6 +168,223 @@ async fn job_recovery_routes_retry_reprint_duplicate_and_audit() {
 }
 
 #[tokio::test]
+async fn retry_dispatch_wakes_agent_on_sibling_instance() {
+    let state = state().await;
+    let sibling = sibling_state(&state);
+    let _control_plane = start_control_plane(sibling.clone()).await;
+    let app = router(state.clone());
+    let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "sibling-retry-operator",
+    )
+    .await;
+    let agent = state.agents().create(tenant_id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
+        .await
+        .unwrap();
+    let (_, created) = request_as(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
+        Some(valid_request()),
+        &token,
+    )
+    .await;
+    let job_id = created["id"].as_str().unwrap();
+    let command_id = CommandId::parse(created["command_id"].as_str().unwrap()).unwrap();
+    state
+        .jobs()
+        .mark_print_sent(command_id, tenant_id, agent.id)
+        .await
+        .unwrap();
+    state
+        .jobs()
+        .mark_print_failed(command_id, tenant_id, agent.id, "agent offline".to_owned())
+        .await
+        .unwrap();
+    let (wake_sender, mut wake_receiver) = tokio::sync::mpsc::channel(1);
+    let (close_sender, _) = tokio::sync::mpsc::channel(1);
+    sibling
+        .sessions()
+        .register(crate::sessions::AgentSession {
+            token: crate::sessions::SessionToken::new(),
+            tenant_id,
+            agent_id: agent.id,
+            name: "agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: pandar_core::created_at_now(),
+            last_heartbeat_at: pandar_core::created_at_now(),
+            wake_sender,
+            close_sender,
+        })
+        .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/jobs/{job_id}/retry-dispatch"),
+        Some(json!({ "reason": "operator retry" })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["status"], "queued");
+    tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
+        .await
+        .expect("sibling agent should be woken")
+        .expect("wake channel should stay open");
+}
+
+#[tokio::test]
+async fn reprint_wakes_agent_on_sibling_instance() {
+    let state = state().await;
+    let sibling = sibling_state(&state);
+    let _control_plane = start_control_plane(sibling.clone()).await;
+    let app = router(state.clone());
+    let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "sibling-reprint-operator",
+    )
+    .await;
+    let agent = state.agents().create(tenant_id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
+        .await
+        .unwrap();
+    let (_, created) = request_as(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
+        Some(valid_request()),
+        &token,
+    )
+    .await;
+    let job_id = JobId::parse(created["id"].as_str().unwrap()).unwrap();
+    state
+        .jobs()
+        .apply_print_report(report_input(
+            tenant_id,
+            agent.id,
+            &printer_id,
+            Some(job_id),
+            None,
+            "FINISH",
+        ))
+        .await
+        .unwrap();
+    let (wake_sender, mut wake_receiver) = tokio::sync::mpsc::channel(1);
+    let (close_sender, _) = tokio::sync::mpsc::channel(1);
+    sibling
+        .sessions()
+        .register(crate::sessions::AgentSession {
+            token: crate::sessions::SessionToken::new(),
+            tenant_id,
+            agent_id: agent.id,
+            name: "agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: pandar_core::created_at_now(),
+            last_heartbeat_at: pandar_core::created_at_now(),
+            wake_sender,
+            close_sender,
+        })
+        .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/jobs/{job_id}/reprint"),
+        Some(json!({ "reason": "print another" })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_ne!(body["id"], job_id.to_string());
+    tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
+        .await
+        .expect("sibling agent should be woken")
+        .expect("wake channel should stay open");
+}
+
+#[tokio::test]
+async fn duplicate_and_print_wakes_agent_on_sibling_instance() {
+    let state = state().await;
+    let sibling = sibling_state(&state);
+    let _control_plane = start_control_plane(sibling.clone()).await;
+    let app = router(state.clone());
+    let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "sibling-duplicate-operator",
+    )
+    .await;
+    let agent = state.agents().create(tenant_id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
+        .await
+        .unwrap();
+    let (_, created) = request_as(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
+        Some(valid_request()),
+        &token,
+    )
+    .await;
+    let job_id = created["id"].as_str().unwrap();
+    let (wake_sender, mut wake_receiver) = tokio::sync::mpsc::channel(1);
+    let (close_sender, _) = tokio::sync::mpsc::channel(1);
+    sibling
+        .sessions()
+        .register(crate::sessions::AgentSession {
+            token: crate::sessions::SessionToken::new(),
+            tenant_id,
+            agent_id: agent.id,
+            name: "agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: pandar_core::created_at_now(),
+            last_heartbeat_at: pandar_core::created_at_now(),
+            wake_sender,
+            close_sender,
+        })
+        .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/jobs/{job_id}/duplicate"),
+        Some(json!({
+            "printer_id": printer_id,
+            "plate_id": 2,
+            "use_ams": true,
+            "flow_cali": true,
+            "timelapse": false,
+            "ams_mapping": null,
+            "ams_mapping2": null
+        })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_ne!(body["id"], job_id);
+    tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
+        .await
+        .expect("sibling agent should be woken")
+        .expect("wake channel should stay open");
+}
+
+#[tokio::test]
 async fn job_recovery_routes_reject_unsafe_retry_and_viewer_auth() {
     let state = state().await;
     let app = router(state.clone());

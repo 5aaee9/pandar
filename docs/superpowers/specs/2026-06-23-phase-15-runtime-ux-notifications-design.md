@@ -46,8 +46,8 @@ New ticket endpoint:
 - `POST /api/v1/tenants/{tenant_id}/printer-events/tickets`
 - Requires the same tenant `viewer` authorization as the WebSocket route through the existing `Authorization: Bearer <token>` header.
 - Returns `{ "ticket": "...", "expires_at": "..." }`.
-- Tickets are random, opaque, in-memory, tenant-scoped, viewer-scoped, one-use, and short-lived. The implementation target is 60 seconds.
-- Tickets are not persisted and are invalid after hub restart.
+- Phase 22 supersedes the original in-memory ticket storage: tickets are random, opaque, stored hashed in SQLite/PostgreSQL, tenant-scoped, viewer-scoped, one-use, and short-lived. The implementation target remains 60 seconds.
+- Phase 22 persists ticket hashes so sibling Hub replicas can consume tickets issued by another replica.
 
 WebSocket authorization paths:
 
@@ -200,7 +200,7 @@ Docs:
 
 - A browser can subscribe to the existing tenant event stream without setting custom WebSocket headers and without receiving server-side bearer tokens.
 - Header-based WebSocket clients keep working.
-- WebSocket tickets are short-lived, one-use, tenant-scoped, and not persisted.
+- Phase 22 supersedes the original non-persistent ticket plan: WebSocket tickets are short-lived, one-use, tenant-scoped, and stored hashed in SQLite/PostgreSQL.
 - The dashboard updates printer and job rows after future WebSocket events without refreshing.
 - Operators see concise in-page notifications for live disconnects, offline printers, dispatch/upload/MQTT failures, physical print failures, and print completion.
 - Job history clearly distinguishes hub dispatch/agent upload/MQTT failure from physical print failure.

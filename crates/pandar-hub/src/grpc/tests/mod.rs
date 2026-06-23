@@ -290,10 +290,11 @@ async fn grpc_dispatch_to_online_agent_yields_refresh_and_marks_sent() {
         .unwrap();
 
     let command = state
-        .sessions()
-        .dispatch_refresh_printers(tenant_id, agent_id, state.commands())
+        .commands()
+        .enqueue_refresh_printers(tenant_id, agent_id)
         .await
         .unwrap();
+    state.sessions().wake_local_agent(tenant_id, agent_id).await;
     let hub_command = stream.next().await.unwrap().unwrap();
 
     assert_eq!(hub_command.command_id, command.id.to_string());
@@ -319,10 +320,11 @@ async fn grpc_ack_and_result_update_command_status() {
         .await
         .unwrap();
     let command = state
-        .sessions()
-        .dispatch_refresh_printers(tenant_id, agent_id, state.commands())
+        .commands()
+        .enqueue_refresh_printers(tenant_id, agent_id)
         .await
         .unwrap();
+    state.sessions().wake_local_agent(tenant_id, agent_id).await;
     let _ = stream.next().await.unwrap().unwrap();
 
     handle_ack(

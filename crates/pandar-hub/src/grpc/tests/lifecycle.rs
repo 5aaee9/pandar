@@ -58,10 +58,11 @@ async fn replacement_stream_receives_commands_after_old_stream_closes() {
             .await
             .unwrap();
     let command = state
-        .sessions()
-        .dispatch_refresh_printers(tenant_id, agent_id, state.commands())
+        .commands()
+        .enqueue_refresh_printers(tenant_id, agent_id)
         .await
         .unwrap();
+    state.sessions().wake_local_agent(tenant_id, agent_id).await;
 
     assert!(old_stream.next().await.is_none());
     let hub_command = new_stream.next().await.unwrap().unwrap();

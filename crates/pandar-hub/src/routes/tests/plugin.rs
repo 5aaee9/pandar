@@ -259,6 +259,66 @@ async fn plugin_print_returns_job_shape_and_records_plugin_actor_metadata() {
 }
 
 #[tokio::test]
+async fn plugin_print_wakes_agent_on_sibling_instance() {
+    let state = state().await;
+    let sibling = sibling_state(&state);
+    let _control_plane = start_control_plane(sibling.clone()).await;
+    let app = router(state.clone());
+    let tenant = state
+        .tenants()
+        .create("plugin-print-sibling", "Plugin Print Sibling")
+        .await
+        .unwrap();
+    let token =
+        plugin_studio_tenant_token(&state, &tenant.id.to_string(), "sibling-print-plugin").await;
+    let agent = state.agents().create(tenant.id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant.id, agent.id)
+        .await
+        .unwrap();
+    let (wake_sender, mut wake_receiver) = tokio::sync::mpsc::channel(1);
+    let (close_sender, _) = tokio::sync::mpsc::channel(1);
+    sibling
+        .sessions()
+        .register(crate::sessions::AgentSession {
+            token: crate::sessions::SessionToken::new(),
+            tenant_id: tenant.id,
+            agent_id: agent.id,
+            name: "agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: pandar_core::created_at_now(),
+            last_heartbeat_at: pandar_core::created_at_now(),
+            wake_sender,
+            close_sender,
+        })
+        .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        "/api/v1/plugin/prints",
+        Some(json!({
+            "printer_id": printer_id,
+            "filename": "plugin plate.3mf",
+            "content_type": "model/3mf",
+            "artifact_base64": STANDARD.encode(b"abc"),
+            "plate_id": 1,
+            "use_ams": true,
+            "flow_cali": false,
+            "timelapse": true
+        })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["status"], "queued");
+    tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
+        .await
+        .expect("sibling agent should be woken")
+        .expect("wake channel should stay open");
+}
+
+#[tokio::test]
 async fn plugin_print_uses_stable_artifact_validation_errors() {
     let state = state().await;
     let app = router(state.clone());

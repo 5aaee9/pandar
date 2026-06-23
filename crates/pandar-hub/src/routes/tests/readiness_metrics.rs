@@ -49,19 +49,40 @@ async fn metrics_redacts_tenant_ids_and_reports_required_series() {
     state
         .metrics()
         .record_print_report(crate::metrics::PrintReportMetric::Rejected);
-    let issued = state.printer_events().issue_ticket(tenant.id).await;
-    assert!(
+    let ticket = crate::repositories::generate_secret("pandar_ws");
+    let issued = state
+        .printer_event_tickets()
+        .issue(tenant.id, crate::repositories::hash_secret(&ticket))
+        .await
+        .unwrap();
+    state
+        .metrics()
+        .record_ticket(crate::metrics::TicketMetric::Issued);
+    assert!(matches!(
         state
-            .printer_events()
-            .consume_ticket(tenant.id, &issued.ticket)
+            .printer_event_tickets()
+            .consume(tenant.id, &issued.ticket_hash)
             .await
-    );
-    assert!(
-        !state
-            .printer_events()
-            .consume_ticket(tenant.id, "missing-ticket")
+            .unwrap(),
+        crate::repositories::PrinterEventTicketConsumeResult::Consumed(_)
+    ));
+    state
+        .metrics()
+        .record_ticket(crate::metrics::TicketMetric::Consumed);
+    assert!(matches!(
+        state
+            .printer_event_tickets()
+            .consume(
+                tenant.id,
+                &crate::repositories::hash_secret("missing-ticket")
+            )
             .await
-    );
+            .unwrap(),
+        crate::repositories::PrinterEventTicketConsumeResult::Invalid
+    ));
+    state
+        .metrics()
+        .record_ticket(crate::metrics::TicketMetric::Invalid);
     let tenant_id_hash = crate::metrics::tenant_id_hash(tenant.id);
 
     let response = app
@@ -98,5 +119,5 @@ async fn metrics_redacts_tenant_ids_and_reports_required_series() {
         "pandar_websocket_subscriptions{{tenant_id_hash=\"{tenant_id_hash}\"}} 1"
     )));
     assert!(!text.contains(&tenant.id.to_string()));
-    assert!(!text.contains(&issued.ticket));
+    assert!(!text.contains(&ticket));
 }

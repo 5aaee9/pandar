@@ -1,12 +1,12 @@
 use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
 
 use anyhow::Context;
-use pandar_core::{AgentId, CommandRecord, TenantId};
+use pandar_core::{AgentId, TenantId};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::sync::{Mutex, mpsc};
 use uuid::Uuid;
 
-use crate::repositories::{AgentRepository, CommandRepository, RepositoryError, RepositoryResult};
+use crate::repositories::{AgentRepository, RepositoryError, RepositoryResult};
 
 #[cfg(test)]
 use pandar_core::AgentStatus;
@@ -132,26 +132,15 @@ impl SessionRegistry {
     where
         Fut: Future<Output = T>,
     {
-        let sessions = self.sessions.lock().await;
-        if !sessions
-            .get(&agent_id)
-            .is_some_and(|session| session.token == token)
-        {
+        if !self.is_current(agent_id, token).await {
             return None;
         }
 
-        Some(operation().await)
+        let result = operation().await;
+        self.is_current(agent_id, token).await.then_some(result)
     }
 
-    pub async fn dispatch_refresh_printers(
-        &self,
-        tenant_id: TenantId,
-        agent_id: AgentId,
-        commands: &CommandRepository,
-    ) -> RepositoryResult<CommandRecord> {
-        let command = commands
-            .enqueue_refresh_printers(tenant_id, agent_id)
-            .await?;
+    pub async fn wake_local_agent(&self, tenant_id: TenantId, agent_id: AgentId) {
         let wake_sender = {
             self.sessions
                 .lock()
@@ -164,22 +153,25 @@ impl SessionRegistry {
         if let Some(wake_sender) = wake_sender {
             let _ = wake_sender.try_send(());
         }
-
-        Ok(command)
     }
 
-    pub async fn wake_agent(&self, tenant_id: TenantId, agent_id: AgentId) {
-        let wake_sender = {
-            self.sessions
-                .lock()
-                .await
+    pub async fn close_local_agent(&self, tenant_id: TenantId, agent_id: AgentId) {
+        let close_sender = {
+            let mut sessions = self.sessions.lock().await;
+            if sessions
                 .get(&agent_id)
-                .filter(|session| session.tenant_id == tenant_id)
-                .map(|session| session.wake_sender.clone())
+                .is_some_and(|session| session.tenant_id == tenant_id)
+            {
+                sessions
+                    .remove(&agent_id)
+                    .map(|session| session.close_sender)
+            } else {
+                None
+            }
         };
 
-        if let Some(wake_sender) = wake_sender {
-            let _ = wake_sender.try_send(());
+        if let Some(close_sender) = close_sender {
+            let _ = close_sender.try_send(());
         }
     }
 
@@ -326,7 +318,89 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sessions_dispatch_wakes_matching_online_agent() {
+    async fn sessions_close_local_agent_removes_matching_session_only() {
+        let registry = SessionRegistry::new();
+        let tenant_id = TenantId::new();
+        let other_tenant_id = TenantId::new();
+        let agent_id = AgentId::new();
+        let (wake_sender, _) = mpsc::channel(1);
+        let (close_sender, mut close_receiver) = mpsc::channel(1);
+
+        registry
+            .register(AgentSession {
+                token: SessionToken::new(),
+                tenant_id,
+                agent_id,
+                name: "agent".to_string(),
+                version: "0.1.0".to_string(),
+                connected_at: "2026-06-20T00:00:00Z".to_string(),
+                last_heartbeat_at: "2026-06-20T00:00:00Z".to_string(),
+                wake_sender,
+                close_sender,
+            })
+            .await;
+
+        registry.close_local_agent(other_tenant_id, agent_id).await;
+        assert!(registry.get(agent_id).await.is_some());
+
+        registry.close_local_agent(tenant_id, agent_id).await;
+        assert!(registry.get(agent_id).await.is_none());
+        tokio::time::timeout(Duration::from_secs(1), close_receiver.recv())
+            .await
+            .expect("agent session should receive close")
+            .expect("close channel should stay open");
+    }
+
+    #[tokio::test]
+    async fn sessions_close_local_agent_is_not_blocked_by_in_flight_current_operation() {
+        let registry = SessionRegistry::new();
+        let tenant_id = TenantId::new();
+        let agent_id = AgentId::new();
+        let token = SessionToken::new();
+        let (wake_sender, _) = mpsc::channel(1);
+        let (close_sender, mut close_receiver) = mpsc::channel(1);
+        let (operation_started, operation_started_receiver) = tokio::sync::oneshot::channel();
+        let (finish_operation, finish_operation_receiver) = tokio::sync::oneshot::channel();
+
+        registry
+            .register(AgentSession {
+                token,
+                tenant_id,
+                agent_id,
+                name: "agent".to_string(),
+                version: "0.1.0".to_string(),
+                connected_at: "2026-06-20T00:00:00Z".to_string(),
+                last_heartbeat_at: "2026-06-20T00:00:00Z".to_string(),
+                wake_sender,
+                close_sender,
+            })
+            .await;
+
+        let operation_registry = registry.clone();
+        let operation = tokio::spawn(async move {
+            operation_registry
+                .while_current(agent_id, token, || async move {
+                    let _ = operation_started.send(());
+                    let _ = finish_operation_receiver.await;
+                    1
+                })
+                .await
+        });
+        operation_started_receiver.await.unwrap();
+
+        registry.close_local_agent(tenant_id, agent_id).await;
+
+        assert!(registry.get(agent_id).await.is_none());
+        tokio::time::timeout(Duration::from_secs(1), close_receiver.recv())
+            .await
+            .expect("agent session should receive close")
+            .expect("close channel should stay open");
+        let _ = finish_operation.send(());
+        assert_eq!(operation.await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn sessions_wake_local_agent_wakes_matching_online_agent() {
         let state = AppState::sqlite_for_tests().await.unwrap();
         let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
         let agent = state.agents().create(tenant.id, "agent").await.unwrap();
@@ -349,10 +423,11 @@ mod tests {
             .await;
 
         let command = state
-            .sessions()
-            .dispatch_refresh_printers(tenant.id, agent.id, state.commands())
+            .commands()
+            .enqueue_refresh_printers(tenant.id, agent.id)
             .await
             .unwrap();
+        state.sessions().wake_local_agent(tenant.id, agent.id).await;
 
         assert_eq!(command.tenant_id, tenant.id);
         assert!(wake_receiver.recv().await.is_some());

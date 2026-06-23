@@ -23,7 +23,7 @@ pub(super) async fn clear_postgres(database: &Database) {
         panic!("expected PostgreSQL database");
     };
     sqlx::query(
-        "TRUNCATE audit_events, api_tokens, user_identities, tenant_tokens, plugin_login_tickets, job_filament_usages, printer_material_snapshots, jobs, job_artifacts, commands, printers, agents, users, tenants",
+        "TRUNCATE printer_event_tickets, audit_events, api_tokens, user_identities, tenant_tokens, plugin_login_tickets, job_filament_usages, printer_material_snapshots, jobs, job_artifacts, commands, printers, agents, users, tenants",
     )
         .execute(pool)
         .await

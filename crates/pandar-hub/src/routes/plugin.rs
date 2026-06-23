@@ -280,10 +280,13 @@ pub(super) async fn create_print(
         .await;
 
     match created {
-        Ok(created) => Ok((
-            StatusCode::CREATED,
-            Json(PluginPrintResponse::from(created)),
-        )),
+        Ok(created) => {
+            let wake_tenant_id = created.job.tenant_id;
+            let wake_agent_id = created.job.agent_id;
+            let response = PluginPrintResponse::from(created);
+            state.wake_agent(wake_tenant_id, wake_agent_id).await;
+            Ok((StatusCode::CREATED, Json(response)))
+        }
         Err(err) => {
             if let Err(cleanup_err) = state
                 .job_storage()

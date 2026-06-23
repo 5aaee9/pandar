@@ -79,10 +79,11 @@ async fn grpc_live_stream_ack_and_result_update_command_ledger() {
         .await
         .unwrap();
     let command = state
-        .sessions()
-        .dispatch_refresh_printers(tenant_id, agent_id, state.commands())
+        .commands()
+        .enqueue_refresh_printers(tenant_id, agent_id)
         .await
         .unwrap();
+    state.sessions().wake_local_agent(tenant_id, agent_id).await;
     let _ = stream.next().await.unwrap().unwrap();
 
     sender

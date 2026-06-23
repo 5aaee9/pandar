@@ -5,6 +5,7 @@ use tokio::sync::mpsc;
 #[tokio::test]
 async fn discover_printers_requires_operator_role() {
     let state = state().await;
+    let _control_plane = start_control_plane(state.clone()).await;
     let app = router(state.clone());
     let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
     let agent = state
@@ -97,6 +98,7 @@ async fn discover_printers_rejects_invalid_timeout_payloads() {
 #[tokio::test]
 async fn discover_printers_defaults_timeout_audits_and_wakes_agent() {
     let state = state().await;
+    let _control_plane = start_control_plane(state.clone()).await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
     let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
@@ -134,7 +136,10 @@ async fn discover_printers_defaults_timeout_audits_and_wakes_agent() {
         body["payload_json"],
         json!({ "timeout_seconds": 5 }).to_string()
     );
-    wake_receiver.try_recv().expect("agent should be woken");
+    tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
+        .await
+        .expect("agent should be woken")
+        .expect("wake channel should stay open");
     let events = state
         .audit_events()
         .list_for_tenant(tenant_id)
@@ -150,6 +155,7 @@ async fn discover_printers_defaults_timeout_audits_and_wakes_agent() {
 #[tokio::test]
 async fn discover_printers_defaults_empty_json_body() {
     let state = state().await;
+    let _control_plane = start_control_plane(state.clone()).await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
     let tenant_id = tenant["id"].as_str().unwrap();
@@ -207,6 +213,7 @@ async fn diagnose_printer_rejects_access_code_payload() {
 #[tokio::test]
 async fn diagnose_printer_enqueues_redacted_payload_audits_and_wakes_agent() {
     let state = state().await;
+    let _control_plane = start_control_plane(state.clone()).await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
     let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
@@ -243,7 +250,10 @@ async fn diagnose_printer_enqueues_redacted_payload_audits_and_wakes_agent() {
         body["payload_json"],
         json!({ "serial_number": "BAMBU123" }).to_string()
     );
-    wake_receiver.try_recv().expect("agent should be woken");
+    tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
+        .await
+        .expect("agent should be woken")
+        .expect("wake channel should stay open");
     let events = state
         .audit_events()
         .list_for_tenant(tenant_id)
@@ -256,6 +266,142 @@ async fn diagnose_printer_enqueues_redacted_payload_audits_and_wakes_agent() {
     let metadata = serde_json::from_str::<serde_json::Value>(&event.metadata_json).unwrap();
     assert!(metadata["tenant_token_id"].as_str().is_some());
     assert_eq!(metadata["tenant_token_scopes"], json!(["*"]));
+}
+
+#[tokio::test]
+async fn refresh_printers_wakes_agent_on_sibling_instance() {
+    let state = state().await;
+    let sibling = sibling_state(&state);
+    let _control_plane = start_control_plane(sibling.clone()).await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let (wake_sender, mut wake_receiver) = mpsc::channel(1);
+    let (close_sender, _) = mpsc::channel(1);
+    sibling
+        .sessions()
+        .register(crate::sessions::AgentSession {
+            token: crate::sessions::SessionToken::new(),
+            tenant_id,
+            agent_id,
+            name: "shop-agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: pandar_core::created_at_now(),
+            last_heartbeat_at: pandar_core::created_at_now(),
+            wake_sender,
+            close_sender,
+        })
+        .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/refresh-printers"),
+        None,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["kind"], "refresh_printers");
+    tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
+        .await
+        .expect("sibling agent should be woken")
+        .expect("wake channel should stay open");
+    let command = state
+        .commands()
+        .next_queued_for_agent(tenant_id, agent_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(command.kind, "refresh_printers");
+}
+
+#[tokio::test]
+async fn discover_printers_wakes_agent_on_sibling_instance() {
+    let state = state().await;
+    let sibling = sibling_state(&state);
+    let _control_plane = start_control_plane(sibling.clone()).await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let (wake_sender, mut wake_receiver) = mpsc::channel(1);
+    let (close_sender, _) = mpsc::channel(1);
+    sibling
+        .sessions()
+        .register(crate::sessions::AgentSession {
+            token: crate::sessions::SessionToken::new(),
+            tenant_id,
+            agent_id,
+            name: "shop-agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: pandar_core::created_at_now(),
+            last_heartbeat_at: pandar_core::created_at_now(),
+            wake_sender,
+            close_sender,
+        })
+        .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/discover-printers"),
+        Some(json!({ "timeout_seconds": 5 })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["kind"], "discover_printers");
+    tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
+        .await
+        .expect("sibling agent should be woken")
+        .expect("wake channel should stay open");
+}
+
+#[tokio::test]
+async fn diagnose_printer_wakes_agent_on_sibling_instance() {
+    let state = state().await;
+    let sibling = sibling_state(&state);
+    let _control_plane = start_control_plane(sibling.clone()).await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let (wake_sender, mut wake_receiver) = mpsc::channel(1);
+    let (close_sender, _) = mpsc::channel(1);
+    sibling
+        .sessions()
+        .register(crate::sessions::AgentSession {
+            token: crate::sessions::SessionToken::new(),
+            tenant_id,
+            agent_id,
+            name: "shop-agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: pandar_core::created_at_now(),
+            last_heartbeat_at: pandar_core::created_at_now(),
+            wake_sender,
+            close_sender,
+        })
+        .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/diagnose-printer"),
+        Some(json!({ "serial_number": "BAMBU123" })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["kind"], "diagnose_printer");
+    tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
+        .await
+        .expect("sibling agent should be woken")
+        .expect("wake channel should stay open");
 }
 
 #[tokio::test]

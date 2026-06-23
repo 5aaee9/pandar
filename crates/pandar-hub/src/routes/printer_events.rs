@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
-    repositories::UserRole,
+    metrics::TicketMetric,
+    repositories::{PrinterEventTicketConsumeResult, UserRole, generate_secret, hash_secret},
     routes::{ApiError, auth},
 };
 
@@ -37,15 +38,28 @@ pub(super) async fn printer_events(
     if headers.contains_key(AUTHORIZATION) {
         auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
     } else if let Some(ticket) = query.ticket {
-        if !state
-            .printer_events()
-            .consume_ticket(tenant_id, &ticket)
-            .await
+        match state
+            .printer_event_tickets()
+            .consume(tenant_id, &hash_secret(&ticket))
+            .await?
         {
-            return Err(ApiError::new(
-                StatusCode::UNAUTHORIZED,
-                "invalid_auth_token",
-            ));
+            PrinterEventTicketConsumeResult::Consumed(_) => {
+                state.metrics().record_ticket(TicketMetric::Consumed)
+            }
+            PrinterEventTicketConsumeResult::Expired => {
+                state.metrics().record_ticket(TicketMetric::Expired);
+                return Err(ApiError::new(
+                    StatusCode::UNAUTHORIZED,
+                    "invalid_auth_token",
+                ));
+            }
+            PrinterEventTicketConsumeResult::Invalid => {
+                state.metrics().record_ticket(TicketMetric::Invalid);
+                return Err(ApiError::new(
+                    StatusCode::UNAUTHORIZED,
+                    "invalid_auth_token",
+                ));
+            }
         }
     } else {
         return Err(ApiError::new(
@@ -72,10 +86,15 @@ pub(super) async fn create_printer_event_ticket(
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
     auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
     state.printers().list_for_tenant(tenant_id).await?;
-    let issued = state.printer_events().issue_ticket(tenant_id).await;
+    let ticket = generate_secret("pandar_ws");
+    let issued = state
+        .printer_event_tickets()
+        .issue(tenant_id, hash_secret(&ticket))
+        .await?;
+    state.metrics().record_ticket(TicketMetric::Issued);
 
     Ok(Json(PrinterEventTicketResponse {
-        ticket: issued.ticket,
+        ticket,
         expires_at: issued.expires_at,
     }))
 }

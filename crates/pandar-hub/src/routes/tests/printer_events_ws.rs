@@ -1,6 +1,7 @@
 use super::*;
 use crate::{
     grpc::AgentControlService,
+    jobs::{DEFAULT_MAX_ARTIFACT_BYTES, JobStorageConfig},
     protocol::agent::v1::{
         AgentEvent, AgentHello, PrintJobReport, PrinterSnapshot,
         agent_control_client::AgentControlClient, agent_control_server::AgentControlServer,
@@ -194,6 +195,112 @@ async fn printer_events_websocket_accepts_browser_ticket_once() {
 }
 
 #[tokio::test]
+async fn printer_events_websocket_accepts_browser_ticket_from_sibling_instance() {
+    let state = state().await;
+    let sibling = sibling_state(&state);
+    let app = router(sibling);
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "sibling-ticket-ws-token",
+    )
+    .await;
+    let http_addr = serve_http(app.clone()).await;
+    let (status, body) = request_as(
+        router(state.clone()),
+        Method::POST,
+        &format!("/api/v1/tenants/{}/printer-events/tickets", tenant.id),
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let ticket = body["ticket"].as_str().unwrap();
+
+    let (ws, _) = tokio_tungstenite::connect_async(format!(
+        "ws://{http_addr}/api/v1/tenants/{}/printer-events?ticket={ticket}",
+        tenant.id
+    ))
+    .await
+    .unwrap();
+    drop(ws);
+}
+
+#[tokio::test]
+async fn printer_events_websocket_accepts_browser_ticket_from_separate_sqlite_connection() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let database_url = format!(
+        "sqlite://{}",
+        temp_dir.path().join("pandar-ticket-test.db").display()
+    );
+    let issuer_storage = JobStorageConfig::new(
+        temp_dir.path().join("issuer-spool"),
+        DEFAULT_MAX_ARTIFACT_BYTES,
+    )
+    .unwrap();
+    let subscriber_storage = JobStorageConfig::new(
+        temp_dir.path().join("subscriber-spool"),
+        DEFAULT_MAX_ARTIFACT_BYTES,
+    )
+    .unwrap();
+    let issuer = AppState::connect_with_config_values(
+        database_url.clone(),
+        issuer_storage,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap()
+    .with_bootstrap_token(TEST_BOOTSTRAP_TOKEN);
+    let subscriber = AppState::connect_with_config_values(
+        database_url,
+        subscriber_storage,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap()
+    .with_bootstrap_token(TEST_BOOTSTRAP_TOKEN);
+    let tenant = issuer
+        .tenants()
+        .create("sqlite-file-acme", "SQLite File Acme")
+        .await
+        .unwrap();
+    let token = auth_token_for_role(
+        &issuer,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "sqlite-file-ticket-ws-token",
+    )
+    .await;
+    let http_addr = serve_http(router(subscriber)).await;
+    let (status, body) = request_as(
+        router(issuer),
+        Method::POST,
+        &format!("/api/v1/tenants/{}/printer-events/tickets", tenant.id),
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let ticket = body["ticket"].as_str().unwrap();
+
+    let (ws, _) = tokio_tungstenite::connect_async(format!(
+        "ws://{http_addr}/api/v1/tenants/{}/printer-events?ticket={ticket}",
+        tenant.id
+    ))
+    .await
+    .unwrap();
+    drop(ws);
+}
+
+#[tokio::test]
 async fn printer_events_websocket_rejects_invalid_ticket_before_upgrade() {
     let state = state().await;
     let app = router(state.clone());
@@ -282,6 +389,7 @@ async fn printer_events_unlinked_external_jwt_returns_forbidden_before_upgrade()
 #[tokio::test]
 async fn printer_events_websocket_receives_snapshot_from_grpc_stream() {
     let state = state().await;
+    let _control_plane = start_control_plane(state.clone()).await;
     let app = router(state.clone());
     let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
     let token = auth_token_for_role(
@@ -349,6 +457,7 @@ async fn printer_events_websocket_receives_snapshot_from_grpc_stream() {
 #[tokio::test]
 async fn printer_events_websocket_receives_job_progress_from_grpc_stream() {
     let state = state().await;
+    let _control_plane = start_control_plane(state.clone()).await;
     let app = router(state.clone());
     let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
     let token = auth_token_for_role(
@@ -445,6 +554,182 @@ async fn printer_events_websocket_receives_job_progress_from_grpc_stream() {
     assert_eq!(body["job"]["print"]["status"], "running");
     assert_eq!(body["job"]["print"]["progress_percent"], 66);
     drop(stream);
+}
+
+#[tokio::test]
+async fn printer_events_websocket_receives_event_from_sibling_instance() {
+    let state = state().await;
+    let sibling = sibling_state(&state);
+    let _control_plane = start_control_plane(sibling.clone()).await;
+    let app = router(sibling);
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "sibling-event-ws-token",
+    )
+    .await;
+    let agent = state
+        .agents()
+        .create(tenant.id, "shop-agent")
+        .await
+        .unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant.id, agent.id)
+        .await
+        .unwrap();
+    let printer = state
+        .printers()
+        .get_for_tenant(tenant.id, &printer_id)
+        .await
+        .unwrap()
+        .unwrap();
+    let http_addr = serve_http(app).await;
+    let mut request = format!(
+        "ws://{http_addr}/api/v1/tenants/{}/printer-events",
+        tenant.id
+    )
+    .into_client_request()
+    .unwrap();
+    request
+        .headers_mut()
+        .insert("Authorization", format!("Bearer {token}").parse().unwrap());
+    let (mut ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+
+    state
+        .publish_printer_event(
+            tenant.id,
+            crate::printer_events::PrinterEvent::PrinterSnapshot { printer },
+        )
+        .await;
+
+    let message = tokio::time::timeout(std::time::Duration::from_secs(1), ws.next())
+        .await
+        .expect("sibling websocket should receive event")
+        .unwrap()
+        .unwrap();
+    let body: Value = match message {
+        Message::Text(text) => serde_json::from_str(&text).unwrap(),
+        other => panic!("expected text websocket message, got {other:?}"),
+    };
+    assert_eq!(body["type"], "printer_snapshot");
+    assert_eq!(body["printer"]["tenant_id"], tenant.id.to_string());
+}
+
+#[tokio::test]
+async fn printer_events_websocket_receives_one_event_from_publishing_instance() {
+    let state = state().await;
+    let _control_plane = start_control_plane(state.clone()).await;
+    let app = router(state.clone());
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "single-event-ws-token",
+    )
+    .await;
+    let agent = state
+        .agents()
+        .create(tenant.id, "shop-agent")
+        .await
+        .unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant.id, agent.id)
+        .await
+        .unwrap();
+    let printer = state
+        .printers()
+        .get_for_tenant(tenant.id, &printer_id)
+        .await
+        .unwrap()
+        .unwrap();
+    let http_addr = serve_http(app).await;
+    let mut request = format!(
+        "ws://{http_addr}/api/v1/tenants/{}/printer-events",
+        tenant.id
+    )
+    .into_client_request()
+    .unwrap();
+    request
+        .headers_mut()
+        .insert("Authorization", format!("Bearer {token}").parse().unwrap());
+    let (mut ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+
+    state
+        .publish_printer_event(
+            tenant.id,
+            crate::printer_events::PrinterEvent::PrinterSnapshot { printer },
+        )
+        .await;
+
+    let message = tokio::time::timeout(std::time::Duration::from_secs(1), ws.next())
+        .await
+        .expect("websocket should receive event")
+        .unwrap()
+        .unwrap();
+    assert!(matches!(message, Message::Text(_)));
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(100), ws.next())
+            .await
+            .is_err(),
+        "publishing instance should not deliver a duplicate event"
+    );
+}
+
+#[tokio::test]
+async fn printer_events_websocket_ignores_wrong_tenant_event_from_sibling_instance() {
+    let state = state().await;
+    let sibling = sibling_state(&state);
+    let _control_plane = start_control_plane(sibling.clone()).await;
+    let app = router(sibling);
+    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
+    let other = state.tenants().create("beta", "Beta Labs").await.unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "wrong-tenant-event-ws-token",
+    )
+    .await;
+    let agent = state
+        .agents()
+        .create(other.id, "other-agent")
+        .await
+        .unwrap();
+    let printer_id = insert_printer_fixture(state.database(), other.id, agent.id)
+        .await
+        .unwrap();
+    let printer = state
+        .printers()
+        .get_for_tenant(other.id, &printer_id)
+        .await
+        .unwrap()
+        .unwrap();
+    let http_addr = serve_http(app).await;
+    let mut request = format!(
+        "ws://{http_addr}/api/v1/tenants/{}/printer-events",
+        tenant.id
+    )
+    .into_client_request()
+    .unwrap();
+    request
+        .headers_mut()
+        .insert("Authorization", format!("Bearer {token}").parse().unwrap());
+    let (mut ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+
+    state
+        .publish_printer_event(
+            other.id,
+            crate::printer_events::PrinterEvent::PrinterSnapshot { printer },
+        )
+        .await;
+
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(100), ws.next())
+            .await
+            .is_err(),
+        "websocket should ignore wrong-tenant events"
+    );
 }
 
 fn test_audit_actor() -> crate::repositories::AuditActor {
