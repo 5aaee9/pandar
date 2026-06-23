@@ -507,6 +507,7 @@ Goal: make release artifacts predictable enough for operators to install without
 
 - Validate tag-driven GitHub Release artifacts on real Linux, Windows, and macOS hosts, including CLI startup, dynamic-library loadability, checksums, and archive layout.
 - Add release-smoke checks that inspect exported plugin symbols for built artifacts, not only local development builds.
+- Completed local Phase 24 release-smoke scaffolding: a standalone helper crate that validates release archive checksums and top-level CLI/plugin layout without joining the main Cargo workspace.
 - Rework the Linux `pandar-network-plugin` export strategy if arm64 plugin releases remain a target, because the current GNU export-map path is known to be fragile around Rust `cdylib` plus C++ shim exports.
 - Add operator-facing installation docs for:
   - `pandar` CLI and service deployment;

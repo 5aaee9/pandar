@@ -6,6 +6,9 @@ members = [
     "crates/pandar-hub",
     "crates/pandar-network-plugin",
 ]
+exclude = [
+    "tools/release-smoke",
+]
 resolver = "2"
 
 [workspace.package]
