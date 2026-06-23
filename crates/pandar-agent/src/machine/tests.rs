@@ -20,6 +20,15 @@ fn endpoint(serial: &str) -> BambuPrinterEndpoint {
     }
 }
 
+fn get_version_report(model: &str) -> serde_json::Value {
+    json!({
+        "info": {
+            "command": "get_version",
+            "module": [{"name": "ota", "product_name": model}]
+        }
+    })
+}
+
 #[tokio::test]
 async fn noop_refresh_printers_returns_no_snapshots() {
     let gateway = NoopMachineGateway;
@@ -29,8 +38,14 @@ async fn noop_refresh_printers_returns_no_snapshots() {
 
 #[tokio::test]
 async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
-    let first = FakeMqttTransport::with_reports([json!({"print": {"state": "READY"}})]);
-    let second = FakeMqttTransport::with_reports([json!({"state": "IDLE"})]);
+    let first = FakeMqttTransport::with_reports([
+        get_version_report("P2S"),
+        json!({"print": {"state": "READY"}}),
+    ]);
+    let second = FakeMqttTransport::with_reports([
+        get_version_report("X1 Carbon"),
+        json!({"state": "IDLE"}),
+    ]);
     let first_endpoint = endpoint("SERIAL1");
     let second_endpoint = endpoint("SERIAL2");
     let gateway = ConfiguredBambuMachineGateway::new(
@@ -49,13 +64,13 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
             MachineSnapshot {
                 serial: "SERIAL1".to_string(),
                 name: "printer-SERIAL1".to_string(),
-                model: Some("A1 Mini".to_string()),
+                model: Some("P2S".to_string()),
                 state: "READY".to_string(),
             },
             MachineSnapshot {
                 serial: "SERIAL2".to_string(),
                 name: "printer-SERIAL2".to_string(),
-                model: Some("A1 Mini".to_string()),
+                model: Some("X1 Carbon".to_string()),
                 state: "IDLE".to_string(),
             },
         ]
@@ -67,6 +82,21 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
     assert_eq!(
         second.subscriptions().await,
         [format!("device/{}/report", second_endpoint.serial)]
+    );
+    assert_eq!(
+        first.published_commands().await,
+        [
+            PublishedMqttCommand {
+                topic: "device/SERIAL1/request".to_string(),
+                payload: json!({"info": {"command": "get_version", "sequence_id": "90002"}}),
+                qos: BAMBU_MQTT_QOS,
+            },
+            PublishedMqttCommand {
+                topic: "device/SERIAL1/request".to_string(),
+                payload: json!({"pushing": {"command": "pushall"}}),
+                qos: BAMBU_MQTT_QOS,
+            },
+        ]
     );
 }
 

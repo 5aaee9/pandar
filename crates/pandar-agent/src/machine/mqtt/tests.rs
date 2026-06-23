@@ -24,6 +24,26 @@ fn endpoint() -> BambuPrinterEndpoint {
     }
 }
 
+fn get_version_report(model: &str) -> serde_json::Value {
+    json!({
+        "info": {
+            "command": "get_version",
+            "module": [
+                {"name": "wifi", "product_name": "ignored"},
+                {"name": "ota", "sw_ver": "01.08.01.00", "product_name": model, "sn": "01S00EXAMPLE"}
+            ]
+        }
+    })
+}
+
+fn request_command(payload: serde_json::Value) -> PublishedMqttCommand {
+    PublishedMqttCommand {
+        topic: "device/01S00EXAMPLE/request".to_string(),
+        payload,
+        qos: BAMBU_MQTT_QOS,
+    }
+}
+
 #[test]
 fn topics_match_bambu_reference_shape() {
     let topics = BambuMqttTopics::for_serial("01S00EXAMPLE");
@@ -87,6 +107,34 @@ fn pushall_payload_matches_reference() {
         BambuMqttCommand::RequestPushAll.payload(),
         json!({"pushing": {"command": "pushall"}})
     );
+}
+
+#[test]
+fn get_version_payload_matches_reference() {
+    assert_eq!(
+        BambuMqttCommand::GetVersion.payload(),
+        json!({"info": {"command": "get_version", "sequence_id": "90002"}})
+    );
+}
+
+#[test]
+fn get_version_report_extracts_trimmed_ota_model() {
+    assert_eq!(
+        model_from_get_version_report(&get_version_report(" P2S ")).unwrap(),
+        "P2S"
+    );
+}
+
+#[test]
+fn get_version_report_rejects_missing_model() {
+    let report = json!({
+        "info": {
+            "command": "get_version",
+            "module": [{"name": "ota", "product_name": "   "}]
+        }
+    });
+
+    assert!(model_from_get_version_report(&report).is_err());
 }
 
 #[test]
@@ -261,7 +309,7 @@ fn project_file_payload_rewrites_flat_external_mapping_values() {
 }
 
 #[test]
-fn report_maps_to_snapshot_with_config_identity() {
+fn report_maps_to_snapshot_without_configured_model() {
     let report = json!({"print": {"gcode_state": "RUNNING"}});
 
     assert_eq!(
@@ -269,7 +317,7 @@ fn report_maps_to_snapshot_with_config_identity() {
         MachineSnapshot {
             serial: "01S00EXAMPLE".to_string(),
             name: "garage-a1".to_string(),
-            model: Some("A1 Mini".to_string()),
+            model: None,
             state: "RUNNING".to_string(),
         }
     );
@@ -316,11 +364,14 @@ fn report_name_defaults_to_serial() {
 
 #[tokio::test]
 async fn refresh_subscribes_publishes_and_maps_report() {
-    let transport = FakeMqttTransport::with_reports([json!({
-        "print": {"gcode_state": "RUNNING"}
-    })]);
+    let mut endpoint = endpoint();
+    endpoint.model = Some("Configured Model".to_string());
+    let transport = FakeMqttTransport::with_reports([
+        get_version_report("P2S"),
+        json!({"print": {"gcode_state": "RUNNING"}}),
+    ]);
 
-    let snapshot = refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
+    let snapshot = refresh_printer(&transport, &endpoint, Duration::from_secs(1))
         .await
         .unwrap();
 
@@ -329,7 +380,7 @@ async fn refresh_subscribes_publishes_and_maps_report() {
         MachineSnapshot {
             serial: "01S00EXAMPLE".to_string(),
             name: "garage-a1".to_string(),
-            model: Some("A1 Mini".to_string()),
+            model: Some("P2S".to_string()),
             state: "RUNNING".to_string(),
         }
     );
@@ -339,11 +390,34 @@ async fn refresh_subscribes_publishes_and_maps_report() {
     );
     assert_eq!(
         transport.published_commands().await,
-        [PublishedMqttCommand {
-            topic: "device/01S00EXAMPLE/request".to_string(),
-            payload: json!({"pushing": {"command": "pushall"}}),
-            qos: BAMBU_MQTT_QOS,
-        }]
+        [
+            request_command(json!({"info": {"command": "get_version", "sequence_id": "90002"}})),
+            request_command(json!({"pushing": {"command": "pushall"}})),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn refresh_ignores_unrelated_reports_before_get_version() {
+    let transport = FakeMqttTransport::with_reports([
+        json!({"print": {"gcode_state": "STALE"}}),
+        json!({"info": {"command": "other"}}),
+        get_version_report("X1 Carbon"),
+        json!({"print": {"state": "READY"}}),
+    ]);
+
+    let snapshot = refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
+        .await
+        .unwrap();
+
+    assert_eq!(snapshot.model.as_deref(), Some("X1 Carbon"));
+    assert_eq!(snapshot.state, "READY");
+    assert_eq!(
+        transport.published_commands().await,
+        [
+            request_command(json!({"info": {"command": "get_version", "sequence_id": "90002"}})),
+            request_command(json!({"pushing": {"command": "pushall"}})),
+        ]
     );
 }
 
@@ -356,7 +430,82 @@ async fn refresh_timeout_error_includes_serial_context() {
         .unwrap_err();
 
     assert!(format!("{err:#}").contains("refresh printer 01S00EXAMPLE"));
-    assert!(format!("{err:#}").contains("timed out waiting for MQTT report"));
+    assert!(format!("{err:#}").contains("wait for MQTT get_version report"));
+    assert!(transport.published_commands().await.len() == 1);
+}
+
+#[tokio::test]
+async fn refresh_fails_total_get_version_deadline_when_unrelated_reports_continue() {
+    let transport = FakeMqttTransport::with_infinite_unrelated_reports();
+
+    let err = refresh_printer(&transport, &endpoint(), Duration::from_millis(10))
+        .await
+        .unwrap_err();
+
+    assert!(format!("{err:#}").contains("timed out waiting for MQTT get_version report"));
+    assert_eq!(
+        transport.published_commands().await,
+        [request_command(
+            json!({"info": {"command": "get_version", "sequence_id": "90002"}})
+        )]
+    );
+}
+
+#[tokio::test]
+async fn refresh_missing_model_fails_before_pushall() {
+    let transport = FakeMqttTransport::with_reports([json!({
+        "info": {
+            "command": "get_version",
+            "module": [{"name": "ota", "product_name": "   "}]
+        }
+    })]);
+
+    let err = refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
+        .await
+        .unwrap_err();
+
+    assert!(format!("{err:#}").contains("missing ota product_name"));
+    assert_eq!(
+        transport.published_commands().await,
+        [request_command(
+            json!({"info": {"command": "get_version", "sequence_id": "90002"}})
+        )]
+    );
+}
+
+#[tokio::test]
+async fn refresh_get_version_publish_failure_fails_before_pushall() {
+    let transport = FakeMqttTransport::with_publish_failure(BambuMqttCommand::GetVersion.payload());
+
+    let err = refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
+        .await
+        .unwrap_err();
+
+    assert!(format!("{err:#}").contains("publish get_version"));
+    assert!(format!("{err:#}").contains("fake publish failure"));
+    assert!(transport.published_commands().await.is_empty());
+}
+
+#[tokio::test]
+async fn refresh_discovery_failure_log_includes_serial_and_error_chain() {
+    let logs = CapturedLogs::default();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(logs.clone())
+        .with_ansi(false)
+        .without_time()
+        .finish();
+    let transport = FakeMqttTransport::with_publish_failure(BambuMqttCommand::GetVersion.payload());
+
+    let _guard = tracing::subscriber::set_default(subscriber);
+    refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
+        .await
+        .unwrap_err();
+
+    let captured = logs.contents();
+    assert!(captured.contains("printer model discovery failed"));
+    assert!(captured.contains("01S00EXAMPLE"));
+    assert!(captured.contains("publish get_version to request topic"));
+    assert!(captured.contains("fake publish failure"));
 }
 
 #[test]

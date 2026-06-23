@@ -102,6 +102,7 @@ pub struct MachineReportDiagnostic {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BambuMqttCommand {
+    GetVersion,
     RequestPushAll,
     PausePrint,
     ResumePrint,
@@ -114,6 +115,7 @@ pub enum BambuMqttCommand {
 impl BambuMqttCommand {
     pub fn payload(&self) -> Value {
         match self {
+            Self::GetVersion => json!({"info": {"command": "get_version", "sequence_id": "90002"}}),
             Self::RequestPushAll => json!({"pushing": {"command": "pushall"}}),
             Self::PausePrint => json!({"print": {"command": "pause", "sequence_id": "0"}}),
             Self::ResumePrint => json!({"print": {"command": "resume", "sequence_id": "0"}}),
@@ -211,6 +213,15 @@ where
             .subscribe(&topics.report)
             .await
             .with_context(|| format!("subscribe to report topic {}", topics.report))?;
+        let discovered_model = discover_printer_model(transport, &topics, report_timeout)
+            .await
+            .inspect_err(|err| {
+                tracing::warn!(
+                    serial = %endpoint.serial,
+                    error = %format!("{err:#}"),
+                    "printer model discovery failed"
+                );
+            })?;
         transport
             .publish(PublishedMqttCommand {
                 topic: topics.request.clone(),
@@ -223,10 +234,63 @@ where
             .next_report(report_timeout)
             .await
             .context("wait for MQTT report")?;
-        Ok::<MachineSnapshot, anyhow::Error>(snapshot_from_report(endpoint, &report))
+        let mut snapshot = snapshot_from_report(endpoint, &report);
+        snapshot.model = Some(discovered_model);
+        Ok::<MachineSnapshot, anyhow::Error>(snapshot)
     }
     .await
     .with_context(|| format!("refresh printer {}", endpoint.serial))
+}
+
+async fn discover_printer_model<T>(
+    transport: &T,
+    topics: &BambuMqttTopics,
+    report_timeout: Duration,
+) -> anyhow::Result<String>
+where
+    T: BambuMqttTransport + ?Sized,
+{
+    transport
+        .publish(PublishedMqttCommand {
+            topic: topics.request.clone(),
+            payload: BambuMqttCommand::GetVersion.payload(),
+            qos: BAMBU_MQTT_QOS,
+        })
+        .await
+        .with_context(|| format!("publish get_version to request topic {}", topics.request))?;
+
+    tokio::time::timeout(report_timeout, async {
+        loop {
+            let report = transport
+                .next_report(report_timeout)
+                .await
+                .context("wait for MQTT get_version report")?;
+            if is_get_version_report(&report) {
+                return model_from_get_version_report(&report);
+            }
+        }
+    })
+    .await
+    .map_err(|_| {
+        anyhow!("timed out waiting for MQTT get_version report after {report_timeout:?}")
+    })?
+}
+
+fn is_get_version_report(report: &Value) -> bool {
+    report.pointer("/info/command").and_then(Value::as_str) == Some("get_version")
+}
+
+fn model_from_get_version_report(report: &Value) -> anyhow::Result<String> {
+    let modules = report
+        .pointer("/info/module")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("get_version report missing info.module array"))?;
+
+    modules
+        .iter()
+        .find(|module| module.get("name").and_then(Value::as_str) == Some("ota"))
+        .and_then(|module| trimmed_string(module.get("product_name")))
+        .ok_or_else(|| anyhow!("get_version report missing ota product_name"))
 }
 
 pub struct RumqttcBambuMqttTransport {
@@ -412,7 +476,7 @@ pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> 
             .name
             .clone()
             .unwrap_or_else(|| endpoint.serial.clone()),
-        model: endpoint.model.clone(),
+        model: None,
         state: state.to_string(),
     }
 }
@@ -647,6 +711,8 @@ struct FakeMqttTransportState {
     published_commands: Vec<PublishedMqttCommand>,
     reports: VecDeque<Value>,
     timeout: bool,
+    fail_publish_payload: Option<Value>,
+    infinite_unrelated_reports: bool,
 }
 
 #[cfg(test)]
@@ -664,6 +730,24 @@ impl FakeMqttTransport {
         Self {
             state: Arc::new(Mutex::new(FakeMqttTransportState {
                 timeout: true,
+                ..Default::default()
+            })),
+        }
+    }
+
+    pub fn with_publish_failure(payload: Value) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(FakeMqttTransportState {
+                fail_publish_payload: Some(payload),
+                ..Default::default()
+            })),
+        }
+    }
+
+    pub fn with_infinite_unrelated_reports() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(FakeMqttTransportState {
+                infinite_unrelated_reports: true,
                 ..Default::default()
             })),
         }
@@ -691,19 +775,29 @@ impl BambuMqttTransport for FakeMqttTransport {
     }
 
     async fn publish(&self, command: PublishedMqttCommand) -> anyhow::Result<()> {
-        self.state.lock().await.published_commands.push(command);
+        let mut state = self.state.lock().await;
+        if state.fail_publish_payload.as_ref() == Some(&command.payload) {
+            bail!("fake publish failure");
+        }
+        state.published_commands.push(command);
         Ok(())
     }
 
     async fn next_report(&self, _timeout: Duration) -> anyhow::Result<Value> {
-        let mut state = self.state.lock().await;
-        if state.timeout {
-            bail!("timed out waiting for MQTT report");
+        {
+            let mut state = self.state.lock().await;
+            if state.timeout {
+                bail!("timed out waiting for MQTT report");
+            }
+            if let Some(report) = state.reports.pop_front() {
+                return Ok(report);
+            }
+            if !state.infinite_unrelated_reports {
+                bail!("timed out waiting for MQTT report");
+            }
         }
-        state
-            .reports
-            .pop_front()
-            .ok_or_else(|| anyhow!("timed out waiting for MQTT report"))
+        tokio::time::sleep(Duration::from_millis(1)).await;
+        Ok(json!({"print": {"gcode_state": "RUNNING"}}))
     }
 }
 

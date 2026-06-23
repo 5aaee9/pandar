@@ -37,6 +37,8 @@ PANDAR_PRINTERS='[{"host":"192.0.2.10","serial":"01S00EXAMPLE","access_code":"12
 
 The value is a JSON array. `host`, `serial`, and `access_code` are required; `model` and `name` are optional. Empty, whitespace, or `[]` means no configured printers and the agent will not open Bambu machine sockets. Invalid printer config fails at startup with `PANDAR_PRINTERS` context.
 
+`RefreshPrinters` discovers the printer model at refresh time through the Bambu LAN MQTT `info.get_version` command before requesting the normal `pushall` state report. If model discovery cannot publish, time out, or parse the `ota.product_name` field, the refresh command fails and logs the full error chain instead of falling back to `PANDAR_PRINTERS[].model`. The optional configured `model` remains local metadata for paths that still need a conservative compatibility profile.
+
 Reverse sessions require `PANDAR_AGENT_CREDENTIAL`. Tenant admins create or rotate agent credentials through tenant-token-backed pairing and enrollment APIs. Plaintext credentials are returned once and only hashes are stored by the hub.
 
 ## Machine Communication
@@ -49,6 +51,7 @@ Runtime Bambu machine communication:
 - MQTT username `bblp`, password set to the printer access code.
 - Report topic `device/{serial}/report`.
 - Request topic `device/{serial}/request`.
+- Refresh sends `info.get_version` before `pushing.pushall` and fails closed when the model cannot be discovered.
 - Machine file transfer through implicit FTPS on port `990`.
 - Protected data mode first, with model-specific clear-data fallback where required.
 

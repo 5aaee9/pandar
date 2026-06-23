@@ -357,13 +357,13 @@ Phase 3 adds the agent-side machine transport boundary:
 - `PANDAR_PRINTERS` is an agent-local JSON array of `{host, serial, access_code, model?, name?}`. Empty config keeps the gateway non-networked. Invalid config fails before the reconnect loop starts.
 - MQTT uses TLS port `8883`, username `bblp`, access code password, report topic `device/{serial}/report`, request topic `device/{serial}/request`, and QoS `1`.
 - Bambu LAN printers present printer-local/self-signed TLS certificates on MQTT. The runtime MQTT adapter uses a Bambu-specific rustls verifier that accepts the printer certificate while keeping TLS encryption and handshake signature verification. This policy is isolated to agent-to-printer MQTT and does not apply to hub-facing HTTP/gRPC TLS.
-- `RefreshPrinters` sends an accepted command ack, publishes `{"pushing":{"command":"pushall"}}`, waits for one report with a bounded timeout, emits normalized `PrinterSnapshot` events, then emits a success or failed command result.
-- MQTT report normalization uses serial/name from config and reads state from `print.gcode_state`, `print.state`, or root `state`, falling back to `unknown`.
+- `RefreshPrinters` sends an accepted command ack, publishes `{"info":{"command":"get_version","sequence_id":"90002"}}`, discovers the model from the `ota` module `product_name`, then publishes `{"pushing":{"command":"pushall"}}`, waits for one state report with a bounded timeout, emits normalized `PrinterSnapshot` events, then emits a success or failed command result.
+- MQTT report normalization uses serial/name from config and reads state from `print.gcode_state`, `print.state`, or root `state`, falling back to `unknown`. Refresh snapshot model values come from MQTT `get_version`; discovery failure fails the refresh instead of falling back to configured `model`.
 - The MQTT runtime adapter is isolated in `pandar-agent`; tests use fake transports and do not open live broker connections.
 - Machine file transfer is modeled as a protocol-neutral boundary derived from the reference FTPS behavior: implicit TLS port `990`, username `bblp`, 64 KiB upload chunks, list/download/upload/delete requests, protected data mode first, and A1/A1 Mini clear-data fallback with success-only mode caching.
 - Phase 3 does not change hub persistence. The hub still receives normalized agent events over the existing gRPC stream.
 
-Phase 4 carries configured printer model values into normalized snapshots. `RefreshPrinters` remains the explicit snapshot path: empty printer config stays no-network, configured printers publish `pushall`, one report is normalized, and the hub persists the latest state plus broadcasts a tenant event.
+Phase 4 carries refreshed printer snapshots into hub inventory. `RefreshPrinters` remains the explicit snapshot path: empty printer config stays no-network, configured printers discover model with `info.get_version`, publish `pushall`, normalize one state report, and the hub persists the latest state plus broadcasts a tenant event.
 
 Phase 5 adds the `PrintProjectFile` command executor:
 
