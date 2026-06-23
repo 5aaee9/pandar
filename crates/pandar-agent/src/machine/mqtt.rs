@@ -26,6 +26,7 @@ use crate::{
 pub const BAMBU_MQTT_PORT: u16 = 8883;
 pub const BAMBU_MQTT_USERNAME: &str = "bblp";
 pub const BAMBU_MQTT_QOS: u8 = 1;
+const BAMBU_MQTT_MAX_PACKET_SIZE: usize = 256 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BambuMqttTopics {
@@ -243,14 +244,7 @@ impl RumqttcBambuMqttTransport {
     }
 
     fn connect_with_client_suffix(endpoint: &BambuPrinterEndpoint, suffix: Option<&str>) -> Self {
-        let client_id = match suffix {
-            Some(suffix) => format!("pandar-agent-{}-{suffix}", endpoint.serial),
-            None => format!("pandar-agent-{}", endpoint.serial),
-        };
-        let mut options = MqttOptions::new(client_id, endpoint.host.as_str(), BAMBU_MQTT_PORT);
-        options.set_credentials(BAMBU_MQTT_USERNAME, endpoint.access_code.as_str());
-        options.set_transport(Transport::tls_with_config(bambu_lan_tls_config()));
-        options.set_keep_alive(Duration::from_secs(30));
+        let options = bambu_lan_mqtt_options(endpoint, suffix);
 
         let (client, event_loop) = AsyncClient::new(options, 10);
         Self {
@@ -258,6 +252,23 @@ impl RumqttcBambuMqttTransport {
             event_loop: Mutex::new(event_loop),
         }
     }
+}
+
+pub fn bambu_lan_mqtt_options(
+    endpoint: &BambuPrinterEndpoint,
+    suffix: Option<&str>,
+) -> MqttOptions {
+    let client_id = match suffix {
+        Some(suffix) => format!("pandar-agent-{}-{suffix}", endpoint.serial),
+        None => format!("pandar-agent-{}", endpoint.serial),
+    };
+    let mut options = MqttOptions::new(client_id, endpoint.host.as_str(), BAMBU_MQTT_PORT);
+    options.set_credentials(BAMBU_MQTT_USERNAME, endpoint.access_code.as_str());
+    options.set_transport(Transport::tls_with_config(bambu_lan_tls_config()));
+    options.set_keep_alive(Duration::from_secs(30));
+    options.set_max_packet_size(BAMBU_MQTT_MAX_PACKET_SIZE, BAMBU_MQTT_MAX_PACKET_SIZE);
+
+    options
 }
 
 pub fn bambu_lan_tls_config() -> TlsConfiguration {
@@ -344,7 +355,7 @@ impl BambuMqttTransport for RumqttcBambuMqttTransport {
     }
 
     async fn next_report(&self, report_timeout: Duration) -> anyhow::Result<Value> {
-        tokio::time::timeout(report_timeout, async {
+        let result = tokio::time::timeout(report_timeout, async {
             let mut event_loop = self.event_loop.lock().await;
             loop {
                 match event_loop.poll().await.context("poll rumqttc event loop")? {
@@ -356,9 +367,28 @@ impl BambuMqttTransport for RumqttcBambuMqttTransport {
                 }
             }
         })
-        .await
-        .map_err(|_| anyhow!("timed out waiting for MQTT report after {report_timeout:?}"))?
+        .await;
+
+        match result {
+            Ok(Ok(report)) => Ok(report),
+            Ok(Err(err)) => {
+                warn_mqtt_report_receive_failed(&err);
+                Err(err)
+            }
+            Err(_) => {
+                let err = anyhow!("timed out waiting for MQTT report after {report_timeout:?}");
+                warn_mqtt_report_receive_failed(&err);
+                Err(err)
+            }
+        }
     }
+}
+
+fn warn_mqtt_report_receive_failed(err: &anyhow::Error) {
+    tracing::warn!(
+        error = %format!("{err:#}"),
+        "MQTT report receive failed"
+    );
 }
 
 fn qos_from_u8(qos: u8) -> anyhow::Result<QoS> {
@@ -504,7 +534,7 @@ where
                 tracing::warn!(
                     serial = %endpoint.serial,
                     error = %format!("{err:#}"),
-                    "timed out waiting for printer report"
+                    "printer report receive failed"
                 );
             }
         }

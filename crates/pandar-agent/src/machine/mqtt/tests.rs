@@ -1,4 +1,8 @@
-use std::time::Duration;
+use std::{
+    io::{self, Write},
+    sync::{Arc, Mutex as StdMutex},
+    time::Duration,
+};
 
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -33,6 +37,33 @@ fn constants_match_bambu_defaults() {
     assert_eq!(BAMBU_MQTT_PORT, 8883);
     assert_eq!(BAMBU_MQTT_USERNAME, "bblp");
     assert_eq!(BAMBU_MQTT_QOS, 1);
+}
+
+#[test]
+fn lan_mqtt_accepts_full_pushall_reports() {
+    let options = bambu_lan_mqtt_options(&endpoint(), None);
+
+    assert!(options.max_packet_size() >= 256 * 1024);
+}
+
+#[test]
+fn mqtt_report_error_log_preserves_error_chain() {
+    let logs = CapturedLogs::default();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(logs.clone())
+        .with_ansi(false)
+        .without_time()
+        .finish();
+    let err = anyhow!("payload size limit exceeded: 262600")
+        .context("MQTT serialization/deserialization error")
+        .context("poll rumqttc event loop");
+
+    tracing::subscriber::with_default(subscriber, || warn_mqtt_report_receive_failed(&err));
+
+    let captured = logs.contents();
+    assert!(captured.contains("MQTT report receive failed"));
+    assert!(captured.contains("payload size limit exceeded: 262600"));
+    assert!(captured.contains("poll rumqttc event loop"));
 }
 
 #[test]
@@ -530,4 +561,40 @@ async fn forward_print_reports_uses_transport_without_live_socket() {
         transport.subscriptions().await,
         ["device/01S00EXAMPLE/report".to_string()]
     );
+}
+
+#[derive(Clone, Default)]
+struct CapturedLogs {
+    buffer: Arc<StdMutex<Vec<u8>>>,
+}
+
+impl CapturedLogs {
+    fn contents(&self) -> String {
+        String::from_utf8(self.buffer.lock().unwrap().clone()).unwrap()
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for CapturedLogs {
+    type Writer = CapturedLogWriter;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        CapturedLogWriter {
+            buffer: Arc::clone(&self.buffer),
+        }
+    }
+}
+
+struct CapturedLogWriter {
+    buffer: Arc<StdMutex<Vec<u8>>>,
+}
+
+impl Write for CapturedLogWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.buffer.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
