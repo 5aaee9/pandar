@@ -16,6 +16,7 @@ pandar-agent -(MQTT + machine file transfer)-> Bambu machines
 
 - [Architecture](docs/architecture.md): component boundaries, reference-derived machine behavior, data model, and protocol notes.
 - [Development and deployment notes](docs/development.md): environment variables, local setup, auth/provisioning examples, live WebSocket notes, and verification commands.
+- [NixOS module options](docs/deployment/nixos/options.md): generated `services.pandar` deployment options for hub, web, and agent services.
 - [Roadmap](docs/roadmap.md): completed phases and planned next phases.
 
 ## Workspace

@@ -42,6 +42,12 @@
 - Added Phase 14 AMS/external-spool material normalization, tenant-scoped material snapshots, print mapping persistence/dispatch, terminal filament usage derivation, HTTP material responses, and dashboard material summaries.
 - Added Phase 15 browser-safe WebSocket tickets, live runtime dashboard event consumption, reconnect status, transition notifications, and token-safe tenant operation references.
 - Added Phase 16 tenant-owned token repository/routes, scoped tenant-token bearer authorization, retired user API-token routes, and bootstrap tenant-token issuance.
+- Added Nix flake packaging for `pandar-hub`, `pandar-agent`, `pandar-cli`, `pandar-network-plugin`, `pandar-web`, checks, formatter, and development shell; `pandar-cli` installs the unified `pandar hub` / `pandar agent` Rust entrypoint while the frontend remains `pandar-web`.
+- Split Nix packaging into a flake-parts root module and `nix/pandar.nix` so package, check, formatter, and dev shell logic stays outside the top-level flake.
+- Added a NixOS module exposed as `nixosModules.default` / `nixosModules.pandar` to run `pandar-hub` and `pandar-web` with configurable bind addresses, packages, URLs, and environment.
+- Extended the NixOS module with an optional `pandar-agent` systemd service, including hub gRPC URL, identity, credential, printers, artifact root, environment file, and package overrides.
+- Generated `services.pandar` NixOS option documentation under `docs/deployment/nixos/options.md` and linked it from the README.
+- Added GitHub Actions CI to run `nix flake check --show-trace` on pushes to `main` and pull requests.
 
 ## Phase 1: Foundation
 
