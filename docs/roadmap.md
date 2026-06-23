@@ -50,6 +50,7 @@
 - Added GitHub Actions CI to run `nix flake check --show-trace` on pushes to `main` and pull requests.
 - Added Mic92/hestia-backed GitHub Actions caching for Nix flake checks, with a scheduled cache GC workflow.
 - Added NixOS VM tests for SQLite and PostgreSQL hub deployments, and split CI into native x86_64/aarch64 package and VM-test matrices.
+- Limited aarch64 package CI to the server, agent, CLI, and web artifacts while keeping the Bambu Studio network plugin package check on x86_64, where the current Linux GNU export-map strategy is supported.
 
 ## Phase 1: Foundation
 
@@ -464,6 +465,7 @@ Goal: support lightweight single-process Hub deployments and horizontally scaled
 - Extended the NixOS module so scaled Hub deployments can use either the local NixOS NATS service or an externally managed NATS URL.
 - Added GitHub Actions Nix checks with Hestia caching, package matrices for x86_64/aarch64, and SQLite/PostgreSQL NixOS VM tests.
 - Adjusted the NixOS VM tests to run without requiring the Nix `kvm` system feature so GitHub's native arm64 runner can execute them through QEMU fallback when `/dev/kvm` is unavailable.
+- Kept the aarch64 package matrix focused on `pandar-hub`, `pandar-agent`, `pandar-cli`, and `pandar-web`; `pandar-network-plugin` remains checked on x86_64 until its C++ ABI export path is reworked for arm64 GNU linking.
 
 Exit criteria:
 
@@ -479,6 +481,7 @@ Exit criteria:
 ## Immediate Next
 
 - Run real Bambu Studio compatibility testing for `pandar-network-plugin` on Linux, Windows, and macOS.
+- Rework the Linux `pandar-network-plugin` export strategy if arm64 plugin builds become a target, because Rust `cdylib` already emits a GNU version script and aarch64 `ld.bfd` rejects adding a second one for the C++ shim exports.
 - Harden Phase 21 plugin hub HTTP behavior with live Studio smoke tests, richer error reporting, and compatibility probes beyond symbol exports.
 - Soak-test PostgreSQL + NATS Hub replicas under concurrent agent sessions and WebSocket subscribers.
 - Add an object-storage artifact backend before scheduling print-job creation across arbitrary Hub pods without shared `PANDAR_SPOOL_DIR`.

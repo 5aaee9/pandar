@@ -66,7 +66,6 @@ fn exported_symbols(path: &Path) -> BTreeSet<String> {
     String::from_utf8_lossy(&output.stdout)
         .lines()
         .filter_map(|line| line.split_whitespace().last())
-        .map(|symbol| symbol.split_once("@@").map_or(symbol, |(name, _)| name))
         .filter(|symbol| symbol.starts_with("bambu_network_") || symbol.starts_with("ft_"))
         .map(ToOwned::to_owned)
         .collect()

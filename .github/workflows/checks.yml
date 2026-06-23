@@ -73,12 +73,16 @@ jobs:
 
       - name: Build packages
         run: |
-          nix build --show-trace \
+          packages=(
             .#checks.${{ matrix.system }}.pandar-hub \
             .#checks.${{ matrix.system }}.pandar-agent \
             .#checks.${{ matrix.system }}.pandar-cli \
-            .#checks.${{ matrix.system }}.pandar-network-plugin \
             .#checks.${{ matrix.system }}.pandar-web
+          )
+          if [ "${{ matrix.system }}" = "x86_64-linux" ]; then
+            packages+=(.#checks.${{ matrix.system }}.pandar-network-plugin)
+          fi
+          nix build --show-trace "${packages[@]}"
 
   nixos-vm-tests:
     name: NixOS VM test (${{ matrix.backend }}, ${{ matrix.system }})
