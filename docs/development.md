@@ -284,6 +284,11 @@ POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tena
 
 NATS is internal Hub infrastructure only: tenants, browsers, and `pandar-agent` still authenticate to Hub over the existing HTTP/WebSocket/gRPC APIs. PostgreSQL remains the shared fact source, and print artifacts still use `PANDAR_SPOOL_DIR`; multi-replica print-job creation needs that directory on shared storage or a later object-storage backend. NATS does not replicate artifacts.
 
+Release packaging references:
+
+- `docs/release-installation.md`
+- `docs/compatibility/release-artifacts.md`
+
 ## Verification
 
 ```bash

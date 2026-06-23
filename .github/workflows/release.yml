@@ -123,8 +123,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME:-manual}"
-          archive="pandar-release-${tag}-${{ matrix.label }}.tar.gz"
+          ref_name="${GITHUB_REF_NAME:-manual}"
+          safe_ref="${ref_name//\//-}"
+          archive="pandar-release-${safe_ref}-${{ matrix.label }}.tar.gz"
           stage="$RUNNER_TEMP/pandar-release-${{ matrix.label }}"
           mkdir -p "$stage" dist
           cp "target/${{ matrix.cli-target }}/release/${{ matrix.cli-name }}" "$stage/${{ matrix.cli-name }}"
@@ -134,6 +135,34 @@ jobs:
             cd dist
             shasum -a 256 "$archive" | awk '{print $1 "  " $2}' > "$archive.sha256"
           )
+
+      - name: Check Windows PE inspector
+        if: startsWith(matrix.label, 'windows-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v objdump
+
+      - name: Smoke release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref_name="${GITHUB_REF_NAME:-manual}"
+          safe_ref="${ref_name//\//-}"
+          archive="dist/pandar-release-${safe_ref}-${{ matrix.label }}.tar.gz"
+          checksum="$archive.sha256"
+          (
+            cd dist
+            shasum -a 256 -c "$(basename "$checksum")"
+          )
+          cargo run --manifest-path tools/release-smoke/Cargo.toml -- \
+            --label "${{ matrix.label }}" \
+            --runner-os "${{ runner.os == 'macOS' && 'macos' || 'linux' }}" \
+            --archive "$archive" \
+            --checksum "$checksum" \
+            --cli-name "${{ matrix.cli-name }}" \
+            --plugin-name "${{ matrix.plugin-name }}" \
+            --repo-root "$GITHUB_WORKSPACE"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

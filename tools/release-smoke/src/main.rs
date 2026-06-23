@@ -4,7 +4,7 @@ use std::{
     fs::File,
     io::Read,
     path::{Component, Path, PathBuf},
-    process::ExitCode,
+    process::{Command, ExitCode},
 };
 
 use flate2::read::GzDecoder;
@@ -26,6 +26,26 @@ struct ChecksumSidecar {
     archive_name: String,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+enum CliStartup {
+    Run,
+    Skip(&'static str),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PluginInspection {
+    Elf,
+    MachO,
+    Pe,
+}
+
+#[derive(Clone, Copy)]
+enum SymbolOutput {
+    Nm,
+    Readelf,
+    PeObjdump,
+}
+
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
@@ -38,11 +58,15 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), String> {
     let args = parse_args()?;
-    let _ = (&args.runner_os, &args.repo_root);
+    let (cli_startup, plugin_inspection) = support_for(&args.label, &args.runner_os)?;
     validate_checksum_file(&args)?;
     let stage = unpack_archive(&args)?;
     validate_layout(&args, &stage)?;
     println!("PASS archive layout: {}", args.label);
+    validate_cli_startup(&args, &stage, cli_startup)?;
+    let expected = expected_symbols(&args.repo_root)?;
+    let actual = exported_symbols(plugin_inspection, &stage.join(&args.plugin_name))?;
+    validate_plugin_exports(&expected, &actual)?;
     Ok(())
 }
 
@@ -306,6 +330,220 @@ fn validate_layout(args: &Args, stage: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn expected_symbols(repo_root: &Path) -> Result<BTreeSet<String>, String> {
+    let path =
+        repo_root.join("docs/superpowers/specs/2026-06-23-phase-21-network-plugin-abi-symbols.txt");
+    let content = fs::read_to_string(&path).map_err(|error| {
+        format!(
+            "failed to read expected symbols {}: {error}",
+            path.display()
+        )
+    })?;
+    parse_expected_symbols(&content)
+}
+
+fn parse_expected_symbols(content: &str) -> Result<BTreeSet<String>, String> {
+    let symbols = content
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("bambu_network_") || line.starts_with("ft_"))
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+
+    if symbols.is_empty() {
+        return Err("expected symbols file did not contain ABI symbols".to_owned());
+    }
+
+    Ok(symbols)
+}
+
+fn support_for(label: &str, runner_os: &str) -> Result<(CliStartup, PluginInspection), String> {
+    match (label, runner_os) {
+        ("linux-amd64", "linux") => Ok((CliStartup::Run, PluginInspection::Elf)),
+        ("linux-arm64", "linux") => Ok((CliStartup::Skip("cross arch"), PluginInspection::Elf)),
+        ("windows-amd64", "linux") | ("windows-arm64", "linux") => Ok((
+            CliStartup::Skip("PE cannot run on Ubuntu"),
+            PluginInspection::Pe,
+        )),
+        ("macos-amd64", "macos") | ("macos-arm64", "macos") => {
+            Ok((CliStartup::Run, PluginInspection::MachO))
+        }
+        ("linux-amd64" | "linux-arm64", _) => Err(format!(
+            "release label {label} must be validated on linux, got {runner_os}"
+        )),
+        ("windows-amd64" | "windows-arm64", _) => Err(format!(
+            "release label {label} must be validated on linux, got {runner_os}"
+        )),
+        ("macos-amd64" | "macos-arm64", _) => Err(format!(
+            "release label {label} must be validated on macos, got {runner_os}"
+        )),
+        _ => Err(format!("unsupported release label {label}")),
+    }
+}
+
+fn validate_cli_startup(args: &Args, stage: &Path, startup: CliStartup) -> Result<(), String> {
+    match startup {
+        CliStartup::Run => {
+            let cli = stage.join(&args.cli_name);
+            let output = Command::new(&cli).arg("--help").output().map_err(|error| {
+                format!(
+                    "failed to run CLI startup {} --help: {error}",
+                    cli.display()
+                )
+            })?;
+            if !output.status.success() {
+                return Err(format!(
+                    "CLI startup failed for {} --help: status {} stderr {}",
+                    cli.display(),
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr).trim()
+                ));
+            }
+            println!("PASS cli-startup: {}", args.label);
+            Ok(())
+        }
+        CliStartup::Skip(reason) => {
+            println!(
+                "SKIP cli-startup: {reason} (label={} runner={})",
+                args.label, args.runner_os
+            );
+            Ok(())
+        }
+    }
+}
+
+fn exported_symbols(kind: PluginInspection, plugin: &Path) -> Result<BTreeSet<String>, String> {
+    let commands: &[(&str, &[&str], SymbolOutput)] = match kind {
+        PluginInspection::Elf => &[
+            ("nm", &["-D", "--defined-only"], SymbolOutput::Nm),
+            ("readelf", &["-Ws"], SymbolOutput::Readelf),
+        ],
+        PluginInspection::MachO => &[("nm", &["-gU"], SymbolOutput::Nm)],
+        PluginInspection::Pe => &[
+            ("objdump", &["-p"], SymbolOutput::PeObjdump),
+            ("llvm-objdump", &["-p"], SymbolOutput::PeObjdump),
+            ("llvm-nm", &["-g", "--defined-only"], SymbolOutput::Nm),
+        ],
+    };
+
+    let mut failures = Vec::new();
+    for (program, args, output_kind) in commands {
+        let output = Command::new(program).args(*args).arg(plugin).output();
+        let output = match output {
+            Ok(output) => output,
+            Err(error) => {
+                failures.push(format!("{program}: {error}"));
+                continue;
+            }
+        };
+        if !output.status.success() {
+            failures.push(format!(
+                "{program}: status {} stderr {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+            continue;
+        }
+
+        return Ok(parse_exported_symbols(
+            *output_kind,
+            &String::from_utf8_lossy(&output.stdout),
+        ));
+    }
+
+    Err(format!(
+        "failed to inspect plugin exports {}: {}",
+        plugin.display(),
+        failures.join("; ")
+    ))
+}
+
+fn parse_exported_symbols(kind: SymbolOutput, output: &str) -> BTreeSet<String> {
+    match kind {
+        SymbolOutput::Nm => parse_nm_symbols(output),
+        SymbolOutput::Readelf => parse_readelf_symbols(output),
+        SymbolOutput::PeObjdump => parse_pe_objdump_symbols(output),
+    }
+}
+
+fn parse_nm_symbols(output: &str) -> BTreeSet<String> {
+    output
+        .lines()
+        .filter_map(|token| {
+            let fields = token.split_whitespace().collect::<Vec<_>>();
+            if fields.len() < 2 || token.contains("(undefined)") {
+                return None;
+            }
+            let symbol_type = fields[fields.len() - 2];
+            if symbol_type == "U" || symbol_type == "u" {
+                return None;
+            }
+            exported_symbol_token(fields[fields.len() - 1])
+        })
+        .collect()
+}
+
+fn parse_readelf_symbols(output: &str) -> BTreeSet<String> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let fields = line.split_whitespace().collect::<Vec<_>>();
+            if fields.len() < 8 || fields.contains(&"UND") {
+                return None;
+            }
+            exported_symbol_token(fields[fields.len() - 1])
+        })
+        .collect()
+}
+
+fn parse_pe_objdump_symbols(output: &str) -> BTreeSet<String> {
+    let mut in_export_table = false;
+    output
+        .lines()
+        .filter_map(|line| {
+            if line.contains("Export Table") || line.contains("Export Tables") {
+                in_export_table = true;
+                return None;
+            }
+            if line.contains("Import Table") || line.contains("Import Tables") {
+                in_export_table = false;
+                return None;
+            }
+            if !in_export_table {
+                return None;
+            }
+            exported_symbol_token(line.split_whitespace().last()?)
+        })
+        .collect()
+}
+
+fn exported_symbol_token(token: &str) -> Option<String> {
+    let normalized = token.strip_prefix('_').unwrap_or(token);
+    if normalized.starts_with("bambu_network_") || normalized.starts_with("ft_") {
+        Some(
+            normalized
+                .split_once('@')
+                .map_or(normalized, |(symbol, _)| symbol)
+                .to_owned(),
+        )
+    } else {
+        None
+    }
+}
+
+fn validate_plugin_exports(
+    expected: &BTreeSet<String>,
+    actual: &BTreeSet<String>,
+) -> Result<(), String> {
+    let missing = expected.difference(actual).cloned().collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Err(format!("missing plugin exports: {:?}", missing));
+    }
+
+    println!("PASS plugin exports: {} symbols", expected.len());
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -391,6 +629,96 @@ mod tests {
         validate_checksum_file(&args).unwrap();
         let stage = unpack_archive(&args).unwrap();
         validate_layout(&args, &stage).unwrap();
+    }
+
+    #[test]
+    fn expected_symbols_reads_canonical_symbol_lines() {
+        let temp = tempdir().unwrap();
+        let path = temp
+            .path()
+            .join("docs/superpowers/specs/2026-06-23-phase-21-network-plugin-abi-symbols.txt");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(
+            &path,
+            "\n# header\n  bambu_network_get_version  \nignored\nft_abi_version\n",
+        )
+        .unwrap();
+
+        assert_eq!(
+            expected_symbols(temp.path()).unwrap(),
+            BTreeSet::from([
+                "bambu_network_get_version".to_owned(),
+                "ft_abi_version".to_owned()
+            ])
+        );
+    }
+
+    #[test]
+    fn expected_symbols_rejects_empty_symbol_list() {
+        assert!(parse_expected_symbols("# no symbols\nignored\n").is_err());
+    }
+
+    #[test]
+    fn support_for_skips_windows_cli_and_uses_pe_on_linux() {
+        assert_eq!(
+            support_for("windows-amd64", "linux").unwrap(),
+            (
+                CliStartup::Skip("PE cannot run on Ubuntu"),
+                PluginInspection::Pe
+            )
+        );
+    }
+
+    #[test]
+    fn support_for_rejects_linux_amd64_on_macos() {
+        assert!(support_for("linux-amd64", "macos").is_err());
+    }
+
+    #[test]
+    fn exported_symbol_parser_strips_one_leading_underscore() {
+        assert_eq!(
+            parse_exported_symbols(
+                SymbolOutput::Nm,
+                "0000 T _bambu_network_get_version\n__ignored\n0000 T _ft_abi_version"
+            ),
+            BTreeSet::from([
+                "bambu_network_get_version".to_owned(),
+                "ft_abi_version".to_owned()
+            ])
+        );
+    }
+
+    #[test]
+    fn exported_symbol_parser_rejects_undefined_nm_symbols() {
+        assert_eq!(
+            parse_exported_symbols(
+                SymbolOutput::Nm,
+                "                 U bambu_network_get_version\n0000 T ft_abi_version"
+            ),
+            BTreeSet::from(["ft_abi_version".to_owned()])
+        );
+    }
+
+    #[test]
+    fn exported_symbol_parser_rejects_undefined_readelf_symbols() {
+        assert_eq!(
+            parse_exported_symbols(
+                SymbolOutput::Readelf,
+                "1: 0000000000000000 0 FUNC GLOBAL DEFAULT UND bambu_network_get_version\n2: 0000000000001000 0 FUNC GLOBAL DEFAULT 12 ft_abi_version"
+            ),
+            BTreeSet::from(["ft_abi_version".to_owned()])
+        );
+    }
+
+    #[test]
+    fn exported_symbol_parser_rejects_pe_import_table_symbols() {
+        assert_eq!(
+            parse_exported_symbols(
+                SymbolOutput::PeObjdump,
+                "The Export Tables\n[ 0] bambu_network_get_version\nThe Import Tables\n[ 1] ft_abi_version"
+            ),
+            BTreeSet::from(["bambu_network_get_version".to_owned()])
+        );
     }
 
     fn test_args(archive: PathBuf, checksum: PathBuf) -> Args {

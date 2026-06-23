@@ -506,15 +506,12 @@ Exit criteria:
 Goal: make release artifacts predictable enough for operators to install without building from source.
 
 - Validate tag-driven GitHub Release artifacts on real Linux, Windows, and macOS hosts, including CLI startup, dynamic-library loadability, checksums, and archive layout.
-- Add release-smoke checks that inspect exported plugin symbols for built artifacts, not only local development builds.
 - Completed local Phase 24 release-smoke scaffolding: a standalone helper crate that validates release archive checksums and top-level CLI/plugin layout without joining the main Cargo workspace.
+- Completed packaged-artifact release-smoke checks for CLI startup on native runners and plugin ABI export inspection from the unpacked release plugin library.
+- Wired the tag-driven GitHub Release workflow to run checksum verification and release-smoke before uploading release artifacts.
+- Added operator release installation docs, a release artifact evidence manifest, and the explicit Phase 24 signing decision: `unsigned-accepted`.
+- Real host installation evidence remains unverified until `docs/compatibility/release-artifacts.md` records target-family rows from actual release artifact installs.
 - Rework the Linux `pandar-network-plugin` export strategy if arm64 plugin releases remain a target, because the current GNU export-map path is known to be fragile around Rust `cdylib` plus C++ shim exports.
-- Add operator-facing installation docs for:
-  - `pandar` CLI and service deployment;
-  - `pandar-network-plugin` replacement paths per OS;
-  - NixOS deployment through `services.pandar`;
-  - Docker Compose deployments for SQLite and PostgreSQL.
-- Decide whether unsigned plugin artifacts remain acceptable for the next release or whether signing/notarization becomes a release gate.
 
 Exit criteria:
 

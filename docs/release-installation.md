@@ -1,0 +1,127 @@
+# Release Installation
+
+## Release Archive Selection
+
+Select the archive that matches the operator host OS and CPU architecture:
+
+| Host | Target label | Archive |
+| --- | --- | --- |
+| Linux x86_64/amd64 | `linux-amd64` | `pandar-release-<tag-or-sanitized-ref>-linux-amd64.tar.gz` |
+| Linux arm64/aarch64 | `linux-arm64` | `pandar-release-<tag-or-sanitized-ref>-linux-arm64.tar.gz` |
+| Windows x86_64/amd64 | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-windows-amd64.tar.gz` |
+| Windows arm64/aarch64 | `windows-arm64` | `pandar-release-<tag-or-sanitized-ref>-windows-arm64.tar.gz` |
+| macOS Intel | `macos-amd64` | `pandar-release-<tag-or-sanitized-ref>-macos-amd64.tar.gz` |
+| macOS Apple Silicon | `macos-arm64` | `pandar-release-<tag-or-sanitized-ref>-macos-arm64.tar.gz` |
+
+Each archive contains the `pandar` CLI binary, or `pandar.exe` on Windows, and the matching `pandar-network-plugin` dynamic library for the target platform.
+
+## Checksum Verification
+
+Download the archive and its `.sha256` sidecar from the same release. Verify the sidecar before unpacking:
+
+```bash
+sha256sum -c pandar-release-<tag-or-sanitized-ref>-<target-label>.tar.gz.sha256
+```
+
+On macOS, use:
+
+```bash
+shasum -a 256 -c pandar-release-<tag-or-sanitized-ref>-<target-label>.tar.gz.sha256
+```
+
+The sidecar must name only the archive file, not a local path. Do not install an archive whose checksum fails or whose sidecar does not match the downloaded filename.
+
+## CLI Startup Smoke
+
+Unpack the archive and run the CLI help command before installing it into a shared path:
+
+```bash
+tar -xzf pandar-release-<tag-or-sanitized-ref>-<target-label>.tar.gz
+./pandar --help
+```
+
+On Windows, run:
+
+```powershell
+tar -xzf pandar-release-<tag-or-sanitized-ref>-<target-label>.tar.gz
+.\pandar.exe --help
+```
+
+If startup fails, keep the archive, checksum, target label, OS version, and terminal output for the release evidence record.
+
+## Hub, Web, And Agent Deployment
+
+The release archive provides the operator CLI and Bambu Studio plugin library. Deploy the running services with the existing container or NixOS paths:
+
+- `pandar-hub`: Rust API server, default HTTP/WebSocket bind `0.0.0.0:8080`, default gRPC bind `0.0.0.0:50051`.
+- `pandar-web`: Next.js frontend, default bind `0.0.0.0:3000`.
+- `pandar-agent`: local-network agent that connects outward to Hub gRPC and talks to Bambu machines.
+
+The hub needs `PANDAR_DATABASE_URL`. The frontend needs `APP_API_URL` and `APP_BASE_URL`. The agent needs `PANDAR_HUB_GRPC_URL`, tenant and agent IDs, an agent credential, and any `PANDAR_PRINTERS` entries for local machines.
+
+## Docker Compose Shapes
+
+Use the SQLite compose shape for single-process or local deployments:
+
+```bash
+APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.sqlite.yml up --build
+```
+
+Use the PostgreSQL compose shape when the database must be external to the Hub container:
+
+```bash
+POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.postgres.yml up --build
+```
+
+Use the PostgreSQL plus NATS profile for horizontally scaled Hub replicas:
+
+```bash
+POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> PANDAR_CONTROL_PLANE=nats docker compose -f docker-compose.postgres.yml --profile nats up --build
+```
+
+SQLite is for lightweight single-process deployments and rejects the NATS control plane.
+
+## NixOS services.pandar
+
+NixOS deployments use the flake module exposed as `nixosModules.default` and `nixosModules.pandar`. Configure Hub, Web, and Agent through `services.pandar`.
+
+Generated option documentation is in `docs/deployment/nixos/options.md`. Use it as the source for exact option names, package overrides, environment files, bind addresses, and agent credential wiring.
+
+## Bambu Studio Plugin Replacement
+
+Replace the Bambu Studio network plugin library with the archive's platform plugin file:
+
+| OS | Plugin file |
+| --- | --- |
+| Linux | `libpandar_network_plugin.so` |
+| Windows | `pandar_network_plugin.dll` |
+| macOS | `libpandar_network_plugin.dylib` |
+
+Keep the original Studio plugin file for rollback. Typical locations vary by Studio installation:
+
+- Linux AppImage or extracted builds: replace the bundled network plugin library next to the extracted Studio libraries.
+- Windows: replace the Bambu Studio network plugin DLL in the Studio installation's plugin or library directory.
+- macOS: replace the network plugin dylib inside the Bambu Studio `.app` bundle's Frameworks or plugin library area.
+
+Record real Studio load and sign-in evidence with `docs/compatibility/bambu-studio-plugin-smoke.md`. Do not treat release-smoke export checks as real Bambu Studio compatibility evidence.
+
+## Unsupported Or Untested Targets
+
+Target status is tracked in `docs/compatibility/release-artifacts.md`. For checksum, layout, CLI startup, plugin exports, and real host install columns, treat any target with `failed`, `blocked`, `unsupported`, or `untested` evidence as not proven for operator installation.
+
+CI release-smoke evidence and real host installation evidence are separate. A target can pass archive layout, checksum, CLI startup, and packaged plugin export checks in CI while still having `untested` real host installation status.
+
+| Target label | Current operator status | Reason | Next action |
+| --- | --- | --- | --- |
+| `linux-amd64` | `untested` | No real host install row has been recorded from a release artifact. | Install the archive on a Linux x86_64 host, verify checksum, run `pandar --help`, inspect plugin replacement behavior, and record the row in `docs/compatibility/release-artifacts.md`. |
+| `linux-arm64` | `untested` | No real host install row has been recorded; plugin export reliability is still watched because the Linux `cdylib` export path is fragile on arm64. | Run the release workflow smoke for the target, install on Linux arm64 hardware, and record export plus install evidence before treating it as usable. |
+| `windows-amd64` | `untested` | No real host install row has been recorded; artifacts are unsigned and may trigger platform warnings. | Install on Windows x86_64, verify checksum, run `pandar.exe --help`, replace the Studio plugin DLL for a controlled smoke, and record evidence. |
+| `windows-arm64` | `untested` | No real host install row has been recorded; artifacts are unsigned and may trigger platform warnings. | Install on Windows arm64, verify checksum, run `pandar.exe --help`, replace the Studio plugin DLL for a controlled smoke, and record evidence. |
+| `macos-amd64` | `untested` | No real host install row has been recorded; artifacts are unsigned and may trigger Gatekeeper warnings. | Install on Intel macOS, verify checksum, run `pandar --help`, replace the Studio plugin dylib for a controlled smoke, and record evidence. |
+| `macos-arm64` | `untested` | No real host install row has been recorded; artifacts are unsigned and may trigger Gatekeeper warnings. | Install on Apple Silicon macOS, verify checksum, run `pandar --help`, replace the Studio plugin dylib for a controlled smoke, and record evidence. |
+
+## Signing Status
+
+Phase 24 signing decision: `unsigned-accepted`.
+
+Artifacts remain unsigned for the next release. Operators must verify `.sha256` checksums before installation and may see platform warnings from Windows SmartScreen, macOS Gatekeeper, or other local policy tools. Code signing, notarization, and signed archive distribution are deferred to a later phase.
