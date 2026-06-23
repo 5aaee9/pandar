@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  nix-flake-check:
-    name: Nix flake checks
+  nix-quality-checks:
+    name: Nix quality checks
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -35,4 +35,86 @@ jobs:
           upstream-cache-filter: true
 
       - name: Run checks
-        run: nix flake check --show-trace
+        run: |
+          nix build --show-trace \
+            .#checks.x86_64-linux.pandar-fmt \
+            .#checks.x86_64-linux.pandar-clippy \
+            .#checks.x86_64-linux.pandar-nextest \
+            .#checks.x86_64-linux.pandar-nixos-module \
+            .#checks.x86_64-linux.pandar-nixos-options-doc
+
+  nix-package-checks:
+    name: Nix package checks (${{ matrix.system }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-latest
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Set up hestia cache
+        uses: Mic92/hestia@v1
+        with:
+          upstream-cache-filter: true
+
+      - name: Build packages
+        run: |
+          nix build --show-trace \
+            .#checks.${{ matrix.system }}.pandar-hub \
+            .#checks.${{ matrix.system }}.pandar-agent \
+            .#checks.${{ matrix.system }}.pandar-cli \
+            .#checks.${{ matrix.system }}.pandar-network-plugin \
+            .#checks.${{ matrix.system }}.pandar-web
+
+  nixos-vm-tests:
+    name: NixOS VM test (${{ matrix.backend }}, ${{ matrix.system }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: sqlite
+            system: x86_64-linux
+            runner: ubuntu-latest
+          - backend: postgres
+            system: x86_64-linux
+            runner: ubuntu-latest
+          - backend: sqlite
+            system: aarch64-linux
+            runner: ubuntu-24.04-arm
+          - backend: postgres
+            system: aarch64-linux
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Set up hestia cache
+        uses: Mic92/hestia@v1
+        with:
+          upstream-cache-filter: true
+
+      - name: Run NixOS VM test
+        run: nix build --show-trace .#checks.${{ matrix.system }}.pandar-nixos-test-${{ matrix.backend }}

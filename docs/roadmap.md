@@ -49,6 +49,7 @@
 - Generated `services.pandar` NixOS option documentation under `docs/deployment/nixos/options.md` and linked it from the README.
 - Added GitHub Actions CI to run `nix flake check --show-trace` on pushes to `main` and pull requests.
 - Added Mic92/hestia-backed GitHub Actions caching for Nix flake checks, with a scheduled cache GC workflow.
+- Added NixOS VM tests for SQLite and PostgreSQL hub deployments, and split CI into native x86_64/aarch64 package and VM-test matrices.
 
 ## Phase 1: Foundation
 

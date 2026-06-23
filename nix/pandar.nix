@@ -253,6 +253,13 @@
         touch "$out"
       '';
 
+      pandarNixosTests = import ./nixos-tests.nix {
+        inherit lib pkgs;
+        pandarHubPackage = pandar-hub;
+        pandarWebPackage = pandar-web;
+        pandarAgentPackage = pandar-agent;
+      };
+
       formatter = pkgs.writeShellApplication {
         name = "pandar-nixfmt";
         runtimeInputs = [
@@ -282,12 +289,15 @@
         inherit
           pandar-hub
           pandar-agent
+          pandar-cli
           pandar-network-plugin
           pandar-web
           ;
 
         pandar-nixos-module = pandarNixosModuleCheck;
         pandar-nixos-options-doc = pandarNixosOptionsDocCheck;
+        pandar-nixos-test-sqlite = pandarNixosTests.sqlite;
+        pandar-nixos-test-postgres = pandarNixosTests.postgres;
 
         pandar-clippy = craneLib.cargoClippy (
           commonArgs
