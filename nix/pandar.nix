@@ -138,7 +138,7 @@
 
       pandarNixosModuleCheck =
         let
-          nixosSystem = inputs.nixpkgs.lib.nixosSystem {
+          serviceNixosSystem = inputs.nixpkgs.lib.nixosSystem {
             inherit system;
             modules = [
               (import ./nixos-module.nix {
@@ -148,6 +148,11 @@
               })
               {
                 services.pandar.enable = true;
+                services.pandar.hub = {
+                  controlPlane = "nats";
+                  nats.mode = "service";
+                  nats.subject = "pandar.test.control";
+                };
                 services.pandar.agent = {
                   enable = true;
                   agentId = "00000000-0000-0000-0000-000000000001";
@@ -158,16 +163,49 @@
               }
             ];
           };
-          hubService = nixosSystem.config.systemd.services.pandar-hub;
-          webService = nixosSystem.config.systemd.services.pandar-web;
-          agentService = nixosSystem.config.systemd.services.pandar-agent;
+          externalNixosSystem = inputs.nixpkgs.lib.nixosSystem {
+            inherit system;
+            modules = [
+              (import ./nixos-module.nix {
+                pandarAgentPackage = pandar-agent;
+                pandarHubPackage = pandar-hub;
+                pandarWebPackage = pandar-web;
+              })
+              {
+                services.pandar.enable = true;
+                services.pandar.hub = {
+                  controlPlane = "nats";
+                  nats = {
+                    mode = "external";
+                    url = "nats://broker.example:4222";
+                    subject = "pandar.external.control";
+                  };
+                };
+                system.stateVersion = "25.11";
+              }
+            ];
+          };
+          serviceHub = serviceNixosSystem.config.systemd.services.pandar-hub;
+          serviceWeb = serviceNixosSystem.config.systemd.services.pandar-web;
+          serviceAgent = serviceNixosSystem.config.systemd.services.pandar-agent;
+          serviceNatsEnabled = if serviceNixosSystem.config.services.nats.enable then "1" else "0";
+          externalHub = externalNixosSystem.config.systemd.services.pandar-hub;
+          externalNatsEnabled = if externalNixosSystem.config.services.nats.enable then "1" else "0";
         in
         pkgs.runCommand "pandar-nixos-module-check" { } ''
-          test "${hubService.serviceConfig.ExecStart}" = "${pandar-hub}/bin/pandar-hub"
-          test "${webService.serviceConfig.ExecStart}" = "${pandar-web}/bin/pandar-web"
-          test "${agentService.serviceConfig.ExecStart}" = "${pandar-agent}/bin/pandar-agent"
-          test "${webService.environment.APP_API_URL}" = "http://127.0.0.1:8080"
-          test "${agentService.environment.PANDAR_HUB_GRPC_URL}" = "http://127.0.0.1:50051"
+          test "${serviceHub.serviceConfig.ExecStart}" = "${pandar-hub}/bin/pandar-hub"
+          test "${serviceWeb.serviceConfig.ExecStart}" = "${pandar-web}/bin/pandar-web"
+          test "${serviceAgent.serviceConfig.ExecStart}" = "${pandar-agent}/bin/pandar-agent"
+          test "${serviceNatsEnabled}" = "1"
+          test "${serviceHub.environment.PANDAR_CONTROL_PLANE}" = "nats"
+          test "${serviceHub.environment.PANDAR_NATS_URL}" = "nats://127.0.0.1:4222"
+          test "${serviceHub.environment.PANDAR_NATS_SUBJECT}" = "pandar.test.control"
+          test "${serviceWeb.environment.APP_API_URL}" = "http://127.0.0.1:8080"
+          test "${serviceAgent.environment.PANDAR_HUB_GRPC_URL}" = "http://127.0.0.1:50051"
+          test "${externalNatsEnabled}" = "0"
+          test "${externalHub.environment.PANDAR_CONTROL_PLANE}" = "nats"
+          test "${externalHub.environment.PANDAR_NATS_URL}" = "nats://broker.example:4222"
+          test "${externalHub.environment.PANDAR_NATS_SUBJECT}" = "pandar.external.control"
           touch "$out"
         '';
 

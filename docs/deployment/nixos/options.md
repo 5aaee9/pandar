@@ -323,6 +323,27 @@ string
 
 
 
+## services\.pandar\.hub\.controlPlane
+
+
+
+Hub control plane passed through PANDAR_CONTROL_PLANE\.
+
+
+
+*Type:*
+one of “in-process”, “nats”
+
+
+
+*Default:*
+
+```nix
+"in-process"
+```
+
+
+
 ## services\.pandar\.hub\.databaseUrl
 
 
@@ -382,6 +403,70 @@ string
 
 ```nix
 "0.0.0.0:50051"
+```
+
+
+
+## services\.pandar\.hub\.nats\.mode
+
+
+
+NATS source for the hub control plane\. ` external ` uses ` services.pandar.hub.nats.url `;
+` service ` enables the local NixOS NATS service and points the hub at it\.
+
+
+
+*Type:*
+one of “external”, “service”
+
+
+
+*Default:*
+
+```nix
+"external"
+```
+
+
+
+## services\.pandar\.hub\.nats\.subject
+
+
+
+Optional NATS subject passed through PANDAR_NATS_SUBJECT\.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
+```
+
+
+
+## services\.pandar\.hub\.nats\.url
+
+
+
+External NATS URL passed through PANDAR_NATS_URL when the hub uses the NATS control plane\.
+
+
+
+*Type:*
+null or string
+
+
+
+*Default:*
+
+```nix
+null
 ```
 
 

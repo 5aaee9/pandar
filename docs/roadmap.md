@@ -459,6 +459,7 @@ Goal: support lightweight single-process Hub deployments and horizontally scaled
 - Preserved PostgreSQL as the shared fact source for durable tenant, command, job, printer, and ticket state.
 - Added cross-instance tests for agent wake/close, WebSocket ticket consumption, and printer event fanout.
 - Updated PostgreSQL Docker Compose with an optional NATS profile and documented the deployment split.
+- Extended the NixOS module so scaled Hub deployments can use either the local NixOS NATS service or an externally managed NATS URL.
 
 Exit criteria:
 

@@ -10,6 +10,8 @@
 }:
 let
   cfg = config.services.pandar;
+  natsServiceUrl = "nats://127.0.0.1:4222";
+  natsUrl = if cfg.hub.nats.mode == "service" then natsServiceUrl else cfg.hub.nats.url;
 in
 {
   options.services.pandar = {
@@ -44,6 +46,41 @@ in
         type = lib.types.str;
         default = "sqlite:///var/lib/pandar-hub/pandar.db";
         description = "Database URL passed through PANDAR_DATABASE_URL.";
+      };
+
+      controlPlane = lib.mkOption {
+        type = lib.types.enum [
+          "in-process"
+          "nats"
+        ];
+        default = "in-process";
+        description = "Hub control plane passed through PANDAR_CONTROL_PLANE.";
+      };
+
+      nats = {
+        mode = lib.mkOption {
+          type = lib.types.enum [
+            "external"
+            "service"
+          ];
+          default = "external";
+          description = ''
+            NATS source for the hub control plane. `external` uses `services.pandar.hub.nats.url`;
+            `service` enables the local NixOS NATS service and points the hub at it.
+          '';
+        };
+
+        url = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "External NATS URL passed through PANDAR_NATS_URL when the hub uses the NATS control plane.";
+        };
+
+        subject = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Optional NATS subject passed through PANDAR_NATS_SUBJECT.";
+        };
       };
 
       spoolDir = lib.mkOption {
@@ -167,16 +204,40 @@ in
   };
 
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = !cfg.hub.enable || cfg.hub.controlPlane != "nats" || natsUrl != null;
+        message = "services.pandar.hub.nats.url is required when services.pandar.hub.controlPlane is \"nats\" and services.pandar.hub.nats.mode is \"external\".";
+      }
+    ];
+
+    services.nats.enable = lib.mkIf (
+      cfg.hub.enable && cfg.hub.controlPlane == "nats" && cfg.hub.nats.mode == "service"
+    ) true;
+
     systemd.services.pandar-hub = lib.mkIf cfg.hub.enable {
       description = "Pandar hub";
       wantedBy = [ "multi-user.target" ];
-      after = [ "network.target" ];
+      after = [
+        "network.target"
+      ]
+      ++ lib.optional (cfg.hub.controlPlane == "nats" && cfg.hub.nats.mode == "service") "nats.service";
+      wants = lib.optional (
+        cfg.hub.controlPlane == "nats" && cfg.hub.nats.mode == "service"
+      ) "nats.service";
 
       environment = {
         PANDAR_HUB_BIND = cfg.hub.bind;
         PANDAR_HUB_GRPC_BIND = cfg.hub.grpcBind;
         PANDAR_DATABASE_URL = cfg.hub.databaseUrl;
+        PANDAR_CONTROL_PLANE = cfg.hub.controlPlane;
         PANDAR_SPOOL_DIR = toString cfg.hub.spoolDir;
+      }
+      // lib.optionalAttrs (natsUrl != null) {
+        PANDAR_NATS_URL = natsUrl;
+      }
+      // lib.optionalAttrs (cfg.hub.nats.subject != null) {
+        PANDAR_NATS_SUBJECT = cfg.hub.nats.subject;
       }
       // cfg.hub.extraEnvironment;
 
