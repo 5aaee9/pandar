@@ -478,6 +478,128 @@ Exit criteria:
 - PostgreSQL + NATS can fan out Hub control messages across replicas while preserving tenant-token authorization at Hub boundaries.
 - Print artifacts still use `PANDAR_SPOOL_DIR`; scaled print-job creation requires shared spool storage until a later object-storage backend exists.
 
+## Phase 23: Real Bambu Studio Plugin Compatibility
+
+Goal: turn the Phase 21 network-plugin scaffold into a verified Bambu Studio integration on real desktop installs.
+
+- Run real Bambu Studio load/login/print-flow smoke tests on Linux, Windows, and macOS using the generated release artifacts.
+- Capture the exact Studio caller behavior for plugin initialization, sign-in, token/profile retrieval, printer listing, job listing, print submission, logout, and offline transitions.
+- Harden `pandar-network-plugin` HTTP behavior beyond symbol exports:
+  - preserve useful hub/network error details without exposing bearer tokens, plugin tickets, artifact paths, or local filesystem paths;
+  - map Pandar hub responses into stable Bambu-shaped response bodies where Studio expects them;
+  - add compatibility probes for Studio versions that call plugin methods in a different order.
+- Validate the sign-in loop from Bambu Studio WebView through `frontend/app/plugin-sign-in`, plugin login-ticket exchange, and `studio_userlogin`/`studio_useroffline` callbacks.
+- Document known compatible Studio versions, operating systems, plugin replacement paths, and unsupported plugin ABI functions.
+- Keep direct LAN/MQTT/FTPS behavior out of the plugin; Studio talks to `pandar-hub`, and Bambu machine credentials remain agent-local.
+
+Exit criteria:
+
+- Bambu Studio can load the Pandar plugin without missing symbols on every supported desktop platform.
+- A user can sign in through Studio, receive a tenant-scoped plugin credential, list Pandar printers/jobs, and submit a print through the hub-backed plugin route.
+- Plugin failure modes are visible enough to diagnose invalid hub URL, expired ticket, revoked plugin token, offline hub, bad artifact, and unauthorized printer/job access.
+- The compatibility evidence is documented from real Studio runs, not only unit tests or export inspection.
+
+## Phase 24: Cross-Platform Release Validation And Packaging
+
+Goal: make release artifacts predictable enough for operators to install without building from source.
+
+- Validate tag-driven GitHub Release artifacts on real Linux, Windows, and macOS hosts, including CLI startup, dynamic-library loadability, checksums, and archive layout.
+- Add release-smoke checks that inspect exported plugin symbols for built artifacts, not only local development builds.
+- Rework the Linux `pandar-network-plugin` export strategy if arm64 plugin releases remain a target, because the current GNU export-map path is known to be fragile around Rust `cdylib` plus C++ shim exports.
+- Add operator-facing installation docs for:
+  - `pandar` CLI and service deployment;
+  - `pandar-network-plugin` replacement paths per OS;
+  - NixOS deployment through `services.pandar`;
+  - Docker Compose deployments for SQLite and PostgreSQL.
+- Decide whether unsigned plugin artifacts remain acceptable for the next release or whether signing/notarization becomes a release gate.
+
+Exit criteria:
+
+- A release tag produces downloadable archives whose contents are validated on the target OS family before the release is treated as usable.
+- Operators can install the CLI, hub/web services, agent, and plugin from documented artifacts without reading CI internals.
+- Any unsupported target is explicit in docs and CI output instead of silently publishing an incomplete artifact.
+
+## Phase 25: Scaled Artifact Storage And Upload Pipeline
+
+Goal: remove shared-local-spool as the limiting factor for horizontally scaled print-job creation.
+
+- Add an artifact-storage boundary with at least:
+  - current filesystem spool backend for SQLite/single-node deployments;
+  - an object-storage backend suitable for PostgreSQL + multi-Hub deployments.
+- Keep artifact metadata in PostgreSQL/SQLite while moving artifact bytes behind the storage backend.
+- Ensure create-job, duplicate, reprint, plugin print, cleanup, metrics, and backup/restore docs all use the storage boundary instead of assuming `PANDAR_SPOOL_DIR` is local to one Hub process.
+- Harden browser and plugin artifact upload transport beyond server-action/base64 submission:
+  - support large files without depending on proxy body limits;
+  - preserve existing backend validation and stable error-code labels;
+  - avoid trusting browser-supplied storage paths.
+- Keep slicer files opaque; this phase changes storage and transport, not slicer parsing.
+
+Exit criteria:
+
+- PostgreSQL + NATS deployments can create print jobs from arbitrary Hub replicas without requiring a shared POSIX spool directory.
+- Filesystem storage remains the simple default for SQLite/single-node deployments.
+- Cleanup, retry, duplicate, reprint, plugin submission, and audit behavior remain consistent across storage backends.
+- Large artifact upload failures preserve actionable cause chains without leaking sensitive paths or tokens.
+
+## Phase 26: Production Soak, HA, And Failure Injection
+
+Goal: prove the scaled Hub and agent model under realistic concurrent use before expanding product surface area.
+
+- Soak-test PostgreSQL + NATS Hub replicas with concurrent agents, WebSocket subscribers, plugin clients, and print-job creation.
+- Exercise failure modes:
+  - Hub replica restart while agents are connected;
+  - NATS disconnect/reconnect;
+  - PostgreSQL latency or transaction conflicts;
+  - WebSocket ticket consumption across replicas;
+  - control-plane subscriber lag;
+  - artifact-storage write/read/delete failures.
+- Add or refine metrics and logs that distinguish app, database, broker, storage, agent, and printer failures.
+- Verify that stale-session protection, replacement sessions, command wakeups, printer events, and job progress broadcasts still converge after restarts.
+- Document recommended deployment topologies and operational runbooks for SQLite single-node and PostgreSQL + NATS scaled deployments.
+
+Exit criteria:
+
+- Scaled deployments have repeatable soak evidence for agent sessions, command dispatch, WebSocket fanout, plugin calls, and print-job creation.
+- Operators can identify which subsystem failed from `/readyz`, `/metrics`, logs, and documented runbooks.
+- Recovery from Hub restarts and broker interruptions does not duplicate terminal machine events or regress physical print state.
+
+## Phase 27: Reference-Backed Live Printer Controls
+
+Goal: add typed pause, resume, stop, and related live printer controls only after the command path is audited against Bambu reference behavior.
+
+- Study `reference/BambuStudio` and `reference/bambuddy` for pause, resume, stop/cancel, and speed-control command payloads plus report reconciliation semantics.
+- Implement typed agent command builders and gateway methods for supported controls; keep raw command dispatch behind diagnostics/admin boundaries.
+- Gate controls through the compatibility matrix so unsupported models or unknown capabilities render unavailable instead of sending speculative commands.
+- Persist command lifecycle, audit events, structured results, and machine events separately from physical print status.
+- Update frontend controls from unavailable indicators to active operations only where backend and compatibility checks allow them.
+- Add no-network fake tests for payload shape, sequencing, authorization, audit, and report reconciliation; add real-printer probe notes when hardware is available.
+
+Exit criteria:
+
+- Operators can pause, resume, and stop supported printers from the dashboard with tenant role enforcement and audit records.
+- UI state distinguishes command dispatch success from physical printer state changes reported later over MQTT.
+- Unsupported or unknown printer/control combinations stay unavailable with diagnostic context.
+
+## Phase 28: Reference-Backed Slicer Metadata
+
+Goal: improve artifact inspection and print defaults by reading safe metadata from project files without turning the hub into a slicer.
+
+- Define a narrow parser boundary for Bambu/3MF project metadata needed by Pandar:
+  - plate count and selected plate defaults;
+  - model/project display name;
+  - material mapping hints;
+  - estimated filament/time fields when safely available.
+- Use reference-derived behavior and fixtures; do not parse or execute arbitrary slicer logic.
+- Keep parsed metadata optional and advisory. Backend validation and operator-selected print settings remain authoritative.
+- Surface metadata in the dashboard and plugin responses where it helps operators choose plate/material settings.
+- Preserve opaque artifact handling for unknown or unsupported files.
+
+Exit criteria:
+
+- Operators can inspect practical project metadata before dispatching a print.
+- Metadata parsing failures do not block upload or dispatch unless the artifact itself is invalid.
+- Parsed values never override explicit user settings or compatibility rules.
+
 ## Optional Later: Virtual Printer And Proxy
 
 - Decide whether virtual-printer/proxy behavior from `reference/bambuddy` is in scope.
@@ -485,12 +607,9 @@ Exit criteria:
 
 ## Immediate Next
 
-- Run real Bambu Studio compatibility testing for `pandar-network-plugin` on Linux, Windows, and macOS.
-- Validate the zigbuild release artifacts on real Windows, macOS, and Linux hosts, especially the arm64 network-plugin dynamic-library exports and Bambu Studio loading behavior.
-- Rework the Linux `pandar-network-plugin` export strategy if arm64 plugin builds become a target, because Rust `cdylib` already emits a GNU version script and aarch64 `ld.bfd` rejects adding a second one for the C++ shim exports.
-- Harden Phase 21 plugin hub HTTP behavior with live Studio smoke tests, richer error reporting, and compatibility probes beyond symbol exports.
-- Soak-test PostgreSQL + NATS Hub replicas under concurrent agent sessions and WebSocket subscribers.
-- Add an object-storage artifact backend before scheduling print-job creation across arbitrary Hub pods without shared `PANDAR_SPOOL_DIR`.
-- Harden large artifact upload transport beyond server-action form submission if production proxy/body limits become a constraint.
-- Add reference-backed live pause/resume/stop controls only after the agent command path is implemented and audited.
-- Defer virtual-printer/proxy behavior until plugin compatibility, authenticated agent enrollment, and operator recovery workflows are stable.
+- Start Phase 23 with real Bambu Studio compatibility testing on Linux, Windows, and macOS.
+- Validate existing release artifacts while running Phase 23 so Phase 24 can use the same platform evidence.
+- Keep Phase 25 object storage ahead of arbitrary multi-Hub print-job scheduling.
+- Run Phase 26 soak after Phase 25 if print-job creation must be supported from any Hub replica; run a narrower control-plane soak earlier if only WebSocket/event fanout is being validated.
+- Do not start Phase 27 live controls until command payloads and state reconciliation are audited against the reference projects.
+- Keep virtual-printer/proxy behavior deferred until plugin compatibility, scaled artifact storage, and operator recovery workflows are stable.
