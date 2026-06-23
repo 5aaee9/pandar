@@ -396,7 +396,7 @@ Agent phase status after Phase 15:
 - Presents hub-backed printer/job state to Bambu Studio from cached hub responses where ABI calls are synchronous.
 - Submits print actions to the hub; the hub dispatches through authenticated agents.
 - Does not store Bambu access codes, open printer MQTT/FTPS/SFTP sockets, or call agents directly.
-- Phase 21 is a scaffold: it builds and exports the required symbols, but packaging/signing and real Bambu Studio compatibility testing are not completed.
+- Phase 23 local probe/docs coverage exercises the exported C++ ABI against a mock hub and documents the real Studio smoke process; real platform compatibility is still gated by manifest evidence.
 
 ### pandar-core
 

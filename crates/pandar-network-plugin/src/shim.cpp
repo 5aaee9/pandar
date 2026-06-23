@@ -339,6 +339,8 @@ PluginHttpResult rust_get_jobs(const Agent* agent) {
 }
 
 PluginHttpResult rust_submit_print(const Agent* agent, const BBL::PrintParams& params) {
+    const std::string& display_name = params.task_name.empty() ? params.project_name : params.task_name;
+    const std::string& artifact_path = params.filename;
     return pandar_plugin_submit_print(
         reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
         agent->hub_url.size(),
@@ -346,10 +348,10 @@ PluginHttpResult rust_submit_print(const Agent* agent, const BBL::PrintParams& p
         agent->token.size(),
         reinterpret_cast<const uint8_t*>(params.dev_id.data()),
         params.dev_id.size(),
-        reinterpret_cast<const uint8_t*>(params.task_name.empty() ? params.project_name.data() : params.task_name.data()),
-        params.task_name.empty() ? params.project_name.size() : params.task_name.size(),
-        reinterpret_cast<const uint8_t*>(params.filename.data()),
-        params.filename.size(),
+        reinterpret_cast<const uint8_t*>(display_name.data()),
+        display_name.size(),
+        reinterpret_cast<const uint8_t*>(artifact_path.data()),
+        artifact_path.size(),
         params.plate_index,
         params.task_use_ams,
         params.task_flow_cali,
@@ -720,7 +722,7 @@ PANDAR_ABI int bambu_network_start_local_print_with_record(void* agent, BBL::Pri
 
 PANDAR_ABI int bambu_network_start_send_gcode_to_sdcard(void* agent, BBL::PrintParams params, BBL::OnUpdateStatusFn update_fn, BBL::WasCancelledFn cancel_fn, BBL::OnWaitFn) {
     if (!as_agent(agent)) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
-    if (update_fn) update_fn(7, BBL::BAMBU_NETWORK_ERR_INVALID_RESULT, "Pandar plugin SD-card print is unsupported");
+    if (update_fn) update_fn(7, BBL::BAMBU_NETWORK_ERR_INVALID_RESULT, R"({"error":"unsupported_file_transfer"})");
     if (cancel_fn && cancel_fn()) return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
     (void)params;
     return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
@@ -1034,8 +1036,8 @@ PANDAR_ABI void ft_tunnel_release(FT_TunnelHandle* h) { release(reinterpret_cast
 PANDAR_ABI ft_err ft_tunnel_start_connect(FT_TunnelHandle* h, ft_tunnel_connect_cb cb, void* user) {
     auto* tunnel = reinterpret_cast<Tunnel*>(h);
     if (!tunnel) return FT_EINVAL;
-    if (cb) cb(user, 1, FT_EIO, "Pandar plugin does not open direct file-transfer tunnels");
-    if (tunnel->status_cb) tunnel->status_cb(tunnel->status_user, 0, -1, FT_EIO, "unsupported");
+    if (cb) cb(user, 1, FT_EIO, R"({"error":"unsupported_file_transfer"})");
+    if (tunnel->status_cb) tunnel->status_cb(tunnel->status_user, 0, -1, FT_EIO, R"({"error":"unsupported_file_transfer"})");
     return FT_OK;
 }
 

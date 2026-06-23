@@ -71,8 +71,9 @@ Add a native symbol-level test harness for `crates/pandar-network-plugin` that l
 11. `bambu_network_user_logout`
 12. `bambu_network_build_logout_cmd`
 13. `bambu_network_connect_printer`
-14. representative `ft_*` tunnel/job functions
-15. `bambu_network_destroy_agent`
+14. `bambu_network_send_message_to_printer`
+15. `ft_abi_version`, `ft_tunnel_create`, `ft_tunnel_start_connect`, `ft_tunnel_sync_connect`, `ft_tunnel_shutdown`, `ft_tunnel_release`, `ft_job_create`, `ft_job_set_result_cb`, `ft_tunnel_start_job`, `ft_job_get_result`, `ft_job_cancel`, and `ft_job_release`
+16. `bambu_network_destroy_agent`
 
 The harness should use a local mock HTTP server for hub responses and `libloading` or an equivalent dynamic-library loading strategy to call the exported symbols. If a platform cannot safely run the symbol-level probe in CI, the test must skip with an explicit reason while keeping the existing export-list test active. It must verify that:
 
@@ -115,13 +116,21 @@ Stable plugin error codes:
 
 Mapping rules:
 
-- HTTP `401` from plugin routes maps to `invalid_auth_token`, except ticket exchange keeps `invalid_plugin_ticket`.
-- HTTP `403` maps to `plugin_forbidden`.
-- HTTP `404` printer/job route failures map to the hub-provided stable code when present, otherwise `printer_not_found`.
-- HTTP `410` or hub response `token_revoked` maps to `plugin_token_revoked` when observed. If the current hub never emits that status/body, a plugin unit test may simulate it at the HTTP boundary.
-- Network send failures map to `hub_unavailable`.
-- Artifact path read failures map to `artifact_missing` without returning the local path.
-- Unsupported direct printer or file-transfer ABI paths return `unsupported_direct_printer` or `unsupported_file_transfer`.
+- `invalid_hub_url` is produced only when the plugin receives a non-UTF-8, empty, or syntactically unusable hub URL before sending a request.
+- `invalid_plugin_ticket` is produced for empty or malformed ticket input and for HTTP `401` during ticket exchange.
+- `invalid_auth_token` is produced for empty or malformed plugin credential input and for HTTP `401` from authenticated plugin routes.
+- `hub_unavailable` is produced for request construction or network send failures, including refused connections and DNS failures.
+- `plugin_token_revoked` is produced for HTTP `410` or a hub JSON body whose stable `error` value is `token_revoked`; Phase 23 may simulate this at the plugin HTTP boundary if the current hub does not emit it.
+- `plugin_forbidden` is produced for HTTP `403`.
+- `printer_not_found` is produced for HTTP `404` printer/job route failures when the hub body does not already contain a more specific stable error code.
+- `artifact_missing` is produced when the artifact path cannot be read; the response must not include the local path.
+- `artifact_empty` is produced when the plugin reads an artifact file with zero bytes before sending it to the hub.
+- `artifact_invalid_base64` is a hub-originated stable error that the plugin may pass through from `/api/v1/plugin/prints`; Phase 23 does not add a second plugin-side base64 parser because the plugin itself encodes bytes.
+- `artifact_invalid_plate` is a hub-originated stable error that the plugin may pass through from `/api/v1/plugin/prints`; Phase 23 must not parse slicer metadata or infer valid plates locally.
+- `artifact_too_large` is a hub-originated stable error that the plugin may pass through from `/api/v1/plugin/prints`; Phase 23 must not add a new plugin-side artifact size policy because upload transport hardening belongs to Phase 25.
+- `unsupported_direct_printer` is produced by direct LAN printer ABI functions such as `bambu_network_connect_printer` and `bambu_network_send_message_to_printer`.
+- `unsupported_file_transfer` is produced by `ft_*` tunnel/job paths that would otherwise open direct file-transfer sockets.
+- `invalid_response` is produced when a hub response body cannot be read, cannot be normalized into the plugin's stable JSON error shape, or returns a non-success status with no recognized stable error code. HTTP `5xx` responses with readable bodies use this fallback rather than `hub_unavailable`, because the hub responded.
 - Response bodies returned to Studio must not contain bearer tokens, plugin tickets, Bambu access codes, local artifact paths, or filesystem paths.
 
 Acceptance criteria:

@@ -127,7 +127,12 @@ Implemented login flow:
 7. The plugin exchanges the ticket with the hub, creating a tenant-owned `["plugin:studio"]` credential. The ABI shim stores Bambu-shaped login state for Studio UI compatibility.
 8. Hub-backed plugin calls read printers/jobs and submit prints through `/api/v1/plugin/*` routes using the plugin credential.
 
-Plugin credentials are revocable tenant-owned credentials. They do not carry `agent:register`. The Phase 21 shim exports all required symbols, delegates login/printer/job/print calls to the hub, and returns stable no-op or unsupported values for direct LAN/printer operations; real Studio compatibility still needs manual Studio testing.
+Plugin credentials are revocable tenant-owned credentials. They do not carry `agent:register`. Phase 23 adds a compatibility manifest, manual smoke runbook, stable plugin error mapping, and a local ABI probe. Real Bambu Studio compatibility remains unverified until `docs/compatibility/bambu-studio-plugin.md` contains a real Studio evidence row.
+
+Compatibility references:
+
+- `docs/compatibility/bambu-studio-plugin.md`
+- `docs/compatibility/bambu-studio-plugin-smoke.md`
 
 Build and inspect the plugin:
 

@@ -5,6 +5,14 @@ use serde_json::{Value, json};
 
 pub const PLUGIN_NAME: &str = "pandar-network-plugin";
 
+#[derive(Clone, Copy)]
+enum RequestKind {
+    TicketExchange,
+    PrinterLookup,
+    JobLookup,
+    PrintSubmission,
+}
+
 #[repr(C)]
 pub struct PluginHttpResult {
     pub status: i32,
@@ -21,7 +29,7 @@ pub extern "C" fn pandar_plugin_exchange_ticket(
     ticket_ptr: *const u8,
     ticket_len: usize,
 ) -> PluginHttpResult {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len) else {
+    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
         return invalid_input("invalid_hub_url");
     };
     let Some(ticket) = read_utf8(ticket_ptr, ticket_len).filter(|ticket| !ticket.trim().is_empty())
@@ -29,12 +37,10 @@ pub extern "C" fn pandar_plugin_exchange_ticket(
         return invalid_input("invalid_plugin_ticket");
     };
     post_json(
-        &format!(
-            "{}/api/v1/plugin/login-tickets/exchange",
-            trim_slash(hub_url)
-        ),
+        &format!("{hub_url}/api/v1/plugin/login-tickets/exchange"),
         None,
         json!({ "ticket": ticket }),
+        RequestKind::TicketExchange,
     )
 }
 
@@ -51,6 +57,7 @@ pub extern "C" fn pandar_plugin_get_printers(
         token_ptr,
         token_len,
         "/api/v1/plugin/printers",
+        RequestKind::PrinterLookup,
     )
 }
 
@@ -67,6 +74,7 @@ pub extern "C" fn pandar_plugin_get_jobs(
         token_ptr,
         token_len,
         "/api/v1/plugin/jobs",
+        RequestKind::JobLookup,
     )
 }
 
@@ -91,10 +99,11 @@ pub extern "C" fn pandar_plugin_submit_print(
     ams_mapping2_ptr: *const u8,
     ams_mapping2_len: usize,
 ) -> PluginHttpResult {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len) else {
+    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
         return invalid_input("invalid_hub_url");
     };
-    let Some(token) = read_utf8(token_ptr, token_len) else {
+    let Some(token) = read_utf8(token_ptr, token_len).filter(|token| !token.trim().is_empty())
+    else {
         return invalid_input("invalid_auth_token");
     };
     let Some(printer_id) = read_utf8(printer_id_ptr, printer_id_len) else {
@@ -117,7 +126,7 @@ pub extern "C" fn pandar_plugin_submit_print(
     let ams_mapping2 = parse_optional_json(ams_mapping2_ptr, ams_mapping2_len);
 
     post_json(
-        &format!("{}/api/v1/plugin/prints", trim_slash(hub_url)),
+        &format!("{hub_url}/api/v1/plugin/prints"),
         Some(&token),
         json!({
             "printer_id": printer_id,
@@ -131,6 +140,7 @@ pub extern "C" fn pandar_plugin_submit_print(
             "ams_mapping": ams_mapping,
             "ams_mapping2": ams_mapping2,
         }),
+        RequestKind::PrintSubmission,
     )
 }
 
@@ -158,26 +168,28 @@ fn get_json(
     token_ptr: *const u8,
     token_len: usize,
     path: &str,
+    kind: RequestKind,
 ) -> PluginHttpResult {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len) else {
+    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
         return invalid_input("invalid_hub_url");
     };
-    let Some(token) = read_utf8(token_ptr, token_len) else {
+    let Some(token) = read_utf8(token_ptr, token_len).filter(|token| !token.trim().is_empty())
+    else {
         return invalid_input("invalid_auth_token");
     };
     match runtime().block_on(async {
         reqwest::Client::new()
-            .get(format!("{}{}", trim_slash(hub_url), path))
+            .get(format!("{hub_url}{path}"))
             .bearer_auth(token)
             .send()
             .await
     }) {
-        Ok(response) => response_result(response),
+        Ok(response) => response_result(response, kind),
         Err(_) => network_error(),
     }
 }
 
-fn post_json(url: &str, token: Option<&str>, body: Value) -> PluginHttpResult {
+fn post_json(url: &str, token: Option<&str>, body: Value, kind: RequestKind) -> PluginHttpResult {
     match runtime().block_on(async {
         let request = reqwest::Client::new().post(url).json(&body);
         let request = if let Some(token) = token {
@@ -187,32 +199,84 @@ fn post_json(url: &str, token: Option<&str>, body: Value) -> PluginHttpResult {
         };
         request.send().await
     }) {
-        Ok(response) => response_result(response),
+        Ok(response) => response_result(response, kind),
         Err(_) => network_error(),
     }
 }
 
-fn response_result(response: reqwest::Response) -> PluginHttpResult {
+fn response_result(response: reqwest::Response, kind: RequestKind) -> PluginHttpResult {
     let http_code = response.status().as_u16().into();
     match runtime().block_on(response.text()) {
         Ok(body) => {
-            let status = if (200..300).contains(&http_code) {
-                0
+            if (200..300).contains(&http_code) {
+                result(0, http_code, body)
             } else {
-                1
-            };
-            result(status, http_code, body)
+                result(1, http_code, redact_hub_error(kind, http_code, &body))
+            }
         }
-        Err(_) => result(1, http_code, r#"{"error":"invalid_response"}"#),
+        Err(_) => result(1, http_code, stable_error_body("invalid_response")),
+    }
+}
+
+fn redact_hub_error(kind: RequestKind, http_code: u32, body: &str) -> String {
+    let hub_error = serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|body| body.get("error").and_then(Value::as_str).map(str::to_owned));
+    let error = match (http_code, hub_error.as_deref()) {
+        (401, _) if matches!(kind, RequestKind::TicketExchange) => "invalid_plugin_ticket",
+        (401, _) => "invalid_auth_token",
+        (403, _) => "plugin_forbidden",
+        (410, _) | (_, Some("token_revoked")) => "plugin_token_revoked",
+        (_, Some(error)) if is_stable_hub_error(error) => error,
+        (404, _)
+            if matches!(
+                kind,
+                RequestKind::PrinterLookup | RequestKind::JobLookup | RequestKind::PrintSubmission
+            ) =>
+        {
+            "printer_not_found"
+        }
+        _ => "invalid_response",
+    };
+    stable_error_body(error)
+}
+
+fn is_stable_hub_error(error: &str) -> bool {
+    matches!(
+        error,
+        "artifact_invalid_base64"
+            | "artifact_invalid_plate"
+            | "artifact_too_large"
+            | "printer_not_found"
+            | "invalid_plugin_ticket"
+            | "invalid_auth_token"
+            | "plugin_forbidden"
+    )
+}
+
+fn stable_error_body(error: &str) -> String {
+    format!(r#"{{"error":"{error}"}}"#)
+}
+
+fn normalize_hub_url(value: String) -> Option<String> {
+    let value = value.trim().trim_end_matches('/').to_string();
+    if value.is_empty() {
+        return None;
+    }
+    let url = reqwest::Url::parse(&value).ok()?;
+    if matches!(url.scheme(), "http" | "https") && url.host_str().is_some() {
+        Some(value)
+    } else {
+        None
     }
 }
 
 fn invalid_input(error: &str) -> PluginHttpResult {
-    result(1, 400, format!(r#"{{"error":"{error}"}}"#))
+    result(1, 400, stable_error_body(error))
 }
 
 fn network_error() -> PluginHttpResult {
-    result(1, 0, r#"{"error":"hub_unavailable"}"#)
+    result(1, 0, stable_error_body("hub_unavailable"))
 }
 
 fn result(status: i32, http_code: u32, body: impl Into<String>) -> PluginHttpResult {
@@ -244,10 +308,6 @@ fn read_utf8(ptr: *const u8, len: usize) -> Option<String> {
     std::str::from_utf8(unsafe { slice::from_raw_parts(ptr, len) })
         .ok()
         .map(ToOwned::to_owned)
-}
-
-fn trim_slash(value: String) -> String {
-    value.trim_end_matches('/').to_string()
 }
 
 fn parse_optional_json(ptr: *const u8, len: usize) -> Option<Value> {

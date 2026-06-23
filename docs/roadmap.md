@@ -491,6 +491,8 @@ Goal: turn the Phase 21 network-plugin scaffold into a verified Bambu Studio int
 - Validate the sign-in loop from Bambu Studio WebView through `frontend/app/plugin-sign-in`, plugin login-ticket exchange, and `studio_userlogin`/`studio_useroffline` callbacks.
 - Document known compatible Studio versions, operating systems, plugin replacement paths, and unsupported plugin ABI functions.
 - Keep direct LAN/MQTT/FTPS behavior out of the plugin; Studio talks to `pandar-hub`, and Bambu machine credentials remain agent-local.
+- Completed local Phase 23 scaffolding: compatibility manifest, smoke runbook, stable plugin error mapping, and a local C++ ABI probe against a mock hub.
+- Real Studio compatibility remains unverified until `docs/compatibility/bambu-studio-plugin.md` records real Studio runs for each platform.
 
 Exit criteria:
 
