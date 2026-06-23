@@ -28,7 +28,7 @@ fn main() {
         let export_map = format!("{out_dir}/pandar-network-plugin.exports");
         std::fs::write(
             &export_map,
-            "{
+            "PANDAR_NETWORK_PLUGIN_1 {
   global:
     bambu_network_*;
     ft_*;

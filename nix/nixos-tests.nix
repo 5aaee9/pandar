@@ -35,6 +35,8 @@ in
   sqlite = pkgs.testers.runNixOSTest {
     name = "pandar-hub-sqlite";
 
+    requiredFeatures.kvm = false;
+
     nodes.machine = baseNode;
 
     testScript = ''
@@ -47,6 +49,8 @@ in
 
   postgres = pkgs.testers.runNixOSTest {
     name = "pandar-hub-postgres";
+
+    requiredFeatures.kvm = false;
 
     nodes.machine =
       { ... }:

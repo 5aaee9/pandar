@@ -462,6 +462,8 @@ Goal: support lightweight single-process Hub deployments and horizontally scaled
 - Added cross-instance tests for agent wake/close, WebSocket ticket consumption, and printer event fanout.
 - Updated PostgreSQL Docker Compose with an optional NATS profile and documented the deployment split.
 - Extended the NixOS module so scaled Hub deployments can use either the local NixOS NATS service or an externally managed NATS URL.
+- Added GitHub Actions Nix checks with Hestia caching, package matrices for x86_64/aarch64, and SQLite/PostgreSQL NixOS VM tests.
+- Adjusted the NixOS VM tests to run without requiring the Nix `kvm` system feature so GitHub's native arm64 runner can execute them through QEMU fallback when `/dev/kvm` is unavailable.
 
 Exit criteria:
 
