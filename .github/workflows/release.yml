@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build release artifacts (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-amd64
+            runner: ubuntu-latest
+            cli-target: x86_64-unknown-linux-musl
+            plugin-target: x86_64-unknown-linux-gnu
+            zig-plugin-target: x86_64-linux-gnu
+            cli-name: pandar
+            plugin-name: libpandar_network_plugin.so
+            use-zig-cc: true
+            windows-crt-static: false
+          - label: linux-arm64
+            runner: ubuntu-latest
+            cli-target: aarch64-unknown-linux-musl
+            plugin-target: aarch64-unknown-linux-gnu
+            zig-plugin-target: aarch64-linux-gnu
+            cli-name: pandar
+            plugin-name: libpandar_network_plugin.so
+            use-zig-cc: true
+            windows-crt-static: false
+          - label: windows-amd64
+            runner: ubuntu-latest
+            cli-target: x86_64-pc-windows-gnu
+            plugin-target: x86_64-pc-windows-gnu
+            zig-plugin-target: x86_64-windows-gnu
+            cli-name: pandar.exe
+            plugin-name: pandar_network_plugin.dll
+            use-zig-cc: true
+            windows-crt-static: true
+          - label: windows-arm64
+            runner: ubuntu-latest
+            cli-target: aarch64-pc-windows-gnullvm
+            plugin-target: aarch64-pc-windows-gnullvm
+            zig-plugin-target: aarch64-windows-gnu
+            cli-name: pandar.exe
+            plugin-name: pandar_network_plugin.dll
+            use-zig-cc: true
+            windows-crt-static: true
+          - label: macos-amd64
+            runner: macos-26-intel
+            cli-target: x86_64-apple-darwin
+            plugin-target: x86_64-apple-darwin
+            zig-plugin-target: ""
+            cli-name: pandar
+            plugin-name: libpandar_network_plugin.dylib
+            use-zig-cc: false
+            windows-crt-static: false
+          - label: macos-arm64
+            runner: macos-26
+            cli-target: aarch64-apple-darwin
+            plugin-target: aarch64-apple-darwin
+            zig-plugin-target: ""
+            cli-name: pandar
+            plugin-name: libpandar_network_plugin.dylib
+            use-zig-cc: false
+            windows-crt-static: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.cli-target }},${{ matrix.plugin-target }}
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Install cargo-zigbuild
+        run: cargo install cargo-zigbuild --locked
+
+      - name: Build pandar CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.windows-crt-static }}" = "true" ]; then
+            export RUSTFLAGS="-C target-feature=+crt-static"
+          fi
+          cargo zigbuild --release -p pandar-app --bin pandar --target "${{ matrix.cli-target }}"
+
+      - name: Build pandar network plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.use-zig-cc }}" = "true" ]; then
+            mkdir -p "$RUNNER_TEMP/zig-cc"
+            printf '%s\n' '#!/usr/bin/env bash' "exec zig cc -target \"\$ZIG_PLUGIN_TARGET\" \"\$@\"" > "$RUNNER_TEMP/zig-cc/zig-cc-plugin"
+            printf '%s\n' '#!/usr/bin/env bash' "exec zig c++ -target \"\$ZIG_PLUGIN_TARGET\" \"\$@\"" > "$RUNNER_TEMP/zig-cc/zig-cxx-plugin"
+            chmod +x "$RUNNER_TEMP/zig-cc/zig-cc-plugin" "$RUNNER_TEMP/zig-cc/zig-cxx-plugin"
+            export ZIG_PLUGIN_TARGET="${{ matrix.zig-plugin-target }}"
+            export CC="$RUNNER_TEMP/zig-cc/zig-cc-plugin"
+            export CXX="$RUNNER_TEMP/zig-cc/zig-cxx-plugin"
+            export AR="zig ar"
+          fi
+          cargo zigbuild --release -p pandar-network-plugin --target "${{ matrix.plugin-target }}"
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME:-manual}"
+          archive="pandar-release-${tag}-${{ matrix.label }}.tar.gz"
+          stage="$RUNNER_TEMP/pandar-release-${{ matrix.label }}"
+          mkdir -p "$stage" dist
+          cp "target/${{ matrix.cli-target }}/release/${{ matrix.cli-name }}" "$stage/${{ matrix.cli-name }}"
+          cp "target/${{ matrix.plugin-target }}/release/${{ matrix.plugin-name }}" "$stage/${{ matrix.plugin-name }}"
+          tar -C "$stage" -czf "dist/$archive" .
+          (
+            cd dist
+            shasum -a 256 "$archive" | awk '{print $1 "  " $2}' > "$archive.sha256"
+          )
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pandar-release-${{ matrix.label }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    if: startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 15
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: pandar-release-*
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256

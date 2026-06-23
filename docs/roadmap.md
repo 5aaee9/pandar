@@ -51,6 +51,7 @@
 - Added Mic92/hestia-backed GitHub Actions caching for Nix flake checks, with a scheduled cache GC workflow.
 - Added NixOS VM tests for SQLite and PostgreSQL hub deployments, and split CI into native x86_64/aarch64 package and VM-test matrices.
 - Limited aarch64 package CI to the server, agent, CLI, and web artifacts while keeping the Bambu Studio network plugin package check on x86_64, where the current Linux GNU export-map strategy is supported.
+- Added tag-driven GitHub Release CI for `pandar` CLI and `pandar-network-plugin` artifacts using `cargo-zigbuild`, covering Linux, Windows, and macOS on amd64 and arm64 with per-target checksums; macOS CLI artifacts are ordinary release Mach-O binaries rather than fully static binaries.
 
 ## Phase 1: Foundation
 
@@ -481,6 +482,7 @@ Exit criteria:
 ## Immediate Next
 
 - Run real Bambu Studio compatibility testing for `pandar-network-plugin` on Linux, Windows, and macOS.
+- Validate the zigbuild release artifacts on real Windows, macOS, and Linux hosts, especially the arm64 network-plugin dynamic-library exports and Bambu Studio loading behavior.
 - Rework the Linux `pandar-network-plugin` export strategy if arm64 plugin builds become a target, because Rust `cdylib` already emits a GNU version script and aarch64 `ld.bfd` rejects adding a second one for the C++ shim exports.
 - Harden Phase 21 plugin hub HTTP behavior with live Studio smoke tests, richer error reporting, and compatibility probes beyond symbol exports.
 - Soak-test PostgreSQL + NATS Hub replicas under concurrent agent sessions and WebSocket subscribers.
