@@ -29,5 +29,10 @@ jobs:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
+      - name: Set up hestia cache
+        uses: Mic92/hestia@v1
+        with:
+          upstream-cache-filter: true
+
       - name: Run checks
         run: nix flake check --show-trace

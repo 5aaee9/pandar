@@ -48,6 +48,7 @@
 - Extended the NixOS module with an optional `pandar-agent` systemd service, including hub gRPC URL, identity, credential, printers, artifact root, environment file, and package overrides.
 - Generated `services.pandar` NixOS option documentation under `docs/deployment/nixos/options.md` and linked it from the README.
 - Added GitHub Actions CI to run `nix flake check --show-trace` on pushes to `main` and pull requests.
+- Added Mic92/hestia-backed GitHub Actions caching for Nix flake checks, with a scheduled cache GC workflow.
 
 ## Phase 1: Foundation
 
