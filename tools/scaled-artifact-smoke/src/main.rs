@@ -8,7 +8,7 @@ mod storage;
 use std::{env, process::ExitCode};
 
 use anyhow::bail;
-use harness::{HarnessConfig, ScenarioFilter};
+use harness::{HarnessConfig, HarnessMode, ScenarioFilter};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -41,8 +41,10 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> anyhow::Result<HarnessC
         usage()?;
         unreachable!();
     };
-    if mode != "--dry-run" {
-        usage()?;
+    match mode.as_str() {
+        "--dry-run" => config.mode = HarnessMode::DryRun,
+        "--live" => config.mode = HarnessMode::Live,
+        _ => usage()?,
     }
     while let Some(flag) = args.next() {
         match flag.as_str() {
@@ -77,6 +79,91 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> anyhow::Result<HarnessC
 
 fn usage() -> anyhow::Result<()> {
     bail!(
-        "usage: pandar-scaled-artifact-smoke --dry-run [--iterations N] [--concurrency N] [--scenario all|artifact|fanout|restart|storage|terminal] | --live-preflight"
+        "usage: pandar-scaled-artifact-smoke --dry-run [--iterations N] [--concurrency N] [--scenario all|artifact|fanout|restart|storage|terminal] | --live [--iterations N] [--concurrency N] [--scenario all|artifact|fanout|restart|terminal] | --live-preflight"
     )
+}
+
+#[cfg(test)]
+mod main {
+    use super::*;
+
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn parse_rejects_no_mode() {
+            assert!(parse_args(Vec::<String>::new()).is_err());
+        }
+
+        #[test]
+        fn parse_accepts_dry_run_mode() {
+            let config = parse_args(["--dry-run"].into_iter().map(str::to_owned)).unwrap();
+            assert_eq!(config.mode, HarnessMode::DryRun);
+            assert_eq!(config.iterations, 1);
+            assert_eq!(config.concurrency, 2);
+            assert_eq!(config.scenario, ScenarioFilter::All);
+        }
+
+        #[test]
+        fn parse_accepts_live_mode() {
+            let config = parse_args(
+                [
+                    "--live",
+                    "--iterations",
+                    "2",
+                    "--concurrency",
+                    "3",
+                    "--scenario",
+                    "artifact",
+                ]
+                .into_iter()
+                .map(str::to_owned),
+            )
+            .unwrap();
+            assert_eq!(config.mode, HarnessMode::Live);
+            assert_eq!(config.iterations, 2);
+            assert_eq!(config.concurrency, 3);
+            assert_eq!(config.scenario, ScenarioFilter::Artifact);
+        }
+
+        #[test]
+        fn parse_rejects_live_storage_scenario() {
+            let err =
+                parse_args(["--live", "--scenario", "storage"].into_iter().map(str::to_owned))
+                    .unwrap_err();
+            assert!(format!("{err:#}").contains("storage failure scenario is local dry-run only"));
+        }
+
+        #[test]
+        fn live_all_excludes_storage_scenario() {
+            let config = parse_args(["--live", "--scenario", "all"].into_iter().map(str::to_owned))
+                .unwrap();
+            assert_eq!(
+                config.included_scenarios(),
+                vec![
+                    ScenarioFilter::Artifact,
+                    ScenarioFilter::Fanout,
+                    ScenarioFilter::Restart,
+                    ScenarioFilter::Terminal,
+                ]
+            );
+        }
+
+        #[test]
+        fn dry_run_all_includes_storage_scenario() {
+            let config =
+                parse_args(["--dry-run", "--scenario", "all"].into_iter().map(str::to_owned))
+                    .unwrap();
+            assert_eq!(
+                config.included_scenarios(),
+                vec![
+                    ScenarioFilter::Artifact,
+                    ScenarioFilter::Fanout,
+                    ScenarioFilter::Restart,
+                    ScenarioFilter::Storage,
+                    ScenarioFilter::Terminal,
+                ]
+            );
+        }
+    }
 }

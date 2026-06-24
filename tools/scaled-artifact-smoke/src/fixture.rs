@@ -3,8 +3,8 @@ use std::sync::Arc;
 use anyhow::Context;
 use pandar_hub::{
     AppState,
-    artifacts::ArtifactStorage,
-    cluster::ControlPlane,
+    artifacts::{ArtifactStorage, S3ArtifactStorageConfig},
+    cluster::{ControlPlane, ControlPlaneConfig},
     db::{Database, DatabaseConfig},
     protocol::agent::v1::PrintJobReport,
     repositories::{
@@ -13,7 +13,10 @@ use pandar_hub::{
 };
 use tempfile::TempDir;
 
-use crate::storage::SharedObjectStorage;
+use crate::{
+    harness::{HarnessConfig, HarnessMode},
+    storage::SharedObjectStorage,
+};
 
 pub const ARTIFACT_BYTES: &[u8] = b"scaled smoke 3mf bytes";
 
@@ -27,7 +30,14 @@ pub struct SmokeWorld {
 }
 
 impl SmokeWorld {
-    pub async fn new() -> anyhow::Result<Self> {
+    pub async fn for_config(config: &HarnessConfig) -> anyhow::Result<Self> {
+        match config.mode {
+            HarnessMode::DryRun => Self::dry_run().await,
+            HarnessMode::Live => Self::live().await,
+        }
+    }
+
+    pub async fn dry_run() -> anyhow::Result<Self> {
         let temp = tempfile::tempdir().context("create smoke temp dir")?;
         let database_url = format!("sqlite://{}", temp.path().join("hub.sqlite").display());
         let database = Database::connect(&DatabaseConfig::from_url(database_url)?).await?;
@@ -49,6 +59,66 @@ impl SmokeWorld {
 
         Ok(Self {
             temp,
+            database,
+            storage,
+            control_plane,
+            hub_a,
+            hub_b,
+        })
+    }
+
+    async fn live() -> anyhow::Result<Self> {
+        let live = crate::live::LiveConfig::from_env()?;
+        let database = Database::connect(&DatabaseConfig::from_url(live.database_url)?)
+            .await
+            .context("connect live soak PostgreSQL database")?;
+        database
+            .migrate()
+            .await
+            .context("migrate live soak PostgreSQL database")?;
+        let control_plane = ControlPlane::from_config(ControlPlaneConfig::Nats {
+            url: live.nats_url,
+            subject: live.nats_subject,
+        })
+        .await
+        .context("connect live soak NATS control plane")?;
+        let storage_config = S3ArtifactStorageConfig::from_env_values(
+            Some(live.s3_bucket),
+            Some(live.s3_region),
+            Some(live.s3_endpoint),
+            Some(live.s3_access_key_id),
+            Some(live.s3_secret_access_key),
+            Some(if live.s3_force_path_style {
+                "true"
+            } else {
+                "false"
+            }),
+            None::<String>,
+        )
+        .context("build live soak S3 storage config from PANDAR_SOAK_* values")?;
+        let storage: Arc<dyn ArtifactStorage> = Arc::new(
+            storage_config
+                .build()
+                .await
+                .context("connect live soak S3-compatible artifact storage")?,
+        );
+        storage
+            .check_ready()
+            .await
+            .context("check live soak S3-compatible artifact storage readiness")?;
+        let hub_a = AppState::from_database_with_control_plane(
+            database.clone(),
+            storage.clone(),
+            control_plane.clone(),
+        );
+        let hub_b = AppState::from_database_with_control_plane(
+            database.clone(),
+            storage.clone(),
+            control_plane.clone(),
+        );
+
+        Ok(Self {
+            temp: tempfile::tempdir().context("create live smoke temp dir")?,
             database,
             storage,
             control_plane,
@@ -232,4 +302,26 @@ pub struct SmokeFixture {
     pub plugin_token: String,
     pub tenant_token: String,
     pub agent_credential: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::harness::ScenarioFilter;
+
+    #[test]
+    fn fixture_suffix_includes_live_run_id() {
+        let config = HarnessConfig {
+            mode: HarnessMode::Live,
+            iterations: 1,
+            concurrency: 2,
+            scenario: ScenarioFilter::Artifact,
+            run_id: "pid123-now456".to_owned(),
+        };
+
+        assert_eq!(
+            config.fixture_suffix("artifact", 7, 3),
+            "live-pid123-now456-artifact-7-3"
+        );
+    }
 }

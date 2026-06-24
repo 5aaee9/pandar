@@ -10,6 +10,25 @@ pub const REQUIRED_ENV: &[&str] = &[
     "PANDAR_SOAK_ARTIFACT_S3_SECRET_ACCESS_KEY",
 ];
 
+pub const DEFAULT_SOAK_NATS_SUBJECT: &str = "pandar.soak.control";
+const OPTIONAL_ENV: &[&str] = &[
+    "PANDAR_SOAK_NATS_SUBJECT",
+    "PANDAR_SOAK_ARTIFACT_S3_FORCE_PATH_STYLE",
+];
+
+#[derive(Debug, Clone)]
+pub struct LiveConfig {
+    pub database_url: String,
+    pub nats_url: String,
+    pub nats_subject: String,
+    pub s3_bucket: String,
+    pub s3_region: String,
+    pub s3_endpoint: String,
+    pub s3_access_key_id: String,
+    pub s3_secret_access_key: String,
+    pub s3_force_path_style: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvalidVariable {
     pub name: &'static str,
@@ -43,13 +62,51 @@ impl fmt::Display for PreflightError {
 }
 
 pub fn run_preflight() -> anyhow::Result<()> {
-    let values = REQUIRED_ENV
-        .iter()
-        .filter_map(|name| env::var(name).ok().map(|value| ((*name).to_owned(), value)))
-        .collect::<BTreeMap<_, _>>();
-    validate(&values).map_err(|error| anyhow::anyhow!("{error}"))?;
+    LiveConfig::from_values(collect_env())?;
     println!("PASS live soak preflight");
     Ok(())
+}
+
+pub fn collect_env() -> BTreeMap<String, String> {
+    REQUIRED_ENV
+        .iter()
+        .chain(OPTIONAL_ENV.iter())
+        .filter_map(|name| env::var(name).ok().map(|value| ((*name).to_owned(), value)))
+        .collect()
+}
+
+impl LiveConfig {
+    pub fn from_env() -> anyhow::Result<Self> {
+        Self::from_values(collect_env())
+    }
+
+    pub fn from_values(values: BTreeMap<String, String>) -> anyhow::Result<Self> {
+        validate(&values).map_err(|error| anyhow::anyhow!("{error}"))?;
+        let s3_force_path_style = parse_optional_bool(
+            &values,
+            "PANDAR_SOAK_ARTIFACT_S3_FORCE_PATH_STYLE",
+            true,
+        )?;
+
+        Ok(Self {
+            database_url: required_value(&values, "PANDAR_SOAK_DATABASE_URL").to_owned(),
+            nats_url: required_value(&values, "PANDAR_SOAK_NATS_URL").to_owned(),
+            nats_subject: optional_value(&values, "PANDAR_SOAK_NATS_SUBJECT")
+                .unwrap_or(DEFAULT_SOAK_NATS_SUBJECT)
+                .to_owned(),
+            s3_bucket: required_value(&values, "PANDAR_SOAK_ARTIFACT_S3_BUCKET").to_owned(),
+            s3_region: required_value(&values, "PANDAR_SOAK_ARTIFACT_S3_REGION").to_owned(),
+            s3_endpoint: required_value(&values, "PANDAR_SOAK_ARTIFACT_S3_ENDPOINT").to_owned(),
+            s3_access_key_id: required_value(&values, "PANDAR_SOAK_ARTIFACT_S3_ACCESS_KEY_ID")
+                .to_owned(),
+            s3_secret_access_key: required_value(
+                &values,
+                "PANDAR_SOAK_ARTIFACT_S3_SECRET_ACCESS_KEY",
+            )
+            .to_owned(),
+            s3_force_path_style,
+        })
+    }
 }
 
 pub fn validate(values: &BTreeMap<String, String>) -> Result<(), PreflightError> {
@@ -125,6 +182,26 @@ fn required_value<'a>(values: &'a BTreeMap<String, String>, name: &str) -> &'a s
         .trim()
 }
 
+fn optional_value<'a>(values: &'a BTreeMap<String, String>, name: &str) -> Option<&'a str> {
+    values
+        .get(name)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+}
+
+fn parse_optional_bool(
+    values: &BTreeMap<String, String>,
+    name: &'static str,
+    default: bool,
+) -> anyhow::Result<bool> {
+    match optional_value(values, name) {
+        None => Ok(default),
+        Some("true") => Ok(true),
+        Some("false") => Ok(false),
+        Some(_) => anyhow::bail!("{name} must be true or false"),
+    }
+}
+
 fn contains_any(value: &str, needles: &[&str]) -> bool {
     needles.iter().any(|needle| value.contains(needle))
 }
@@ -182,6 +259,79 @@ mod tests {
             PreflightError::Invalid(values) => values.into_iter().map(|value| value.name).collect(),
             other => panic!("expected invalid variables, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn live_config_defaults_optional_values() {
+        let config = LiveConfig::from_values(complete_values()).unwrap();
+        assert_eq!(
+            config.database_url,
+            "postgres://pandar_soak@localhost/pandar_soak"
+        );
+        assert_eq!(config.nats_url, "nats://127.0.0.1:4222");
+        assert_eq!(config.nats_subject, "pandar.soak.control");
+        assert!(config.s3_force_path_style);
+    }
+
+    #[test]
+    fn live_config_accepts_optional_values() {
+        let mut values = complete_values();
+        values.insert(
+            "PANDAR_SOAK_NATS_SUBJECT".to_owned(),
+            "pandar.custom.soak".to_owned(),
+        );
+        values.insert(
+            "PANDAR_SOAK_ARTIFACT_S3_FORCE_PATH_STYLE".to_owned(),
+            "false".to_owned(),
+        );
+
+        let config = LiveConfig::from_values(values).unwrap();
+        assert_eq!(config.nats_subject, "pandar.custom.soak");
+        assert!(!config.s3_force_path_style);
+    }
+
+    #[test]
+    fn live_config_rejects_invalid_path_style_with_soak_name() {
+        let mut values = complete_values();
+        values.insert(
+            "PANDAR_SOAK_ARTIFACT_S3_FORCE_PATH_STYLE".to_owned(),
+            "maybe".to_owned(),
+        );
+
+        let err = LiveConfig::from_values(values).unwrap_err();
+        assert!(format!("{err:#}").contains("PANDAR_SOAK_ARTIFACT_S3_FORCE_PATH_STYLE"));
+    }
+
+    #[test]
+    fn live_config_ignores_production_s3_environment_names() {
+        let mut values = complete_values();
+        values.insert(
+            "PANDAR_ARTIFACT_S3_BUCKET".to_owned(),
+            "production-bucket".to_owned(),
+        );
+        values.insert(
+            "PANDAR_ARTIFACT_S3_REGION".to_owned(),
+            "production-region".to_owned(),
+        );
+        values.insert(
+            "PANDAR_ARTIFACT_S3_ENDPOINT".to_owned(),
+            "https://production.example.invalid".to_owned(),
+        );
+        values.insert(
+            "PANDAR_ARTIFACT_S3_ACCESS_KEY_ID".to_owned(),
+            "production-access".to_owned(),
+        );
+        values.insert(
+            "PANDAR_ARTIFACT_S3_SECRET_ACCESS_KEY".to_owned(),
+            "production-secret".to_owned(),
+        );
+
+        let config = LiveConfig::from_values(values).unwrap();
+        assert_eq!(config.s3_bucket, "pandar-soak-artifacts");
+        assert_eq!(config.s3_region, "us-east-1");
+        assert_eq!(config.s3_endpoint, "http://127.0.0.1:9000");
+        assert_eq!(config.s3_access_key_id, "pandar-soak-access");
+        assert_eq!(config.s3_secret_access_key, "pandar-soak-secret");
     }
 
     #[test]

@@ -34,8 +34,9 @@ pub async fn artifact_dispatch_download(
     iteration: usize,
     config: &HarnessConfig,
 ) -> anyhow::Result<()> {
-    let world = SmokeWorld::new().await?;
-    let fixture = seed_fixture(&world.hub_a, &format!("artifact-{iteration}")).await?;
+    let world = SmokeWorld::for_config(config).await?;
+    let fixture = seed_fixture(&world.hub_a, &config.fixture_suffix("artifact", iteration, 0))
+        .await?;
     let (_control_plane, ready) = spawn_control_plane_ready(world.hub_b.clone());
     ready
         .await
@@ -87,8 +88,9 @@ pub async fn artifact_dispatch_download(
 }
 
 pub async fn websocket_fanout(iteration: usize, config: &HarnessConfig) -> anyhow::Result<()> {
-    let world = SmokeWorld::new().await?;
-    let fixture = seed_fixture(&world.hub_a, &format!("fanout-{iteration}")).await?;
+    let world = SmokeWorld::for_config(config).await?;
+    let fixture =
+        seed_fixture(&world.hub_a, &config.fixture_suffix("fanout", iteration, 0)).await?;
     create_print_through_multipart_route(&world.hub_a, &fixture).await?;
     let created_job = world
         .hub_a
@@ -153,9 +155,10 @@ pub async fn websocket_fanout(iteration: usize, config: &HarnessConfig) -> anyho
     Ok(())
 }
 
-pub async fn restart_convergence(iteration: usize, _config: &HarnessConfig) -> anyhow::Result<()> {
-    let world = SmokeWorld::new().await?;
-    let fixture = seed_fixture(&world.hub_a, &format!("restart-{iteration}")).await?;
+pub async fn restart_convergence(iteration: usize, config: &HarnessConfig) -> anyhow::Result<()> {
+    let world = SmokeWorld::for_config(config).await?;
+    let fixture =
+        seed_fixture(&world.hub_a, &config.fixture_suffix("restart", iteration, 0)).await?;
     create_print_through_multipart_route(&world.hub_a, &fixture).await?;
     let restarted = world.restarted_state();
     let (command_id, _print) = dequeue_print_command(&restarted, &fixture).await?;
@@ -246,10 +249,16 @@ async fn concurrent_plugin_pressure(
     iteration: usize,
     config: &HarnessConfig,
 ) -> anyhow::Result<()> {
-    let world = SmokeWorld::new().await?;
+    let world = SmokeWorld::for_config(config).await?;
     let mut fixtures = Vec::with_capacity(config.concurrency);
     for index in 0..config.concurrency {
-        fixtures.push(seed_fixture(&world.hub_a, &format!("pressure-{iteration}-{index}")).await?);
+        fixtures.push(
+            seed_fixture(
+                &world.hub_a,
+                &config.fixture_suffix("pressure", iteration, index),
+            )
+            .await?,
+        );
     }
     let limiter = Arc::new(tokio::sync::Semaphore::new(config.concurrency));
     futures_util::future::try_join_all(fixtures.iter().map(|fixture| {
@@ -288,10 +297,11 @@ async fn concurrent_plugin_pressure(
 
 pub async fn terminal_report_idempotence(
     iteration: usize,
-    _config: &HarnessConfig,
+    config: &HarnessConfig,
 ) -> anyhow::Result<()> {
-    let world = SmokeWorld::new().await?;
-    let fixture = seed_fixture(&world.hub_a, &format!("terminal-{iteration}")).await?;
+    let world = SmokeWorld::for_config(config).await?;
+    let fixture =
+        seed_fixture(&world.hub_a, &config.fixture_suffix("terminal", iteration, 0)).await?;
     let created = create_print_job(&world.hub_a, &fixture).await?;
     let terminal = apply_report(
         &world.hub_a,
