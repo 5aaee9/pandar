@@ -418,9 +418,16 @@ int main(int argc, char** argv) {
     }
 
     out.direct_connect_rc = connect_printer(agent, "printer-1", "127.0.0.1", "user", "pass", false);
-    out.direct_message_rc = send_printer(agent, "printer-1", "{}", 0, 0);
-    if (out.direct_connect_rc == 0 || out.direct_message_rc == 0) {
-        fail(agent, destroy_agent, "direct printer calls unexpectedly succeeded");
+    out.direct_message_rc = send_printer(agent, "printer-1", "G28 X", 0, 0);
+    if (out.direct_connect_rc == 0) {
+        fail(agent, destroy_agent, "direct printer connect unexpectedly succeeded");
+    }
+    if (failure_mode) {
+        if (out.direct_message_rc == 0) {
+            fail(agent, destroy_agent, "direct printer message unexpectedly succeeded in failure mode");
+        }
+    } else if (out.direct_message_rc != 0) {
+        fail(agent, destroy_agent, "direct printer message did not submit operation");
     }
 
     out.ft_abi_version = ft_abi_version();

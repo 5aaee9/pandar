@@ -19,6 +19,7 @@ mod bootstrap;
 pub(crate) mod jobs;
 mod plugin;
 mod printer_events;
+mod printer_operations;
 mod printers;
 mod provisioning;
 mod status;
@@ -89,6 +90,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/v1/plugin/prints",
             post(plugin::create_print).layer(DefaultBodyLimit::disable()),
+        )
+        .route(
+            "/api/v1/plugin/printers/{printer_id}/operations",
+            post(plugin::create_printer_operation),
         )
         .route(
             "/api/v1/agents/{agent_id}/artifacts/{artifact_id}",

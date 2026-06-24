@@ -164,6 +164,43 @@ fn print_speed_is_limited_to_reference_modes() {
 }
 
 #[test]
+fn gcode_line_payload_preserves_single_home_line() {
+    assert_eq!(
+        BambuMqttCommand::GcodeLine(GcodeLineCommand {
+            lines: vec!["G28".to_string()],
+        })
+        .payload(),
+        json!({"print": {"command": "gcode_line", "param": "G28", "sequence_id": "90001"}})
+    );
+}
+
+#[test]
+fn gcode_line_payload_joins_relative_move_lines() {
+    assert_eq!(
+        BambuMqttCommand::GcodeLine(GcodeLineCommand {
+            lines: vec![
+                "G91".to_string(),
+                "G0 X10 Z-0.5 F3000".to_string(),
+                "G90".to_string(),
+            ],
+        })
+        .payload(),
+        json!({"print": {"command": "gcode_line", "param": "G91\nG0 X10 Z-0.5 F3000\nG90", "sequence_id": "90001"}})
+    );
+}
+
+#[test]
+fn gcode_line_payload_preserves_hotend_temperature_line() {
+    assert_eq!(
+        BambuMqttCommand::GcodeLine(GcodeLineCommand {
+            lines: vec!["M104 S200".to_string()],
+        })
+        .payload(),
+        json!({"print": {"command": "gcode_line", "param": "M104 S200", "sequence_id": "90001"}})
+    );
+}
+
+#[test]
 fn raw_json_payload_is_preserved() {
     let payload = json!({"print": {"command": "custom", "sequence_id": "9"}});
     assert_eq!(

@@ -8,11 +8,12 @@ use crate::{
         AuditActor, RepositoryError, RepositoryResult,
         audit::{insert_audit_event_tx, record_audit_event},
         commands::{
-            DiagnosePrinterPayload, DiscoverPrintersPayload, PrinterControlAction,
-            PrinterControlPayload,
+            DiagnosePrinterPayload, DiscoverPrintersPayload, PrinterOperationKind,
+            PrinterOperationPayload,
             inserts::{self, InsertCommand},
-            ownership,
+            operation_audit_metadata, ownership,
             rows::command_from_model,
+            validate_printer_operation,
         },
     },
 };
@@ -89,36 +90,34 @@ pub async fn enqueue_diagnose_printer_with_audit(
     .await
 }
 
-pub async fn enqueue_printer_control_with_audit(
+pub async fn enqueue_printer_operation_with_audit(
     database: &Database,
     tenant_id: TenantId,
     printer_id: &str,
-    action: PrinterControlAction,
-    speed_mode: Option<u8>,
+    operation: PrinterOperationKind,
     actor: AuditActor,
 ) -> RepositoryResult<CommandRecord> {
-    validate_control(action, speed_mode)?;
+    validate_printer_operation(&operation)?;
     let printer = ownership::printer_for_tenant(database, tenant_id, printer_id).await?;
     ownership::verify_agent_owner(database, tenant_id, printer.agent_id).await?;
     if !pandar_core::compatibility::live_controls_supported(printer.model.as_deref()) {
         return Err(RepositoryError::PrinterControlUnavailable);
     }
 
-    let payload = PrinterControlPayload {
+    let payload = PrinterOperationPayload {
         printer_id: printer.id.clone(),
         serial_number: printer.serial_number.clone(),
-        action,
-        speed_mode,
+        operation,
     };
     let payload_json = serde_json::to_string(&payload)
-        .context("failed to serialize printer control command payload")?;
+        .context("failed to serialize printer operation command payload")?;
     let id = CommandId::new();
     let now = pandar_core::created_at_now();
     let connection = database.sea_orm_connection();
     let tx = connection
         .begin()
         .await
-        .context("failed to begin printer control command audit transaction")?;
+        .context("failed to begin printer operation command audit transaction")?;
     inserts::insert(
         &tx,
         InsertCommand {
@@ -126,7 +125,7 @@ pub async fn enqueue_printer_control_with_audit(
             tenant_id,
             agent_id: printer.agent_id,
             printer_id: Some(&printer.id),
-            kind: "printer_control",
+            kind: "printer_operation",
             payload_json: &payload_json,
             created_at: &now,
         },
@@ -134,12 +133,12 @@ pub async fn enqueue_printer_control_with_audit(
     .await?;
     insert_audit_event_tx(
         &tx,
-        &printer_control_audit_event(tenant_id, &printer, action, speed_mode, actor),
+        &printer_operation_audit_event(tenant_id, &printer, &payload.operation, actor),
     )
     .await?;
     tx.commit()
         .await
-        .context("failed to commit printer control command audit transaction")?;
+        .context("failed to commit printer operation command audit transaction")?;
 
     get_command(database, id)
         .await?
@@ -197,15 +196,6 @@ fn insert_command<'a>(
     }
 }
 
-fn validate_control(action: PrinterControlAction, speed_mode: Option<u8>) -> RepositoryResult<()> {
-    match (action, speed_mode) {
-        (PrinterControlAction::SetPrintSpeed, Some(1..=4)) => Ok(()),
-        (PrinterControlAction::SetPrintSpeed, _) => Err(RepositoryError::InvalidPrinterControl),
-        (_, None) => Ok(()),
-        (_, Some(_)) => Err(RepositoryError::InvalidPrinterControl),
-    }
-}
-
 fn refresh_audit_event(
     tenant_id: TenantId,
     agent_id: AgentId,
@@ -214,11 +204,10 @@ fn refresh_audit_event(
     audit_event(tenant_id, agent_id, actor, "agent.refresh_printers")
 }
 
-fn printer_control_audit_event(
+fn printer_operation_audit_event(
     tenant_id: TenantId,
     printer: &ownership::CommandPrinter,
-    action: PrinterControlAction,
-    speed_mode: Option<u8>,
+    operation: &PrinterOperationKind,
     actor: AuditActor,
 ) -> crate::repositories::AuditEvent {
     record_audit_event(
@@ -227,12 +216,11 @@ fn printer_control_audit_event(
         "printer.dispatch_control",
         "printer",
         Some(printer.id.clone()),
-        serde_json::json!({
-            "agent_id": printer.agent_id.to_string(),
-            "serial_number": printer.serial_number,
-            "action": action.as_str(),
-            "speed_mode": speed_mode,
-        }),
+        operation_audit_metadata(
+            printer.agent_id.to_string(),
+            printer.serial_number.clone(),
+            operation,
+        ),
     )
 }
 

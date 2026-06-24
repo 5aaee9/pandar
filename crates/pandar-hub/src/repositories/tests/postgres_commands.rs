@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use super::*;
 use crate::repositories::tests::postgres::postgres_database;
-use crate::repositories::{AuditActor, PrinterControlAction};
+use crate::repositories::{AuditActor, PrinterOperationKind};
 
 #[tokio::test]
 async fn postgres_command_repository_behavior_when_configured() {
@@ -227,7 +227,7 @@ async fn postgres_command_repository_behavior_when_configured() {
 }
 
 #[tokio::test]
-async fn postgres_printer_control_enqueue_behavior_when_configured() {
+async fn postgres_printer_operation_enqueue_behavior_when_configured() {
     let Some(database) = postgres_database().await else {
         eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
         return;
@@ -249,21 +249,19 @@ async fn postgres_printer_control_enqueue_behavior_when_configured() {
     .unwrap();
 
     let command = commands
-        .enqueue_printer_control_with_audit(
+        .enqueue_printer_operation_with_audit(
             tenant.id,
             &printer_id,
-            PrinterControlAction::Pause,
-            None,
+            PrinterOperationKind::Pause,
             test_audit_actor(),
         )
         .await
         .unwrap();
     let payload: Value = serde_json::from_str(&command.payload_json).unwrap();
-    assert_eq!(command.kind, "printer_control");
+    assert_eq!(command.kind, "printer_operation");
     assert_eq!(command.agent_id, agent.id);
     assert_eq!(command.printer_id.as_deref(), Some(printer_id.as_str()));
-    assert_eq!(payload["action"], "pause");
-    assert_eq!(payload["speed_mode"], Value::Null);
+    assert_eq!(payload["operation"]["type"], "pause");
     assert!(
         audit
             .list_for_tenant(tenant.id)
@@ -282,11 +280,10 @@ async fn postgres_printer_control_enqueue_behavior_when_configured() {
     .await
     .unwrap();
     let err = commands
-        .enqueue_printer_control_with_audit(
+        .enqueue_printer_operation_with_audit(
             tenant.id,
             &unsupported_id,
-            PrinterControlAction::Pause,
-            None,
+            PrinterOperationKind::Pause,
             test_audit_actor(),
         )
         .await

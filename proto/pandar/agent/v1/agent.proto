@@ -86,7 +86,7 @@ message HubCommand {
     PrintProjectFile print_project_file = 11;
     DiscoverPrinters discover_printers = 12;
     DiagnosePrinter diagnose_printer = 13;
-    PrinterControl printer_control = 14;
+    PrinterOperation printer_operation = 14;
   }
 }
 
@@ -100,10 +100,53 @@ message DiagnosePrinter {
   string serial_number = 1;
 }
 
-message PrinterControl {
+message PrinterOperation {
   string serial_number = 1;
-  string action = 2;
-  uint32 speed_mode = 3;
+  oneof operation {
+    PauseOperation pause = 10;
+    ResumeOperation resume = 11;
+    StopOperation stop = 12;
+    SetPrintSpeedOperation set_print_speed = 13;
+    HomeOperation home = 14;
+    MoveAxesOperation move_axes = 15;
+    SetHotendTemperatureOperation set_hotend_temperature = 16;
+  }
+}
+
+message PauseOperation {}
+
+message ResumeOperation {}
+
+message StopOperation {}
+
+message SetPrintSpeedOperation {
+  uint32 speed_mode = 1;
+}
+
+enum Axis {
+  AXIS_UNSPECIFIED = 0;
+  AXIS_X = 1;
+  AXIS_Y = 2;
+  AXIS_Z = 3;
+}
+
+message HomeOperation {
+  repeated Axis axes = 1;
+}
+
+message AxisMovement {
+  Axis axis = 1;
+  double delta_mm = 2;
+}
+
+message MoveAxesOperation {
+  repeated AxisMovement movements = 1;
+  uint32 feedrate_mm_per_min = 2;
+}
+
+message SetHotendTemperatureOperation {
+  uint32 temperature_celsius = 1;
+  bool wait = 2;
 }
 
 message PrintProjectFile {

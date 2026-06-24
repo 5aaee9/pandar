@@ -20,7 +20,7 @@ pub use auth::{
 };
 pub use commands::{
     CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
-    PrinterControlAction, PrinterControlPayload,
+    PrinterAxis, PrinterAxisMovement, PrinterOperationKind, PrinterOperationPayload,
 };
 pub use jobs::{
     AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, CreatePrintJob, DuplicatePrintJob,

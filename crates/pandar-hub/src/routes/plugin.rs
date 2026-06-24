@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::rejection::JsonRejection,
-    extract::{Multipart, State},
+    extract::{Multipart, Path, State},
     http::{HeaderMap, StatusCode},
 };
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 use crate::{
     AppState,
     repositories::{AuthenticatedPrincipal, JobWithArtifact, RepositoryError},
-    routes::{ApiError, auth},
+    routes::{ApiError, auth, printer_operations::PrinterOperationRequest},
 };
 
 #[derive(Debug, Deserialize)]
@@ -86,6 +86,12 @@ pub(super) struct PluginPrintResponse {
     message: Option<String>,
     artifact_metadata: Option<serde_json::Value>,
     pandar_job_id: String,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct PluginPrinterOperationResponse {
+    command_id: String,
+    status: String,
 }
 
 pub(super) async fn create_login_ticket(
@@ -216,6 +222,33 @@ pub(super) async fn create_print(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
+pub(super) async fn create_printer_operation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(printer_id): Path<String>,
+    payload: Result<Json<PrinterOperationRequest>, JsonRejection>,
+) -> Result<Json<PluginPrinterOperationResponse>, ApiError> {
+    let authenticated = auth::authorize_plugin_studio(&state, &headers).await?;
+    let Json(payload) = payload.map_err(|_| ApiError::bad_request("invalid_printer_control"))?;
+    let operation = payload.into_operation()?;
+    let command = state
+        .commands()
+        .enqueue_printer_operation_with_audit(
+            authenticated.token.tenant_id,
+            &printer_id,
+            operation,
+            auth::plugin_audit_actor(&authenticated),
+        )
+        .await
+        .map_err(plugin_operation_error)?;
+    state.wake_agent(command.tenant_id, command.agent_id).await;
+
+    Ok(Json(PluginPrinterOperationResponse {
+        command_id: command.id.to_string(),
+        status: command.status.to_string(),
+    }))
+}
+
 fn user_id(principal: &AuthenticatedPrincipal) -> Option<String> {
     match principal {
         AuthenticatedPrincipal::User(authenticated) => Some(authenticated.user.id.clone()),
@@ -229,6 +262,15 @@ fn plugin_ticket_error(err: RepositoryError) -> ApiError {
     match err {
         RepositoryError::MissingPluginLoginTicket => {
             ApiError::new(StatusCode::UNAUTHORIZED, "invalid_plugin_ticket")
+        }
+        other => other.into(),
+    }
+}
+
+fn plugin_operation_error(err: RepositoryError) -> ApiError {
+    match err {
+        RepositoryError::PrinterControlUnavailable => {
+            ApiError::bad_request("printer_operation_unavailable")
         }
         other => other.into(),
     }

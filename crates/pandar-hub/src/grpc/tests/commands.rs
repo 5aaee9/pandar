@@ -3,13 +3,15 @@ use tokio_stream::StreamExt;
 use tonic::Code;
 
 use super::*;
+use crate::protocol::agent::v1::Axis;
+use crate::protocol::agent::v1::printer_operation;
 use crate::{
     grpc::commands::{
         CommandConversionOptions, hub_command_from_record, hub_command_from_record_with_options,
     },
     repositories::{
-        DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
-        PrinterControlAction, PrinterControlPayload,
+        DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, PrinterAxis,
+        PrinterOperationKind, PrinterOperationPayload,
     },
 };
 
@@ -162,22 +164,21 @@ async fn grpc_hub_command_from_record_maps_discovery_and_diagnostics() {
 }
 
 #[tokio::test]
-async fn grpc_hub_command_from_record_maps_printer_control() {
+async fn grpc_hub_command_from_record_maps_printer_operation() {
     let tenant_id = TenantId::new();
     let agent_id = AgentId::new();
     let printer_id = "printer-1".to_string();
-    let payload = PrinterControlPayload {
+    let payload = PrinterOperationPayload {
         printer_id: printer_id.clone(),
         serial_number: "SERIAL123".to_string(),
-        action: PrinterControlAction::SetPrintSpeed,
-        speed_mode: Some(4),
+        operation: PrinterOperationKind::SetPrintSpeed { speed_mode: 4 },
     };
     let command = CommandRecord::from_parts(CommandRecordParts {
         id: CommandId::new(),
         tenant_id,
         agent_id,
         printer_id: Some(printer_id),
-        kind: "printer_control".to_string(),
+        kind: "printer_operation".to_string(),
         status: "queued".to_string(),
         payload_json: serde_json::to_string(&payload).unwrap(),
         result_json: None,
@@ -191,11 +192,80 @@ async fn grpc_hub_command_from_record_maps_printer_control() {
 
     assert!(matches!(
         hub_command.command,
-        Some(hub_command::Command::PrinterControl(command))
+        Some(hub_command::Command::PrinterOperation(command))
             if command.serial_number == "SERIAL123"
-                && command.action == "set_print_speed"
-                && command.speed_mode == 4
+                && matches!(
+                    command.operation,
+                    Some(printer_operation::Operation::SetPrintSpeed(speed))
+                        if speed.speed_mode == 4
+                )
     ));
+}
+
+#[tokio::test]
+async fn grpc_hub_command_from_record_maps_printer_operation_home_axes() {
+    let tenant_id = TenantId::new();
+    let agent_id = AgentId::new();
+    let printer_id = "printer-1".to_string();
+    let payload = PrinterOperationPayload {
+        printer_id: printer_id.clone(),
+        serial_number: "SERIAL123".to_string(),
+        operation: PrinterOperationKind::Home {
+            axes: vec![PrinterAxis::X, PrinterAxis::Z],
+        },
+    };
+    let command = CommandRecord::from_parts(CommandRecordParts {
+        id: CommandId::new(),
+        tenant_id,
+        agent_id,
+        printer_id: Some(printer_id),
+        kind: "printer_operation".to_string(),
+        status: "queued".to_string(),
+        payload_json: serde_json::to_string(&payload).unwrap(),
+        result_json: None,
+        error: None,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        updated_at: "2026-01-01T00:00:00Z".to_string(),
+    })
+    .unwrap();
+
+    let hub_command = hub_command_from_record(command).unwrap();
+
+    match hub_command.command {
+        Some(hub_command::Command::PrinterOperation(command)) => {
+            assert_eq!(command.serial_number, "SERIAL123");
+            match command.operation {
+                Some(printer_operation::Operation::Home(home)) => {
+                    assert_eq!(home.axes, vec![Axis::X as i32, Axis::Z as i32]);
+                }
+                other => panic!("expected home operation, got {other:?}"),
+            }
+        }
+        other => panic!("expected printer operation command, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn grpc_hub_command_from_record_rejects_invalid_printer_operation_payload() {
+    let command = CommandRecord::from_parts(CommandRecordParts {
+        id: CommandId::new(),
+        tenant_id: TenantId::new(),
+        agent_id: AgentId::new(),
+        printer_id: Some("printer-1".to_string()),
+        kind: "printer_operation".to_string(),
+        status: "queued".to_string(),
+        payload_json: r#"{"printer_id":"printer-1","serial_number":"SERIAL123","operation":{"type":"unknown"}}"#.to_string(),
+        result_json: None,
+        error: None,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        updated_at: "2026-01-01T00:00:00Z".to_string(),
+    })
+    .unwrap();
+
+    let err = hub_command_from_record(command).unwrap_err();
+
+    assert_eq!(err.code(), Code::Internal);
+    assert_eq!(err.message(), "invalid printer operation command payload");
 }
 
 #[tokio::test]

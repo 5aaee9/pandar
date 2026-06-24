@@ -181,6 +181,13 @@ PluginHttpResult pandar_plugin_submit_print(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t
 );
+PluginHttpResult pandar_plugin_submit_printer_operation(
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t
+);
+PluginHttpResult pandar_plugin_operation_json_from_gcode(const uint8_t*, std::size_t);
 void pandar_plugin_free(void*, std::size_t);
 void pandar_plugin_free_with_capacity(void*, std::size_t, std::size_t);
 }
@@ -360,6 +367,26 @@ PluginHttpResult rust_submit_print(const Agent* agent, const BBL::PrintParams& p
         params.ams_mapping.size(),
         reinterpret_cast<const uint8_t*>(params.ams_mapping2.data()),
         params.ams_mapping2.size()
+    );
+}
+
+PluginHttpResult rust_operation_json_from_gcode(const std::string& message) {
+    return pandar_plugin_operation_json_from_gcode(
+        reinterpret_cast<const uint8_t*>(message.data()),
+        message.size()
+    );
+}
+
+PluginHttpResult rust_submit_printer_operation(const Agent* agent, const std::string& printer_id, const std::string& operation_json) {
+    return pandar_plugin_submit_printer_operation(
+        reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
+        agent->hub_url.size(),
+        reinterpret_cast<const uint8_t*>(agent->token.data()),
+        agent->token.size(),
+        reinterpret_cast<const uint8_t*>(printer_id.data()),
+        printer_id.size(),
+        reinterpret_cast<const uint8_t*>(operation_json.data()),
+        operation_json.size()
     );
 }
 
@@ -566,8 +593,30 @@ PANDAR_ABI int bambu_network_disconnect_printer(void* agent) {
     return as_agent(agent) ? BBL::BAMBU_NETWORK_SUCCESS : BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
 }
 
-PANDAR_ABI int bambu_network_send_message_to_printer(void* agent, std::string, std::string, int, int) {
-    return as_agent(agent) ? BBL::BAMBU_NETWORK_ERR_CONNECT_FAILED : BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+PANDAR_ABI int bambu_network_send_message_to_printer(void* agent, std::string dev_id, std::string message, int, int) {
+    auto* a = as_agent(agent);
+    if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    if (a->token.empty() || dev_id.empty()) {
+        a->last_error = R"({"error":"invalid_printer_operation"})";
+        return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
+    }
+
+    auto parsed = rust_operation_json_from_gcode(message);
+    std::string operation_json = body_from_result(parsed);
+    if (parsed.status != 0) {
+        a->last_error = operation_json;
+        return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
+    }
+
+    auto result = rust_submit_printer_operation(a, dev_id, operation_json);
+    std::string body = body_from_result(result);
+    if (result.status != 0) {
+        a->last_error = body;
+        return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
+    }
+
+    a->last_error.clear();
+    return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
 PANDAR_ABI int bambu_network_update_cert(void*) {

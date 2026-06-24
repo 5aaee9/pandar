@@ -87,9 +87,11 @@ Recovery APIs:
 - `POST /api/v1/tenants/{tenant_id}/jobs/{job_id}/retry-dispatch` retries dispatch for a failed or cancelled dispatch lifecycle.
 - `POST /api/v1/tenants/{tenant_id}/jobs/{job_id}/reprint` queues a reprint from the existing artifact and options.
 - `POST /api/v1/tenants/{tenant_id}/jobs/{job_id}/duplicate` creates a new job from the existing artifact with optional printer, plate, and print-flag overrides.
-- `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/controls` queues typed, compatibility-gated live printer controls.
+- `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/controls` queues typed, compatibility-gated live printer operations.
 
-Phase 27 live printer controls are dispatch-only operations for compatible printers. Pause, resume, stop, and print-speed requests enqueue audited `printer_control` commands; physical printer state changes remain report-derived.
+Phase 29 live printer operations are dispatch-only operations for compatible printers. Pause, resume, stop, print-speed, home, relative movement, and hotend-temperature requests enqueue audited `printer_operation` commands; physical printer state changes remain report-derived.
+
+The Hub stores and forwards semantic operation JSON only. Bambu-specific MQTT and G-code conversion happens inside `pandar-agent`. The network plugin maps supported Studio `send_message_to_printer` G-code messages to semantic operation requests at `POST /api/v1/plugin/printers/{printer_id}/operations` and rejects unsupported G-code before contacting Hub.
 
 ## Frontend Runtime
 

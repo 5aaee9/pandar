@@ -4,12 +4,14 @@ use tonic::Status;
 use crate::{
     AppState,
     protocol::agent::v1::{
-        DiagnosePrinter, DiscoverPrinters, HubCommand, PrintProjectFile, PrinterControl,
-        RefreshPrinters, hub_command,
+        Axis, AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
+        MoveAxesOperation, PauseOperation, PrintProjectFile, PrinterOperation, RefreshPrinters,
+        ResumeOperation, SetHotendTemperatureOperation, SetPrintSpeedOperation, StopOperation,
+        hub_command, printer_operation,
     },
     repositories::{
-        DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
-        PrinterControlPayload, RepositoryError,
+        DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, PrinterAxis,
+        PrinterAxisMovement, PrinterOperationKind, PrinterOperationPayload, RepositoryError,
     },
 };
 
@@ -221,20 +223,19 @@ pub fn hub_command_from_record_with_options(
                 serial_number: payload.serial_number,
             })
         }
-        "printer_control" => {
-            let payload: PrinterControlPayload = serde_json::from_str(&command.payload_json)
+        "printer_operation" => {
+            let payload: PrinterOperationPayload = serde_json::from_str(&command.payload_json)
                 .map_err(|err| {
                     tracing::error!(
                         command_id = %command.id,
                         error = %format!("{err:#}"),
-                        "failed to deserialize printer control command payload"
+                        "failed to deserialize printer operation command payload"
                     );
-                    Status::internal("invalid printer control command payload")
+                    Status::internal("invalid printer operation command payload")
                 })?;
-            hub_command::Command::PrinterControl(PrinterControl {
+            hub_command::Command::PrinterOperation(PrinterOperation {
                 serial_number: payload.serial_number,
-                action: payload.action.as_str().to_string(),
-                speed_mode: payload.speed_mode.unwrap_or_default().into(),
+                operation: Some(proto_printer_operation(payload.operation)),
             })
         }
         "print_project_file" => {
@@ -287,6 +288,51 @@ pub fn hub_command_from_record_with_options(
         command_id,
         command: Some(command),
     })
+}
+
+fn proto_printer_operation(operation: PrinterOperationKind) -> printer_operation::Operation {
+    match operation {
+        PrinterOperationKind::Pause => printer_operation::Operation::Pause(PauseOperation {}),
+        PrinterOperationKind::Resume => printer_operation::Operation::Resume(ResumeOperation {}),
+        PrinterOperationKind::Stop => printer_operation::Operation::Stop(StopOperation {}),
+        PrinterOperationKind::SetPrintSpeed { speed_mode } => {
+            printer_operation::Operation::SetPrintSpeed(SetPrintSpeedOperation {
+                speed_mode: speed_mode.into(),
+            })
+        }
+        PrinterOperationKind::Home { axes } => printer_operation::Operation::Home(HomeOperation {
+            axes: axes.into_iter().map(proto_axis).collect(),
+        }),
+        PrinterOperationKind::MoveAxes {
+            movements,
+            feedrate_mm_per_min,
+        } => printer_operation::Operation::MoveAxes(MoveAxesOperation {
+            movements: movements.into_iter().map(proto_axis_movement).collect(),
+            feedrate_mm_per_min: feedrate_mm_per_min.unwrap_or_default(),
+        }),
+        PrinterOperationKind::SetHotendTemperature {
+            temperature_celsius,
+            wait,
+        } => printer_operation::Operation::SetHotendTemperature(SetHotendTemperatureOperation {
+            temperature_celsius: temperature_celsius.into(),
+            wait,
+        }),
+    }
+}
+
+fn proto_axis(axis: PrinterAxis) -> i32 {
+    match axis {
+        PrinterAxis::X => Axis::X as i32,
+        PrinterAxis::Y => Axis::Y as i32,
+        PrinterAxis::Z => Axis::Z as i32,
+    }
+}
+
+fn proto_axis_movement(movement: PrinterAxisMovement) -> AxisMovement {
+    AxisMovement {
+        axis: proto_axis(movement.axis),
+        delta_mm: movement.delta_mm,
+    }
 }
 
 fn mapping_payload_string(

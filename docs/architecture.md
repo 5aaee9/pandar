@@ -37,7 +37,7 @@ Evidence from `reference/bambuddy/backend/app/services/bambu_mqtt.py`:
 - Commands are published to `device/{serial_number}/request`.
 - Publish calls should use QoS `1`; the reference notes QoS `0` can be ignored while printers are busy.
 - The client requests state with `{"pushing": {"command": "pushall"}}`.
-- Basic print controls are JSON commands under `print.command`, including `project_file`, `stop`, `pause`, `resume`, and `print_speed`.
+- Basic Bambu print controls are JSON commands under `print.command`, including `project_file`, `stop`, `pause`, `resume`, and `print_speed`; Pandar keeps these as agent-side adapter details behind semantic Hub operations.
 
 Evidence from `reference/BambuStudio/src/slic3r/Utils/NetworkAgent.hpp`:
 
@@ -386,7 +386,7 @@ Agent phase status after Phase 7:
 Agent phase status after Phase 15:
 
 - Phase 16 replaced manual `PANDAR_TENANT_ID`/`PANDAR_AGENT_ID` trust with authenticated enrollment credentials issued by tenant tokens carrying `agent:register` or `*` scope.
-- Phase 18 made dispatch retry/reprint/duplicate explicit through hub recovery APIs. Phase 27 routes pause/resume/stop/print-speed through typed `printer_control` commands gated by Hub compatibility checks; these commands are dispatch lifecycle records, not direct physical status mutations.
+- Phase 18 made dispatch retry/reprint/duplicate explicit through hub recovery APIs. Phase 29 routes pause/resume/stop/print-speed/home/move/hotend through typed `printer_operation` commands gated by Hub compatibility checks; these commands are dispatch lifecycle records, not direct physical status mutations. Hub stores semantic operations only, while `pandar-agent` performs Bambu-specific MQTT/G-code translation.
 - Phase 19 exposes hub-side readiness evidence and redacts Bambu access codes, agent credentials, plugin tickets, WebSocket tickets, bearer tokens, and artifact paths.
 
 ### pandar-network-plugin

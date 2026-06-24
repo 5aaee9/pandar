@@ -73,6 +73,11 @@ pub struct ProjectFileCommand {
     pub ams_mapping2_json: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GcodeLineCommand {
+    pub lines: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrintReportProgress {
     pub serial: String,
@@ -108,6 +113,7 @@ pub enum BambuMqttCommand {
     ResumePrint,
     StopPrint,
     SetPrintSpeed(PrintSpeed),
+    GcodeLine(GcodeLineCommand),
     RawJson(Value),
     ProjectFile(ProjectFileCommand),
 }
@@ -122,6 +128,9 @@ impl BambuMqttCommand {
             Self::StopPrint => json!({"print": {"command": "stop", "sequence_id": "0"}}),
             Self::SetPrintSpeed(speed) => {
                 json!({"print": {"command": "print_speed", "param": speed.as_u8().to_string(), "sequence_id": "0"}})
+            }
+            Self::GcodeLine(command) => {
+                json!({"print": {"command": "gcode_line", "param": command.lines.join("\n"), "sequence_id": "90001"}})
             }
             Self::RawJson(payload) => payload.clone(),
             Self::ProjectFile(command) => project_file_payload(command),

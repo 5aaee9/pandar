@@ -489,14 +489,14 @@ async fn printer_control_enqueues_audits_and_wakes_owning_agent() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "printer_control");
+    assert_eq!(body["kind"], "printer_operation");
     assert_eq!(body["agent_id"], agent_id.to_string());
     assert_eq!(body["printer_id"], printer_id);
     let payload: Value = serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
     assert_eq!(payload["printer_id"], printer_id);
     assert_eq!(payload["serial_number"], format!("serial-{printer_id}"));
-    assert_eq!(payload["action"], "set_print_speed");
-    assert_eq!(payload["speed_mode"], 4);
+    assert_eq!(payload["operation"]["type"], "set_print_speed");
+    assert_eq!(payload["operation"]["speed_mode"], 4);
     tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
         .await
         .expect("owning agent should be woken")
@@ -656,6 +656,23 @@ async fn printer_control_rejects_invalid_action_and_speed_payloads() {
         json!({ "action": "set_print_speed", "speed_mode": 5 }),
         json!({ "action": "pause", "speed_mode": 2 }),
         json!({ "action": "pause", "raw_command": "M400" }),
+        json!({ "action": "move_axes", "movements": [] }),
+        json!({
+            "action": "move_axes",
+            "movements": [{ "axis": "x", "delta_mm": 0.0 }]
+        }),
+        json!({
+            "action": "move_axes",
+            "movements": [{ "axis": "a", "delta_mm": 5.0 }]
+        }),
+        json!({
+            "action": "move_axes",
+            "movements": [
+                { "axis": "x", "delta_mm": 5.0 },
+                { "axis": "x", "delta_mm": 6.0 }
+            ]
+        }),
+        json!({ "action": "set_hotend_temperature", "temperature_celsius": 301 }),
     ] {
         let (status, body) = request_as(
             app.clone(),
@@ -670,6 +687,60 @@ async fn printer_control_rejects_invalid_action_and_speed_payloads() {
         assert_eq!(body, json!({ "error": "invalid_printer_control" }));
         assert_eq!(state.commands().count().await.unwrap(), 0);
         assert_no_printer_control_audit(&state, tenant_id).await;
+    }
+}
+
+#[tokio::test]
+async fn printer_control_accepts_semantic_home_move_and_hotend_operations() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        state.database(),
+        tenant_id,
+        agent_id,
+        Some("A1"),
+    )
+    .await
+    .unwrap();
+
+    for (payload, expected_type) in [
+        (json!({ "action": "home", "axes": ["x", "z"] }), "home"),
+        (
+            json!({
+                "action": "move_axes",
+                "movements": [
+                    { "axis": "x", "delta_mm": 10.0 },
+                    { "axis": "z", "delta_mm": -1.0 }
+                ],
+                "feedrate_mm_per_min": 1200
+            }),
+            "move_axes",
+        ),
+        (
+            json!({
+                "action": "set_hotend_temperature",
+                "temperature_celsius": 215,
+                "wait": true
+            }),
+            "set_hotend_temperature",
+        ),
+    ] {
+        let (status, body) = request_as(
+            app.clone(),
+            Method::POST,
+            &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls"),
+            Some(payload),
+            &token,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["kind"], "printer_operation");
+        let payload: Value = serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
+        assert_eq!(payload["operation"]["type"], expected_type);
     }
 }
 

@@ -27,13 +27,15 @@ The Hub is authoritative for compatibility and authorization. The frontend can m
 | X2D | `X2D` | `N6` | Supported |
 | Missing or unknown model | none or normalized unknown key | none | Unknown; reject control enqueue |
 
-Phase 27 dispatches only typed controls: pause, resume, stop, and print speed. Raw MQTT or arbitrary printer commands remain outside the operator control path.
+Phase 27 dispatched only typed controls: pause, resume, stop, and print speed. Phase 29 moves the command kind to protocol-defined `printer_operation` and expands the semantic operation set to home, relative move axes, and hotend temperature. Raw MQTT or arbitrary printer commands remain outside the operator control path.
+
+For Bambu printers, Phase 29 intentionally collapses every home operation to bare `G28` in the agent adapter. Axis-specific home intent may exist in the Pandar protocol for future device families, but the Bambu adapter must not publish `G28 X`, `G28 Y`, or `G28 Z`.
 
 ## Lifecycle Boundary
 
 Live printer controls are dispatch commands, not physical print-state mutations.
 
-- Enqueueing a control creates a durable `printer_control` command and audit record.
+- Enqueueing a control creates a durable `printer_operation` command and audit record.
 - Sending the command over gRPC or publishing it to MQTT updates the command lifecycle only.
 - A successful control result means the agent dispatched the typed MQTT payload.
 - Physical print state remains report-derived from later printer MQTT reports and existing print reconciliation.
@@ -42,21 +44,23 @@ This separation prevents a successful MQTT publish from being treated as proof t
 
 ## Local Verification
 
-These commands are no-network checks. They use compatibility tests, fake MQTT transports, command handler tests, and Hub route/repository/gRPC tests.
+These Phase 29 commands are no-network checks. They use compatibility tests, fake MQTT transports, command handler tests, network plugin parser tests, and Hub route/repository/gRPC tests.
 
 ```sh
 cargo test -p pandar-core compatibility
-cargo test -p pandar-agent configured_control_printer
-cargo test -p pandar-agent printer_control
+cargo test -p pandar-agent printer_operation
+cargo test -p pandar-agent configured_operate_printer
+cargo test -p pandar-network-plugin
 cargo test -p pandar-hub printer_control
 ```
 
-Observed locally on 2026-06-24 after the live-control probe blocker was recorded:
+Observed locally on 2026-06-25 after Phase 29:
 
-- `cargo test -p pandar-core compatibility`: 5 passed.
-- `cargo test -p pandar-agent configured_control_printer`: 3 passed.
-- `cargo test -p pandar-agent printer_control`: 6 passed.
-- `cargo test -p pandar-hub printer_control`: 11 passed.
+- `cargo fmt -- --check`: passed.
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed.
+- `cargo nextest run --manifest-path "Cargo.toml" --workspace`: 570 passed.
+
+Earlier Phase 27 evidence used the older `printer_control` command kind; Phase 29 preserves the tenant `/controls` HTTP route name but persists and dispatches `printer_operation`.
 
 ## Real-Printer Probe Status
 

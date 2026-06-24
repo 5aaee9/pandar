@@ -67,6 +67,7 @@
 - Refreshed Phase 23/24/26 local evidence after Phase 28: the plugin ABI probe, release-smoke unit coverage, and scaled artifact smoke dry-run are recorded against current code, and the smoke tool now carries the optional artifact metadata field.
 - Added Phase 27 live printer-control groundwork: shared model compatibility policy moved into `pandar-core`, Hub now enqueues audited tenant/printer-scoped `printer_control` commands for compatible models, gRPC carries typed printer controls to agents, and agents dispatch typed pause/resume/stop/print-speed MQTT payloads without relying on local model metadata. Local no-network tests cover compatibility, Hub enqueue/route/gRPC behavior, agent command handling, and fake MQTT payload dispatch; real pause/resume/stop/print-speed printer probes are not recorded.
 - Added Phase 28 reference-backed slicer metadata: bounded 3MF metadata parsing, SQLite/PostgreSQL `job_artifacts.metadata_json` persistence, tenant preview API, job/plugin response metadata, dashboard upload preview, and compact job/recovery metadata summaries. Local parser, SQLite route/repository/plugin/frontend verification, and disposable PostgreSQL metadata repository verification are recorded.
+- Added Phase 29 protocol-level printer operations: Hub now persists and forwards semantic `printer_operation` commands instead of Bambu-specific control strings, tenant `/controls` and plugin `/operations` requests share semantic validation, agents translate operations to Bambu MQTT/G-code locally, and the network plugin parses supported Studio G-code messages into semantic operation JSON before contacting Hub.
 
 ## Phase 1: Foundation
 
@@ -393,7 +394,7 @@ Exit criteria:
 Goal: make day-to-day printer operations recoverable from the UI when dispatch or machine state changes unexpectedly.
 
 - Completed tenant-authorized refresh, retry dispatch, reprint, and duplicate-and-print controls.
-- Phase 27 later adds pause, resume, stop, and print-speed as typed, compatibility-gated `printer_control` dispatch commands rather than physical-state mutations.
+- Phase 27 later added pause, resume, stop, and print-speed controls; Phase 29 moves customer controls to protocol-defined `printer_operation` commands rather than physical-state mutations.
 - Show command state transitions and latest structured result details inline with the affected printer or job.
 - Added safe retry affordances for failed dispatch/upload/MQTT operations without creating duplicate physical prints accidentally.
 - Kept raw Bambu commands behind diagnostics/admin boundaries; normal operators use typed controls.
@@ -612,6 +613,22 @@ Exit criteria:
 - Operators can queue supported live printer controls with tenant role enforcement and audit records.
 - UI state distinguishes command dispatch success from physical printer state changes reported later over MQTT.
 - Unsupported or unknown printer/control combinations stay unavailable with diagnostic context.
+
+## Phase 29: Protocol Printer Operations
+
+Goal: make customer-facing printer actions device-neutral so non-Bambu agents can translate the same semantic operation contract later.
+
+- Completed `PrinterOperation` protobuf dispatch for pause, resume, stop, speed, home, relative axis movement, and hotend temperature.
+- Completed Hub persistence and audit of semantic `printer_operation` payloads; Hub validates ownership, compatibility, ranges, axes, and unknown fields without constructing Bambu MQTT JSON or G-code.
+- Completed Bambu agent translation for semantic operations, including bare `G28` for every home request, relative move `gcode_line`, and `M104`/`M109` hotend commands.
+- Completed network plugin parsing of supported control G-code into semantic Hub operation requests; unsupported or ambiguous G-code returns stable plugin errors before network dispatch.
+- Real-printer probes for Phase 29 home/move/hotend are not recorded in this workspace.
+
+Exit criteria:
+
+- Hub sends `HubCommand::PrinterOperation` for customer controls.
+- Agent-local adapters own all device-specific command conversion.
+- Studio plugin live control messages never forward raw G-code to Hub.
 
 ## Phase 28: Reference-Backed Slicer Metadata
 

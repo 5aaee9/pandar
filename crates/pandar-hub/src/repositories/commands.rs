@@ -6,10 +6,16 @@ use serde::{Deserialize, Serialize};
 mod audit;
 mod enqueue;
 pub mod inserts;
+mod operations;
 mod ownership;
 pub(crate) mod rows;
 mod transitions;
 use rows::command_from_model;
+
+pub use operations::{
+    PrinterAxis, PrinterAxisMovement, PrinterOperationKind, PrinterOperationPayload,
+    operation_audit_metadata, validate_printer_operation,
+};
 
 use crate::{
     db::Database,
@@ -44,34 +50,6 @@ pub struct DiscoverPrintersPayload {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiagnosePrinterPayload {
     pub serial_number: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum PrinterControlAction {
-    Pause,
-    Resume,
-    Stop,
-    SetPrintSpeed,
-}
-
-impl PrinterControlAction {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Pause => "pause",
-            Self::Resume => "resume",
-            Self::Stop => "stop",
-            Self::SetPrintSpeed => "set_print_speed",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PrinterControlPayload {
-    pub printer_id: String,
-    pub serial_number: String,
-    pub action: PrinterControlAction,
-    pub speed_mode: Option<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -144,20 +122,18 @@ impl CommandRepository {
         .await
     }
 
-    pub async fn enqueue_printer_control_with_audit(
+    pub async fn enqueue_printer_operation_with_audit(
         &self,
         tenant_id: TenantId,
         printer_id: &str,
-        action: PrinterControlAction,
-        speed_mode: Option<u8>,
+        operation: PrinterOperationKind,
         actor: AuditActor,
     ) -> RepositoryResult<CommandRecord> {
-        audit::enqueue_printer_control_with_audit(
+        audit::enqueue_printer_operation_with_audit(
             &self.database,
             tenant_id,
             printer_id,
-            action,
-            speed_mode,
+            operation,
             actor,
         )
         .await

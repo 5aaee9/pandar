@@ -174,6 +174,7 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                 ("GET", "/api/v1/plugin/printers", true),
                 ("GET", "/api/v1/plugin/jobs", true),
                 ("POST", "/api/v1/plugin/prints", true),
+                ("POST", "/api/v1/plugin/printers/printer-1/operations", true),
             ];
             for (index, (method, path, bearer)) in expected.into_iter().enumerate() {
                 let mut stream = accept_with_timeout(&listener);
@@ -206,6 +207,22 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         );
                         assert_multipart_file_part(&request, "probe.3mf", &artifact);
                         write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"job_id":"job-1"}"#);
+                    }
+                    4 => {
+                        assert_eq!(
+                            serde_json::from_str::<serde_json::Value>(request_body(&request))
+                                .unwrap(),
+                            serde_json::json!({"action":"home","axes":["x"]})
+                        );
+                        assert!(
+                            !request_body(&request).contains("G28"),
+                            "operation request leaked raw G-code: {request}"
+                        );
+                        write_response(
+                            &mut stream,
+                            "HTTP/1.1 202 Accepted",
+                            r#"{"command_id":"cmd-1","status":"queued"}"#,
+                        );
                     }
                     _ => unreachable!(),
                 }

@@ -2,11 +2,13 @@ mod support;
 
 use pandar_network_plugin::{
     PluginHttpResult, pandar_plugin_exchange_ticket, pandar_plugin_free_with_capacity,
-    pandar_plugin_get_jobs, pandar_plugin_get_printers, pandar_plugin_submit_print,
+    pandar_plugin_get_jobs, pandar_plugin_get_printers, pandar_plugin_operation_json_from_gcode,
+    pandar_plugin_submit_print, pandar_plugin_submit_printer_operation,
 };
 use std::{fs, io::Write, net::TcpListener, path::Path, thread};
 use support::{
     assert_multipart_file_part, assert_multipart_print_request, read_http_request_with_timeout,
+    request_body,
 };
 
 const TOKEN: &[u8] = b"pandar_plugin_test_token";
@@ -105,8 +107,37 @@ fn submit_print(hub_url: &[u8], token: &[u8], artifact_path: &[u8]) -> PluginHtt
     )
 }
 
+fn submit_printer_operation(
+    hub_url: &[u8],
+    token: &[u8],
+    operation_json: &[u8],
+) -> PluginHttpResult {
+    let printer_id = b"printer";
+    pandar_plugin_submit_printer_operation(
+        hub_url.as_ptr(),
+        hub_url.len(),
+        token.as_ptr(),
+        token.len(),
+        printer_id.as_ptr(),
+        printer_id.len(),
+        operation_json.as_ptr(),
+        operation_json.len(),
+    )
+}
+
 fn write_artifact(path: &Path, bytes: &[u8]) {
     fs::write(path, bytes).unwrap();
+}
+
+fn operation_json(message: &[u8]) -> PluginHttpResult {
+    pandar_plugin_operation_json_from_gcode(message.as_ptr(), message.len())
+}
+
+fn assert_json_body_eq(result: PluginHttpResult, expected: serde_json::Value) {
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&body(result)).unwrap(),
+        expected
+    );
 }
 
 #[test]
@@ -371,4 +402,141 @@ fn exchange_ticket_rejects_empty_ticket_before_network() {
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 400);
     assert_eq!(body(result), r#"{"error":"invalid_plugin_ticket"}"#);
+}
+
+#[test]
+fn gcode_parser_maps_home_and_axes_to_semantic_json() {
+    let result = operation_json(b"  G28 X Z ; home selected axes\n");
+
+    assert_eq!(result.status, 0);
+    assert_eq!(result.http_code, 200);
+    assert_json_body_eq(
+        result,
+        serde_json::json!({"action":"home","axes":["x","z"]}),
+    );
+}
+
+#[test]
+fn gcode_parser_maps_relative_move_to_semantic_json() {
+    let result = operation_json(b"G91\nG0 X10.5 Z-0.25 F3000");
+
+    assert_eq!(result.status, 0);
+    assert_eq!(result.http_code, 200);
+    assert_json_body_eq(
+        result,
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [
+                { "axis": "x", "delta_mm": 10.5 },
+                { "axis": "z", "delta_mm": -0.25 }
+            ],
+            "feedrate_mm_per_min": 3000,
+        }),
+    );
+}
+
+#[test]
+fn gcode_parser_maps_hotend_temperature_to_semantic_json() {
+    let result = operation_json(b"M109 S215");
+
+    assert_eq!(result.status, 0);
+    assert_eq!(result.http_code, 200);
+    assert_json_body_eq(
+        result,
+        serde_json::json!({
+            "action": "set_hotend_temperature",
+            "temperature_celsius": 215,
+            "wait": true
+        }),
+    );
+}
+
+#[test]
+fn gcode_parser_rejects_unsupported_or_ambiguous_commands() {
+    for message in [
+        b"G0 X10".as_slice(),
+        b"G90\nG0 X10",
+        b"G91 X10\nG0 Y5",
+        b"G91 F3000\nG0 X5",
+        b"G91\nG0 X1 E2",
+        b"G91\nG0 X1\nG90",
+        b"G91\nG0 X1\nM104 S200",
+    ] {
+        let result = operation_json(message);
+
+        assert_ne!(result.status, 0);
+        assert_eq!(result.http_code, 400);
+        assert_eq!(body(result), r#"{"error":"unsupported_printer_operation"}"#);
+    }
+}
+
+fn assert_printer_operation_request(request: &str) {
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(request_body(request)).unwrap(),
+        serde_json::json!({"action":"home","axes":["x"]})
+    );
+    assert!(
+        !request_body(request).contains("G28"),
+        "operation request leaked raw G-code: {request}"
+    );
+}
+
+#[test]
+fn submit_printer_operation_posts_semantic_body_to_plugin_endpoint() {
+    let hub_url = one_shot_server(
+        "POST",
+        "/api/v1/plugin/printers/printer/operations",
+        Some("pandar_plugin_test_token"),
+        "HTTP/1.1 202 Accepted",
+        r#"{"command_id":"cmd","status":"queued"}"#,
+        Some(assert_printer_operation_request),
+    );
+    let result = submit_printer_operation(
+        hub_url.as_bytes(),
+        TOKEN,
+        br#"{"action":"home","axes":["x"]}"#,
+    );
+
+    assert_eq!(result.status, 0);
+    assert_eq!(result.http_code, 202);
+    assert_eq!(body(result), r#"{"command_id":"cmd","status":"queued"}"#);
+}
+
+#[test]
+fn submit_printer_operation_rejects_invalid_json_before_network() {
+    let result = submit_printer_operation(b"http://127.0.0.1:9", TOKEN, b"not-json");
+
+    assert_ne!(result.status, 0);
+    assert_eq!(result.http_code, 400);
+    assert_eq!(body(result), r#"{"error":"invalid_printer_operation"}"#);
+}
+
+#[test]
+fn submit_printer_operation_rejects_unknown_action_before_network() {
+    let result = submit_printer_operation(b"http://127.0.0.1:9", TOKEN, br#"{"action":"dance"}"#);
+
+    assert_ne!(result.status, 0);
+    assert_eq!(result.http_code, 400);
+    assert_eq!(body(result), r#"{"error":"invalid_printer_operation"}"#);
+}
+
+#[test]
+fn submit_printer_operation_preserves_stable_operation_errors() {
+    let hub_url = one_shot_server(
+        "POST",
+        "/api/v1/plugin/printers/printer/operations",
+        Some("pandar_plugin_test_token"),
+        "HTTP/1.1 400 Bad Request",
+        r#"{"error":"printer_operation_unavailable"}"#,
+        Some(assert_printer_operation_request),
+    );
+    let result = submit_printer_operation(
+        hub_url.as_bytes(),
+        TOKEN,
+        br#"{"action":"home","axes":["x"]}"#,
+    );
+
+    assert_ne!(result.status, 0);
+    assert_eq!(result.http_code, 400);
+    assert_eq!(body(result), r#"{"error":"printer_operation_unavailable"}"#);
 }

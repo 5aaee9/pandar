@@ -7,7 +7,7 @@ use crate::{
     db::Database,
     protocol::agent::v1::hub_command,
     repositories::{
-        CreatePrintJob, PrinterControlAction,
+        CreatePrintJob, PrinterOperationKind,
         test_helpers::{insert_printer_fixture, insert_printer_fixture_with_model},
     },
 };
@@ -235,7 +235,7 @@ async fn grpc_malformed_print_payload_streams_internal_error() {
 }
 
 #[tokio::test]
-async fn printer_control_success_does_not_mutate_physical_print_status() {
+async fn printer_operation_success_does_not_mutate_physical_print_status() {
     let state = fixture_state().await;
     let (tenant_id, agent_id) = tenant_agent(&state).await;
     let printer_id =
@@ -265,11 +265,10 @@ async fn printer_control_success_does_not_mutate_physical_print_status() {
         .unwrap();
     let control = state
         .commands()
-        .enqueue_printer_control_with_audit(
+        .enqueue_printer_operation_with_audit(
             tenant_id,
             &printer_id,
-            PrinterControlAction::Stop,
-            None,
+            PrinterOperationKind::Stop,
             test_audit_actor(),
         )
         .await
@@ -291,7 +290,7 @@ async fn printer_control_success_does_not_mutate_physical_print_status() {
             control.id,
             tenant_id,
             agent_id,
-            Some(r#"{"type":"printer_control","action":"stop"}"#.to_string()),
+            Some(r#"{"type":"printer_operation","action":"stop"}"#.to_string()),
         )
         .await
         .unwrap();

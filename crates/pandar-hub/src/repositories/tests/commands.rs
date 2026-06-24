@@ -2,7 +2,7 @@ use pandar_core::{AgentId, CommandId, CommandStatus};
 use serde_json::Value;
 
 use super::*;
-use crate::repositories::{AuditActor, PrintProjectFilePayload, PrinterControlAction};
+use crate::repositories::{AuditActor, PrintProjectFilePayload, PrinterOperationKind};
 
 #[tokio::test]
 async fn command_enqueue_rejects_missing_agent() {
@@ -155,7 +155,7 @@ async fn command_enqueue_print_project_file_rejects_wrong_printer_owner() {
 }
 
 #[tokio::test]
-async fn command_enqueue_printer_control_derives_agent_persists_payload_and_audits() {
+async fn command_enqueue_printer_operation_derives_agent_persists_payload_and_audits() {
     let (database, tenants, agents, _, commands, _) = repositories().await;
     let audit = AuditEventRepository::new(database.clone());
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
@@ -170,25 +170,24 @@ async fn command_enqueue_printer_control_derives_agent_persists_payload_and_audi
     .unwrap();
 
     let command = commands
-        .enqueue_printer_control_with_audit(
+        .enqueue_printer_operation_with_audit(
             tenant.id,
             &printer_id,
-            PrinterControlAction::SetPrintSpeed,
-            Some(3),
+            PrinterOperationKind::SetPrintSpeed { speed_mode: 3 },
             test_audit_actor(),
         )
         .await
         .unwrap();
     let payload: Value = serde_json::from_str(&command.payload_json).unwrap();
 
-    assert_eq!(command.kind, "printer_control");
+    assert_eq!(command.kind, "printer_operation");
     assert_eq!(command.status, CommandStatus::Queued);
     assert_eq!(command.agent_id, agent.id);
     assert_eq!(command.printer_id.as_deref(), Some(printer_id.as_str()));
     assert_eq!(payload["printer_id"], printer_id);
     assert_eq!(payload["serial_number"], format!("serial-{printer_id}"));
-    assert_eq!(payload["action"], "set_print_speed");
-    assert_eq!(payload["speed_mode"], 3);
+    assert_eq!(payload["operation"]["type"], "set_print_speed");
+    assert_eq!(payload["operation"]["speed_mode"], 3);
 
     let events = audit.list_for_tenant(tenant.id).await.unwrap();
     let event = events
@@ -205,7 +204,7 @@ async fn command_enqueue_printer_control_derives_agent_persists_payload_and_audi
 }
 
 #[tokio::test]
-async fn command_enqueue_printer_control_rejects_unknown_model_before_insert() {
+async fn command_enqueue_printer_operation_rejects_unknown_model_before_insert() {
     let (database, tenants, agents, _, commands, _) = repositories().await;
     let audit = AuditEventRepository::new(database.clone());
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
@@ -220,11 +219,10 @@ async fn command_enqueue_printer_control_rejects_unknown_model_before_insert() {
     .unwrap();
 
     let err = commands
-        .enqueue_printer_control_with_audit(
+        .enqueue_printer_operation_with_audit(
             tenant.id,
             &printer_id,
-            PrinterControlAction::Pause,
-            None,
+            PrinterOperationKind::Pause,
             test_audit_actor(),
         )
         .await
@@ -236,7 +234,7 @@ async fn command_enqueue_printer_control_rejects_unknown_model_before_insert() {
 }
 
 #[tokio::test]
-async fn command_enqueue_printer_control_rejects_invalid_speed() {
+async fn command_enqueue_printer_operation_rejects_invalid_speed() {
     let (database, tenants, agents, _, commands, _) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
     let agent = agents.create(tenant.id, "agent").await.unwrap();
@@ -249,20 +247,50 @@ async fn command_enqueue_printer_control_rejects_invalid_speed() {
     .await
     .unwrap();
 
-    for (action, speed_mode) in [
-        (PrinterControlAction::SetPrintSpeed, None),
-        (PrinterControlAction::SetPrintSpeed, Some(0)),
-        (PrinterControlAction::SetPrintSpeed, Some(5)),
-        (PrinterControlAction::Pause, Some(2)),
-        (PrinterControlAction::Resume, Some(2)),
-        (PrinterControlAction::Stop, Some(2)),
+    for operation in [
+        PrinterOperationKind::SetPrintSpeed { speed_mode: 0 },
+        PrinterOperationKind::SetPrintSpeed { speed_mode: 5 },
+        PrinterOperationKind::MoveAxes {
+            movements: Vec::new(),
+            feedrate_mm_per_min: None,
+        },
+        PrinterOperationKind::MoveAxes {
+            movements: vec![crate::repositories::PrinterAxisMovement {
+                axis: crate::repositories::PrinterAxis::X,
+                delta_mm: 51.0,
+            }],
+            feedrate_mm_per_min: None,
+        },
+        PrinterOperationKind::MoveAxes {
+            movements: vec![crate::repositories::PrinterAxisMovement {
+                axis: crate::repositories::PrinterAxis::Y,
+                delta_mm: 5.0,
+            }],
+            feedrate_mm_per_min: Some(12_001),
+        },
+        PrinterOperationKind::MoveAxes {
+            movements: vec![
+                crate::repositories::PrinterAxisMovement {
+                    axis: crate::repositories::PrinterAxis::X,
+                    delta_mm: 5.0,
+                },
+                crate::repositories::PrinterAxisMovement {
+                    axis: crate::repositories::PrinterAxis::X,
+                    delta_mm: 6.0,
+                },
+            ],
+            feedrate_mm_per_min: None,
+        },
+        PrinterOperationKind::SetHotendTemperature {
+            temperature_celsius: 301,
+            wait: false,
+        },
     ] {
         let err = commands
-            .enqueue_printer_control_with_audit(
+            .enqueue_printer_operation_with_audit(
                 tenant.id,
                 &printer_id,
-                action,
-                speed_mode,
+                operation,
                 test_audit_actor(),
             )
             .await

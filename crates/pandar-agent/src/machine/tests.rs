@@ -203,7 +203,7 @@ async fn configured_print_project_file_unknown_serial_rejects_before_upload() {
 }
 
 #[tokio::test]
-async fn configured_control_printer_publishes_pause_to_request_topic() {
+async fn configured_operate_printer_publishes_pause_to_request_topic() {
     let mqtt = FakeMqttTransport::default();
     let transfer = FakeMachineFileTransfer::default();
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
@@ -213,7 +213,7 @@ async fn configured_control_printer_publishes_pause_to_request_topic() {
     );
 
     gateway
-        .control_printer("SERIAL1", PrinterControl::Pause)
+        .operate_printer("SERIAL1", PrinterOperation::Pause)
         .await
         .unwrap();
 
@@ -228,7 +228,7 @@ async fn configured_control_printer_publishes_pause_to_request_topic() {
 }
 
 #[tokio::test]
-async fn configured_control_printer_print_speed_mode_4_publishes_to_request_topic() {
+async fn configured_operate_printer_print_speed_mode_4_publishes_to_request_topic() {
     let mqtt = FakeMqttTransport::default();
     let transfer = FakeMachineFileTransfer::default();
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
@@ -238,7 +238,7 @@ async fn configured_control_printer_print_speed_mode_4_publishes_to_request_topi
     );
 
     gateway
-        .control_printer("SERIAL1", PrinterControl::SetPrintSpeed(4))
+        .operate_printer("SERIAL1", PrinterOperation::SetPrintSpeed(4))
         .await
         .unwrap();
 
@@ -253,7 +253,101 @@ async fn configured_control_printer_print_speed_mode_4_publishes_to_request_topi
 }
 
 #[tokio::test]
-async fn configured_control_printer_unknown_serial_rejects_before_publish() {
+async fn configured_operate_printer_home_publishes_bare_g28_for_axis_specific_request() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::Home {
+                axes: vec![PrinterAxis::X, PrinterAxis::Z],
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        mqtt.published_commands().await,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: json!({"print": {"command": "gcode_line", "param": "G28", "sequence_id": "90001"}}),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_move_axes_publishes_relative_gcode_line() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::MoveAxes {
+                x_mm: Some(10.0),
+                y_mm: None,
+                z_mm: Some(-0.5),
+                feedrate_mm_per_min: Some(3000.0),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        mqtt.published_commands().await,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: json!({"print": {"command": "gcode_line", "param": "G91\nG0 X10 Z-0.5 F3000\nG90", "sequence_id": "90001"}}),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_hotend_publishes_wait_gcode_line() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::SetHotendTemperature {
+                temperature_celsius: 215,
+                wait: true,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        mqtt.published_commands().await,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: json!({"print": {"command": "gcode_line", "param": "M109 S215", "sequence_id": "90001"}}),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_unknown_serial_rejects_before_publish() {
     let mqtt = FakeMqttTransport::default();
     let transfer = FakeMachineFileTransfer::default();
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
@@ -263,7 +357,7 @@ async fn configured_control_printer_unknown_serial_rejects_before_publish() {
     );
 
     let err = gateway
-        .control_printer("UNKNOWN", PrinterControl::Pause)
+        .operate_printer("UNKNOWN", PrinterOperation::Pause)
         .await
         .unwrap_err();
 

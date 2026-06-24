@@ -12,12 +12,13 @@ use super::*;
 use crate::{
     machine::{
         BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot, NoopMachineGateway,
-        PrinterControl as MachinePrinterControl, diagnostics::PrinterDiagnosticResult,
+        PrinterOperation as MachinePrinterOperation, diagnostics::PrinterDiagnosticResult,
         discovery::PrinterDiscoveryResult,
     },
     protocol::agent::v1::{
-        DiagnosePrinter, DiscoverPrinters, HubCommand, PrinterControl as ProtoPrinterControl,
-        RefreshPrinters,
+        Axis, AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
+        MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
+        RefreshPrinters, SetHotendTemperatureOperation, SetPrintSpeedOperation, printer_operation,
     },
 };
 
@@ -359,12 +360,12 @@ impl BambuMachineGateway for FakeGateway {
         unreachable!("refresh tests do not dispatch print commands")
     }
 
-    async fn control_printer(
+    async fn operate_printer(
         &self,
         _serial_number: &str,
-        _control: MachinePrinterControl,
+        _operation: MachinePrinterOperation,
     ) -> anyhow::Result<()> {
-        unreachable!("refresh tests do not dispatch printer control commands")
+        unreachable!("refresh tests do not dispatch printer operation commands")
     }
 }
 
@@ -402,17 +403,17 @@ async fn command_failure_redacts_access_code() {
 }
 
 #[tokio::test]
-async fn printer_control_valid_emits_ack_and_success_with_result_json() {
+async fn printer_operation_valid_emits_ack_and_success_with_result_json() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
-    let gateway = ControlGateway::default();
+    let gateway = OperationGateway::default();
     let (sender, mut receiver) = mpsc::channel(2);
 
     handle_command_with_gateway(
         &config,
         &gateway,
         &sender,
-        printer_control_command(command_id.clone(), "SERIAL1", "pause", 0),
+        pause_operation_command(command_id.clone(), "SERIAL1"),
     )
     .await
     .unwrap();
@@ -427,30 +428,30 @@ async fn printer_control_valid_emits_ack_and_success_with_result_json() {
             assert_eq!(result.command_id, command_id);
             assert!(result.success);
             let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["type"], "printer_control");
+            assert_eq!(json["type"], "printer_operation");
             assert_eq!(json["action"], "pause");
             assert_eq!(json["serial_number"], "SERIAL1");
         }
         other => panic!("expected command result, got {other:?}"),
     }
     assert_eq!(
-        gateway.controls().await,
-        vec![("SERIAL1".to_string(), MachinePrinterControl::Pause)]
+        gateway.operations().await,
+        vec![("SERIAL1".to_string(), MachinePrinterOperation::Pause)]
     );
 }
 
 #[tokio::test]
-async fn printer_control_unknown_serial_rejects_ack_without_dispatch() {
+async fn printer_operation_unknown_serial_rejects_ack_without_dispatch() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
-    let gateway = ControlGateway::unknown_serial();
+    let gateway = OperationGateway::unknown_serial();
     let (sender, mut receiver) = mpsc::channel(1);
 
     handle_command_with_gateway(
         &config,
         &gateway,
         &sender,
-        printer_control_command(command_id.clone(), "UNKNOWN", "pause", 0),
+        pause_operation_command(command_id.clone(), "UNKNOWN"),
     )
     .await
     .unwrap();
@@ -465,21 +466,21 @@ async fn printer_control_unknown_serial_rejects_ack_without_dispatch() {
         other => panic!("expected command ack, got {other:?}"),
     }
     assert!(receiver.recv().await.is_none());
-    assert!(gateway.controls().await.is_empty());
+    assert!(gateway.operations().await.is_empty());
 }
 
 #[tokio::test]
-async fn printer_control_invalid_speed_rejects_ack_without_dispatch() {
+async fn printer_operation_invalid_speed_rejects_ack_without_dispatch() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
-    let gateway = ControlGateway::default();
+    let gateway = OperationGateway::default();
     let (sender, mut receiver) = mpsc::channel(1);
 
     handle_command_with_gateway(
         &config,
         &gateway,
         &sender,
-        printer_control_command(command_id.clone(), "SERIAL1", "set_print_speed", 5),
+        set_print_speed_operation_command(command_id.clone(), "SERIAL1", 5),
     )
     .await
     .unwrap();
@@ -494,21 +495,25 @@ async fn printer_control_invalid_speed_rejects_ack_without_dispatch() {
         other => panic!("expected command ack, got {other:?}"),
     }
     assert!(receiver.recv().await.is_none());
-    assert!(gateway.controls().await.is_empty());
+    assert!(gateway.operations().await.is_empty());
 }
 
 #[tokio::test]
-async fn printer_control_non_speed_action_with_speed_rejects_ack_without_dispatch() {
+async fn printer_operation_unspecified_axis_rejects_ack_without_dispatch() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
-    let gateway = ControlGateway::default();
+    let gateway = OperationGateway::default();
     let (sender, mut receiver) = mpsc::channel(1);
 
     handle_command_with_gateway(
         &config,
         &gateway,
         &sender,
-        printer_control_command(command_id.clone(), "SERIAL1", "pause", 2),
+        home_operation_command(
+            command_id.clone(),
+            "SERIAL1",
+            vec![Axis::Unspecified as i32],
+        ),
     )
     .await
     .unwrap();
@@ -518,26 +523,173 @@ async fn printer_control_non_speed_action_with_speed_rejects_ack_without_dispatc
         agent_event::Event::CommandAck(ack) => {
             assert_eq!(ack.command_id, command_id);
             assert!(!ack.accepted);
-            assert!(ack.error.contains("speed_mode"));
+            assert!(ack.error.contains("axis"));
         }
         other => panic!("expected command ack, got {other:?}"),
     }
     assert!(receiver.recv().await.is_none());
-    assert!(gateway.controls().await.is_empty());
+    assert!(gateway.operations().await.is_empty());
 }
 
 #[tokio::test]
-async fn printer_control_publish_failure_emits_ack_then_failure_with_redacted_context() {
+async fn printer_operation_duplicate_move_axis_rejects_ack_without_dispatch() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
-    let gateway = ControlGateway::publish_failure("ACCESS-CODE-UNIQUE");
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(1);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        move_axes_operation_command_with_movements(
+            command_id.clone(),
+            "SERIAL1",
+            vec![
+                AxisMovement {
+                    axis: Axis::X as i32,
+                    delta_mm: 10.0,
+                },
+                AxisMovement {
+                    axis: Axis::X as i32,
+                    delta_mm: 12.0,
+                },
+            ],
+            3000,
+        ),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandAck(ack) => {
+            assert_eq!(ack.command_id, command_id);
+            assert!(!ack.accepted);
+            assert!(ack.error.contains("duplicate axis"));
+        }
+        other => panic!("expected command ack, got {other:?}"),
+    }
+    assert!(receiver.recv().await.is_none());
+    assert!(gateway.operations().await.is_empty());
+}
+
+#[tokio::test]
+async fn printer_operation_invalid_move_bounds_reject_ack_without_dispatch() {
+    for (command, expected_error) in [
+        (
+            move_axes_operation_command_with_movements(
+                uuid::Uuid::new_v4().to_string(),
+                "SERIAL1",
+                vec![AxisMovement {
+                    axis: Axis::X as i32,
+                    delta_mm: 0.0,
+                }],
+                3000,
+            ),
+            "delta_mm",
+        ),
+        (
+            move_axes_operation_command_with_movements(
+                uuid::Uuid::new_v4().to_string(),
+                "SERIAL1",
+                vec![AxisMovement {
+                    axis: Axis::X as i32,
+                    delta_mm: 51.0,
+                }],
+                3000,
+            ),
+            "delta_mm",
+        ),
+        (
+            move_axes_operation_command_with_movements(
+                uuid::Uuid::new_v4().to_string(),
+                "SERIAL1",
+                vec![AxisMovement {
+                    axis: Axis::X as i32,
+                    delta_mm: f64::NAN,
+                }],
+                3000,
+            ),
+            "delta_mm",
+        ),
+        (
+            move_axes_operation_command_with_movements(
+                uuid::Uuid::new_v4().to_string(),
+                "SERIAL1",
+                vec![AxisMovement {
+                    axis: Axis::X as i32,
+                    delta_mm: 5.0,
+                }],
+                12_001,
+            ),
+            "feedrate",
+        ),
+    ] {
+        let config = test_config();
+        let command_id = command.command_id.clone();
+        let gateway = OperationGateway::default();
+        let (sender, mut receiver) = mpsc::channel(1);
+
+        handle_command_with_gateway(&config, &gateway, &sender, command)
+            .await
+            .unwrap();
+        drop(sender);
+
+        match receiver.recv().await.unwrap().event.unwrap() {
+            agent_event::Event::CommandAck(ack) => {
+                assert_eq!(ack.command_id, command_id);
+                assert!(!ack.accepted);
+                assert!(ack.error.contains(expected_error), "{}", ack.error);
+            }
+            other => panic!("expected command ack, got {other:?}"),
+        }
+        assert!(receiver.recv().await.is_none());
+        assert!(gateway.operations().await.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn printer_operation_invalid_hotend_temperature_rejects_ack_without_dispatch() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(1);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        hotend_operation_command(command_id.clone(), "SERIAL1", 301, false),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandAck(ack) => {
+            assert_eq!(ack.command_id, command_id);
+            assert!(!ack.accepted);
+            assert!(ack.error.contains("temperature"));
+        }
+        other => panic!("expected command ack, got {other:?}"),
+    }
+    assert!(receiver.recv().await.is_none());
+    assert!(gateway.operations().await.is_empty());
+}
+
+#[tokio::test]
+async fn printer_operation_publish_failure_emits_ack_then_failure_with_redacted_context() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::publish_failure("ACCESS-CODE-UNIQUE");
     let (sender, mut receiver) = mpsc::channel(2);
 
     handle_command_with_gateway(
         &config,
         &gateway,
         &sender,
-        printer_control_command(command_id.clone(), "SERIAL1", "resume", 0),
+        resume_operation_command(command_id.clone(), "SERIAL1"),
     )
     .await
     .unwrap();
@@ -554,7 +706,7 @@ async fn printer_control_publish_failure_emits_ack_then_failure_with_redacted_co
             assert!(
                 result
                     .error
-                    .contains("dispatch printer control resume to SERIAL1")
+                    .contains("dispatch printer operation resume to SERIAL1")
             );
             assert!(result.error.contains("[REDACTED_ACCESS_CODE]"));
             assert!(!result.error.contains("ACCESS-CODE-UNIQUE"));
@@ -563,23 +715,23 @@ async fn printer_control_publish_failure_emits_ack_then_failure_with_redacted_co
         other => panic!("expected command result, got {other:?}"),
     }
     assert_eq!(
-        gateway.controls().await,
-        vec![("SERIAL1".to_string(), MachinePrinterControl::Resume)]
+        gateway.operations().await,
+        vec![("SERIAL1".to_string(), MachinePrinterOperation::Resume)]
     );
 }
 
 #[tokio::test]
-async fn printer_control_does_not_reject_missing_local_model() {
+async fn printer_operation_does_not_reject_missing_local_model() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
-    let gateway = ControlGateway::default();
+    let gateway = OperationGateway::default();
     let (sender, mut receiver) = mpsc::channel(2);
 
     handle_command_with_gateway(
         &config,
         &gateway,
         &sender,
-        printer_control_command(command_id.clone(), "SERIAL1", "set_print_speed", 4),
+        set_print_speed_operation_command(command_id.clone(), "SERIAL1", 4),
     )
     .await
     .unwrap();
@@ -600,39 +752,252 @@ async fn printer_control_does_not_reject_missing_local_model() {
         other => panic!("expected command result, got {other:?}"),
     }
     assert_eq!(
-        gateway.controls().await,
+        gateway.operations().await,
         vec![(
             "SERIAL1".to_string(),
-            MachinePrinterControl::SetPrintSpeed(4)
+            MachinePrinterOperation::SetPrintSpeed(4)
         )]
     );
 }
 
-fn printer_control_command(
+#[tokio::test]
+async fn printer_operation_move_axes_dispatches_typed_details() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        move_axes_operation_command(command_id.clone(), "SERIAL1"),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(result.success);
+            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(json["type"], "printer_operation");
+            assert_eq!(json["action"], "move_axes");
+            assert_eq!(json["x_mm"], 10.0);
+            assert_eq!(json["z_mm"], -0.5);
+            assert_eq!(json["feedrate_mm_per_min"], 3000.0);
+            assert!(json.get("y_mm").is_none());
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.operations().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::MoveAxes {
+                x_mm: Some(10.0),
+                y_mm: None,
+                z_mm: Some(-0.5),
+                feedrate_mm_per_min: Some(3000.0),
+            }
+        )]
+    );
+}
+
+#[tokio::test]
+async fn printer_operation_hotend_dispatches_typed_details() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        hotend_operation_command(command_id.clone(), "SERIAL1", 215, true),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(result.success);
+            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(json["type"], "printer_operation");
+            assert_eq!(json["action"], "set_hotend_temperature");
+            assert_eq!(json["temperature_celsius"], 215);
+            assert_eq!(json["wait"], true);
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.operations().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::SetHotendTemperature {
+                temperature_celsius: 215,
+                wait: true,
+            }
+        )]
+    );
+}
+
+#[tokio::test]
+async fn printer_operation_missing_operation_rejects_ack_without_dispatch() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(1);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_operation_command(command_id.clone(), "SERIAL1", None),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandAck(ack) => {
+            assert_eq!(ack.command_id, command_id);
+            assert!(!ack.accepted);
+            assert!(ack.error.contains("missing printer operation"));
+        }
+        other => panic!("expected command ack, got {other:?}"),
+    }
+    assert!(receiver.recv().await.is_none());
+    assert!(gateway.operations().await.is_empty());
+}
+
+fn pause_operation_command(command_id: String, serial_number: &str) -> HubCommand {
+    printer_operation_command(
+        command_id,
+        serial_number,
+        Some(printer_operation::Operation::Pause(PauseOperation {})),
+    )
+}
+
+fn resume_operation_command(command_id: String, serial_number: &str) -> HubCommand {
+    printer_operation_command(
+        command_id,
+        serial_number,
+        Some(printer_operation::Operation::Resume(
+            crate::protocol::agent::v1::ResumeOperation {},
+        )),
+    )
+}
+
+fn set_print_speed_operation_command(
     command_id: String,
     serial_number: &str,
-    action: &str,
     speed_mode: u32,
+) -> HubCommand {
+    printer_operation_command(
+        command_id,
+        serial_number,
+        Some(printer_operation::Operation::SetPrintSpeed(
+            SetPrintSpeedOperation { speed_mode },
+        )),
+    )
+}
+
+fn home_operation_command(command_id: String, serial_number: &str, axes: Vec<i32>) -> HubCommand {
+    printer_operation_command(
+        command_id,
+        serial_number,
+        Some(printer_operation::Operation::Home(HomeOperation { axes })),
+    )
+}
+
+fn move_axes_operation_command(command_id: String, serial_number: &str) -> HubCommand {
+    move_axes_operation_command_with_movements(
+        command_id,
+        serial_number,
+        vec![
+            AxisMovement {
+                axis: Axis::X as i32,
+                delta_mm: 10.0,
+            },
+            AxisMovement {
+                axis: Axis::Z as i32,
+                delta_mm: -0.5,
+            },
+        ],
+        3000,
+    )
+}
+
+fn move_axes_operation_command_with_movements(
+    command_id: String,
+    serial_number: &str,
+    movements: Vec<AxisMovement>,
+    feedrate_mm_per_min: u32,
+) -> HubCommand {
+    printer_operation_command(
+        command_id,
+        serial_number,
+        Some(printer_operation::Operation::MoveAxes(MoveAxesOperation {
+            movements,
+            feedrate_mm_per_min,
+        })),
+    )
+}
+
+fn hotend_operation_command(
+    command_id: String,
+    serial_number: &str,
+    temperature_celsius: u32,
+    wait: bool,
+) -> HubCommand {
+    printer_operation_command(
+        command_id,
+        serial_number,
+        Some(printer_operation::Operation::SetHotendTemperature(
+            SetHotendTemperatureOperation {
+                temperature_celsius,
+                wait,
+            },
+        )),
+    )
+}
+
+fn printer_operation_command(
+    command_id: String,
+    serial_number: &str,
+    operation: Option<printer_operation::Operation>,
 ) -> HubCommand {
     HubCommand {
         command_id,
-        command: Some(hub_command::Command::PrinterControl(ProtoPrinterControl {
-            serial_number: serial_number.to_owned(),
-            action: action.to_owned(),
-            speed_mode,
-        })),
+        command: Some(hub_command::Command::PrinterOperation(
+            ProtoPrinterOperation {
+                serial_number: serial_number.to_owned(),
+                operation,
+            },
+        )),
     }
 }
 
 #[derive(Debug, Clone, Default)]
-struct ControlGateway {
-    controls: Arc<Mutex<Vec<(String, MachinePrinterControl)>>>,
+struct OperationGateway {
+    operations: Arc<Mutex<Vec<(String, MachinePrinterOperation)>>>,
     validate_error: Option<String>,
     dispatch_error: Option<String>,
     access_code: Option<String>,
 }
 
-impl ControlGateway {
+impl OperationGateway {
     fn unknown_serial() -> Self {
         Self {
             validate_error: Some("no configured Bambu printer matches serial UNKNOWN".to_string()),
@@ -650,13 +1015,13 @@ impl ControlGateway {
         }
     }
 
-    async fn controls(&self) -> Vec<(String, MachinePrinterControl)> {
-        self.controls.lock().await.clone()
+    async fn operations(&self) -> Vec<(String, MachinePrinterOperation)> {
+        self.operations.lock().await.clone()
     }
 }
 
 #[async_trait]
-impl BambuMachineGateway for ControlGateway {
+impl BambuMachineGateway for OperationGateway {
     fn redact_error(&self, message: &str) -> String {
         match &self.access_code {
             Some(access_code) => message.replace(access_code, "[REDACTED_ACCESS_CODE]"),
@@ -668,18 +1033,18 @@ impl BambuMachineGateway for ControlGateway {
         &self,
         _timeout_seconds: u32,
     ) -> anyhow::Result<PrinterDiscoveryResult> {
-        unreachable!("printer control tests do not discover printers")
+        unreachable!("printer operation tests do not discover printers")
     }
 
     async fn diagnose_printer(
         &self,
         _serial_number: &str,
     ) -> anyhow::Result<PrinterDiagnosticResult> {
-        unreachable!("printer control tests do not diagnose printers")
+        unreachable!("printer operation tests do not diagnose printers")
     }
 
     async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
-        unreachable!("printer control tests do not refresh printers")
+        unreachable!("printer operation tests do not refresh printers")
     }
 
     async fn validate_printer(&self, _serial_number: &str) -> anyhow::Result<()> {
@@ -695,18 +1060,18 @@ impl BambuMachineGateway for ControlGateway {
         _command: &crate::protocol::agent::v1::PrintProjectFile,
         _artifact: Vec<u8>,
     ) -> anyhow::Result<()> {
-        unreachable!("printer control tests do not dispatch print commands")
+        unreachable!("printer operation tests do not dispatch print commands")
     }
 
-    async fn control_printer(
+    async fn operate_printer(
         &self,
         serial_number: &str,
-        control: MachinePrinterControl,
+        operation: MachinePrinterOperation,
     ) -> anyhow::Result<()> {
-        self.controls
+        self.operations
             .lock()
             .await
-            .push((serial_number.to_string(), control));
+            .push((serial_number.to_string(), operation));
         match &self.dispatch_error {
             Some(error) => Err(anyhow::anyhow!(error.clone())),
             None => Ok(()),
