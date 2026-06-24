@@ -504,6 +504,7 @@ Goal: turn the Phase 21 network-plugin scaffold into a verified Bambu Studio int
 - Keep direct LAN/MQTT/FTPS behavior out of the plugin; Studio talks to `pandar-hub`, and Bambu machine credentials remain agent-local.
 - Completed local Phase 23 scaffolding: compatibility manifest, smoke runbook, stable plugin error mapping, and a local C++ ABI probe against a mock hub.
 - Refreshed local probe evidence on 2026-06-24: `cargo test -p pandar-network-plugin` passed 20 tests against the current code.
+- Added a Phase 23 Studio preflight helper that validates local Studio/plugin prerequisite metadata and prints a redacted manifest row template before manual real-Studio testing; it does not claim compatibility without a real Studio run.
 - Checked real Studio test prerequisites on 2026-06-24: no local Bambu Studio command and no Windows/macOS host were available, so Phase 23 real Studio rows are blocked until matching Studio installations exist. Matching plugin artifact availability is tracked separately in the Phase 24 release evidence manifest.
 - Real Studio compatibility remains unverified until `docs/compatibility/bambu-studio-plugin.md` records real Studio runs for each platform.
 

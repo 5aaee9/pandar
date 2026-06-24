@@ -54,6 +54,26 @@ export PANDAR_PLUGIN_HUB_URL="https://your-hub.example"
 export PANDAR_PLUGIN_FRONTEND_URL="https://your-web.example"
 ```
 
+## Preflight
+
+Run the local preflight helper before replacing any Bambu Studio plugin file:
+
+```bash
+cargo run --manifest-path tools/studio-plugin-smoke/Cargo.toml -- \
+  --preflight \
+  --studio-path /path/to/BambuStudio \
+  --plugin-artifact /path/to/libpandar_network_plugin.so \
+  --hub-url "$PANDAR_PLUGIN_HUB_URL" \
+  --frontend-url "$PANDAR_PLUGIN_FRONTEND_URL" \
+  --os linux \
+  --arch x86_64 \
+  --studio-version "1.10.2" \
+  --test-date 2026-06-24 \
+  --pandar-commit "$(git rev-parse HEAD)"
+```
+
+A passing preflight only proves the prerequisite paths, plugin filename, URL shape, and evidence metadata are ready for a manual run. It does not launch Bambu Studio, exercise the plugin, or provide real Studio compatibility evidence; every Studio checklist item remains `untested` until Studio is launched and exercised manually.
+
 ## Replace And Roll Back
 
 1. Locate the original Bambu Studio network plugin dynamic library.
