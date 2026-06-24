@@ -149,7 +149,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if ! command -v llvm-objdump >/dev/null 2>&1 || ! command -v llvm-nm >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y llvm
+          fi
           command -v objdump
+          command -v llvm-objdump
+          command -v llvm-nm
 
       - name: Smoke release artifact
         shell: bash
