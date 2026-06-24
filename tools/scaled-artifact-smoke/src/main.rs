@@ -21,6 +21,7 @@ async fn main() -> ExitCode {
 }
 
 async fn run() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
     let config = parse_args(env::args().skip(1))?;
     harness::run(config).await
 }

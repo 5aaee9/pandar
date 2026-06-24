@@ -210,6 +210,24 @@ impl AppState {
         .context("failed to create SQLite test app state")
     }
 
+    #[cfg(test)]
+    pub async fn file_sqlite_for_tests() -> anyhow::Result<Self> {
+        let spool_dir = tempfile::tempdir()
+            .context("failed to create temporary job spool directory")?
+            .keep();
+        let database_dir = tempfile::tempdir()
+            .context("failed to create temporary SQLite database directory")?
+            .keep();
+        let artifact_storage = artifacts::FilesystemArtifactStorage::new(
+            spool_dir,
+            artifacts::DEFAULT_MAX_ARTIFACT_BYTES,
+        )?;
+        let database_url = format!("sqlite://{}", database_dir.join("hub.sqlite").display());
+        Self::connect_with_config_values(database_url, artifact_storage, None, None, None, None)
+            .await
+            .context("failed to create file SQLite test app state")
+    }
+
     pub fn tenants(&self) -> &TenantRepository {
         &self.tenants
     }

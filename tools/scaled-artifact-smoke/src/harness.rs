@@ -1,4 +1,4 @@
-use anyhow::ensure;
+use anyhow::{Context, ensure};
 
 #[derive(Debug, Clone)]
 pub struct HarnessConfig {
@@ -63,23 +63,33 @@ impl ScenarioFilter {
 pub async fn run(config: HarnessConfig) -> anyhow::Result<()> {
     for iteration in 1..=config.iterations {
         if config.scenario.includes(ScenarioFilter::Artifact) {
-            crate::scenarios::artifact_dispatch_download(iteration, &config).await?;
+            crate::scenarios::artifact_dispatch_download(iteration, &config)
+                .await
+                .with_context(|| format!("scenario=artifact iteration={iteration}"))?;
             println!("PASS scenario=artifact iteration={iteration}");
         }
         if config.scenario.includes(ScenarioFilter::Fanout) {
-            crate::scenarios::websocket_fanout(iteration, &config).await?;
+            crate::scenarios::websocket_fanout(iteration, &config)
+                .await
+                .with_context(|| format!("scenario=fanout iteration={iteration}"))?;
             println!("PASS scenario=fanout iteration={iteration}");
         }
         if config.scenario.includes(ScenarioFilter::Restart) {
-            crate::scenarios::restart_convergence(iteration, &config).await?;
+            crate::scenarios::restart_convergence(iteration, &config)
+                .await
+                .with_context(|| format!("scenario=restart iteration={iteration}"))?;
             println!("PASS scenario=restart iteration={iteration}");
         }
         if config.scenario.includes(ScenarioFilter::Storage) {
-            crate::scenarios::storage_failures(iteration, &config).await?;
+            crate::scenarios::storage_failures(iteration, &config)
+                .await
+                .with_context(|| format!("scenario=storage iteration={iteration}"))?;
             println!("PASS scenario=storage iteration={iteration}");
         }
         if config.scenario.includes(ScenarioFilter::Terminal) {
-            crate::scenarios::terminal_report_idempotence(iteration, &config).await?;
+            crate::scenarios::terminal_report_idempotence(iteration, &config)
+                .await
+                .with_context(|| format!("scenario=terminal iteration={iteration}"))?;
             println!("PASS scenario=terminal iteration={iteration}");
         }
     }

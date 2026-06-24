@@ -253,6 +253,61 @@ async fn plugin_print_returns_job_shape_and_records_plugin_actor_metadata() {
 }
 
 #[tokio::test]
+async fn plugin_print_handles_concurrent_sqlite_writes() {
+    let state = AppState::file_sqlite_for_tests()
+        .await
+        .unwrap()
+        .with_bootstrap_token(TEST_BOOTSTRAP_TOKEN);
+    let app = router(state.clone());
+    let tenant = state
+        .tenants()
+        .create("plugin-print-concurrent", "Plugin Print Concurrent")
+        .await
+        .unwrap();
+    let agent = state.agents().create(tenant.id, "agent").await.unwrap();
+    let mut requests = Vec::new();
+    for index in 0..2 {
+        let token = plugin_studio_tenant_token(
+            &state,
+            &tenant.id.to_string(),
+            &format!("print-plugin-{index}"),
+        )
+        .await;
+        let printer_id = insert_printer_fixture(state.database(), tenant.id, agent.id)
+            .await
+            .unwrap();
+        requests.push((token, printer_id));
+    }
+
+    let responses =
+        futures_util::future::join_all(requests.into_iter().map(|(token, printer_id)| {
+            let app = app.clone();
+            async move {
+                multipart_request_as(
+                    app,
+                    Method::POST,
+                    "/api/v1/plugin/prints",
+                    multipart_print_body(
+                        Some(&printer_id),
+                        Some(("plugin concurrent.3mf", "model/3mf", b"abc")),
+                        1,
+                    ),
+                    &token,
+                )
+                .await
+            }
+        }))
+        .await;
+
+    for (status, body) in responses {
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        assert_eq!(body["status"], "queued");
+        assert!(body["task_id"].as_str().is_some());
+        assert!(body["command_id"].as_str().is_some());
+    }
+}
+
+#[tokio::test]
 async fn plugin_print_and_list_include_artifact_metadata() {
     let state = state().await;
     let app = router(state.clone());
