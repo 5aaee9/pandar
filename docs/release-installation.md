@@ -126,6 +126,28 @@ CI release-smoke evidence and real host installation evidence are separate. A ta
 | `macos-amd64` | `untested` | No real host install row has been recorded; artifacts are unsigned and may trigger Gatekeeper warnings. | Install on Intel macOS, verify checksum, run `pandar --help`, replace the Studio plugin dylib for a controlled smoke, and record evidence. |
 | `macos-arm64` | `untested` | No real host install row has been recorded; artifacts are unsigned and may trigger Gatekeeper warnings. | Install on Apple Silicon macOS, verify checksum, run `pandar --help`, replace the Studio plugin dylib for a controlled smoke, and record evidence. |
 
+## Operations Runbook
+
+SQLite single-node checks:
+
+- Check `/readyz` before exposing the deployment. `database=1`, `artifact_storage=1`, and `grpc=1` are required for normal service.
+- Check `/metrics` for `pandar_readyz`, command/job counts, WebSocket ticket counters, control-plane counters, and print-report counters.
+- Back up both the SQLite database and filesystem artifact directory together. A database backup without matching artifact files cannot restore pending print artifacts.
+
+PostgreSQL + NATS + object-storage checks:
+
+- Verify PostgreSQL readiness and migration completion before adding additional Hub replicas.
+- Verify `PANDAR_CONTROL_PLANE=nats`, `PANDAR_NATS_URL`, and object-storage variables on every Hub replica.
+- Check `/metrics` for `pandar_control_plane_messages_total`, `pandar_agent_sessions`, `pandar_commands_total`, `pandar_jobs_total`, `pandar_print_reports_total`, and `pandar_readyz`.
+- Run the local Phase 26 dry-run harness during release validation, then record any disposable live PostgreSQL/NATS/object-storage soak in `docs/compatibility/phase-26-soak-evidence.md`.
+
+Recovery checks:
+
+- Hub restart: verify agents reconnect or receive the next wake, queued/sent commands remain in the database, and WebSocket subscribers can reconnect with new tickets.
+- NATS interruption: verify durable command/job state remains committed, restart the broker or Hub subscriber, then issue another wake-producing action if needed.
+- Storage outage: verify `/readyz` reports `artifact_storage=0`; upload/download failures should use stable artifact error labels, and cleanup should leave rows for retry when delete fails.
+- Printer/report issues: inspect print report counters, `machine_events`, command/job state, and full-chain agent logs before retrying operator actions.
+
 ## Signing Status
 
 Phase 24 signing decision: `unsigned-accepted`.

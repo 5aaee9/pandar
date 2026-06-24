@@ -253,7 +253,7 @@ Hub audit records are stored in `audit_events` for successful user-triggered mut
 Readiness and metrics:
 
 - `GET /readyz` checks database access, artifact storage access, scaled storage topology, gRPC bind configuration, and external-auth JWKS readiness when configured. Public details are sanitized.
-- `GET /metrics` exposes Prometheus text metrics for agent sessions, command/job/report counters, WebSocket tickets/subscriptions, and readiness gauges. Tenant labels are hashed before export.
+- `GET /metrics` exposes Prometheus text metrics for agent sessions, command/job/report counters, WebSocket tickets/subscriptions, control-plane publish/receive counters, and readiness gauges. Tenant labels are hashed before export.
 
 Cleanup CLI:
 
@@ -289,11 +289,23 @@ POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tena
 
 NATS is internal Hub infrastructure only: tenants, browsers, and `pandar-agent` still authenticate to Hub over the existing HTTP/WebSocket/gRPC APIs. PostgreSQL remains the shared fact source. For PostgreSQL plus NATS, use S3-compatible artifact storage, or set `PANDAR_ARTIFACT_FILESYSTEM_SHARED=true` only when every Hub replica truly mounts the same filesystem artifact directory. NATS does not replicate artifacts.
 
-The scaled artifact smoke harness exercises the default cross-Hub contract without live PostgreSQL, NATS, or S3 services:
+The Phase 26 local HA/failure smoke harness exercises the default cross-Hub contract without live PostgreSQL, NATS, MinIO, cloud S3, or Docker services:
 
 ```bash
 cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run
+cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run --iterations 2 --concurrency 2
+cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run --scenario storage
 ```
+
+The default mode uses local process fixtures, a shared SQLite database, shared fake object storage, and loopback HTTP/WebSocket only. Treat it as local convergence evidence for command wakeups, WebSocket fanout, plugin calls, storage failures, restart simulation, and terminal report idempotence. It is not live PostgreSQL/NATS/object-storage soak evidence.
+
+Optional live soak evidence variables:
+
+- `PANDAR_SOAK_DATABASE_URL`: disposable PostgreSQL database.
+- `PANDAR_SOAK_NATS_URL`: disposable NATS server.
+- `PANDAR_SOAK_ARTIFACT_S3_BUCKET`, `PANDAR_SOAK_ARTIFACT_S3_REGION`, `PANDAR_SOAK_ARTIFACT_S3_ENDPOINT`, `PANDAR_SOAK_ARTIFACT_S3_ACCESS_KEY_ID`, `PANDAR_SOAK_ARTIFACT_S3_SECRET_ACCESS_KEY`: disposable object-storage bucket.
+
+Do not point live soak at production data. When disposable live dependencies are available, record PostgreSQL latency or transaction-conflict observations, NATS reconnect behavior, object-storage behavior, command output, and commit SHA in `docs/compatibility/phase-26-soak-evidence.md`.
 
 Release packaging references:
 

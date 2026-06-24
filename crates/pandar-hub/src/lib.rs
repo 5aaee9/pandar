@@ -27,7 +27,7 @@ use crate::{
     artifacts::{ArtifactStorage, ArtifactStorageConfig, IntoArtifactStorage, JobStorageAlias},
     db::{Database, DatabaseConfig},
     identity::{ExternalAuthConfig, JwtVerifier},
-    metrics::MetricsState,
+    metrics::{ControlPlaneMetric, MetricsState},
     printer_events::{PrinterEvent, PrinterEventHub},
     repositories::{
         AgentRepository, AuditEventRepository, AuthRepository, CommandRepository, JobRepository,
@@ -299,7 +299,12 @@ impl AppState {
             })
             .await
         {
+            self.metrics
+                .record_control_plane(ControlPlaneMetric::PublishFailed);
             tracing::error!(error = %format!("{err:#}"), "failed to publish agent wake control message");
+        } else {
+            self.metrics
+                .record_control_plane(ControlPlaneMetric::PublishOk);
         }
     }
 
@@ -317,7 +322,12 @@ impl AppState {
             })
             .await
         {
+            self.metrics
+                .record_control_plane(ControlPlaneMetric::PublishFailed);
             tracing::error!(error = %format!("{err:#}"), "failed to publish agent close control message");
+        } else {
+            self.metrics
+                .record_control_plane(ControlPlaneMetric::PublishOk);
         }
     }
 
@@ -334,7 +344,12 @@ impl AppState {
             })
             .await
         {
+            self.metrics
+                .record_control_plane(ControlPlaneMetric::PublishFailed);
             tracing::error!(error = %format!("{err:#}"), "failed to publish printer event control message");
+        } else {
+            self.metrics
+                .record_control_plane(ControlPlaneMetric::PublishOk);
         }
     }
 

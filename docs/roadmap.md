@@ -60,6 +60,9 @@
 - Added Phase 25 Task 8 readiness and cleanup hardening: `/readyz` and Prometheus now report `artifact_storage`, scaled PostgreSQL+NATS filesystem deployments require an explicit shared-filesystem override or object storage, and cleanup execute deletes artifact storage objects before artifact rows while preserving rows on storage delete failure.
 - Added Phase 25 scaled artifact storage: browser and Bambu Studio plugin print submission now use multipart artifact uploads, Hub commands carry Hub-mediated `artifact_download_path` values instead of inline base64 artifact payloads, S3-compatible object storage is available for PostgreSQL+NATS deployments, and the scaled smoke harness verifies cross-Hub dispatch/download without a shared local spool.
 - Updated deployment, architecture, release, and Docker Compose docs so filesystem storage is documented as the SQLite/single-node default while PostgreSQL+NATS deployments use object storage or an explicit shared-filesystem override.
+- Added Phase 26 local HA/failure smoke coverage: the scaled smoke harness now exercises command wake convergence across Hub states, WebSocket `printer_snapshot` and `job_progress` fanout, restart simulation, plugin print pressure, artifact storage put/open/delete failures, and terminal print-report idempotence without Docker or live services.
+- Added Phase 26 focused failure observability: Prometheus exports control-plane publish/receive counters, publish failure after durable job/command commit is observable without rolling back state, WebSocket ticket safety is covered across replicas, and storage write/read/delete failure tests pin stable behavior.
+- Added Phase 26 operations docs and evidence tracking for SQLite single-node and PostgreSQL+NATS+object-storage deployments, including explicit live soak variables and a `docs/compatibility/phase-26-soak-evidence.md` table for local and live evidence.
 
 ## Phase 1: Foundation
 
@@ -553,23 +556,25 @@ Exit criteria:
 
 Goal: prove the scaled Hub and agent model under realistic concurrent use before expanding product surface area.
 
-- Soak-test PostgreSQL + NATS Hub replicas with concurrent agents, WebSocket subscribers, plugin clients, and print-job creation.
+- Completed local dry-run evidence for concurrent agent-session wake convergence, WebSocket subscribers, plugin clients, print-job creation, restart simulation, storage failures, and terminal print-report idempotence.
+- Remaining live evidence gap: disposable PostgreSQL + NATS + object-storage soak has not been run. `docs/compatibility/phase-26-soak-evidence.md` must be updated before treating live scaled deployment latency/conflict/reconnect behavior as proven.
+- Soak-test PostgreSQL + NATS Hub replicas with concurrent agents, WebSocket subscribers, plugin clients, and print-job creation when disposable live dependencies are available.
 - Exercise failure modes:
-  - Hub replica restart while agents are connected;
-  - NATS disconnect/reconnect;
-  - PostgreSQL latency or transaction conflicts;
-  - WebSocket ticket consumption across replicas;
-  - control-plane subscriber lag;
-  - artifact-storage write/read/delete failures.
-- Add or refine metrics and logs that distinguish app, database, broker, storage, agent, and printer failures.
-- Verify that stale-session protection, replacement sessions, command wakeups, printer events, and job progress broadcasts still converge after restarts.
-- Document recommended deployment topologies and operational runbooks for SQLite single-node and PostgreSQL + NATS scaled deployments.
+  - Hub restart is covered locally through shared database/storage/control-plane reconstruction;
+  - NATS disconnect/reconnect remains live-only evidence;
+  - PostgreSQL latency or transaction conflicts remain live-only evidence;
+  - WebSocket ticket consumption across replicas is covered locally;
+  - control-plane subscriber decode failure and continuation are covered by focused tests;
+  - artifact-storage write/read/delete failures are covered locally.
+- Metrics and logs distinguish app, database, broker/control-plane, storage, agent/session, and printer/report failures through `/readyz`, `/metrics`, and full-chain error logging.
+- Recommended deployment topologies and operational runbooks for SQLite single-node and PostgreSQL + NATS scaled deployments are documented.
 
 Exit criteria:
 
-- Scaled deployments have repeatable soak evidence for agent sessions, command dispatch, WebSocket fanout, plugin calls, and print-job creation.
+- Local scaled dry-run has repeatable evidence for agent sessions, command dispatch/wake, WebSocket fanout, plugin calls, and print-job creation.
 - Operators can identify which subsystem failed from `/readyz`, `/metrics`, logs, and documented runbooks.
-- Recovery from Hub restarts and broker interruptions does not duplicate terminal machine events or regress physical print state.
+- Recovery from local Hub restart simulation does not duplicate terminal machine events or regress physical print state.
+- Live broker interruption and PostgreSQL latency/conflict behavior remain unverified until disposable live soak evidence is recorded.
 
 ## Phase 27: Reference-Backed Live Printer Controls
 

@@ -15,6 +15,7 @@ pub struct MetricsState {
     websocket_tickets: Arc<WebsocketTicketCounters>,
     websocket_subscriptions: Arc<Mutex<HashMap<String, i64>>>,
     print_reports: Arc<PrintReportCounters>,
+    control_plane: Arc<ControlPlaneCounters>,
     readyz: Arc<Mutex<HashMap<&'static str, i64>>>,
 }
 
@@ -32,6 +33,14 @@ struct PrintReportCounters {
     rejected: AtomicI64,
 }
 
+#[derive(Debug, Default)]
+struct ControlPlaneCounters {
+    publish_ok: AtomicI64,
+    publish_failed: AtomicI64,
+    receive_ok: AtomicI64,
+    receive_failed: AtomicI64,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum TicketMetric {
     Issued,
@@ -46,12 +55,21 @@ pub enum PrintReportMetric {
     Rejected,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ControlPlaneMetric {
+    PublishOk,
+    PublishFailed,
+    ReceiveOk,
+    ReceiveFailed,
+}
+
 impl MetricsState {
     pub fn new() -> Self {
         Self {
             websocket_tickets: Arc::new(WebsocketTicketCounters::default()),
             websocket_subscriptions: Arc::new(Mutex::new(HashMap::new())),
             print_reports: Arc::new(PrintReportCounters::default()),
+            control_plane: Arc::new(ControlPlaneCounters::default()),
             readyz: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -70,6 +88,16 @@ impl MetricsState {
         let counter = match metric {
             PrintReportMetric::Accepted => &self.print_reports.accepted,
             PrintReportMetric::Rejected => &self.print_reports.rejected,
+        };
+        counter.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_control_plane(&self, metric: ControlPlaneMetric) {
+        let counter = match metric {
+            ControlPlaneMetric::PublishOk => &self.control_plane.publish_ok,
+            ControlPlaneMetric::PublishFailed => &self.control_plane.publish_failed,
+            ControlPlaneMetric::ReceiveOk => &self.control_plane.receive_ok,
+            ControlPlaneMetric::ReceiveFailed => &self.control_plane.receive_failed,
         };
         counter.fetch_add(1, Ordering::Relaxed);
     }
@@ -131,6 +159,27 @@ impl MetricsState {
             (
                 "rejected",
                 self.print_reports.rejected.load(Ordering::Relaxed),
+            ),
+        ]
+    }
+
+    pub fn control_plane_snapshot(&self) -> [(&'static str, i64); 4] {
+        [
+            (
+                "publish_ok",
+                self.control_plane.publish_ok.load(Ordering::Relaxed),
+            ),
+            (
+                "publish_failed",
+                self.control_plane.publish_failed.load(Ordering::Relaxed),
+            ),
+            (
+                "receive_ok",
+                self.control_plane.receive_ok.load(Ordering::Relaxed),
+            ),
+            (
+                "receive_failed",
+                self.control_plane.receive_failed.load(Ordering::Relaxed),
             ),
         ]
     }

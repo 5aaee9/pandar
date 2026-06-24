@@ -133,6 +133,12 @@ async fn print_job_returns_created_when_agent_wake_publish_fails() {
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(body["command"]["kind"], "print_project_file");
     assert_eq!(state.commands().count().await.unwrap(), 1);
+    assert!(
+        state
+            .metrics()
+            .control_plane_snapshot()
+            .contains(&("publish_failed", 1))
+    );
 }
 
 #[tokio::test]

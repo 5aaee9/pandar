@@ -1,6 +1,61 @@
 use super::*;
 
 #[tokio::test]
+async fn plugin_print_storage_put_failure_creates_no_job_or_command() {
+    let state = AppState::connect_with_config_values(
+        "sqlite::memory:",
+        PutFailingArtifactStorage,
+        None,
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap()
+    .with_bootstrap_token(TEST_BOOTSTRAP_TOKEN);
+    let app = router(state.clone());
+    let tenant = state
+        .tenants()
+        .create("plugin-print-put-failure", "Plugin Print Put Failure")
+        .await
+        .unwrap();
+    let token =
+        plugin_studio_tenant_token(&state, &tenant.id.to_string(), "put-failure-plugin").await;
+    let agent = state.agents().create(tenant.id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant.id, agent.id)
+        .await
+        .unwrap();
+
+    let (status, response) = multipart_request_as(
+        app,
+        Method::POST,
+        "/api/v1/plugin/prints",
+        multipart_print_body(
+            Some(&printer_id),
+            Some(("plugin plate.3mf", "model/3mf", b"abc")),
+            1,
+        ),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(response, json!({ "error": "internal_server_error" }));
+    assert_eq!(state.commands().count().await.unwrap(), 0);
+    let jobs: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM jobs")
+        .fetch_one(sqlite_pool(&state))
+        .await
+        .unwrap();
+    assert_eq!(jobs.0, 0);
+    assert!(
+        state
+            .metrics()
+            .control_plane_snapshot()
+            .contains(&("publish_ok", 0))
+    );
+}
+
+#[tokio::test]
 async fn plugin_print_uses_stable_artifact_validation_errors() {
     let state = state().await;
     let app = router(state.clone());
@@ -184,4 +239,40 @@ fn sqlite_pool(state: &AppState) -> &sqlx::SqlitePool {
         panic!("expected SQLite database");
     };
     pool
+}
+
+#[derive(Debug)]
+struct PutFailingArtifactStorage;
+
+#[async_trait::async_trait]
+impl crate::artifacts::ArtifactStorage for PutFailingArtifactStorage {
+    async fn put_artifact(
+        &self,
+        _input: crate::artifacts::StoreArtifactInput<'_>,
+    ) -> anyhow::Result<crate::artifacts::StoredArtifact> {
+        anyhow::bail!("injected put failure")
+    }
+
+    async fn open_artifact(
+        &self,
+        _storage_key: &str,
+    ) -> anyhow::Result<crate::artifacts::ArtifactBody> {
+        unreachable!("put failure test never opens artifacts")
+    }
+
+    async fn delete_artifact(&self, _storage_key: &str) -> anyhow::Result<()> {
+        unreachable!("put failure test never deletes artifacts")
+    }
+
+    async fn check_ready(&self) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn max_artifact_bytes(&self) -> usize {
+        crate::artifacts::DEFAULT_MAX_ARTIFACT_BYTES
+    }
+
+    fn backend(&self) -> crate::artifacts::ArtifactStorageBackend {
+        crate::artifacts::ArtifactStorageBackend::S3
+    }
 }

@@ -301,6 +301,56 @@ async fn printer_events_websocket_accepts_browser_ticket_from_separate_sqlite_co
 }
 
 #[tokio::test]
+async fn printer_events_cross_replica_ticket_safety_matrix() {
+    let state = state().await;
+    let subscriber = sibling_state(&state);
+    let issuer = router(state.clone());
+    let http_addr = serve_http(router(subscriber)).await;
+    let tenant = state
+        .tenants()
+        .create("ticket-matrix-acme", "Ticket Matrix Acme")
+        .await
+        .unwrap();
+    let other = state
+        .tenants()
+        .create("ticket-matrix-other", "Ticket Matrix Other")
+        .await
+        .unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "ticket-matrix-token",
+    )
+    .await;
+    let other_token = auth_token_for_role(
+        &state,
+        &other.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "ticket-matrix-other-token",
+    )
+    .await;
+
+    let ticket = issue_ticket(issuer.clone(), tenant.id, &token).await;
+    let (ws, _) = tokio_tungstenite::connect_async(format!(
+        "ws://{http_addr}/api/v1/tenants/{}/printer-events?ticket={ticket}",
+        tenant.id
+    ))
+    .await
+    .unwrap();
+    drop(ws);
+
+    assert_ws_ticket_rejected(http_addr, tenant.id, &ticket).await;
+
+    let wrong_tenant_ticket = issue_ticket(issuer.clone(), other.id, &other_token).await;
+    assert_ws_ticket_rejected(http_addr, tenant.id, &wrong_tenant_ticket).await;
+
+    let expired_ticket = "pandar_ws_expired_matrix";
+    seed_expired_ticket(state.database(), tenant.id, expired_ticket).await;
+    assert_ws_ticket_rejected(http_addr, tenant.id, expired_ticket).await;
+}
+
+#[tokio::test]
 async fn printer_events_websocket_rejects_invalid_ticket_before_upgrade() {
     let state = state().await;
     let app = router(state.clone());
@@ -737,6 +787,77 @@ fn test_audit_actor() -> crate::repositories::AuditActor {
 }
 
 const JOB_PROGRESS_ARTIFACT_ID: &str = "22222222-2222-4222-8222-222222222222";
+
+async fn issue_ticket(app: Router, tenant_id: TenantId, token: &str) -> String {
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printer-events/tickets"),
+        None,
+        token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    body["ticket"].as_str().unwrap().to_owned()
+}
+
+async fn assert_ws_ticket_rejected(
+    http_addr: std::net::SocketAddr,
+    tenant_id: TenantId,
+    ticket: &str,
+) {
+    let err = tokio_tungstenite::connect_async(format!(
+        "ws://{http_addr}/api/v1/tenants/{tenant_id}/printer-events?ticket={ticket}",
+    ))
+    .await
+    .unwrap_err();
+    let message = err.to_string();
+    assert!(
+        message.contains("401") || message.contains("Unauthorized"),
+        "unexpected rejected-ticket error: {message}"
+    );
+}
+
+async fn seed_expired_ticket(database: &crate::Database, tenant_id: TenantId, ticket: &str) {
+    let now = time::OffsetDateTime::now_utc();
+    let created_at = now
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap();
+    let expires_at = (now - time::Duration::seconds(1))
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap();
+    let ticket_hash = crate::repositories::hash_secret(ticket);
+    match database {
+        crate::Database::Sqlite(pool) => {
+            sqlx::query(
+                "INSERT INTO printer_event_tickets (id, tenant_id, ticket_hash, created_at, expires_at, used_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, NULL)",
+            )
+            .bind(uuid::Uuid::new_v4().to_string())
+            .bind(tenant_id.to_string())
+            .bind(ticket_hash)
+            .bind(created_at)
+            .bind(expires_at)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        crate::Database::Postgres(pool) => {
+            sqlx::query(
+                "INSERT INTO printer_event_tickets (id, tenant_id, ticket_hash, created_at, expires_at, used_at)
+                 VALUES ($1, $2, $3, $4, $5, NULL)",
+            )
+            .bind(uuid::Uuid::new_v4().to_string())
+            .bind(tenant_id.to_string())
+            .bind(ticket_hash)
+            .bind(created_at)
+            .bind(expires_at)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+    }
+}
 
 async fn serve_http(app: Router) -> std::net::SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

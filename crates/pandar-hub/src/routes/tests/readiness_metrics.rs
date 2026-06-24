@@ -142,6 +142,18 @@ async fn metrics_redacts_tenant_ids_and_reports_required_series() {
     state
         .metrics()
         .record_ticket(crate::metrics::TicketMetric::Invalid);
+    state
+        .metrics()
+        .record_control_plane(crate::metrics::ControlPlaneMetric::PublishOk);
+    state
+        .metrics()
+        .record_control_plane(crate::metrics::ControlPlaneMetric::PublishFailed);
+    state
+        .metrics()
+        .record_control_plane(crate::metrics::ControlPlaneMetric::ReceiveOk);
+    state
+        .metrics()
+        .record_control_plane(crate::metrics::ControlPlaneMetric::ReceiveFailed);
     let tenant_id_hash = crate::metrics::tenant_id_hash(tenant.id);
 
     let response = app
@@ -163,6 +175,7 @@ async fn metrics_redacts_tenant_ids_and_reports_required_series() {
         "pandar_commands_total",
         "pandar_websocket_subscriptions",
         "pandar_websocket_tickets_total",
+        "pandar_control_plane_messages_total",
         "pandar_jobs_total",
         "pandar_print_reports_total",
         "pandar_readyz",
@@ -172,6 +185,10 @@ async fn metrics_redacts_tenant_ids_and_reports_required_series() {
     assert!(text.contains("pandar_websocket_tickets_total{result=\"issued\"} 1"));
     assert!(text.contains("pandar_websocket_tickets_total{result=\"consumed\"} 1"));
     assert!(text.contains("pandar_websocket_tickets_total{result=\"invalid\"} 1"));
+    assert!(text.contains("pandar_control_plane_messages_total{result=\"publish_ok\"} 1"));
+    assert!(text.contains("pandar_control_plane_messages_total{result=\"publish_failed\"} 1"));
+    assert!(text.contains("pandar_control_plane_messages_total{result=\"receive_ok\"} 1"));
+    assert!(text.contains("pandar_control_plane_messages_total{result=\"receive_failed\"} 1"));
     assert!(text.contains("pandar_print_reports_total{result=\"accepted\"} 1"));
     assert!(text.contains("pandar_print_reports_total{result=\"rejected\"} 1"));
     assert!(text.contains("pandar_readyz{check=\"artifact_storage\"} 1"));

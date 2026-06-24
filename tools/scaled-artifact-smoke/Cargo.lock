@@ -2748,14 +2748,17 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "futures-util",
  "http-body-util",
  "pandar-agent",
  "pandar-core",
  "pandar-hub",
  "reqwest",
+ "sea-orm",
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-tungstenite",
  "tower",
 ]
 

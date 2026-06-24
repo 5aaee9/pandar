@@ -4,7 +4,7 @@ use anyhow::Context;
 use futures_util::StreamExt;
 use tokio::{sync::oneshot, task::JoinHandle};
 
-use crate::{AppState, cluster::HubControlMessage};
+use crate::{AppState, cluster::HubControlMessage, metrics::ControlPlaneMetric};
 
 const STALE_SESSION_TIMEOUT: Duration = Duration::from_secs(45);
 const STALE_SESSION_SWEEP_INTERVAL: Duration = Duration::from_secs(15);
@@ -61,8 +61,16 @@ fn spawn_control_plane_inner(
         };
         while let Some(message) = stream.next().await {
             match message {
-                Ok(message) => handle_control_message(&state, message).await,
+                Ok(message) => {
+                    handle_control_message(&state, message).await;
+                    state
+                        .metrics()
+                        .record_control_plane(ControlPlaneMetric::ReceiveOk);
+                }
                 Err(err) => {
+                    state
+                        .metrics()
+                        .record_control_plane(ControlPlaneMetric::ReceiveFailed);
                     tracing::error!(error = %format!("{err:#}"), "failed to receive hub control message");
                 }
             }

@@ -12,6 +12,7 @@ pub async fn prometheus_metrics(state: &AppState) -> anyhow::Result<String> {
     append_agent_sessions(&mut output, state).await?;
     append_commands(&mut output, state.database()).await?;
     append_websockets(&mut output, state).await;
+    append_control_plane(&mut output, state);
     append_jobs(&mut output, state.database()).await?;
     append_print_reports(&mut output, state);
     append_readyz(&mut output, state).await;
@@ -61,6 +62,14 @@ async fn append_websockets(output: &mut String, state: &AppState) {
     for (result, count) in state.metrics().websocket_ticket_snapshot() {
         output.push_str(&format!(
             "pandar_websocket_tickets_total{{result=\"{result}\"}} {count}\n"
+        ));
+    }
+}
+
+fn append_control_plane(output: &mut String, state: &AppState) {
+    for (result, count) in state.metrics().control_plane_snapshot() {
+        output.push_str(&format!(
+            "pandar_control_plane_messages_total{{result=\"{result}\"}} {count}\n"
         ));
     }
 }
