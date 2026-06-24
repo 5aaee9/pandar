@@ -13,7 +13,7 @@ This runbook records real Bambu Studio compatibility evidence for Phase 23. A su
 - A linked `pandar-agent`.
 - Optional: a real printer connected through the agent for print submission.
 
-Current workspace check on 2026-06-24: no local Bambu Studio command and no local release plugin archive were found, so this runbook is blocked here until those prerequisites are provided.
+Current workspace check on 2026-06-24: no local Bambu Studio command was found, so this runbook is blocked here until a Studio installation is provided. Release artifact availability is tracked separately in `docs/compatibility/release-artifacts.md`.
 
 ## Build Or Select Plugin Artifact
 
