@@ -16,12 +16,18 @@ Phase 24 tracks release archive evidence separately from real Bambu Studio compa
 
 | Run/Tag | Target | Archive Filename | Checksum | Layout | CLI Startup | Plugin Exports | Real Host Install | Signing | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| untested | `linux-amd64` | `pandar-release-<tag-or-sanitized-ref>-linux-amd64.tar.gz` | `untested` | `untested` | `untested` | `untested` | `untested` | `unsupported` | Unsigned artifacts accepted for Phase 24; no real host install evidence recorded. |
-| untested | `linux-arm64` | `pandar-release-<tag-or-sanitized-ref>-linux-arm64.tar.gz` | `untested` | `untested` | `untested` | `untested` | `untested` | `unsupported` | Unsigned artifacts accepted for Phase 24; no real host install evidence recorded. |
-| untested | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-windows-amd64.tar.gz` | `untested` | `untested` | `untested` | `untested` | `untested` | `unsupported` | Unsigned artifacts accepted for Phase 24; expect platform warnings; no real host install evidence recorded. |
-| untested | `windows-arm64` | `pandar-release-<tag-or-sanitized-ref>-windows-arm64.tar.gz` | `untested` | `untested` | `untested` | `untested` | `untested` | `unsupported` | Unsigned artifacts accepted for Phase 24; expect platform warnings; no real host install evidence recorded. |
-| untested | `macos-amd64` | `pandar-release-<tag-or-sanitized-ref>-macos-amd64.tar.gz` | `untested` | `untested` | `untested` | `untested` | `untested` | `unsupported` | Unsigned artifacts accepted for Phase 24; expect Gatekeeper warnings; no real host install evidence recorded. |
-| untested | `macos-arm64` | `pandar-release-<tag-or-sanitized-ref>-macos-arm64.tar.gz` | `untested` | `untested` | `untested` | `untested` | `untested` | `unsupported` | Unsigned artifacts accepted for Phase 24; expect Gatekeeper warnings; no real host install evidence recorded. |
+| blocked | `linux-amd64` | `pandar-release-<tag-or-sanitized-ref>-linux-amd64.tar.gz` | `blocked` | `blocked` | `blocked` | `blocked` | `blocked` | `unsupported` | No release artifact exists for this target yet; create a tag/release artifact before validation. |
+| blocked | `linux-arm64` | `pandar-release-<tag-or-sanitized-ref>-linux-arm64.tar.gz` | `blocked` | `blocked` | `blocked` | `blocked` | `blocked` | `unsupported` | No release artifact exists for this target yet; create a tag/release artifact before validation. |
+| blocked | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-windows-amd64.tar.gz` | `blocked` | `blocked` | `blocked` | `blocked` | `blocked` | `unsupported` | No release artifact exists for this target yet; create a tag/release artifact before validation. |
+| blocked | `windows-arm64` | `pandar-release-<tag-or-sanitized-ref>-windows-arm64.tar.gz` | `blocked` | `blocked` | `blocked` | `blocked` | `blocked` | `unsupported` | No release artifact exists for this target yet; create a tag/release artifact before validation. |
+| blocked | `macos-amd64` | `pandar-release-<tag-or-sanitized-ref>-macos-amd64.tar.gz` | `blocked` | `blocked` | `blocked` | `blocked` | `blocked` | `unsupported` | No release artifact exists for this target yet; create a tag/release artifact before validation. |
+| blocked | `macos-arm64` | `pandar-release-<tag-or-sanitized-ref>-macos-arm64.tar.gz` | `blocked` | `blocked` | `blocked` | `blocked` | `blocked` | `unsupported` | No release artifact exists for this target yet; create a tag/release artifact before validation. |
+
+## Release Availability Check
+
+| Date | Source | Command | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| 2026-06-24 | GitHub Releases, release workflow runs, git tags, local archive search | `gh release list --limit 20`; `gh run list --workflow release.yml --limit 20 --json databaseId,headBranch,headSha,event,status,conclusion,createdAt,updatedAt,url`; `git tag --sort=-creatordate | head -20`; `find dist target -name 'pandar-release-*.tar.gz' -o -name 'pandar-release-*.tar.gz.sha256'` | `blocked` | No GitHub releases, no release workflow runs, no local tags, and no local `pandar-release-*.tar.gz` archives were found. Real artifact validation cannot run until a release artifact exists. |
 
 ## Local Release-Smoke Coverage
 

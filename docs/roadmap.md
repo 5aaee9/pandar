@@ -522,6 +522,7 @@ Goal: make release artifacts predictable enough for operators to install without
 - Refreshed local release-smoke unit evidence on 2026-06-24: `cargo test --manifest-path tools/release-smoke/Cargo.toml` passed 17 tests.
 - Wired the tag-driven GitHub Release workflow to run checksum verification and release-smoke before uploading release artifacts.
 - Added operator release installation docs, a release artifact evidence manifest, and the explicit Phase 24 signing decision: `unsigned-accepted`.
+- Checked release artifact availability on 2026-06-24: no GitHub Releases, no `release.yml` workflow runs, no tags, and no local `pandar-release-*.tar.gz` archives were available, so real artifact validation is blocked until a release artifact is produced.
 - Real host installation evidence remains unverified until `docs/compatibility/release-artifacts.md` records target-family rows from actual release artifact installs.
 - Rework the Linux `pandar-network-plugin` export strategy if arm64 plugin releases remain a target, because the current GNU export-map path is known to be fragile around Rust `cdylib` plus C++ shim exports.
 
@@ -630,8 +631,8 @@ Exit criteria:
 ## Immediate Next
 
 - Start Phase 23 with real Bambu Studio compatibility testing on Linux, Windows, and macOS.
-- Validate existing release artifacts while running Phase 23 so Phase 24 can use the same platform evidence.
+- Produce a tag/release artifact, then validate it while running Phase 23 so Phase 24 can use the same platform evidence.
 - Record real Bambu Studio plugin compatibility evidence for Phase 23.
-- Record live release artifact install evidence for Phase 24.
+- Record live release artifact install evidence for Phase 24 after an archive exists.
 - Run live Phase 26 soak when disposable PostgreSQL, NATS, and object-storage infrastructure is available.
 - Keep virtual-printer/proxy behavior deferred until plugin compatibility, scaled artifact storage, and operator recovery workflows are stable.
