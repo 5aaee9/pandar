@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 
+import type { ArtifactMetadata } from './dashboard-types'
 import { formatBytes } from './dashboard-ui'
 
 type DispatchTenant = {
@@ -40,7 +41,15 @@ export function DispatchForm({
     size: 0,
     state: 'idle',
   })
+  const [metadataPreview, setMetadataPreview] = useState<{
+    state: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
+    metadata: ArtifactMetadata | null
+  }>({
+    state: 'idle',
+    metadata: null,
+  })
   const [submitting, setSubmitting] = useState(false)
+  const previewRequestRef = useRef(0)
 
   useEffect(() => {
     if (!printers.some((printer) => printer.id === selectedPrinterId)) {
@@ -50,16 +59,64 @@ export function DispatchForm({
 
   const selectArtifact = (file: File | null) => {
     if (!file) {
+      previewRequestRef.current += 1
       setArtifact({ file: null, size: 0, state: 'idle' })
+      setMetadataPreview({ state: 'idle', metadata: null })
       return
     }
 
     if (file.size > maxArtifactBytes) {
+      previewRequestRef.current += 1
       setArtifact({ file, size: file.size, state: 'too_large' })
+      setMetadataPreview({ state: 'idle', metadata: null })
       return
     }
 
     setArtifact({ file, size: file.size, state: 'ready' })
+    void previewArtifact(file)
+  }
+
+  const previewArtifact = async (file: File) => {
+    if (!selectedTenant) {
+      setMetadataPreview({ state: 'idle', metadata: null })
+      return
+    }
+
+    const formData = new FormData()
+    formData.set('filename', file.name)
+    formData.set('content_type', file.type || 'application/octet-stream')
+    formData.set('file', file)
+    const requestId = previewRequestRef.current + 1
+    previewRequestRef.current = requestId
+    setMetadataPreview({ state: 'loading', metadata: null })
+
+    try {
+      const response = await fetch(metadataPreviewPath(selectedTenant.id), {
+        method: 'POST',
+        body: formData,
+      })
+      if (requestId !== previewRequestRef.current) {
+        return
+      }
+      if (!response.ok) {
+        setMetadataPreview({ state: 'error', metadata: null })
+        return
+      }
+      const body = (await response.json()) as { metadata?: ArtifactMetadata | null }
+      if (requestId !== previewRequestRef.current) {
+        return
+      }
+      setMetadataPreview(
+        body.metadata
+          ? { state: 'ready', metadata: body.metadata }
+          : { state: 'unavailable', metadata: null },
+      )
+    } catch {
+      if (requestId !== previewRequestRef.current) {
+        return
+      }
+      setMetadataPreview({ state: 'error', metadata: null })
+    }
   }
 
   const submitPrintJob = async (event: FormEvent<HTMLFormElement>) => {
@@ -167,6 +224,7 @@ export function DispatchForm({
                   ? `${formatBytes(artifact.size)} exceeds the configured limit`
                   : 'Choose a file before dispatch.'}
             </div>
+            <MetadataPreview preview={metadataPreview} />
             <div className="mt-2 flex flex-wrap gap-1 text-xs">
               {backendErrorCodes.map((code) => (
                 <span key={code} className="rounded bg-white px-2 py-1 text-slate-600">
@@ -208,6 +266,10 @@ function uploadPath(tenantId: string, printerId: string) {
   return `/api/tenants/${encodeURIComponent(tenantId)}/printers/${encodeURIComponent(printerId)}/jobs`
 }
 
+function metadataPreviewPath(tenantId: string) {
+  return `/api/tenants/${encodeURIComponent(tenantId)}/artifact-metadata-preview`
+}
+
 async function errorCode(response: Response) {
   try {
     const body = (await response.json()) as { error?: string }
@@ -215,6 +277,54 @@ async function errorCode(response: Response) {
   } catch {
     return `http_${response.status}`
   }
+}
+
+function MetadataPreview({
+  preview,
+}: {
+  preview: {
+    state: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
+    metadata: ArtifactMetadata | null
+  }
+}) {
+  if (preview.state === 'idle') {
+    return null
+  }
+  if (preview.state === 'loading') {
+    return <div className="mt-2 text-xs text-slate-600">Reading slicer metadata</div>
+  }
+  if (preview.state === 'unavailable') {
+    return <div className="mt-2 text-xs text-slate-600">No slicer metadata found</div>
+  }
+  if (preview.state === 'error' || !preview.metadata) {
+    return <div className="mt-2 text-xs text-slate-600">Metadata preview unavailable</div>
+  }
+
+  const metadata = preview.metadata
+  const primaryPlate =
+    metadata.plates.find((plate) => plate.plate_id === metadata.default_plate_id) ??
+    metadata.plates[0]
+
+  return (
+    <div className="mt-2 grid gap-1 text-xs text-slate-700 sm:grid-cols-3">
+      <div className="min-w-0">
+        <span className="text-slate-500">Project </span>
+        <span className="font-medium text-slate-900">{metadata.display_name}</span>
+      </div>
+      <div>
+        <span className="text-slate-500">Plate </span>
+        <span className="font-medium text-slate-900">
+          {metadata.default_plate_id ?? '-'}
+        </span>
+      </div>
+      <div className="truncate">
+        <span className="text-slate-500">Objects </span>
+        <span className="font-medium text-slate-900">
+          {primaryPlate?.objects.length ? primaryPlate.objects.join(', ') : '-'}
+        </span>
+      </div>
+    </div>
+  )
 }
 
 function DispatchEmptyState({ title, message }: { title: string; message: string }) {

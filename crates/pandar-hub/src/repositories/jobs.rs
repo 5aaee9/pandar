@@ -40,6 +40,7 @@ pub struct CreatePrintJob {
     pub artifact_content_type: String,
     pub artifact_size_bytes: u64,
     pub artifact_storage_path: String,
+    pub artifact_metadata_json: Option<String>,
     pub plate_id: u32,
     pub use_ams: bool,
     pub flow_cali: bool,

@@ -227,6 +227,7 @@ async fn plugin_print_returns_job_shape_and_records_plugin_actor_metadata() {
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(body["status"], "queued");
     assert_eq!(body["message"], Value::Null);
+    assert_eq!(body["artifact_metadata"], Value::Null);
     assert!(body["task_id"].as_str().is_some());
     assert!(body["command_id"].as_str().is_some());
     assert_eq!(body["pandar_job_id"], body["task_id"]);
@@ -249,6 +250,47 @@ async fn plugin_print_returns_job_shape_and_records_plugin_actor_metadata() {
     assert_eq!(metadata["tenant_token_scopes"], json!(["plugin:studio"]));
     assert!(metadata.get("token").is_none());
     assert!(metadata.get("ticket").is_none());
+}
+
+#[tokio::test]
+async fn plugin_print_and_list_include_artifact_metadata() {
+    let state = state().await;
+    let app = router(state.clone());
+    let tenant = state
+        .tenants()
+        .create("plugin-print-metadata", "Plugin Print Metadata")
+        .await
+        .unwrap();
+    let token =
+        plugin_studio_tenant_token(&state, &tenant.id.to_string(), "print-metadata-plugin").await;
+    let agent = state.agents().create(tenant.id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant.id, agent.id)
+        .await
+        .unwrap();
+    let artifact = crate::routes::tests::multipart::slicer_metadata_fixture();
+
+    let (status, body) = multipart_request_as(
+        app.clone(),
+        Method::POST,
+        "/api/v1/plugin/prints",
+        multipart_print_body(
+            Some(&printer_id),
+            Some(("plugin plate.3mf", "model/3mf", &artifact)),
+            1,
+        ),
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["artifact_metadata"]["display_name"], "plate file");
+    assert_eq!(body["artifact_metadata"]["default_plate_id"], 1);
+
+    let (status, list) = request_as(app, Method::GET, "/api/v1/plugin/jobs", None, &token).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        list["jobs"][0]["artifact_metadata"],
+        body["artifact_metadata"]
+    );
 }
 
 #[tokio::test]

@@ -1,7 +1,7 @@
 import { controlPrinter, duplicateJob, refreshPrinters, reprintJob, retryDispatchJob } from './actions'
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
 import { EmptyState, SectionHeader } from './dashboard-ui'
-import { formatJobRecoveryState } from './dashboard-runtime-helpers'
+import { formatArtifactMetadata, formatJobRecoveryState } from './dashboard-runtime-helpers'
 
 const liveControlModelKeys = new Set(['A1', 'A1MINI', 'A1M', 'A1MIN', 'BAMBULABA1MINI', 'BAMBULABA1', 'P2S', 'N7', 'X2D', 'N6'])
 
@@ -50,6 +50,7 @@ export function RecoveryActions({
                   <div key={job.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[minmax(0,1fr)_minmax(320px,auto)]">
                     <div className="min-w-0">
                       <div className="truncate font-medium text-slate-950">{job.artifact.filename}</div>
+                      <div className="truncate text-xs text-slate-700">{formatArtifactMetadata(job)}</div>
                       <div className="mt-1 text-xs text-slate-600">{formatJobRecoveryState(job)}</div>
                       <LiveControlPanel tenantId={selectedTenant.id} printer={printer} />
                     </div>

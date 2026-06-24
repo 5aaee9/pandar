@@ -10,6 +10,7 @@ import {
 } from './dashboard-ui'
 import type { LiveState, RuntimeNotification } from './dashboard-runtime-helpers'
 import {
+  formatArtifactMetadata,
   formatJobMaterial,
   formatJobRecoveryState,
   formatPrinterMaterials,
@@ -149,6 +150,7 @@ function JobRow({ job }: { job: Job }) {
         <div className="truncate text-xs text-slate-600">
           {job.artifact.content_type} · {formatBytes(job.artifact.size_bytes)}
         </div>
+        <div className="truncate text-xs text-slate-700">{formatArtifactMetadata(job)}</div>
         <div className="truncate font-mono text-xs text-slate-600">Job {job.id}</div>
         <div className="truncate font-mono text-xs text-slate-600">Artifact {job.artifact.id}</div>
       </div>

@@ -10,6 +10,7 @@ pub struct Model {
     pub content_type: String,
     pub size_bytes: i64,
     pub storage_path: String,
+    pub metadata_json: Option<String>,
     pub created_at: String,
 }
 

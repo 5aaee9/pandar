@@ -62,6 +62,7 @@ pub struct NewPrintJobFromArtifact {
     artifact_content_type: String,
     artifact_size_bytes: u64,
     artifact_storage_path: String,
+    artifact_metadata_json: Option<String>,
     plate_id: u32,
     use_ams: bool,
     flow_cali: bool,
@@ -94,6 +95,7 @@ impl NewPrintJobFromArtifact {
             artifact_content_type: source.artifact.content_type,
             artifact_size_bytes: source.artifact.size_bytes,
             artifact_storage_path: source.artifact.storage_path,
+            artifact_metadata_json: source.artifact.metadata_json,
             plate_id: overrides.plate_id.unwrap_or(source_payload.plate_id),
             use_ams: overrides.use_ams.unwrap_or(source_payload.use_ams),
             flow_cali: overrides.flow_cali.unwrap_or(source_payload.flow_cali),
@@ -208,6 +210,7 @@ where
         content_type: Set(input.artifact_content_type.clone()),
         size_bytes: Set(input.artifact_size_bytes as i64),
         storage_path: Set(input.artifact_storage_path.clone()),
+        metadata_json: Set(input.artifact_metadata_json.clone()),
         created_at: Set(now.to_owned()),
     }
     .insert(connection)
@@ -294,6 +297,7 @@ fn build_created_job(
             content_type: input.artifact_content_type,
             size_bytes: input.artifact_size_bytes,
             storage_path: input.artifact_storage_path,
+            metadata_json: input.artifact_metadata_json,
             created_at: now.clone(),
         })
         .map_err(anyhow::Error::from)
@@ -345,6 +349,7 @@ fn build_job_from_existing_artifact(
             content_type: input.artifact_content_type,
             size_bytes: input.artifact_size_bytes,
             storage_path: input.artifact_storage_path,
+            metadata_json: input.artifact_metadata_json,
             created_at: now.clone(),
         })
         .map_err(anyhow::Error::from)

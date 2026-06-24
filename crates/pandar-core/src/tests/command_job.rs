@@ -120,6 +120,7 @@ fn job_artifact_from_parts_validates_required_fields() {
             content_type: content_type.to_string(),
             size_bytes,
             storage_path: path.to_string(),
+            metadata_json: None,
             created_at: created_at.clone(),
         })
     };

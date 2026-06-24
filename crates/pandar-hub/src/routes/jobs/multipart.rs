@@ -9,36 +9,11 @@ use crate::{
     routes::{ApiError, jobs::material},
 };
 
+mod types;
+
+pub(in crate::routes::jobs) use types::{MultipartPrintFields, StagedUpload};
+
 const MAX_MULTIPART_TEXT_FIELD_BYTES: usize = 16 * 1024;
-
-#[derive(Debug, Default)]
-struct MultipartPrintFields {
-    printer_id: Option<String>,
-    filename: Option<String>,
-    content_type: Option<String>,
-    plate_id: Option<i64>,
-    use_ams: Option<bool>,
-    flow_cali: Option<bool>,
-    timelapse: Option<bool>,
-    ams_mapping: Option<Value>,
-    ams_mapping2: Option<Value>,
-    file: Option<StagedUpload>,
-}
-
-impl MultipartPrintFields {
-    async fn cleanup_staged_uploads(&self) {
-        if let Some(file) = &self.file {
-            cleanup_staged_upload(file).await;
-        }
-    }
-}
-
-#[derive(Debug)]
-struct StagedUpload {
-    path: std::path::PathBuf,
-    filename: Option<String>,
-    content_type: Option<String>,
-}
 
 pub(in crate::routes) async fn create_print_job_from_multipart(
     state: &AppState,
@@ -60,6 +35,7 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
         timelapse,
         filename,
         content_type,
+        artifact_metadata,
         upload_file,
     ) = match prepared {
         Ok(prepared) => prepared,
@@ -105,6 +81,7 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
                 artifact_content_type: content_type,
                 artifact_size_bytes: stored.size_bytes,
                 artifact_storage_path: stored.storage_path.clone(),
+                artifact_metadata_json: artifact_metadata.map(|value| value.to_string()),
                 plate_id,
                 use_ams,
                 flow_cali,
@@ -135,7 +112,7 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
     }
 }
 
-async fn parse_multipart_print_fields(
+pub(super) async fn parse_multipart_print_fields(
     state: &AppState,
     mut multipart: Multipart,
 ) -> Result<MultipartPrintFields, ApiError> {
@@ -248,6 +225,7 @@ type PreparedPrintJob = (
     bool,
     String,
     String,
+    Option<serde_json::Value>,
     fs::File,
 );
 
@@ -297,6 +275,8 @@ async fn prepare_print_job(
         );
         ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
     })?;
+    let artifact_metadata =
+        super::metadata_preview::parsed_metadata_json(&filename, &content_type, &file.path).await?;
 
     Ok((
         printer,
@@ -308,6 +288,7 @@ async fn prepare_print_job(
         timelapse,
         filename,
         content_type,
+        artifact_metadata,
         upload_file,
     ))
 }
@@ -361,6 +342,18 @@ async fn stage_file_field(
         drop(file);
         let _ = fs::remove_file(&path).await;
         return Err(ApiError::bad_request("artifact_empty"));
+    }
+    if let Err(err) = file.flush().await {
+        tracing::error!(
+            error = %super::redact_artifact_error(&format!("{err:#}")),
+            "failed to flush staged print artifact"
+        );
+        drop(file);
+        let _ = fs::remove_file(&path).await;
+        return Err(ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_server_error",
+        ));
     }
     Ok(StagedUpload {
         path,

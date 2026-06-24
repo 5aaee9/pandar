@@ -36,6 +36,7 @@ pub(super) fn create_input_with_filename(
         artifact_content_type: "model/3mf".to_string(),
         artifact_size_bytes: 42,
         artifact_storage_path: format!("{tenant_id}/{artifact_id}/{filename}"),
+        artifact_metadata_json: None,
         plate_id: 1,
         use_ams: true,
         flow_cali: false,

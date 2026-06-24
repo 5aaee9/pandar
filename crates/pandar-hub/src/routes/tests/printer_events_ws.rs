@@ -546,6 +546,7 @@ async fn printer_events_websocket_receives_job_progress_from_grpc_stream() {
             artifact_content_type: "model/3mf".to_string(),
             artifact_size_bytes: 3,
             artifact_storage_path: format!("{}/{JOB_PROGRESS_ARTIFACT_ID}/plate.3mf", tenant.id),
+            artifact_metadata_json: None,
             plate_id: 1,
             use_ams: true,
             flow_cali: false,

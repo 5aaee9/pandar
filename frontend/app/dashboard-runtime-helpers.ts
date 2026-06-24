@@ -88,6 +88,26 @@ export function formatJobMaterial(job: Job) {
   return mappings.length > 0 ? mappings.join(', ') : 'No material mapping'
 }
 
+export function formatArtifactMetadata(job: Job) {
+  const metadata = job.artifact.metadata
+  if (!metadata) {
+    return 'No slicer metadata'
+  }
+
+  const plate =
+    metadata.plates.find((candidate) => candidate.plate_id === metadata.default_plate_id) ??
+    metadata.plates[0]
+  const plateLabel = metadata.default_plate_id ? `plate ${metadata.default_plate_id}` : 'plate -'
+  const objects = plate?.objects.length ? plate.objects.join(', ') : 'no objects'
+  const filament =
+    plate?.filaments
+      .map((row) => row.filament_type ?? row.filament_id)
+      .filter(Boolean)
+      .join(', ') || 'no filament'
+
+  return `${metadata.display_name} · ${plateLabel} · ${objects} · ${filament}`
+}
+
 export function formatJobRecoveryState(job: Job) {
   const dispatch = job.status.toLowerCase()
   const command = job.command.status.toLowerCase()

@@ -16,6 +16,7 @@ use crate::{
 };
 
 mod material;
+mod metadata_preview;
 pub(super) mod multipart;
 
 #[derive(Debug, Deserialize)]
@@ -76,7 +77,13 @@ pub struct JobArtifactResponse {
     filename: String,
     content_type: String,
     size_bytes: u64,
+    metadata: Option<Value>,
     created_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ArtifactMetadataPreviewResponse {
+    metadata: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +121,19 @@ pub async fn create_job(
     let response = JobResponse::try_from(created)?;
     state.wake_agent(wake_tenant_id, wake_agent_id).await;
     Ok((StatusCode::CREATED, Json(response)))
+}
+
+pub async fn preview_artifact_metadata(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(tenant_id): Path<String>,
+    multipart: Multipart,
+) -> Result<Json<ArtifactMetadataPreviewResponse>, ApiError> {
+    let tenant_id = parse_tenant_id(&tenant_id)?;
+    auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let metadata =
+        metadata_preview::preview_artifact_metadata_from_multipart(&state, multipart).await?;
+    Ok(Json(ArtifactMetadataPreviewResponse { metadata }))
 }
 
 pub async fn retry_dispatch(
@@ -278,7 +298,7 @@ impl JobResponse {
                 kind: "print_project_file".to_string(),
                 status: job.status.to_string(),
             },
-            artifact: JobArtifactResponse::from(artifact),
+            artifact: JobArtifactResponse::try_from_artifact(artifact)?,
             material,
         })
     }
@@ -304,15 +324,24 @@ impl From<JobPrintState> for JobPrintResponse {
     }
 }
 
-impl From<JobArtifact> for JobArtifactResponse {
-    fn from(artifact: JobArtifact) -> Self {
-        Self {
+impl JobArtifactResponse {
+    fn try_from_artifact(artifact: JobArtifact) -> Result<Self, RepositoryError> {
+        Ok(Self {
             id: artifact.id,
             tenant_id: artifact.tenant_id.to_string(),
             filename: artifact.filename,
             content_type: artifact.content_type,
             size_bytes: artifact.size_bytes,
+            metadata: artifact
+                .metadata_json
+                .map(|value| serde_json::from_str(&value))
+                .transpose()
+                .map_err(|err| {
+                    RepositoryError::Database(
+                        anyhow::Error::new(err).context("invalid persisted artifact metadata"),
+                    )
+                })?,
             created_at: artifact.created_at,
-        }
+        })
     }
 }

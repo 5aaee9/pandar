@@ -64,6 +64,7 @@
 - Added Phase 26 focused failure observability: Prometheus exports control-plane publish/receive counters, publish failure after durable job/command commit is observable without rolling back state, WebSocket ticket safety is covered across replicas, and storage write/read/delete failure tests pin stable behavior.
 - Added Phase 26 operations docs and evidence tracking for SQLite single-node and PostgreSQL+NATS+object-storage deployments, including explicit live soak variables and a `docs/compatibility/phase-26-soak-evidence.md` table for local and live evidence.
 - Added Phase 27 live printer-control groundwork: shared model compatibility policy moved into `pandar-core`, Hub now enqueues audited tenant/printer-scoped `printer_control` commands for compatible models, gRPC carries typed printer controls to agents, and agents dispatch typed pause/resume/stop/print-speed MQTT payloads without relying on local model metadata. Local no-network tests cover compatibility, Hub enqueue/route/gRPC behavior, agent command handling, and fake MQTT payload dispatch; real pause/resume/stop/print-speed printer probes are not recorded.
+- Added Phase 28 reference-backed slicer metadata: bounded 3MF metadata parsing, SQLite/PostgreSQL `job_artifacts.metadata_json` persistence, tenant preview API, job/plugin response metadata, dashboard upload preview, and compact job/recovery metadata summaries. Local SQLite-backed parser, repository, route, plugin, and frontend build verification is recorded; optional PostgreSQL verification still requires `PANDAR_TEST_POSTGRES_URL`.
 
 ## Phase 1: Foundation
 
@@ -599,21 +600,22 @@ Exit criteria:
 
 Goal: improve artifact inspection and print defaults by reading safe metadata from project files without turning the hub into a slicer.
 
-- Define a narrow parser boundary for Bambu/3MF project metadata needed by Pandar:
+- Completed a narrow parser boundary for Bambu/3MF project metadata needed by Pandar:
   - plate count and selected plate defaults;
   - model/project display name;
   - material mapping hints;
   - estimated filament/time fields when safely available.
-- Use reference-derived behavior and fixtures; do not parse or execute arbitrary slicer logic.
-- Keep parsed metadata optional and advisory. Backend validation and operator-selected print settings remain authoritative.
-- Surface metadata in the dashboard and plugin responses where it helps operators choose plate/material settings.
-- Preserve opaque artifact handling for unknown or unsupported files.
+- Completed reference-derived fixtures and bounded parsing; the hub does not parse or execute arbitrary slicer logic.
+- Completed optional advisory persistence in both SQLite and PostgreSQL migrations. Backend validation and operator-selected print settings remain authoritative.
+- Completed metadata preview, dashboard display, job responses, and plugin responses.
+- Preserved opaque artifact handling for unknown, unsupported, or malformed files.
 
 Exit criteria:
 
-- Operators can inspect practical project metadata before dispatching a print.
-- Metadata parsing failures do not block upload or dispatch unless the artifact itself is invalid.
-- Parsed values never override explicit user settings or compatibility rules.
+- Completed locally: operators can inspect practical project metadata before dispatching a print.
+- Completed locally: metadata parsing failures do not block upload or dispatch unless the artifact itself is invalid.
+- Completed locally: parsed values never override explicit user settings or compatibility rules.
+- Remaining evidence gap: run optional PostgreSQL verification with `PANDAR_TEST_POSTGRES_URL` against a disposable database.
 
 ## Optional Later: Virtual Printer And Proxy
 
@@ -624,7 +626,8 @@ Exit criteria:
 
 - Start Phase 23 with real Bambu Studio compatibility testing on Linux, Windows, and macOS.
 - Validate existing release artifacts while running Phase 23 so Phase 24 can use the same platform evidence.
-- Keep Phase 25 object storage ahead of arbitrary multi-Hub print-job scheduling.
-- Run Phase 26 soak after Phase 25 if print-job creation must be supported from any Hub replica; run a narrower control-plane soak earlier if only WebSocket/event fanout is being validated.
-- Do not start Phase 27 live controls until command payloads and state reconciliation are audited against the reference projects.
+- Run optional Phase 28 PostgreSQL metadata verification with `PANDAR_TEST_POSTGRES_URL`.
+- Record real Bambu Studio plugin compatibility evidence for Phase 23.
+- Record live release artifact install evidence for Phase 24.
+- Run live Phase 26 soak when disposable PostgreSQL, NATS, and object-storage infrastructure is available.
 - Keep virtual-printer/proxy behavior deferred until plugin compatibility, scaled artifact storage, and operator recovery workflows are stable.

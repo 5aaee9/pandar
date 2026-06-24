@@ -69,6 +69,7 @@ Printer inventory and live events:
 Tenant-scoped print dispatch:
 
 - `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs` accepts multipart form data with a `file` part plus `filename`, `content_type`, `plate_id`, `use_ams`, `flow_cali`, `timelapse`, and optional material mapping fields, then creates an artifact, linked command, and job transactionally.
+- `POST /api/v1/tenants/{tenant_id}/artifact-metadata-preview` accepts multipart artifact data and returns optional advisory slicer metadata without creating artifact, command, or job rows.
 - `GET /api/v1/tenants/{tenant_id}/jobs` lists tenant print jobs.
 - `GET /api/v1/tenants/{tenant_id}/jobs/{job_id}` returns one tenant-scoped print job.
 
@@ -77,6 +78,8 @@ Artifact storage is selected with `PANDAR_ARTIFACT_STORAGE`, defaulting to `file
 Agents receive a Hub artifact download path in `PrintProjectFile` and fetch bytes from Hub HTTP with their agent credential. Set `PANDAR_HUB_API_URL` for agents when `PANDAR_HUB_GRPC_URL` is not an HTTP(S) URL. `PANDAR_ARTIFACT_ROOT` remains a local fallback for older commands that do not contain a Hub download path.
 
 Print job dispatch success means the agent accepted the command path and completed upload/MQTT dispatch work. Physical progress and terminal printer outcome are tracked separately from MQTT reports.
+
+Slicer metadata is advisory. The hub extracts a bounded subset of 3MF project metadata for display and stores it with the artifact when available, but explicit request fields such as `plate_id`, AMS mapping, calibration, and timelapse remain authoritative. Unsupported files, malformed ZIPs, and parser failures return no metadata and do not block dispatch when the artifact upload itself is valid.
 
 Recovery APIs:
 
@@ -107,6 +110,7 @@ Phase 15 browser-safe live runtime updates:
 - `POST /api/tenants/{tenantId}/printer-events/ticket` obtains tickets server-side through the Next.js app. Browser code receives only auth metadata and the opaque ticket, never `APP_API_TOKEN`, `APP_AUTH_BEARER_TOKEN`, or HttpOnly cookie token values.
 - Fronting proxies and access logs should redact the `ticket` query parameter.
 - The dashboard merges live printer snapshots and job progress without refresh, retries WebSocket connections after 1s, 2s, 5s, and 10s, and marks live status unavailable after 3 failed attempts while continuing to retry.
+- The dispatch form calls `POST /api/tenants/{tenantId}/artifact-metadata-preview` after a valid artifact is selected. Preview absence or failure does not disable dispatch. Job history and recovery rows display stored slicer metadata summaries returned by the hub.
 
 ## Bambu Studio Network Plugin
 

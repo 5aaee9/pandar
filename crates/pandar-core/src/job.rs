@@ -96,6 +96,7 @@ pub struct JobArtifact {
     pub content_type: String,
     pub size_bytes: u64,
     pub storage_path: String,
+    pub metadata_json: Option<String>,
     pub created_at: String,
 }
 
@@ -107,6 +108,7 @@ pub struct JobArtifactParts {
     pub content_type: String,
     pub size_bytes: u64,
     pub storage_path: String,
+    pub metadata_json: Option<String>,
     pub created_at: String,
 }
 
@@ -127,6 +129,7 @@ impl JobArtifact {
             content_type: parts.content_type,
             size_bytes: parts.size_bytes,
             storage_path: parts.storage_path,
+            metadata_json: parts.metadata_json,
             created_at: parts.created_at,
         })
     }

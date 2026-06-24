@@ -1,6 +1,130 @@
 use super::*;
 
 #[tokio::test]
+async fn metadata_preview_authorizes_operator_and_rejects_viewer() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let operator = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "metadata-preview-operator",
+    )
+    .await;
+    let viewer = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "metadata-preview-viewer",
+    )
+    .await;
+    let artifact = crate::routes::tests::multipart::slicer_metadata_fixture();
+    let uri = format!("/api/v1/tenants/{tenant_id}/artifact-metadata-preview");
+
+    let (status, body) = multipart_request_as(
+        app.clone(),
+        Method::POST,
+        &uri,
+        multipart_print_body_with_fields(Some(("project.3mf", "model/3mf", &artifact)), &[]),
+        &operator,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["metadata"]["display_name"], "project");
+
+    let (status, body) = multipart_request_as(
+        app,
+        Method::POST,
+        &uri,
+        multipart_print_body_with_fields(Some(("project.3mf", "model/3mf", &artifact)), &[]),
+        &viewer,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "role_forbidden" }));
+}
+
+#[tokio::test]
+async fn metadata_preview_accepts_file_only_and_creates_no_rows() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "metadata-preview-file-only-operator",
+    )
+    .await;
+    let artifact = crate::routes::tests::multipart::slicer_metadata_fixture();
+
+    let (status, body) = multipart_request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/artifact-metadata-preview"),
+        multipart_print_body_with_fields(Some(("project.3mf", "model/3mf", &artifact)), &[]),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["metadata"]["plate_count"], 1);
+    assert_eq!(body["metadata"]["default_plate_id"], 1);
+    assert_eq!(body["metadata"]["plates"][0]["estimated_time_seconds"], 120);
+    assert_eq!(state.commands().count().await.unwrap(), 0);
+    let pool = sqlite_pool(&state);
+    let jobs: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM jobs")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    let artifacts: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM job_artifacts")
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    let audits = state
+        .audit_events()
+        .list_for_tenant(tenant_id)
+        .await
+        .unwrap();
+    assert_eq!(jobs.0, 0);
+    assert_eq!(artifacts.0, 0);
+    assert!(audits.iter().all(|event| event.action != "job.create"));
+}
+
+#[tokio::test]
+async fn metadata_preview_returns_null_for_unsupported_artifact() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "metadata-preview-unsupported-operator",
+    )
+    .await;
+
+    let (status, body) = multipart_request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/artifact-metadata-preview"),
+        multipart_print_body_with_fields(
+            Some(("plain.gcode", "application/octet-stream", b"G1 X1")),
+            &[],
+        ),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({ "metadata": Value::Null }));
+}
+
+#[tokio::test]
 async fn job_create_rejects_missing_empty_oversized_and_invalid_multipart_uploads() {
     let state = state().await;
     let app = router(state.clone());

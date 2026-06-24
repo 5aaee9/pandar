@@ -72,6 +72,7 @@ pub(super) struct PluginJobResponse {
     name: String,
     status: String,
     progress_percent: Option<u8>,
+    artifact_metadata: Option<serde_json::Value>,
     created_at: String,
     updated_at: String,
     pandar_job_id: String,
@@ -83,6 +84,7 @@ pub(super) struct PluginPrintResponse {
     command_id: String,
     status: String,
     message: Option<String>,
+    artifact_metadata: Option<serde_json::Value>,
     pandar_job_id: String,
 }
 
@@ -185,8 +187,8 @@ pub(super) async fn list_jobs(
         .list_for_tenant(authenticated.token.tenant_id)
         .await?
         .into_iter()
-        .map(PluginJobResponse::from)
-        .collect();
+        .map(PluginJobResponse::try_from)
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(Json(PluginJobListResponse { jobs }))
 }
@@ -209,7 +211,7 @@ pub(super) async fn create_print(
     .await?;
     let wake_tenant_id = created.job.tenant_id;
     let wake_agent_id = created.job.agent_id;
-    let response = PluginPrintResponse::from(created);
+    let response = PluginPrintResponse::try_from(created)?;
     state.wake_agent(wake_tenant_id, wake_agent_id).await;
     Ok((StatusCode::CREATED, Json(response)))
 }
@@ -271,29 +273,48 @@ fn plugin_login_ticket_expires_at() -> Result<String, ApiError> {
         })
 }
 
-impl From<JobWithArtifact> for PluginJobResponse {
-    fn from(value: JobWithArtifact) -> Self {
-        Self {
+impl TryFrom<JobWithArtifact> for PluginJobResponse {
+    type Error = RepositoryError;
+
+    fn try_from(value: JobWithArtifact) -> Result<Self, Self::Error> {
+        Ok(Self {
             task_id: value.job.id.to_string(),
             dev_id: value.job.printer_id,
             name: value.artifact.filename,
             status: value.job.status.to_string(),
             progress_percent: value.job.print.progress_percent,
+            artifact_metadata: artifact_metadata(value.artifact.metadata_json)?,
             created_at: value.job.created_at,
             updated_at: value.job.updated_at,
             pandar_job_id: value.job.id.to_string(),
-        }
+        })
     }
 }
 
-impl From<JobWithArtifact> for PluginPrintResponse {
-    fn from(value: JobWithArtifact) -> Self {
-        Self {
+impl TryFrom<JobWithArtifact> for PluginPrintResponse {
+    type Error = RepositoryError;
+
+    fn try_from(value: JobWithArtifact) -> Result<Self, Self::Error> {
+        Ok(Self {
             task_id: value.job.id.to_string(),
             command_id: value.job.command_id.to_string(),
             status: value.job.status.to_string(),
             message: None,
+            artifact_metadata: artifact_metadata(value.artifact.metadata_json)?,
             pandar_job_id: value.job.id.to_string(),
-        }
+        })
     }
+}
+
+fn artifact_metadata(
+    metadata_json: Option<String>,
+) -> Result<Option<serde_json::Value>, RepositoryError> {
+    metadata_json
+        .map(|value| serde_json::from_str(&value))
+        .transpose()
+        .map_err(|err| {
+            RepositoryError::Database(
+                anyhow::Error::new(err).context("invalid persisted artifact metadata"),
+            )
+        })
 }

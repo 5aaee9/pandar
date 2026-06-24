@@ -49,6 +49,52 @@ async fn job_create_writes_artifact_queues_command_and_returns_created_job() {
 }
 
 #[tokio::test]
+async fn job_create_persists_parsed_artifact_metadata() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Operator,
+        "metadata-job-operator",
+    )
+    .await;
+    let agent = state.agents().create(tenant_id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
+        .await
+        .unwrap();
+    let artifact = crate::routes::tests::multipart::slicer_metadata_fixture();
+
+    let (status, body) = multipart_request_as(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
+        multipart_print_body(None, Some(("project.3mf", "model/3mf", &artifact)), 1),
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["artifact"]["metadata"]["display_name"], "plate file");
+    assert_eq!(body["artifact"]["metadata"]["default_plate_id"], 1);
+
+    let (status, list) = request_as(
+        app,
+        Method::GET,
+        &format!("/api/v1/tenants/{tenant_id}/jobs"),
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        list["jobs"][0]["artifact"]["metadata"],
+        body["artifact"]["metadata"]
+    );
+}
+
+#[tokio::test]
 async fn print_job_wakes_agent_on_sibling_instance() {
     let state = state().await;
     let sibling = sibling_state(&state);

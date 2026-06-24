@@ -105,6 +105,7 @@ mod tests {
                 artifact_content_type: "model/3mf".to_string(),
                 artifact_size_bytes: 42,
                 artifact_storage_path: format!("{}/artifact-1/plate.3mf", tenant.id),
+                artifact_metadata_json: None,
                 plate_id: 1,
                 use_ams: true,
                 flow_cali: false,

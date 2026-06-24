@@ -123,6 +123,10 @@ pub fn router(state: AppState) -> Router {
             post(jobs::create_job).layer(DefaultBodyLimit::disable()),
         )
         .route(
+            "/api/v1/tenants/{tenant_id}/artifact-metadata-preview",
+            post(jobs::preview_artifact_metadata).layer(DefaultBodyLimit::disable()),
+        )
+        .route(
             "/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls",
             post(printers::printer_control),
         )

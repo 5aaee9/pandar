@@ -1,4 +1,5 @@
 use super::*;
+use crate::{Database, repositories::DuplicatePrintJob};
 
 #[tokio::test]
 async fn job_repository_list_returns_newest_first() {
@@ -80,6 +81,192 @@ async fn job_repository_artifact_for_agent_requires_matching_job_agent() {
             .unwrap(),
         AgentArtifactAccess::NotFound
     ));
+}
+
+#[tokio::test]
+async fn job_repository_metadata_round_trips_through_create_list_and_get() {
+    let (database, tenants, agents, _, _, jobs) = repositories().await;
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id =
+        crate::repositories::test_helpers::insert_printer_fixture(&database, tenant.id, agent.id)
+            .await
+            .unwrap();
+    let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
+    input.artifact_metadata_json = Some(
+        json!({
+            "source": "bambu_3mf",
+            "display_name": "Widget",
+            "default_plate_id": 1,
+            "plate_count": 1,
+            "plates": [],
+            "warnings": []
+        })
+        .to_string(),
+    );
+
+    let created = jobs.create_print_job(input).await.unwrap();
+    let listed = jobs.list_for_tenant(tenant.id).await.unwrap();
+    let fetched = jobs
+        .get_for_tenant(tenant.id, created.job.id)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        created.artifact.metadata_json,
+        Some(
+            json!({
+                "source": "bambu_3mf",
+                "display_name": "Widget",
+                "default_plate_id": 1,
+                "plate_count": 1,
+                "plates": [],
+                "warnings": []
+            })
+            .to_string()
+        )
+    );
+    assert_eq!(
+        listed[0].artifact.metadata_json,
+        created.artifact.metadata_json
+    );
+    assert_eq!(
+        fetched.artifact.metadata_json,
+        created.artifact.metadata_json
+    );
+}
+
+#[tokio::test]
+async fn job_repository_missing_metadata_remains_none() {
+    let (database, tenants, agents, _, _, jobs) = repositories().await;
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id =
+        crate::repositories::test_helpers::insert_printer_fixture(&database, tenant.id, agent.id)
+            .await
+            .unwrap();
+
+    let created = jobs
+        .create_print_job(create_input(tenant.id, agent.id, &printer_id, "artifact-1"))
+        .await
+        .unwrap();
+
+    assert_eq!(created.artifact.metadata_json, None);
+}
+
+#[tokio::test]
+async fn job_repository_reprint_and_duplicate_reuse_artifact_metadata() {
+    let (database, tenants, agents, _, commands, jobs) = repositories().await;
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id =
+        crate::repositories::test_helpers::insert_printer_fixture(&database, tenant.id, agent.id)
+            .await
+            .unwrap();
+    let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
+    input.artifact_metadata_json = Some(
+        json!({
+            "source": "bambu_3mf",
+            "display_name": "Reusable",
+            "default_plate_id": 2,
+            "plate_count": 1,
+            "plates": [],
+            "warnings": []
+        })
+        .to_string(),
+    );
+    let source = jobs.create_print_job(input).await.unwrap();
+    commands
+        .mark_sent(source.job.command_id, tenant.id, agent.id)
+        .await
+        .unwrap();
+    commands
+        .mark_acknowledged(source.job.command_id, tenant.id, agent.id)
+        .await
+        .unwrap();
+    commands
+        .mark_succeeded(source.job.command_id, tenant.id, agent.id)
+        .await
+        .unwrap();
+    jobs.mark_for_command(source.job.command_id, JobStatus::Succeeded, None)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE jobs SET print_status = 'completed' WHERE id = ?1")
+        .bind(source.job.id.to_string())
+        .execute(sqlite_pool(&database))
+        .await
+        .unwrap();
+
+    let reprint = jobs
+        .reprint_with_audit(tenant.id, source.job.id, None, test_audit_actor())
+        .await
+        .unwrap();
+    let duplicate = jobs
+        .duplicate_and_print_with_audit(
+            tenant.id,
+            source.job.id,
+            DuplicatePrintJob {
+                printer_id: None,
+                plate_id: None,
+                use_ams: None,
+                flow_cali: None,
+                timelapse: None,
+                ams_mapping_json: None,
+                ams_mapping2_json: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        reprint.artifact.metadata_json,
+        source.artifact.metadata_json
+    );
+    assert_eq!(
+        duplicate.artifact.metadata_json,
+        source.artifact.metadata_json
+    );
+}
+
+#[tokio::test]
+async fn job_repository_invalid_persisted_metadata_is_data_error() {
+    let (database, tenants, agents, _, _, jobs) = repositories().await;
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id =
+        crate::repositories::test_helpers::insert_printer_fixture(&database, tenant.id, agent.id)
+            .await
+            .unwrap();
+    let created = jobs
+        .create_print_job(create_input(tenant.id, agent.id, &printer_id, "artifact-1"))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE job_artifacts SET metadata_json = '{' WHERE id = ?1")
+        .bind(&created.artifact.id)
+        .execute(sqlite_pool(&database))
+        .await
+        .unwrap();
+
+    let err = jobs.list_for_tenant(tenant.id).await.unwrap_err();
+
+    assert!(format!("{err:#}").contains("invalid persisted artifact metadata"));
+}
+
+fn sqlite_pool(database: &Database) -> &sqlx::SqlitePool {
+    let Database::Sqlite(pool) = database else {
+        panic!("expected sqlite database");
+    };
+    pool
+}
+
+fn test_audit_actor() -> crate::repositories::AuditActor {
+    crate::repositories::AuditActor {
+        actor_type: "system".to_owned(),
+        user_id: None,
+        metadata: None,
+    }
 }
 
 #[tokio::test]

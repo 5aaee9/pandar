@@ -10,6 +10,7 @@ use tokio::{fs, io::AsyncRead};
 
 mod app_state;
 mod filesystem;
+pub(crate) mod metadata;
 mod s3;
 
 pub use app_state::{IntoArtifactStorage, JobStorageAlias};

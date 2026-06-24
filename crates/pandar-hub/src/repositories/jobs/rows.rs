@@ -118,6 +118,10 @@ pub(crate) fn usage_from_model(
 }
 
 pub(crate) fn artifact_from_model(model: job_artifacts::Model) -> RepositoryResult<JobArtifact> {
+    if let Some(metadata_json) = &model.metadata_json {
+        serde_json::from_str::<serde_json::Value>(metadata_json)
+            .with_context(|| format!("invalid persisted artifact metadata for {}", model.id))?;
+    }
     JobArtifact::from_parts(JobArtifactParts {
         id: model.id,
         tenant_id: TenantId::parse(&model.tenant_id).map_err(anyhow::Error::from)?,
@@ -125,6 +129,7 @@ pub(crate) fn artifact_from_model(model: job_artifacts::Model) -> RepositoryResu
         content_type: model.content_type,
         size_bytes: model.size_bytes as u64,
         storage_path: model.storage_path,
+        metadata_json: model.metadata_json,
         created_at: model.created_at,
     })
     .map_err(anyhow::Error::from)

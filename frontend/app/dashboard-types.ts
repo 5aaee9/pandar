@@ -186,6 +186,28 @@ export type DiagnosticResultData = {
 
 export type CommandResultData = DiscoveryResultData | DiagnosticResultData
 
+export type ArtifactMetadata = {
+  display_name: string
+  default_plate_id: number | null
+  plates: Array<{
+    plate_id: number
+    name: string
+    estimated_time_seconds: number | null
+    filament_weight_grams: number | null
+    object_count: number
+    objects: string[]
+    filaments: Array<{
+      filament_id: string | null
+      filament_type: string | null
+      color: string | null
+      used_grams: number | null
+      used_meters: number | null
+    }>
+    has_thumbnail: boolean
+  }>
+  warnings: string[]
+}
+
 export type Job = {
   id: string
   printer_id: string
@@ -222,6 +244,7 @@ export type Job = {
     filename: string
     content_type: string
     size_bytes: number
+    metadata: ArtifactMetadata | null
     created_at: string
   }
   material: {

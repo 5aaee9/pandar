@@ -4,7 +4,9 @@ use axum::{
     http::{Method, Request, header::AUTHORIZATION},
 };
 use http_body_util::BodyExt;
+use std::io::{Cursor, Write};
 use tower::ServiceExt;
+use zip::{ZipWriter, write::SimpleFileOptions};
 
 pub(super) async fn multipart_request_as(
     app: Router,
@@ -152,4 +154,29 @@ pub(super) fn multipart_print_body_with_fields(
     body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
 
     MultipartTestBody { boundary, body }
+}
+
+pub(super) fn slicer_metadata_fixture() -> Vec<u8> {
+    let mut bytes = Cursor::new(Vec::new());
+    {
+        let mut zip = ZipWriter::new(&mut bytes);
+        let options = SimpleFileOptions::default();
+        zip.start_file("Metadata/plate_1.gcode", options).unwrap();
+        zip.write_all(b"").unwrap();
+        zip.start_file("Metadata/slice_info.config", options)
+            .unwrap();
+        zip.write_all(
+            br##"
+            <config>
+              <plate index="1" prediction="120" weight="4.5">
+                <object name="calibration cube"/>
+                <filament id="1" type="PLA" color="#00ff00" used_g="4.5" used_m="1.2"/>
+              </plate>
+            </config>
+            "##,
+        )
+        .unwrap();
+        zip.finish().unwrap();
+    }
+    bytes.into_inner()
 }
