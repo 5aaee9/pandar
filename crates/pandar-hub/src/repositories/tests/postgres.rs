@@ -1,4 +1,5 @@
 use pandar_core::{JobStatus, PrintStatus};
+use serde_json::json;
 
 use super::*;
 use crate::repositories::{
@@ -23,7 +24,7 @@ pub(super) async fn clear_postgres(database: &Database) {
         panic!("expected PostgreSQL database");
     };
     sqlx::query(
-        "TRUNCATE printer_event_tickets, audit_events, api_tokens, user_identities, tenant_tokens, plugin_login_tickets, job_filament_usages, printer_material_snapshots, jobs, job_artifacts, commands, printers, agents, users, tenants",
+        "TRUNCATE printer_event_tickets, audit_events, api_tokens, user_identities, tenant_tokens, plugin_login_tickets, job_filament_usages, printer_material_snapshots, machine_events, jobs, job_artifacts, commands, printers, agents, users, tenants",
     )
         .execute(pool)
         .await
@@ -374,6 +375,135 @@ async fn postgres_job_recovery_when_configured() {
         .unwrap();
     assert_eq!(duplicate.artifact.id, source.artifact.id);
     assert_eq!(commands.count().await.unwrap(), 5);
+}
+
+#[tokio::test]
+async fn postgres_job_metadata_round_trips_and_reuses_artifact_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    let tenants = TenantRepository::new(database.clone());
+    let agents = AgentRepository::new(database.clone());
+    let jobs = JobRepository::new(database.clone());
+    let tenant = tenants
+        .create("metadata-postgres", "Metadata Postgres")
+        .await
+        .unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)
+        .await
+        .unwrap();
+    let metadata_json = json!({
+        "source": "bambu_3mf",
+        "display_name": "Postgres Metadata",
+        "default_plate_id": 2,
+        "plate_count": 1,
+        "plates": [],
+        "warnings": []
+    })
+    .to_string();
+    let source = jobs
+        .create_print_job(CreatePrintJob {
+            tenant_id: tenant.id,
+            printer_id,
+            agent_id: agent.id,
+            artifact_id: "artifact-metadata".to_string(),
+            artifact_filename: "metadata.3mf".to_string(),
+            artifact_content_type: "model/3mf".to_string(),
+            artifact_size_bytes: 128,
+            artifact_storage_path: format!("{}/artifact-metadata/metadata.3mf", tenant.id),
+            artifact_metadata_json: Some(metadata_json.clone()),
+            plate_id: 2,
+            use_ams: true,
+            flow_cali: false,
+            timelapse: false,
+            ams_mapping_json: None,
+            ams_mapping2_json: None,
+        })
+        .await
+        .unwrap();
+
+    let listed = jobs.list_for_tenant(tenant.id).await.unwrap();
+    let fetched = jobs
+        .get_for_tenant(tenant.id, source.job.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(source.artifact.metadata_json, Some(metadata_json));
+    assert_eq!(
+        listed[0].artifact.metadata_json,
+        source.artifact.metadata_json
+    );
+    assert_eq!(
+        fetched.artifact.metadata_json,
+        source.artifact.metadata_json
+    );
+
+    jobs.apply_print_report(ApplyPrintReport {
+        tenant_id: tenant.id,
+        agent_id: agent.id,
+        serial: format!("serial-{}", source.job.printer_id),
+        job_id: Some(source.job.id),
+        artifact_id: None,
+        subtask_id: None,
+        gcode_file: Some("metadata.3mf".to_string()),
+        subtask_name: None,
+        gcode_state: Some("FINISH".to_string()),
+        percent: Some(100),
+        remaining_time_minutes: Some(0),
+        current_layer: Some(1),
+        total_layers: Some(1),
+        diagnostics: Vec::new(),
+        printer_materials_json: String::new(),
+        observed_at: "2026-06-24T00:00:00Z".to_string(),
+    })
+    .await
+    .unwrap();
+
+    let reprint = jobs
+        .reprint_with_audit(
+            tenant.id,
+            source.job.id,
+            None,
+            crate::repositories::AuditActor {
+                actor_type: "system".to_owned(),
+                user_id: None,
+                metadata: None,
+            },
+        )
+        .await
+        .unwrap();
+    let duplicate = jobs
+        .duplicate_and_print_with_audit(
+            tenant.id,
+            source.job.id,
+            crate::repositories::DuplicatePrintJob {
+                printer_id: None,
+                plate_id: None,
+                use_ams: None,
+                flow_cali: None,
+                timelapse: None,
+                ams_mapping_json: None,
+                ams_mapping2_json: None,
+            },
+            crate::repositories::AuditActor {
+                actor_type: "system".to_owned(),
+                user_id: None,
+                metadata: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        reprint.artifact.metadata_json,
+        source.artifact.metadata_json
+    );
+    assert_eq!(
+        duplicate.artifact.metadata_json,
+        source.artifact.metadata_json
+    );
 }
 
 #[tokio::test]

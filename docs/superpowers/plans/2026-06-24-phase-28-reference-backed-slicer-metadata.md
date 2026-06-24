@@ -156,6 +156,8 @@ PANDAR_TEST_POSTGRES_URL=<postgres-url> cargo test -p pandar-hub repositories::t
 Expected: PASS.
 If `PANDAR_TEST_POSTGRES_URL` is unavailable, Phase 28 is not complete. Record the missing PostgreSQL verification as a blocker instead of treating skipped tests as a pass.
 
+2026-06-24 update: this PostgreSQL verification was later run against a disposable local PostgreSQL 17.10 instance with `postgres_job_metadata_round_trips_and_reuses_artifact_when_configured` and `cargo test -p pandar-hub metadata`; both passed. See `docs/compatibility/phase-28-slicer-metadata.md`.
+
 ### Task 3: Hub Routes, Multipart Preview, And Plugin Responses
 
 **Files:**
@@ -320,6 +322,8 @@ git diff --check
 
 Expected: PASS.
 PostgreSQL migration/repository verification is required for completion. If no PostgreSQL URL is available, stop and report Phase 28 as blocked rather than marking it complete.
+
+2026-06-24 update: disposable PostgreSQL metadata verification has been recorded in `docs/compatibility/phase-28-slicer-metadata.md`.
 
 - [ ] **Step 3: Final independent review**
 

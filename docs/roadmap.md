@@ -65,7 +65,7 @@
 - Added Phase 26 operations docs and evidence tracking for SQLite single-node and PostgreSQL+NATS+object-storage deployments, including explicit live soak variables and a `docs/compatibility/phase-26-soak-evidence.md` table for local and live evidence.
 - Refreshed Phase 23/24/26 local evidence after Phase 28: the plugin ABI probe, release-smoke unit coverage, and scaled artifact smoke dry-run are recorded against current code, and the smoke tool now carries the optional artifact metadata field.
 - Added Phase 27 live printer-control groundwork: shared model compatibility policy moved into `pandar-core`, Hub now enqueues audited tenant/printer-scoped `printer_control` commands for compatible models, gRPC carries typed printer controls to agents, and agents dispatch typed pause/resume/stop/print-speed MQTT payloads without relying on local model metadata. Local no-network tests cover compatibility, Hub enqueue/route/gRPC behavior, agent command handling, and fake MQTT payload dispatch; real pause/resume/stop/print-speed printer probes are not recorded.
-- Added Phase 28 reference-backed slicer metadata: bounded 3MF metadata parsing, SQLite/PostgreSQL `job_artifacts.metadata_json` persistence, tenant preview API, job/plugin response metadata, dashboard upload preview, and compact job/recovery metadata summaries. Local SQLite-backed parser, repository, route, plugin, and frontend build verification is recorded; optional PostgreSQL verification still requires `PANDAR_TEST_POSTGRES_URL`.
+- Added Phase 28 reference-backed slicer metadata: bounded 3MF metadata parsing, SQLite/PostgreSQL `job_artifacts.metadata_json` persistence, tenant preview API, job/plugin response metadata, dashboard upload preview, and compact job/recovery metadata summaries. Local parser, SQLite route/repository/plugin/frontend verification, and disposable PostgreSQL metadata repository verification are recorded.
 
 ## Phase 1: Foundation
 
@@ -612,6 +612,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Completed reference-derived fixtures and bounded parsing; the hub does not parse or execute arbitrary slicer logic.
 - Completed optional advisory persistence in both SQLite and PostgreSQL migrations. Backend validation and operator-selected print settings remain authoritative.
 - Completed metadata preview, dashboard display, job responses, and plugin responses.
+- Completed disposable PostgreSQL metadata verification for create/list/get hydration and reprint/duplicate reuse through the repository boundary.
 - Preserved opaque artifact handling for unknown, unsupported, or malformed files.
 
 Exit criteria:
@@ -619,7 +620,7 @@ Exit criteria:
 - Completed locally: operators can inspect practical project metadata before dispatching a print.
 - Completed locally: metadata parsing failures do not block upload or dispatch unless the artifact itself is invalid.
 - Completed locally: parsed values never override explicit user settings or compatibility rules.
-- Remaining evidence gap: run optional PostgreSQL verification with `PANDAR_TEST_POSTGRES_URL` against a disposable database.
+- Completed locally: disposable PostgreSQL repository verification covers persisted metadata hydration and artifact reuse.
 
 ## Optional Later: Virtual Printer And Proxy
 
@@ -630,7 +631,6 @@ Exit criteria:
 
 - Start Phase 23 with real Bambu Studio compatibility testing on Linux, Windows, and macOS.
 - Validate existing release artifacts while running Phase 23 so Phase 24 can use the same platform evidence.
-- Run optional Phase 28 PostgreSQL metadata verification with `PANDAR_TEST_POSTGRES_URL`.
 - Record real Bambu Studio plugin compatibility evidence for Phase 23.
 - Record live release artifact install evidence for Phase 24.
 - Run live Phase 26 soak when disposable PostgreSQL, NATS, and object-storage infrastructure is available.
