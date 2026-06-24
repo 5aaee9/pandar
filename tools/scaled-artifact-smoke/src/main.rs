@@ -1,6 +1,7 @@
 mod fixture;
 mod harness;
 mod http;
+mod live;
 mod scenarios;
 mod storage;
 
@@ -22,7 +23,14 @@ async fn main() -> ExitCode {
 
 async fn run() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
-    let config = parse_args(env::args().skip(1))?;
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    if args.first().is_some_and(|mode| mode == "--live-preflight") {
+        if args.len() != 1 {
+            usage()?;
+        }
+        return live::run_preflight();
+    }
+    let config = parse_args(args)?;
     harness::run(config).await
 }
 
@@ -69,6 +77,6 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> anyhow::Result<HarnessC
 
 fn usage() -> anyhow::Result<()> {
     bail!(
-        "usage: pandar-scaled-artifact-smoke --dry-run [--iterations N] [--concurrency N] [--scenario all|artifact|fanout|restart|storage|terminal]"
+        "usage: pandar-scaled-artifact-smoke --dry-run [--iterations N] [--concurrency N] [--scenario all|artifact|fanout|restart|storage|terminal] | --live-preflight"
     )
 }

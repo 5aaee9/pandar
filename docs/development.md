@@ -300,9 +300,12 @@ The Phase 26 local HA/failure smoke harness exercises the default cross-Hub cont
 cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run
 cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run --iterations 2 --concurrency 2
 cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run --scenario storage
+cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --live-preflight
 ```
 
 The default mode uses local process fixtures, a shared SQLite database, shared fake object storage, and loopback HTTP/WebSocket only. Treat it as local convergence evidence for command wakeups, WebSocket fanout, plugin calls, storage failures, restart simulation, and terminal report idempotence. It is not live PostgreSQL/NATS/object-storage soak evidence.
+
+`--live-preflight` checks only the disposable live soak environment contract; it does not connect to PostgreSQL, NATS, or object storage and is not live soak evidence.
 
 Optional live soak evidence variables:
 

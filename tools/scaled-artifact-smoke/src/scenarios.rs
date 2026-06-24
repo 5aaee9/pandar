@@ -267,7 +267,7 @@ async fn concurrent_plugin_pressure(
     );
     let mut prints = Vec::new();
     for fixture in &fixtures {
-        prints.push(dequeue_print_command(&world.hub_b, &fixture).await?.1);
+        prints.push(dequeue_print_command(&world.hub_b, fixture).await?.1);
     }
     ensure!(
         prints.len() == config.concurrency,

@@ -139,7 +139,7 @@ PostgreSQL + NATS + object-storage checks:
 - Verify PostgreSQL readiness and migration completion before adding additional Hub replicas.
 - Verify `PANDAR_CONTROL_PLANE=nats`, `PANDAR_NATS_URL`, and object-storage variables on every Hub replica.
 - Check `/metrics` for `pandar_control_plane_messages_total`, `pandar_agent_sessions`, `pandar_commands_total`, `pandar_jobs_total`, `pandar_print_reports_total`, and `pandar_readyz`.
-- Run the local Phase 26 dry-run harness during release validation, then record any disposable live PostgreSQL/NATS/object-storage soak in `docs/compatibility/phase-26-soak-evidence.md`.
+- Run the local Phase 26 dry-run harness and `--live-preflight` during release validation, then record any disposable live PostgreSQL/NATS/object-storage soak in `docs/compatibility/phase-26-soak-evidence.md`.
 
 Recovery checks:
 
