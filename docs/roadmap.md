@@ -594,6 +594,7 @@ Goal: add typed pause, resume, stop, and related live printer controls only afte
 - Completed command lifecycle, audit event, structured result, and physical print-status separation in local tests.
 - Added Phase 27 compatibility documentation with local no-network verification commands and explicit real-printer probe status.
 - Frontend controls were updated in this phase and covered by the production build; browser-level e2e interaction and real-printer probes are not recorded in this workspace.
+- Checked Phase 27 live-control probe prerequisites on 2026-06-24: no `PANDAR_PRINTERS` configuration or printer access code is available in this workspace, so pause/resume/stop/print-speed hardware probes are blocked until an operator supplies safe printer state and agent-local LAN credentials outside source control.
 - Real-printer probes for pause, resume, stop, and print speed are not recorded; `docs/bambu-lan-printer-probe-2026-06-24.md` covers other MQTT commands only.
 
 Exit criteria:
@@ -636,4 +637,5 @@ Exit criteria:
 - Record real Bambu Studio plugin compatibility evidence for Phase 23.
 - Record live release artifact install evidence for Phase 24 after an archive exists.
 - Run live Phase 26 soak when disposable PostgreSQL, NATS, and object-storage infrastructure is available.
+- Run Phase 27 pause/resume/stop/print-speed hardware probes only after a safe printer state and agent-local LAN credentials are available.
 - Keep virtual-printer/proxy behavior deferred until plugin compatibility, scaled artifact storage, and operator recovery workflows are stable.

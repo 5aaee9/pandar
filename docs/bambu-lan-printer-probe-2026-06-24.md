@@ -82,4 +82,5 @@ Observed results:
 
 - Keep LAN credentials local to `pandar-agent`; do not store printer access codes in the hub or frontend.
 - Revisit FTPS runtime behavior separately. This probe confirmed listener reachability but not successful upload/delete behavior.
+- This probe did not exercise Phase 27 typed pause, resume, stop, or print-speed controls; those require a separate operator-approved run in a safe printer state.
 - If MQTT report receive fails again, inspect warning logs for the full `{err:#}` chain before changing protocol behavior.

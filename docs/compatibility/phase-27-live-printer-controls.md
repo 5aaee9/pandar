@@ -51,15 +51,19 @@ cargo test -p pandar-agent printer_control
 cargo test -p pandar-hub printer_control
 ```
 
-Observed locally on 2026-06-24:
+Observed locally on 2026-06-24 after the live-control probe blocker was recorded:
 
 - `cargo test -p pandar-core compatibility`: 5 passed.
 - `cargo test -p pandar-agent configured_control_printer`: 3 passed.
 - `cargo test -p pandar-agent printer_control`: 6 passed.
-- `cargo test -p pandar-hub printer_control`: 10 passed.
+- `cargo test -p pandar-hub printer_control`: 11 passed.
 
 ## Real-Printer Probe Status
 
-Not run for Phase 27 live controls.
+| Date | Printer | Controls | Result | Evidence |
+| --- | --- | --- | --- | --- |
+| 2026-06-24 | Bambu Lab X2D from `docs/bambu-lan-printer-probe-2026-06-24.md` | pause, resume, stop, print speed | `blocked` | The prior real-printer probe used an interactively supplied LAN access code and recorded MQTT connectivity, `pushall`, `gcode_line`, and `get_version` only. The current workspace has no `PANDAR_PRINTERS` configuration or printer access code, so typed live-control probes cannot be repeated safely here. |
 
 `docs/bambu-lan-printer-probe-2026-06-24.md` records real-printer evidence for MQTT connectivity, `pushall`, `gcode_line`, and `get_version` on an X2D. It does not record pause, resume, stop, or print-speed probes, so this document makes no hardware compatibility claim for those controls.
+
+Do not run Phase 27 live-control probes against a real printer unless the operator has selected a safe machine state and supplied agent-local LAN credentials outside source control. Record failed and blocked attempts here because they are compatibility evidence.
