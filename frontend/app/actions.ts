@@ -28,33 +28,6 @@ export type SecretActionState =
     }
   | null
 
-export async function createPrintJob(formData: FormData) {
-  const tenantId = stringField(formData, 'tenant_id')
-  const printerId = stringField(formData, 'printer_id')
-  const response = await fetch(
-    `${apiUrl}/api/v1/tenants/${tenantId}/printers/${printerId}/jobs`,
-    {
-      method: 'POST',
-      headers: await apiHeaders('application/json'),
-      body: JSON.stringify({
-        filename: stringField(formData, 'filename'),
-        content_type: stringField(formData, 'content_type'),
-        artifact_base64: stringField(formData, 'artifact_base64'),
-        plate_id: Number(stringField(formData, 'plate_id')),
-        use_ams: formData.get('use_ams') === 'on',
-        flow_cali: formData.get('flow_cali') === 'on',
-        timelapse: formData.get('timelapse') === 'on',
-      }),
-    },
-  )
-
-  if (!response.ok) {
-    redirect(statusUrl(tenantId, await errorCode(response)))
-  }
-
-  redirect(statusUrl(tenantId, 'job_created'))
-}
-
 export async function discoverPrinters(formData: FormData) {
   const tenantId = stringField(formData, 'tenant_id')
   const agentId = stringField(formData, 'agent_id')

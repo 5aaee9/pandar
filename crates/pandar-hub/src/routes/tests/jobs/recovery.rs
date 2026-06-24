@@ -20,11 +20,11 @@ async fn job_recovery_routes_retry_reprint_duplicate_and_audit() {
         .await
         .unwrap();
 
-    let (_, retry_source) = request_as(
+    let (_, retry_source) = multipart_request_as(
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -63,11 +63,11 @@ async fn job_recovery_routes_retry_reprint_duplicate_and_audit() {
     assert_eq!(retried["status"], "queued");
     assert_ne!(retried["command_id"], retry_command_id);
 
-    let (_, finished) = request_as(
+    let (_, finished) = multipart_request_as(
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -186,11 +186,11 @@ async fn retry_dispatch_wakes_agent_on_sibling_instance() {
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
         .await
         .unwrap();
-    let (_, created) = request_as(
+    let (_, created) = multipart_request_as(
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -259,11 +259,11 @@ async fn reprint_wakes_agent_on_sibling_instance() {
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
         .await
         .unwrap();
-    let (_, created) = request_as(
+    let (_, created) = multipart_request_as(
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -333,11 +333,11 @@ async fn duplicate_and_print_wakes_agent_on_sibling_instance() {
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
         .await
         .unwrap();
-    let (_, created) = request_as(
+    let (_, created) = multipart_request_as(
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -408,11 +408,11 @@ async fn job_recovery_routes_reject_unsafe_retry_and_viewer_auth() {
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
         .await
         .unwrap();
-    let (_, created) = request_as(
+    let (_, created) = multipart_request_as(
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &operator,
     )
     .await;

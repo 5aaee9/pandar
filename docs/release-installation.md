@@ -59,6 +59,8 @@ The release archive provides the operator CLI and Bambu Studio plugin library. D
 
 The hub needs `PANDAR_DATABASE_URL`. The frontend needs `APP_API_URL` and `APP_BASE_URL`. The agent needs `PANDAR_HUB_GRPC_URL`, tenant and agent IDs, an agent credential, and any `PANDAR_PRINTERS` entries for local machines.
 
+For agent artifact downloads, set `PANDAR_HUB_API_URL` when `PANDAR_HUB_GRPC_URL` is not an HTTP(S) URL. Agents authenticate artifact downloads with `PANDAR_AGENT_CREDENTIAL`; do not distribute object-store credentials to agents or browsers.
+
 ## Docker Compose Shapes
 
 Use the SQLite compose shape for single-process or local deployments:
@@ -73,13 +75,17 @@ Use the PostgreSQL compose shape when the database must be external to the Hub c
 POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.postgres.yml up --build
 ```
 
-Use the PostgreSQL plus NATS profile for horizontally scaled Hub replicas:
+Use the PostgreSQL plus NATS profile to run the broker-backed deployment shape with S3-compatible artifact storage:
 
 ```bash
-POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> PANDAR_CONTROL_PLANE=nats docker compose -f docker-compose.postgres.yml --profile nats up --build
+POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> PANDAR_CONTROL_PLANE=nats PANDAR_ARTIFACT_STORAGE=s3 PANDAR_ARTIFACT_S3_BUCKET=<bucket> PANDAR_ARTIFACT_S3_REGION=<region> PANDAR_ARTIFACT_S3_ENDPOINT=<endpoint> PANDAR_ARTIFACT_S3_ACCESS_KEY_ID=<access key> PANDAR_ARTIFACT_S3_SECRET_ACCESS_KEY=<secret> docker compose -f docker-compose.postgres.yml --profile nats up --build
 ```
 
-SQLite is for lightweight single-process deployments and rejects the NATS control plane.
+The compose file starts one `pandar-api` service with fixed host ports. For multiple Hub replicas, put replicas behind your own HTTP/gRPC routing layer and avoid publishing the same host ports from every container.
+
+SQLite is for lightweight single-process deployments and rejects the NATS control plane. The SQLite compose shape keeps the filesystem artifact backend and `PANDAR_SPOOL_DIR`. PostgreSQL plus NATS should use S3-compatible artifact storage; a shared filesystem is accepted only with the explicit `PANDAR_ARTIFACT_FILESYSTEM_SHARED=true` readiness override when every Hub replica truly mounts the same artifact directory.
+
+Back up SQLite deployments by capturing both the SQLite database file and the filesystem artifact directory. Back up PostgreSQL/object-storage deployments by capturing the PostgreSQL database and the configured object-storage bucket.
 
 ## NixOS services.pandar
 

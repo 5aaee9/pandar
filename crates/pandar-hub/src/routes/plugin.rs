@@ -1,17 +1,16 @@
 use axum::{
     Json,
-    extract::State,
     extract::rejection::JsonRejection,
+    extract::{Multipart, State},
     http::{HeaderMap, StatusCode},
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     AppState,
-    repositories::{AuthenticatedPrincipal, CreatePrintJob, JobWithArtifact, RepositoryError},
-    routes::{ApiError, auth, jobs::validate_artifact_submission},
+    repositories::{AuthenticatedPrincipal, JobWithArtifact, RepositoryError},
+    routes::{ApiError, auth},
 };
 
 #[derive(Debug, Deserialize)]
@@ -44,20 +43,6 @@ pub(super) struct PluginProfileResponse {
     user_name: String,
     tenant_id: String,
     tenant_name: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub(super) struct CreatePluginPrintRequest {
-    printer_id: String,
-    filename: String,
-    content_type: String,
-    artifact_base64: String,
-    plate_id: i64,
-    use_ams: bool,
-    flow_cali: bool,
-    timelapse: bool,
-    ams_mapping: Option<Value>,
-    ams_mapping2: Option<Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -209,98 +194,24 @@ pub(super) async fn list_jobs(
 pub(super) async fn create_print(
     State(state): State<AppState>,
     headers: HeaderMap,
-    payload: Result<Json<CreatePluginPrintRequest>, JsonRejection>,
+    multipart: Multipart,
 ) -> Result<(StatusCode, Json<PluginPrintResponse>), ApiError> {
     let authenticated = auth::authorize_plugin_studio(&state, &headers).await?;
     let tenant_id = authenticated.token.tenant_id;
-    let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
-    if payload.filename.trim().is_empty() {
-        return Err(ApiError::bad_request("bad_request"));
-    }
-    if payload.artifact_base64.trim().is_empty() {
-        return Err(ApiError::bad_request("artifact_empty"));
-    }
-    let plate_id = super::jobs::validated_plate_id(payload.plate_id)?;
-    uuid::Uuid::parse_str(&payload.printer_id)
-        .map_err(|_| ApiError::bad_request("invalid_printer_id"))?;
-
-    let content_type = if payload.content_type.trim().is_empty() {
-        "application/octet-stream".to_string()
-    } else {
-        payload.content_type
-    };
-    let artifact_bytes = validate_artifact_submission(
-        &payload.artifact_base64,
-        state.job_storage().max_artifact_bytes(),
-    )?;
-
-    let ams_mapping_json = mapping_json(payload.ams_mapping, "ams_mapping")?;
-    let ams_mapping2_json = mapping_json(payload.ams_mapping2, "ams_mapping2")?;
-    let Some(printer) = state
-        .printers()
-        .get_for_tenant(tenant_id, &payload.printer_id)
-        .await?
-    else {
-        return Err(ApiError::not_found("printer_not_found"));
-    };
-
-    let artifact_id = uuid::Uuid::new_v4().to_string();
-    let stored = state
-        .job_storage()
-        .write_artifact(tenant_id, &artifact_id, &payload.filename, &artifact_bytes)
-        .await
-        .map_err(|err| {
-            tracing::error!(
-                error = %redact_artifact_error(&format!("{err:#}")),
-                "failed to write plugin print artifact"
-            );
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
-        })?;
-    let created = state
-        .jobs()
-        .create_print_job_with_audit(
-            CreatePrintJob {
-                tenant_id,
-                printer_id: printer.id,
-                agent_id: printer.agent_id,
-                artifact_id,
-                artifact_filename: stored.filename,
-                artifact_content_type: content_type,
-                artifact_size_bytes: stored.size_bytes,
-                artifact_storage_path: stored.storage_path.clone(),
-                plate_id,
-                use_ams: payload.use_ams,
-                flow_cali: payload.flow_cali,
-                timelapse: payload.timelapse,
-                ams_mapping_json,
-                ams_mapping2_json,
-            },
-            auth::plugin_audit_actor(&authenticated),
-        )
-        .await;
-
-    match created {
-        Ok(created) => {
-            let wake_tenant_id = created.job.tenant_id;
-            let wake_agent_id = created.job.agent_id;
-            let response = PluginPrintResponse::from(created);
-            state.wake_agent(wake_tenant_id, wake_agent_id).await;
-            Ok((StatusCode::CREATED, Json(response)))
-        }
-        Err(err) => {
-            if let Err(cleanup_err) = state
-                .job_storage()
-                .remove_artifact(&stored.storage_path)
-                .await
-            {
-                tracing::warn!(
-                    error = %redact_artifact_error(&format!("{cleanup_err:#}")),
-                    "failed to remove plugin print artifact after repository error"
-                );
-            }
-            Err(err.into())
-        }
-    }
+    let created = super::jobs::multipart::create_print_job_from_multipart(
+        &state,
+        tenant_id,
+        None,
+        multipart,
+        auth::plugin_audit_actor(&authenticated),
+        "plugin",
+    )
+    .await?;
+    let wake_tenant_id = created.job.tenant_id;
+    let wake_agent_id = created.job.agent_id;
+    let response = PluginPrintResponse::from(created);
+    state.wake_agent(wake_tenant_id, wake_agent_id).await;
+    Ok((StatusCode::CREATED, Json(response)))
 }
 
 fn user_id(principal: &AuthenticatedPrincipal) -> Option<String> {
@@ -358,21 +269,6 @@ fn plugin_login_ticket_expires_at() -> Result<String, ApiError> {
             tracing::error!(error = %format!("{err:#}"), "failed to format plugin login ticket expiry");
             ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
         })
-}
-
-fn mapping_json(value: Option<Value>, field: &'static str) -> Result<Option<String>, ApiError> {
-    value
-        .map(|value| {
-            serde_json::to_string(&value).map_err(|err| {
-                tracing::error!(
-                    error = %format!("{err:#}"),
-                    field,
-                    "failed to serialize plugin print material mapping"
-                );
-                ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
-            })
-        })
-        .transpose()
 }
 
 impl From<JobWithArtifact> for PluginJobResponse {

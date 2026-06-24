@@ -14,14 +14,14 @@ services:
       retries: 12
 
   nats:
-    image: nats:2
+    image: nats:2-alpine
     profiles: ["nats"]
     command: ["-js", "-m", "8222"]
     expose:
       - "4222"
       - "8222"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8222/healthz"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8222/healthz | grep -q ok"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -35,17 +35,31 @@ services:
       PANDAR_DATABASE_URL: postgres://pandar:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/pandar
       PANDAR_HUB_BIND: 0.0.0.0:8080
       PANDAR_HUB_GRPC_BIND: 0.0.0.0:50051
-      PANDAR_SPOOL_DIR: /spool
       PANDAR_CONTROL_PLANE: ${PANDAR_CONTROL_PLANE:-in-process}
       PANDAR_NATS_URL: ${PANDAR_NATS_URL:-nats://nats:4222}
+      PANDAR_ARTIFACT_STORAGE: ${PANDAR_ARTIFACT_STORAGE:-filesystem}
+      PANDAR_SPOOL_DIR: ${PANDAR_SPOOL_DIR:-/spool}
+      PANDAR_ARTIFACT_FILESYSTEM_SHARED: ${PANDAR_ARTIFACT_FILESYSTEM_SHARED:-false}
+      PANDAR_ARTIFACT_S3_BUCKET: ${PANDAR_ARTIFACT_S3_BUCKET:-}
+      PANDAR_ARTIFACT_S3_REGION: ${PANDAR_ARTIFACT_S3_REGION:-}
+      PANDAR_ARTIFACT_S3_ENDPOINT: ${PANDAR_ARTIFACT_S3_ENDPOINT:-}
+      PANDAR_ARTIFACT_S3_ACCESS_KEY_ID: ${PANDAR_ARTIFACT_S3_ACCESS_KEY_ID:-}
+      PANDAR_ARTIFACT_S3_SECRET_ACCESS_KEY: ${PANDAR_ARTIFACT_S3_SECRET_ACCESS_KEY:-}
+      PANDAR_ARTIFACT_S3_FORCE_PATH_STYLE: ${PANDAR_ARTIFACT_S3_FORCE_PATH_STYLE:-false}
+    # The default single-Hub filesystem backend persists /spool in pandar-spool.
+    # For PostgreSQL+NATS replicas, prefer S3; a shared filesystem requires
+    # PANDAR_ARTIFACT_FILESYSTEM_SHARED=true and a genuinely shared mount.
+    volumes:
+      - pandar-spool:/spool
     ports:
       - "8080:8080"
       - "50051:50051"
-    volumes:
-      - pandar-spool:/spool
     depends_on:
       postgres:
         condition: service_healthy
+      nats:
+        condition: service_healthy
+        required: false
 
   pandar-web:
     build:

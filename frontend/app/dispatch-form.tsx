@@ -1,8 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 
-import { createPrintJob } from './actions'
 import { formatBytes } from './dashboard-ui'
 
 type DispatchTenant = {
@@ -18,7 +17,7 @@ type DispatchPrinter = {
 const maxArtifactBytes = 268435456
 const backendErrorCodes = [
   'artifact_empty',
-  'artifact_invalid_base64',
+  'artifact_invalid_upload',
   'artifact_invalid_plate',
   'artifact_too_large',
   'printer_not_found',
@@ -31,71 +30,63 @@ export function DispatchForm({
   selectedTenant: DispatchTenant | null
   printers: DispatchPrinter[]
 }) {
+  const [selectedPrinterId, setSelectedPrinterId] = useState(printers[0]?.id ?? '')
   const [artifact, setArtifact] = useState<{
-    filename: string
-    contentType: string
+    file: File | null
     size: number
-    base64: string
-    state: 'idle' | 'converting' | 'ready' | 'too_large' | 'failed'
+    state: 'idle' | 'ready' | 'too_large'
   }>({
-    filename: '',
-    contentType: '',
+    file: null,
     size: 0,
-    base64: '',
     state: 'idle',
   })
+  const [submitting, setSubmitting] = useState(false)
 
-  const selectArtifact = async (file: File | null) => {
+  useEffect(() => {
+    if (!printers.some((printer) => printer.id === selectedPrinterId)) {
+      setSelectedPrinterId(printers[0]?.id ?? '')
+    }
+  }, [printers, selectedPrinterId])
+
+  const selectArtifact = (file: File | null) => {
     if (!file) {
-      setArtifact({ filename: '', contentType: '', size: 0, base64: '', state: 'idle' })
+      setArtifact({ file: null, size: 0, state: 'idle' })
       return
     }
 
     if (file.size > maxArtifactBytes) {
-      setArtifact({
-        filename: file.name,
-        contentType: file.type || 'model/3mf',
-        size: file.size,
-        base64: '',
-        state: 'too_large',
-      })
+      setArtifact({ file, size: file.size, state: 'too_large' })
       return
     }
 
-    setArtifact({
-      filename: file.name,
-      contentType: file.type || 'model/3mf',
-      size: file.size,
-      base64: '',
-      state: 'converting',
-    })
+    setArtifact({ file, size: file.size, state: 'ready' })
+  }
+
+  const submitPrintJob = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!selectedTenant || artifact.state !== 'ready' || !selectedPrinterId) {
+      return
+    }
+
+    const formData = new FormData(event.currentTarget)
+    const printerId = String(formData.get('printer_id') ?? '')
+    setSubmitting(true)
 
     try {
-      const buffer = await file.arrayBuffer()
-      let binary = ''
-      const bytes = new Uint8Array(buffer)
-      const chunkSize = 0x8000
-      for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-        const chunk = bytes.subarray(offset, offset + chunkSize)
-        binary += String.fromCharCode(...chunk)
-      }
-      setArtifact({
-        filename: file.name,
-        contentType: file.type || 'model/3mf',
-        size: file.size,
-        base64: btoa(binary),
-        state: 'ready',
+      const response = await fetch(uploadPath(selectedTenant.id, printerId), {
+        method: 'POST',
+        body: formData,
       })
-    } catch {
-      setArtifact({
-        filename: file.name,
-        contentType: file.type || 'model/3mf',
-        size: file.size,
-        base64: '',
-        state: 'failed',
-      })
+      const status = response.ok ? 'job_created' : await errorCode(response)
+      window.location.assign(
+        `/?tenant=${encodeURIComponent(selectedTenant.id)}&status=${encodeURIComponent(status)}`,
+      )
+    } finally {
+      setSubmitting(false)
     }
   }
+
+  const selectedFilename = artifact.file?.name ?? ''
 
   return (
     <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
@@ -103,7 +94,7 @@ export function DispatchForm({
         <div>
           <h2 className="text-base font-semibold">Dispatch print job</h2>
           <p className="mt-0.5 text-sm text-slate-600">
-            Submit a base64 project artifact to the selected tenant printer
+            Upload a project artifact to the selected tenant printer
           </p>
         </div>
       </div>
@@ -116,17 +107,21 @@ export function DispatchForm({
           message="A reported printer is required before jobs can be dispatched."
         />
       ) : (
-        <form action={createPrintJob} className="grid gap-4 px-4 py-4 lg:grid-cols-2">
-          <input name="tenant_id" type="hidden" value={selectedTenant.id} />
-          <input name="filename" type="hidden" value={artifact.filename} />
-          <input name="content_type" type="hidden" value={artifact.contentType} />
-          <input name="artifact_base64" type="hidden" value={artifact.base64} />
+        <form
+          action={uploadPath(selectedTenant.id, selectedPrinterId)}
+          className="grid gap-4 px-4 py-4 lg:grid-cols-2"
+          encType="multipart/form-data"
+          method="post"
+          onSubmit={(event) => void submitPrintJob(event)}
+        >
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-xs font-medium text-slate-500">Printer</span>
             <select
               name="printer_id"
               className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
+              onChange={(event) => setSelectedPrinterId(event.currentTarget.value)}
               required
+              value={selectedPrinterId}
             >
               {printers.map((printer) => (
                 <option key={printer.id} value={printer.id}>
@@ -151,26 +146,26 @@ export function DispatchForm({
             <input
               accept=".3mf,.gcode,.gcode.3mf,application/octet-stream,model/3mf"
               className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-950 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium"
-              onChange={(event) => void selectArtifact(event.currentTarget.files?.[0] ?? null)}
+              name="file"
+              onChange={(event) => selectArtifact(event.currentTarget.files?.[0] ?? null)}
               type="file"
               required
             />
             <span className="text-xs text-slate-600">Maximum artifact size {formatBytes(maxArtifactBytes)}</span>
           </label>
+          <input name="use_ams" type="hidden" value="false" />
+          <input name="flow_cali" type="hidden" value="false" />
+          <input name="timelapse" type="hidden" value="false" />
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 lg:col-span-2">
             <div className="font-medium text-slate-950">
-              {artifact.filename || 'No artifact selected'}
+              {selectedFilename || 'No artifact selected'}
             </div>
             <div className="mt-1 text-xs">
-              {artifact.state === 'converting'
-                ? 'Converting artifact for form submission'
-                : artifact.state === 'ready'
-                  ? `${formatBytes(artifact.size)} ready`
-                  : artifact.state === 'too_large'
-                    ? `${formatBytes(artifact.size)} exceeds the configured limit`
-                    : artifact.state === 'failed'
-                      ? 'Artifact conversion failed'
-                      : 'Choose a file to convert in the browser before dispatch.'}
+              {artifact.state === 'ready'
+                ? `${formatBytes(artifact.size)} selected`
+                : artifact.state === 'too_large'
+                  ? `${formatBytes(artifact.size)} exceeds the configured limit`
+                  : 'Choose a file before dispatch.'}
             </div>
             <div className="mt-2 flex flex-wrap gap-1 text-xs">
               {backendErrorCodes.map((code) => (
@@ -182,31 +177,44 @@ export function DispatchForm({
           </div>
           <div className="flex flex-wrap gap-4 text-sm text-slate-700 lg:col-span-2">
             <label className="flex items-center gap-2">
-              <input name="use_ams" type="checkbox" defaultChecked />
+              <input name="use_ams" type="checkbox" value="true" defaultChecked />
               Use AMS
             </label>
             <label className="flex items-center gap-2">
-              <input name="flow_cali" type="checkbox" />
+              <input name="flow_cali" type="checkbox" value="true" />
               Flow calibration
             </label>
             <label className="flex items-center gap-2">
-              <input name="timelapse" type="checkbox" />
+              <input name="timelapse" type="checkbox" value="true" />
               Timelapse
             </label>
           </div>
           <div className="lg:col-span-2">
             <button
               className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white disabled:bg-slate-300 disabled:text-slate-600"
-              disabled={artifact.state !== 'ready'}
+              disabled={artifact.state !== 'ready' || submitting}
               type="submit"
             >
-              Dispatch
+              {submitting ? 'Dispatching' : 'Dispatch'}
             </button>
           </div>
         </form>
       )}
     </section>
   )
+}
+
+function uploadPath(tenantId: string, printerId: string) {
+  return `/api/tenants/${encodeURIComponent(tenantId)}/printers/${encodeURIComponent(printerId)}/jobs`
+}
+
+async function errorCode(response: Response) {
+  try {
+    const body = (await response.json()) as { error?: string }
+    return body.error ?? `http_${response.status}`
+  } catch {
+    return `http_${response.status}`
+  }
 }
 
 function DispatchEmptyState({ title, message }: { title: string; message: string }) {

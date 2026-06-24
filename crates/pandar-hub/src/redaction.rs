@@ -27,9 +27,13 @@ fn redact_line(line: &str) -> String {
     let lower = redacted.to_ascii_lowercase();
     if lower.contains("artifact file ")
         || lower.contains("artifact directory ")
+        || lower.contains("artifact spool ")
         || lower.contains("artifact storage path ")
     {
-        return redact_after_marker(&redacted, &[" file ", " directory ", " storage path "]);
+        return redact_after_marker(
+            &redacted,
+            &[" file ", " directory ", " spool ", " storage path "],
+        );
     }
     if lower.starts_with("authorization:") {
         return "Authorization: [redacted]".to_owned();
@@ -121,5 +125,22 @@ failed to remove artifact file /tmp/pandar/spool/tenant/artifact/plate.3mf";
                 "{forbidden} was not redacted from {redacted}"
             );
         }
+    }
+
+    #[test]
+    fn redacts_artifact_spool_paths_without_removing_cause_chain() {
+        let message = "\
+failed to create artifact spool /tmp/pandar/spool/not-a-directory
+
+Caused by:
+    Not a directory (os error 20)";
+
+        let redacted = redact_secrets(message);
+
+        assert!(redacted.contains("failed to create artifact spool [redacted]"));
+        assert!(redacted.contains("Caused by:"));
+        assert!(redacted.contains("Not a directory"));
+        assert!(!redacted.contains("/tmp/pandar"));
+        assert!(!redacted.contains("not-a-directory"));
     }
 }

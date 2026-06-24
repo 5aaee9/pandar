@@ -17,11 +17,11 @@ async fn job_list_and_detail_return_tenant_jobs() {
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
         .await
         .unwrap();
-    let (_, created) = request_as(
+    let (_, created) = multipart_request_as(
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -70,11 +70,11 @@ async fn job_detail_returns_internal_error_for_corrupt_persisted_mapping_json() 
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
         .await
         .unwrap();
-    let (_, created) = request_as(
+    let (_, created) = multipart_request_as(
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;

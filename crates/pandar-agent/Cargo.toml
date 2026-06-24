@@ -11,6 +11,7 @@ async-trait.workspace = true
 clap.workspace = true
 pandar-core.workspace = true
 prost.workspace = true
+reqwest.workspace = true
 rumqttc.workspace = true
 rustls.workspace = true
 serde.workspace = true

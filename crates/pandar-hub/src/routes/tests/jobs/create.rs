@@ -18,19 +18,11 @@ async fn job_create_writes_artifact_queues_command_and_returns_created_job() {
         .await
         .unwrap();
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
-        Some(json!({
-            "filename": "plate file.3mf",
-            "content_type": "model/3mf",
-            "artifact_base64": STANDARD.encode(b"abc"),
-            "plate_id": 1,
-            "use_ams": true,
-            "flow_cali": false,
-            "timelapse": true
-        })),
+        multipart_print_body(None, Some(("plate file.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -92,11 +84,11 @@ async fn print_job_wakes_agent_on_sibling_instance() {
         })
         .await;
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -129,11 +121,11 @@ async fn print_job_returns_created_when_agent_wake_publish_fails() {
         .await
         .unwrap();
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs"),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -162,11 +154,11 @@ async fn job_create_accepts_optional_material_mappings_and_responses_preserve_nu
         .unwrap();
     let uri = format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs");
 
-    let (status, null_mapping) = request_as(
+    let (status, null_mapping) = multipart_request_as(
         app.clone(),
         Method::POST,
         &uri,
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -180,21 +172,17 @@ async fn job_create_accepts_optional_material_mappings_and_responses_preserve_nu
         serde_json::Value::Null
     );
 
-    let (status, empty_mapping) = request_as(
+    let (status, empty_mapping) = multipart_request_as(
         app.clone(),
         Method::POST,
         &uri,
-        Some(json!({
-            "filename": "plate.3mf",
-            "content_type": "model/3mf",
-            "artifact_base64": STANDARD.encode(b"abc"),
-            "plate_id": 1,
-            "use_ams": false,
-            "flow_cali": false,
-            "timelapse": false,
-            "ams_mapping": [],
-            "ams_mapping2": []
-        })),
+        multipart_print_body_with_mappings(
+            None,
+            Some(("plate.3mf", "model/3mf", b"abc")),
+            1,
+            Some(json!([])),
+            Some(json!([])),
+        ),
         &token,
     )
     .await;
@@ -202,20 +190,17 @@ async fn job_create_accepts_optional_material_mappings_and_responses_preserve_nu
     assert_eq!(empty_mapping["material"]["ams_mapping"], json!([]));
     assert_eq!(empty_mapping["material"]["ams_mapping2"], json!([]));
 
-    let (status, external_mapping) = request_as(
+    let (status, external_mapping) = multipart_request_as(
         app.clone(),
         Method::POST,
         &uri,
-        Some(json!({
-            "filename": "external.3mf",
-            "content_type": "model/3mf",
-            "artifact_base64": STANDARD.encode(b"abc"),
-            "plate_id": 1,
-            "use_ams": true,
-            "flow_cali": false,
-            "timelapse": false,
-            "ams_mapping2": [{ "ams_id": 254, "slot_id": 8 }]
-        })),
+        multipart_print_body_with_mappings(
+            None,
+            Some(("external.3mf", "model/3mf", b"abc")),
+            1,
+            None,
+            Some(json!([{ "ams_id": 254, "slot_id": 8 }])),
+        ),
         &token,
     )
     .await;
@@ -297,14 +282,20 @@ async fn job_create_rejects_invalid_material_mapping_shapes_without_echoing_valu
         json!({ "ams_mapping2": [{ "ams_id": 0, "slot_id": 0, "access_code": "sk-live-secret" }] }),
         json!({ "ams_mapping2": vec![json!({ "ams_id": 0, "slot_id": 0 }); 33] }),
     ] {
-        let mut body = valid_request();
-        let object = body.as_object_mut().unwrap();
-        for (key, value) in payload.as_object().unwrap() {
-            object.insert(key.clone(), value.clone());
-        }
-
-        let (status, response) =
-            request_as(app.clone(), Method::POST, &uri, Some(body), &token).await;
+        let (status, response) = multipart_request_as(
+            app.clone(),
+            Method::POST,
+            &uri,
+            multipart_print_body_with_mappings(
+                None,
+                Some(("plate.3mf", "model/3mf", b"abc")),
+                1,
+                payload.get("ams_mapping").cloned(),
+                payload.get("ams_mapping2").cloned(),
+            ),
+            &token,
+        )
+        .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(response, json!({ "error": "invalid_material_mapping" }));
         assert!(!response.to_string().contains("sk-live-secret"));

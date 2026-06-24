@@ -14,7 +14,7 @@ use crate::{
         commands::inserts::{self, InsertCommand},
         jobs::{
             create::{self, NewPrintJobFromArtifact},
-            job_with_artifact_by_id,
+            hydration::job_with_artifact_by_id,
             rows::{job_from_model_with_usage, job_with_artifact_from_models, usage_from_model},
         },
     },
@@ -39,7 +39,7 @@ pub async fn retry_dispatch_with_audit(
     }
 
     let command_id = CommandId::new();
-    let payload = retry_payload(&command.payload_json, job_id)?;
+    let payload = retry_payload(&command.payload_json, job_id, &source)?;
     inserts::insert(
         &tx,
         InsertCommand {
@@ -106,14 +106,24 @@ pub async fn retry_dispatch_with_audit(
         .ok_or(RepositoryError::MissingJob)
 }
 
-fn retry_payload(payload_json: &str, job_id: JobId) -> RepositoryResult<String> {
+fn retry_payload(
+    payload_json: &str,
+    job_id: JobId,
+    source: &JobWithArtifact,
+) -> RepositoryResult<String> {
     let mut payload =
         serde_json::from_str::<crate::repositories::PrintProjectFilePayload>(payload_json)
             .context("failed to parse retry source command payload")?;
     payload.job_id = job_id.to_string();
+    payload.artifact_download_path =
+        artifact_download_path(&source.job.agent_id, &source.artifact.id);
     serde_json::to_string(&payload)
         .context("failed to serialize retry command payload")
         .map_err(RepositoryError::from)
+}
+
+fn artifact_download_path(agent_id: &pandar_core::AgentId, artifact_id: &str) -> String {
+    format!("/api/v1/agents/{agent_id}/artifacts/{artifact_id}")
 }
 
 pub async fn reprint_with_audit(

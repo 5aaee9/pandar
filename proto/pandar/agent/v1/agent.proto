@@ -113,4 +113,5 @@ message PrintProjectFile {
   bool timelapse = 11;
   string ams_mapping_json = 12;
   string ams_mapping2_json = 13;
+  string artifact_download_path = 14;
 }

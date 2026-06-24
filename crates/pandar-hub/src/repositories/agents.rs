@@ -120,6 +120,21 @@ impl AgentRepository {
             .transpose()
     }
 
+    pub async fn credential_records_by_hash(
+        &self,
+        credential_hash: &str,
+    ) -> RepositoryResult<Vec<AgentCredentialRecord>> {
+        agents::Entity::find()
+            .filter(agents::Column::CredentialHash.eq(credential_hash))
+            .order_by_asc(agents::Column::Id)
+            .all(&self.database.sea_orm_connection())
+            .await
+            .context("failed to get agent credentials by hash")?
+            .into_iter()
+            .map(agent_credential_from_model)
+            .collect()
+    }
+
     pub async fn update_connection(
         &self,
         agent_id: AgentId,

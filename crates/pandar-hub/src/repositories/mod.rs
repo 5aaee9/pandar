@@ -22,8 +22,8 @@ pub use commands::{
     CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
 };
 pub use jobs::{
-    AppliedPrintReport, ApplyPrintReport, CreatePrintJob, DuplicatePrintJob, JobRepository,
-    JobWithArtifact, PrintReportDiagnostic,
+    AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, CreatePrintJob, DuplicatePrintJob,
+    JobRepository, JobWithArtifact, PrintReportDiagnostic,
 };
 pub use materials::{MaterialPatchInput, MaterialRepository, MaterialSnapshot};
 pub use printer_event_tickets::{

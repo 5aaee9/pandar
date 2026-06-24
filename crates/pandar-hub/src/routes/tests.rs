@@ -12,9 +12,13 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 mod agents;
+mod artifacts;
+mod basic;
 mod bootstrap;
 mod jobs;
+mod multipart;
 mod plugin;
+mod plugin_multipart;
 mod plugin_redaction;
 mod printer_commands;
 mod printer_events_ws;
@@ -22,6 +26,11 @@ mod printers;
 mod provisioning;
 mod readiness_metrics;
 mod tenant_tokens;
+
+use multipart::{
+    multipart_print_body, multipart_print_body_file_first, multipart_print_body_with_fields,
+    multipart_print_body_with_mappings, multipart_request_as,
+};
 
 const TEST_PRIVATE_KEY_PEM: &str = include_str!("tests/fixtures/external_auth_private.pem");
 const TEST_PUBLIC_JWK_JSON: &str = include_str!("tests/fixtures/external_auth_jwks.json");
@@ -357,51 +366,4 @@ struct ExternalAuthClaims<'a> {
     aud: &'a str,
     exp: u64,
     nbf: u64,
-}
-
-#[tokio::test]
-async fn health_check_reports_ok() {
-    let (status, body) = request(app().await, Method::GET, "/healthz", None).await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "status": "ok" }));
-}
-
-#[tokio::test]
-async fn retired_api_token_auth_is_rejected_when_external_auth_is_configured() {
-    let state = state().await;
-    let app = router(external_auth_state(state.clone()));
-    let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
-    let user = state
-        .auth()
-        .create_user(
-            tenant.id,
-            "api-token-user@example.test",
-            "API Token User",
-            crate::repositories::UserRole::Viewer,
-        )
-        .await
-        .unwrap();
-    state
-        .auth()
-        .create_api_token(
-            tenant.id,
-            &user.id,
-            "retired-api-token",
-            "retired-api-token",
-        )
-        .await
-        .unwrap();
-
-    let (status, body) = request_as(
-        app,
-        Method::GET,
-        &format!("/api/v1/tenants/{}/agents", tenant.id),
-        None,
-        "retired-api-token",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
 }

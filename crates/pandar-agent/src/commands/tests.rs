@@ -1,3 +1,4 @@
+mod artifacts;
 mod diagnostics;
 mod print;
 
@@ -10,7 +11,7 @@ use tokio::{sync::Mutex, sync::mpsc};
 use super::*;
 use crate::{
     machine::{
-        BambuMachineGateway, MachineSnapshot, NoopMachineGateway,
+        BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot, NoopMachineGateway,
         diagnostics::PrinterDiagnosticResult, discovery::PrinterDiscoveryResult,
     },
     protocol::agent::v1::{DiagnosePrinter, DiscoverPrinters, HubCommand, RefreshPrinters},
@@ -227,6 +228,7 @@ pub(super) fn diagnose_command(command_id: String, serial_number: &str) -> HubCo
 pub(super) fn test_config() -> AgentConfig {
     AgentConfig {
         hub_grpc_url: "http://hub.internal:50051".to_owned(),
+        hub_api_url: None,
         agent_name: "garage".to_owned(),
         agent_id: "agent-id".to_owned(),
         tenant_id: "tenant-id".to_owned(),

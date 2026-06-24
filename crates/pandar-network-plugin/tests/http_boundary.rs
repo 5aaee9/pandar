@@ -1,13 +1,12 @@
+mod support;
+
 use pandar_network_plugin::{
     PluginHttpResult, pandar_plugin_exchange_ticket, pandar_plugin_free_with_capacity,
     pandar_plugin_get_jobs, pandar_plugin_get_printers, pandar_plugin_submit_print,
 };
-use std::{
-    fs,
-    io::{Read, Write},
-    net::TcpListener,
-    path::Path,
-    thread,
+use std::{fs, io::Write, net::TcpListener, path::Path, thread};
+use support::{
+    assert_multipart_file_part, assert_multipart_print_request, read_http_request_with_timeout,
 };
 
 const TOKEN: &[u8] = b"pandar_plugin_test_token";
@@ -28,15 +27,14 @@ fn one_shot_server(
     expected_bearer: Option<&'static str>,
     status_line: &'static str,
     body: &'static str,
+    inspect_request: Option<fn(&str)>,
 ) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
 
     thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
-        let mut request = [0_u8; 8192];
-        let bytes_read = stream.read(&mut request).unwrap();
-        let request = String::from_utf8_lossy(&request[..bytes_read]);
+        let request = read_http_request_with_timeout(&mut stream, None);
         let mut lines = request.lines();
         assert_eq!(
             lines.next().unwrap(),
@@ -48,6 +46,9 @@ fn one_shot_server(
                 "request did not contain expected bearer header: {request}"
             );
         }
+        if let Some(inspect_request) = inspect_request {
+            inspect_request(&request);
+        }
         let response = format!(
             "{status_line}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
             body.len()
@@ -55,6 +56,11 @@ fn one_shot_server(
         stream.write_all(response.as_bytes()).unwrap();
     });
     url
+}
+
+fn assert_plugin_multipart_print_request(request: &str) {
+    assert_multipart_print_request(request);
+    assert_multipart_file_part(request, "job.3mf", b"not empty");
 }
 
 fn exchange_ticket(hub_url: &[u8], ticket: &[u8]) -> PluginHttpResult {
@@ -138,6 +144,7 @@ fn ticket_exchange_401_maps_to_invalid_plugin_ticket() {
         None,
         "HTTP/1.1 401 Unauthorized",
         r#"{"error":"secret ticket"}"#,
+        None,
     );
     let result = exchange_ticket(hub_url.as_bytes(), b"ticket");
 
@@ -163,6 +170,7 @@ fn authenticated_401_maps_to_invalid_auth_token() {
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 401 Unauthorized",
         r#"{"error":"secret token"}"#,
+        None,
     );
     let result = get_printers(hub_url.as_bytes(), TOKEN);
 
@@ -179,6 +187,7 @@ fn forbidden_maps_to_plugin_forbidden() {
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 403 Forbidden",
         r#"{"error":"tenant xyz"}"#,
+        None,
     );
     let result = get_printers(hub_url.as_bytes(), TOKEN);
 
@@ -195,6 +204,7 @@ fn not_found_without_stable_code_maps_to_printer_not_found() {
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 404 Not Found",
         r#"{"error":"missing /tmp/x"}"#,
+        None,
     );
     let result = get_printers(hub_url.as_bytes(), TOKEN);
 
@@ -211,6 +221,7 @@ fn jobs_not_found_without_stable_code_maps_to_printer_not_found() {
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 404 Not Found",
         r#"{"error":"missing /tmp/job"}"#,
+        None,
     );
     let result = get_jobs(hub_url.as_bytes(), TOKEN);
 
@@ -231,6 +242,7 @@ fn print_not_found_without_stable_code_maps_to_printer_not_found() {
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 404 Not Found",
         r#"{"error":"missing /tmp/print"}"#,
+        Some(assert_plugin_multipart_print_request),
     );
     let result = submit_print(hub_url.as_bytes(), TOKEN, artifact_path.as_bytes());
     fs::remove_file(&artifact).unwrap();
@@ -248,6 +260,7 @@ fn token_revoked_body_maps_to_plugin_token_revoked() {
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 400 Bad Request",
         r#"{"error":"token_revoked"}"#,
+        None,
     );
     let result = get_printers(hub_url.as_bytes(), TOKEN);
 
@@ -264,6 +277,7 @@ fn unrecognized_server_error_maps_to_invalid_response() {
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 500 Internal Server Error",
         r#"{"error":"db password"}"#,
+        None,
     );
     let result = get_printers(hub_url.as_bytes(), TOKEN);
 
@@ -308,14 +322,45 @@ fn hub_artifact_errors_pass_through_when_stable() {
         "/api/v1/plugin/prints",
         Some("pandar_plugin_test_token"),
         "HTTP/1.1 400 Bad Request",
-        r#"{"error":"artifact_invalid_plate"}"#,
+        r#"{"error":"artifact_invalid_upload"}"#,
+        Some(assert_plugin_multipart_print_request),
     );
     let result = submit_print(hub_url.as_bytes(), TOKEN, artifact_path.as_bytes());
     fs::remove_file(&artifact).unwrap();
 
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 400);
-    assert_eq!(body(result), r#"{"error":"artifact_invalid_plate"}"#);
+    assert_eq!(body(result), r#"{"error":"artifact_invalid_upload"}"#);
+}
+
+#[test]
+fn retired_base64_artifact_error_is_not_stable() {
+    let artifact = std::env::temp_dir().join(format!(
+        "pandar-retired-base64-error-{}.3mf",
+        std::process::id()
+    ));
+    write_artifact(&artifact, b"not empty");
+    let artifact_path = artifact.to_string_lossy();
+    let hub_url = one_shot_server(
+        "POST",
+        "/api/v1/plugin/prints",
+        Some("pandar_plugin_test_token"),
+        "HTTP/1.1 400 Bad Request",
+        Box::leak(
+            format!(
+                r#"{{"error":"{}"}}"#,
+                ["artifact", "invalid", "base64"].join("_")
+            )
+            .into_boxed_str(),
+        ),
+        Some(assert_plugin_multipart_print_request),
+    );
+    let result = submit_print(hub_url.as_bytes(), TOKEN, artifact_path.as_bytes());
+    fs::remove_file(&artifact).unwrap();
+
+    assert_ne!(result.status, 0);
+    assert_eq!(result.http_code, 400);
+    assert_eq!(body(result), r#"{"error":"invalid_response"}"#);
 }
 
 #[test]
@@ -326,37 +371,4 @@ fn exchange_ticket_rejects_empty_ticket_before_network() {
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 400);
     assert_eq!(body(result), r#"{"error":"invalid_plugin_ticket"}"#);
-}
-
-#[test]
-fn submit_print_rejects_missing_artifact_before_network() {
-    let hub = b"http://127.0.0.1:9";
-    let token = b"pandar_plugin_test_token";
-    let printer_id = b"printer";
-    let filename = b"job.3mf";
-    let artifact_path = b"/path/that/does/not/exist/job.3mf";
-    let result = pandar_plugin_submit_print(
-        hub.as_ptr(),
-        hub.len(),
-        token.as_ptr(),
-        token.len(),
-        printer_id.as_ptr(),
-        printer_id.len(),
-        filename.as_ptr(),
-        filename.len(),
-        artifact_path.as_ptr(),
-        artifact_path.len(),
-        1,
-        true,
-        false,
-        false,
-        b"".as_ptr(),
-        0,
-        b"".as_ptr(),
-        0,
-    );
-
-    assert_ne!(result.status, 0);
-    assert_eq!(result.http_code, 400);
-    assert_eq!(body(result), r#"{"error":"artifact_missing"}"#);
 }

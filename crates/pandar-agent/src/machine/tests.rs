@@ -250,6 +250,7 @@ fn print_project_file() -> PrintProjectFile {
         serial_number: "SERIAL1".to_string(),
         filename: "plate.3mf".to_string(),
         storage_path: "tenant/artifact/plate.3mf".to_string(),
+        artifact_download_path: "/api/v1/agents/agent-1/artifacts/artifact-1".to_string(),
         size_bytes: 3,
         plate_id: 1,
         use_ams: true,

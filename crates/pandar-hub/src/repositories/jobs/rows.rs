@@ -117,7 +117,7 @@ pub(crate) fn usage_from_model(
     })
 }
 
-fn artifact_from_model(model: job_artifacts::Model) -> RepositoryResult<JobArtifact> {
+pub(crate) fn artifact_from_model(model: job_artifacts::Model) -> RepositoryResult<JobArtifact> {
     JobArtifact::from_parts(JobArtifactParts {
         id: model.id,
         tenant_id: TenantId::parse(&model.tenant_id).map_err(anyhow::Error::from)?,

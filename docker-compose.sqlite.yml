@@ -8,6 +8,7 @@ services:
       PANDAR_DATABASE_URL: sqlite:///data/pandar.db
       PANDAR_HUB_BIND: 0.0.0.0:8080
       PANDAR_HUB_GRPC_BIND: 0.0.0.0:50051
+      PANDAR_ARTIFACT_STORAGE: filesystem
       PANDAR_SPOOL_DIR: /spool
     ports:
       - "8080:8080"

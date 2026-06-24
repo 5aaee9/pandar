@@ -5,7 +5,9 @@ use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     entities::{jobs, printers},
-    repositories::{JobWithArtifact, RepositoryResult, jobs::hydrate_jobs_with_artifacts},
+    repositories::{
+        JobWithArtifact, RepositoryResult, jobs::hydration::hydrate_jobs_with_artifacts,
+    },
 };
 
 use super::ApplyPrintReport;

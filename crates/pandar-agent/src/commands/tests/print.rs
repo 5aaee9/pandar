@@ -6,8 +6,8 @@ use tokio::sync::{Mutex, mpsc};
 use super::{assert_failure_contains, test_config};
 use crate::{
     commands::{
-        ArtifactReader, FilesystemArtifactReader, ack_event, handle_command_with_reader,
-        success_event,
+        ArtifactReader, FilesystemArtifactReader, ack_event, handle_command_with_gateway,
+        handle_command_with_reader, success_event,
     },
     machine::{
         BambuMachineGateway, MachineSnapshot, diagnostics::PrinterDiagnosticResult,
@@ -123,6 +123,57 @@ async fn print_project_file_missing_artifact_fails_with_storage_path_context() {
 }
 
 #[tokio::test]
+async fn hub_artifact_download_failure_does_not_report_artifact_paths() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut request = vec![0; 2048];
+        let _ = tokio::io::AsyncReadExt::read(&mut socket, &mut request)
+            .await
+            .unwrap();
+        tokio::io::AsyncWriteExt::write_all(
+            &mut socket,
+            b"HTTP/1.1 500 Internal Server Error\r\ncontent-length: 0\r\n\r\n",
+        )
+        .await
+        .unwrap();
+    });
+    let config = crate::AgentConfig {
+        hub_api_url: Some(base_url),
+        ..test_config()
+    };
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = FakePrintGateway::ok(["SERIAL1"]);
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        print_command(command_id.clone(), "SERIAL1", "tenant/artifact/secret.3mf"),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_failure_excludes(
+        receiver.recv().await.unwrap(),
+        &command_id,
+        &[
+            "tenant/artifact/secret.3mf",
+            "/api/v1/agents/agent-1/artifacts/artifact-1",
+        ],
+    );
+    assert!(gateway.prints.lock().await.is_empty());
+    server.abort();
+}
+
+#[tokio::test]
 async fn print_project_file_unknown_serial_rejects_before_artifact_read() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
@@ -200,6 +251,7 @@ fn print_command(command_id: String, serial_number: &str, storage_path: &str) ->
             serial_number: serial_number.to_string(),
             filename: "plate.3mf".to_string(),
             storage_path: storage_path.to_string(),
+            artifact_download_path: "/api/v1/agents/agent-1/artifacts/artifact-1".to_string(),
             size_bytes: 3,
             plate_id: 1,
             use_ams: true,
@@ -219,6 +271,23 @@ fn assert_rejected_ack_contains(event: AgentEvent, command_id: &str, needle: &st
             assert!(ack.error.contains(needle), "{}", ack.error);
         }
         other => panic!("expected command ack, got {other:?}"),
+    }
+}
+
+fn assert_failure_excludes(event: AgentEvent, command_id: &str, needles: &[&str]) {
+    match event.event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert_eq!(result.command_id, command_id);
+            assert!(!result.success);
+            for needle in needles {
+                assert!(
+                    !result.error.contains(needle),
+                    "failure leaked {needle}: {}",
+                    result.error
+                );
+            }
+        }
+        other => panic!("expected command result, got {other:?}"),
     }
 }
 

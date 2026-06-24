@@ -15,6 +15,9 @@ use crate::{
     },
 };
 
+mod payload;
+use payload::{payload, payload_from_existing_artifact};
+
 pub async fn create_print_job<C>(
     connection: &C,
     input: CreatePrintJob,
@@ -275,46 +278,6 @@ where
     .await
     .context("failed to insert recovered print job")?;
     Ok(())
-}
-
-fn payload(input: &CreatePrintJob, job_id: JobId, serial_number: &str) -> PrintProjectFilePayload {
-    PrintProjectFilePayload {
-        job_id: job_id.to_string(),
-        artifact_id: input.artifact_id.clone(),
-        printer_id: input.printer_id.clone(),
-        serial_number: serial_number.to_string(),
-        filename: input.artifact_filename.clone(),
-        storage_path: input.artifact_storage_path.clone(),
-        size_bytes: input.artifact_size_bytes,
-        plate_id: input.plate_id,
-        use_ams: input.use_ams,
-        flow_cali: input.flow_cali,
-        timelapse: input.timelapse,
-        ams_mapping_json: input.ams_mapping_json.clone(),
-        ams_mapping2_json: input.ams_mapping2_json.clone(),
-    }
-}
-
-fn payload_from_existing_artifact(
-    input: &NewPrintJobFromArtifact,
-    job_id: JobId,
-    serial_number: &str,
-) -> PrintProjectFilePayload {
-    PrintProjectFilePayload {
-        job_id: job_id.to_string(),
-        artifact_id: input.artifact_id.clone(),
-        printer_id: input.printer_id.clone(),
-        serial_number: serial_number.to_string(),
-        filename: input.artifact_filename.clone(),
-        storage_path: input.artifact_storage_path.clone(),
-        size_bytes: input.artifact_size_bytes,
-        plate_id: input.plate_id,
-        use_ams: input.use_ams,
-        flow_cali: input.flow_cali,
-        timelapse: input.timelapse,
-        ams_mapping_json: input.ams_mapping_json.clone(),
-        ams_mapping2_json: input.ams_mapping2_json.clone(),
-    }
 }
 
 fn build_created_job(

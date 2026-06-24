@@ -68,11 +68,13 @@ Printer inventory and live events:
 
 Tenant-scoped print dispatch:
 
-- `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs` accepts `filename`, `content_type`, `artifact_base64`, `plate_id`, `use_ams`, `flow_cali`, `timelapse`, and optional material mapping fields, then creates an artifact, linked command, and job transactionally.
+- `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs` accepts multipart form data with a `file` part plus `filename`, `content_type`, `plate_id`, `use_ams`, `flow_cali`, `timelapse`, and optional material mapping fields, then creates an artifact, linked command, and job transactionally.
 - `GET /api/v1/tenants/{tenant_id}/jobs` lists tenant print jobs.
 - `GET /api/v1/tenants/{tenant_id}/jobs/{job_id}` returns one tenant-scoped print job.
 
-`pandar-hub` writes uploaded artifacts under `PANDAR_SPOOL_DIR`, defaulting to `pandar-spool`, and rejects decoded artifacts larger than `PANDAR_MAX_ARTIFACT_BYTES`, defaulting to `10485760`. The frontend displays a 256 MiB artifact cap and configures the Next.js server-action body limit for base64 form submissions. `pandar-agent` reads job artifacts from `PANDAR_ARTIFACT_ROOT`, defaulting to the current directory, plus the hub-provided relative storage path. In local deployments the hub spool root and agent artifact root must point at the same shared filesystem path or print dispatch fails when the agent reads the artifact.
+Artifact storage is selected with `PANDAR_ARTIFACT_STORAGE`, defaulting to `filesystem`. The filesystem backend writes uploaded artifacts under `PANDAR_SPOOL_DIR`, defaulting to `pandar-spool`, and is intended for SQLite or single-Hub deployments. All backends reject artifacts larger than `PANDAR_MAX_ARTIFACT_BYTES`, defaulting to `10485760`. The S3-compatible backend uses `PANDAR_ARTIFACT_STORAGE=s3` plus `PANDAR_ARTIFACT_S3_BUCKET`, `PANDAR_ARTIFACT_S3_REGION`, `PANDAR_ARTIFACT_S3_ENDPOINT`, `PANDAR_ARTIFACT_S3_ACCESS_KEY_ID`, `PANDAR_ARTIFACT_S3_SECRET_ACCESS_KEY`, and optional `PANDAR_ARTIFACT_S3_FORCE_PATH_STYLE=true|false`.
+
+Agents receive a Hub artifact download path in `PrintProjectFile` and fetch bytes from Hub HTTP with their agent credential. Set `PANDAR_HUB_API_URL` for agents when `PANDAR_HUB_GRPC_URL` is not an HTTP(S) URL. `PANDAR_ARTIFACT_ROOT` remains a local fallback for older commands that do not contain a Hub download path.
 
 Print job dispatch success means the agent accepted the command path and completed upload/MQTT dispatch work. Physical progress and terminal printer outcome are tracked separately from MQTT reports.
 
@@ -250,7 +252,7 @@ Hub audit records are stored in `audit_events` for successful user-triggered mut
 
 Readiness and metrics:
 
-- `GET /readyz` checks database access, artifact spool access, gRPC bind configuration, and external-auth JWKS readiness when configured. Public details are sanitized.
+- `GET /readyz` checks database access, artifact storage access, scaled storage topology, gRPC bind configuration, and external-auth JWKS readiness when configured. Public details are sanitized.
 - `GET /metrics` exposes Prometheus text metrics for agent sessions, command/job/report counters, WebSocket tickets/subscriptions, and readiness gauges. Tenant labels are hashed before export.
 
 Cleanup CLI:
@@ -260,16 +262,19 @@ cargo run -p pandar-app -- cleanup --dry-run
 cargo run -p pandar-app -- cleanup --execute
 ```
 
-Cleanup removes expired or terminal records according to retention environment variables and removes artifact files before deleting their database rows. A file-removal failure leaves artifact rows for retry.
+Cleanup removes expired or terminal records according to retention environment variables. In execute mode it builds the configured artifact storage backend, deletes unreferenced artifact objects before deleting their database rows, and leaves artifact rows for retry if storage deletion fails.
 
 Backup and restore examples:
 
 ```bash
 sqlite3 pandar.db ".backup 'pandar-backup.db'"
 sqlite3 pandar-restored.db ".restore 'pandar-backup.db'"
+# Back up the filesystem artifact directory, for example:
+tar -C "${PANDAR_SPOOL_DIR:-pandar-spool}" -czf pandar-artifacts.tar.gz .
 
 pg_dump "$PANDAR_DATABASE_URL" > pandar.sql
 psql "$PANDAR_DATABASE_URL" < pandar.sql
+# Back up the configured S3-compatible bucket with your object-store tooling.
 ```
 
 ## Deployment Examples
@@ -277,12 +282,18 @@ psql "$PANDAR_DATABASE_URL" < pandar.sql
 ```bash
 APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.sqlite.yml up --build
 POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.postgres.yml up --build
-POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> PANDAR_CONTROL_PLANE=nats docker compose -f docker-compose.postgres.yml --profile nats up --build
+POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> PANDAR_CONTROL_PLANE=nats PANDAR_ARTIFACT_STORAGE=s3 PANDAR_ARTIFACT_S3_BUCKET=<bucket> PANDAR_ARTIFACT_S3_REGION=<region> PANDAR_ARTIFACT_S3_ENDPOINT=<endpoint> PANDAR_ARTIFACT_S3_ACCESS_KEY_ID=<access key> PANDAR_ARTIFACT_S3_SECRET_ACCESS_KEY=<secret> docker compose -f docker-compose.postgres.yml --profile nats up --build
 ```
 
-`pandar-hub` defaults to the in-process control plane. Use `PANDAR_CONTROL_PLANE=nats` with PostgreSQL and `PANDAR_NATS_URL` for horizontally scaled Hub replicas. SQLite rejects the NATS control plane because it is intended for lightweight single-process deployments.
+`pandar-hub` defaults to the in-process control plane. Use `PANDAR_CONTROL_PLANE=nats` with PostgreSQL and `PANDAR_NATS_URL` for the broker-backed control plane required by horizontally scaled Hub replicas. The compose example above starts one API service with fixed host ports; multiple replicas need an external HTTP/gRPC routing layer and per-container port planning. SQLite rejects the NATS control plane because it is intended for lightweight single-process deployments.
 
-NATS is internal Hub infrastructure only: tenants, browsers, and `pandar-agent` still authenticate to Hub over the existing HTTP/WebSocket/gRPC APIs. PostgreSQL remains the shared fact source, and print artifacts still use `PANDAR_SPOOL_DIR`; multi-replica print-job creation needs that directory on shared storage or a later object-storage backend. NATS does not replicate artifacts.
+NATS is internal Hub infrastructure only: tenants, browsers, and `pandar-agent` still authenticate to Hub over the existing HTTP/WebSocket/gRPC APIs. PostgreSQL remains the shared fact source. For PostgreSQL plus NATS, use S3-compatible artifact storage, or set `PANDAR_ARTIFACT_FILESYSTEM_SHARED=true` only when every Hub replica truly mounts the same filesystem artifact directory. NATS does not replicate artifacts.
+
+The scaled artifact smoke harness exercises the default cross-Hub contract without live PostgreSQL, NATS, or S3 services:
+
+```bash
+cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run
+```
 
 Release packaging references:
 

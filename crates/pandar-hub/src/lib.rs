@@ -1,3 +1,4 @@
+pub mod artifacts;
 mod bootstrap;
 pub mod cleanup;
 pub mod cluster;
@@ -17,18 +18,17 @@ mod routes;
 pub mod runtime;
 pub mod sessions;
 
+use std::{fmt, sync::Arc};
+
+#[cfg(test)]
 use anyhow::Context;
-use tokio::net::TcpListener;
-use tonic::transport::Server;
 
 use crate::{
+    artifacts::{ArtifactStorage, ArtifactStorageConfig, IntoArtifactStorage, JobStorageAlias},
     db::{Database, DatabaseConfig},
-    grpc::AgentControlService,
     identity::{ExternalAuthConfig, JwtVerifier},
-    jobs::JobStorageConfig,
     metrics::MetricsState,
     printer_events::{PrinterEvent, PrinterEventHub},
-    protocol::agent::v1::agent_control_server::AgentControlServer,
     repositories::{
         AgentRepository, AuditEventRepository, AuthRepository, CommandRepository, JobRepository,
         MaterialRepository, PrinterEventTicketRepository, PrinterRepository, TenantRepository,
@@ -36,7 +36,7 @@ use crate::{
     sessions::SessionRegistry,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AppState {
     database: Database,
     tenants: TenantRepository,
@@ -48,32 +48,43 @@ pub struct AppState {
     jobs: JobRepository,
     materials: MaterialRepository,
     printer_event_tickets: PrinterEventTicketRepository,
-    job_storage: JobStorageConfig,
+    artifact_storage: Arc<dyn ArtifactStorage>,
     external_auth: Option<JwtVerifier>,
     bootstrap_token: Option<String>,
     printer_events: PrinterEventHub,
     sessions: SessionRegistry,
     metrics: MetricsState,
     control_plane: cluster::ControlPlane,
+    #[cfg(test)]
+    database_backend_override: Option<db::DatabaseBackend>,
+}
+
+impl fmt::Debug for AppState {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("AppState")
+            .field("artifact_storage_backend", &self.artifact_storage.backend())
+            .finish()
+    }
 }
 
 impl AppState {
     pub async fn connect(database_url: impl Into<String>) -> anyhow::Result<Self> {
-        let job_storage = JobStorageConfig::from_env()?;
-        Self::connect_with_config(database_url, job_storage).await
+        let artifact_storage = ArtifactStorageConfig::from_env()?.build().await?;
+        Self::connect_with_config(database_url, artifact_storage).await
     }
 
     pub async fn connect_with_config(
         database_url: impl Into<String>,
-        job_storage: JobStorageConfig,
+        artifact_storage: impl IntoArtifactStorage,
     ) -> anyhow::Result<Self> {
         let external_auth = ExternalAuthConfig::from_env()?.map(JwtVerifier::remote);
-        Self::connect_with_auth_config(database_url, job_storage, external_auth).await
+        Self::connect_with_auth_config(database_url, artifact_storage, external_auth).await
     }
 
     pub async fn connect_with_auth_config(
         database_url: impl Into<String>,
-        job_storage: JobStorageConfig,
+        artifact_storage: impl IntoArtifactStorage,
         external_auth: Option<JwtVerifier>,
     ) -> anyhow::Result<Self> {
         let control_plane = std::env::var("PANDAR_CONTROL_PLANE").ok();
@@ -81,7 +92,7 @@ impl AppState {
         let nats_subject = std::env::var("PANDAR_NATS_SUBJECT").ok();
         Self::connect_with_config_values(
             database_url,
-            job_storage,
+            artifact_storage,
             external_auth,
             control_plane.as_deref(),
             nats_url.as_deref(),
@@ -92,7 +103,7 @@ impl AppState {
 
     pub async fn connect_with_config_values(
         database_url: impl Into<String>,
-        job_storage: JobStorageConfig,
+        artifact_storage: impl IntoArtifactStorage,
         external_auth: Option<JwtVerifier>,
         control_plane: Option<&str>,
         nats_url: Option<&str>,
@@ -115,23 +126,23 @@ impl AppState {
             .filter(|value| !value.trim().is_empty());
 
         Ok(
-            Self::from_database_with_control_plane(database, job_storage, control_plane)
+            Self::from_database_with_control_plane(database, artifact_storage, control_plane)
                 .with_external_auth_option(external_auth)
                 .with_bootstrap_token_option(bootstrap_token),
         )
     }
 
-    pub fn from_database(database: Database, job_storage: JobStorageConfig) -> Self {
+    pub fn from_database(database: Database, artifact_storage: impl IntoArtifactStorage) -> Self {
         Self::from_database_with_control_plane(
             database,
-            job_storage,
+            artifact_storage,
             cluster::ControlPlane::in_process(),
         )
     }
 
     pub fn from_database_with_control_plane(
         database: Database,
-        job_storage: JobStorageConfig,
+        artifact_storage: impl IntoArtifactStorage,
         control_plane: cluster::ControlPlane,
     ) -> Self {
         let metrics = MetricsState::new();
@@ -146,13 +157,15 @@ impl AppState {
             jobs: JobRepository::new(database.clone()),
             materials: MaterialRepository::new(database.clone()),
             printer_event_tickets: PrinterEventTicketRepository::new(database),
-            job_storage,
+            artifact_storage: artifact_storage.into_artifact_storage(),
             external_auth: None,
             bootstrap_token: None,
             printer_events: PrinterEventHub::with_metrics(metrics.clone()),
             sessions: SessionRegistry::new(),
             metrics,
             control_plane,
+            #[cfg(test)]
+            database_backend_override: None,
         }
     }
 
@@ -181,10 +194,20 @@ impl AppState {
         let temp_dir = tempfile::tempdir()
             .context("failed to create temporary job spool directory")?
             .keep();
-        let job_storage = JobStorageConfig::new(temp_dir, jobs::DEFAULT_MAX_ARTIFACT_BYTES)?;
-        Self::connect_with_config_values("sqlite::memory:", job_storage, None, None, None, None)
-            .await
-            .context("failed to create SQLite test app state")
+        let artifact_storage = artifacts::FilesystemArtifactStorage::new(
+            temp_dir,
+            artifacts::DEFAULT_MAX_ARTIFACT_BYTES,
+        )?;
+        Self::connect_with_config_values(
+            "sqlite::memory:",
+            artifact_storage,
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
+        .context("failed to create SQLite test app state")
     }
 
     pub fn tenants(&self) -> &TenantRepository {
@@ -223,8 +246,12 @@ impl AppState {
         &self.printer_event_tickets
     }
 
-    pub fn job_storage(&self) -> &JobStorageConfig {
-        &self.job_storage
+    pub fn artifact_storage(&self) -> &dyn ArtifactStorage {
+        &*self.artifact_storage
+    }
+
+    pub fn job_storage(&self) -> JobStorageAlias<'_> {
+        JobStorageAlias::new(self.artifact_storage())
     }
 
     pub fn external_auth(&self) -> Option<&JwtVerifier> {
@@ -249,6 +276,14 @@ impl AppState {
 
     pub fn control_plane(&self) -> &cluster::ControlPlane {
         &self.control_plane
+    }
+
+    pub(crate) fn database_backend(&self) -> db::DatabaseBackend {
+        #[cfg(test)]
+        if let Some(backend) = self.database_backend_override {
+            return backend;
+        }
+        self.database.backend()
     }
 
     pub async fn wake_agent(
@@ -311,7 +346,7 @@ impl AppState {
     pub(crate) fn sibling_for_tests(&self) -> Self {
         Self::from_database_with_control_plane(
             self.database.clone(),
-            self.job_storage.clone(),
+            self.artifact_storage.clone(),
             self.control_plane.clone(),
         )
         .with_external_auth_option(self.external_auth.clone())
@@ -326,45 +361,13 @@ impl AppState {
         self.control_plane = control_plane;
         self
     }
+
+    #[cfg(test)]
+    pub(crate) fn with_database_backend_for_tests(mut self, backend: db::DatabaseBackend) -> Self {
+        self.database_backend_override = Some(backend);
+        self
+    }
 }
 
+pub use bootstrap::run_from_env;
 pub use routes::router;
-
-pub async fn run_from_env() -> anyhow::Result<()> {
-    let bind_addr = std::env::var("PANDAR_HUB_BIND").unwrap_or_else(|_| "0.0.0.0:8080".to_owned());
-    let grpc_bind_addr =
-        std::env::var("PANDAR_HUB_GRPC_BIND").unwrap_or_else(|_| "0.0.0.0:50051".to_owned());
-    let database_url =
-        std::env::var("PANDAR_DATABASE_URL").unwrap_or_else(|_| "sqlite://pandar.db".to_owned());
-    let state = AppState::connect(database_url)
-        .await
-        .context("failed to initialize pandar-hub application state")?;
-    let listener = TcpListener::bind(&bind_addr)
-        .await
-        .with_context(|| format!("failed to bind pandar-hub to {bind_addr}"))?;
-    let grpc_listener = TcpListener::bind(&grpc_bind_addr)
-        .await
-        .with_context(|| format!("failed to bind pandar-hub gRPC to {grpc_bind_addr}"))?;
-
-    tracing::info!(%bind_addr, "pandar-hub listening");
-    tracing::info!(%grpc_bind_addr, "pandar-hub gRPC listening");
-    let _session_expiry = runtime::spawn_session_expiry(state.clone());
-    let (_control_plane, control_plane_ready) = runtime::spawn_control_plane_ready(state.clone());
-    control_plane_ready
-        .await
-        .context("control plane subscriber stopped before reporting readiness")?
-        .context("failed to start control plane subscriber")?;
-    let http = axum::serve(listener, router(state.clone()));
-    let grpc = Server::builder()
-        .add_service(AgentControlServer::new(AgentControlService::new(state)))
-        .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(
-            grpc_listener,
-        ));
-
-    tokio::try_join!(
-        async { http.await.context("pandar-hub HTTP server exited") },
-        async { grpc.await.context("pandar-hub gRPC server exited") },
-    )?;
-
-    Ok(())
-}

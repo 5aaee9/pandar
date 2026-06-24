@@ -2,10 +2,13 @@ use pandar_core::{AgentId, CommandId, JobId, JobStatus, PrintStatus};
 use serde_json::{Value, json};
 
 use super::*;
-use crate::repositories::{ApplyPrintReport, CreatePrintJob, PrintReportDiagnostic};
+use crate::repositories::{
+    AgentArtifactAccess, ApplyPrintReport, CreatePrintJob, PrintReportDiagnostic,
+};
 
 mod lifecycle;
 mod mapping;
+mod recovery;
 mod repository;
 
 pub(super) fn create_input(

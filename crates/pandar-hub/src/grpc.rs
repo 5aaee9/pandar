@@ -8,9 +8,9 @@ use tonic::{Request, Response, Status};
 use crate::{
     AppState,
     grpc::commands::{
-        handle_ack_and_job, handle_result_and_job, hub_command_from_record, mark_sent_and_job,
-        parse_command_id, repository_status,
+        handle_ack_and_job, handle_result_and_job, parse_command_id, repository_status,
     },
+    grpc::outbound::spawn_outbound_pump,
     grpc::print_reports::handle_print_report,
     grpc::printer_snapshots::handle_snapshot,
     protocol::agent::v1::{
@@ -22,6 +22,7 @@ use crate::{
 };
 
 pub mod commands;
+mod outbound;
 pub mod print_reports;
 pub mod printer_snapshots;
 #[cfg(test)]
@@ -304,87 +305,6 @@ async fn handle_result(
         result.result_json,
     )
     .await
-}
-
-fn spawn_outbound_pump(
-    state: AppState,
-    tenant_id: TenantId,
-    agent_id: AgentId,
-    mut wake_receiver: mpsc::Receiver<()>,
-    mut close_receiver: mpsc::Receiver<()>,
-    mut status_receiver: mpsc::Receiver<Status>,
-    command_sender: mpsc::Sender<Result<HubCommand, Status>>,
-) {
-    tokio::spawn(async move {
-        loop {
-            if !drain_commands(
-                &state,
-                tenant_id,
-                agent_id,
-                &mut close_receiver,
-                &command_sender,
-            )
-            .await
-            {
-                break;
-            }
-            tokio::select! {
-                biased;
-                Some(()) = close_receiver.recv() => break,
-                Some(status) = status_receiver.recv() => {
-                    let _ = command_sender.send(Err(status)).await;
-                    break;
-                }
-                Some(()) = wake_receiver.recv() => {}
-                else => break,
-            }
-        }
-    });
-}
-
-async fn drain_commands(
-    state: &AppState,
-    tenant_id: TenantId,
-    agent_id: AgentId,
-    close_receiver: &mut mpsc::Receiver<()>,
-    command_sender: &mpsc::Sender<Result<HubCommand, Status>>,
-) -> bool {
-    loop {
-        let command = match tokio::select! {
-            biased;
-            Some(()) = close_receiver.recv() => return false,
-            command = state.commands().next_queued_for_agent(tenant_id, agent_id) => command,
-        } {
-            Ok(Some(command)) => command,
-            Ok(None) => return true,
-            Err(err) => return send_error(command_sender, repository_status(err)).await,
-        };
-
-        let command = match tokio::select! {
-            biased;
-            Some(()) = close_receiver.recv() => return false,
-            command = mark_sent_and_job(state, command, tenant_id, agent_id) => command,
-        } {
-            Ok(command) => command,
-            Err(err) => return send_error(command_sender, err).await,
-        };
-
-        let command = match hub_command_from_record(command) {
-            Ok(command) => command,
-            Err(err) => return send_error(command_sender, err).await,
-        };
-
-        if command_sender.send(Ok(command)).await.is_err() {
-            return false;
-        }
-    }
-}
-
-async fn send_error(
-    command_sender: &mpsc::Sender<Result<HubCommand, Status>>,
-    status: Status,
-) -> bool {
-    command_sender.send(Err(status)).await.is_ok()
 }
 
 fn validate_rfc3339(value: &str) -> Result<(), Status> {

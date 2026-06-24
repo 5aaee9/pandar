@@ -1,43 +1,26 @@
-use std::path::{Component, Path, PathBuf};
-
-use anyhow::{Context, bail};
-use async_trait::async_trait;
+use anyhow::Context;
 use tokio::sync::mpsc;
+
+mod artifacts;
+mod config;
+mod events;
+#[cfg(test)]
+pub(crate) use artifacts::resolve_artifact_path;
+pub use artifacts::{
+    ArtifactReader, FilesystemArtifactReader, HubArtifactReader, artifact_download_url,
+};
+use artifacts::{CommandArtifactReader, LegacyCommandArtifactReader, PrintCommandArtifactReader};
+pub use config::parse_printer_config;
+use events::event;
 
 use crate::{
     AgentConfig,
-    machine::{BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot},
+    machine::{BambuMachineGateway, MachineSnapshot},
     protocol::agent::v1::{
         AgentEvent, CommandAck, CommandResult, DiagnosePrinter, DiscoverPrinters, PrintProjectFile,
         PrinterSnapshot, agent_event, hub_command,
     },
 };
-
-pub fn parse_printer_config(raw: &str) -> anyhow::Result<Vec<BambuPrinterEndpoint>> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() || trimmed == "[]" {
-        return Ok(Vec::new());
-    }
-
-    let printers: Vec<BambuPrinterEndpoint> =
-        serde_json::from_str(trimmed).context("parse PANDAR_PRINTERS as JSON array")?;
-
-    for printer in &printers {
-        validate_required("host", &printer.host)?;
-        validate_required("serial", &printer.serial)?;
-        validate_required("access_code", &printer.access_code)?;
-    }
-
-    Ok(printers)
-}
-
-fn validate_required(field: &str, value: &str) -> anyhow::Result<()> {
-    if value.trim().is_empty() {
-        anyhow::bail!("PANDAR_PRINTERS printer entry has missing or blank {field}");
-    }
-
-    Ok(())
-}
 
 pub async fn handle_command_with_gateway<G>(
     config: &AgentConfig,
@@ -48,8 +31,25 @@ pub async fn handle_command_with_gateway<G>(
 where
     G: BambuMachineGateway,
 {
-    let artifact_reader = FilesystemArtifactReader::new(config.artifact_root.clone());
-    handle_command_with_reader(config, gateway, &artifact_reader, sender, command).await
+    match command.command {
+        Some(hub_command::Command::PrintProjectFile(print)) => {
+            emit_print_project_file_events(config, gateway, sender, &command.command_id, print)
+                .await
+        }
+        other => {
+            handle_command_with_reader(
+                config,
+                gateway,
+                &FilesystemArtifactReader::new(config.artifact_root.clone()),
+                sender,
+                crate::protocol::agent::v1::HubCommand {
+                    command_id: command.command_id,
+                    command: other,
+                },
+            )
+            .await
+        }
+    }
 }
 
 pub async fn handle_command_with_reader<G, R>(
@@ -68,7 +68,7 @@ where
             emit_refresh_printers_events(config, gateway, sender, &command.command_id).await
         }
         Some(hub_command::Command::PrintProjectFile(print)) => {
-            emit_print_project_file_events(
+            emit_print_project_file_events_with_reader(
                 config,
                 gateway,
                 artifact_reader,
@@ -87,32 +87,6 @@ where
                 .await
         }
         None => Ok(()),
-    }
-}
-
-#[async_trait]
-pub trait ArtifactReader: Send + Sync {
-    async fn read_artifact(&self, storage_path: &str) -> anyhow::Result<Vec<u8>>;
-}
-
-pub struct FilesystemArtifactReader {
-    root: PathBuf,
-}
-
-impl FilesystemArtifactReader {
-    pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
-    }
-}
-
-#[async_trait]
-impl ArtifactReader for FilesystemArtifactReader {
-    async fn read_artifact(&self, storage_path: &str) -> anyhow::Result<Vec<u8>> {
-        let artifact_path = resolve_artifact_path(&self.root, storage_path)?;
-        tokio::task::spawn_blocking(move || std::fs::read(&artifact_path))
-            .await
-            .context("join print artifact read task")?
-            .with_context(|| format!("read print artifact {storage_path}"))
     }
 }
 
@@ -228,7 +202,29 @@ where
     Ok(())
 }
 
-async fn emit_print_project_file_events<G, R>(
+async fn emit_print_project_file_events<G>(
+    config: &AgentConfig,
+    gateway: &G,
+    sender: &mpsc::Sender<AgentEvent>,
+    command_id: &str,
+    command: PrintProjectFile,
+) -> anyhow::Result<()>
+where
+    G: BambuMachineGateway,
+{
+    let artifact_reader = CommandArtifactReader::new(config);
+    emit_print_project_file_events_with_command_reader(
+        config,
+        gateway,
+        &artifact_reader,
+        sender,
+        command_id,
+        command,
+    )
+    .await
+}
+
+async fn emit_print_project_file_events_with_reader<G, R>(
     config: &AgentConfig,
     gateway: &G,
     artifact_reader: &R,
@@ -239,6 +235,29 @@ async fn emit_print_project_file_events<G, R>(
 where
     G: BambuMachineGateway,
     R: ArtifactReader,
+{
+    emit_print_project_file_events_with_command_reader(
+        config,
+        gateway,
+        &LegacyCommandArtifactReader { artifact_reader },
+        sender,
+        command_id,
+        command,
+    )
+    .await
+}
+
+async fn emit_print_project_file_events_with_command_reader<G, R>(
+    config: &AgentConfig,
+    gateway: &G,
+    artifact_reader: &R,
+    sender: &mpsc::Sender<AgentEvent>,
+    command_id: &str,
+    command: PrintProjectFile,
+) -> anyhow::Result<()>
+where
+    G: BambuMachineGateway,
+    R: PrintCommandArtifactReader,
 {
     if let Err(err) = gateway.validate_printer(&command.serial_number).await {
         let error = gateway.redact_error(&format!("{err:#}"));
@@ -256,9 +275,9 @@ where
 
     let result = async {
         let artifact = artifact_reader
-            .read_artifact(&command.storage_path)
+            .read_print_artifact(&command)
             .await
-            .with_context(|| format!("read print artifact {}", command.storage_path))?;
+            .with_context(|| read_print_artifact_context(&command))?;
         gateway
             .print_project_file(&command.serial_number, &command, artifact)
             .await
@@ -283,6 +302,14 @@ where
     }
 
     Ok(())
+}
+
+fn read_print_artifact_context(command: &PrintProjectFile) -> String {
+    if command.artifact_download_path.trim().is_empty() {
+        format!("read print artifact {}", command.storage_path)
+    } else {
+        "read print artifact from hub".to_string()
+    }
 }
 
 async fn emit_discover_printers_events<G>(
@@ -369,30 +396,6 @@ where
     }
 
     Ok(())
-}
-
-fn resolve_artifact_path(root: &Path, storage_path: &str) -> anyhow::Result<PathBuf> {
-    let storage_path = Path::new(storage_path);
-    if storage_path.is_absolute() {
-        bail!("artifact storage path must be relative");
-    }
-    if storage_path
-        .components()
-        .any(|component| !matches!(component, Component::Normal(_)))
-    {
-        bail!("artifact storage path must not contain parent or prefix components");
-    }
-
-    Ok(root.join(storage_path))
-}
-
-fn event(config: &AgentConfig, event_id: &str, event: agent_event::Event) -> AgentEvent {
-    AgentEvent {
-        agent_id: config.agent_id.to_string(),
-        tenant_id: config.tenant_id.to_string(),
-        event_id: event_id.to_owned(),
-        event: Some(event),
-    }
 }
 
 #[cfg(test)]

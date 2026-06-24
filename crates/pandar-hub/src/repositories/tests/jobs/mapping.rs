@@ -27,6 +27,14 @@ async fn print_command_created_by_job_transaction_has_linked_job() {
     assert_eq!(payload["job_id"], created.job.id.to_string());
     assert_eq!(payload["artifact_id"], created.artifact.id);
     assert_eq!(payload["printer_id"], printer_id);
+    assert_eq!(
+        payload["artifact_download_path"],
+        format!(
+            "/api/v1/agents/{}/artifacts/{}",
+            agent.id, created.artifact.id
+        )
+    );
+    assert_eq!(payload["storage_path"], created.artifact.storage_path);
     assert!(
         payload["serial_number"]
             .as_str()

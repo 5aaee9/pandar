@@ -9,7 +9,6 @@ pub mod inserts;
 mod ownership;
 pub(crate) mod rows;
 mod transitions;
-
 use rows::command_from_model;
 
 use crate::{
@@ -26,6 +25,8 @@ pub struct PrintProjectFilePayload {
     pub serial_number: String,
     pub filename: String,
     pub storage_path: String,
+    #[serde(default)]
+    pub artifact_download_path: String,
     pub size_bytes: u64,
     pub plate_id: u32,
     pub use_ams: bool,

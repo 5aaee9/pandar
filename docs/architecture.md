@@ -191,6 +191,7 @@ Hub replicas use an explicit control-plane split:
 - PostgreSQL deployments can run either one Hub process with the in-process control plane or multiple Hub replicas with NATS enabled through `PANDAR_CONTROL_PLANE=nats`, `PANDAR_NATS_URL`, and optional `PANDAR_NATS_SUBJECT`.
 - NATS carries only internal Hub wake, close, and live-event fanout messages. Tenants, browsers, and `pandar-agent` continue to authenticate through Hub HTTP/WebSocket/gRPC APIs, and `pandar-agent` keeps the existing reverse gRPC connection.
 - PostgreSQL remains the shared fact source for tenant, agent, command, job, printer, material, audit, plugin-ticket, tenant-token, and WebSocket-ticket state.
+- Multi-Hub PostgreSQL plus NATS deployments should use the S3-compatible artifact storage backend. The filesystem backend is the SQLite/single-Hub default and requires an explicit shared-filesystem readiness override before it is accepted with PostgreSQL plus NATS.
 
 Phase 4 adds tenant-scoped printer inventory and state:
 
@@ -202,9 +203,9 @@ Phase 4 adds tenant-scoped printer inventory and state:
 
 Phase 5 adds tenant-scoped print dispatch while preserving the durable command ledger:
 
-- `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs` accepts a base64 project artifact plus print options, writes the artifact into the hub spool, then creates artifact metadata, a linked print command, and a job row in one backend-neutral SQLite/PostgreSQL transaction.
+- `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs` accepts multipart project artifact upload plus print options, writes the artifact through the configured artifact storage backend, then creates artifact metadata, a linked print command, and a job row in one backend-neutral SQLite/PostgreSQL transaction.
 - `GET /api/v1/tenants/{tenant_id}/jobs` and `GET /api/v1/tenants/{tenant_id}/jobs/{job_id}` expose tenant-scoped job history and command status.
-- `PANDAR_SPOOL_DIR` controls the hub artifact root and defaults to `pandar-spool`; `PANDAR_MAX_ARTIFACT_BYTES` controls decoded artifact size and defaults to `10485760`.
+- `PANDAR_ARTIFACT_STORAGE=filesystem|s3` selects artifact byte storage. The filesystem backend uses `PANDAR_SPOOL_DIR`, defaults to `pandar-spool`, and is intended for SQLite/single-Hub deployments. The S3-compatible backend uses the `PANDAR_ARTIFACT_S3_*` settings and is intended for scaled PostgreSQL plus NATS deployments. `PANDAR_MAX_ARTIFACT_BYTES` controls upload size and defaults to `10485760`.
 - The hub sends `PrintProjectFile` over the existing reverse gRPC stream with job id, artifact id, printer id, Bambu serial number, artifact metadata, plate id, AMS, flow calibration, and timelapse flags.
 - Print job creation is not exposed as a standalone command enqueue path. Print commands are created only with their linked job and artifact metadata.
 - Command acknowledgement/result events update both command and job state through repository-level transactions, so print job status cannot drift from its durable command status.
@@ -254,7 +255,7 @@ Phase 17-20 add the product and operational surfaces over these foundations:
 - Operators can manually refresh printers, retry dispatch, reprint, and duplicate jobs while the UI keeps dispatch lifecycle wording separate from physical print state. Pause, resume, and stop remain unavailable.
 - `/readyz` and `/metrics` expose deployment readiness and Prometheus metrics with redaction and hashed tenant labels.
 - `pandar cleanup` performs retention cleanup for terminal jobs, commands, machine events, audit rows, expired/used plugin tickets, revoked/expired tenant tokens, and unreferenced artifacts.
-- Artifact upload UX shows selected file, size, conversion state, configured max size, and stable backend error codes. The hub still treats slicer files as opaque artifacts.
+- Artifact upload UX shows selected file, size, multipart upload state, configured max size, and stable backend error codes. The hub still treats slicer files as opaque artifacts.
 
 Phase 14 adds material-state persistence and reporting:
 
@@ -367,7 +368,8 @@ Phase 4 carries refreshed printer snapshots into hub inventory. `RefreshPrinters
 
 Phase 5 adds the `PrintProjectFile` command executor:
 
-- `PANDAR_ARTIFACT_ROOT` controls where the agent reads hub-spooled artifacts and defaults to the current directory.
+- `PrintProjectFile` carries `artifact_download_path`; agents download artifact bytes from Hub HTTP with their agent credential. `PANDAR_HUB_API_URL` configures that HTTP base URL when the gRPC URL is not HTTP(S).
+- `PANDAR_ARTIFACT_ROOT` controls the legacy local artifact reader for commands that do not include `artifact_download_path` and defaults to the current directory.
 - The agent validates the requested Bambu serial against configured printers before resolving or reading artifact paths.
 - Artifact storage paths must be relative paths below `PANDAR_ARTIFACT_ROOT`; absolute paths, `..`, and prefix escapes are rejected.
 - The configured machine gateway composes machine file upload and MQTT `project_file` publish in order. It uploads the artifact filename through the file-transfer boundary, then publishes to `device/{serial}/request` with QoS `1`, `ftp://{filename}`, `Metadata/plate_{plate_id}.gcode`, job/subtask ids, and print flags.
@@ -413,7 +415,7 @@ Agent phase status after Phase 15:
 - Job dispatch and command controls.
 - Operational settings for database-independent hub behavior.
 
-Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form that posts base64 artifacts and print flags through the Rust hub API. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. Phase 10 centralizes frontend bearer forwarding: request cookie `APP_AUTH_COOKIE_NAME` defaulting to `pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. Phase 11 keeps configured tenant dashboards on tenant-scoped APIs when `APP_TENANT_ID` is set, so ordinary tenant tokens do not need bootstrap authority. Phase 13 exposes linked agents, discovery commands, diagnostic commands, and selected command details. It renders discovery rows, diagnostic checks, and compatibility capability availability from hub command `result_json`; it does not accept or display Bambu access codes. Phase 14 renders printer material summaries and job material mapping/usage rows from Rust API response shapes while keeping dispatch-form mapping fields API-client-only. Phase 15 adds ticket-backed browser WebSocket consumption, live status, transition notifications, and token-safe tenant operation references. Phase 17-20 add tenant administration, recovery controls, browser-side artifact conversion, backend error-code surfacing, and a Studio sign-in page that uses Studio's localhost callback discovery when available.
+Phase 4 replaces the placeholder landing page with a small operational dashboard. It fetches hub summary counts, tenant list, and the first tenant's printer inventory from `APP_API_URL` using uncached server-side HTTP requests. It renders empty states for no tenants and no reported printers. Phase 5 adds job history plus an HTTP-only dispatch form for artifact and print flags through the Rust hub API; Phase 25 moves that browser path to multipart upload so artifact bytes are no longer base64-encoded through server actions. Phase 9 displays dispatch status separately from physical print status, percent/layer progress, remaining time, and terminal print reason from the HTTP `job.print` shape. Phase 10 centralizes frontend bearer forwarding: request cookie `APP_AUTH_COOKIE_NAME` defaulting to `pandar_auth_token`, then `APP_AUTH_BEARER_TOKEN`, then `APP_API_TOKEN`. Phase 11 keeps configured tenant dashboards on tenant-scoped APIs when `APP_TENANT_ID` is set, so ordinary tenant tokens do not need bootstrap authority. Phase 13 exposes linked agents, discovery commands, diagnostic commands, and selected command details. It renders discovery rows, diagnostic checks, and compatibility capability availability from hub command `result_json`; it does not accept or display Bambu access codes. Phase 14 renders printer material summaries and job material mapping/usage rows from Rust API response shapes while keeping dispatch-form mapping fields API-client-only. Phase 15 adds ticket-backed browser WebSocket consumption, live status, transition notifications, and token-safe tenant operation references. Phase 17-20 add tenant administration, recovery controls, backend error-code surfacing, and a Studio sign-in page that uses Studio's localhost callback discovery when available.
 
 Frontend phase status after Phase 7:
 
@@ -427,7 +429,7 @@ Frontend phase status after Phase 7:
 Remaining frontend limitations:
 
 - Pause/resume/stop controls are intentionally unavailable until live printer control is implemented.
-- Artifact conversion for dispatch still uses form submission to the Next.js server action; production proxies must keep body limits aligned with the configured frontend and hub limits.
+- Artifact uploads now use multipart transport through the frontend API proxy; production proxies still need request body limits aligned with `PANDAR_MAX_ARTIFACT_BYTES`.
 
 ## Data Model Draft
 

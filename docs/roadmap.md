@@ -56,6 +56,10 @@
 - Added full-chain warning logs for MQTT report receive failures so errors such as `payload size limit exceeded` are visible during printer refresh/report polling.
 - Documented the 2026-06-24 Bambu LAN printer probe, including MQTT topics, tested commands, device details, transport findings, verification, and follow-up notes.
 - Added refresh-time printer model discovery through MQTT `info.get_version`; refresh now fails and logs the full error chain when the model cannot be discovered instead of falling back to configured model metadata.
+- Added Phase 25 Task 6 Hub-mediated agent artifact downloads: agent bearer auth, agent/artifact ownership checks, storage-backed download responses, agent HTTP artifact fetching through `PANDAR_HUB_API_URL`, and local artifact-reader fallback for legacy command payloads.
+- Added Phase 25 Task 8 readiness and cleanup hardening: `/readyz` and Prometheus now report `artifact_storage`, scaled PostgreSQL+NATS filesystem deployments require an explicit shared-filesystem override or object storage, and cleanup execute deletes artifact storage objects before artifact rows while preserving rows on storage delete failure.
+- Added Phase 25 scaled artifact storage: browser and Bambu Studio plugin print submission now use multipart artifact uploads, Hub commands carry Hub-mediated `artifact_download_path` values instead of inline base64 artifact payloads, S3-compatible object storage is available for PostgreSQL+NATS deployments, and the scaled smoke harness verifies cross-Hub dispatch/download without a shared local spool.
+- Updated deployment, architecture, release, and Docker Compose docs so filesystem storage is documented as the SQLite/single-node default while PostgreSQL+NATS deployments use object storage or an explicit shared-filesystem override.
 
 ## Phase 1: Foundation
 
@@ -128,7 +132,7 @@ Exit criteria:
 
 - Completed `JobArtifact` and `Job` core domain models and protobuf `PrintProjectFile` command payload.
 - Completed SQLite and PostgreSQL migrations for `job_artifacts` and `jobs`.
-- Completed hub artifact spool storage with `PANDAR_SPOOL_DIR`, `PANDAR_MAX_ARTIFACT_BYTES`, filename sanitization, and scoped cleanup on repository failure.
+- Completed the initial hub filesystem artifact storage with `PANDAR_SPOOL_DIR`, `PANDAR_MAX_ARTIFACT_BYTES`, filename sanitization, and scoped cleanup on repository failure; Phase 25 later moved artifact bytes behind the configured storage boundary.
 - Completed tenant-scoped print job HTTP APIs:
   - `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs`
   - `GET /api/v1/tenants/{tenant_id}/jobs`
@@ -138,7 +142,7 @@ Exit criteria:
 - Completed command/job lifecycle coupling for print jobs through repository-level SQLite/PostgreSQL transactions.
 - Completed agent `PANDAR_ARTIFACT_ROOT` handling, safe relative artifact path resolution, missing-artifact failure reporting, and unknown-serial rejection before artifact I/O.
 - Completed configured agent gateway composition for uploading a project artifact through `MachineFileTransfer`, then publishing MQTT `project_file` with job identity and print flags; fake tests verify upload-before-publish and no-publish-on-upload-failure behavior without live Bambu sockets.
-- Completed frontend print job history, per-printer dispatch API visibility, and an HTTP-only dispatch form that posts base64 artifacts through the hub API.
+- Completed frontend print job history, per-printer dispatch API visibility, and the initial HTTP-only dispatch form; Phase 25 later moved browser artifact transport to multipart upload.
 - Deferred real printer file-transfer runtime upload and upload verification; the default Phase 5 runtime adapter returns an explicit unavailable error after serial selection until the FTPS implementation is completed.
 - Deferred printer-report reconciliation for physical print progress/completion/failure to the next machine-runtime phase.
 
@@ -397,7 +401,7 @@ Exit criteria:
 
 Goal: make Pandar easier to operate in long-running self-hosted deployments.
 
-- Completed `/readyz` checks for database, artifact spool access, gRPC bind configuration, and external-auth JWKS readiness.
+- Completed `/readyz` checks for database, configured artifact storage, gRPC bind configuration, and external-auth JWKS readiness.
 - Completed `/metrics` Prometheus output for agent sessions, command lifecycle counts, WebSocket tickets/subscriptions, job outcomes, printer report ingestion, and readiness gauges.
 - Completed redaction coverage for bearer tokens, WebSocket tickets, plugin tickets, Bambu access codes, artifact paths, and agent credentials.
 - Completed cleanup CLI and retention behavior for terminal jobs/commands, unreferenced artifacts, old machine/audit events, expired/used plugin tickets, and revoked/expired tenant tokens.
@@ -413,7 +417,7 @@ Exit criteria:
 
 Goal: make print submission closer to a practical Bambu Studio cloud replacement while keeping slicer concerns out of the hub core.
 
-- Completed artifact upload UX with selected filename/size, browser-side base64 conversion state, displayed max size, and stable backend error-code labels.
+- Completed artifact upload UX with selected filename/size, upload state, displayed max size, and stable backend error-code labels; Phase 25 later replaced browser-side base64 conversion with multipart upload.
 - Preserved artifact metadata for operator inspection while keeping slicer files opaque to the hub.
 - Completed job duplication and reprint flows that reuse existing artifacts safely.
 - Kept backend APIs authoritative for validation.
@@ -476,7 +480,7 @@ Exit criteria:
 
 - SQLite + no broker remains the lightweight single-machine deployment path.
 - PostgreSQL + NATS can fan out Hub control messages across replicas while preserving tenant-token authorization at Hub boundaries.
-- Print artifacts still use `PANDAR_SPOOL_DIR`; scaled print-job creation requires shared spool storage until a later object-storage backend exists.
+- Print artifacts now use the configured artifact-storage boundary; filesystem storage remains available for single-node deployments, while PostgreSQL + NATS deployments should use object storage or explicitly declare a shared filesystem.
 
 ## Phase 23: Real Bambu Studio Plugin Compatibility
 
@@ -524,15 +528,19 @@ Exit criteria:
 Goal: remove shared-local-spool as the limiting factor for horizontally scaled print-job creation.
 
 - Add an artifact-storage boundary with at least:
-  - current filesystem spool backend for SQLite/single-node deployments;
-  - an object-storage backend suitable for PostgreSQL + multi-Hub deployments.
-- Keep artifact metadata in PostgreSQL/SQLite while moving artifact bytes behind the storage backend.
-- Ensure create-job, duplicate, reprint, plugin print, cleanup, metrics, and backup/restore docs all use the storage boundary instead of assuming `PANDAR_SPOOL_DIR` is local to one Hub process.
-- Harden browser and plugin artifact upload transport beyond server-action/base64 submission:
-  - support large files without depending on proxy body limits;
-  - preserve existing backend validation and stable error-code labels;
-  - avoid trusting browser-supplied storage paths.
-- Keep slicer files opaque; this phase changes storage and transport, not slicer parsing.
+  - completed filesystem backend for SQLite/single-node deployments;
+  - completed S3-compatible object-storage backend suitable for PostgreSQL + multi-Hub deployments.
+- Completed metadata persistence in PostgreSQL/SQLite while moving artifact bytes behind the storage backend.
+- Completed create-job, duplicate, reprint, plugin print, cleanup, metrics, readiness, and backup/restore docs through the storage boundary instead of assuming `PANDAR_SPOOL_DIR` is local to one Hub process.
+- Completed browser and plugin artifact upload transport hardening beyond server-action/base64 submission:
+  - multipart uploads avoid browser/server-action base64 body amplification;
+  - backend validation and stable error-code labels remain authoritative;
+  - storage paths are generated by the Hub, not trusted from browser or plugin callers.
+- Completed Hub-mediated agent artifact downloads through bearer-authenticated `artifact_download_path` values, so agents do not need browser/plugin payload bytes or object-store credentials.
+- Completed final transport hardening for plugin-side streamed multipart uploads, S3 staged-file streaming, handler-owned upload error labels, same-tenant cross-agent artifact `403` classification, backend download failure classification, and redacted Hub-download failure context.
+- Added `tools/scaled-artifact-smoke` to exercise multipart plugin submission on one Hub state, command dequeue on another Hub state, and agent download through a Hub HTTP artifact route without a shared local spool.
+- Kept slicer files opaque; this phase changed storage and transport, not slicer parsing.
+- Remaining live evidence gap: the smoke harness uses local process fixtures and a filesystem-backed fake S3 boundary; live third-party S3/MinIO buckets and a real multi-node PostgreSQL + NATS deployment remain Phase 26 soak-test work.
 
 Exit criteria:
 

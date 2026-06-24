@@ -33,6 +33,42 @@ pub async fn mark_sent_and_job(
         .map_err(repository_status)
 }
 
+pub async fn next_hub_command_for_agent(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+) -> Result<Option<HubCommand>, Status> {
+    next_hub_command_for_agent_with_options(
+        state,
+        tenant_id,
+        agent_id,
+        CommandConversionOptions {
+            require_artifact_download_path: state.artifact_storage().backend().requires_hub_fetch(),
+        },
+    )
+    .await
+}
+
+pub async fn next_hub_command_for_agent_with_options(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    options: CommandConversionOptions,
+) -> Result<Option<HubCommand>, Status> {
+    let Some(command) = state
+        .commands()
+        .next_queued_for_agent(tenant_id, agent_id)
+        .await
+        .map_err(repository_status)?
+    else {
+        return Ok(None);
+    };
+
+    let hub_command = hub_command_from_record_with_options(command.clone(), options)?;
+    mark_sent_and_job(state, command, tenant_id, agent_id).await?;
+    Ok(Some(hub_command))
+}
+
 pub async fn handle_ack_and_job(
     state: &AppState,
     tenant_id: TenantId,
@@ -135,7 +171,24 @@ pub async fn handle_result_and_job(
     Ok(())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommandConversionOptions {
+    pub require_artifact_download_path: bool,
+}
+
 pub fn hub_command_from_record(command: CommandRecord) -> Result<HubCommand, Status> {
+    hub_command_from_record_with_options(
+        command,
+        CommandConversionOptions {
+            require_artifact_download_path: false,
+        },
+    )
+}
+
+pub fn hub_command_from_record_with_options(
+    command: CommandRecord,
+    options: CommandConversionOptions,
+) -> Result<HubCommand, Status> {
     let command_id = command.id.to_string();
     let command = match command.kind.as_str() {
         "refresh_printers" => hub_command::Command::RefreshPrinters(RefreshPrinters {}),
@@ -177,6 +230,11 @@ pub fn hub_command_from_record(command: CommandRecord) -> Result<HubCommand, Sta
                     );
                     Status::internal("invalid print command payload")
                 })?;
+            if options.require_artifact_download_path
+                && payload.artifact_download_path.trim().is_empty()
+            {
+                return Err(Status::internal("missing artifact download path"));
+            }
             hub_command::Command::PrintProjectFile(PrintProjectFile {
                 job_id: payload.job_id,
                 artifact_id: payload.artifact_id,
@@ -184,6 +242,7 @@ pub fn hub_command_from_record(command: CommandRecord) -> Result<HubCommand, Sta
                 serial_number: payload.serial_number,
                 filename: payload.filename,
                 storage_path: payload.storage_path,
+                artifact_download_path: payload.artifact_download_path,
                 size_bytes: payload.size_bytes,
                 plate_id: payload.plate_id,
                 use_ams: payload.use_ams,

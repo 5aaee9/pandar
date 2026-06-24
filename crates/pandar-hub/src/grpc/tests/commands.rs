@@ -4,8 +4,10 @@ use tonic::Code;
 
 use super::*;
 use crate::{
-    grpc::commands::hub_command_from_record,
-    repositories::{DiagnosePrinterPayload, DiscoverPrintersPayload},
+    grpc::commands::{
+        CommandConversionOptions, hub_command_from_record, hub_command_from_record_with_options,
+    },
+    repositories::{DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload},
 };
 
 #[tokio::test]
@@ -154,6 +156,56 @@ async fn grpc_hub_command_from_record_maps_discovery_and_diagnostics() {
         diagnostic_command.command,
         Some(hub_command::Command::DiagnosePrinter(command)) if command.serial_number == "SERIAL123"
     ));
+}
+
+#[tokio::test]
+async fn grpc_hub_command_from_record_requires_artifact_download_path_when_configured() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture(
+        state.database(),
+        tenant_id,
+        agent_id,
+    )
+    .await
+    .unwrap();
+    let command = state
+        .commands()
+        .enqueue_print_project_file(
+            tenant_id,
+            agent_id,
+            &printer_id,
+            PrintProjectFilePayload {
+                job_id: "job-1".to_string(),
+                artifact_id: "artifact-1".to_string(),
+                printer_id: printer_id.clone(),
+                serial_number: "serial-explicit".to_string(),
+                filename: "plate.3mf".to_string(),
+                storage_path: "tenant/artifact/plate.3mf".to_string(),
+                artifact_download_path: String::new(),
+                size_bytes: 3,
+                plate_id: 1,
+                use_ams: true,
+                flow_cali: false,
+                timelapse: true,
+                ams_mapping_json: None,
+                ams_mapping2_json: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    hub_command_from_record(command.clone()).unwrap();
+    let err = hub_command_from_record_with_options(
+        command,
+        CommandConversionOptions {
+            require_artifact_download_path: true,
+        },
+    )
+    .unwrap_err();
+
+    assert_eq!(err.code(), Code::Internal);
+    assert_eq!(err.message(), "missing artifact download path");
 }
 
 #[tokio::test]

@@ -1,7 +1,7 @@
 use anyhow::Context;
 use sqlx::{Executor, Postgres, Sqlite, Transaction};
 
-use crate::db::Database;
+use crate::{artifacts::ArtifactStorage, db::Database};
 
 mod options;
 mod sql;
@@ -12,6 +12,7 @@ use sql::*;
 
 pub async fn cleanup_database(
     database: &Database,
+    artifact_storage: Option<&dyn ArtifactStorage>,
     options: CleanupOptions,
     mode: CleanupMode,
 ) -> anyhow::Result<CleanupSummary> {
@@ -74,7 +75,13 @@ pub async fn cleanup_database(
     };
 
     if mode == CleanupMode::Execute {
+        if let Some(artifact_storage) = artifact_storage {
+            delete_artifacts(artifact_storage, &summary.artifact_storage_paths).await?;
+        }
         execute_cleanup(database, &cutoffs).await?;
+        if artifact_storage.is_some() {
+            cleanup_artifact_rows(database, &summary.artifact_ids).await?;
+        }
     }
 
     Ok(summary)
@@ -134,6 +141,22 @@ async fn execute_cleanup(database: &Database, cutoffs: &CleanupCutoffs) -> anyho
         "tenant token",
     )
     .await
+}
+
+async fn delete_artifacts(
+    artifact_storage: &dyn ArtifactStorage,
+    storage_paths: &[String],
+) -> anyhow::Result<()> {
+    for storage_path in storage_paths {
+        artifact_storage
+            .delete_artifact(storage_path)
+            .await
+            .context("failed to delete cleanup artifact [redacted]")
+            .map_err(|err| {
+                anyhow::anyhow!("{}", crate::redaction::redact_secrets(&format!("{err:#}")))
+            })?;
+    }
+    Ok(())
 }
 
 async fn delete_ids(

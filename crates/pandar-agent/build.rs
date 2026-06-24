@@ -4,9 +4,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     unsafe {
         std::env::set_var("PROTOC", protoc);
     }
-    tonic_prost_build::configure().compile_protos(
-        &["../../proto/pandar/agent/v1/agent.proto"],
-        &["../../proto"],
-    )?;
+    tonic_prost_build::configure()
+        .type_attribute(
+            ".pandar.agent.v1.HubCommand.command",
+            "#[allow(clippy::large_enum_variant)]",
+        )
+        .compile_protos(
+            &["../../proto/pandar/agent/v1/agent.proto"],
+            &["../../proto"],
+        )?;
     Ok(())
 }

@@ -1,9 +1,8 @@
 use clap::{Parser, Subcommand};
 use pandar_hub::{
+    artifacts::ArtifactStorageConfig,
     cleanup::{CleanupMode, CleanupOptions, cleanup_database},
     db::{Database, DatabaseConfig},
-    jobs::JobStorageConfig,
-    redaction::redact_secrets,
 };
 
 #[derive(Debug, Parser)]
@@ -18,7 +17,7 @@ enum Command {
     #[command(about = "Run pandar-hub")]
     Hub,
     #[command(about = "Run pandar-agent")]
-    Agent(pandar_agent::AgentConfig),
+    Agent(Box<pandar_agent::AgentConfig>),
     #[command(about = "Print CLI version")]
     Version,
     #[command(about = "Run retention cleanup")]
@@ -38,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Hub => pandar_hub::run_from_env().await?,
         Command::Agent(config) => {
             tracing::info!("{}", pandar_agent::startup_summary(&config));
-            pandar_agent::run(config).await?;
+            pandar_agent::run(*config).await?;
         }
         Command::Version => println!("{}", env!("CARGO_PKG_VERSION")),
         Command::Cleanup { execute, .. } => {
@@ -52,20 +51,18 @@ async fn main() -> anyhow::Result<()> {
             } else {
                 CleanupMode::DryRun
             };
-            let summary = cleanup_database(&database, CleanupOptions::from_env()?, mode).await?;
-            if mode == CleanupMode::Execute {
-                let storage = JobStorageConfig::from_env()?;
-                for storage_path in &summary.artifact_storage_paths {
-                    storage.remove_artifact(storage_path).await.map_err(|err| {
-                        anyhow::anyhow!(
-                            "failed to remove cleanup artifact: {}",
-                            redact_secrets(&format!("{err:#}"))
-                        )
-                    })?;
-                }
-                pandar_hub::cleanup::cleanup_artifact_rows(&database, &summary.artifact_ids)
-                    .await?;
-            }
+            let artifact_storage = if mode == CleanupMode::Execute {
+                Some(ArtifactStorageConfig::from_env()?.build().await?)
+            } else {
+                None
+            };
+            let summary = cleanup_database(
+                &database,
+                artifact_storage.as_deref(),
+                CleanupOptions::from_env()?,
+                mode,
+            )
+            .await?;
             println!("{}", serde_json::to_string(&summary_json(&summary, mode))?);
         }
     }

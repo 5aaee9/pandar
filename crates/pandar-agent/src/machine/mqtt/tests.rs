@@ -578,6 +578,7 @@ fn print_report_from_report_drops_out_of_range_numeric_values() {
 fn print_job_report_event_sets_numeric_presence_booleans() {
     let config = AgentConfig {
         hub_grpc_url: "http://hub.internal:50051".to_owned(),
+        hub_api_url: None,
         agent_name: "garage".to_owned(),
         agent_id: "agent-id".to_owned(),
         tenant_id: "tenant-id".to_owned(),
@@ -667,6 +668,7 @@ async fn forward_print_reports_uses_transport_without_live_socket() {
     let (sender, mut receiver) = mpsc::channel(4);
     let config = AgentConfig {
         hub_grpc_url: "http://hub.internal:50051".to_owned(),
+        hub_api_url: None,
         agent_name: "garage".to_owned(),
         agent_id: "agent-id".to_owned(),
         tenant_id: "tenant-id".to_owned(),

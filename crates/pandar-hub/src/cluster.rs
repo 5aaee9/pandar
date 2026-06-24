@@ -102,18 +102,28 @@ pub(crate) fn parse_agent_identity(
 #[derive(Clone)]
 pub struct ControlPlane {
     backend: Arc<dyn ControlPlaneBackend>,
+    kind: ControlPlaneKind,
 }
 
 impl std::fmt::Debug for ControlPlane {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ControlPlane").finish_non_exhaustive()
+        f.debug_struct("ControlPlane")
+            .field("kind", &self.kind)
+            .finish_non_exhaustive()
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ControlPlaneKind {
+    InProcess,
+    Nats,
 }
 
 impl ControlPlane {
     pub fn in_process() -> Self {
         Self {
             backend: Arc::new(InProcessControlPlane::new()),
+            kind: ControlPlaneKind::InProcess,
         }
     }
 
@@ -129,9 +139,14 @@ impl ControlPlane {
                         Arc::new(AsyncNatsTransport { client }),
                         subject,
                     )),
+                    kind: ControlPlaneKind::Nats,
                 })
             }
         }
+    }
+
+    pub fn kind(&self) -> ControlPlaneKind {
+        self.kind
     }
 
     pub async fn publish(&self, message: HubControlMessage) -> anyhow::Result<()> {
@@ -146,6 +161,15 @@ impl ControlPlane {
     pub(crate) fn failing_for_tests() -> Self {
         Self {
             backend: Arc::new(FailingControlPlaneBackend),
+            kind: ControlPlaneKind::InProcess,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn nats_for_tests() -> Self {
+        Self {
+            backend: Arc::new(InProcessControlPlane::new()),
+            kind: ControlPlaneKind::Nats,
         }
     }
 }

@@ -1,6 +1,6 @@
-use std::{ffi::c_void, slice};
+use std::{ffi::c_void, path::PathBuf, slice};
 
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use futures_util::TryStreamExt;
 use serde_json::{Value, json};
 
 pub const PLUGIN_NAME: &str = "pandar-network-plugin";
@@ -115,32 +115,33 @@ pub extern "C" fn pandar_plugin_submit_print(
     let Some(artifact_path) = read_utf8(artifact_path_ptr, artifact_path_len) else {
         return invalid_input("artifact_missing");
     };
-    let artifact = match std::fs::read(artifact_path) {
-        Ok(bytes) => bytes,
+    let artifact_path = PathBuf::from(artifact_path);
+    let artifact_len = match std::fs::metadata(&artifact_path) {
+        Ok(metadata) if metadata.is_file() => metadata.len(),
         Err(_) => return invalid_input("artifact_missing"),
+        Ok(_) => return invalid_input("artifact_missing"),
     };
-    if artifact.is_empty() {
+    if artifact_len == 0 {
         return invalid_input("artifact_empty");
     }
     let ams_mapping = parse_optional_json(ams_mapping_ptr, ams_mapping_len);
     let ams_mapping2 = parse_optional_json(ams_mapping2_ptr, ams_mapping2_len);
 
-    post_json(
+    post_multipart_print(
         &format!("{hub_url}/api/v1/plugin/prints"),
-        Some(&token),
-        json!({
-            "printer_id": printer_id,
-            "filename": filename,
-            "content_type": "model/3mf",
-            "artifact_base64": STANDARD.encode(artifact),
-            "plate_id": plate_id,
-            "use_ams": use_ams,
-            "flow_cali": flow_cali,
-            "timelapse": timelapse,
-            "ams_mapping": ams_mapping,
-            "ams_mapping2": ams_mapping2,
-        }),
-        RequestKind::PrintSubmission,
+        &token,
+        PrintSubmissionBody {
+            printer_id,
+            filename,
+            artifact_path,
+            artifact_len,
+            plate_id,
+            use_ams,
+            flow_cali,
+            timelapse,
+            ams_mapping,
+            ams_mapping2,
+        },
     )
 }
 
@@ -204,6 +205,73 @@ fn post_json(url: &str, token: Option<&str>, body: Value, kind: RequestKind) -> 
     }
 }
 
+struct PrintSubmissionBody {
+    printer_id: String,
+    filename: String,
+    artifact_path: PathBuf,
+    artifact_len: u64,
+    plate_id: i64,
+    use_ams: bool,
+    flow_cali: bool,
+    timelapse: bool,
+    ams_mapping: Option<Value>,
+    ams_mapping2: Option<Value>,
+}
+
+enum PrintSubmissionError {
+    LocalArtifact,
+    Request,
+}
+
+fn post_multipart_print(url: &str, token: &str, body: PrintSubmissionBody) -> PluginHttpResult {
+    match runtime().block_on(async {
+        let artifact = tokio::fs::File::open(&body.artifact_path)
+            .await
+            .map_err(|_| PrintSubmissionError::LocalArtifact)?;
+        let artifact_stream =
+            tokio_util::io::ReaderStream::new(artifact).map_ok(http_body::Frame::data);
+        let file = reqwest::multipart::Part::stream_with_length(
+            reqwest::Body::wrap(http_body_util::StreamBody::new(artifact_stream)),
+            body.artifact_len,
+        )
+        .file_name(body.filename.clone())
+        .mime_str("model/3mf")
+        .map_err(|_| PrintSubmissionError::Request)?;
+        let request = reqwest::Client::new()
+            .post(url)
+            .bearer_auth(token)
+            .multipart(
+                reqwest::multipart::Form::new()
+                    .text("printer_id", body.printer_id)
+                    .text("filename", body.filename)
+                    .text("content_type", "model/3mf")
+                    .text("plate_id", body.plate_id.to_string())
+                    .text("use_ams", body.use_ams.to_string())
+                    .text("flow_cali", body.flow_cali.to_string())
+                    .text("timelapse", body.timelapse.to_string())
+                    .text(
+                        "ams_mapping",
+                        body.ams_mapping
+                            .map_or_else(|| "null".to_string(), |value| value.to_string()),
+                    )
+                    .text(
+                        "ams_mapping2",
+                        body.ams_mapping2
+                            .map_or_else(|| "null".to_string(), |value| value.to_string()),
+                    )
+                    .part("file", file),
+            );
+        request
+            .send()
+            .await
+            .map_err(|_| PrintSubmissionError::Request)
+    }) {
+        Ok(response) => response_result(response, RequestKind::PrintSubmission),
+        Err(PrintSubmissionError::LocalArtifact) => invalid_input("artifact_missing"),
+        Err(PrintSubmissionError::Request) => network_error(),
+    }
+}
+
 fn response_result(response: reqwest::Response, kind: RequestKind) -> PluginHttpResult {
     let http_code = response.status().as_u16().into();
     match runtime().block_on(response.text()) {
@@ -244,8 +312,8 @@ fn redact_hub_error(kind: RequestKind, http_code: u32, body: &str) -> String {
 fn is_stable_hub_error(error: &str) -> bool {
     matches!(
         error,
-        "artifact_invalid_base64"
-            | "artifact_invalid_plate"
+        "artifact_invalid_plate"
+            | "artifact_invalid_upload"
             | "artifact_too_large"
             | "printer_not_found"
             | "invalid_plugin_ticket"

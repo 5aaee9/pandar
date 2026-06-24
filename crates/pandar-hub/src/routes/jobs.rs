@@ -1,34 +1,22 @@
 use axum::{
     Json,
+    extract::Multipart,
     extract::rejection::JsonRejection,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
 };
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use pandar_core::{Job, JobArtifact, JobId, JobPrintState};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
     AppState,
-    repositories::{CreatePrintJob, DuplicatePrintJob, JobWithArtifact, RepositoryError, UserRole},
+    repositories::{DuplicatePrintJob, JobWithArtifact, RepositoryError, UserRole},
     routes::{ApiError, auth, parse_tenant_id},
 };
 
 mod material;
-
-#[derive(Debug, Deserialize)]
-pub struct CreateJobRequest {
-    filename: String,
-    content_type: String,
-    artifact_base64: String,
-    plate_id: i64,
-    use_ams: bool,
-    flow_cali: bool,
-    timelapse: bool,
-    ams_mapping: Option<Value>,
-    ams_mapping2: Option<Value>,
-}
+pub(super) mod multipart;
 
 #[derive(Debug, Deserialize)]
 pub struct RecoveryReasonRequest {
@@ -106,95 +94,26 @@ pub async fn create_job(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((tenant_id, printer_id)): Path<(String, String)>,
-    payload: Result<Json<CreateJobRequest>, JsonRejection>,
+    multipart: Multipart,
 ) -> Result<(StatusCode, Json<JobResponse>), ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
     let auth =
         auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
     parse_printer_id(&printer_id)?;
-    let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
-    if payload.filename.trim().is_empty() {
-        return Err(ApiError::bad_request("bad_request"));
-    }
-    let plate_id = validated_plate_id(payload.plate_id)?;
-    let content_type = if payload.content_type.trim().is_empty() {
-        "application/octet-stream".to_string()
-    } else {
-        payload.content_type
-    };
-
-    let artifact_bytes = validate_artifact_submission(
-        &payload.artifact_base64,
-        state.job_storage().max_artifact_bytes(),
-    )?;
-    let ams_mapping_json = material::mapping_json(payload.ams_mapping, "ams_mapping")?;
-    let ams_mapping2_json = material::mapping_json(payload.ams_mapping2, "ams_mapping2")?;
-
-    let Some(printer) = state
-        .printers()
-        .get_for_tenant(tenant_id, &printer_id)
-        .await?
-    else {
-        return Err(ApiError::not_found("printer_not_found"));
-    };
-    let artifact_id = uuid::Uuid::new_v4().to_string();
-    let stored = state
-        .job_storage()
-        .write_artifact(tenant_id, &artifact_id, &payload.filename, &artifact_bytes)
-        .await
-        .map_err(|err| {
-            tracing::error!(
-                error = %redact_artifact_error(&format!("{err:#}")),
-                "failed to write print artifact"
-            );
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
-        })?;
-
-    let created = state
-        .jobs()
-        .create_print_job_with_audit(
-            CreatePrintJob {
-                tenant_id,
-                printer_id: printer.id,
-                agent_id: printer.agent_id,
-                artifact_id,
-                artifact_filename: stored.filename,
-                artifact_content_type: content_type,
-                artifact_size_bytes: stored.size_bytes,
-                artifact_storage_path: stored.storage_path.clone(),
-                plate_id,
-                use_ams: payload.use_ams,
-                flow_cali: payload.flow_cali,
-                timelapse: payload.timelapse,
-                ams_mapping_json,
-                ams_mapping2_json,
-            },
-            auth::audit_actor(&auth),
-        )
-        .await;
-
-    match created {
-        Ok(created) => {
-            let wake_tenant_id = created.job.tenant_id;
-            let wake_agent_id = created.job.agent_id;
-            let response = JobResponse::try_from(created)?;
-            state.wake_agent(wake_tenant_id, wake_agent_id).await;
-            Ok((StatusCode::CREATED, Json(response)))
-        }
-        Err(err) => {
-            if let Err(cleanup_err) = state
-                .job_storage()
-                .remove_artifact(&stored.storage_path)
-                .await
-            {
-                tracing::warn!(
-                    error = %redact_artifact_error(&format!("{cleanup_err:#}")),
-                    "failed to remove print artifact after repository error"
-                );
-            }
-            Err(err.into())
-        }
-    }
+    let created = multipart::create_print_job_from_multipart(
+        &state,
+        tenant_id,
+        Some(printer_id),
+        multipart,
+        auth::audit_actor(&auth),
+        "print",
+    )
+    .await?;
+    let wake_tenant_id = created.job.tenant_id;
+    let wake_agent_id = created.job.agent_id;
+    let response = JobResponse::try_from(created)?;
+    state.wake_agent(wake_tenant_id, wake_agent_id).await;
+    Ok((StatusCode::CREATED, Json(response)))
 }
 
 pub async fn retry_dispatch(
@@ -282,27 +201,11 @@ pub async fn duplicate(
     Ok((StatusCode::CREATED, Json(response)))
 }
 
-pub fn validate_artifact_submission(payload: &str, max_bytes: usize) -> Result<Vec<u8>, ApiError> {
-    let bytes = STANDARD
-        .decode(payload)
-        .map_err(|_| ApiError::bad_request("artifact_invalid_base64"))?;
-    if bytes.is_empty() {
-        return Err(ApiError::bad_request("artifact_empty"));
-    }
-    if bytes.len() > max_bytes {
-        return Err(ApiError::new(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "artifact_too_large",
-        ));
-    }
-    Ok(bytes)
-}
-
 pub(super) fn redact_artifact_error(message: &str) -> String {
     crate::routes::plugin::redact_artifact_error(message)
 }
 
-fn parse_printer_id(value: &str) -> Result<(), ApiError> {
+pub(super) fn parse_printer_id(value: &str) -> Result<(), ApiError> {
     uuid::Uuid::parse_str(value).map_err(|_| ApiError::bad_request("invalid_printer_id"))?;
     Ok(())
 }
@@ -313,6 +216,7 @@ pub(super) fn validated_plate_id(value: i64) -> Result<u32, ApiError> {
     }
     u32::try_from(value).map_err(|_| ApiError::bad_request("artifact_invalid_plate"))
 }
+
 pub async fn list_jobs(
     State(state): State<AppState>,
     headers: HeaderMap,

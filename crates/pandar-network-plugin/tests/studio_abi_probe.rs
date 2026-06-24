@@ -1,11 +1,17 @@
+mod support;
+
 use std::{
     env, fs,
-    io::{Read, Write},
+    io::Write,
     net::{TcpListener, TcpStream},
     path::PathBuf,
     process::{Command, Output, Stdio},
     thread,
     time::{Duration, Instant},
+};
+use support::{
+    assert_multipart_file_part, assert_multipart_print_request, read_http_request_with_timeout,
+    request_body,
 };
 
 const MOCK_HUB_TIMEOUT: Duration = Duration::from_secs(5);
@@ -118,37 +124,6 @@ struct MockHub {
     handle: thread::JoinHandle<()>,
 }
 
-fn read_request(stream: &mut std::net::TcpStream) -> String {
-    let mut request = Vec::new();
-    let mut buffer = [0_u8; 1024];
-    let headers_end = loop {
-        let read = stream.read(&mut buffer).unwrap();
-        assert_ne!(read, 0, "client closed before sending request");
-        request.extend_from_slice(&buffer[..read]);
-        if let Some(pos) = request.windows(4).position(|window| window == b"\r\n\r\n") {
-            break pos + 4;
-        }
-    };
-    let text = String::from_utf8_lossy(&request).to_string();
-    let content_length = text
-        .lines()
-        .find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            name.eq_ignore_ascii_case("content-length")
-                .then(|| value.trim().parse::<usize>().unwrap())
-        })
-        .unwrap_or(0);
-    while request.len() - headers_end < content_length {
-        let read = stream.read(&mut buffer).unwrap();
-        assert_ne!(read, 0, "client closed before sending full request body");
-        request.extend_from_slice(&buffer[..read]);
-        if request.len() - headers_end >= content_length {
-            break;
-        }
-    }
-    String::from_utf8_lossy(&request).to_string()
-}
-
 fn accept_with_timeout(listener: &TcpListener) -> TcpStream {
     let deadline = Instant::now() + MOCK_HUB_TIMEOUT;
     loop {
@@ -164,10 +139,6 @@ fn accept_with_timeout(listener: &TcpListener) -> TcpStream {
             Err(error) => panic!("failed accepting mock hub request: {error}"),
         }
     }
-}
-
-fn request_body(request: &str) -> &str {
-    request.split("\r\n\r\n").nth(1).unwrap_or("")
 }
 
 fn write_response(stream: &mut std::net::TcpStream, status: &str, body: &str) {
@@ -208,7 +179,7 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                 let mut stream = accept_with_timeout(&listener);
                 stream.set_read_timeout(Some(MOCK_HUB_TIMEOUT)).unwrap();
                 stream.set_write_timeout(Some(MOCK_HUB_TIMEOUT)).unwrap();
-                let request = read_request(&mut stream);
+                let request = read_http_request_with_timeout(&mut stream, Some(MOCK_HUB_TIMEOUT));
                 assert_request(&request, method, path, bearer);
                 match index {
                     0 => write_response(
@@ -224,18 +195,16 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                     2 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"tasks":[]}"#),
                     3 => {
                         let body = request_body(&request);
+                        assert_multipart_print_request(&request);
                         assert!(
-                            body.contains(r#""printer_id":"printer-1""#),
+                            body.contains(r#"name="printer_id""#),
                             "bad print body: {body}"
                         );
                         assert!(
-                            body.contains(r#""filename":"probe.3mf""#),
+                            body.contains(r#"name="filename""#),
                             "bad print filename: {body}"
                         );
-                        assert!(
-                            body.contains(&format!(r#""artifact_base64":"{}""#, base64(&artifact))),
-                            "bad artifact body: {body}"
-                        );
+                        assert_multipart_file_part(&request, "probe.3mf", &artifact);
                         write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"job_id":"job-1"}"#);
                     }
                     _ => unreachable!(),
@@ -252,7 +221,7 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                 let mut stream = accept_with_timeout(&listener);
                 stream.set_read_timeout(Some(MOCK_HUB_TIMEOUT)).unwrap();
                 stream.set_write_timeout(Some(MOCK_HUB_TIMEOUT)).unwrap();
-                let request = read_request(&mut stream);
+                let request = read_http_request_with_timeout(&mut stream, Some(MOCK_HUB_TIMEOUT));
                 assert_request(&request, method, path, bearer);
                 match index {
                     0 => write_response(
@@ -358,29 +327,6 @@ fn run_probe(mode: MockMode, mode_arg: &str) -> Option<(String, String)> {
         );
     }
     Some((stdout, stderr))
-}
-
-fn base64(bytes: &[u8]) -> String {
-    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::new();
-    for chunk in bytes.chunks(3) {
-        let b0 = chunk[0];
-        let b1 = *chunk.get(1).unwrap_or(&0);
-        let b2 = *chunk.get(2).unwrap_or(&0);
-        out.push(TABLE[(b0 >> 2) as usize] as char);
-        out.push(TABLE[(((b0 & 0b0000_0011) << 4) | (b1 >> 4)) as usize] as char);
-        if chunk.len() > 1 {
-            out.push(TABLE[(((b1 & 0b0000_1111) << 2) | (b2 >> 6)) as usize] as char);
-        } else {
-            out.push('=');
-        }
-        if chunk.len() > 2 {
-            out.push(TABLE[(b2 & 0b0011_1111) as usize] as char);
-        } else {
-            out.push('=');
-        }
-    }
-    out
 }
 
 fn assert_json_field(output: &str, field: &str, value: &str) {

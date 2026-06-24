@@ -1,6 +1,4 @@
 use super::*;
-use base64::{Engine as _, engine::general_purpose::STANDARD};
-
 #[tokio::test]
 async fn plugin_login_ticket_creation_enforces_external_viewer_or_all_tenant_token() {
     let state = state().await;
@@ -213,20 +211,15 @@ async fn plugin_print_returns_job_shape_and_records_plugin_actor_metadata() {
         .await
         .unwrap();
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app,
         Method::POST,
         "/api/v1/plugin/prints",
-        Some(json!({
-            "printer_id": printer_id,
-            "filename": "plugin plate.3mf",
-            "content_type": "model/3mf",
-            "artifact_base64": STANDARD.encode(b"abc"),
-            "plate_id": 1,
-            "use_ams": true,
-            "flow_cali": false,
-            "timelapse": true
-        })),
+        multipart_print_body(
+            Some(&printer_id),
+            Some(("plugin plate.3mf", "model/3mf", b"abc")),
+            1,
+        ),
         &token,
     )
     .await;
@@ -292,20 +285,15 @@ async fn plugin_print_wakes_agent_on_sibling_instance() {
         })
         .await;
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app,
         Method::POST,
         "/api/v1/plugin/prints",
-        Some(json!({
-            "printer_id": printer_id,
-            "filename": "plugin plate.3mf",
-            "content_type": "model/3mf",
-            "artifact_base64": STANDARD.encode(b"abc"),
-            "plate_id": 1,
-            "use_ams": true,
-            "flow_cali": false,
-            "timelapse": true
-        })),
+        multipart_print_body(
+            Some(&printer_id),
+            Some(("plugin plate.3mf", "model/3mf", b"abc")),
+            1,
+        ),
         &token,
     )
     .await;
@@ -316,70 +304,6 @@ async fn plugin_print_wakes_agent_on_sibling_instance() {
         .await
         .expect("sibling agent should be woken")
         .expect("wake channel should stay open");
-}
-
-#[tokio::test]
-async fn plugin_print_uses_stable_artifact_validation_errors() {
-    let state = state().await;
-    let app = router(state.clone());
-    let tenant = state
-        .tenants()
-        .create("plugin-print-validation", "Plugin Print Validation")
-        .await
-        .unwrap();
-    let token =
-        plugin_studio_tenant_token(&state, &tenant.id.to_string(), "print-validation-plugin").await;
-    let agent = state.agents().create(tenant.id, "agent").await.unwrap();
-    let printer_id = insert_printer_fixture(state.database(), tenant.id, agent.id)
-        .await
-        .unwrap();
-    let body = |artifact_base64: &str, plate_id: i64| {
-        Some(json!({
-            "printer_id": printer_id,
-            "filename": "plugin plate.3mf",
-            "content_type": "model/3mf",
-            "artifact_base64": artifact_base64,
-            "plate_id": plate_id,
-            "use_ams": true,
-            "flow_cali": false,
-            "timelapse": true
-        }))
-    };
-
-    let (status, response) = request_as(
-        app.clone(),
-        Method::POST,
-        "/api/v1/plugin/prints",
-        body("@@@", 1),
-        &token,
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response, json!({ "error": "artifact_invalid_base64" }));
-
-    let (status, response) = request_as(
-        app.clone(),
-        Method::POST,
-        "/api/v1/plugin/prints",
-        body("", 1),
-        &token,
-    )
-    .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response, json!({ "error": "artifact_empty" }));
-
-    for plate_id in [0, -1, 4294967296_i64] {
-        let (status, response) = request_as(
-            app.clone(),
-            Method::POST,
-            "/api/v1/plugin/prints",
-            body(&STANDARD.encode(b"abc"), plate_id),
-            &token,
-        )
-        .await;
-        assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(response, json!({ "error": "artifact_invalid_plate" }));
-    }
 }
 
 #[tokio::test]

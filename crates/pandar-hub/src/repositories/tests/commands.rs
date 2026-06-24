@@ -95,6 +95,10 @@ async fn command_enqueue_print_project_file_persists_payload_and_printer() {
     assert_eq!(payload["serial_number"], "serial-explicit");
     assert_eq!(payload["filename"], "plate.3mf");
     assert_eq!(payload["storage_path"], "tenant/artifact/plate.3mf");
+    assert_eq!(
+        payload["artifact_download_path"],
+        "/api/v1/agents/agent-1/artifacts/artifact-1"
+    );
     assert_eq!(payload["size_bytes"], 3);
     assert_eq!(payload["plate_id"], 1);
     assert_eq!(payload["use_ams"], true);
@@ -170,6 +174,7 @@ fn print_payload(printer_id: &str, serial_number: &str) -> PrintProjectFilePaylo
         serial_number: serial_number.to_string(),
         filename: "plate.3mf".to_string(),
         storage_path: "tenant/artifact/plate.3mf".to_string(),
+        artifact_download_path: "/api/v1/agents/agent-1/artifacts/artifact-1".to_string(),
         size_bytes: 3,
         plate_id: 1,
         use_ams: true,

@@ -92,7 +92,7 @@ fn append_print_reports(output: &mut String, state: &AppState) {
 async fn append_readyz(output: &mut String, state: &AppState) {
     let readyz = state.metrics().readyz_snapshot().await;
     if readyz.is_empty() {
-        for check in ["database", "grpc", "spool", "external_auth"] {
+        for check in ["database", "grpc", "artifact_storage", "external_auth"] {
             output.push_str(&format!("pandar_readyz{{check=\"{check}\"}} 0\n"));
         }
     }

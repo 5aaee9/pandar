@@ -17,11 +17,11 @@ async fn linked_operator_jwt_can_create_print_job() {
         .await
         .unwrap();
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app,
         Method::POST,
         &format!("/api/v1/tenants/{}/printers/{printer_id}/jobs", tenant.id),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -47,11 +47,11 @@ async fn linked_viewer_jwt_cannot_create_print_job() {
         .await
         .unwrap();
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app,
         Method::POST,
         &format!("/api/v1/tenants/{}/printers/{printer_id}/jobs", tenant.id),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -72,21 +72,22 @@ async fn job_create_rejects_invalid_tenant_printer_and_job_ids() {
         "invalid-job-operator",
     )
     .await;
-    let (status, body) = request(
+    let (status, body) = multipart_request_as(
         app.clone(),
         Method::POST,
         "/api/v1/tenants/not-a-uuid/printers/printer/jobs",
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
+        "unused",
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body, json!({ "error": "invalid_tenant_id" }));
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app.clone(),
         Method::POST,
         "/api/v1/tenants/00000000-0000-0000-0000-000000000001/printers/not-a-uuid/jobs",
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -119,11 +120,11 @@ async fn job_create_rejects_missing_printer() {
     )
     .await;
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/00000000-0000-0000-0000-000000000001/jobs"),
-        Some(valid_request()),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
         &token,
     )
     .await;
@@ -151,34 +152,34 @@ async fn job_create_rejects_empty_invalid_and_oversized_artifacts() {
         .unwrap();
     let uri = format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs");
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app.clone(),
         Method::POST,
         &uri,
-        Some(json!({ "filename": "plate.3mf", "content_type": "model/3mf", "artifact_base64": "", "plate_id": 1, "use_ams": false, "flow_cali": false, "timelapse": false })),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"")), 1),
         &token,
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body, json!({ "error": "artifact_empty" }));
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app.clone(),
         Method::POST,
         &uri,
-        Some(json!({ "filename": "plate.3mf", "content_type": "model/3mf", "artifact_base64": "@@@", "plate_id": 1, "use_ams": false, "flow_cali": false, "timelapse": false })),
+        multipart_print_body(None, None, 1),
         &token,
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "artifact_invalid_base64" }));
+    assert_eq!(body, json!({ "error": "artifact_invalid_upload" }));
 
     let oversized = vec![0_u8; state.job_storage().max_artifact_bytes() + 1];
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app,
         Method::POST,
         &uri,
-        Some(json!({ "filename": "plate.3mf", "content_type": "model/3mf", "artifact_base64": STANDARD.encode(oversized), "plate_id": 1, "use_ams": false, "flow_cali": false, "timelapse": false })),
+        multipart_print_body(None, Some(("plate.3mf", "model/3mf", &oversized)), 1),
         &token,
     )
     .await;
@@ -205,19 +206,21 @@ async fn job_create_defaults_content_type_and_rejects_invalid_plate() {
         .unwrap();
     let uri = format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs");
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app.clone(),
         Method::POST,
         &uri,
-        Some(json!({
-            "filename": "plate.3mf",
-            "content_type": "",
-            "artifact_base64": STANDARD.encode(b"abc"),
-            "plate_id": 1,
-            "use_ams": false,
-            "flow_cali": false,
-            "timelapse": false
-        })),
+        multipart_print_body_with_fields(
+            Some(("plate.3mf", "", b"abc")),
+            &[
+                ("filename", "plate.3mf"),
+                ("content_type", ""),
+                ("plate_id", "1"),
+                ("use_ams", "false"),
+                ("flow_cali", "false"),
+                ("timelapse", "false"),
+            ],
+        ),
         &token,
     )
     .await;
@@ -225,19 +228,11 @@ async fn job_create_defaults_content_type_and_rejects_invalid_plate() {
     assert_eq!(body["artifact"]["content_type"], "application/octet-stream");
 
     for plate_id in [0, -1] {
-        let (status, body) = request_as(
+        let (status, body) = multipart_request_as(
             app.clone(),
             Method::POST,
             &uri,
-            Some(json!({
-                "filename": "plate.3mf",
-                "content_type": "model/3mf",
-                "artifact_base64": STANDARD.encode(b"abc"),
-                "plate_id": plate_id,
-                "use_ams": false,
-                "flow_cali": false,
-                "timelapse": false
-            })),
+            multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), plate_id),
             &token,
         )
         .await;
@@ -245,19 +240,15 @@ async fn job_create_defaults_content_type_and_rejects_invalid_plate() {
         assert_eq!(body, json!({ "error": "artifact_invalid_plate" }));
     }
 
-    let (status, body) = request_as(
+    let (status, body) = multipart_request_as(
         app,
         Method::POST,
         &uri,
-        Some(json!({
-            "filename": "plate.3mf",
-            "content_type": "model/3mf",
-            "artifact_base64": STANDARD.encode(b"abc"),
-            "plate_id": 4294967296_i64,
-            "use_ams": false,
-            "flow_cali": false,
-            "timelapse": false
-        })),
+        multipart_print_body(
+            None,
+            Some(("plate.3mf", "model/3mf", b"abc")),
+            4294967296_i64,
+        ),
         &token,
     )
     .await;

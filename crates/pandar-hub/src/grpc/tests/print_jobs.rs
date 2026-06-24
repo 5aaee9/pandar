@@ -29,6 +29,13 @@ async fn grpc_dispatch_print_project_file_sends_payload_and_marks_job_sent() {
     assert_eq!(print.printer_id, created.job.printer_id);
     assert_eq!(print.filename, "plate.3mf");
     assert_eq!(print.storage_path, created.artifact.storage_path);
+    assert_eq!(
+        print.artifact_download_path,
+        format!(
+            "/api/v1/agents/{}/artifacts/{}",
+            agent_id, created.artifact.id
+        )
+    );
     assert_eq!(print.size_bytes, 42);
     assert!(print.serial_number.starts_with("serial-"));
     assert_eq!(
@@ -102,7 +109,7 @@ async fn grpc_corrupt_persisted_mapping_streams_internal_error() {
             .unwrap()
             .job
             .status,
-        JobStatus::Sent
+        JobStatus::Queued
     );
 }
 
@@ -220,7 +227,7 @@ async fn grpc_malformed_print_payload_streams_internal_error() {
             .unwrap()
             .job
             .status,
-        JobStatus::Sent
+        JobStatus::Queued
     );
 }
 
@@ -289,7 +296,7 @@ async fn corrupt_command_payload(state: &AppState, command_id: pandar_core::Comm
 }
 
 async fn corrupt_command_mapping(state: &AppState, command_id: pandar_core::CommandId) {
-    let payload = r#"{"job_id":"job","artifact_id":"artifact","printer_id":"printer","serial_number":"serial","filename":"plate.3mf","storage_path":"tenant/artifact/plate.3mf","size_bytes":42,"plate_id":1,"use_ams":true,"flow_cali":false,"timelapse":true,"ams_mapping_json":"[{}]","ams_mapping2_json":null}"#;
+    let payload = r#"{"job_id":"job","artifact_id":"artifact","printer_id":"printer","serial_number":"serial","filename":"plate.3mf","storage_path":"tenant/artifact/plate.3mf","artifact_download_path":"/api/v1/agents/agent/artifacts/artifact","size_bytes":42,"plate_id":1,"use_ams":true,"flow_cali":false,"timelapse":true,"ams_mapping_json":"[{}]","ams_mapping2_json":null}"#;
     match state.database() {
         Database::Sqlite(pool) => {
             sqlx::query("UPDATE commands SET payload_json = ?2 WHERE id = ?1")

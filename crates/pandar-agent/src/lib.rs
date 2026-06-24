@@ -36,6 +36,8 @@ pub struct AgentConfig {
         default_value = "http://127.0.0.1:50051"
     )]
     pub hub_grpc_url: String,
+    #[arg(long, env = "PANDAR_HUB_API_URL")]
+    pub hub_api_url: Option<String>,
     #[arg(long, env = "PANDAR_AGENT_NAME", default_value = "local-agent")]
     pub agent_name: String,
     #[arg(long, env = "PANDAR_AGENT_ID")]
@@ -271,6 +273,7 @@ mod tests {
         ]);
 
         assert_eq!(config.hub_grpc_url, "http://hub.internal:50051");
+        assert_eq!(config.hub_api_url, None);
         assert_eq!(config.agent_name, "garage");
         assert_eq!(config.agent_id, agent_id);
         assert_eq!(config.tenant_id, tenant_id);
@@ -300,6 +303,7 @@ mod tests {
     fn startup_summary_names_hub_and_agent() {
         let config = AgentConfig {
             hub_grpc_url: "http://hub.internal:50051".to_owned(),
+            hub_api_url: None,
             agent_name: "garage".to_owned(),
             agent_id: "agent-id".to_owned(),
             tenant_id: "tenant-id".to_owned(),
@@ -374,6 +378,7 @@ mod tests {
     fn test_config() -> AgentConfig {
         AgentConfig {
             hub_grpc_url: "http://hub.internal:50051".to_owned(),
+            hub_api_url: None,
             agent_name: "garage".to_owned(),
             agent_id: "agent-id".to_owned(),
             tenant_id: "tenant-id".to_owned(),

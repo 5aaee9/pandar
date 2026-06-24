@@ -1,4 +1,8 @@
 use super::*;
+use std::sync::LazyLock;
+use tokio::sync::Mutex;
+
+static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 #[tokio::test]
 async fn readyz_reports_disabled_external_auth_as_ready() {
@@ -7,13 +11,14 @@ async fn readyz_reports_disabled_external_auth_as_ready() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["status"], "ready");
     assert_eq!(body["checks"]["database"]["ready"], true);
-    assert_eq!(body["checks"]["spool"]["ready"], true);
+    assert_eq!(body["checks"]["artifact_storage"]["ready"], true);
+    assert!(body["checks"].get("spool").is_none());
     assert_eq!(body["checks"]["external_auth"]["ready"], true);
     assert_eq!(body["checks"]["external_auth"]["detail"], "disabled");
 }
 
 #[tokio::test]
-async fn readyz_reports_spool_failure() {
+async fn readyz_reports_artifact_storage_failure() {
     let database = crate::db::Database::connect(
         &crate::db::DatabaseConfig::from_url("sqlite::memory:").unwrap(),
     )
@@ -30,7 +35,61 @@ async fn readyz_reports_spool_failure() {
 
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(body["status"], "not_ready");
-    assert_eq!(body["checks"]["spool"]["ready"], false);
+    assert_eq!(body["checks"]["artifact_storage"]["ready"], false);
+    assert!(body["checks"].get("spool").is_none());
+}
+
+#[tokio::test]
+async fn readyz_reports_filesystem_not_shared_for_postgres_nats() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let _guard = EnvGuard::remove("PANDAR_ARTIFACT_FILESYSTEM_SHARED");
+    let state = raw_state()
+        .await
+        .with_database_backend_for_tests(crate::db::DatabaseBackend::Postgres)
+        .with_control_plane_for_tests(crate::cluster::ControlPlane::nats_for_tests());
+    let app = router(state);
+
+    let (status, body) = request(app, Method::GET, "/readyz", None).await;
+
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body["status"], "not_ready");
+    assert_eq!(body["checks"]["artifact_storage"]["ready"], false);
+    assert_eq!(
+        body["checks"]["artifact_storage"]["detail"],
+        "filesystem_not_shared"
+    );
+}
+
+#[tokio::test]
+async fn metrics_reports_ready_with_explicit_shared_filesystem_override() {
+    let _env_lock = ENV_LOCK.lock().await;
+    let _guard = EnvGuard::set("PANDAR_ARTIFACT_FILESYSTEM_SHARED", "true");
+    let state = raw_state()
+        .await
+        .with_database_backend_for_tests(crate::db::DatabaseBackend::Postgres)
+        .with_control_plane_for_tests(crate::cluster::ControlPlane::nats_for_tests());
+    let app = router(state);
+
+    let (status, body) = request(app.clone(), Method::GET, "/readyz", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["checks"]["artifact_storage"]["ready"], true);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/metrics")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+
+    assert!(text.contains("pandar_readyz{check=\"artifact_storage\"} 1"));
+    assert!(!text.contains("pandar_readyz{check=\"spool\"}"));
 }
 
 #[tokio::test]
@@ -115,9 +174,45 @@ async fn metrics_redacts_tenant_ids_and_reports_required_series() {
     assert!(text.contains("pandar_websocket_tickets_total{result=\"invalid\"} 1"));
     assert!(text.contains("pandar_print_reports_total{result=\"accepted\"} 1"));
     assert!(text.contains("pandar_print_reports_total{result=\"rejected\"} 1"));
+    assert!(text.contains("pandar_readyz{check=\"artifact_storage\"} 1"));
+    assert!(!text.contains("pandar_readyz{check=\"spool\"}"));
     assert!(text.contains(&format!(
         "pandar_websocket_subscriptions{{tenant_id_hash=\"{tenant_id_hash}\"}} 1"
     )));
     assert!(!text.contains(&tenant.id.to_string()));
     assert!(!text.contains(&ticket));
+}
+
+struct EnvGuard {
+    name: &'static str,
+    previous: Option<String>,
+}
+
+impl EnvGuard {
+    fn set(name: &'static str, value: &str) -> Self {
+        let previous = std::env::var(name).ok();
+        unsafe {
+            std::env::set_var(name, value);
+        }
+        Self { name, previous }
+    }
+
+    fn remove(name: &'static str) -> Self {
+        let previous = std::env::var(name).ok();
+        unsafe {
+            std::env::remove_var(name);
+        }
+        Self { name, previous }
+    }
+}
+
+impl Drop for EnvGuard {
+    fn drop(&mut self) {
+        unsafe {
+            match &self.previous {
+                Some(value) => std::env::set_var(self.name, value),
+                None => std::env::remove_var(self.name),
+            }
+        }
+    }
 }
