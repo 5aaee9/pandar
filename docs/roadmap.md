@@ -521,9 +521,10 @@ Goal: make release artifacts predictable enough for operators to install without
 - Completed local Phase 24 release-smoke scaffolding: a standalone helper crate that validates release archive checksums and top-level CLI/plugin layout without joining the main Cargo workspace.
 - Completed packaged-artifact release-smoke checks for CLI startup on native runners and plugin ABI export inspection from the unpacked release plugin library.
 - Refreshed local release-smoke unit evidence on 2026-06-24: `cargo test --manifest-path tools/release-smoke/Cargo.toml` passed 17 tests.
+- Added local linux-amd64 artifact evidence on 2026-06-24: a `pandar-release-local-a79bcae-linux-amd64.tar.gz` archive built from release binaries passed checksum/layout, `pandar --help`, and 129 packaged plugin ABI export checks through `tools/release-smoke`.
 - Wired the tag-driven GitHub Release workflow to run checksum verification and release-smoke before uploading release artifacts.
 - Added operator release installation docs, a release artifact evidence manifest, and the explicit Phase 24 signing decision: `unsigned-accepted`.
-- Checked release artifact availability on 2026-06-24: no GitHub Releases, no `release.yml` workflow runs, no tags, and no local `pandar-release-*.tar.gz` archives were available, so real artifact validation is blocked until a release artifact is produced.
+- Checked release artifact availability on 2026-06-24: no GitHub Releases, no `release.yml` workflow runs, and no tags were available. The generated local linux-amd64 archive proves local artifact smoke only; official release artifacts, cross-platform artifacts, and real host install validation remain blocked until a tag or workflow artifact exists.
 - Real host installation evidence remains unverified until `docs/compatibility/release-artifacts.md` records target-family rows from actual release artifact installs.
 - Rework the Linux `pandar-network-plugin` export strategy if arm64 plugin releases remain a target, because the current GNU export-map path is known to be fragile around Rust `cdylib` plus C++ shim exports.
 

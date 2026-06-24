@@ -1,4 +1,5 @@
 /reference/
+/dist/
 target/
 /frontend/.next/
 /frontend/node_modules/
