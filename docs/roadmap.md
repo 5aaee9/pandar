@@ -629,6 +629,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Preserved opaque artifact handling for unknown, unsupported, or malformed files.
 - Added Windows MSVC build compatibility for the network plugin shim by passing the MSVC C++17 compiler flag.
 - Fixed filesystem artifact storage key validation on Windows so rooted paths such as `/tmp/escape` are rejected consistently.
+- Made the Phase 21 network plugin export verification locate Visual Studio `dumpbin.exe` on Windows when it is not on `PATH`.
 
 Exit criteria:
 
