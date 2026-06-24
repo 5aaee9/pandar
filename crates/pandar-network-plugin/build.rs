@@ -12,16 +12,16 @@ fn main() {
         .file("src/shim.cpp")
         .compile("pandar_network_plugin_shim");
 
-    let object_suffix = if target_os == "windows" { ".obj" } else { ".o" };
     let shim_object = std::fs::read_dir(&out_dir)
         .expect("shim build output exists")
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .find(|path| {
-            path.file_name().is_some_and(|name| {
-                name.to_string_lossy()
-                    .ends_with(&format!("-shim{object_suffix}"))
-            })
+            path.file_stem()
+                .is_some_and(|stem| stem.to_string_lossy().ends_with("-shim"))
+                && path
+                    .extension()
+                    .is_some_and(|extension| matches!(extension.to_str(), Some("o" | "obj")))
         })
         .expect("cc produced shim object");
     if target_os == "linux" && target_env == "gnu" {

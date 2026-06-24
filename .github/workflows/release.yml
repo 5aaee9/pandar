@@ -101,7 +101,11 @@ jobs:
           if [ "${{ matrix.windows-crt-static }}" = "true" ]; then
             export RUSTFLAGS="-C target-feature=+crt-static"
           fi
-          cargo zigbuild --release -p pandar-app --bin pandar --target "${{ matrix.cli-target }}"
+          if [ "${{ matrix.use-zig-cc }}" = "true" ]; then
+            cargo zigbuild --release -p pandar-app --bin pandar --target "${{ matrix.cli-target }}"
+          else
+            cargo build --release -p pandar-app --bin pandar --target "${{ matrix.cli-target }}"
+          fi
 
       - name: Build pandar network plugin
         shell: bash
@@ -117,7 +121,11 @@ jobs:
             export CXX="$RUNNER_TEMP/zig-cc/zig-cxx-plugin"
             export AR="zig ar"
           fi
-          cargo zigbuild --release -p pandar-network-plugin --target "${{ matrix.plugin-target }}"
+          if [ "${{ matrix.use-zig-cc }}" = "true" ]; then
+            cargo zigbuild --release -p pandar-network-plugin --target "${{ matrix.plugin-target }}"
+          else
+            cargo build --release -p pandar-network-plugin --target "${{ matrix.plugin-target }}"
+          fi
 
       - name: Package artifacts
         shell: bash

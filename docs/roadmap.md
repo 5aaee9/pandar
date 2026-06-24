@@ -525,6 +525,7 @@ Goal: make release artifacts predictable enough for operators to install without
 - Wired the tag-driven GitHub Release workflow to run checksum verification and release-smoke before uploading release artifacts.
 - Added operator release installation docs, a release artifact evidence manifest, and the explicit Phase 24 signing decision: `unsigned-accepted`.
 - Checked release artifact availability on 2026-06-24: no GitHub Releases, no `release.yml` workflow runs, and no tags were available. The generated local linux-amd64 archive proves local artifact smoke only; official release artifacts, cross-platform artifacts, and real host install validation remain blocked until a tag or workflow artifact exists.
+- Triggered `release.yml` workflow_dispatch run `28098334876` on 2026-06-24: linux-amd64 and linux-arm64 artifacts uploaded, but the full matrix failed because macOS CLI builds linked through cargo-zigbuild on native macOS runners and Windows plugin builds did not find the `cc` shim object. The release workflow now uses native `cargo build` for non-zig macOS targets and accepts both `.o` and `.obj` shim objects before the next workflow evidence run.
 - Real host installation evidence remains unverified until `docs/compatibility/release-artifacts.md` records target-family rows from actual release artifact installs.
 - Rework the Linux `pandar-network-plugin` export strategy if arm64 plugin releases remain a target, because the current GNU export-map path is known to be fragile around Rust `cdylib` plus C++ shim exports.
 
