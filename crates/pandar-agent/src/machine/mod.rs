@@ -16,8 +16,8 @@ use discovery::PrinterDiscoveryResult;
 use file_transfer::{MachineFileTransfer, TransferModeCache, run_with_transfer_mode};
 use ftps::FtpsMachineFileTransfer;
 use mqtt::{
-    BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, ProjectFileCommand,
-    PublishedMqttCommand, refresh_printer,
+    BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, PrintSpeed,
+    ProjectFileCommand, PublishedMqttCommand, refresh_printer,
 };
 
 use crate::protocol::agent::v1::PrintProjectFile;
@@ -39,6 +39,14 @@ pub struct MachineSnapshot {
     pub state: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrinterControl {
+    Pause,
+    Resume,
+    Stop,
+    SetPrintSpeed(u8),
+}
+
 #[async_trait]
 pub trait BambuMachineGateway: Send + Sync {
     fn redact_error(&self, message: &str) -> String;
@@ -58,6 +66,13 @@ pub trait BambuMachineGateway: Send + Sync {
         command: &PrintProjectFile,
         artifact: Vec<u8>,
     ) -> anyhow::Result<()>;
+    async fn control_printer(
+        &self,
+        serial_number: &str,
+        _control: PrinterControl,
+    ) -> anyhow::Result<()> {
+        bail!("no Bambu printer configured for serial {serial_number}")
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -109,6 +124,14 @@ impl BambuMachineGateway for NoopMachineGateway {
         serial_number: &str,
         _command: &PrintProjectFile,
         _artifact: Vec<u8>,
+    ) -> anyhow::Result<()> {
+        bail!("no Bambu printer configured for serial {serial_number}")
+    }
+
+    async fn control_printer(
+        &self,
+        serial_number: &str,
+        _control: PrinterControl,
     ) -> anyhow::Result<()> {
         bail!("no Bambu printer configured for serial {serial_number}")
     }
@@ -215,6 +238,22 @@ where
             &artifact,
         )
         .await
+    }
+
+    async fn control_printer(
+        &self,
+        serial_number: &str,
+        control: PrinterControl,
+    ) -> anyhow::Result<()> {
+        let Some((endpoint, mqtt, _)) = self
+            .printers
+            .iter()
+            .find(|(endpoint, _, _)| endpoint.serial == serial_number)
+        else {
+            bail!("no configured Bambu printer matches serial {serial_number}");
+        };
+
+        dispatch_printer_control(endpoint, mqtt, control).await
     }
 }
 
@@ -325,6 +364,35 @@ where
 
 fn non_empty_string(value: &str) -> Option<String> {
     (!value.is_empty()).then(|| value.to_owned())
+}
+
+async fn dispatch_printer_control<T>(
+    endpoint: &BambuPrinterEndpoint,
+    mqtt: &T,
+    control: PrinterControl,
+) -> anyhow::Result<()>
+where
+    T: BambuMqttTransport + Send + Sync,
+{
+    let topics = BambuMqttTopics::for_serial(&endpoint.serial);
+    mqtt.publish(PublishedMqttCommand {
+        topic: topics.request,
+        payload: mqtt_command_for_printer_control(control)?.payload(),
+        qos: BAMBU_MQTT_QOS,
+    })
+    .await
+    .with_context(|| format!("publish printer control to {}", endpoint.serial))
+}
+
+fn mqtt_command_for_printer_control(control: PrinterControl) -> anyhow::Result<BambuMqttCommand> {
+    match control {
+        PrinterControl::Pause => Ok(BambuMqttCommand::PausePrint),
+        PrinterControl::Resume => Ok(BambuMqttCommand::ResumePrint),
+        PrinterControl::Stop => Ok(BambuMqttCommand::StopPrint),
+        PrinterControl::SetPrintSpeed(mode) => {
+            Ok(BambuMqttCommand::SetPrintSpeed(PrintSpeed::new(mode)?))
+        }
+    }
 }
 
 #[cfg(test)]

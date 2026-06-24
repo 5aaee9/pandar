@@ -4,11 +4,12 @@ use tonic::Status;
 use crate::{
     AppState,
     protocol::agent::v1::{
-        DiagnosePrinter, DiscoverPrinters, HubCommand, PrintProjectFile, RefreshPrinters,
-        hub_command,
+        DiagnosePrinter, DiscoverPrinters, HubCommand, PrintProjectFile, PrinterControl,
+        RefreshPrinters, hub_command,
     },
     repositories::{
-        DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, RepositoryError,
+        DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
+        PrinterControlPayload, RepositoryError,
     },
 };
 
@@ -218,6 +219,22 @@ pub fn hub_command_from_record_with_options(
                 })?;
             hub_command::Command::DiagnosePrinter(DiagnosePrinter {
                 serial_number: payload.serial_number,
+            })
+        }
+        "printer_control" => {
+            let payload: PrinterControlPayload = serde_json::from_str(&command.payload_json)
+                .map_err(|err| {
+                    tracing::error!(
+                        command_id = %command.id,
+                        error = %format!("{err:#}"),
+                        "failed to deserialize printer control command payload"
+                    );
+                    Status::internal("invalid printer control command payload")
+                })?;
+            hub_command::Command::PrinterControl(PrinterControl {
+                serial_number: payload.serial_number,
+                action: payload.action.as_str().to_string(),
+                speed_mode: payload.speed_mode.unwrap_or_default().into(),
             })
         }
         "print_project_file" => {

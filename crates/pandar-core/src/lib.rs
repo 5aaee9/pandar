@@ -3,6 +3,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub mod agent;
 pub mod command;
+pub mod compatibility;
 pub mod ids;
 pub mod job;
 pub mod printer;

@@ -63,6 +63,7 @@
 - Added Phase 26 local HA/failure smoke coverage: the scaled smoke harness now exercises command wake convergence across Hub states, WebSocket `printer_snapshot` and `job_progress` fanout, restart simulation, plugin print pressure, artifact storage put/open/delete failures, and terminal print-report idempotence without Docker or live services.
 - Added Phase 26 focused failure observability: Prometheus exports control-plane publish/receive counters, publish failure after durable job/command commit is observable without rolling back state, WebSocket ticket safety is covered across replicas, and storage write/read/delete failure tests pin stable behavior.
 - Added Phase 26 operations docs and evidence tracking for SQLite single-node and PostgreSQL+NATS+object-storage deployments, including explicit live soak variables and a `docs/compatibility/phase-26-soak-evidence.md` table for local and live evidence.
+- Added Phase 27 live printer-control groundwork: shared model compatibility policy moved into `pandar-core`, Hub now enqueues audited tenant/printer-scoped `printer_control` commands for compatible models, gRPC carries typed printer controls to agents, and agents dispatch typed pause/resume/stop/print-speed MQTT payloads without relying on local model metadata.
 
 ## Phase 1: Foundation
 

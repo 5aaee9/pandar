@@ -1,7 +1,9 @@
 use pandar_core::{AgentId, AgentStatus, CommandId, CommandStatus};
+use serde_json::Value;
 
 use super::*;
 use crate::repositories::tests::postgres::postgres_database;
+use crate::repositories::{AuditActor, PrinterControlAction};
 
 #[tokio::test]
 async fn postgres_command_repository_behavior_when_configured() {
@@ -222,4 +224,77 @@ async fn postgres_command_repository_behavior_when_configured() {
             .unwrap(),
         None
     );
+}
+
+#[tokio::test]
+async fn postgres_printer_control_enqueue_behavior_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    let tenants = TenantRepository::new(database.clone());
+    let agents = AgentRepository::new(database.clone());
+    let commands = CommandRepository::new(database.clone());
+    let audit = AuditEventRepository::new(database.clone());
+    let tenant = tenants.create("control", "Control Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        &database,
+        tenant.id,
+        agent.id,
+        Some("A1"),
+    )
+    .await
+    .unwrap();
+
+    let command = commands
+        .enqueue_printer_control_with_audit(
+            tenant.id,
+            &printer_id,
+            PrinterControlAction::Pause,
+            None,
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+    let payload: Value = serde_json::from_str(&command.payload_json).unwrap();
+    assert_eq!(command.kind, "printer_control");
+    assert_eq!(command.agent_id, agent.id);
+    assert_eq!(command.printer_id.as_deref(), Some(printer_id.as_str()));
+    assert_eq!(payload["action"], "pause");
+    assert_eq!(payload["speed_mode"], Value::Null);
+    assert!(
+        audit
+            .list_for_tenant(tenant.id)
+            .await
+            .unwrap()
+            .iter()
+            .any(|event| event.action == "printer.dispatch_control")
+    );
+
+    let unsupported_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        &database,
+        tenant.id,
+        agent.id,
+        Some("Mystery Model"),
+    )
+    .await
+    .unwrap();
+    let err = commands
+        .enqueue_printer_control_with_audit(
+            tenant.id,
+            &unsupported_id,
+            PrinterControlAction::Pause,
+            None,
+            test_audit_actor(),
+        )
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, RepositoryError::PrinterControlUnavailable));
+}
+
+fn test_audit_actor() -> AuditActor {
+    AuditActor::tenant_token(None, "postgres-repository-test-token", vec!["*"])
 }

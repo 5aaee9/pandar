@@ -86,6 +86,7 @@ message HubCommand {
     PrintProjectFile print_project_file = 11;
     DiscoverPrinters discover_printers = 12;
     DiagnosePrinter diagnose_printer = 13;
+    PrinterControl printer_control = 14;
   }
 }
 
@@ -97,6 +98,12 @@ message DiscoverPrinters {
 
 message DiagnosePrinter {
   string serial_number = 1;
+}
+
+message PrinterControl {
+  string serial_number = 1;
+  string action = 2;
+  uint32 speed_mode = 3;
 }
 
 message PrintProjectFile {

@@ -20,6 +20,7 @@ pub use auth::{
 };
 pub use commands::{
     CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
+    PrinterControlAction, PrinterControlPayload,
 };
 pub use jobs::{
     AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, CreatePrintJob, DuplicatePrintJob,
@@ -94,6 +95,10 @@ pub enum RepositoryError {
     RetryNotSafe,
     #[error("print job cannot be reprinted")]
     ReprintNotAllowed,
+    #[error("printer control is unavailable for this printer")]
+    PrinterControlUnavailable,
+    #[error("invalid printer control")]
+    InvalidPrinterControl,
     #[error(transparent)]
     Database(#[from] anyhow::Error),
 }
@@ -155,18 +160,28 @@ pub(crate) mod test_helpers {
         tenant_id: TenantId,
         agent_id: AgentId,
     ) -> anyhow::Result<String> {
+        insert_printer_fixture_with_model(database, tenant_id, agent_id, None).await
+    }
+
+    pub(crate) async fn insert_printer_fixture_with_model(
+        database: &Database,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        model: Option<&str>,
+    ) -> anyhow::Result<String> {
         let id = uuid::Uuid::new_v4().to_string();
         match database {
             Database::Sqlite(pool) => {
                 sqlx::query(
                     "INSERT INTO printers (id, tenant_id, agent_id, serial_number, name, model, status, last_seen_at, created_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?7)",
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
                 )
                 .bind(&id)
                 .bind(tenant_id.to_string())
                 .bind(agent_id.to_string())
                 .bind(format!("serial-{id}"))
                 .bind("Fixture Printer")
+                .bind(model)
                 .bind("offline")
                 .bind("2026-06-20T00:00:00Z")
                 .execute(pool)
@@ -176,13 +191,14 @@ pub(crate) mod test_helpers {
             Database::Postgres(pool) => {
                 sqlx::query(
                     "INSERT INTO printers (id, tenant_id, agent_id, serial_number, name, model, status, last_seen_at, created_at)
-                     VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $7)",
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)",
                 )
                 .bind(&id)
                 .bind(tenant_id.to_string())
                 .bind(agent_id.to_string())
                 .bind(format!("serial-{id}"))
                 .bind("Fixture Printer")
+                .bind(model)
                 .bind("offline")
                 .bind("2026-06-20T00:00:00Z")
                 .execute(pool)

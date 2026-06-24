@@ -15,10 +15,10 @@ use events::event;
 
 use crate::{
     AgentConfig,
-    machine::{BambuMachineGateway, MachineSnapshot},
+    machine::{BambuMachineGateway, MachineSnapshot, PrinterControl as MachinePrinterControl},
     protocol::agent::v1::{
         AgentEvent, CommandAck, CommandResult, DiagnosePrinter, DiscoverPrinters, PrintProjectFile,
-        PrinterSnapshot, agent_event, hub_command,
+        PrinterControl as ProtoPrinterControl, PrinterSnapshot, agent_event, hub_command,
     },
 };
 
@@ -85,6 +85,9 @@ where
         Some(hub_command::Command::DiagnosePrinter(diagnostic)) => {
             emit_diagnose_printer_events(config, gateway, sender, &command.command_id, diagnostic)
                 .await
+        }
+        Some(hub_command::Command::PrinterControl(control)) => {
+            emit_printer_control_events(config, gateway, sender, &command.command_id, control).await
         }
         None => Ok(()),
     }
@@ -310,6 +313,101 @@ fn read_print_artifact_context(command: &PrintProjectFile) -> String {
     } else {
         "read print artifact from hub".to_string()
     }
+}
+
+async fn emit_printer_control_events<G>(
+    config: &AgentConfig,
+    gateway: &G,
+    sender: &mpsc::Sender<AgentEvent>,
+    command_id: &str,
+    command: ProtoPrinterControl,
+) -> anyhow::Result<()>
+where
+    G: BambuMachineGateway,
+{
+    let control = match parse_printer_control(&command) {
+        Ok(control) => control,
+        Err(err) => {
+            sender
+                .send(rejected_ack_event(config, command_id, format!("{err:#}")))
+                .await
+                .context("queue printer-control rejected ack")?;
+            return Ok(());
+        }
+    };
+
+    if let Err(err) = gateway.validate_printer(&command.serial_number).await {
+        let error = gateway.redact_error(&format!("{err:#}"));
+        sender
+            .send(rejected_ack_event(config, command_id, error))
+            .await
+            .context("queue printer-control rejected ack")?;
+        return Ok(());
+    }
+
+    sender
+        .send(ack_event(config, command_id))
+        .await
+        .context("queue printer-control command ack")?;
+
+    match gateway
+        .control_printer(&command.serial_number, control)
+        .await
+        .with_context(|| {
+            format!(
+                "dispatch printer control {} to {}",
+                command.action, command.serial_number
+            )
+        }) {
+        Ok(()) => {
+            let result_json = printer_control_result_json(&command);
+            sender
+                .send(success_event_with_result(config, command_id, result_json))
+                .await
+                .context("queue printer-control command success")?;
+        }
+        Err(err) => {
+            let error = gateway.redact_error(&format!("{err:#}"));
+            sender
+                .send(failure_event(config, command_id, error))
+                .await
+                .context("queue printer-control command failure")?;
+        }
+    }
+
+    Ok(())
+}
+
+fn parse_printer_control(command: &ProtoPrinterControl) -> anyhow::Result<MachinePrinterControl> {
+    match command.action.as_str() {
+        "pause" => Ok(MachinePrinterControl::Pause),
+        "resume" => Ok(MachinePrinterControl::Resume),
+        "stop" => Ok(MachinePrinterControl::Stop),
+        "set_print_speed" => match command.speed_mode {
+            1..=4 => Ok(MachinePrinterControl::SetPrintSpeed(
+                command.speed_mode as u8,
+            )),
+            _ => anyhow::bail!("invalid printer control speed_mode; expected 1..=4"),
+        },
+        action => anyhow::bail!("unknown printer control action {action}"),
+    }
+}
+
+fn printer_control_result_json(command: &ProtoPrinterControl) -> String {
+    let mut result = serde_json::Map::new();
+    result.insert("type".to_string(), serde_json::json!("printer_control"));
+    result.insert("action".to_string(), serde_json::json!(command.action));
+    result.insert(
+        "serial_number".to_string(),
+        serde_json::json!(command.serial_number),
+    );
+    if command.action == "set_print_speed" {
+        result.insert(
+            "speed_mode".to_string(),
+            serde_json::json!(command.speed_mode),
+        );
+    }
+    serde_json::Value::Object(result).to_string()
 }
 
 async fn emit_discover_printers_events<G>(

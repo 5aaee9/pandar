@@ -12,9 +12,13 @@ use super::*;
 use crate::{
     machine::{
         BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot, NoopMachineGateway,
-        diagnostics::PrinterDiagnosticResult, discovery::PrinterDiscoveryResult,
+        PrinterControl as MachinePrinterControl, diagnostics::PrinterDiagnosticResult,
+        discovery::PrinterDiscoveryResult,
     },
-    protocol::agent::v1::{DiagnosePrinter, DiscoverPrinters, HubCommand, RefreshPrinters},
+    protocol::agent::v1::{
+        DiagnosePrinter, DiscoverPrinters, HubCommand, PrinterControl as ProtoPrinterControl,
+        RefreshPrinters,
+    },
 };
 
 #[test]
@@ -354,6 +358,14 @@ impl BambuMachineGateway for FakeGateway {
     ) -> anyhow::Result<()> {
         unreachable!("refresh tests do not dispatch print commands")
     }
+
+    async fn control_printer(
+        &self,
+        _serial_number: &str,
+        _control: MachinePrinterControl,
+    ) -> anyhow::Result<()> {
+        unreachable!("refresh tests do not dispatch printer control commands")
+    }
 }
 
 #[tokio::test]
@@ -386,5 +398,289 @@ async fn command_failure_redacts_access_code() {
             assert_eq!(result.result_json, "");
         }
         other => panic!("expected command result, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn printer_control_valid_emits_ack_and_success_with_result_json() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = ControlGateway::default();
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_control_command(command_id.clone(), "SERIAL1", "pause", 0),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert_eq!(result.command_id, command_id);
+            assert!(result.success);
+            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(json["type"], "printer_control");
+            assert_eq!(json["action"], "pause");
+            assert_eq!(json["serial_number"], "SERIAL1");
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.controls().await,
+        vec![("SERIAL1".to_string(), MachinePrinterControl::Pause)]
+    );
+}
+
+#[tokio::test]
+async fn printer_control_unknown_serial_rejects_ack_without_dispatch() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = ControlGateway::unknown_serial();
+    let (sender, mut receiver) = mpsc::channel(1);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_control_command(command_id.clone(), "UNKNOWN", "pause", 0),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandAck(ack) => {
+            assert_eq!(ack.command_id, command_id);
+            assert!(!ack.accepted);
+            assert!(ack.error.contains("UNKNOWN"));
+        }
+        other => panic!("expected command ack, got {other:?}"),
+    }
+    assert!(receiver.recv().await.is_none());
+    assert!(gateway.controls().await.is_empty());
+}
+
+#[tokio::test]
+async fn printer_control_invalid_speed_rejects_ack_without_dispatch() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = ControlGateway::default();
+    let (sender, mut receiver) = mpsc::channel(1);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_control_command(command_id.clone(), "SERIAL1", "set_print_speed", 5),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandAck(ack) => {
+            assert_eq!(ack.command_id, command_id);
+            assert!(!ack.accepted);
+            assert!(ack.error.contains("speed_mode"));
+        }
+        other => panic!("expected command ack, got {other:?}"),
+    }
+    assert!(receiver.recv().await.is_none());
+    assert!(gateway.controls().await.is_empty());
+}
+
+#[tokio::test]
+async fn printer_control_publish_failure_emits_ack_then_failure_with_redacted_context() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = ControlGateway::publish_failure("ACCESS-CODE-UNIQUE");
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_control_command(command_id.clone(), "SERIAL1", "resume", 0),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert_eq!(result.command_id, command_id);
+            assert!(!result.success);
+            assert!(
+                result
+                    .error
+                    .contains("dispatch printer control resume to SERIAL1")
+            );
+            assert!(result.error.contains("[REDACTED_ACCESS_CODE]"));
+            assert!(!result.error.contains("ACCESS-CODE-UNIQUE"));
+            assert_eq!(result.result_json, "");
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.controls().await,
+        vec![("SERIAL1".to_string(), MachinePrinterControl::Resume)]
+    );
+}
+
+#[tokio::test]
+async fn printer_control_does_not_reject_missing_local_model() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = ControlGateway::default();
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_control_command(command_id.clone(), "SERIAL1", "set_print_speed", 4),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert_eq!(result.command_id, command_id);
+            assert!(result.success);
+            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(json["action"], "set_print_speed");
+            assert_eq!(json["speed_mode"], 4);
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.controls().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterControl::SetPrintSpeed(4)
+        )]
+    );
+}
+
+fn printer_control_command(
+    command_id: String,
+    serial_number: &str,
+    action: &str,
+    speed_mode: u32,
+) -> HubCommand {
+    HubCommand {
+        command_id,
+        command: Some(hub_command::Command::PrinterControl(ProtoPrinterControl {
+            serial_number: serial_number.to_owned(),
+            action: action.to_owned(),
+            speed_mode,
+        })),
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct ControlGateway {
+    controls: Arc<Mutex<Vec<(String, MachinePrinterControl)>>>,
+    validate_error: Option<String>,
+    dispatch_error: Option<String>,
+    access_code: Option<String>,
+}
+
+impl ControlGateway {
+    fn unknown_serial() -> Self {
+        Self {
+            validate_error: Some("no configured Bambu printer matches serial UNKNOWN".to_string()),
+            ..Self::default()
+        }
+    }
+
+    fn publish_failure(access_code: &str) -> Self {
+        Self {
+            dispatch_error: Some(format!(
+                "fake publish failure with access code {access_code}"
+            )),
+            access_code: Some(access_code.to_string()),
+            ..Self::default()
+        }
+    }
+
+    async fn controls(&self) -> Vec<(String, MachinePrinterControl)> {
+        self.controls.lock().await.clone()
+    }
+}
+
+#[async_trait]
+impl BambuMachineGateway for ControlGateway {
+    fn redact_error(&self, message: &str) -> String {
+        match &self.access_code {
+            Some(access_code) => message.replace(access_code, "[REDACTED_ACCESS_CODE]"),
+            None => message.to_owned(),
+        }
+    }
+
+    async fn discover_printers(
+        &self,
+        _timeout_seconds: u32,
+    ) -> anyhow::Result<PrinterDiscoveryResult> {
+        unreachable!("printer control tests do not discover printers")
+    }
+
+    async fn diagnose_printer(
+        &self,
+        _serial_number: &str,
+    ) -> anyhow::Result<PrinterDiagnosticResult> {
+        unreachable!("printer control tests do not diagnose printers")
+    }
+
+    async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
+        unreachable!("printer control tests do not refresh printers")
+    }
+
+    async fn validate_printer(&self, _serial_number: &str) -> anyhow::Result<()> {
+        match &self.validate_error {
+            Some(error) => Err(anyhow::anyhow!(error.clone())),
+            None => Ok(()),
+        }
+    }
+
+    async fn print_project_file(
+        &self,
+        _serial_number: &str,
+        _command: &crate::protocol::agent::v1::PrintProjectFile,
+        _artifact: Vec<u8>,
+    ) -> anyhow::Result<()> {
+        unreachable!("printer control tests do not dispatch print commands")
+    }
+
+    async fn control_printer(
+        &self,
+        serial_number: &str,
+        control: MachinePrinterControl,
+    ) -> anyhow::Result<()> {
+        self.controls
+            .lock()
+            .await
+            .push((serial_number.to_string(), control));
+        match &self.dispatch_error {
+            Some(error) => Err(anyhow::anyhow!(error.clone())),
+            None => Ok(()),
+        }
     }
 }

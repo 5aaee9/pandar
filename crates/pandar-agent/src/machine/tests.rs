@@ -20,6 +20,12 @@ fn endpoint(serial: &str) -> BambuPrinterEndpoint {
     }
 }
 
+fn endpoint_without_model(serial: &str) -> BambuPrinterEndpoint {
+    let mut endpoint = endpoint(serial);
+    endpoint.model = None;
+    endpoint
+}
+
 fn get_version_report(model: &str) -> serde_json::Value {
     json!({
         "info": {
@@ -193,6 +199,75 @@ async fn configured_print_project_file_unknown_serial_rejects_before_upload() {
 
     assert!(format!("{err:#}").contains("UNKNOWN"));
     assert!(transfer.recorded_requests().is_empty());
+    assert!(mqtt.published_commands().await.is_empty());
+}
+
+#[tokio::test]
+async fn configured_control_printer_publishes_pause_to_request_topic() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .control_printer("SERIAL1", PrinterControl::Pause)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        mqtt.published_commands().await,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: json!({"print": {"command": "pause", "sequence_id": "0"}}),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn configured_control_printer_print_speed_mode_4_publishes_to_request_topic() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .control_printer("SERIAL1", PrinterControl::SetPrintSpeed(4))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        mqtt.published_commands().await,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: json!({"print": {"command": "print_speed", "param": "4", "sequence_id": "0"}}),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn configured_control_printer_unknown_serial_rejects_before_publish() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    let err = gateway
+        .control_printer("UNKNOWN", PrinterControl::Pause)
+        .await
+        .unwrap_err();
+
+    assert!(format!("{err:#}").contains("UNKNOWN"));
     assert!(mqtt.published_commands().await.is_empty());
 }
 

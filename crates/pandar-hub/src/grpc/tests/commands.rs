@@ -1,4 +1,4 @@
-use pandar_core::{CommandId, CommandStatus};
+use pandar_core::{AgentId, CommandId, CommandRecord, CommandRecordParts, CommandStatus, TenantId};
 use tokio_stream::StreamExt;
 use tonic::Code;
 
@@ -7,7 +7,10 @@ use crate::{
     grpc::commands::{
         CommandConversionOptions, hub_command_from_record, hub_command_from_record_with_options,
     },
-    repositories::{DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload},
+    repositories::{
+        DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
+        PrinterControlAction, PrinterControlPayload,
+    },
 };
 
 #[tokio::test]
@@ -155,6 +158,43 @@ async fn grpc_hub_command_from_record_maps_discovery_and_diagnostics() {
     assert!(matches!(
         diagnostic_command.command,
         Some(hub_command::Command::DiagnosePrinter(command)) if command.serial_number == "SERIAL123"
+    ));
+}
+
+#[tokio::test]
+async fn grpc_hub_command_from_record_maps_printer_control() {
+    let tenant_id = TenantId::new();
+    let agent_id = AgentId::new();
+    let printer_id = "printer-1".to_string();
+    let payload = PrinterControlPayload {
+        printer_id: printer_id.clone(),
+        serial_number: "SERIAL123".to_string(),
+        action: PrinterControlAction::SetPrintSpeed,
+        speed_mode: Some(4),
+    };
+    let command = CommandRecord::from_parts(CommandRecordParts {
+        id: CommandId::new(),
+        tenant_id,
+        agent_id,
+        printer_id: Some(printer_id),
+        kind: "printer_control".to_string(),
+        status: "queued".to_string(),
+        payload_json: serde_json::to_string(&payload).unwrap(),
+        result_json: None,
+        error: None,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        updated_at: "2026-01-01T00:00:00Z".to_string(),
+    })
+    .unwrap();
+
+    let hub_command = hub_command_from_record(command).unwrap();
+
+    assert!(matches!(
+        hub_command.command,
+        Some(hub_command::Command::PrinterControl(command))
+            if command.serial_number == "SERIAL123"
+                && command.action == "set_print_speed"
+                && command.speed_mode == 4
     ));
 }
 

@@ -9,7 +9,10 @@ use std::collections::HashMap;
 
 use crate::{
     AppState,
-    repositories::{DiagnosePrinterPayload, DiscoverPrintersPayload, MaterialSnapshot, UserRole},
+    repositories::{
+        DiagnosePrinterPayload, DiscoverPrintersPayload, MaterialSnapshot, PrinterControlAction,
+        UserRole,
+    },
     routes::{ApiError, auth},
 };
 
@@ -68,6 +71,13 @@ pub(super) struct DiscoverPrintersRequest {
 #[serde(deny_unknown_fields)]
 pub(super) struct DiagnosePrinterRequest {
     serial_number: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct PrinterControlRequest {
+    action: PrinterControlAction,
+    speed_mode: Option<u8>,
 }
 
 pub(super) async fn list_printers(
@@ -204,6 +214,32 @@ pub(super) async fn diagnose_printer(
         )
         .await?;
     state.wake_agent(tenant_id, agent_id).await;
+
+    Ok(Json(CommandResponse::from(command)))
+}
+
+pub(super) async fn printer_control(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((tenant_id, printer_id)): Path<(String, String)>,
+    payload: Result<Json<PrinterControlRequest>, JsonRejection>,
+) -> Result<Json<CommandResponse>, ApiError> {
+    let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    let auth =
+        auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let printer_id = parse_printer_id(&printer_id)?;
+    let Json(payload) = payload.map_err(|_| ApiError::bad_request("invalid_printer_control"))?;
+    let command = state
+        .commands()
+        .enqueue_printer_control_with_audit(
+            tenant_id,
+            printer_id,
+            payload.action,
+            payload.speed_mode,
+            auth::audit_actor(&auth),
+        )
+        .await?;
+    state.wake_agent(tenant_id, command.agent_id).await;
 
     Ok(Json(CommandResponse::from(command)))
 }

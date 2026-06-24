@@ -8,6 +8,13 @@ use crate::{
     repositories::{RepositoryError, RepositoryResult},
 };
 
+pub struct CommandPrinter {
+    pub id: String,
+    pub agent_id: AgentId,
+    pub serial_number: String,
+    pub model: Option<String>,
+}
+
 pub async fn verify_agent_owner(
     database: &Database,
     tenant_id: TenantId,
@@ -45,4 +52,28 @@ pub async fn printer_serial_for_agent(
         .map(|printer| printer.serial_number);
 
     serial_number.ok_or(RepositoryError::MissingPrinter)
+}
+
+pub async fn printer_for_tenant(
+    database: &Database,
+    tenant_id: TenantId,
+    printer_id: &str,
+) -> RepositoryResult<CommandPrinter> {
+    let printer = printers::Entity::find_by_id(printer_id)
+        .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
+        .one(&database.sea_orm_connection())
+        .await
+        .context("failed to load command printer")?
+        .ok_or(RepositoryError::MissingPrinter)?;
+
+    Ok(CommandPrinter {
+        id: printer.id,
+        agent_id: AgentId::parse(&printer.agent_id).map_err(|err| {
+            RepositoryError::Database(
+                anyhow::Error::new(err).context("failed to parse command printer agent id"),
+            )
+        })?,
+        serial_number: printer.serial_number,
+        model: printer.model,
+    })
 }

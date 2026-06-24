@@ -2,7 +2,7 @@ use pandar_core::{AgentId, CommandId, CommandStatus};
 use serde_json::Value;
 
 use super::*;
-use crate::repositories::PrintProjectFilePayload;
+use crate::repositories::{AuditActor, PrintProjectFilePayload, PrinterControlAction};
 
 #[tokio::test]
 async fn command_enqueue_rejects_missing_agent() {
@@ -155,6 +155,125 @@ async fn command_enqueue_print_project_file_rejects_wrong_printer_owner() {
 }
 
 #[tokio::test]
+async fn command_enqueue_printer_control_derives_agent_persists_payload_and_audits() {
+    let (database, tenants, agents, _, commands, _) = repositories().await;
+    let audit = AuditEventRepository::new(database.clone());
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        &database,
+        tenant.id,
+        agent.id,
+        Some("A1"),
+    )
+    .await
+    .unwrap();
+
+    let command = commands
+        .enqueue_printer_control_with_audit(
+            tenant.id,
+            &printer_id,
+            PrinterControlAction::SetPrintSpeed,
+            Some(3),
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+    let payload: Value = serde_json::from_str(&command.payload_json).unwrap();
+
+    assert_eq!(command.kind, "printer_control");
+    assert_eq!(command.status, CommandStatus::Queued);
+    assert_eq!(command.agent_id, agent.id);
+    assert_eq!(command.printer_id.as_deref(), Some(printer_id.as_str()));
+    assert_eq!(payload["printer_id"], printer_id);
+    assert_eq!(payload["serial_number"], format!("serial-{printer_id}"));
+    assert_eq!(payload["action"], "set_print_speed");
+    assert_eq!(payload["speed_mode"], 3);
+
+    let events = audit.list_for_tenant(tenant.id).await.unwrap();
+    let event = events
+        .iter()
+        .find(|event| event.action == "printer.dispatch_control")
+        .expect("printer control audit event");
+    assert_eq!(event.target_type, "printer");
+    assert_eq!(event.target_id.as_deref(), Some(printer_id.as_str()));
+    let metadata: Value = serde_json::from_str(&event.metadata_json).unwrap();
+    assert_eq!(metadata["agent_id"], agent.id.to_string());
+    assert_eq!(metadata["serial_number"], format!("serial-{printer_id}"));
+    assert_eq!(metadata["action"], "set_print_speed");
+    assert_eq!(metadata["speed_mode"], 3);
+}
+
+#[tokio::test]
+async fn command_enqueue_printer_control_rejects_unknown_model_before_insert() {
+    let (database, tenants, agents, _, commands, _) = repositories().await;
+    let audit = AuditEventRepository::new(database.clone());
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        &database,
+        tenant.id,
+        agent.id,
+        Some("Mystery Model"),
+    )
+    .await
+    .unwrap();
+
+    let err = commands
+        .enqueue_printer_control_with_audit(
+            tenant.id,
+            &printer_id,
+            PrinterControlAction::Pause,
+            None,
+            test_audit_actor(),
+        )
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, RepositoryError::PrinterControlUnavailable));
+    assert_eq!(commands.count().await.unwrap(), 0);
+    assert!(audit.list_for_tenant(tenant.id).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn command_enqueue_printer_control_rejects_invalid_speed() {
+    let (database, tenants, agents, _, commands, _) = repositories().await;
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        &database,
+        tenant.id,
+        agent.id,
+        Some("A1"),
+    )
+    .await
+    .unwrap();
+
+    for (action, speed_mode) in [
+        (PrinterControlAction::SetPrintSpeed, None),
+        (PrinterControlAction::SetPrintSpeed, Some(0)),
+        (PrinterControlAction::SetPrintSpeed, Some(5)),
+        (PrinterControlAction::Pause, Some(2)),
+        (PrinterControlAction::Resume, Some(2)),
+        (PrinterControlAction::Stop, Some(2)),
+    ] {
+        let err = commands
+            .enqueue_printer_control_with_audit(
+                tenant.id,
+                &printer_id,
+                action,
+                speed_mode,
+                test_audit_actor(),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, RepositoryError::InvalidPrinterControl));
+    }
+    assert_eq!(commands.count().await.unwrap(), 0);
+}
+
+#[tokio::test]
 async fn command_update_rejects_missing_command() {
     let (_, _, commands, tenant, agent) = command_repositories().await;
 
@@ -183,6 +302,10 @@ fn print_payload(printer_id: &str, serial_number: &str) -> PrintProjectFilePaylo
         ams_mapping_json: None,
         ams_mapping2_json: None,
     }
+}
+
+fn test_audit_actor() -> AuditActor {
+    AuditActor::tenant_token(None, "repository-test-token", vec!["*"])
 }
 
 #[tokio::test]

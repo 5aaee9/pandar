@@ -122,6 +122,10 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs",
             post(jobs::create_job).layer(DefaultBodyLimit::disable()),
         )
+        .route(
+            "/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls",
+            post(printers::printer_control),
+        )
         .route("/api/v1/tenants/{tenant_id}/jobs", get(jobs::list_jobs))
         .route(
             "/api/v1/tenants/{tenant_id}/jobs/{job_id}",
@@ -335,6 +339,12 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::RetryNotSafe => Self::new(StatusCode::CONFLICT, "retry_not_safe"),
             RepositoryError::ReprintNotAllowed => {
                 Self::new(StatusCode::CONFLICT, "reprint_not_allowed")
+            }
+            RepositoryError::PrinterControlUnavailable => {
+                Self::new(StatusCode::BAD_REQUEST, "printer_control_unavailable")
+            }
+            RepositoryError::InvalidPrinterControl => {
+                Self::new(StatusCode::BAD_REQUEST, "invalid_printer_control")
             }
             RepositoryError::Database(err) => {
                 tracing::error!(error = %format!("{err:#}"), "repository database error");
