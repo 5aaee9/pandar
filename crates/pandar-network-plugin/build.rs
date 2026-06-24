@@ -8,12 +8,17 @@ fn main() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").expect("target OS is set by Cargo");
     let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
 
-    cc::Build::new()
-        .cpp(true)
-        .cargo_metadata(false)
-        .flag_if_supported("-std=c++17")
-        .flag_if_supported("-Wno-return-type-c-linkage")
-        .flag_if_supported("-Wno-unused-parameter")
+    let mut shim_build = cc::Build::new();
+    shim_build.cpp(true).cargo_metadata(false);
+    if target_env == "msvc" {
+        shim_build.flag_if_supported("/std:c++17");
+    } else {
+        shim_build
+            .flag_if_supported("-std=c++17")
+            .flag_if_supported("-Wno-return-type-c-linkage")
+            .flag_if_supported("-Wno-unused-parameter");
+    }
+    shim_build
         .file("src/shim.cpp")
         .compile("pandar_network_plugin_shim");
 

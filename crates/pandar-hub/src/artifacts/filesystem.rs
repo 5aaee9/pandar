@@ -207,9 +207,12 @@ pub fn sanitize_filename(input: &str) -> String {
 fn safe_relative_path(path: &str) -> anyhow::Result<&Path> {
     let path = Path::new(path);
     if path.is_absolute()
-        || path
-            .components()
-            .any(|component| matches!(component, Component::ParentDir | Component::Prefix(_)))
+        || path.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::Prefix(_) | Component::RootDir
+            )
+        })
     {
         bail!("artifact storage key must be relative and stay under storage root");
     }
