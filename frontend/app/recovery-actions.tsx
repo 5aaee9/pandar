@@ -1,7 +1,9 @@
-import { duplicateJob, refreshPrinters, reprintJob, retryDispatchJob } from './actions'
+import { controlPrinter, duplicateJob, refreshPrinters, reprintJob, retryDispatchJob } from './actions'
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
 import { EmptyState, SectionHeader } from './dashboard-ui'
 import { formatJobRecoveryState } from './dashboard-runtime-helpers'
+
+const liveControlModelKeys = new Set(['A1', 'A1MINI', 'A1M', 'A1MIN', 'BAMBULABA1MINI', 'BAMBULABA1', 'P2S', 'N7', 'X2D', 'N6'])
 
 export function RecoveryActions({
   selectedTenant,
@@ -42,26 +44,75 @@ export function RecoveryActions({
             <EmptyState title="No jobs" message="Jobs will appear here when dispatch history exists." />
           ) : (
             <div className="divide-y divide-slate-200">
-              {jobs.slice(0, 8).map((job) => (
-                <div key={job.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[minmax(0,1fr)_minmax(320px,auto)]">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium text-slate-950">{job.artifact.filename}</div>
-                    <div className="mt-1 text-xs text-slate-600">{formatJobRecoveryState(job)}</div>
-                    <div className="mt-1 text-xs text-slate-600">Pause, resume, and stop are unavailable until live printer control is implemented.</div>
+              {jobs.slice(0, 8).map((job) => {
+                const printer = printers.find((candidate) => candidate.id === job.printer_id)
+                return (
+                  <div key={job.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[minmax(0,1fr)_minmax(320px,auto)]">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-slate-950">{job.artifact.filename}</div>
+                      <div className="mt-1 text-xs text-slate-600">{formatJobRecoveryState(job)}</div>
+                      <LiveControlPanel tenantId={selectedTenant.id} printer={printer} />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <ReasonForm action={retryDispatchJob} tenantId={selectedTenant.id} jobId={job.id} label="Retry dispatch" />
+                      <ReasonForm action={reprintJob} tenantId={selectedTenant.id} jobId={job.id} label="Reprint" />
+                      <DuplicateForm tenantId={selectedTenant.id} jobId={job.id} printers={printers} />
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <ReasonForm action={retryDispatchJob} tenantId={selectedTenant.id} jobId={job.id} label="Retry dispatch" />
-                    <ReasonForm action={reprintJob} tenantId={selectedTenant.id} jobId={job.id} label="Reprint" />
-                    <DuplicateForm tenantId={selectedTenant.id} jobId={job.id} printers={printers} />
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
       )}
     </section>
   )
+}
+
+function LiveControlPanel({ tenantId, printer }: { tenantId: string; printer: Printer | undefined }) {
+  if (!printer) {
+    return <div className="mt-1 text-xs text-slate-600">Printer record unavailable for live controls</div>
+  }
+
+  if (!liveControlsAvailable(printer)) {
+    return <div className="mt-1 text-xs text-slate-600">Live controls unavailable for unknown printer model</div>
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      <PrinterControlForm tenantId={tenantId} printerId={printer.id} action="pause" label="Queue pause" />
+      <PrinterControlForm tenantId={tenantId} printerId={printer.id} action="resume" label="Queue resume" />
+      <PrinterControlForm tenantId={tenantId} printerId={printer.id} action="stop" label="Queue stop" />
+      <form action={controlPrinter} className="flex gap-2">
+        <input name="tenant_id" type="hidden" value={tenantId} />
+        <input name="printer_id" type="hidden" value={printer.id} />
+        <input name="action" type="hidden" value="set_print_speed" />
+        <select name="speed_mode" className="h-8 w-24 rounded border border-slate-300 bg-white px-2 text-xs">
+          <option value="1">Silent</option>
+          <option value="2">Standard</option>
+          <option value="3">Sport</option>
+          <option value="4">Ludicrous</option>
+        </select>
+        <button className="h-8 rounded border border-slate-300 px-2 text-xs font-medium" type="submit">Queue speed</button>
+      </form>
+    </div>
+  )
+}
+
+function PrinterControlForm({ tenantId, printerId, action, label }: { tenantId: string; printerId: string; action: string; label: string }) {
+  return (
+    <form action={controlPrinter}>
+      <input name="tenant_id" type="hidden" value={tenantId} />
+      <input name="printer_id" type="hidden" value={printerId} />
+      <input name="action" type="hidden" value={action} />
+      <button className="h-8 rounded border border-slate-300 px-2 text-xs font-medium" type="submit">{label}</button>
+    </form>
+  )
+}
+
+function liveControlsAvailable(printer: Printer) {
+  const normalized = printer.model?.trim().toUpperCase().replace(/[ _-]/g, '')
+  return normalized ? liveControlModelKeys.has(normalized) : false
 }
 
 function ReasonForm({ action, tenantId, jobId, label }: { action: (formData: FormData) => void; tenantId: string; jobId: string; label: string }) {

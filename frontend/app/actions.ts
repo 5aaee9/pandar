@@ -219,6 +219,18 @@ export async function duplicateJob(formData: FormData) {
   redirect(statusUrl(tenantId, response.ok ? 'duplicate_queued' : await errorCode(response)))
 }
 
+export async function controlPrinter(formData: FormData) {
+  const tenantId = stringField(formData, 'tenant_id')
+  const printerId = stringField(formData, 'printer_id')
+  const action = stringField(formData, 'action')
+  const speedMode = nullableField(formData, 'speed_mode')
+  const response = await postJson(`/api/v1/tenants/${tenantId}/printers/${printerId}/controls`, {
+    action,
+    speed_mode: speedMode ? Number(speedMode) : undefined,
+  })
+  redirect(statusUrl(tenantId, response.ok ? 'printer_control_queued' : await errorCode(response)))
+}
+
 export async function createPluginTicket(formData: FormData) {
   const tenantId = stringField(formData, 'tenant_id')
   const redirectUrl = stringField(formData, 'redirect_url')

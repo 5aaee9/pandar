@@ -84,8 +84,9 @@ Recovery APIs:
 - `POST /api/v1/tenants/{tenant_id}/jobs/{job_id}/retry-dispatch` retries dispatch for a failed or cancelled dispatch lifecycle.
 - `POST /api/v1/tenants/{tenant_id}/jobs/{job_id}/reprint` queues a reprint from the existing artifact and options.
 - `POST /api/v1/tenants/{tenant_id}/jobs/{job_id}/duplicate` creates a new job from the existing artifact with optional printer, plate, and print-flag overrides.
+- `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/controls` queues typed, compatibility-gated live printer controls.
 
-Pause, resume, and stop are not implemented yet; the UI labels them unavailable instead of pretending they are physical-printer controls.
+Phase 27 live printer controls are dispatch-only operations for compatible printers. Pause, resume, stop, and print-speed requests enqueue audited `printer_control` commands; physical printer state changes remain report-derived.
 
 ## Frontend Runtime
 

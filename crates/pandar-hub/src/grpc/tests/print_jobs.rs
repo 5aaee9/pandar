@@ -1,4 +1,4 @@
-use pandar_core::{AgentId, JobStatus, TenantId};
+use pandar_core::{AgentId, JobStatus, PrintStatus, TenantId};
 use tokio_stream::StreamExt;
 use tonic::Code;
 
@@ -6,7 +6,10 @@ use super::*;
 use crate::{
     db::Database,
     protocol::agent::v1::hub_command,
-    repositories::{CreatePrintJob, test_helpers::insert_printer_fixture},
+    repositories::{
+        CreatePrintJob, PrinterControlAction,
+        test_helpers::{insert_printer_fixture, insert_printer_fixture_with_model},
+    },
 };
 
 #[tokio::test]
@@ -229,6 +232,76 @@ async fn grpc_malformed_print_payload_streams_internal_error() {
             .status,
         JobStatus::Queued
     );
+}
+
+#[tokio::test]
+async fn printer_control_success_does_not_mutate_physical_print_status() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let printer_id =
+        insert_printer_fixture_with_model(state.database(), tenant_id, agent_id, Some("A1 Mini"))
+            .await
+            .unwrap();
+    let created = state
+        .jobs()
+        .create_print_job(CreatePrintJob {
+            tenant_id,
+            printer_id: printer_id.clone(),
+            agent_id,
+            artifact_id: "artifact-1".to_string(),
+            artifact_filename: "plate.3mf".to_string(),
+            artifact_content_type: "model/3mf".to_string(),
+            artifact_size_bytes: 42,
+            artifact_storage_path: format!("{tenant_id}/artifact-1/plate.3mf"),
+            plate_id: 1,
+            use_ams: true,
+            flow_cali: false,
+            timelapse: false,
+            ams_mapping_json: None,
+            ams_mapping2_json: None,
+        })
+        .await
+        .unwrap();
+    let control = state
+        .commands()
+        .enqueue_printer_control_with_audit(
+            tenant_id,
+            &printer_id,
+            PrinterControlAction::Stop,
+            None,
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+
+    state
+        .commands()
+        .mark_sent(control.id, tenant_id, agent_id)
+        .await
+        .unwrap();
+    state
+        .commands()
+        .mark_acknowledged(control.id, tenant_id, agent_id)
+        .await
+        .unwrap();
+    state
+        .commands()
+        .mark_succeeded_with_result(
+            control.id,
+            tenant_id,
+            agent_id,
+            Some(r#"{"type":"printer_control","action":"stop"}"#.to_string()),
+        )
+        .await
+        .unwrap();
+
+    let reloaded = state
+        .jobs()
+        .get_for_tenant(tenant_id, created.job.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(reloaded.job.print.status, PrintStatus::Pending);
 }
 
 async fn create_print_job(

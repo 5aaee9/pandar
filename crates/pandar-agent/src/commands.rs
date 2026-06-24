@@ -380,9 +380,12 @@ where
 
 fn parse_printer_control(command: &ProtoPrinterControl) -> anyhow::Result<MachinePrinterControl> {
     match command.action.as_str() {
-        "pause" => Ok(MachinePrinterControl::Pause),
-        "resume" => Ok(MachinePrinterControl::Resume),
-        "stop" => Ok(MachinePrinterControl::Stop),
+        "pause" if command.speed_mode == 0 => Ok(MachinePrinterControl::Pause),
+        "resume" if command.speed_mode == 0 => Ok(MachinePrinterControl::Resume),
+        "stop" if command.speed_mode == 0 => Ok(MachinePrinterControl::Stop),
+        "pause" | "resume" | "stop" => {
+            anyhow::bail!("printer control speed_mode is only valid for set_print_speed")
+        }
         "set_print_speed" => match command.speed_mode {
             1..=4 => Ok(MachinePrinterControl::SetPrintSpeed(
                 command.speed_mode as u8,

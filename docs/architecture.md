@@ -252,7 +252,7 @@ Phase 16 replaced the Phase 6/11 user-owned API token model with tenant-owned to
 Phase 17-20 add the product and operational surfaces over these foundations:
 
 - Tenant admins can manage users, roles, identity links, tenant tokens, agent pairings, and recent audit events from the frontend. Admin API failures render a compact unavailable state.
-- Operators can manually refresh printers, retry dispatch, reprint, and duplicate jobs while the UI keeps dispatch lifecycle wording separate from physical print state. Pause, resume, and stop remain unavailable.
+- Operators can manually refresh printers, retry dispatch, reprint, duplicate jobs, and queue typed live printer controls while the UI keeps dispatch lifecycle wording separate from physical print state.
 - `/readyz` and `/metrics` expose deployment readiness and Prometheus metrics with redaction and hashed tenant labels.
 - `pandar cleanup` performs retention cleanup for terminal jobs, commands, machine events, audit rows, expired/used plugin tickets, revoked/expired tenant tokens, and unreferenced artifacts.
 - Artifact upload UX shows selected file, size, multipart upload state, configured max size, and stable backend error codes. The hub still treats slicer files as opaque artifacts.
@@ -331,7 +331,7 @@ Phase 16-21 hub status:
 
 - Phase 16 added tenant-owned scoped tokens, agent enrollment credentials, gRPC agent credential authentication, token rotation/revocation, plugin login tickets, and plugin-scoped tenant credentials.
 - Phase 17 exposed tenant users, identity links, scoped tenant tokens, agent pairings, and audit events in the product UI.
-- Phase 18 added retry/reprint/duplicate recovery APIs and UI controls while leaving pause/resume/stop unavailable.
+- Phase 18 added retry/reprint/duplicate recovery APIs and UI controls. Phase 27 adds typed, compatibility-gated pause/resume/stop/print-speed dispatch commands without treating dispatch success as a physical printer-state change.
 - Phase 19 added readiness checks, Prometheus metrics, redaction coverage, retention cleanup, and cleanup CLI behavior.
 - Phase 20 improved artifact upload UX and duplicate/reprint flows without adding slicer-file parsing.
 - Phase 21 added the `pandar-network-plugin` ABI shim crate and export-list verification.
@@ -386,7 +386,7 @@ Agent phase status after Phase 7:
 Agent phase status after Phase 15:
 
 - Phase 16 replaced manual `PANDAR_TENANT_ID`/`PANDAR_AGENT_ID` trust with authenticated enrollment credentials issued by tenant tokens carrying `agent:register` or `*` scope.
-- Phase 18 made dispatch retry/reprint/duplicate explicit through hub recovery APIs. Direct physical pause/resume/stop are still not implemented.
+- Phase 18 made dispatch retry/reprint/duplicate explicit through hub recovery APIs. Phase 27 routes pause/resume/stop/print-speed through typed `printer_control` commands gated by Hub compatibility checks; these commands are dispatch lifecycle records, not direct physical status mutations.
 - Phase 19 exposes hub-side readiness evidence and redacts Bambu access codes, agent credentials, plugin tickets, WebSocket tickets, bearer tokens, and artifact paths.
 
 ### pandar-network-plugin
@@ -428,7 +428,7 @@ Frontend phase status after Phase 7:
 
 Remaining frontend limitations:
 
-- Pause/resume/stop controls are intentionally unavailable until live printer control is implemented.
+- Live printer controls are typed, compatibility-gated dispatch actions. Frontend/final end-to-end verification is not recorded in this workspace, so physical control behavior must still be proven by later hardware probes.
 - Artifact uploads now use multipart transport through the frontend API proxy; production proxies still need request body limits aligned with `PANDAR_MAX_ARTIFACT_BYTES`.
 
 ## Data Model Draft

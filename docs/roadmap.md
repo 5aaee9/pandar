@@ -63,7 +63,7 @@
 - Added Phase 26 local HA/failure smoke coverage: the scaled smoke harness now exercises command wake convergence across Hub states, WebSocket `printer_snapshot` and `job_progress` fanout, restart simulation, plugin print pressure, artifact storage put/open/delete failures, and terminal print-report idempotence without Docker or live services.
 - Added Phase 26 focused failure observability: Prometheus exports control-plane publish/receive counters, publish failure after durable job/command commit is observable without rolling back state, WebSocket ticket safety is covered across replicas, and storage write/read/delete failure tests pin stable behavior.
 - Added Phase 26 operations docs and evidence tracking for SQLite single-node and PostgreSQL+NATS+object-storage deployments, including explicit live soak variables and a `docs/compatibility/phase-26-soak-evidence.md` table for local and live evidence.
-- Added Phase 27 live printer-control groundwork: shared model compatibility policy moved into `pandar-core`, Hub now enqueues audited tenant/printer-scoped `printer_control` commands for compatible models, gRPC carries typed printer controls to agents, and agents dispatch typed pause/resume/stop/print-speed MQTT payloads without relying on local model metadata.
+- Added Phase 27 live printer-control groundwork: shared model compatibility policy moved into `pandar-core`, Hub now enqueues audited tenant/printer-scoped `printer_control` commands for compatible models, gRPC carries typed printer controls to agents, and agents dispatch typed pause/resume/stop/print-speed MQTT payloads without relying on local model metadata. Local no-network tests cover compatibility, Hub enqueue/route/gRPC behavior, agent command handling, and fake MQTT payload dispatch; real pause/resume/stop/print-speed printer probes are not recorded.
 
 ## Phase 1: Foundation
 
@@ -390,7 +390,7 @@ Exit criteria:
 Goal: make day-to-day printer operations recoverable from the UI when dispatch or machine state changes unexpectedly.
 
 - Completed tenant-authorized refresh, retry dispatch, reprint, and duplicate-and-print controls.
-- Kept pause, resume, and stop unavailable because the underlying live printer control path is not implemented yet.
+- Phase 27 later adds pause, resume, stop, and print-speed as typed, compatibility-gated `printer_control` dispatch commands rather than physical-state mutations.
 - Show command state transitions and latest structured result details inline with the affected printer or job.
 - Added safe retry affordances for failed dispatch/upload/MQTT operations without creating duplicate physical prints accidentally.
 - Kept raw Bambu commands behind diagnostics/admin boundaries; normal operators use typed controls.
@@ -581,16 +581,17 @@ Exit criteria:
 
 Goal: add typed pause, resume, stop, and related live printer controls only after the command path is audited against Bambu reference behavior.
 
-- Study `reference/BambuStudio` and `reference/bambuddy` for pause, resume, stop/cancel, and speed-control command payloads plus report reconciliation semantics.
-- Implement typed agent command builders and gateway methods for supported controls; keep raw command dispatch behind diagnostics/admin boundaries.
-- Gate controls through the compatibility matrix so unsupported models or unknown capabilities render unavailable instead of sending speculative commands.
-- Persist command lifecycle, audit events, structured results, and machine events separately from physical print status.
-- Update frontend controls from unavailable indicators to active operations only where backend and compatibility checks allow them.
-- Add no-network fake tests for payload shape, sequencing, authorization, audit, and report reconciliation; add real-printer probe notes when hardware is available.
+- Completed reference-backed payload policy for pause, resume, stop, and print-speed dispatch.
+- Completed typed agent command builders and gateway methods for supported controls; raw command dispatch remains behind diagnostics/admin boundaries.
+- Completed Hub-side compatibility gating so unsupported models or unknown capabilities reject enqueue instead of sending speculative commands.
+- Completed command lifecycle, audit event, structured result, and physical print-status separation in local tests.
+- Added Phase 27 compatibility documentation with local no-network verification commands and explicit real-printer probe status.
+- Frontend controls were updated in this phase and covered by the production build; browser-level e2e interaction and real-printer probes are not recorded in this workspace.
+- Real-printer probes for pause, resume, stop, and print speed are not recorded; `docs/bambu-lan-printer-probe-2026-06-24.md` covers other MQTT commands only.
 
 Exit criteria:
 
-- Operators can pause, resume, and stop supported printers from the dashboard with tenant role enforcement and audit records.
+- Operators can queue supported live printer controls with tenant role enforcement and audit records.
 - UI state distinguishes command dispatch success from physical printer state changes reported later over MQTT.
 - Unsupported or unknown printer/control combinations stay unavailable with diagnostic context.
 

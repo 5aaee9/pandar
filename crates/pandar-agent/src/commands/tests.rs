@@ -498,6 +498,35 @@ async fn printer_control_invalid_speed_rejects_ack_without_dispatch() {
 }
 
 #[tokio::test]
+async fn printer_control_non_speed_action_with_speed_rejects_ack_without_dispatch() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = ControlGateway::default();
+    let (sender, mut receiver) = mpsc::channel(1);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_control_command(command_id.clone(), "SERIAL1", "pause", 2),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandAck(ack) => {
+            assert_eq!(ack.command_id, command_id);
+            assert!(!ack.accepted);
+            assert!(ack.error.contains("speed_mode"));
+        }
+        other => panic!("expected command ack, got {other:?}"),
+    }
+    assert!(receiver.recv().await.is_none());
+    assert!(gateway.controls().await.is_empty());
+}
+
+#[tokio::test]
 async fn printer_control_publish_failure_emits_ack_then_failure_with_redacted_context() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
