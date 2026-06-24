@@ -305,13 +305,13 @@ cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --live-prefl
 
 The default mode uses local process fixtures, a shared SQLite database, shared fake object storage, and loopback HTTP/WebSocket only. Treat it as local convergence evidence for command wakeups, WebSocket fanout, plugin calls, storage failures, restart simulation, and terminal report idempotence. It is not live PostgreSQL/NATS/object-storage soak evidence.
 
-`--live-preflight` checks only the disposable live soak environment contract; it does not connect to PostgreSQL, NATS, or object storage and is not live soak evidence.
+`--live-preflight` checks only the disposable live soak environment contract; it does not connect to PostgreSQL, NATS, or object storage and is not live soak evidence. It verifies that the PostgreSQL URL uses a PostgreSQL scheme, contains a disposable marker (`soak`, `disposable`, `ephemeral`, or `test`), and does not contain production markers (`prod` or `production`). It also checks that the NATS URL uses `nats://`, the S3 endpoint uses HTTP(S), and bucket/region/access-key/secret values are not blank or placeholder-looking.
 
 Optional live soak evidence variables:
 
-- `PANDAR_SOAK_DATABASE_URL`: disposable PostgreSQL database.
-- `PANDAR_SOAK_NATS_URL`: disposable NATS server.
-- `PANDAR_SOAK_ARTIFACT_S3_BUCKET`, `PANDAR_SOAK_ARTIFACT_S3_REGION`, `PANDAR_SOAK_ARTIFACT_S3_ENDPOINT`, `PANDAR_SOAK_ARTIFACT_S3_ACCESS_KEY_ID`, `PANDAR_SOAK_ARTIFACT_S3_SECRET_ACCESS_KEY`: disposable object-storage bucket.
+- `PANDAR_SOAK_DATABASE_URL`: disposable PostgreSQL database, for example `postgres://pandar_soak@localhost/pandar_soak`.
+- `PANDAR_SOAK_NATS_URL`: disposable NATS server, for example `nats://127.0.0.1:4222`.
+- `PANDAR_SOAK_ARTIFACT_S3_BUCKET`, `PANDAR_SOAK_ARTIFACT_S3_REGION`, `PANDAR_SOAK_ARTIFACT_S3_ENDPOINT`, `PANDAR_SOAK_ARTIFACT_S3_ACCESS_KEY_ID`, `PANDAR_SOAK_ARTIFACT_S3_SECRET_ACCESS_KEY`: disposable object-storage bucket, for example a local S3-compatible endpoint such as `http://127.0.0.1:9000`.
 
 Do not point live soak at production data. When disposable live dependencies are available, record PostgreSQL latency or transaction-conflict observations, NATS reconnect behavior, object-storage behavior, command output, and commit SHA in `docs/compatibility/phase-26-soak-evidence.md`.
 
