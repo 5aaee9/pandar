@@ -81,7 +81,9 @@ pub fn live_controls_supported(model: Option<&str>) -> bool {
 ```
 
 Set `live_controls: Capability::Supported` for `A1`, `A1_MINI`, `P2S`, and `X2D`; keep `Unknown` for missing/unknown models.
-Preserve the existing aliases in `normalize_model`, including `N7 -> P2S`, `N6 -> X2D`, and `A1 Mini` spellings, so the tests for `N7` and `N6` pass through normalization rather than separate matrix rows.
+Preserve the existing aliases in `normalize_model`, including `N7 -> P2S`, `N6 -> X2D`, `BAMBULABA1 -> A1`, and `A1 Mini` spellings, so the tests for `N7` and `N6` pass through normalization rather than separate matrix rows.
+
+Update the existing whole-struct serialization assertion `absent_model_serializes_null_and_unknown_features` so the expected JSON includes `"live_controls": "unknown"` under `features`. Review any other exact `CompatibilityFeatures` serialization assertions touched by the move and add the new field there.
 
 Export it from `crates/pandar-core/src/lib.rs`:
 
@@ -110,6 +112,7 @@ Expected: PASS. Existing agent compatibility tests should still pass through the
 
 **Files:**
 - Modify: `proto/pandar/agent/v1/agent.proto`
+- Modify: `crates/pandar-hub/src/repositories/mod.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands.rs`
 - Modify: `crates/pandar-hub/src/grpc/commands.rs`
 - Modify: `crates/pandar-hub/src/grpc/tests/commands.rs`
@@ -121,31 +124,29 @@ In `crates/pandar-hub/src/grpc/tests/commands.rs`, add a test next to `grpc_hub_
 ```rust
 #[tokio::test]
 async fn grpc_hub_command_from_record_maps_printer_control() {
-    let state = fixture_state().await;
-    let (tenant_id, agent_id) = tenant_agent(&state).await;
-    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
-        state.database(),
+    let tenant_id = TenantId::new();
+    let agent_id = AgentId::new();
+    let printer_id = "printer-1".to_string();
+    let payload = PrinterControlPayload {
+        printer_id: printer_id.clone(),
+        serial_number: "SERIAL123".to_string(),
+        action: PrinterControlAction::SetPrintSpeed,
+        speed_mode: Some(4),
+    };
+    let command = CommandRecord::from_parts(CommandRecordParts {
+        id: CommandId::new(),
         tenant_id,
         agent_id,
-        Some("A1 Mini"),
-    )
-    .await
+        printer_id: Some(printer_id),
+        kind: "printer_control".to_string(),
+        status: "queued".to_string(),
+        payload_json: serde_json::to_string(&payload).unwrap(),
+        result_json: None,
+        error: None,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        updated_at: "2026-01-01T00:00:00Z".to_string(),
+    })
     .unwrap();
-    let command = state
-        .commands()
-        .enqueue_printer_control(
-            tenant_id,
-            agent_id,
-            &printer_id,
-            PrinterControlPayload {
-                printer_id: printer_id.clone(),
-                serial_number: "SERIAL123".to_string(),
-                action: PrinterControlAction::SetPrintSpeed,
-                speed_mode: Some(4),
-            },
-        )
-        .await
-        .unwrap();
 
     let hub_command = hub_command_from_record(command).unwrap();
 
@@ -159,7 +160,7 @@ async fn grpc_hub_command_from_record_maps_printer_control() {
 }
 ```
 
-Also import `PrinterControlAction` and `PrinterControlPayload` in that test file.
+Also import `AgentId`, `CommandId`, `CommandRecord`, `CommandRecordParts`, `TenantId`, `PrinterControlAction`, and `PrinterControlPayload` in that test file.
 
 - [ ] **Step 2: Run the focused failing test**
 
@@ -194,7 +195,7 @@ message PrinterControl {
 }
 ```
 
-- [ ] **Step 4: Add repository payload/action types and basic enqueue**
+- [ ] **Step 4: Add repository payload/action types**
 
 In `crates/pandar-hub/src/repositories/commands.rs`, add:
 
@@ -228,7 +229,16 @@ pub struct PrinterControlPayload {
 }
 ```
 
-Add `CommandRepository::enqueue_printer_control(...)` for tests, mirroring `enqueue_print_project_file` but inserting `kind = "printer_control"`.
+Do not add a basic `enqueue_printer_control(...)` method here. Task 3 adds the audited enqueue path that validates tenant/printer ownership, model compatibility, and speed-mode semantics.
+
+In `crates/pandar-hub/src/repositories/mod.rs`, immediately add the new public re-exports so the gRPC conversion code and tests compile in this task:
+
+```rust
+pub use commands::{
+    CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
+    PrinterControlAction, PrinterControlPayload,
+};
+```
 
 - [ ] **Step 5: Convert command records to proto**
 
@@ -514,6 +524,7 @@ async fn printer_control_rejects_invalid_action_and_speed_payloads() {
         json!({ "action": "set_print_speed", "speed_mode": 0 }),
         json!({ "action": "set_print_speed", "speed_mode": 5 }),
         json!({ "action": "pause", "speed_mode": 2 }),
+        json!({ "action": "pause", "raw_command": "project_file" }),
     ] {
         let (status, body) = request_as(
             app.clone(),
@@ -538,7 +549,7 @@ Run:
 cargo test -p pandar-hub printer_control_
 ```
 
-Expected: FAIL because route, error, helper, and enqueue audit are missing.
+Expected: FAIL because route, stable control payload rejection, helper, and enqueue audit are missing.
 
 - [ ] **Step 3: Write failing repository tests for SQLite and PostgreSQL**
 
@@ -614,9 +625,7 @@ If `commands.rs` does not already have an audit actor helper, add:
 
 ```rust
 fn test_audit_actor() -> AuditActor {
-    AuditActor::System {
-        name: "repository-test".to_string(),
-    }
+    AuditActor::user("repository-test")
 }
 ```
 
@@ -698,7 +707,7 @@ Expected: FAIL because repository payload, errors, helper, and enqueue audit are
 
 - [ ] **Step 5: Add test helper with explicit model**
 
-In `crates/pandar-hub/src/repositories/mod.rs`, add:
+Inside the existing `#[cfg(test)] pub(crate) mod test_helpers` block in `crates/pandar-hub/src/repositories/mod.rs`, add:
 
 ```rust
 pub(crate) async fn insert_printer_fixture_with_model(
@@ -836,7 +845,7 @@ serde_json::json!({
 
 For non-speed actions, `speed_mode` may be omitted or serialized as `null`; route tests must assert required fields and print-speed metadata.
 
-In `commands.rs`, expose `CommandRepository::enqueue_printer_control_with_audit(tenant_id, printer_id, action, speed_mode, actor)` and export payload/action types from `repositories/mod.rs`.
+In `commands.rs`, expose `CommandRepository::enqueue_printer_control_with_audit(tenant_id, printer_id, action, speed_mode, actor)`. The payload/action type re-export already happened in Task 2 and should remain in `repositories/mod.rs`.
 
 - [ ] **Step 9: Add route handler**
 
@@ -851,7 +860,9 @@ pub(super) struct PrinterControlRequest {
 }
 ```
 
-Add `printer_control(...)` that parses tenant/printer, authorizes `Operator`, calls the repository with `auth::audit_actor(&auth)`, wakes `command.agent_id` returned on the command record, and returns `CommandResponse`. The route must not accept or parse `agent_id`.
+Add `printer_control(...)` with `payload: Result<Json<PrinterControlRequest>, JsonRejection>`. It must parse tenant/printer, authorize `Operator`, map any `JsonRejection` to `ApiError::bad_request("invalid_printer_control")`, call the repository with `auth::audit_actor(&auth)`, wake `command.agent_id` returned on the command record, and return `CommandResponse`. The route must not accept or parse `agent_id`.
+
+`PrinterControlRequest` must keep `#[serde(deny_unknown_fields)]` so unknown actions, malformed speed types, and extra fields return `400 {"error":"invalid_printer_control"}` before repository enqueue, command insert, audit insert, or wakeup.
 
 Register route in `routes.rs`:
 
@@ -1133,11 +1144,28 @@ In `recovery-actions.tsx`, add a small local helper that mirrors the shared mode
 ```ts
 function liveControlsAvailable(printer: Printer) {
   const normalized = printer.model?.trim().toUpperCase().replace(/[ _-]/g, '')
-  return normalized === 'A1' || normalized === 'A1MINI' || normalized === 'BAMBULABA1MINI' || normalized === 'P2S' || normalized === 'N7' || normalized === 'X2D' || normalized === 'N6'
+  return normalized === 'A1'
+    || normalized === 'A1MINI'
+    || normalized === 'A1M'
+    || normalized === 'A1MIN'
+    || normalized === 'BAMBULABA1MINI'
+    || normalized === 'BAMBULABA1'
+    || normalized === 'P2S'
+    || normalized === 'N7'
+    || normalized === 'X2D'
+    || normalized === 'N6'
 }
 ```
 
 This is advisory only; backend rejects remain authoritative.
+
+Add a local table near the helper for the shared aliases and use it from `liveControlsAvailable`, rather than scattering string comparisons through render code:
+
+```ts
+const liveControlModelKeys = new Set(['A1', 'A1MINI', 'A1M', 'A1MIN', 'BAMBULABA1MINI', 'BAMBULABA1', 'P2S', 'N7', 'X2D', 'N6'])
+```
+
+Before the build, verify the helper table covers the core aliases by scanning for the exact literals `A1M`, `A1MIN`, `BAMBULABA1`, `N7`, and `N6` in `frontend/app/recovery-actions.tsx`.
 
 - [ ] **Step 3: Render controls in recovery actions**
 
@@ -1155,10 +1183,11 @@ Keep button and input dimensions stable, use existing compact button style, and 
 Run:
 
 ```bash
+rg -n "A1M|A1MIN|BAMBULABA1|N7|N6" frontend/app/recovery-actions.tsx
 npm --prefix frontend run build
 ```
 
-Expected: PASS.
+Expected: `rg` prints the advisory compatibility alias table, then build PASS.
 
 ### Task 7: Documentation Updates
 
