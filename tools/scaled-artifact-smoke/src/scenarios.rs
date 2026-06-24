@@ -376,6 +376,7 @@ async fn create_print_job(
                 fixture.tenant_id,
                 pandar_core::JobId::new()
             ),
+            artifact_metadata_json: None,
             plate_id: 1,
             use_ams: true,
             flow_cali: false,

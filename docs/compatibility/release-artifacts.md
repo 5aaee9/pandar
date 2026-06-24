@@ -23,6 +23,12 @@ Phase 24 tracks release archive evidence separately from real Bambu Studio compa
 | untested | `macos-amd64` | `pandar-release-<tag-or-sanitized-ref>-macos-amd64.tar.gz` | `untested` | `untested` | `untested` | `untested` | `untested` | `unsupported` | Unsigned artifacts accepted for Phase 24; expect Gatekeeper warnings; no real host install evidence recorded. |
 | untested | `macos-arm64` | `pandar-release-<tag-or-sanitized-ref>-macos-arm64.tar.gz` | `untested` | `untested` | `untested` | `untested` | `untested` | `unsupported` | Unsigned artifacts accepted for Phase 24; expect Gatekeeper warnings; no real host install evidence recorded. |
 
+## Local Release-Smoke Coverage
+
+| Date | Commit | Command | Coverage | Result | Notes |
+| --- | --- | --- | --- | --- | --- |
+| 2026-06-24 | post-Phase 28 smoke-sync commit | `cargo test --manifest-path tools/release-smoke/Cargo.toml` | checksum sidecar parsing, archive path normalization, exact top-level layout checks, target/runner support routing, and exported-symbol parsing | `passed` | 17 tests passed. This proves the local release-smoke checker behavior, not any real release archive install. |
+
 ## Evidence Rules
 
 - Use only `passed`, `failed`, `blocked`, `unsupported`, or `untested` in status columns.

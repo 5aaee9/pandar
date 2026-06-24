@@ -63,6 +63,7 @@
 - Added Phase 26 local HA/failure smoke coverage: the scaled smoke harness now exercises command wake convergence across Hub states, WebSocket `printer_snapshot` and `job_progress` fanout, restart simulation, plugin print pressure, artifact storage put/open/delete failures, and terminal print-report idempotence without Docker or live services.
 - Added Phase 26 focused failure observability: Prometheus exports control-plane publish/receive counters, publish failure after durable job/command commit is observable without rolling back state, WebSocket ticket safety is covered across replicas, and storage write/read/delete failure tests pin stable behavior.
 - Added Phase 26 operations docs and evidence tracking for SQLite single-node and PostgreSQL+NATS+object-storage deployments, including explicit live soak variables and a `docs/compatibility/phase-26-soak-evidence.md` table for local and live evidence.
+- Refreshed Phase 23/24/26 local evidence after Phase 28: the plugin ABI probe, release-smoke unit coverage, and scaled artifact smoke dry-run are recorded against current code, and the smoke tool now carries the optional artifact metadata field.
 - Added Phase 27 live printer-control groundwork: shared model compatibility policy moved into `pandar-core`, Hub now enqueues audited tenant/printer-scoped `printer_control` commands for compatible models, gRPC carries typed printer controls to agents, and agents dispatch typed pause/resume/stop/print-speed MQTT payloads without relying on local model metadata. Local no-network tests cover compatibility, Hub enqueue/route/gRPC behavior, agent command handling, and fake MQTT payload dispatch; real pause/resume/stop/print-speed printer probes are not recorded.
 - Added Phase 28 reference-backed slicer metadata: bounded 3MF metadata parsing, SQLite/PostgreSQL `job_artifacts.metadata_json` persistence, tenant preview API, job/plugin response metadata, dashboard upload preview, and compact job/recovery metadata summaries. Local SQLite-backed parser, repository, route, plugin, and frontend build verification is recorded; optional PostgreSQL verification still requires `PANDAR_TEST_POSTGRES_URL`.
 
@@ -501,6 +502,7 @@ Goal: turn the Phase 21 network-plugin scaffold into a verified Bambu Studio int
 - Document known compatible Studio versions, operating systems, plugin replacement paths, and unsupported plugin ABI functions.
 - Keep direct LAN/MQTT/FTPS behavior out of the plugin; Studio talks to `pandar-hub`, and Bambu machine credentials remain agent-local.
 - Completed local Phase 23 scaffolding: compatibility manifest, smoke runbook, stable plugin error mapping, and a local C++ ABI probe against a mock hub.
+- Refreshed local probe evidence on 2026-06-24: `cargo test -p pandar-network-plugin` passed 20 tests against the current code.
 - Real Studio compatibility remains unverified until `docs/compatibility/bambu-studio-plugin.md` records real Studio runs for each platform.
 
 Exit criteria:
@@ -517,6 +519,7 @@ Goal: make release artifacts predictable enough for operators to install without
 - Validate tag-driven GitHub Release artifacts on real Linux, Windows, and macOS hosts, including CLI startup, dynamic-library loadability, checksums, and archive layout.
 - Completed local Phase 24 release-smoke scaffolding: a standalone helper crate that validates release archive checksums and top-level CLI/plugin layout without joining the main Cargo workspace.
 - Completed packaged-artifact release-smoke checks for CLI startup on native runners and plugin ABI export inspection from the unpacked release plugin library.
+- Refreshed local release-smoke unit evidence on 2026-06-24: `cargo test --manifest-path tools/release-smoke/Cargo.toml` passed 17 tests.
 - Wired the tag-driven GitHub Release workflow to run checksum verification and release-smoke before uploading release artifacts.
 - Added operator release installation docs, a release artifact evidence manifest, and the explicit Phase 24 signing decision: `unsigned-accepted`.
 - Real host installation evidence remains unverified until `docs/compatibility/release-artifacts.md` records target-family rows from actual release artifact installs.
@@ -559,6 +562,7 @@ Exit criteria:
 Goal: prove the scaled Hub and agent model under realistic concurrent use before expanding product surface area.
 
 - Completed local dry-run evidence for concurrent agent-session wake convergence, WebSocket subscribers, plugin clients, print-job creation, restart simulation, storage failures, and terminal print-report idempotence.
+- Refreshed scaled smoke evidence on 2026-06-24 after Phase 28 metadata persistence: `tools/scaled-artifact-smoke` now constructs print jobs with explicit `artifact_metadata_json: None`, and `--dry-run --iterations 1 --concurrency 2` passed all local scenarios.
 - Remaining live evidence gap: disposable PostgreSQL + NATS + object-storage soak has not been run. `docs/compatibility/phase-26-soak-evidence.md` must be updated before treating live scaled deployment latency/conflict/reconnect behavior as proven.
 - Soak-test PostgreSQL + NATS Hub replicas with concurrent agents, WebSocket subscribers, plugin clients, and print-job creation when disposable live dependencies are available.
 - Exercise failure modes:
