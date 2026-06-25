@@ -63,7 +63,7 @@
 - Added Phase 26 local HA/failure smoke coverage: the scaled smoke harness now exercises command wake convergence across Hub states, WebSocket `printer_snapshot` and `job_progress` fanout, restart simulation, plugin print pressure, artifact storage put/open/delete failures, and terminal print-report idempotence without Docker or live services.
 - Added Phase 26 focused failure observability: Prometheus exports control-plane publish/receive counters, publish failure after durable job/command commit is observable without rolling back state, WebSocket ticket safety is covered across replicas, and storage write/read/delete failure tests pin stable behavior.
 - Added Phase 26 operations docs and evidence tracking for SQLite single-node and PostgreSQL+NATS+object-storage deployments, including explicit live soak variables and a `docs/compatibility/phase-26-soak-evidence.md` table for local and live evidence.
-- Added a Phase 26 `tools/scaled-artifact-smoke --live` runner entry point for disposable PostgreSQL, NATS, and S3-compatible object storage; actual live soak evidence remains blocked until those dependencies are configured and the command succeeds.
+- Added a Phase 26 `tools/scaled-artifact-smoke --live` runner entry point for disposable PostgreSQL, NATS, and S3-compatible object storage; disposable local live soak plus explicit NATS and PostgreSQL reconnect evidence are now recorded.
 - Refreshed Phase 23/24/26 local evidence after Phase 28: the plugin ABI probe, release-smoke unit coverage, and scaled artifact smoke dry-run are recorded against current code, and the smoke tool now carries the optional artifact metadata field.
 - Added Phase 27 live printer-control groundwork: shared model compatibility policy moved into `pandar-core`, Hub now enqueues audited tenant/printer-scoped `printer_control` commands for compatible models, gRPC carries typed printer controls to agents, and agents dispatch typed pause/resume/stop/print-speed MQTT payloads without relying on local model metadata. Local no-network tests cover compatibility, Hub enqueue/route/gRPC behavior, agent command handling, and fake MQTT payload dispatch; real pause/resume/stop/print-speed printer probes are not recorded.
 - Added Phase 28 reference-backed slicer metadata: bounded 3MF metadata parsing, SQLite/PostgreSQL `job_artifacts.metadata_json` persistence, tenant preview API, job/plugin response metadata, dashboard upload preview, and compact job/recovery metadata summaries. Local parser, SQLite route/repository/plugin/frontend verification, and disposable PostgreSQL metadata repository verification are recorded.
@@ -355,23 +355,23 @@ Goal: replace the user-scoped API token model with tenant-owned tokens that can 
   - `["agent:register"]` means the token can register or rotate agents but cannot read or mutate ordinary tenant API resources.
 - Completed nullable `created_by_user_id` audit metadata. Token authorization does not inherit the creating user's role, and later user role changes do not change token capability.
 - Completed tenant-token creation, listing, revocation, rotation, and last-used tracking APIs for tenant admins.
-- Use tenant tokens with `agent:register` or `*` scope to issue or rotate agent enrollment credentials.
-- Require `pandar-agent` to authenticate the reverse gRPC stream with a tenant-scoped agent credential instead of only `PANDAR_TENANT_ID` and `PANDAR_AGENT_ID`.
-- Persist only hashed agent credentials in the hub and return plaintext agent credentials once.
-- Bind gRPC command, heartbeat, snapshot, print report, and command result updates to the authenticated agent identity.
-- Preserve stale-session protection and replacement-session behavior from Phase 2.
+- Completed tenant-token-backed agent enrollment credentials for `agent:register` and `*` scopes.
+- Completed `pandar-agent` reverse gRPC authentication with tenant-scoped agent credentials instead of trusting only `PANDAR_TENANT_ID` and `PANDAR_AGENT_ID`.
+- Completed hash-only agent credential persistence with plaintext credentials returned once for pairing and rotation.
+- Completed authenticated-session binding for gRPC command, heartbeat, snapshot, print report, and command result updates.
+- Preserved stale-session protection and replacement-session behavior from Phase 2.
 - Updated deployment docs so API automation and agent pairing use tenant tokens instead of user-owned API tokens or long-lived bootstrap credentials.
 
 Exit criteria:
 
-- Existing user-scoped API tokens are no longer accepted for bearer API authentication after the migration.
-- A tenant can own multiple active tenant tokens with independent scopes, revocation, rotation, and audit metadata.
-- Empty-scope tenant tokens can read tenant resources but cannot mutate them.
-- `*` tenant tokens can perform all tenant-scoped operations.
-- `agent:register` tenant tokens can register or rotate agents but cannot access ordinary tenant API resources.
-- A fresh agent can be enrolled through tenant-token-authorized pairing and connect without manual database identifiers.
-- Revoked or rotated tenant tokens and agent credentials cannot open or mutate protected sessions.
-- Existing command dispatch and printer/job report tests prove authenticated agent identity is enforced.
+- Completed: existing user-scoped API tokens are no longer accepted for bearer API authentication after the migration.
+- Completed: a tenant can own multiple active tenant tokens with independent scopes, revocation, rotation, and audit metadata.
+- Completed: empty-scope tenant tokens can read tenant resources but cannot mutate them.
+- Completed: `*` tenant tokens can perform all tenant-scoped operations.
+- Completed: `agent:register` tenant tokens can register or rotate agents but cannot access ordinary tenant API resources.
+- Completed: a fresh agent can be enrolled through tenant-token-authorized pairing and connect without manual database identifiers.
+- Completed: revoked or rotated tenant tokens and agent credentials cannot open or mutate protected sessions.
+- Completed: existing command dispatch and printer/job report tests prove authenticated agent identity is enforced.
 
 ## Phase 17: Tenant Admin Product UI
 
@@ -529,12 +529,13 @@ Goal: make release artifacts predictable enough for operators to install without
 - Added local linux-amd64 artifact evidence on 2026-06-24: a `pandar-release-local-a79bcae-linux-amd64.tar.gz` archive built from release binaries passed checksum/layout, `pandar --help`, and 129 packaged plugin ABI export checks through `tools/release-smoke`.
 - Wired the tag-driven GitHub Release workflow to run checksum verification and release-smoke before uploading release artifacts.
 - Added operator release installation docs, a release artifact evidence manifest, and the explicit Phase 24 signing decision: `unsigned-accepted`.
-- Initial pre-workflow release artifact availability check on 2026-06-24 found no GitHub Releases, no `release.yml` workflow runs, and no tags. Later workflow_dispatch runs uploaded artifacts for five target families (see run evidence below), but no tagged GitHub Release archive exists yet. The generated local linux-amd64 archive proves local artifact smoke only; real host install validation remains blocked until an operator selects a tagged GitHub Release archive or a suitable workflow artifact and validates it on the target OS family.
+- Initial pre-workflow release artifact availability check on 2026-06-24 found no GitHub Releases, no `release.yml` workflow runs, and no tags. Later workflow_dispatch runs uploaded artifacts for five target families (see run evidence below), but no tagged GitHub Release archive exists yet. The generated local linux-amd64 archive proves local artifact smoke only; workflow run `28102001464` now has local Linux x86_64 host install evidence, while tagged-release install validation and the other target families remain blocked.
 - Triggered `release.yml` workflow_dispatch run `28098334876` on 2026-06-24: linux-amd64 and linux-arm64 artifacts uploaded, but the full matrix failed because macOS CLI builds linked through cargo-zigbuild on native macOS runners and Windows plugin builds did not find the `cc` shim object. The release workflow now uses native `cargo build` for non-zig macOS targets and accepts both `.o` and `.obj` shim objects before the next workflow evidence run.
 - Triggered `release.yml` workflow_dispatch run `28099917011` on 2026-06-24: linux-amd64 and linux-arm64 artifact jobs passed in CI and local downloaded artifact smoke; macOS CLI/package smoke reached the plugin export check but failed because the Mach-O export table omitted required ABI symbols; Windows plugin builds now find the shim object but fail to link C++ runtime symbols. The plugin build script now prepares a macOS exported-symbol list from the canonical ABI file and links Windows shim builds against libc++/libc++abi before the next workflow evidence run.
 - Triggered `release.yml` workflow_dispatch run `28102001464` on 2026-06-24: linux-amd64, linux-arm64, macos-amd64, macos-arm64, and windows-amd64 artifact jobs passed packaged release-smoke and uploaded artifacts. Windows arm64 built and packaged but failed plugin export inspection because Ubuntu's default `objdump` did not recognize ARM64 PE and no LLVM PE inspector was present. The release workflow now installs LLVM tools before Windows PE export inspection.
 - Triggered `release.yml` workflow_dispatch run `28103772270` on 2026-06-24 after the LLVM inspector fix, but GitHub Actions did not start any build steps because account payments failed or the spending limit needs to be increased. Re-run the workflow after billing is restored before treating Windows arm64 release evidence as updated.
-- Real host installation evidence remains unverified until `docs/compatibility/release-artifacts.md` records target-family rows from actual release artifact installs.
+- Rechecked release availability on 2026-06-25: no GitHub Releases or remote git tags exist, and run `28102001464` artifacts remain unexpired for linux-amd64, linux-arm64, windows-amd64, macos-amd64, and macos-arm64. Local static follow-up checks passed release-smoke for linux-arm64 and windows-amd64 and checksum/layout/file-type inspection for both macOS artifacts; these do not replace target-host install evidence.
+- Real host installation evidence now covers only the `linux-amd64` workflow artifact from run `28102001464`; tagged GitHub Release installs and the other target families remain unverified until `docs/compatibility/release-artifacts.md` records target-family rows from actual release artifact installs.
 - Rework the Linux `pandar-network-plugin` export strategy if arm64 plugin releases remain a target, because the current GNU export-map path is known to be fragile around Rust `cdylib` plus C++ shim exports.
 
 Exit criteria:
@@ -560,7 +561,7 @@ Goal: remove shared-local-spool as the limiting factor for horizontally scaled p
 - Completed final transport hardening for plugin-side streamed multipart uploads, S3 staged-file streaming, handler-owned upload error labels, same-tenant cross-agent artifact `403` classification, backend download failure classification, and redacted Hub-download failure context.
 - Added `tools/scaled-artifact-smoke` to exercise multipart plugin submission on one Hub state, command dequeue on another Hub state, and agent download through a Hub HTTP artifact route without a shared local spool.
 - Kept slicer files opaque; this phase changed storage and transport, not slicer parsing.
-- Remaining live evidence gap: the smoke harness uses local process fixtures and a filesystem-backed fake S3 boundary; live third-party S3/MinIO buckets and a real multi-node PostgreSQL + NATS deployment remain Phase 26 soak-test work.
+- Live scaled-deployment evidence is tracked in Phase 26; local dry-run coverage remains the Phase 25 storage/transport baseline.
 
 Exit criteria:
 
@@ -576,14 +577,17 @@ Goal: prove the scaled Hub and agent model under realistic concurrent use before
 - Completed local dry-run evidence for concurrent agent-session wake convergence, WebSocket subscribers, plugin clients, print-job creation, restart simulation, storage failures, and terminal print-report idempotence.
 - Refreshed scaled smoke evidence on 2026-06-24 after Phase 28 metadata persistence: `tools/scaled-artifact-smoke` now constructs print jobs with explicit `artifact_metadata_json: None`, and `--dry-run --iterations 1 --concurrency 2` passed all local scenarios.
 - Fixed and re-verified Phase 26 local concurrent plugin pressure after reproducing a SQLite `database is locked` failure: print-job audit transactions now use SQLite immediate write transactions, and `--dry-run --iterations 2 --concurrency 2` passed all local scenarios with scenario-context diagnostics.
-- Checked live soak prerequisites on 2026-06-24: local PostgreSQL binaries are available and `tools/scaled-artifact-smoke --live-preflight` now verifies required variables, input shape, and disposable safety markers for PostgreSQL/NATS/object-storage, but no disposable NATS/object-storage endpoint or credentials are configured, so live PostgreSQL+NATS+object-storage soak remains blocked.
+- Checked live soak prerequisites on 2026-06-24: local PostgreSQL binaries were available and `tools/scaled-artifact-smoke --live-preflight` verified required variables, input shape, and disposable safety markers for PostgreSQL/NATS/object-storage; the first pass remained blocked until disposable NATS/object-storage endpoints were configured.
 - Added a live runner entry point for artifact, fanout, restart, and terminal scenarios against disposable PostgreSQL, NATS, and S3-compatible object storage. The storage failure scenario remains local-only.
-- Remaining live evidence gap: disposable PostgreSQL + NATS + object-storage soak has not been run. `docs/compatibility/phase-26-soak-evidence.md` must be updated before treating live scaled deployment latency/conflict/reconnect behavior as proven.
-- Soak-test PostgreSQL + NATS Hub replicas with concurrent agents, WebSocket subscribers, plugin clients, and print-job creation when disposable live dependencies are available.
+- Completed disposable local live soak on 2026-06-25 using PostgreSQL, NATS, and MinIO containers: `--live-preflight` passed, and `--live --iterations 2 --concurrency 2` passed artifact, fanout, restart, and terminal scenarios twice.
+- Fixed and re-verified a live-runner assertion that counted prior persistent commands globally during concurrent plugin pressure; live pressure now counts queued print commands for the current pressure fixtures only.
+- Added explicit NATS interruption evidence on 2026-06-25: the live `nats-reconnect` scenario waited after Hub B subscribed, the disposable NATS container was stopped and started, and a subsequent plugin print from Hub A still woke the Hub B agent session and dequeued the persisted command.
+- Added explicit PostgreSQL restart/reconnect evidence on 2026-06-25: the live `postgres-reconnect` scenario seeded data before a controlled PostgreSQL stop/start, then fresh plugin print creation, command dequeue, and terminal print-report persistence succeeded through the reused pool.
+- Deferred proxy-style artificial SQL latency injection beyond Phase 26; current acceptance uses concurrent pressure plus controlled PostgreSQL restart/reconnect as database fault evidence without adding proxy tooling.
 - Exercise failure modes:
   - Hub restart is covered locally through shared database/storage/control-plane reconstruction;
-  - NATS disconnect/reconnect remains live-only evidence;
-  - PostgreSQL latency or transaction conflicts remain live-only evidence;
+  - NATS disconnect/reconnect is covered by the disposable local `nats-reconnect` live scenario;
+  - PostgreSQL restart/reconnect is covered by the disposable local `postgres-reconnect` live scenario; artificial SQL latency injection is deferred beyond Phase 26 unless future incidents require proxy-level delay testing;
   - WebSocket ticket consumption across replicas is covered locally;
   - control-plane subscriber decode failure and continuation are covered by focused tests;
   - artifact-storage write/read/delete failures are covered locally.
@@ -595,7 +599,7 @@ Exit criteria:
 - Local scaled dry-run has repeatable evidence for agent sessions, command dispatch/wake, WebSocket fanout, plugin calls, and print-job creation.
 - Operators can identify which subsystem failed from `/readyz`, `/metrics`, logs, and documented runbooks.
 - Recovery from local Hub restart simulation does not duplicate terminal machine events or regress physical print state.
-- Live broker interruption and PostgreSQL latency/conflict behavior remain unverified until disposable live soak evidence is recorded.
+- Live PostgreSQL + NATS + object-storage artifact, fanout, restart, terminal, explicit broker interruption, and PostgreSQL restart/reconnect scenarios have disposable local evidence. Artificial SQL latency injection is documented as deferred beyond Phase 26 rather than required Phase 26 evidence.
 
 ## Phase 27: Reference-Backed Live Printer Controls
 
@@ -606,7 +610,7 @@ Goal: add typed pause, resume, stop, and related live printer controls only afte
 - Completed Hub-side compatibility gating so unsupported models or unknown capabilities reject enqueue instead of sending speculative commands.
 - Completed command lifecycle, audit event, structured result, and physical print-status separation in local tests.
 - Added Phase 27 compatibility documentation with local no-network verification commands and explicit real-printer probe status.
-- Frontend controls were updated in this phase and covered by the production build; browser-level e2e interaction and real-printer probes are not recorded in this workspace.
+- Frontend controls were updated in this phase and covered by a 2026-06-25 `frontend/` production build; browser-level e2e interaction and real-printer probes are not recorded in this workspace.
 - Checked Phase 27 live-control probe prerequisites on 2026-06-24: no `PANDAR_PRINTERS` configuration or printer access code is available in this workspace, so pause/resume/stop/print-speed hardware probes are blocked until an operator supplies safe printer state and agent-local LAN credentials outside source control.
 - Real-printer probes for pause, resume, stop, and print speed are not recorded; `docs/bambu-lan-printer-probe-2026-06-24.md` covers other MQTT commands only.
 
@@ -668,7 +672,6 @@ Exit criteria:
 - Provide Bambu Studio installations and matching plugin artifacts, then run Phase 23 real compatibility testing on Linux, Windows, and macOS.
 - Produce a tag/release artifact, then validate it while running Phase 23 so Phase 24 can use the same platform evidence.
 - Record real Bambu Studio plugin compatibility evidence for Phase 23.
-- Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, then record live release artifact install evidence for Phase 24.
-- Run live Phase 26 soak when disposable PostgreSQL, NATS, and object-storage infrastructure is available.
-- Run Phase 27 pause/resume/stop/print-speed hardware probes only after a safe printer state and agent-local LAN credentials are available.
+- Produce or select a tagged GitHub Release archive, then record live release artifact install evidence for Phase 24 target families that are still unverified.
+- Run Phase 27 pause/resume/stop/print-speed and Phase 29 home/move/hotend hardware probes only after a safe printer state and agent-local LAN credentials are available.
 - Keep virtual-printer/proxy behavior deferred until plugin compatibility, scaled artifact storage, and operator recovery workflows are stable.

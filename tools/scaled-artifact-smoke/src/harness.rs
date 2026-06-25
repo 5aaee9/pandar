@@ -36,6 +36,15 @@ impl HarnessConfig {
             !(self.mode == HarnessMode::Live && self.scenario == ScenarioFilter::Storage),
             "storage failure scenario is local dry-run only"
         );
+        ensure!(
+            !(self.mode == HarnessMode::DryRun && self.scenario == ScenarioFilter::NatsReconnect),
+            "nats reconnect scenario is live only"
+        );
+        ensure!(
+            !(self.mode == HarnessMode::DryRun
+                && self.scenario == ScenarioFilter::PostgresReconnect),
+            "postgres reconnect scenario is live only"
+        );
         Ok(())
     }
 
@@ -80,6 +89,8 @@ pub enum ScenarioFilter {
     Restart,
     Storage,
     Terminal,
+    NatsReconnect,
+    PostgresReconnect,
 }
 
 impl ScenarioFilter {
@@ -91,10 +102,11 @@ impl ScenarioFilter {
             "restart" => Ok(Self::Restart),
             "storage" => Ok(Self::Storage),
             "terminal" => Ok(Self::Terminal),
+            "nats-reconnect" => Ok(Self::NatsReconnect),
+            "postgres-reconnect" => Ok(Self::PostgresReconnect),
             other => anyhow::bail!("unknown scenario {other}"),
         }
     }
-
 }
 
 pub async fn run(config: HarnessConfig) -> anyhow::Result<()> {
@@ -131,6 +143,22 @@ pub async fn run(config: HarnessConfig) -> anyhow::Result<()> {
                         .await
                         .with_context(|| format!("scenario=terminal iteration={iteration}"))?;
                     println!("PASS scenario=terminal iteration={iteration}");
+                }
+                ScenarioFilter::NatsReconnect => {
+                    crate::scenarios::nats_reconnect(iteration, &config)
+                        .await
+                        .with_context(|| {
+                            format!("scenario=nats-reconnect iteration={iteration}")
+                        })?;
+                    println!("PASS scenario=nats-reconnect iteration={iteration}");
+                }
+                ScenarioFilter::PostgresReconnect => {
+                    crate::scenarios::postgres_reconnect(iteration, &config)
+                        .await
+                        .with_context(|| {
+                            format!("scenario=postgres-reconnect iteration={iteration}")
+                        })?;
+                    println!("PASS scenario=postgres-reconnect iteration={iteration}");
                 }
             }
         }

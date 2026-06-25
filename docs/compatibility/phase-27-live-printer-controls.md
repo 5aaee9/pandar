@@ -59,6 +59,7 @@ Observed locally on 2026-06-25 after Phase 29:
 - `cargo fmt -- --check`: passed.
 - `cargo clippy --workspace --all-targets -- -D warnings`: passed.
 - `cargo nextest run --manifest-path "Cargo.toml" --workspace`: 570 passed.
+- `npm run build` in `frontend/`: passed with Next.js 16.2.9, including production compilation and TypeScript checks for the live-control UI/server-action path.
 
 Earlier Phase 27 evidence used the older `printer_control` command kind; Phase 29 preserves the tenant `/controls` HTTP route name but persists and dispatches `printer_operation`.
 
@@ -67,6 +68,7 @@ Earlier Phase 27 evidence used the older `printer_control` command kind; Phase 2
 | Date | Printer | Controls | Result | Evidence |
 | --- | --- | --- | --- | --- |
 | 2026-06-24 | Bambu Lab X2D from `docs/bambu-lan-printer-probe-2026-06-24.md` | pause, resume, stop, print speed | `blocked` | The prior real-printer probe used an interactively supplied LAN access code and recorded MQTT connectivity, `pushall`, `gcode_line`, and `get_version` only. The current workspace has no `PANDAR_PRINTERS` configuration or printer access code, so typed live-control probes cannot be repeated safely here. |
+| 2026-06-25 | none configured | pause, resume, stop, print speed, Phase 29 home/move/hotend | `blocked` | Fresh environment check found no `PANDAR_PRINTERS` configuration. No printer access code or operator-selected safe printer state is available in this workspace, so live-control hardware probes were not attempted. |
 
 `docs/bambu-lan-printer-probe-2026-06-24.md` records real-printer evidence for MQTT connectivity, `pushall`, `gcode_line`, and `get_version` on an X2D. It does not record pause, resume, stop, or print-speed probes, so this document makes no hardware compatibility claim for those controls.
 

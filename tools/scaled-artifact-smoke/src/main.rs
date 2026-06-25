@@ -79,7 +79,7 @@ fn parse_args(args: impl IntoIterator<Item = String>) -> anyhow::Result<HarnessC
 
 fn usage() -> anyhow::Result<()> {
     bail!(
-        "usage: pandar-scaled-artifact-smoke --dry-run [--iterations N] [--concurrency N] [--scenario all|artifact|fanout|restart|storage|terminal] | --live [--iterations N] [--concurrency N] [--scenario all|artifact|fanout|restart|terminal] | --live-preflight"
+        "usage: pandar-scaled-artifact-smoke --dry-run [--iterations N] [--concurrency N] [--scenario all|artifact|fanout|restart|storage|terminal] | --live [--iterations N] [--concurrency N] [--scenario all|artifact|fanout|restart|terminal|nats-reconnect|postgres-reconnect] | --live-preflight"
     )
 }
 
@@ -135,7 +135,7 @@ mod main {
         }
 
         #[test]
-        fn live_all_excludes_storage_scenario() {
+        fn live_all_excludes_manual_fault_scenarios() {
             let config = parse_args(["--live", "--scenario", "all"].into_iter().map(str::to_owned))
                 .unwrap();
             assert_eq!(
@@ -164,6 +164,50 @@ mod main {
                     ScenarioFilter::Terminal,
                 ]
             );
+        }
+
+        #[test]
+        fn parse_accepts_live_nats_reconnect_scenario() {
+            let config = parse_args(
+                ["--live", "--scenario", "nats-reconnect"]
+                    .into_iter()
+                    .map(str::to_owned),
+            )
+            .unwrap();
+            assert_eq!(config.scenario, ScenarioFilter::NatsReconnect);
+        }
+
+        #[test]
+        fn parse_rejects_dry_run_nats_reconnect_scenario() {
+            let err = parse_args(
+                ["--dry-run", "--scenario", "nats-reconnect"]
+                    .into_iter()
+                    .map(str::to_owned),
+            )
+            .unwrap_err();
+            assert!(format!("{err:#}").contains("nats reconnect scenario is live only"));
+        }
+
+        #[test]
+        fn parse_accepts_live_postgres_reconnect_scenario() {
+            let config = parse_args(
+                ["--live", "--scenario", "postgres-reconnect"]
+                    .into_iter()
+                    .map(str::to_owned),
+            )
+            .unwrap();
+            assert_eq!(config.scenario, ScenarioFilter::PostgresReconnect);
+        }
+
+        #[test]
+        fn parse_rejects_dry_run_postgres_reconnect_scenario() {
+            let err = parse_args(
+                ["--dry-run", "--scenario", "postgres-reconnect"]
+                    .into_iter()
+                    .map(str::to_owned),
+            )
+            .unwrap_err();
+            assert!(format!("{err:#}").contains("postgres reconnect scenario is live only"));
         }
     }
 }

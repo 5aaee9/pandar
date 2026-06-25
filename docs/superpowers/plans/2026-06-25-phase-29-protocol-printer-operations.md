@@ -39,7 +39,7 @@
 - Modify: `proto/pandar/agent/v1/agent.proto`
 - Modify: generated Rust users after build through later tasks
 
-- [ ] **Step 1: Add protobuf messages**
+- [x] **Step 1: Add protobuf messages**
 
 In `proto/pandar/agent/v1/agent.proto`, replace `PrinterControl printer_control = 14;` in `HubCommand` with:
 
@@ -100,7 +100,7 @@ message SetHotendTemperatureOperation {
 
 Remove the old `PrinterControl` message.
 
-- [ ] **Step 2: Regenerate/check generated users through compilation**
+- [x] **Step 2: Regenerate/check generated users through compilation**
 
 Run:
 
@@ -120,7 +120,7 @@ Expected: FAIL with compile errors in Hub and agent code that still imports or m
 - Modify: `crates/pandar-hub/src/repositories/tests/commands.rs`
 - Modify: `crates/pandar-hub/src/repositories/tests/postgres_commands.rs`
 
-- [ ] **Step 1: Write failing repository tests**
+- [x] **Step 1: Write failing repository tests**
 
 In `crates/pandar-hub/src/repositories/tests/commands.rs`, replace/add printer-control tests for `printer_operation`:
 
@@ -146,7 +146,7 @@ async fn command_enqueue_printer_operation_rejects_unknown_model_before_insert()
 
 Update the PostgreSQL mirror tests in `crates/pandar-hub/src/repositories/tests/postgres_commands.rs` so the configured PostgreSQL path calls `enqueue_printer_operation_with_audit`, asserts `command.kind == "printer_operation"`, and keeps the same unavailable-model behavior. Do not leave PostgreSQL tests asserting `printer_control`.
 
-- [ ] **Step 2: Run focused failing tests**
+- [x] **Step 2: Run focused failing tests**
 
 Run:
 
@@ -156,7 +156,7 @@ cargo test -p pandar-hub command_enqueue_printer_operation
 
 Expected: FAIL because operation types/enqueue are missing.
 
-- [ ] **Step 3: Implement operation payload module**
+- [x] **Step 3: Implement operation payload module**
 
 Create `crates/pandar-hub/src/repositories/commands/operations.rs`:
 
@@ -227,7 +227,7 @@ Add `validate_printer_operation(operation: &PrinterOperationKind) -> RepositoryR
 
 Use `RepositoryError::InvalidPrinterControl` for validation failures to preserve the existing stable API error.
 
-- [ ] **Step 4: Wire repository exports**
+- [x] **Step 4: Wire repository exports**
 
 In `crates/pandar-hub/src/repositories/commands.rs`:
 
@@ -242,7 +242,7 @@ Remove `PrinterControlAction` and `PrinterControlPayload`.
 
 In `crates/pandar-hub/src/repositories/mod.rs`, re-export the new types instead of the old ones.
 
-- [ ] **Step 5: Implement audited enqueue**
+- [x] **Step 5: Implement audited enqueue**
 
 In `crates/pandar-hub/src/repositories/commands/audit.rs`, replace `enqueue_printer_control_with_audit` with `enqueue_printer_operation_with_audit` taking `PrinterOperationKind`.
 
@@ -267,7 +267,7 @@ serde_json::json!({
 })
 ```
 
-- [ ] **Step 6: Run repository tests**
+- [x] **Step 6: Run repository tests**
 
 Run:
 
@@ -288,7 +288,7 @@ Expected: PASS.
 - Modify: `crates/pandar-hub/src/routes.rs`
 - Modify: route tests under `crates/pandar-hub/src/routes/tests/`
 
-- [ ] **Step 1: Write failing gRPC conversion tests**
+- [x] **Step 1: Write failing gRPC conversion tests**
 
 In `crates/pandar-hub/src/grpc/tests/commands.rs`, add tests that build `CommandRecord` values with `kind: "printer_operation"` and semantic payload JSON:
 
@@ -345,7 +345,7 @@ fn grpc_hub_command_from_record_rejects_invalid_printer_operation_payload() {
 
 If `command_record_with_payload` does not already exist, add it as a local test helper next to the existing command-record helpers.
 
-- [ ] **Step 2: Run focused failing tests**
+- [x] **Step 2: Run focused failing tests**
 
 Run:
 
@@ -355,7 +355,7 @@ cargo test -p pandar-hub grpc_hub_command_from_record_maps_printer_operation
 
 Expected: FAIL until conversion is implemented.
 
-- [ ] **Step 3: Complete gRPC conversion**
+- [x] **Step 3: Complete gRPC conversion**
 
 Map `PrinterOperationPayload.operation` to generated protobuf `printer_operation::Operation` variants. Ensure `PrinterAxis::X/Y/Z` become numeric `Axis::AxisX/Y/Z` values and never `AxisUnspecified`.
 
@@ -363,7 +363,7 @@ Unknown/invalid payload JSON returns `Status::internal("invalid printer operatio
 
 Update `crates/pandar-hub/src/grpc/tests/print_jobs.rs::printer_control_success_does_not_mutate_physical_print_status` to enqueue `printer_operation` stop and assert its result JSON uses `"type":"printer_operation"`. Keep the behavioral assertion that control command success does not mutate physical print status.
 
-- [ ] **Step 4: Add `/controls` request parsing tests**
+- [x] **Step 4: Add `/controls` request parsing tests**
 
 Add route tests proving:
 
@@ -372,7 +372,7 @@ Add route tests proving:
 - New body `{"action":"home","axes":["x","z"]}` enqueues semantic home operation with axes and no G-code.
 - Invalid movement returns `400 invalid_printer_control`.
 
-- [ ] **Step 5: Implement route request shape**
+- [x] **Step 5: Implement route request shape**
 
 Create a shared route helper module or shared private functions usable by both `routes/printers.rs` and `routes/plugin.rs`; do not duplicate divergent parsing logic. A simple option is `crates/pandar-hub/src/routes/printer_operations.rs` with `pub(super)` request type and conversion helper, imported by both route modules.
 
@@ -404,7 +404,7 @@ Convert it to `PrinterOperationKind`:
 
 Call `enqueue_printer_operation_with_audit`.
 
-- [ ] **Step 6: Add plugin operation route**
+- [x] **Step 6: Add plugin operation route**
 
 In `crates/pandar-hub/src/routes.rs`, add:
 
@@ -427,13 +427,13 @@ struct PluginOperationResponse {
 
 Wake the command's agent after enqueue.
 
-- [ ] **Step 7: Map stable API errors**
+- [x] **Step 7: Map stable API errors**
 
 Keep existing `RepositoryError::PrinterControlUnavailable` mapping for the tenant API as `printer_control_unavailable` for API stability. In the plugin operation route, map `RepositoryError::PrinterControlUnavailable` to body `{"error":"printer_operation_unavailable"}`.
 
 In `crates/pandar-network-plugin/src/lib.rs`, add `printer_operation_unavailable` to `is_stable_hub_error` so plugin clients receive the stable Hub validation error instead of `invalid_response`.
 
-- [ ] **Step 8: Run Hub tests**
+- [x] **Step 8: Run Hub tests**
 
 Run:
 
@@ -454,7 +454,7 @@ Expected: PASS.
 - Modify: `crates/pandar-agent/src/commands/tests.rs`
 - Modify: `crates/pandar-agent/src/machine/tests.rs`
 
-- [ ] **Step 1: Write failing agent command tests**
+- [x] **Step 1: Write failing agent command tests**
 
 Add tests proving:
 
@@ -462,7 +462,7 @@ Add tests proving:
 - Invalid protobuf `AxisUnspecified` in home emits rejected ack.
 - Agent validates configured printer serial before dispatch.
 
-- [ ] **Step 2: Write failing Bambu dispatch tests**
+- [x] **Step 2: Write failing Bambu dispatch tests**
 
 In `crates/pandar-agent/src/machine/tests.rs`, add tests proving:
 
@@ -471,7 +471,7 @@ In `crates/pandar-agent/src/machine/tests.rs`, add tests proving:
 - Move without feedrate omits `F`.
 - Hotend wait false publishes `M104 S...`; wait true publishes `M109 S...`.
 
-- [ ] **Step 3: Implement operation enum**
+- [x] **Step 3: Implement operation enum**
 
 Create `crates/pandar-agent/src/machine/operations.rs`:
 
@@ -502,7 +502,7 @@ Add `dispatch_printer_operation(endpoint, mqtt, operation)` that publishes to `d
 
 For Bambu home, ignore `axes` and publish bare `G28`.
 
-- [ ] **Step 4: Wire gateway method**
+- [x] **Step 4: Wire gateway method**
 
 In `machine/mod.rs`:
 
@@ -511,7 +511,7 @@ In `machine/mod.rs`:
 - Replace `control_printer` with `operate_printer`.
 - Update `NoopMachineGateway` and `ConfiguredBambuMachineGateway` implementations.
 
-- [ ] **Step 5: Implement command parser module**
+- [x] **Step 5: Implement command parser module**
 
 Create `crates/pandar-agent/src/commands/operations.rs` with:
 
@@ -528,7 +528,7 @@ Validation:
 
 Update `commands.rs` to route `hub_command::Command::PrinterOperation`.
 
-- [ ] **Step 6: Run agent tests**
+- [x] **Step 6: Run agent tests**
 
 Run:
 
@@ -548,7 +548,7 @@ Expected: PASS.
 - Modify: `crates/pandar-network-plugin/tests/support/mod.rs`
 - Modify: `crates/pandar-network-plugin/tests/fixtures/studio_abi_probe.cpp` if the probe expects direct message failure.
 
-- [ ] **Step 1: Write failing parser and HTTP tests**
+- [x] **Step 1: Write failing parser and HTTP tests**
 
 Add Rust tests proving:
 
@@ -561,7 +561,7 @@ Add Rust tests proving:
 - `pandar_plugin_submit_printer_operation` posts a supplied semantic operation JSON body unchanged to `/api/v1/plugin/printers/{printer_id}/operations`.
 - Malformed semantic operation JSON passed to `pandar_plugin_submit_printer_operation` returns `{"error":"invalid_printer_operation"}` before network.
 
-- [ ] **Step 2: Add HTTP helper**
+- [x] **Step 2: Add HTTP helper**
 
 Add FFI export:
 
@@ -588,7 +588,7 @@ Add `RequestKind::PrinterOperation` and error redaction:
 - Hub stable `printer_operation_unavailable` passes through.
 - Malformed operation JSON returns `invalid_printer_operation`.
 
-- [ ] **Step 3: Implement parser**
+- [x] **Step 3: Implement parser**
 
 Implement a small parser in Rust without adding dependencies:
 
@@ -611,7 +611,7 @@ pub extern "C" fn pandar_plugin_operation_json_from_gcode(
 
 On success, return HTTP-like status `0`, code `200`, and the operation JSON body. On unsupported input, return status `1`, code `400`, and `{"error":"unsupported_printer_operation"}`.
 
-- [ ] **Step 4: Wire C++ shim**
+- [x] **Step 4: Wire C++ shim**
 
 In `src/shim.cpp`:
 
@@ -627,7 +627,7 @@ In `src/shim.cpp`:
 
 Keep `bambu_network_start_send_gcode_to_sdcard` unsupported.
 
-- [ ] **Step 5: Run plugin tests**
+- [x] **Step 5: Run plugin tests**
 
 Run:
 
@@ -646,7 +646,7 @@ Expected: PASS.
 - Modify: `docs/architecture.md`
 - Modify: `docs/compatibility/phase-27-live-printer-controls.md`
 
-- [ ] **Step 1: Update roadmap**
+- [x] **Step 1: Update roadmap**
 
 Add Phase 29 to `docs/roadmap.md` and note:
 
@@ -656,11 +656,11 @@ Add Phase 29 to `docs/roadmap.md` and note:
 - Network plugin parses limited G-code into semantic operations.
 - Bambu homing always publishes bare `G28`.
 
-- [ ] **Step 2: Update development docs**
+- [x] **Step 2: Update development docs**
 
 In `docs/development.md`, replace Phase 27 wording that says `printer_control` commands with `printer_operation` and document the expanded operation set plus plugin route.
 
-- [ ] **Step 3: Update architecture docs**
+- [x] **Step 3: Update architecture docs**
 
 In `docs/architecture.md`, add a short paragraph under machine command/plugin sections:
 
@@ -668,7 +668,7 @@ In `docs/architecture.md`, add a short paragraph under machine command/plugin se
 Customer controls are protocol-defined printer operations. Hub stores and forwards semantic operations only; device-specific G-code/MQTT translation is agent-local.
 ```
 
-- [ ] **Step 4: Update compatibility note**
+- [x] **Step 4: Update compatibility note**
 
 In `docs/compatibility/phase-27-live-printer-controls.md`, add a Phase 29 note explaining:
 
@@ -682,7 +682,7 @@ In `docs/compatibility/phase-27-live-printer-controls.md`, add a Phase 29 note e
 **Files:**
 - All modified files.
 
-- [ ] **Step 1: Format**
+- [x] **Step 1: Format**
 
 Run:
 
@@ -692,7 +692,7 @@ cargo fmt --all -- --check
 
 If it fails, run `cargo fmt --all`, then rerun `cargo fmt --all -- --check`.
 
-- [ ] **Step 2: Focused tests**
+- [x] **Step 2: Focused tests**
 
 Run:
 
@@ -702,7 +702,7 @@ cargo test -p pandar-agent printer_operation
 cargo test -p pandar-network-plugin printer_operation
 ```
 
-- [ ] **Step 3: Workspace verification**
+- [x] **Step 3: Workspace verification**
 
 Run:
 
@@ -711,7 +711,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo nextest run --manifest-path "Cargo.toml" --workspace
 ```
 
-- [ ] **Step 4: Diff review**
+- [x] **Step 4: Diff review**
 
 Run:
 

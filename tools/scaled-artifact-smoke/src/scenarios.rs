@@ -271,7 +271,7 @@ async fn concurrent_plugin_pressure(
     }))
     .await?;
     ensure!(
-        world.hub_b.commands().count().await? == config.concurrency as i64,
+        queued_print_commands_for_fixtures(&world, &fixtures).await? == config.concurrency as i64,
         "expected one command per concurrent plugin client"
     );
     let mut prints = Vec::new();
@@ -346,6 +346,105 @@ pub async fn terminal_report_idempotence(
         "stale RUNNING report regressed terminal print status"
     );
     Ok(())
+}
+
+pub async fn nats_reconnect(iteration: usize, config: &HarnessConfig) -> anyhow::Result<()> {
+    let world = SmokeWorld::for_config(config).await?;
+    let fixture =
+        seed_fixture(&world.hub_a, &config.fixture_suffix("nats-reconnect", iteration, 0)).await?;
+    let (_control_plane, ready) = spawn_control_plane_ready(world.hub_b.clone());
+    ready
+        .await
+        .context("control plane readiness channel closed")?
+        .context("hub B control plane failed to start")?;
+    let (wake_sender, mut wake_receiver) = mpsc::channel(1);
+    let (close_sender, _) = mpsc::channel(1);
+    world
+        .hub_b
+        .sessions()
+        .register(agent_session(&fixture, wake_sender, close_sender))
+        .await;
+
+    println!("WAIT scenario=nats-reconnect iteration={iteration} stop-restart-nats-now");
+    tokio::time::sleep(nats_reconnect_pause()).await;
+
+    create_print_through_multipart_route(&world.hub_a, &fixture).await?;
+    tokio::time::timeout(Duration::from_secs(10), wake_receiver.recv())
+        .await
+        .context("agent wake did not arrive after NATS interruption")?
+        .context("agent wake channel closed after NATS interruption")?;
+    let (command_id, _print) = dequeue_print_command(&world.hub_b, &fixture).await?;
+    let persisted = world
+        .hub_b
+        .commands()
+        .get_for_tenant(fixture.tenant_id, command_id)
+        .await?
+        .context("expected persisted command after NATS reconnect dequeue")?;
+    ensure!(
+        persisted.status == CommandStatus::Sent,
+        "NATS reconnect command was not marked sent"
+    );
+    Ok(())
+}
+
+pub async fn postgres_reconnect(iteration: usize, config: &HarnessConfig) -> anyhow::Result<()> {
+    let world = SmokeWorld::for_config(config).await?;
+    let fixture = seed_fixture(
+        &world.hub_a,
+        &config.fixture_suffix("postgres-reconnect", iteration, 0),
+    )
+    .await?;
+
+    println!(
+        "WAIT scenario=postgres-reconnect iteration={iteration} stop-restart-postgres-now"
+    );
+    tokio::time::sleep(postgres_reconnect_pause()).await;
+
+    create_print_through_multipart_route(&world.hub_a, &fixture).await?;
+    let (command_id, _print) = dequeue_print_command(&world.hub_b, &fixture).await?;
+    let persisted = world
+        .hub_b
+        .commands()
+        .get_for_tenant(fixture.tenant_id, command_id)
+        .await?
+        .context("expected persisted command after PostgreSQL reconnect dequeue")?;
+    ensure!(
+        persisted.status == CommandStatus::Sent,
+        "PostgreSQL reconnect command was not marked sent"
+    );
+
+    let created = create_print_job(&world.hub_a, &fixture).await?;
+    let terminal = apply_report(
+        &world.hub_a,
+        &fixture,
+        Some(created.job.id),
+        Some(created.artifact.id.clone()),
+        "FINISH",
+    )
+    .await?;
+    ensure!(
+        terminal.changed,
+        "PostgreSQL reconnect terminal report did not change job"
+    );
+    Ok(())
+}
+
+fn nats_reconnect_pause() -> Duration {
+    std::env::var("PANDAR_SOAK_NATS_RECONNECT_PAUSE_SECS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|seconds| *seconds > 0)
+        .map(Duration::from_secs)
+        .unwrap_or(Duration::from_secs(10))
+}
+
+fn postgres_reconnect_pause() -> Duration {
+    std::env::var("PANDAR_SOAK_POSTGRES_RECONNECT_PAUSE_SECS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|seconds| *seconds > 0)
+        .map(Duration::from_secs)
+        .unwrap_or(Duration::from_secs(10))
 }
 
 fn agent_session(
@@ -429,4 +528,74 @@ async fn table_count(database: &Database, table: &'static str) -> anyhow::Result
         .await?
         .context("count query returned no row")?;
     row.try_get("", "count").map_err(anyhow::Error::from)
+}
+
+async fn queued_print_commands_for_fixtures(
+    world: &SmokeWorld,
+    fixtures: &[SmokeFixture],
+) -> anyhow::Result<i64> {
+    let mut total = 0;
+    for fixture in fixtures {
+        let sql = "SELECT COUNT(*) AS count FROM commands \
+            WHERE tenant_id = $1 AND agent_id = $2 AND kind = 'print_project_file' \
+            AND status = 'queued'";
+        let statement = match world.database.backend() {
+            pandar_hub::db::DatabaseBackend::Sqlite => Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Sqlite,
+                sql.replace("$1", "?").replace("$2", "?"),
+                [
+                    fixture.tenant_id.to_string().into(),
+                    fixture.agent_id.to_string().into(),
+                ],
+            ),
+            pandar_hub::db::DatabaseBackend::Postgres => Statement::from_sql_and_values(
+                sea_orm::DatabaseBackend::Postgres,
+                sql,
+                [
+                    fixture.tenant_id.to_string().into(),
+                    fixture.agent_id.to_string().into(),
+                ],
+            ),
+        };
+        let row = world
+            .database
+            .sea_orm_connection()
+            .query_one_raw(statement)
+            .await?
+            .context("fixture command count query returned no row")?;
+        total += row.try_get::<i64>("", "count")?;
+    }
+    Ok(total)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn pressure_count_ignores_prior_commands_in_shared_database() {
+        let world = SmokeWorld::dry_run().await.unwrap();
+        let prior = seed_fixture(&world.hub_a, "prior").await.unwrap();
+        create_print_through_multipart_route(&world.hub_a, &prior)
+            .await
+            .unwrap();
+        let mut fixtures = Vec::new();
+        for index in 0..2 {
+            let fixture = seed_fixture(&world.hub_a, &format!("pressure-{index}"))
+                .await
+                .unwrap();
+            create_print_through_multipart_route(&world.hub_a, &fixture)
+                .await
+                .unwrap();
+            fixtures.push(fixture);
+        }
+
+        assert_eq!(world.hub_a.commands().count().await.unwrap(), 3);
+        assert_eq!(
+            queued_print_commands_for_fixtures(&world, &fixtures)
+                .await
+                .unwrap(),
+            2
+        );
+    }
 }

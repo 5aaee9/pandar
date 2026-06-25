@@ -27,6 +27,7 @@ Phase 23 tracks Pandar's Bambu Studio network plugin compatibility evidence. A p
 | --- | --- | --- | --- | --- |
 | 2026-06-24 | Local workspace Studio host search | `command -v bambu-studio || command -v BambuStudio || command -v bambu-studio.AppImage` | `blocked` | No local Bambu Studio command was found. Phase 23 real Studio rows remain unproven until a real Studio installation is available; release artifact availability is tracked separately in `docs/compatibility/release-artifacts.md`. |
 | 2026-06-25 | Local Windows Bambu Studio load smoke | `cargo run --manifest-path tools/studio-plugin-smoke/Cargo.toml -- --preflight ...` plus manual-installation load check | `passed` | Bambu Studio `02.07.01.62` was available on Windows x86_64. Preflight, export inspection, direct `LoadLibrary`/`ft_abi_version`, and Studio process-module load checks passed. See `docs/compatibility/windows-dll-smoke-2026-06-25.md`. |
+| 2026-06-25 | Current Linux workspace Studio host search | `command -v bambu-studio || command -v BambuStudio || command -v bambu-studio.AppImage` | `blocked` | Fresh check found no local Bambu Studio command in this workspace. Linux/macOS real Studio validation and Windows sign-in/print-flow validation remain unproven until matching Studio hosts are available. |
 
 ## Local Automated Probe Coverage
 
