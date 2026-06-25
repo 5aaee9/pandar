@@ -188,6 +188,13 @@ PluginHttpResult pandar_plugin_submit_printer_operation(
     const uint8_t*, std::size_t
 );
 PluginHttpResult pandar_plugin_operation_json_from_gcode(const uint8_t*, std::size_t);
+PluginHttpResult pandar_plugin_start_local_webserver(
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t,
+    bool,
+    bool
+);
+PluginHttpResult pandar_plugin_local_webserver_config();
 void pandar_plugin_free(void*, std::size_t);
 void pandar_plugin_free_with_capacity(void*, std::size_t, std::size_t);
 }
@@ -207,9 +214,11 @@ struct Agent {
     std::string avatar;
     std::string profile_json;
     std::string hub_url = "http://localhost:8080";
-    std::string frontend_url = "http://localhost:3000/";
+    std::string frontend_url = "http://localhost:3000";
     std::string last_error;
     bool connected = false;
+    bool hub_configured = false;
+    bool frontend_configured = false;
 };
 
 Agent* as_agent(void* raw) {
@@ -220,11 +229,23 @@ bool has_hub(const Agent* agent) {
     return agent && !agent->hub_url.empty();
 }
 
-std::string env_or(const char* name, std::string fallback) {
-    if (const char* value = std::getenv(name); value && value[0] != '\0') {
-        return value;
+void clear_login_state(Agent* agent) {
+    agent->token.clear();
+    agent->user_id.clear();
+    agent->user_name.clear();
+    agent->avatar.clear();
+    agent->profile_json.clear();
+    agent->connected = false;
+}
+
+std::pair<std::string, bool> env_or_default(const char* primary, const char* secondary, std::string fallback) {
+    if (const char* value = std::getenv(primary); value && value[0] != '\0') {
+        return {value, true};
     }
-    return fallback;
+    if (const char* value = std::getenv(secondary); value && value[0] != '\0') {
+        return {value, true};
+    }
+    return {std::move(fallback), false};
 }
 
 std::string escape_json(const std::string& value) {
@@ -327,6 +348,29 @@ PluginHttpResult rust_exchange_ticket(const Agent* agent, const std::string& tic
     );
 }
 
+PluginHttpResult rust_start_local_webserver(const Agent* agent) {
+    return pandar_plugin_start_local_webserver(
+        reinterpret_cast<const uint8_t*>(agent->frontend_url.data()),
+        agent->frontend_url.size(),
+        reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
+        agent->hub_url.size(),
+        agent->frontend_configured,
+        agent->hub_configured
+    );
+}
+
+void refresh_local_webserver_config(Agent* agent) {
+    auto result = pandar_plugin_local_webserver_config();
+    std::string body = body_from_result(result);
+    if (result.status != 0) return;
+    if (const auto hub_url = field_from_json(body, "hub_url"); !hub_url.empty()) {
+        if (hub_url != agent->hub_url) {
+            clear_login_state(agent);
+        }
+        agent->hub_url = hub_url;
+    }
+}
+
 PluginHttpResult rust_get_printers(const Agent* agent) {
     return pandar_plugin_get_printers(
         reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
@@ -425,26 +469,32 @@ PANDAR_ABI std::string bambu_network_get_version() {
 
 PANDAR_ABI std::string bambu_network_get_user_id(void* agent) {
     auto* a = as_agent(agent);
+    if (a) refresh_local_webserver_config(a);
     return a ? a->user_id : std::string{};
 }
 
 PANDAR_ABI std::string bambu_network_get_user_name(void* agent) {
     auto* a = as_agent(agent);
+    if (a) refresh_local_webserver_config(a);
     return a ? a->user_name : std::string{};
 }
 
 PANDAR_ABI std::string bambu_network_get_user_avatar(void* agent) {
     auto* a = as_agent(agent);
+    if (a) refresh_local_webserver_config(a);
     return a ? a->avatar : std::string{};
 }
 
 PANDAR_ABI std::string bambu_network_get_user_nickanme(void* agent) {
     auto* a = as_agent(agent);
+    if (a) refresh_local_webserver_config(a);
     return a ? a->user_name : std::string{};
 }
 
 PANDAR_ABI std::string bambu_network_build_login_cmd(void* agent) {
-    return login_envelope(as_agent(agent), false);
+    auto* a = as_agent(agent);
+    if (a) refresh_local_webserver_config(a);
+    return login_envelope(a, false);
 }
 
 PANDAR_ABI std::string bambu_network_build_logout_cmd(void* agent) {
@@ -452,12 +502,26 @@ PANDAR_ABI std::string bambu_network_build_logout_cmd(void* agent) {
 }
 
 PANDAR_ABI std::string bambu_network_build_login_info(void* agent) {
-    return login_envelope(as_agent(agent), false);
+    auto* a = as_agent(agent);
+    if (a) refresh_local_webserver_config(a);
+    return login_envelope(a, false);
 }
 
 PANDAR_ABI std::string bambu_network_get_bambulab_host(void* agent) {
     auto* a = as_agent(agent);
-    return a ? a->frontend_url : env_or("PANDAR_PLUGIN_FRONTEND_URL", "http://localhost:3000/");
+    if (!a) return {};
+    auto result = rust_start_local_webserver(a);
+    std::string body = body_from_result(result);
+    if (result.status != 0) {
+        a->last_error = body;
+        return {};
+    }
+    if (const auto base_url = field_from_json(body, "base_url"); !base_url.empty()) {
+        a->last_error.clear();
+        return base_url;
+    }
+    a->last_error = R"({"error":"local_webserver_unavailable"})";
+    return {};
 }
 
 PANDAR_ABI std::string bambu_network_get_user_selected_machine(void* agent) {
@@ -482,11 +546,12 @@ PANDAR_ABI bool bambu_network_check_debug_consistent(bool) {
 
 PANDAR_ABI void* bambu_network_create_agent(std::string log_dir) {
     auto* agent = new Agent(std::move(log_dir));
-    agent->hub_url = env_or("PANDAR_PLUGIN_HUB_URL", env_or("APP_API_URL", "http://localhost:8080"));
-    agent->frontend_url = env_or("PANDAR_PLUGIN_FRONTEND_URL", env_or("APP_BASE_URL", "http://localhost:3000/"));
-    if (!agent->frontend_url.empty() && agent->frontend_url.back() != '/') {
-        agent->frontend_url.push_back('/');
-    }
+    auto [hub_url, hub_configured] = env_or_default("PANDAR_PLUGIN_HUB_URL", "APP_API_URL", "http://localhost:8080");
+    auto [frontend_url, frontend_configured] = env_or_default("PANDAR_PLUGIN_FRONTEND_URL", "APP_BASE_URL", "http://localhost:3000");
+    agent->hub_url = std::move(hub_url);
+    agent->frontend_url = std::move(frontend_url);
+    agent->hub_configured = hub_configured;
+    agent->frontend_configured = frontend_configured;
     return agent;
 }
 
@@ -596,6 +661,7 @@ PANDAR_ABI int bambu_network_disconnect_printer(void* agent) {
 PANDAR_ABI int bambu_network_send_message_to_printer(void* agent, std::string dev_id, std::string message, int, int) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    refresh_local_webserver_config(a);
     if (a->token.empty() || dev_id.empty()) {
         a->last_error = R"({"error":"invalid_printer_operation"})";
         return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
@@ -633,10 +699,7 @@ PANDAR_ABI int bambu_network_change_user(void* agent, std::string user_info) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     if (user_info.empty() || user_info == "{}") {
-        a->token.clear();
-        a->profile_json.clear();
-        a->user_id.clear();
-        a->user_name.clear();
+        clear_login_state(a);
         return BBL::BAMBU_NETWORK_SUCCESS;
     }
     apply_profile_json(a, user_info);
@@ -645,14 +708,14 @@ PANDAR_ABI int bambu_network_change_user(void* agent, std::string user_info) {
 
 PANDAR_ABI bool bambu_network_is_user_login(void* agent) {
     auto* a = as_agent(agent);
+    if (a) refresh_local_webserver_config(a);
     return a && !a->token.empty();
 }
 
 PANDAR_ABI int bambu_network_user_logout(void* agent, bool) {
     auto* a = as_agent(agent);
     if (a) {
-        a->token.clear();
-        a->profile_json.clear();
+        clear_login_state(a);
     }
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
@@ -673,6 +736,7 @@ PANDAR_ABI int bambu_network_get_my_profile(void* agent, std::string token, unsi
 PANDAR_ABI int bambu_network_get_my_token(void* agent, std::string ticket, unsigned int* http_code, std::string* http_body) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    refresh_local_webserver_config(a);
     if (ticket.empty()) {
         if (http_code) *http_code = 401;
         if (http_body) *http_body = R"({"error":"invalid_plugin_ticket"})";
@@ -748,6 +812,7 @@ PANDAR_ABI int bambu_network_report_consent(void*, std::string) {
 PANDAR_ABI int bambu_network_start_print(void* agent, BBL::PrintParams params, BBL::OnUpdateStatusFn update_fn, BBL::WasCancelledFn cancel_fn, BBL::OnWaitFn) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    refresh_local_webserver_config(a);
     if (cancel_fn && cancel_fn()) return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
     if (a->token.empty() || params.dev_id.empty() || params.filename.empty()) {
         if (update_fn) update_fn(7, BBL::BAMBU_NETWORK_ERR_INVALID_RESULT, "Pandar plugin print submission is missing token, printer, or artifact");
@@ -827,6 +892,7 @@ PANDAR_ABI int bambu_network_check_user_task_report(void*, int* task_id, bool* p
 PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http_code, std::string* http_body) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    refresh_local_webserver_config(a);
     if (a->token.empty()) {
         if (http_code) *http_code = 401;
         if (http_body) *http_body = R"({"error":"invalid_auth_token"})";
@@ -842,6 +908,7 @@ PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http
 PANDAR_ABI int bambu_network_get_user_tasks(void* agent, BBL::TaskQueryParams, std::string* http_body) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    refresh_local_webserver_config(a);
     if (a->token.empty()) {
         if (http_body) *http_body = R"({"error":"invalid_auth_token"})";
         return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;

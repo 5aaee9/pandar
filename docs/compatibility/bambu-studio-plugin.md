@@ -33,6 +33,7 @@ Phase 23 tracks Pandar's Bambu Studio network plugin compatibility evidence. A p
 | Probe | Coverage | Status | Evidence |
 | --- | --- | --- | --- |
 | `cargo test -p pandar-network-plugin` | Exported symbol list, Rust HTTP helper boundaries, and local C++ ABI call sequence without Bambu Studio. | `passed` | 2026-06-24 after Phase 28: 20 tests passed. This is local probe evidence only; real Studio rows remain blocked until a Studio installation is available. Matching plugin artifact evidence is tracked separately in `docs/compatibility/release-artifacts.md`. |
+| `cargo test -p pandar-network-plugin --test local_webserver` plus `--test studio_abi_probe` | Exercises the embedded loopback sign-in/config server, target-server switching, static assets from `rust-embed`, and the C++ ABI host handoff without Bambu Studio. | `passed` | 2026-06-25: local automated evidence only. Real Studio sign-in and ticket-flow rows remain unverified until a matching Studio host is available. |
 | `cargo test --manifest-path tools/studio-plugin-smoke/Cargo.toml` plus a valid temporary-file CLI invocation | Validates Phase 23 operator prerequisite shape, plugin filename/OS matching, URL redaction rules, and evidence row formatting before a manual Studio run. | `passed` | 2026-06-24: local helper coverage only; real Studio rows remain blocked until actual Bambu Studio hosts are available. |
 
 ## Unsupported ABI Surfaces

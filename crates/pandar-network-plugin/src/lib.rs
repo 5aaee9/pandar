@@ -3,6 +3,8 @@ use std::{ffi::c_void, path::PathBuf, slice};
 use futures_util::TryStreamExt;
 use serde_json::{Value, json};
 
+mod local_webserver;
+
 pub const PLUGIN_NAME: &str = "pandar-network-plugin";
 
 #[derive(Clone, Copy)]
@@ -21,6 +23,34 @@ pub struct PluginHttpResult {
     pub body_ptr: *mut u8,
     pub body_len: usize,
     pub body_cap: usize,
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pandar_plugin_start_local_webserver(
+    web_url_ptr: *const u8,
+    web_url_len: usize,
+    hub_url_ptr: *const u8,
+    hub_url_len: usize,
+    web_configured: bool,
+    hub_configured: bool,
+) -> PluginHttpResult {
+    let Some(web_url) = read_utf8(web_url_ptr, web_url_len) else {
+        return invalid_input("invalid_target_server");
+    };
+    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len) else {
+        return invalid_input("invalid_target_server");
+    };
+    local_webserver::start(web_url, hub_url, web_configured, hub_configured)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pandar_plugin_local_webserver_base_url() -> PluginHttpResult {
+    local_webserver::base_url()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pandar_plugin_local_webserver_config() -> PluginHttpResult {
+    local_webserver::config()
 }
 
 #[unsafe(no_mangle)]

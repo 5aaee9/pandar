@@ -8,9 +8,14 @@
 #include <vector>
 
 #if defined(_WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #else
 #include <dlfcn.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <netdb.h>
 #endif
 
 namespace BBL {
@@ -120,12 +125,131 @@ bool contains(const std::string& haystack, const std::string& needle) {
     return haystack.find(needle) != std::string::npos;
 }
 
-std::string frontend_url() {
-    const char* value = std::getenv("PANDAR_PLUGIN_FRONTEND_URL");
-    if (!value || value[0] == '\0') return {};
-    std::string url(value);
-    if (!url.empty() && url.back() != '/') url.push_back('/');
-    return url;
+struct ParsedUrl {
+    std::string host;
+    std::string port;
+};
+
+ParsedUrl parse_http_loopback_url(const std::string& url) {
+    const std::string prefix = "http://";
+    if (url.rfind(prefix, 0) != 0) {
+        std::cerr << "expected http URL: " << url << "\n";
+        std::exit(2);
+    }
+    auto authority = url.substr(prefix.size());
+    auto slash = authority.find('/');
+    if (slash != std::string::npos) authority.resize(slash);
+    auto colon = authority.rfind(':');
+    if (colon == std::string::npos) {
+        std::cerr << "expected explicit port in URL: " << url << "\n";
+        std::exit(2);
+    }
+    return {authority.substr(0, colon), authority.substr(colon + 1)};
+}
+
+std::string http_request(const std::string& base_url, const std::string& request) {
+    auto parsed = parse_http_loopback_url(base_url);
+#if defined(_WIN32)
+    WSADATA data;
+    if (WSAStartup(MAKEWORD(2, 2), &data) != 0) {
+        std::cerr << "WSAStartup failed\n";
+        std::exit(2);
+    }
+#endif
+    addrinfo hints{};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    addrinfo* addrs = nullptr;
+    if (getaddrinfo(parsed.host.c_str(), parsed.port.c_str(), &hints, &addrs) != 0 || !addrs) {
+        std::cerr << "getaddrinfo failed for local webserver\n";
+        std::exit(2);
+    }
+    int fd = -1;
+    for (auto* addr = addrs; addr; addr = addr->ai_next) {
+        fd = static_cast<int>(socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol));
+        if (fd < 0) continue;
+        if (connect(fd, addr->ai_addr, addr->ai_addrlen) == 0) break;
+#if defined(_WIN32)
+        closesocket(fd);
+#else
+        close(fd);
+#endif
+        fd = -1;
+    }
+    freeaddrinfo(addrs);
+    if (fd < 0) {
+        std::cerr << "connect local webserver failed\n";
+        std::exit(2);
+    }
+    const char* cursor = request.data();
+    std::size_t remaining = request.size();
+    while (remaining > 0) {
+#if defined(_WIN32)
+        int sent = send(fd, cursor, static_cast<int>(remaining), 0);
+#else
+        auto sent = send(fd, cursor, remaining, 0);
+#endif
+        if (sent <= 0) {
+            std::cerr << "send local webserver request failed\n";
+            std::exit(2);
+        }
+        cursor += sent;
+        remaining -= static_cast<std::size_t>(sent);
+    }
+    std::string response;
+    char buffer[1024];
+    for (;;) {
+#if defined(_WIN32)
+        int read = recv(fd, buffer, sizeof(buffer), 0);
+#else
+        auto read = recv(fd, buffer, sizeof(buffer), 0);
+#endif
+        if (read <= 0) break;
+        response.append(buffer, buffer + read);
+    }
+#if defined(_WIN32)
+    closesocket(fd);
+    WSACleanup();
+#else
+    close(fd);
+#endif
+    return response;
+}
+
+std::string http_body(const std::string& response) {
+    auto marker = response.find("\r\n\r\n");
+    return marker == std::string::npos ? std::string{} : response.substr(marker + 4);
+}
+
+std::string json_field(const std::string& body, const std::string& name) {
+    const std::string key = "\"" + name + "\":\"";
+    auto start = body.find(key);
+    if (start == std::string::npos) return {};
+    start += key.size();
+    auto end = body.find('"', start);
+    return end == std::string::npos ? std::string{} : body.substr(start, end - start);
+}
+
+void switch_local_hub_target(const std::string& base_url, const std::string& hub_url) {
+    auto config_response = http_request(
+        base_url,
+        "GET /config HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    );
+    auto config_body = http_body(config_response);
+    auto web_url = json_field(config_body, "webUrl");
+    auto nonce = json_field(config_body, "configNonce");
+    if (web_url.empty() || nonce.empty()) {
+        std::cerr << "local config response lacked webUrl or configNonce: " << config_body << "\n";
+        std::exit(2);
+    }
+    auto post_body = std::string("{\"webUrl\":\"") + web_url + "\",\"hubUrl\":\"" + hub_url + "\",\"configNonce\":\"" + nonce + "\"}";
+    auto request = std::string("POST /config HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: ") +
+        std::to_string(post_body.size()) + "\r\nConnection: close\r\n\r\n" + post_body;
+    auto response = http_request(base_url, request);
+    if (!contains(response, "HTTP/1.1 200 OK")) {
+        std::cerr << "switch local hub target failed: " << response << "\n";
+        std::exit(2);
+    }
 }
 
 struct Library {
@@ -271,6 +395,7 @@ int main(int argc, char** argv) {
     using string_agent_fn = std::string (*)(void*);
     using token_fn = int (*)(void*, std::string, unsigned int*, std::string*);
     using change_user_fn = int (*)(void*, std::string);
+    using is_user_login_fn = bool (*)(void*);
     using print_info_fn = int (*)(void*, unsigned int*, std::string*);
     using tasks_fn = int (*)(void*, BBL::TaskQueryParams, std::string*);
     using start_print_fn = int (*)(void*, BBL::PrintParams, BBL::OnUpdateStatusFn, BBL::WasCancelledFn, BBL::OnWaitFn);
@@ -285,6 +410,7 @@ int main(int argc, char** argv) {
     auto get_token = lib.sym<token_fn>("bambu_network_get_my_token");
     auto get_profile = lib.sym<token_fn>("bambu_network_get_my_profile");
     auto change_user = lib.sym<change_user_fn>("bambu_network_change_user");
+    auto is_user_login = lib.sym<is_user_login_fn>("bambu_network_is_user_login");
     auto build_login_cmd = lib.sym<string_agent_fn>("bambu_network_build_login_cmd");
     auto build_login_info = lib.sym<string_agent_fn>("bambu_network_build_login_info");
     auto get_print_info = lib.sym<print_info_fn>("bambu_network_get_user_print_info");
@@ -314,7 +440,9 @@ int main(int argc, char** argv) {
     if (!agent) fail(agent, destroy_agent, "agent creation failed");
 
     out.host = get_host(agent);
-    if (out.host != frontend_url()) fail(agent, destroy_agent, "frontend host did not match environment");
+    if (!contains(out.host, "http://127.0.0.1:")) {
+        fail(agent, destroy_agent, "frontend host did not use local webserver");
+    }
 
     unsigned int http_code = 0;
     std::string http_body;
@@ -342,6 +470,25 @@ int main(int argc, char** argv) {
             fail(agent, destroy_agent, "profile retrieval did not return stored profile content");
         }
         if (change_user(agent, profile_body) != 0) fail(agent, destroy_agent, "change_user failed");
+        if (!is_user_login(agent)) fail(agent, destroy_agent, "expected user login before hub switch");
+        switch_local_hub_target(out.host, "https://switched-hub.example.test");
+        if (is_user_login(agent)) fail(agent, destroy_agent, "hub switch did not clear login state");
+        if (contains(build_login_info(agent), "probe-token") || contains(build_login_cmd(agent), "probe-token")) {
+            fail(agent, destroy_agent, "hub switch left old token in login envelope");
+        }
+        const char* original_hub = std::getenv("PANDAR_PLUGIN_HUB_URL");
+        if (!original_hub || original_hub[0] == '\0') {
+            fail(agent, destroy_agent, "missing original hub URL env");
+        }
+        switch_local_hub_target(out.host, original_hub);
+        if (get_token(agent, "probe-ticket", &http_code, &http_body) != 0 || http_code != 200) {
+            fail(agent, destroy_agent, "ticket exchange after hub switch recovery failed");
+        }
+        std::string recovered_profile;
+        if (get_profile(agent, "probe-token", &http_code, &recovered_profile) != 0 || http_code != 200) {
+            fail(agent, destroy_agent, "profile retrieval after hub switch recovery failed");
+        }
+        if (change_user(agent, recovered_profile) != 0) fail(agent, destroy_agent, "change_user after hub switch recovery failed");
     }
 
     out.login_command = build_login_cmd(agent);

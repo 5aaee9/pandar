@@ -447,13 +447,15 @@ Goal: add `crates/pandar-network-plugin` as a Bambu Studio network plugin ABI dy
 - Exported the required `bambu_network_*` and `ft_*` symbols for Bambu Studio loading.
 - Kept direct LAN/printer paths as stable no-op/unsupported behavior; the plugin does not connect directly to `pandar-agent` or Bambu machines.
 - Implemented login scaffolding around Bambu Studio's existing flow:
-  - `bambu_network_get_bambulab_host` returns a Pandar frontend URL that serves a Studio-compatible sign-in entry page.
-  - The sign-in page lets the user enter or confirm the Pandar URL when needed, then redirects to the configured Pandar frontend authentication flow.
+  - `bambu_network_get_bambulab_host` starts and returns a plugin-local loopback webserver that serves a Studio-compatible sign-in entry page.
+  - The sign-in page is built from the `frontend/plugin-local` monorepo package, embedded in the plugin with `rust-embed`, and lets the user inspect defaults or switch the target web/hub server.
+  - The local page then redirects to the configured Pandar frontend authentication flow.
   - The frontend authenticates with Clerk or Logto, selects a tenant through Pandar-managed membership, creates a short-lived one-use plugin login ticket, and returns it through Studio's expected local callback path.
   - The web page uses Bambu Studio's `get_localhost_url` message when available, then sends the browser to Studio's localhost HTTP server with `ticket` and `redirect_url`.
   - Studio calls the plugin's `get_my_token(ticket)` and `get_my_profile(token)` ABI methods; the plugin exchanges the ticket with `pandar-hub` and returns Bambu-shaped token/profile JSON that lets Studio call `change_user(login_info)`.
 - Represented the resulting plugin credential as a tenant-owned `["plugin:studio"]` token issued by the hub, not as a user-owned API token.
 - Kept Bambu printer access codes and LAN addresses out of the plugin. Those remain agent-local.
+- Completed local webserver coverage for embedded assets, default configuration prompts, target-server switching, and ABI handoff through `cargo test -p pandar-network-plugin --test local_webserver` and `--test studio_abi_probe`.
 - Added a symbol export test from the local ABI symbol file so missing exports fail before runtime Studio loading.
 - Documented Linux, Windows, and macOS replacement paths with packaging/signing explicitly optional.
 

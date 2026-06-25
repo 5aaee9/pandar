@@ -82,6 +82,8 @@ fn compile_probe(mode_arg: &str) -> Option<PathBuf> {
         .arg(&output);
     if cfg!(target_os = "linux") {
         command.arg("-ldl");
+    } else if cfg!(target_os = "windows") {
+        command.arg("-lws2_32");
     }
 
     let result = command.output().unwrap();
@@ -171,6 +173,7 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
         MockMode::Success => {
             let expected = [
                 ("POST", "/api/v1/plugin/login-tickets/exchange", false),
+                ("POST", "/api/v1/plugin/login-tickets/exchange", false),
                 ("GET", "/api/v1/plugin/printers", true),
                 ("GET", "/api/v1/plugin/jobs", true),
                 ("POST", "/api/v1/plugin/prints", true),
@@ -191,10 +194,15 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                     1 => write_response(
                         &mut stream,
                         "HTTP/1.1 200 OK",
+                        r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
+                    ),
+                    2 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
                         r#"{"devices":[{"dev_id":"printer-1","name":"Probe Printer"}]}"#,
                     ),
-                    2 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"tasks":[]}"#),
-                    3 => {
+                    3 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"tasks":[]}"#),
+                    4 => {
                         let body = request_body(&request);
                         assert_multipart_print_request(&request);
                         assert!(
@@ -208,7 +216,7 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         assert_multipart_file_part(&request, "probe.3mf", &artifact);
                         write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"job_id":"job-1"}"#);
                     }
-                    4 => {
+                    5 => {
                         assert_eq!(
                             serde_json::from_str::<serde_json::Value>(request_body(&request))
                                 .unwrap(),
@@ -361,7 +369,10 @@ fn probe_exercises_studio_abi_success_path() {
 
     assert!(stderr.is_empty(), "probe stderr was not empty: {stderr}");
     assert_json_field(&stdout, "ok", "true");
-    assert!(stdout.contains(r#""host":"http://127.0.0.1:3000/pandar/""#));
+    assert!(
+        stdout.contains(r#""host":"http://127.0.0.1:"#),
+        "probe host did not use local webserver: {stdout}"
+    );
     assert!(stdout.contains("studio_userlogin"));
     assert!(stdout.contains("studio_useroffline"));
     assert_json_field(&stdout, "printer_rc", "0");

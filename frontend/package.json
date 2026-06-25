@@ -2,9 +2,11 @@
   "name": "pandar-web",
   "version": "0.1.0",
   "private": true,
+  "workspaces": ["plugin-local"],
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run build -w pandar-plugin-local && next build",
+    "build:plugin-local": "npm run build -w pandar-plugin-local",
     "start": "next start",
     "lint": "next lint"
   },

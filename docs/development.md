@@ -128,13 +128,22 @@ Important boundaries:
 Implemented login flow:
 
 1. Bambu Studio opens the plugin-provided host plus `/sign-in`.
-2. The Pandar sign-in page lets the user enter or confirm the Pandar frontend URL when needed.
-3. The frontend relies on the configured Pandar auth token/cookie bridge and tenant selection through Pandar-managed membership.
-4. The hub issues a short-lived one-use plugin login ticket.
-5. The page uses Studio's `get_localhost_url` message and redirects to Studio's local HTTP server with `ticket` and `redirect_url`.
-6. Studio calls the plugin's `get_my_token(ticket)` and `get_my_profile(token)` ABI methods.
-7. The plugin exchanges the ticket with the hub, creating a tenant-owned `["plugin:studio"]` credential. The ABI shim stores Bambu-shaped login state for Studio UI compatibility.
-8. Hub-backed plugin calls read printers/jobs and submit prints through `/api/v1/plugin/*` routes using the plugin credential.
+2. The plugin starts a loopback HTTP server on `127.0.0.1:0`; that server is the host returned by `bambu_network_get_bambulab_host`.
+3. The local server serves `frontend/plugin-local/dist` with `rust-embed`. The page shows default web/hub URLs when no configuration is present and lets the user switch the target server before sign-in.
+4. The local page links to the configured Pandar frontend `/plugin-sign-in` route with the local callback URL.
+5. The frontend relies on the configured Pandar auth token/cookie bridge and tenant selection through Pandar-managed membership.
+6. The hub issues a short-lived one-use plugin login ticket.
+7. The page uses Studio's `get_localhost_url` message and redirects to Studio's local HTTP server with `ticket` and `redirect_url`.
+8. Studio calls the plugin's `get_my_token(ticket)` and `get_my_profile(token)` ABI methods.
+9. The plugin exchanges the ticket with the selected hub, creating a tenant-owned `["plugin:studio"]` credential. The ABI shim stores Bambu-shaped login state for Studio UI compatibility.
+10. Hub-backed plugin calls read printers/jobs and submit prints through `/api/v1/plugin/*` routes using the plugin credential.
+
+Plugin URL configuration uses this precedence:
+
+- Frontend URL: `PANDAR_PLUGIN_FRONTEND_URL`, then `APP_BASE_URL`, then `http://localhost:3000`.
+- Hub URL: `PANDAR_PLUGIN_HUB_URL`, then `APP_API_URL`, then `http://localhost:8080`.
+
+The local `/config` endpoint stores an in-process target-server override. Later hub-facing ABI calls refresh only the hub URL from that local config; the existing Next.js `/plugin-sign-in` flow remains responsible for authentication and ticket creation.
 
 Plugin credentials are revocable tenant-owned credentials. They do not carry `agent:register`. Phase 23 adds a compatibility manifest, manual smoke runbook, stable plugin error mapping, and a local ABI probe. Real Bambu Studio compatibility remains unverified until `docs/compatibility/bambu-studio-plugin.md` contains a real Studio evidence row.
 

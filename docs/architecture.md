@@ -142,12 +142,13 @@ Evidence from `reference/open-bamboo-networking` and `reference/BambuStudio`:
 
 Pandar's plugin design:
 
-1. `pandar-network-plugin` returns the Pandar frontend as the plugin host/sign-in URL.
-2. The Pandar frontend page lets the user enter or confirm the Pandar URL when needed, then completes Clerk or Logto authentication.
-3. After authentication, the frontend asks the hub to create a short-lived, one-use plugin login ticket for a selected tenant.
-4. The page uses Studio's `get_localhost_url` flow and redirects the browser to Studio's local callback with `ticket` and `redirect_url`.
-5. Studio calls the plugin's token/profile ABI. The plugin exchanges the ticket with `pandar-hub` for a tenant-owned plugin credential and returns Bambu-shaped token/profile JSON to Studio.
-6. `change_user` stores enough session state for Studio login UI and future hub API calls.
+1. `pandar-network-plugin` starts a process-local loopback HTTP server and returns that server as the plugin host/sign-in URL.
+2. The loopback server serves an embedded minimal sign-in/configuration page from `frontend/plugin-local/dist` through `rust-embed`.
+3. The local page displays default Pandar web and hub URLs when no configuration is present, lets the user switch the target server, and links to the configured Pandar frontend `/plugin-sign-in` page.
+4. The Pandar frontend completes Clerk or Logto authentication and asks the hub to create a short-lived, one-use plugin login ticket for a selected tenant.
+5. The page uses Studio's `get_localhost_url` flow and redirects the browser to Studio's local callback with `ticket` and `redirect_url`.
+6. Studio calls the plugin's token/profile ABI. The plugin exchanges the ticket with `pandar-hub` for a tenant-owned plugin credential and returns Bambu-shaped token/profile JSON to Studio.
+7. `change_user` stores enough session state for Studio login UI and future hub API calls.
 
 The plugin credential is tenant-owned and revocable. It is not a user-owned API token and does not receive `agent:register`.
 
@@ -394,7 +395,7 @@ Agent phase status after Phase 15:
 - Dynamic-library crate intended to replace Bambu Studio's network plugin ABI.
 - Exports the required `bambu_network_*` and minimal `ft_*` compatibility symbols.
 - Connects only to `pandar-hub` through HTTP/WebSocket APIs.
-- Uses Bambu Studio's existing login WebView, local callback, token/profile ABI, and `change_user` flow instead of inventing a separate local listener.
+- Uses Bambu Studio's existing login WebView, local callback, token/profile ABI, and `change_user` flow. The plugin host is a minimal loopback webserver that serves the embedded local sign-in/config page and keeps the hub URL selectable before token exchange.
 - Presents hub-backed printer/job state to Bambu Studio from cached hub responses where ABI calls are synchronous.
 - Submits print actions to the hub; the hub dispatches through authenticated agents.
 - Does not store Bambu access codes, open printer MQTT/FTPS/SFTP sockets, or call agents directly.
