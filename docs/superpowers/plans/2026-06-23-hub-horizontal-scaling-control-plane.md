@@ -30,6 +30,7 @@
 ## Task 1: Control Plane Configuration, Dependency, And Startup Wiring
 
 **Files:**
+
 - Modify: `Cargo.toml`
 - Modify: `crates/pandar-hub/Cargo.toml`
 - Create: `crates/pandar-hub/src/cluster.rs`
@@ -442,6 +443,7 @@ Expected: all seven tests pass, including SQLite+NATS rejection, SQLite default 
 ## Task 2: In-Process/NATS Control Plane And Runtime Subscriber
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/cluster.rs`
 - Modify: `crates/pandar-hub/src/lib.rs`
 - Modify: `crates/pandar-hub/src/runtime.rs`
@@ -1155,6 +1157,7 @@ Expected: sibling wake/close tests, wrong-tenant/wrong-agent negative tests, par
 ## Task 3: Database-Backed Printer Event Tickets
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/entities/printer_event_tickets.rs`
 - Modify: `crates/pandar-hub/src/entities/mod.rs`
 - Create: `crates/pandar-hub/src/repositories/printer_event_tickets.rs`
@@ -1445,6 +1448,7 @@ Expected: repository semantics pass for SQLite and for PostgreSQL when `PANDAR_T
 ## Task 4: Route Command Wake Coverage
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/routes/jobs.rs`
 - Modify: `crates/pandar-hub/src/routes/plugin.rs`
 - Modify: `crates/pandar-hub/src/routes/provisioning/agents.rs`
@@ -1614,6 +1618,7 @@ Expected: sibling command wake, print wake, and credential revoke close tests pa
 ## Task 5: Cross-Replica Printer Event Fanout Without Duplicates
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/routes/tests/printer_events_ws.rs`
 
 - [ ] **Step 1: Add sibling fanout regression coverage**
@@ -1793,6 +1798,7 @@ Expected: existing and new WebSocket event tests pass.
 ## Task 6: Documentation And Deployment Wiring
 
 **Files:**
+
 - Modify: `docker-compose.postgres.yml`
 - Modify: `docs/architecture.md`
 - Modify: `docs/development.md`
@@ -1803,24 +1809,24 @@ Expected: existing and new WebSocket event tests pass.
 Add service:
 
 ```yaml
-  nats:
-    image: nats:2.11-alpine
-    profiles: ["nats"]
-    command: ["-js", "-m", "8222"]
-    ports:
-      - "4222:4222"
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8222/healthz"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
+nats:
+  image: nats:2.11-alpine
+  profiles: ["nats"]
+  command: ["-js", "-m", "8222"]
+  ports:
+    - "4222:4222"
+  healthcheck:
+    test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8222/healthz"]
+    interval: 5s
+    timeout: 5s
+    retries: 12
 ```
 
 Set `pandar-api` environment:
 
 ```yaml
-      PANDAR_CONTROL_PLANE: ${PANDAR_CONTROL_PLANE:-in-process}
-      PANDAR_NATS_URL: ${PANDAR_NATS_URL:-nats://nats:4222}
+PANDAR_CONTROL_PLANE: ${PANDAR_CONTROL_PLANE:-in-process}
+PANDAR_NATS_URL: ${PANDAR_NATS_URL:-nats://nats:4222}
 ```
 
 Document beside the Compose environment that `PANDAR_NATS_URL` is ignored unless `PANDAR_CONTROL_PLANE=nats`; in-process PostgreSQL deployments do not require NATS even if the URL variable has a default value. Keep `pandar-api` free of `depends_on: nats` in the default graph. Document enabling the optional broker with a Compose profile, for example:
@@ -1881,6 +1887,7 @@ Expected: no whitespace errors.
 ## Task 7: Full Verification, Review, Commit, Push
 
 **Files:**
+
 - All changed files.
 
 Commit and push are included because the user explicitly invoked `$sdd-workflow`, whose completion contract requires documentation updates, fresh verification, a Lore-format commit, and a push. These are downstream SDD completion steps after implementation review approval, not a generic requirement for unrelated plans.

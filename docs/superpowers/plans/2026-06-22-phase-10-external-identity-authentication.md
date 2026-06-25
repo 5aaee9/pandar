@@ -29,6 +29,7 @@
 ## Task 1: Add Dependencies And Identity Schema
 
 **Files:**
+
 - Modify: `Cargo.toml`
 - Modify: `crates/pandar-hub/Cargo.toml`
 - Create: `crates/pandar-hub/migrations/sqlite/20260622030000_phase_10_external_identity.sql`
@@ -89,6 +90,7 @@ Expected: the test passes and SQLx compile-time migration embedding succeeds.
 ## Task 2: Add Repository Identity Link And Resolve
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/repositories/mod.rs`
 - Modify: `crates/pandar-hub/src/repositories/auth.rs`
 - Modify: `crates/pandar-hub/src/repositories/tests/auth.rs`
@@ -301,6 +303,7 @@ Expected: all auth repository tests pass. If `PANDAR_TEST_POSTGRES_URL` is unset
 ## Task 3: Add External Auth Config And JWT Verifier
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/identity.rs`
 - Modify: `crates/pandar-hub/src/lib.rs`
 
@@ -510,6 +513,7 @@ Expected: config and claim helper tests pass.
 ## Task 4: Integrate External JWT Auth Into HTTP And WebSocket Authorization
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/routes/auth.rs`
 
 - [x] **Step 1: Keep bearer extraction unchanged**
@@ -572,6 +576,7 @@ Expected: existing auth error behavior still passes.
 ## Task 5: Add Local JWKS Route Tests
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/routes/tests.rs`
 - Modify: `crates/pandar-hub/src/routes/tests/agents.rs`
 - Modify: `crates/pandar-hub/src/routes/tests/jobs.rs`
@@ -730,6 +735,7 @@ Expected: all route tests pass with no external network access.
 ## Task 6: Add Frontend Bearer Helper
 
 **Files:**
+
 - Create: `frontend/app/api-auth.ts`
 - Modify: `frontend/app/page.tsx`
 - Modify: `frontend/app/actions.ts`
@@ -739,26 +745,26 @@ Expected: all route tests pass with no external network access.
 Create `frontend/app/api-auth.ts`:
 
 ```ts
-import { cookies } from 'next/headers'
+import { cookies } from "next/headers";
 
-const apiToken = process.env.APP_API_TOKEN
-const staticAuthToken = process.env.APP_AUTH_BEARER_TOKEN
-const authCookieName = process.env.APP_AUTH_COOKIE_NAME ?? 'pandar_auth_token'
+const apiToken = process.env.APP_API_TOKEN;
+const staticAuthToken = process.env.APP_AUTH_BEARER_TOKEN;
+const authCookieName = process.env.APP_AUTH_COOKIE_NAME ?? "pandar_auth_token";
 
 export async function apiHeaders(contentType?: string) {
-  const headers: Record<string, string> = {}
+  const headers: Record<string, string> = {};
   if (contentType) {
-    headers['content-type'] = contentType
+    headers["content-type"] = contentType;
   }
 
-  const cookieStore = await cookies()
-  const cookieToken = cookieStore.get(authCookieName)?.value
-  const token = cookieToken || staticAuthToken || apiToken
+  const cookieStore = await cookies();
+  const cookieToken = cookieStore.get(authCookieName)?.value;
+  const token = cookieToken || staticAuthToken || apiToken;
   if (token) {
-    headers.authorization = `Bearer ${token}`
+    headers.authorization = `Bearer ${token}`;
   }
 
-  return Object.keys(headers).length > 0 ? headers : undefined
+  return Object.keys(headers).length > 0 ? headers : undefined;
 }
 ```
 
@@ -767,7 +773,7 @@ export async function apiHeaders(contentType?: string) {
 In `page.tsx`, remove local `apiToken` and `apiHeaders()` and import:
 
 ```ts
-import { apiHeaders } from './api-auth'
+import { apiHeaders } from "./api-auth";
 ```
 
 In `fetchJson`, call:
@@ -797,6 +803,7 @@ Expected: Next.js build succeeds.
 ## Task 7: Update Documentation
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `docs/architecture.md`
 - Modify: `docs/roadmap.md`
@@ -834,6 +841,7 @@ Move Phase 10 bullets to completed tense, add it under `Completed`, and change `
 ## Task 8: Full Verification, Review, Commit, Push
 
 **Files:**
+
 - All Phase 10 files.
 
 - [x] **Step 1: Format**

@@ -12,7 +12,7 @@ If model discovery fails, refresh must fail. A stale or missing configured model
 - Before publishing `pushing.pushall`, publish:
 
 ```json
-{"info":{"command":"get_version","sequence_id":"90002"}}
+{ "info": { "command": "get_version", "sequence_id": "90002" } }
 ```
 
 - Parse the model from the `get_version` response.
@@ -30,7 +30,12 @@ The reference-backed `get_version` response shape is:
   "info": {
     "command": "get_version",
     "module": [
-      {"name": "ota", "sw_ver": "01.08.01.00", "product_name": "P2S", "sn": "..."}
+      {
+        "name": "ota",
+        "sw_ver": "01.08.01.00",
+        "product_name": "P2S",
+        "sn": "..."
+      }
     ]
   }
 }

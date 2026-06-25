@@ -50,6 +50,7 @@ Modify:
 ## Task 1: Compatibility Manifest
 
 **Files:**
+
 - Create: `docs/compatibility/bambu-studio-plugin.md`
 
 - [ ] **Step 1: Add the manifest skeleton**
@@ -63,33 +64,33 @@ Phase 23 tracks Pandar's Bambu Studio network plugin compatibility evidence. A p
 
 ## Status Values
 
-| Status | Meaning |
-| --- | --- |
-| `passed` | Verified in the named environment with evidence captured. |
-| `failed` | Attempted and failed; reproduction notes are recorded. |
-| `blocked` | Could not complete because of a documented environment or dependency blocker. |
-| `unsupported` | Intentionally unsupported by Pandar. |
-| `untested` | No evidence has been recorded. |
+| Status        | Meaning                                                                       |
+| ------------- | ----------------------------------------------------------------------------- |
+| `passed`      | Verified in the named environment with evidence captured.                     |
+| `failed`      | Attempted and failed; reproduction notes are recorded.                        |
+| `blocked`     | Could not complete because of a documented environment or dependency blocker. |
+| `unsupported` | Intentionally unsupported by Pandar.                                          |
+| `untested`    | No evidence has been recorded.                                                |
 
 ## Real Studio Evidence
 
-| Studio Version | OS | Arch | Plugin Artifact | Pandar Commit | Test Date | Load | Sign-In Page | Localhost Ticket | Token Exchange | Profile | Printers | Jobs | Print Submission | Logout | Unsupported ABI | Evidence |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| untested | Linux | x86_64 | `libpandar_network_plugin.so` | none | none | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | No real Studio run recorded. |
-| untested | Windows | x86_64 | `pandar_network_plugin.dll` | none | none | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | No real Studio run recorded. |
-| untested | macOS | arm64/x86_64 | `libpandar_network_plugin.dylib` | none | none | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | No real Studio run recorded. |
+| Studio Version | OS      | Arch         | Plugin Artifact                  | Pandar Commit | Test Date | Load       | Sign-In Page | Localhost Ticket | Token Exchange | Profile    | Printers   | Jobs       | Print Submission | Logout     | Unsupported ABI | Evidence                     |
+| -------------- | ------- | ------------ | -------------------------------- | ------------- | --------- | ---------- | ------------ | ---------------- | -------------- | ---------- | ---------- | ---------- | ---------------- | ---------- | --------------- | ---------------------------- |
+| untested       | Linux   | x86_64       | `libpandar_network_plugin.so`    | none          | none      | `untested` | `untested`   | `untested`       | `untested`     | `untested` | `untested` | `untested` | `untested`       | `untested` | `untested`      | No real Studio run recorded. |
+| untested       | Windows | x86_64       | `pandar_network_plugin.dll`      | none          | none      | `untested` | `untested`   | `untested`       | `untested`     | `untested` | `untested` | `untested` | `untested`       | `untested` | `untested`      | No real Studio run recorded. |
+| untested       | macOS   | arm64/x86_64 | `libpandar_network_plugin.dylib` | none          | none      | `untested` | `untested`   | `untested`       | `untested`     | `untested` | `untested` | `untested` | `untested`       | `untested` | `untested`      | No real Studio run recorded. |
 
 ## Local Automated Probe Coverage
 
-| Probe | Coverage | Status | Evidence |
-| --- | --- | --- | --- |
+| Probe                                 | Coverage                                                                                                 | Status     | Evidence                                              |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------- | ---------- | ----------------------------------------------------- |
 | `cargo test -p pandar-network-plugin` | Exported symbol list, Rust HTTP helper boundaries, and local C++ ABI call sequence without Bambu Studio. | `untested` | Update after the implementation lands and tests pass. |
 
 ## Unsupported ABI Surfaces
 
-| Surface | Status | Reason |
-| --- | --- | --- |
-| Direct LAN printer connect/message APIs | `unsupported` | Pandar keeps printer sockets in `pandar-agent`; the plugin talks only to `pandar-hub`. |
+| Surface                                     | Status        | Reason                                                                                                           |
+| ------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Direct LAN printer connect/message APIs     | `unsupported` | Pandar keeps printer sockets in `pandar-agent`; the plugin talks only to `pandar-hub`.                           |
 | `ft_*` direct file-transfer tunnel/job APIs | `unsupported` | Pandar uploads through hub-backed print submission and does not open direct file-transfer sockets in the plugin. |
 
 ## Evidence Requirements
@@ -113,6 +114,7 @@ Expected: all status cells use only `passed`, `failed`, `blocked`, `unsupported`
 ## Task 2: Stable Plugin Error Mapping
 
 **Files:**
+
 - Modify: `crates/pandar-network-plugin/src/lib.rs`
 - Modify: `crates/pandar-network-plugin/tests/http_boundary.rs`
 
@@ -234,6 +236,7 @@ Expected: all `http_boundary` tests pass.
 ## Task 3: C++ ABI Probe Harness
 
 **Files:**
+
 - Create: `crates/pandar-network-plugin/tests/fixtures/studio_abi_probe.cpp`
 - Create: `crates/pandar-network-plugin/tests/studio_abi_probe.rs`
 - Modify: `crates/pandar-network-plugin/src/shim.cpp`
@@ -398,6 +401,7 @@ Expected: the test builds the plugin, compiles the C++ probe, runs it against th
 ## Task 4: Manual Smoke Runbook
 
 **Files:**
+
 - Create: `docs/compatibility/bambu-studio-plugin-smoke.md`
 
 - [ ] **Step 1: Add the runbook**
@@ -422,6 +426,7 @@ This runbook records real Bambu Studio compatibility evidence for Phase 23. A su
 ## Build Or Select Plugin Artifact
 
 Linux:
+
 ```bash
 cargo build -p pandar-network-plugin --release
 ```
@@ -444,17 +449,17 @@ export PANDAR_PLUGIN_FRONTEND_URL="https://your-web.example"
 
 ## Smoke Checklist
 
-| Step | Expected Result | Status | Evidence |
-| --- | --- | --- | --- |
-| Studio starts and loads plugin | No missing-symbol or dynamic-loader error. | `untested` | |
-| Login opens Pandar sign-in | Studio WebView displays Pandar sign-in. | `untested` | |
-| Localhost ticket callback completes | Studio receives plugin ticket through its local callback. | `untested` | |
-| Token/profile exchange completes | Studio receives Bambu-shaped login state. | `untested` | |
-| Printer list loads | Hub-backed printers display or an empty list is accepted. | `untested` | |
-| Job list loads | Hub-backed jobs display or an empty list is accepted. | `untested` | |
-| Print submission | Optional print submits through `/api/v1/plugin/prints`. | `untested` | |
-| Logout | Studio receives `studio_useroffline`. | `untested` | |
-| Direct-printer/`ft_*` paths | Unsupported behavior is stable and does not open machine sockets. | `untested` | |
+| Step                                | Expected Result                                                   | Status     | Evidence |
+| ----------------------------------- | ----------------------------------------------------------------- | ---------- | -------- |
+| Studio starts and loads plugin      | No missing-symbol or dynamic-loader error.                        | `untested` |          |
+| Login opens Pandar sign-in          | Studio WebView displays Pandar sign-in.                           | `untested` |          |
+| Localhost ticket callback completes | Studio receives plugin ticket through its local callback.         | `untested` |          |
+| Token/profile exchange completes    | Studio receives Bambu-shaped login state.                         | `untested` |          |
+| Printer list loads                  | Hub-backed printers display or an empty list is accepted.         | `untested` |          |
+| Job list loads                      | Hub-backed jobs display or an empty list is accepted.             | `untested` |          |
+| Print submission                    | Optional print submits through `/api/v1/plugin/prints`.           | `untested` |          |
+| Logout                              | Studio receives `studio_useroffline`.                             | `untested` |          |
+| Direct-printer/`ft_*` paths         | Unsupported behavior is stable and does not open machine sockets. | `untested` |          |
 
 ## Evidence Capture And Redaction
 
@@ -480,6 +485,7 @@ Expected: status vocabulary and required environment variables are present.
 ## Task 5: Documentation And Roadmap Updates
 
 **Files:**
+
 - Modify: `docs/development.md`
 - Modify: `docs/architecture.md`
 - Modify: `docs/roadmap.md`
@@ -531,6 +537,7 @@ Expected: all new docs are linked and the real-evidence caveat appears in develo
 ## Task 6: Final Verification
 
 **Files:**
+
 - All files touched by Tasks 1-5.
 
 - [ ] **Step 1: Format**

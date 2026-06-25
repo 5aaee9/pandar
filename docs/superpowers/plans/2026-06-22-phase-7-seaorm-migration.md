@@ -27,6 +27,7 @@
 ## Task 1: Dependency Alignment
 
 **Files:**
+
 - Modify: `/home/indexyz/pandar/Cargo.toml`
 - Modify: `/home/indexyz/pandar/crates/pandar-hub/Cargo.toml`
 - Modify: `/home/indexyz/pandar/Cargo.lock`
@@ -61,6 +62,7 @@ Expected: Cargo resolves `sea-orm 2.0.0-rc.41` and `sqlx 0.9.0`. Compilation may
 ## Task 2: SeaORM Database Accessor
 
 **Files:**
+
 - Modify: `/home/indexyz/pandar/crates/pandar-hub/src/db.rs`
 
 - [ ] **Step 1: Add SeaORM imports**
@@ -97,6 +99,7 @@ Expected: `db.rs` compiles or remaining failures are unrelated SQLx 0.9 compatib
 ## Task 3: Tenant Entity
 
 **Files:**
+
 - Modify: `/home/indexyz/pandar/crates/pandar-hub/src/lib.rs`
 - Create: `/home/indexyz/pandar/crates/pandar-hub/src/entities/mod.rs`
 - Create: `/home/indexyz/pandar/crates/pandar-hub/src/entities/tenants.rs`
@@ -154,6 +157,7 @@ Expected: entity derives compile with SeaORM 2.0.
 ## Task 4: Rewrite TenantRepository With SeaORM
 
 **Files:**
+
 - Modify: `/home/indexyz/pandar/crates/pandar-hub/src/repositories/tenants.rs`
 
 - [ ] **Step 1: Replace direct SQLx imports**
@@ -276,6 +280,7 @@ Expected: Phase 1 repository tests, including tenant create/list/count and dupli
 ## Task 5: SQLx 0.9 Compatibility Pass
 
 **Files:**
+
 - Modify only files that fail to compile under SQLx 0.9.
 
 - [ ] **Step 1: Run workspace check**
@@ -313,6 +318,7 @@ Expected: all hub repository tests pass.
 ## Task 6: PostgreSQL Coverage And No Generated Files
 
 **Files:**
+
 - Modify: `/home/indexyz/pandar/crates/pandar-hub/src/repositories/tests/postgres.rs`
 
 - [ ] **Step 1: Ensure optional Postgres tenant coverage remains present**
@@ -348,6 +354,7 @@ Expected: no output.
 ## Task 7: Documentation And Roadmap
 
 **Files:**
+
 - Modify: `/home/indexyz/pandar/docs/roadmap.md`
 
 - [ ] **Step 1: Add Phase 7 SeaORM Migration section**
@@ -395,6 +402,7 @@ Expected: roadmap clearly shows Phase 7 as SeaORM migration and compatibility ex
 ## Task 8: Final Verification
 
 **Files:**
+
 - No code edits unless verification exposes required fixes.
 
 - [ ] **Step 1: Format**

@@ -18,6 +18,7 @@
 ## Task 1: Add Release Workflow
 
 **Files:**
+
 - Create: `.github/workflows/release.yml`
 
 - [ ] **Step 1: Create the workflow file**
@@ -205,6 +206,7 @@ Expected: command exits `0`.
 ## Task 2: Update Roadmap
 
 **Files:**
+
 - Modify: `docs/roadmap.md`
 
 - [ ] **Step 1: Add release CI completion note**
@@ -226,6 +228,7 @@ In `docs/roadmap.md` under `Immediate Next`, keep a risk note for plugin compati
 ## Task 3: Verify Release Workflow Locally
 
 **Files:**
+
 - Read: `.github/workflows/release.yml`
 - Read: `docs/roadmap.md`
 

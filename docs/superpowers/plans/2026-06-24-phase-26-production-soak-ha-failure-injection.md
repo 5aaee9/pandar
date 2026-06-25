@@ -58,6 +58,7 @@
 ## Task 1: Split And Extend The Scaled Smoke CLI
 
 **Files:**
+
 - Modify: `tools/scaled-artifact-smoke/src/main.rs`
 - Create: `tools/scaled-artifact-smoke/src/harness.rs`
 - Create: `tools/scaled-artifact-smoke/src/scenarios.rs`
@@ -255,6 +256,7 @@ pub async fn run(config: HarnessConfig) -> anyhow::Result<()> {
 ## Task 2: Add Phase 26 Harness Scenarios
 
 **Files:**
+
 - Modify: `tools/scaled-artifact-smoke/src/scenarios.rs`
 - Modify: `tools/scaled-artifact-smoke/src/fixture.rs`
 - Modify: `tools/scaled-artifact-smoke/src/http.rs`
@@ -421,6 +423,7 @@ Expected: each command prints `PASS`.
 ## Task 3: Add Control-Plane Metrics
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/metrics.rs`
 - Modify: `crates/pandar-hub/src/metrics_export.rs`
 - Modify: `crates/pandar-hub/src/lib.rs`
@@ -539,6 +542,7 @@ Expected: test passes and proves both committed durable state and failure observ
 ## Task 4: Add Focused Failure Tests
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/cluster/tests.rs`
 - Modify: `crates/pandar-hub/src/routes/tests/jobs/create.rs`
 - Modify: `crates/pandar-hub/src/routes/tests/artifacts.rs`
@@ -675,6 +679,7 @@ Expected: all targeted tests pass. If `terminal_report` does not match test name
 ## Task 5: Update Operations Documentation And Evidence
 
 **Files:**
+
 - Modify: `docs/development.md`
 - Modify: `docs/release-installation.md`
 - Create: `docs/compatibility/phase-26-soak-evidence.md`
@@ -684,7 +689,7 @@ Expected: all targeted tests pass. If `terminal_report` does not match test name
 
 Add to `docs/development.md` under Operations:
 
-```markdown
+````markdown
 Phase 26 local HA/failure smoke:
 
 ```bash
@@ -692,9 +697,11 @@ cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run
 cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run --iterations 2 --concurrency 2
 cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run --scenario storage
 ```
+````
 
 The default mode uses local process fixtures and loopback HTTP only. It does not require Docker, PostgreSQL, NATS, MinIO, or cloud S3 credentials. Treat it as local convergence evidence, not as live deployment soak evidence.
-```
+
+````
 
 - [ ] **Step 2: Document live soak variables**
 
@@ -708,7 +715,7 @@ Optional live soak variables:
 - `PANDAR_SOAK_ARTIFACT_S3_BUCKET`, `PANDAR_SOAK_ARTIFACT_S3_REGION`, `PANDAR_SOAK_ARTIFACT_S3_ENDPOINT`, `PANDAR_SOAK_ARTIFACT_S3_ACCESS_KEY_ID`, `PANDAR_SOAK_ARTIFACT_S3_SECRET_ACCESS_KEY`: disposable object-storage bucket.
 
 Do not point live soak at production data. The live soak evidence path is skipped unless these variables are explicitly provided. When live dependencies are available, record PostgreSQL latency or transaction-conflict observations, NATS reconnect behavior, object-storage behavior, command output, and commit SHA in `docs/compatibility/phase-26-soak-evidence.md`.
-```
+````
 
 - [ ] **Step 3: Add runbook checks**
 
@@ -731,15 +738,15 @@ Create `docs/compatibility/phase-26-soak-evidence.md`:
 
 ## Local Dry-Run Evidence
 
-| Date | Commit | Command | Scenarios | Result | Notes |
-| --- | --- | --- | --- | --- | --- |
+| Date       | Commit                     | Command                                                                         | Scenarios                     | Result                                               | Notes                                                                   |
+| ---------- | -------------------------- | ------------------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------- |
 | 2026-06-24 | working tree before commit | `cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run` | all default dry-run scenarios | to be updated during Task 6 after the command is run | Replace this row with the actual verification result before committing. |
 
 ## Live PostgreSQL + NATS + Object Storage Evidence
 
-| Date | Commit | PostgreSQL | PostgreSQL latency/conflict notes | NATS | NATS reconnect notes | Object storage | Command | Result | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| not run | not committed | not provided | not run | not provided | not run | not provided | not run | untested | Requires disposable live dependencies and must not target production data. |
+| Date    | Commit        | PostgreSQL   | PostgreSQL latency/conflict notes | NATS         | NATS reconnect notes | Object storage | Command | Result   | Notes                                                                      |
+| ------- | ------------- | ------------ | --------------------------------- | ------------ | -------------------- | -------------- | ------- | -------- | -------------------------------------------------------------------------- |
+| not run | not committed | not provided | not run                           | not provided | not run              | not provided   | not run | untested | Requires disposable live dependencies and must not target production data. |
 ```
 
 Update the local row after verification with the actual command result before committing.
@@ -751,6 +758,7 @@ Add Phase 26 completed bullets under `## Completed` and update `## Phase 26` to 
 ## Task 6: Final Verification, Review Gate, Commit, Push
 
 **Files:**
+
 - All files touched above.
 
 - [ ] **Step 1: Run formatting and targeted checks**

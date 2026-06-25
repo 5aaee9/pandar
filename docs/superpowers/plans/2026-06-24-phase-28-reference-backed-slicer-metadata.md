@@ -34,6 +34,7 @@
 ### Task 1: Parser And Fixtures
 
 **Files:**
+
 - Modify `Cargo.toml`
 - Modify `crates/pandar-hub/Cargo.toml`
 - Create `crates/pandar-hub/src/artifacts/metadata.rs`
@@ -96,6 +97,7 @@ Expected: PASS.
 ### Task 2: Persistence And Repository Hydration
 
 **Files:**
+
 - Add SQLite/PostgreSQL migrations
 - Modify `crates/pandar-hub/src/entities/job_artifacts.rs`
 - Modify `crates/pandar-core/src/job.rs`
@@ -161,6 +163,7 @@ If `PANDAR_TEST_POSTGRES_URL` is unavailable, Phase 28 is not complete. Record t
 ### Task 3: Hub Routes, Multipart Preview, And Plugin Responses
 
 **Files:**
+
 - Modify `crates/pandar-hub/src/routes.rs`
 - Modify `crates/pandar-hub/src/routes/jobs.rs`
 - Modify `crates/pandar-hub/src/routes/jobs/multipart.rs`
@@ -240,6 +243,7 @@ Expected: PASS.
 ### Task 4: Frontend Preview And Display
 
 **Files:**
+
 - Create `frontend/app/api/tenants/[tenantId]/artifact-metadata-preview/route.ts`
 - Modify `frontend/app/dispatch-form.tsx`
 - Modify `frontend/app/dashboard-types.ts`
@@ -289,6 +293,7 @@ Expected: PASS.
 ### Task 5: Documentation And Final Verification
 
 **Files:**
+
 - Create `docs/compatibility/phase-28-slicer-metadata.md`
 - Modify `docs/roadmap.md`
 - Modify `docs/development.md` or `docs/architecture.md`

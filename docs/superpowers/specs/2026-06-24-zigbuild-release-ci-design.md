@@ -32,14 +32,14 @@ This prevents branch-based manual runs from creating or updating a release accid
 
 Use separate CLI and plugin targets when static CLI requirements differ from dynamic-library plugin requirements:
 
-| Artifact label | Platform | Architecture | Runner | CLI target | Plugin target |
-| --- | --- | --- | --- | --- |
-| `linux-amd64` | Linux | amd64 | `ubuntu-latest` | `x86_64-unknown-linux-musl` | `x86_64-unknown-linux-gnu` |
-| `linux-arm64` | Linux | arm64 | `ubuntu-latest` | `aarch64-unknown-linux-musl` | `aarch64-unknown-linux-gnu` |
-| `windows-amd64` | Windows | amd64 | `ubuntu-latest` | `x86_64-pc-windows-gnu` | `x86_64-pc-windows-gnu` |
-| `windows-arm64` | Windows | arm64 | `ubuntu-latest` | `aarch64-pc-windows-gnullvm` | `aarch64-pc-windows-gnullvm` |
-| `macos-amd64` | macOS | amd64 | `macos-26-intel` | `x86_64-apple-darwin` | `x86_64-apple-darwin` |
-| `macos-arm64` | macOS | arm64 | `macos-26` | `aarch64-apple-darwin` | `aarch64-apple-darwin` |
+| Artifact label  | Platform | Architecture | Runner           | CLI target                   | Plugin target                |
+| --------------- | -------- | ------------ | ---------------- | ---------------------------- | ---------------------------- |
+| `linux-amd64`   | Linux    | amd64        | `ubuntu-latest`  | `x86_64-unknown-linux-musl`  | `x86_64-unknown-linux-gnu`   |
+| `linux-arm64`   | Linux    | arm64        | `ubuntu-latest`  | `aarch64-unknown-linux-musl` | `aarch64-unknown-linux-gnu`  |
+| `windows-amd64` | Windows  | amd64        | `ubuntu-latest`  | `x86_64-pc-windows-gnu`      | `x86_64-pc-windows-gnu`      |
+| `windows-arm64` | Windows  | arm64        | `ubuntu-latest`  | `aarch64-pc-windows-gnullvm` | `aarch64-pc-windows-gnullvm` |
+| `macos-amd64`   | macOS    | amd64        | `macos-26-intel` | `x86_64-apple-darwin`        | `x86_64-apple-darwin`        |
+| `macos-arm64`   | macOS    | arm64        | `macos-26`       | `aarch64-apple-darwin`       | `aarch64-apple-darwin`       |
 
 Linux and Windows matrix jobs run on Ubuntu GitHub-hosted runners. macOS matrix jobs run on GitHub-hosted macOS 26 runners so the Apple SDK is provided by the runner instead of attempting to vendor or fetch an SDK on Linux. GitHub documents `macos-26` as the standard arm64 macOS runner and `macos-26-intel` as the standard x64 macOS runner.
 
@@ -54,11 +54,11 @@ zig-cxx-plugin: exec zig c++ -target "$ZIG_PLUGIN_TARGET" "$@"
 
 The plugin build exports `CC`, `CXX`, and `AR` to those wrappers for the `cargo zigbuild -p pandar-network-plugin` command. `ZIG_PLUGIN_TARGET` is derived from the plugin target:
 
-| Plugin target | Zig target |
-| --- | --- |
-| `x86_64-unknown-linux-gnu` | `x86_64-linux-gnu` |
-| `aarch64-unknown-linux-gnu` | `aarch64-linux-gnu` |
-| `x86_64-pc-windows-gnu` | `x86_64-windows-gnu` |
+| Plugin target                | Zig target            |
+| ---------------------------- | --------------------- |
+| `x86_64-unknown-linux-gnu`   | `x86_64-linux-gnu`    |
+| `aarch64-unknown-linux-gnu`  | `aarch64-linux-gnu`   |
+| `x86_64-pc-windows-gnu`      | `x86_64-windows-gnu`  |
 | `aarch64-pc-windows-gnullvm` | `aarch64-windows-gnu` |
 
 macOS jobs use the runner Apple C/C++ toolchain for the shim while still invoking `cargo zigbuild`. The amd64 job runs on `macos-26-intel`; the arm64 job runs on `macos-26`. Each macOS job builds its native architecture target rather than cross-building the opposite macOS architecture.

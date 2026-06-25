@@ -21,6 +21,7 @@
 ## Task 1: Add The Standalone Preflight Crate
 
 **Files:**
+
 - Create: `tools/studio-plugin-smoke/Cargo.toml`
 - Create: `tools/studio-plugin-smoke/src/main.rs`
 
@@ -182,6 +183,7 @@ Expected: all `pandar-studio-plugin-smoke` tests pass.
 ## Task 2: Document The Preflight Helper
 
 **Files:**
+
 - Modify: `docs/compatibility/bambu-studio-plugin-smoke.md`
 - Modify: `docs/compatibility/bambu-studio-plugin.md`
 - Modify: `docs/roadmap.md`
@@ -229,6 +231,7 @@ Keep the existing real Studio blocker and exit criteria unchanged.
 ## Task 3: Verify, Review, And Prepare For Commit
 
 **Files:**
+
 - Verify all changed files.
 
 - [ ] **Step 1: Run formatting for the standalone crate**

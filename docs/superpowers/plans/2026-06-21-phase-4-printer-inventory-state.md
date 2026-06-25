@@ -32,6 +32,7 @@
 ## Milestone 1: Core, Proto, And Agent Snapshot Model
 
 **Files:**
+
 - Modify: `crates/pandar-core/src/lib.rs`
 - Modify: `crates/pandar-core/src/tests.rs`
 - Modify: `proto/pandar/agent/v1/agent.proto`
@@ -173,6 +174,7 @@ Expected: tests pass and find prints nothing.
 ## Milestone 2: Printer Repository And Migrations
 
 **Files:**
+
 - Create: `crates/pandar-hub/migrations/sqlite/20260621000000_phase_4_printer_state.sql`
 - Create: `crates/pandar-hub/migrations/postgres/20260621000000_phase_4_printer_state.sql`
 - Create: `crates/pandar-hub/src/repositories/printers.rs`
@@ -265,6 +267,7 @@ Expected: targeted hub repository tests pass.
 ## Milestone 3: Hub Snapshot Ingestion, HTTP API, And WebSocket Broadcast
 
 **Files:**
+
 - Modify: `Cargo.toml`
 - Modify: `crates/pandar-hub/Cargo.toml`
 - Create: `crates/pandar-hub/src/printer_events.rs`
@@ -416,6 +419,7 @@ Expected: hub tests pass.
 ## Milestone 4: Frontend Inventory Dashboard And Docs
 
 **Files:**
+
 - Modify: `frontend/app/page.tsx`
 - Modify: `frontend/app/globals.css`
 - Modify: `README.md`
@@ -475,6 +479,7 @@ from `frontend/`. Expected: Next.js production build succeeds.
 ## Milestone 5: Final SDD Review, Workspace Verification, Commit, Push
 
 **Files:**
+
 - All changed files.
 
 - [ ] **Step 1: Run full verification**

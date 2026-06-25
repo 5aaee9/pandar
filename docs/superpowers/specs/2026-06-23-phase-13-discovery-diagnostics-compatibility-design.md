@@ -241,13 +241,13 @@ Unknown or uncertain model features default to `unknown`, and UI availability mu
 
 Initial matrix:
 
-| Model key | Aliases | Evidence | FTPS TLS 1.2 cap | Clear-data fallback | External storage | Chamber temp | Drying | Dual nozzle | Flow calibration | Vibration calibration | Nozzle-offset calibration |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `A1` | none | Existing Pandar transfer policy and Bambuddy storage diagnostic skip A1-class machines | false | true | unsupported | unknown | unknown | unsupported | unknown | unknown | unknown |
-| `A1_MINI` | `A1 mini`, `A1 Mini`, `A1M` | Existing Pandar transfer policy and Bambuddy storage diagnostic skip A1-class machines | false | true | unsupported | unknown | unknown | unsupported | unknown | unknown | unknown |
-| `P2S` | `N7` | Existing Pandar FTPS profile aliases from Bambuddy `ftp_profiles.py` | true | false | unknown | unknown | unknown | unknown | unknown | unknown | unknown |
-| `X2D` | `N6` | Existing Pandar FTPS profile aliases from Bambuddy `ftp_profiles.py` | true | false | unknown | unknown | unknown | unknown | unknown | unknown | unknown |
-| `UNKNOWN` | any unmatched/empty model | No reference-backed model behavior | false | false | unknown | unknown | unknown | unknown | unknown | unknown | unknown |
+| Model key | Aliases                     | Evidence                                                                               | FTPS TLS 1.2 cap | Clear-data fallback | External storage | Chamber temp | Drying  | Dual nozzle | Flow calibration | Vibration calibration | Nozzle-offset calibration |
+| --------- | --------------------------- | -------------------------------------------------------------------------------------- | ---------------- | ------------------- | ---------------- | ------------ | ------- | ----------- | ---------------- | --------------------- | ------------------------- |
+| `A1`      | none                        | Existing Pandar transfer policy and Bambuddy storage diagnostic skip A1-class machines | false            | true                | unsupported      | unknown      | unknown | unsupported | unknown          | unknown               | unknown                   |
+| `A1_MINI` | `A1 mini`, `A1 Mini`, `A1M` | Existing Pandar transfer policy and Bambuddy storage diagnostic skip A1-class machines | false            | true                | unsupported      | unknown      | unknown | unsupported | unknown          | unknown               | unknown                   |
+| `P2S`     | `N7`                        | Existing Pandar FTPS profile aliases from Bambuddy `ftp_profiles.py`                   | true             | false               | unknown          | unknown      | unknown | unknown     | unknown          | unknown               | unknown                   |
+| `X2D`     | `N6`                        | Existing Pandar FTPS profile aliases from Bambuddy `ftp_profiles.py`                   | true             | false               | unknown          | unknown      | unknown | unknown     | unknown          | unknown               | unknown                   |
+| `UNKNOWN` | any unmatched/empty model   | No reference-backed model behavior                                                     | false            | false               | unknown          | unknown      | unknown | unknown     | unknown          | unknown               | unknown                   |
 
 This initial table is deliberately conservative. Additional model support requires either a reference-backed row in this table or future live-capture documentation.
 

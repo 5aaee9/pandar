@@ -21,7 +21,6 @@
 - [x] **Step 1: Update operator target status**
 
   In `docs/release-installation.md`, revise the unsupported or untested targets table so each target keeps `blocked` operator status but uses current evidence:
-
   - `linux-amd64`, `linux-arm64`, `windows-amd64`, `macos-amd64`, and `macos-arm64`: workflow artifact evidence exists from run `28102001464`, but no tagged GitHub Release archive or real host installation evidence exists.
   - `windows-arm64`: run `28102001464` built, packaged, and checksum-verified the target but release-smoke failed before `upload-artifact`; no passing uploaded artifact exists after the LLVM inspector fix because run `28103772270` was blocked before build steps.
 
@@ -36,7 +35,6 @@
 - [x] **Step 3: Add current release availability check**
 
   In `docs/compatibility/release-artifacts.md`, relabel the existing initial availability row as the pre-workflow initial check, then add a current 2026-06-24 availability row directly after that initial row. The current row records:
-
   - No GitHub Releases.
   - No git tags.
   - Unexpired workflow artifacts from run `28102001464` for five target families.

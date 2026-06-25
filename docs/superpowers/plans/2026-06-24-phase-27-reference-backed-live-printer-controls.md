@@ -32,6 +32,7 @@
 ### Task 1: Shared Compatibility Policy
 
 **Files:**
+
 - Create: `crates/pandar-core/src/compatibility.rs`
 - Modify: `crates/pandar-core/src/lib.rs`
 - Modify: `crates/pandar-agent/src/machine/compatibility.rs`
@@ -111,6 +112,7 @@ Expected: PASS. Existing agent compatibility tests should still pass through the
 ### Task 2: Proto And Hub Command Conversion
 
 **Files:**
+
 - Modify: `proto/pandar/agent/v1/agent.proto`
 - Modify: `crates/pandar-hub/src/repositories/mod.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands.rs`
@@ -276,6 +278,7 @@ Expected: PASS.
 ### Task 3: Hub Repository, Audit, And API Route
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/repositories/mod.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands/enqueue.rs`
@@ -887,6 +890,7 @@ Expected: PASS.
 ### Task 4: Agent Command Handler And Gateway MQTT Dispatch
 
 **Files:**
+
 - Modify: `crates/pandar-agent/src/machine/mod.rs`
 - Modify: `crates/pandar-agent/src/commands.rs`
 - Modify: `crates/pandar-agent/src/commands/tests.rs`
@@ -1008,7 +1012,12 @@ In `commands.rs`, import protobuf `PrinterControl`, add a match arm in `handle_c
 - emit success with result JSON:
 
 ```json
-{"type":"printer_control","serial_number":"SERIAL1","action":"pause","dispatch":"mqtt_published"}
+{
+  "type": "printer_control",
+  "serial_number": "SERIAL1",
+  "action": "pause",
+  "dispatch": "mqtt_published"
+}
 ```
 
 On error, use `gateway.redact_error(&format!("{err:#}"))`.
@@ -1027,6 +1036,7 @@ Expected: PASS.
 ### Task 5: Status-Separation Test
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/grpc/tests/commands.rs` or `crates/pandar-hub/src/repositories/tests/jobs/lifecycle.rs`
 
 - [ ] **Step 1: Write failing status-separation test**
@@ -1116,6 +1126,7 @@ Expected: PASS after Task 3 implements printer-control command lifecycle without
 ### Task 6: Frontend Controls
 
 **Files:**
+
 - Modify: `frontend/app/actions.ts`
 - Modify: `frontend/app/recovery-actions.tsx`
 
@@ -1125,15 +1136,23 @@ In `frontend/app/actions.ts`, add:
 
 ```ts
 export async function controlPrinter(formData: FormData) {
-  const tenantId = stringField(formData, 'tenant_id')
-  const printerId = stringField(formData, 'printer_id')
-  const action = stringField(formData, 'action')
-  const speedMode = nullableField(formData, 'speed_mode')
-  const response = await postJson(`/api/v1/tenants/${tenantId}/printers/${printerId}/controls`, {
-    action,
-    speed_mode: speedMode ? Number(speedMode) : undefined,
-  })
-  redirect(statusUrl(tenantId, response.ok ? 'printer_control_queued' : await errorCode(response)))
+  const tenantId = stringField(formData, "tenant_id");
+  const printerId = stringField(formData, "printer_id");
+  const action = stringField(formData, "action");
+  const speedMode = nullableField(formData, "speed_mode");
+  const response = await postJson(
+    `/api/v1/tenants/${tenantId}/printers/${printerId}/controls`,
+    {
+      action,
+      speed_mode: speedMode ? Number(speedMode) : undefined,
+    },
+  );
+  redirect(
+    statusUrl(
+      tenantId,
+      response.ok ? "printer_control_queued" : await errorCode(response),
+    ),
+  );
 }
 ```
 
@@ -1143,17 +1162,19 @@ In `recovery-actions.tsx`, add a small local helper that mirrors the shared mode
 
 ```ts
 function liveControlsAvailable(printer: Printer) {
-  const normalized = printer.model?.trim().toUpperCase().replace(/[ _-]/g, '')
-  return normalized === 'A1'
-    || normalized === 'A1MINI'
-    || normalized === 'A1M'
-    || normalized === 'A1MIN'
-    || normalized === 'BAMBULABA1MINI'
-    || normalized === 'BAMBULABA1'
-    || normalized === 'P2S'
-    || normalized === 'N7'
-    || normalized === 'X2D'
-    || normalized === 'N6'
+  const normalized = printer.model?.trim().toUpperCase().replace(/[ _-]/g, "");
+  return (
+    normalized === "A1" ||
+    normalized === "A1MINI" ||
+    normalized === "A1M" ||
+    normalized === "A1MIN" ||
+    normalized === "BAMBULABA1MINI" ||
+    normalized === "BAMBULABA1" ||
+    normalized === "P2S" ||
+    normalized === "N7" ||
+    normalized === "X2D" ||
+    normalized === "N6"
+  );
 }
 ```
 
@@ -1162,7 +1183,18 @@ This is advisory only; backend rejects remain authoritative.
 Add a local table near the helper for the shared aliases and use it from `liveControlsAvailable`, rather than scattering string comparisons through render code:
 
 ```ts
-const liveControlModelKeys = new Set(['A1', 'A1MINI', 'A1M', 'A1MIN', 'BAMBULABA1MINI', 'BAMBULABA1', 'P2S', 'N7', 'X2D', 'N6'])
+const liveControlModelKeys = new Set([
+  "A1",
+  "A1MINI",
+  "A1M",
+  "A1MIN",
+  "BAMBULABA1MINI",
+  "BAMBULABA1",
+  "P2S",
+  "N7",
+  "X2D",
+  "N6",
+]);
 ```
 
 Before the build, verify the helper table covers the core aliases by scanning for the exact literals `A1M`, `A1MIN`, `BAMBULABA1`, `N7`, and `N6` in `frontend/app/recovery-actions.tsx`.
@@ -1192,6 +1224,7 @@ Expected: `rg` prints the advisory compatibility alias table, then build PASS.
 ### Task 7: Documentation Updates
 
 **Files:**
+
 - Create: `docs/compatibility/phase-27-live-printer-controls.md`
 - Modify: `docs/roadmap.md`
 - Modify: `docs/development.md`
@@ -1225,6 +1258,7 @@ Update docs so they say Phase 27 controls are typed, compatibility-gated, and di
 ### Task 8: Full Verification And Final Review Package
 
 **Files:**
+
 - No new code files unless earlier tasks reveal a focused fix.
 
 - [ ] **Step 1: Run formatting**

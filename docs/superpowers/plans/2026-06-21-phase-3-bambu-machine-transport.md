@@ -26,6 +26,7 @@
 ## Task 1: MQTT Model And Payload Builders
 
 **Files:**
+
 - Create: `crates/pandar-agent/src/machine/mod.rs`
 - Create: `crates/pandar-agent/src/machine/mqtt.rs`
 - Modify: `crates/pandar-agent/src/lib.rs`
@@ -359,6 +360,7 @@ Expected: tests pass and formatting is clean.
 ## Task 2: MQTT Transport Trait, Runtime Adapter, And Refresh Gateway
 
 **Files:**
+
 - Modify: `crates/pandar-agent/src/machine/mqtt.rs`
 - Modify: `crates/pandar-agent/src/machine/mod.rs`
 - Modify: `crates/pandar-agent/Cargo.toml`
@@ -534,6 +536,7 @@ Expected: tests and lint pass.
 ## Task 3: File Transfer Boundary
 
 **Files:**
+
 - Create/Modify: `crates/pandar-agent/src/machine/file_transfer.rs`
 - Modify: `crates/pandar-agent/src/machine/mod.rs`
 
@@ -798,6 +801,7 @@ Expected: tests and lint pass.
 ## Task 4: Agent Config And Command Integration
 
 **Files:**
+
 - Create: `crates/pandar-agent/src/commands.rs`
 - Modify: `crates/pandar-agent/src/lib.rs`
 - Modify: `crates/pandar-agent/src/machine/mod.rs`
@@ -952,6 +956,7 @@ Expected: tests and lint pass.
 ## Task 5: Documentation And Roadmap
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `docs/architecture.md`
 - Modify: `docs/roadmap.md`
@@ -993,6 +998,7 @@ Expected: docs describe Phase 3 accurately and do not claim real printer compati
 ## Task 6: Full Verification And Final Review
 
 **Files:**
+
 - No new implementation files.
 
 - [ ] **Step 1: Run full verification**

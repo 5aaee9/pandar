@@ -22,7 +22,6 @@
 - [x] **Step 1: Add failing validation tests**
 
   In `tools/scaled-artifact-smoke/src/live.rs`, extend the existing `live::tests` module with tests for:
-
   - all missing variables are reported together;
   - complete disposable values pass;
   - production database URLs fail;
@@ -34,7 +33,6 @@
   - a database URL containing both a disposable marker and a production marker fails.
 
   First rewrite the existing `complete_values()` helper so every default value uses the spec's valid disposable example:
-
   - `PANDAR_SOAK_DATABASE_URL=postgres://pandar_soak@localhost/pandar_soak`
   - `PANDAR_SOAK_NATS_URL=nats://127.0.0.1:4222`
   - `PANDAR_SOAK_ARTIFACT_S3_BUCKET=pandar-soak-artifacts`
@@ -58,7 +56,6 @@
 - [x] **Step 2: Implement collected invalid-variable reporting**
 
   Update `PreflightError` in `tools/scaled-artifact-smoke/src/live.rs` so it can report:
-
   - missing variables, preserving current all-missing behavior;
   - invalid variables as a collection, with each entry naming the variable and the reason.
 
@@ -79,7 +76,6 @@
 - [x] **Step 3: Implement local-only shape and safety checks**
 
   In `validate`, after missing-variable checks pass, collect invalid variables:
-
   - `PANDAR_SOAK_DATABASE_URL`: starts with `postgres://` or `postgresql://`, lowercased URL contains one of `soak`, `disposable`, `ephemeral`, or `test`, and lowercased URL does not contain `prod` or `production`.
   - `PANDAR_SOAK_NATS_URL`: starts with `nats://`.
   - `PANDAR_SOAK_ARTIFACT_S3_ENDPOINT`: starts with `http://` or `https://`.
@@ -90,7 +86,6 @@
 - [x] **Step 4: Update Phase 26 docs**
 
   Update:
-
   - `docs/development.md`: explain that `--live-preflight` checks input shape and disposable markers only, without connecting.
   - `docs/compatibility/phase-26-soak-evidence.md`: add a row for the strengthened local preflight behavior and keep live soak as blocked.
   - `docs/roadmap.md`: mention stronger preflight checks while keeping live soak unverified.
@@ -117,7 +112,6 @@
   ```
 
   Expected results:
-
   - formatting, clippy, tests, valid-value preflight, workspace nextest, and diff check exit 0;
   - missing-variable preflight exits non-zero and lists the missing `PANDAR_SOAK_*` variables;
   - valid-value preflight prints `PASS live soak preflight`.

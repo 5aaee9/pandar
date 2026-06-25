@@ -26,7 +26,7 @@ The printer accepted TLS MQTT connections on port `8883` with username `bblp` an
 Requesting a full status report:
 
 ```json
-{"pushing":{"command":"pushall"}}
+{ "pushing": { "command": "pushall" } }
 ```
 
 The authenticated status refresh returned a report whose normalized printer state was `IDLE`.
@@ -34,7 +34,7 @@ The authenticated status refresh returned a report whose normalized printer stat
 Sending a Home command through the raw MQTT command path:
 
 ```json
-{"print":{"command":"gcode_line","param":"G28","sequence_id":"90001"}}
+{ "print": { "command": "gcode_line", "param": "G28", "sequence_id": "90001" } }
 ```
 
 The printer reported `gcode_line` acknowledgements and then returned to `IDLE`, confirming that direct command publish through `device/{serial}/request` works.
@@ -42,7 +42,7 @@ The printer reported `gcode_line` acknowledgements and then returned to `IDLE`, 
 Querying version/details:
 
 ```json
-{"info":{"command":"get_version","sequence_id":"90002"}}
+{ "info": { "command": "get_version", "sequence_id": "90002" } }
 ```
 
 The response identified the machine as `Bambu Lab X2D` with firmware `01.01.01.00`.

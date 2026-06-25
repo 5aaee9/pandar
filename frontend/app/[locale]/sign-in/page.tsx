@@ -1,2 +1,1 @@
-export { default } from '../../plugin-sign-in/page'
-
+export { default } from "../../plugin-sign-in/page";

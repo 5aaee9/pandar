@@ -75,7 +75,12 @@ Response:
 
 ```json
 {
-  "tenant": { "id": "...", "slug": "acme", "display_name": "Acme", "created_at": "..." },
+  "tenant": {
+    "id": "...",
+    "slug": "acme",
+    "display_name": "Acme",
+    "created_at": "..."
+  },
   "user": {
     "id": "...",
     "tenant_id": "...",

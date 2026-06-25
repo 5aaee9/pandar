@@ -35,8 +35,11 @@ pub async fn artifact_dispatch_download(
     config: &HarnessConfig,
 ) -> anyhow::Result<()> {
     let world = SmokeWorld::for_config(config).await?;
-    let fixture = seed_fixture(&world.hub_a, &config.fixture_suffix("artifact", iteration, 0))
-        .await?;
+    let fixture = seed_fixture(
+        &world.hub_a,
+        &config.fixture_suffix("artifact", iteration, 0),
+    )
+    .await?;
     let (_control_plane, ready) = spawn_control_plane_ready(world.hub_b.clone());
     ready
         .await
@@ -157,8 +160,11 @@ pub async fn websocket_fanout(iteration: usize, config: &HarnessConfig) -> anyho
 
 pub async fn restart_convergence(iteration: usize, config: &HarnessConfig) -> anyhow::Result<()> {
     let world = SmokeWorld::for_config(config).await?;
-    let fixture =
-        seed_fixture(&world.hub_a, &config.fixture_suffix("restart", iteration, 0)).await?;
+    let fixture = seed_fixture(
+        &world.hub_a,
+        &config.fixture_suffix("restart", iteration, 0),
+    )
+    .await?;
     create_print_through_multipart_route(&world.hub_a, &fixture).await?;
     let restarted = world.restarted_state();
     let (command_id, _print) = dequeue_print_command(&restarted, &fixture).await?;
@@ -300,8 +306,11 @@ pub async fn terminal_report_idempotence(
     config: &HarnessConfig,
 ) -> anyhow::Result<()> {
     let world = SmokeWorld::for_config(config).await?;
-    let fixture =
-        seed_fixture(&world.hub_a, &config.fixture_suffix("terminal", iteration, 0)).await?;
+    let fixture = seed_fixture(
+        &world.hub_a,
+        &config.fixture_suffix("terminal", iteration, 0),
+    )
+    .await?;
     let created = create_print_job(&world.hub_a, &fixture).await?;
     let terminal = apply_report(
         &world.hub_a,
@@ -350,8 +359,11 @@ pub async fn terminal_report_idempotence(
 
 pub async fn nats_reconnect(iteration: usize, config: &HarnessConfig) -> anyhow::Result<()> {
     let world = SmokeWorld::for_config(config).await?;
-    let fixture =
-        seed_fixture(&world.hub_a, &config.fixture_suffix("nats-reconnect", iteration, 0)).await?;
+    let fixture = seed_fixture(
+        &world.hub_a,
+        &config.fixture_suffix("nats-reconnect", iteration, 0),
+    )
+    .await?;
     let (_control_plane, ready) = spawn_control_plane_ready(world.hub_b.clone());
     ready
         .await
@@ -395,9 +407,7 @@ pub async fn postgres_reconnect(iteration: usize, config: &HarnessConfig) -> any
     )
     .await?;
 
-    println!(
-        "WAIT scenario=postgres-reconnect iteration={iteration} stop-restart-postgres-now"
-    );
+    println!("WAIT scenario=postgres-reconnect iteration={iteration} stop-restart-postgres-now");
     tokio::time::sleep(postgres_reconnect_pause()).await;
 
     create_print_through_multipart_route(&world.hub_a, &fixture).await?;

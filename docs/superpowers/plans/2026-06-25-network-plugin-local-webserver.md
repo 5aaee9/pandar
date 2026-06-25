@@ -31,6 +31,7 @@
 ## Task 1: Static Plugin-Local Frontend Package
 
 **Files:**
+
 - Modify: `frontend/package.json`
 - Create: `frontend/plugin-local/package.json`
 - Create: `frontend/plugin-local/tsconfig.json`
@@ -93,28 +94,31 @@ Create `frontend/plugin-local/tsconfig.json`:
 Create `frontend/plugin-local/scripts/build.mjs`:
 
 ```js
-import { copyFile, mkdir, rm } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { spawnSync } from 'node:child_process'
+import { copyFile, mkdir, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
-const root = dirname(dirname(fileURLToPath(import.meta.url)))
-const dist = join(root, 'dist')
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const dist = join(root, "dist");
 
-await rm(dist, { force: true, recursive: true })
-await mkdir(join(dist, 'assets'), { recursive: true })
+await rm(dist, { force: true, recursive: true });
+await mkdir(join(dist, "assets"), { recursive: true });
 
-const tsc = spawnSync('npx', ['tsc', '-p', 'tsconfig.json'], {
+const tsc = spawnSync("npx", ["tsc", "-p", "tsconfig.json"], {
   cwd: root,
-  stdio: 'inherit',
-  shell: process.platform === 'win32',
-})
+  stdio: "inherit",
+  shell: process.platform === "win32",
+});
 if (tsc.status !== 0) {
-  process.exit(tsc.status ?? 1)
+  process.exit(tsc.status ?? 1);
 }
 
-await copyFile(join(root, 'src', 'index.html'), join(dist, 'index.html'))
-await copyFile(join(root, 'src', 'styles.css'), join(dist, 'assets', 'styles.css'))
+await copyFile(join(root, "src", "index.html"), join(dist, "index.html"));
+await copyFile(
+  join(root, "src", "styles.css"),
+  join(dist, "assets", "styles.css"),
+);
 ```
 
 - [ ] **Step 5: Create HTML shell**
@@ -157,7 +161,9 @@ Create `frontend/plugin-local/src/index.html`:
         </form>
 
         <div class="actions">
-          <a id="continueLink" class="primary" href="#" aria-disabled="true">Continue sign-in</a>
+          <a id="continueLink" class="primary" href="#" aria-disabled="true"
+            >Continue sign-in</a
+          >
         </div>
       </section>
     </main>
@@ -292,7 +298,7 @@ button:hover,
   background: #155e75;
 }
 
-.primary[aria-disabled='true'] {
+.primary[aria-disabled="true"] {
   background: #64748b;
   pointer-events: none;
 }
@@ -324,76 +330,81 @@ Create `frontend/plugin-local/src/app.ts`:
 
 ```ts
 type Config = {
-  webUrl: string
-  hubUrl: string
-  usingDefaultServer: boolean
-  usingDefaultWebServer: boolean
-  usingDefaultHubServer: boolean
-  callbackUrl: string
-}
+  webUrl: string;
+  hubUrl: string;
+  usingDefaultServer: boolean;
+  usingDefaultWebServer: boolean;
+  usingDefaultHubServer: boolean;
+  callbackUrl: string;
+};
 
-const statusEl = document.querySelector<HTMLSpanElement>('#status')!
-const noticeEl = document.querySelector<HTMLDivElement>('#defaultNotice')!
-const errorEl = document.querySelector<HTMLDivElement>('#error')!
-const webInput = document.querySelector<HTMLInputElement>('#webUrl')!
-const hubInput = document.querySelector<HTMLInputElement>('#hubUrl')!
-const continueLink = document.querySelector<HTMLAnchorElement>('#continueLink')!
-const form = document.querySelector<HTMLFormElement>('#targetForm')!
+const statusEl = document.querySelector<HTMLSpanElement>("#status")!;
+const noticeEl = document.querySelector<HTMLDivElement>("#defaultNotice")!;
+const errorEl = document.querySelector<HTMLDivElement>("#error")!;
+const webInput = document.querySelector<HTMLInputElement>("#webUrl")!;
+const hubInput = document.querySelector<HTMLInputElement>("#hubUrl")!;
+const continueLink =
+  document.querySelector<HTMLAnchorElement>("#continueLink")!;
+const form = document.querySelector<HTMLFormElement>("#targetForm")!;
 
 function setError(message: string | null) {
-  errorEl.hidden = message === null
-  errorEl.textContent = message ?? ''
+  errorEl.hidden = message === null;
+  errorEl.textContent = message ?? "";
 }
 
 function applyConfig(config: Config) {
-  webInput.value = config.webUrl
-  hubInput.value = config.hubUrl
-  statusEl.textContent = config.usingDefaultServer ? 'Default target' : 'Configured target'
-  noticeEl.hidden = !config.usingDefaultServer
+  webInput.value = config.webUrl;
+  hubInput.value = config.hubUrl;
+  statusEl.textContent = config.usingDefaultServer
+    ? "Default target"
+    : "Configured target";
+  noticeEl.hidden = !config.usingDefaultServer;
   if (config.usingDefaultServer) {
     const defaults = [
-      config.usingDefaultWebServer ? 'web server' : null,
-      config.usingDefaultHubServer ? 'API server' : null,
-    ].filter(Boolean).join(' and ')
-    noticeEl.textContent = `No explicit ${defaults} configuration was found. Confirm these defaults or switch to your Pandar deployment.`
+      config.usingDefaultWebServer ? "web server" : null,
+      config.usingDefaultHubServer ? "API server" : null,
+    ]
+      .filter(Boolean)
+      .join(" and ");
+    noticeEl.textContent = `No explicit ${defaults} configuration was found. Confirm these defaults or switch to your Pandar deployment.`;
   }
-  const signIn = new URL('/plugin-sign-in', config.webUrl)
-  signIn.searchParams.set('redirect_url', config.callbackUrl)
-  continueLink.href = signIn.toString()
-  continueLink.setAttribute('aria-disabled', 'false')
+  const signIn = new URL("/plugin-sign-in", config.webUrl);
+  signIn.searchParams.set("redirect_url", config.callbackUrl);
+  continueLink.href = signIn.toString();
+  continueLink.setAttribute("aria-disabled", "false");
 }
 
 async function loadConfig() {
-  setError(null)
-  const response = await fetch('/config', { cache: 'no-store' })
+  setError(null);
+  const response = await fetch("/config", { cache: "no-store" });
   if (!response.ok) {
-    throw new Error(`Config lookup returned ${response.status}`)
+    throw new Error(`Config lookup returned ${response.status}`);
   }
-  applyConfig(await response.json() as Config)
+  applyConfig((await response.json()) as Config);
 }
 
-form.addEventListener('submit', async (event) => {
-  event.preventDefault()
-  setError(null)
-  const response = await fetch('/config', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setError(null);
+  const response = await fetch("/config", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({
       webUrl: webInput.value,
       hubUrl: hubInput.value,
     }),
-  })
+  });
   if (!response.ok) {
-    setError('Enter valid http:// or https:// target server URLs.')
-    return
+    setError("Enter valid http:// or https:// target server URLs.");
+    return;
   }
-  applyConfig(await response.json() as Config)
-})
+  applyConfig((await response.json()) as Config);
+});
 
 loadConfig().catch((error) => {
-  statusEl.textContent = 'Unavailable'
-  setError(error instanceof Error ? error.message : 'Config lookup failed')
-})
+  statusEl.textContent = "Unavailable";
+  setError(error instanceof Error ? error.message : "Config lookup failed");
+});
 ```
 
 - [ ] **Step 8: Build and commit generated static assets**
@@ -410,6 +421,7 @@ Expected: `frontend/plugin-local/dist/index.html`, `frontend/plugin-local/dist/a
 ## Task 2: Rust Embedded Local Webserver
 
 **Files:**
+
 - Modify: `Cargo.toml`
 - Modify: `crates/pandar-network-plugin/Cargo.toml`
 - Modify: `crates/pandar-network-plugin/src/lib.rs`
@@ -597,11 +609,11 @@ Use one serial test for global singleton mutation. Do not split config-mutating 
 Add a pure helper test in `http_boundary.rs` or a crate unit test that does not touch `LOCAL_WEBSERVER`. It should build/normalize `LocalWebserverConfig` values for all four configured flag combinations:
 
 | web_configured | hub_configured | using_default_web_server | using_default_hub_server |
-| --- | --- | --- | --- |
-| false | false | true | true |
-| true | false | false | true |
-| false | true | true | false |
-| true | true | false | false |
+| -------------- | -------------- | ------------------------ | ------------------------ |
+| false          | false          | true                     | true                     |
+| true           | false          | false                    | true                     |
+| false          | true           | true                     | false                    |
+| true           | true           | false                    | false                    |
 
 If helper visibility would force over-exposure, keep the four flag assertions inside the single serial lifecycle test before `POST /config` and document that global mutation prevents parallel cases.
 
@@ -618,6 +630,7 @@ Expected: the new lifecycle test passes.
 ## Task 3: C++ Shim Local Host Integration
 
 **Files:**
+
 - Modify: `crates/pandar-network-plugin/src/shim.cpp`
 - Modify: `crates/pandar-network-plugin/tests/fixtures/studio_abi_probe.cpp`
 - Modify: `crates/pandar-network-plugin/tests/studio_abi_probe.rs`
@@ -719,6 +732,7 @@ Expected: local ABI probe passes or skips only for missing C++ compiler/platform
 ## Task 4: Documentation Updates
 
 **Files:**
+
 - Modify: `docs/architecture.md`
 - Modify: `docs/development.md`
 - Modify: `docs/compatibility/bambu-studio-plugin.md`
@@ -763,6 +777,7 @@ Do not mark real Studio sign-in compatibility as complete.
 ## Task 5: Full Verification And Cleanup
 
 **Files:**
+
 - All files changed above.
 
 - [ ] **Step 1: Format**

@@ -23,6 +23,7 @@
 ## Task 1: Dependency And Real API Compile Proof
 
 **Files:**
+
 - Modify: `Cargo.toml`
 - Modify: `crates/pandar-agent/Cargo.toml`
 - Create: `crates/pandar-agent/src/machine/ftps.rs`
@@ -189,6 +190,7 @@ Expected: PASS. If this fails because a type or feature is wrong, fix the depend
 ## Task 2: Shared Bambu LAN TLS Policy
 
 **Files:**
+
 - Modify: `crates/pandar-agent/src/machine/mqtt.rs`
 - Modify: `crates/pandar-agent/src/machine/ftps.rs`
 - Test: `crates/pandar-agent/src/machine/mqtt/tests.rs`
@@ -288,6 +290,7 @@ Expected: PASS.
 ## Task 3: Runtime Adapter Verification Helpers And Profiles
 
 **Files:**
+
 - Modify: `crates/pandar-agent/src/machine/ftps.rs`
 - Test: `crates/pandar-agent/src/machine/ftps.rs`
 
@@ -375,6 +378,7 @@ Expected: PASS.
 ## Task 4: Implement `suppaftp` Session Operations
 
 **Files:**
+
 - Modify: `crates/pandar-agent/src/machine/ftps.rs`
 
 - [ ] **Step 1: Add imports for runtime session work**
@@ -585,6 +589,7 @@ Expected: PASS. Fix only API mismatches inside `ftps.rs` before moving on.
 ## Task 5: Runtime Gateway Wiring
 
 **Files:**
+
 - Modify: `crates/pandar-agent/src/machine/mod.rs`
 - Test: `crates/pandar-agent/src/machine/tests.rs`
 
@@ -662,6 +667,7 @@ If cargo rejects multiple filters, run these three tests as separate commands. E
 ## Task 6: Docs And Roadmap
 
 **Files:**
+
 - Modify: `docs/roadmap.md`
 - Modify: `docs/architecture.md`
 
@@ -711,6 +717,7 @@ Expected: PASS.
 ## Task 7: Final Verification
 
 **Files:**
+
 - All changed files.
 
 - [ ] **Step 1: Format**

@@ -128,16 +128,23 @@ mod main {
 
         #[test]
         fn parse_rejects_live_storage_scenario() {
-            let err =
-                parse_args(["--live", "--scenario", "storage"].into_iter().map(str::to_owned))
-                    .unwrap_err();
+            let err = parse_args(
+                ["--live", "--scenario", "storage"]
+                    .into_iter()
+                    .map(str::to_owned),
+            )
+            .unwrap_err();
             assert!(format!("{err:#}").contains("storage failure scenario is local dry-run only"));
         }
 
         #[test]
         fn live_all_excludes_manual_fault_scenarios() {
-            let config = parse_args(["--live", "--scenario", "all"].into_iter().map(str::to_owned))
-                .unwrap();
+            let config = parse_args(
+                ["--live", "--scenario", "all"]
+                    .into_iter()
+                    .map(str::to_owned),
+            )
+            .unwrap();
             assert_eq!(
                 config.included_scenarios(),
                 vec![
@@ -151,9 +158,12 @@ mod main {
 
         #[test]
         fn dry_run_all_includes_storage_scenario() {
-            let config =
-                parse_args(["--dry-run", "--scenario", "all"].into_iter().map(str::to_owned))
-                    .unwrap();
+            let config = parse_args(
+                ["--dry-run", "--scenario", "all"]
+                    .into_iter()
+                    .map(str::to_owned),
+            )
+            .unwrap();
             assert_eq!(
                 config.included_scenarios(),
                 vec![

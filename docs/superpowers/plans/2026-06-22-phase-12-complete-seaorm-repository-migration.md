@@ -47,6 +47,7 @@
 ## Task 1: Entity And Mapping Foundation
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/entities/users.rs`
 - Create: `crates/pandar-hub/src/entities/agents.rs`
 - Create: `crates/pandar-hub/src/entities/printers.rs`
@@ -63,7 +64,6 @@
 - [x] **Step 1: Add one hand-written SeaORM entity per persistent table**
 
   Use the existing `crates/pandar-hub/src/entities/tenants.rs` style. Each entity must use the real table name and all persisted columns from migrations:
-
   - `users`: `id`, `tenant_id`, `email`, `display_name`, `role`, `created_at`
   - `agents`: `id`, `tenant_id`, `name`, `status`, `version`, `last_seen_at`, `created_at`
   - `printers`: `id`, `tenant_id`, `agent_id`, `serial_number`, `name`, `model`, `status`, `last_seen_at`, `created_at`
@@ -96,7 +96,6 @@
 - [x] **Step 3: Add SeaORM-aware repository helpers**
 
   In `crates/pandar-hub/src/repositories/mod.rs`, add helpers that can be reused by migrated repositories:
-
   - `fn is_sea_orm_unique_violation(err: &sea_orm::DbErr, sqlite_name: &str, postgres_name: &str) -> bool`
   - `fn is_sea_orm_foreign_key_violation(err: &sea_orm::DbErr) -> bool`
 
@@ -118,6 +117,7 @@
 ## Task 2: Auth, Audit, Agent, And Printer Repositories
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/repositories/audit.rs`
 - Modify: `crates/pandar-hub/src/repositories/auth.rs`
 - Modify: `crates/pandar-hub/src/repositories/auth/bootstrap.rs`
@@ -141,14 +141,12 @@
   Replace SQLx tenant-admin bootstrap and user insert/list/update/select paths with SeaORM. Use `Database::sea_orm_connection().begin().await` for bootstrap/provisioning transactions and commit only after every row in the intended mutation group succeeds.
 
   For the Phase 11 tenant-admin bootstrap helper, the transaction boundary must include:
-
   - tenant row creation,
   - admin user row creation,
   - first API token row creation,
   - all bootstrap audit event rows.
 
   Preserve these error mappings:
-
   - duplicate tenant slug -> `RepositoryError::DuplicateTenantSlug`
   - duplicate user email -> `RepositoryError::DuplicateUserEmail`
   - missing user -> `RepositoryError::MissingUser`
@@ -158,7 +156,6 @@
 - [x] **Step 3: Migrate API tokens**
 
   Replace SQLx token create/list/revoke/authenticate paths with SeaORM. Preserve:
-
   - duplicate `(tenant_id, name)` -> `DuplicateApiTokenName`
   - duplicate `token_hash` -> `DuplicateApiTokenHash`
   - revoked tokens do not authenticate
@@ -167,7 +164,6 @@
 - [x] **Step 4: Migrate external identities**
 
   Replace SQLx identity link/list/authenticate paths with SeaORM. Preserve:
-
   - duplicate `(tenant_id, provider, subject)` -> `DuplicateExternalIdentity`
   - duplicate `(tenant_id, user_id, provider)` -> `DuplicateUserExternalIdentity`
   - missing linked user -> `MissingUser`
@@ -198,6 +194,7 @@
 ## Task 3: Command Repository Migration
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/repositories/commands.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands/audit.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands/inserts.rs`
@@ -241,6 +238,7 @@
 ## Task 4: Job, Artifact, Print Report, And Machine Event Migration
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/repositories/jobs.rs`
 - Modify: `crates/pandar-hub/src/repositories/jobs/audit.rs`
 - Modify: `crates/pandar-hub/src/repositories/jobs/create.rs`
@@ -268,7 +266,6 @@
 - [x] **Step 4: Migrate print report reconciliation**
 
   Replace SQLx machine event insert/dedupe and job print-state updates with SeaORM where practical. Preserve:
-
   - idempotency through `(tenant_id, event_key)`
   - no duplicated terminal events after repeated reports
   - no regression from terminal print states
@@ -292,6 +289,7 @@
 ## Task 5: SQLx Escape Hatch Audit And Documentation
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/repositories/mod.rs`
 - Modify: `docs/superpowers/specs/2026-06-22-phase-12-complete-seaorm-repository-migration-design.md`
 - Modify: `docs/superpowers/plans/2026-06-22-phase-12-complete-seaorm-repository-migration.md`
@@ -315,14 +313,12 @@
 - [x] **Step 3: Document persistence boundary**
 
   Final migration boundary:
-
   - Actual SQLx adapter module kept: `crates/pandar-hub/src/repositories/adapters/printers.rs`.
   - Operation covered: atomic printer snapshot upsert on `(tenant_id, serial_number)`.
   - Reason: the SeaORM generic path for this repository flow would be select-then-write; the adapter preserves SQLite/PostgreSQL `ON CONFLICT` atomic upsert behavior and concurrency semantics.
   - Error context: unmapped database failures preserve lower-level cause/context through operation-specific `anyhow` context.
 
   Update `docs/architecture.md` to state:
-
   - repositories use SeaORM 2.0 entities and transactions for persistent behavior,
   - SQLx remains the connection/migration layer,
   - any remaining raw SQL repository usage is isolated in documented adapters with SQLite/PostgreSQL parity tests.
@@ -334,6 +330,7 @@
 ## Task 6: Final Verification And SDD Review Inputs
 
 **Files:**
+
 - No implementation files unless verification exposes a bug.
 
 - [x] **Step 1: Run required formatting and linting**
@@ -367,7 +364,6 @@
 - [x] **Step 4: Prepare final SDD implementation review packet**
 
   Collect:
-
   - reviewed spec path and content,
   - reviewed plan path and content,
   - `git diff --stat`,

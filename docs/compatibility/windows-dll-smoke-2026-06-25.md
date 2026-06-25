@@ -5,15 +5,15 @@ plugin DLL. Local usernames and repository paths are redacted.
 
 ## Environment
 
-| Item | Value |
-| --- | --- |
-| OS | Windows x86_64 |
-| Bambu Studio | `02.07.01.62` |
-| Bambu Studio install | `C:\Program Files\Bambu Studio\bambu-studio.exe` |
-| Plugin directory | `%APPDATA%\BambuStudio\plugins` |
-| Pandar commit | `00380cf` |
-| Tested DLL | `<repo>\target\debug\pandar_network_plugin.dll` |
-| Tested DLL SHA256 | `B7756734C18DC496B801413CFDFABC6C061BBC3D800D1B3DFCFBACCB04CB446E` |
+| Item                      | Value                                                              |
+| ------------------------- | ------------------------------------------------------------------ |
+| OS                        | Windows x86_64                                                     |
+| Bambu Studio              | `02.07.01.62`                                                      |
+| Bambu Studio install      | `C:\Program Files\Bambu Studio\bambu-studio.exe`                   |
+| Plugin directory          | `%APPDATA%\BambuStudio\plugins`                                    |
+| Pandar commit             | `00380cf`                                                          |
+| Tested DLL                | `<repo>\target\debug\pandar_network_plugin.dll`                    |
+| Tested DLL SHA256         | `B7756734C18DC496B801413CFDFABC6C061BBC3D800D1B3DFCFBACCB04CB446E` |
 | Official Bambu DLL SHA256 | `87AE4BD4AD142AEBEF7ADFC1087D1F7E145A07F0E113577011B915797FDC0098` |
 
 ## Test Coverage

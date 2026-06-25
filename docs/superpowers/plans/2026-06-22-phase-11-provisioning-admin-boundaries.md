@@ -33,6 +33,7 @@
 ## Task 1: Migrations And Repository Behavior
 
 **Files:**
+
 - Create: `crates/pandar-hub/migrations/sqlite/20260622040000_phase_11_provisioning.sql`
 - Create: `crates/pandar-hub/migrations/postgres/20260622040000_phase_11_provisioning.sql`
 - Modify: `crates/pandar-hub/src/repositories/mod.rs`
@@ -133,6 +134,7 @@ Expected: PASS. If `PANDAR_TEST_POSTGRES_URL` is unset, PostgreSQL tests print s
 ## Task 2: Bootstrap Authority And Cross-Tenant Admin Routes
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/bootstrap.rs`
 - Create: `crates/pandar-hub/src/routes/admin.rs`
 - Create: `crates/pandar-hub/src/routes/bootstrap.rs`
@@ -230,6 +232,7 @@ Expected: PASS for updated route tests.
 ## Task 3: Tenant-Admin Provisioning Routes
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/routes/provisioning.rs`
 - Modify: `crates/pandar-hub/src/routes.rs`
 - Create: `crates/pandar-hub/src/routes/tests/provisioning.rs`
@@ -318,6 +321,7 @@ Expected: PASS.
 ## Task 4: Frontend And Documentation
 
 **Files:**
+
 - Modify: `frontend/app/page.tsx`
 - Modify: `docs/architecture.md`
 - Modify: `docs/roadmap.md`
@@ -361,6 +365,7 @@ In `docs/roadmap.md`, move Phase 11 bullets to completed language and leave Phas
 ## Task 5: Full Verification, Final Review, Commit, Push
 
 **Files:**
+
 - All changed files from Tasks 1-4.
 
 - [ ] **Step 1: Run formatting**

@@ -21,11 +21,11 @@ Prefer an existing plugin artifact built for the same OS and architecture as the
 
 Expected artifact names:
 
-| OS | Artifact |
-| --- | --- |
-| Linux | `libpandar_network_plugin.so` |
-| Windows | `pandar_network_plugin.dll` |
-| macOS | `libpandar_network_plugin.dylib` |
+| OS      | Artifact                         |
+| ------- | -------------------------------- |
+| Linux   | `libpandar_network_plugin.so`    |
+| Windows | `pandar_network_plugin.dll`      |
+| macOS   | `libpandar_network_plugin.dylib` |
 
 Repo-local build option for Linux:
 
@@ -83,18 +83,18 @@ A passing preflight only proves the prerequisite paths, plugin filename, URL sha
 
 ## Smoke Checklist
 
-| Step | Expected Result | Status | Evidence |
-| --- | --- | --- | --- |
-| Studio starts and loads plugin | No missing-symbol or dynamic-loader error. | `untested` | |
-| Login opens Pandar sign-in | Studio WebView displays Pandar sign-in. | `untested` | |
-| Localhost ticket callback completes | Studio receives plugin ticket through its local callback. | `untested` | |
-| Token exchange completes | Studio exchanges the plugin ticket for a tenant-scoped plugin credential. | `untested` | |
-| Profile loads | Studio receives Bambu-shaped login state. | `untested` | |
-| Printer list loads | Hub-backed printers display or an empty list is accepted. | `untested` | |
-| Job list loads | Hub-backed jobs display or an empty list is accepted. | `untested` | |
-| Print submission | Optional print submits through `/api/v1/plugin/prints`. | `untested` | |
-| Logout | Studio receives `studio_useroffline`. | `untested` | |
-| Direct-printer and `ft_*` paths | Unsupported behavior is stable and does not open machine sockets. | `untested` | |
+| Step                                | Expected Result                                                           | Status     | Evidence |
+| ----------------------------------- | ------------------------------------------------------------------------- | ---------- | -------- |
+| Studio starts and loads plugin      | No missing-symbol or dynamic-loader error.                                | `untested` |          |
+| Login opens Pandar sign-in          | Studio WebView displays Pandar sign-in.                                   | `untested` |          |
+| Localhost ticket callback completes | Studio receives plugin ticket through its local callback.                 | `untested` |          |
+| Token exchange completes            | Studio exchanges the plugin ticket for a tenant-scoped plugin credential. | `untested` |          |
+| Profile loads                       | Studio receives Bambu-shaped login state.                                 | `untested` |          |
+| Printer list loads                  | Hub-backed printers display or an empty list is accepted.                 | `untested` |          |
+| Job list loads                      | Hub-backed jobs display or an empty list is accepted.                     | `untested` |          |
+| Print submission                    | Optional print submits through `/api/v1/plugin/prints`.                   | `untested` |          |
+| Logout                              | Studio receives `studio_useroffline`.                                     | `untested` |          |
+| Direct-printer and `ft_*` paths     | Unsupported behavior is stable and does not open machine sockets.         | `untested` |          |
 
 ## Evidence Capture And Redaction
 

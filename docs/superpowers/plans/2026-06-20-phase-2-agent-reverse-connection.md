@@ -42,6 +42,7 @@
 ## Task 1: Proto And Generated Code
 
 **Files:**
+
 - Modify: `Cargo.toml`
 - Modify: `proto/pandar/agent/v1/agent.proto`
 - Modify: `crates/pandar-hub/Cargo.toml`
@@ -178,6 +179,7 @@ Expected: both commands compile without requiring a live database.
 ## Task 2: Core Command Domain And Repository Persistence
 
 **Files:**
+
 - Modify: `crates/pandar-core/src/lib.rs`
 - Modify: `crates/pandar-hub/src/repositories/mod.rs`
 - Modify: `crates/pandar-hub/src/repositories/agents.rs`
@@ -343,6 +345,7 @@ Expected: all pass.
 ## Task 3: Hub Session Registry And gRPC Service
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/lib.rs`
 - Create: `crates/pandar-hub/src/sessions.rs`
 - Create: `crates/pandar-hub/src/grpc.rs`
@@ -437,6 +440,7 @@ If Cargo rejects multiple test filters, run equivalent filters separately.
 ## Task 4: Hub Runtime Startup
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/main.rs`
 - Modify: `crates/pandar-hub/src/lib.rs` if a helper is needed
 
@@ -467,6 +471,7 @@ Expected: all pass.
 ## Task 5: Agent Reverse Client
 
 **Files:**
+
 - Modify: `crates/pandar-agent/Cargo.toml`
 - Modify: `crates/pandar-agent/src/lib.rs`
 - Modify: `crates/pandar-agent/src/main.rs`
@@ -539,6 +544,7 @@ Expected: all pass.
 ## Task 6: Integration Verification And Docs
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `docs/architecture.md`
 - Modify: `docs/roadmap.md`

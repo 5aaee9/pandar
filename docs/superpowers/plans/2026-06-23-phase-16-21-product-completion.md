@@ -99,6 +99,7 @@ Modify:
 ## Task 1: Phase 16 Persistence And Domain Entities
 
 **Files:**
+
 - Create migrations and entities listed above.
 - Modify `crates/pandar-hub/src/entities/mod.rs`, `crates/pandar-core/src/agent.rs`, `crates/pandar-hub/src/repositories/tests/mod.rs`.
 
@@ -207,6 +208,7 @@ Expected: new SQLite repository tests pass.
 ## Task 2: Tenant Token Repository, Authorization Principal, And Retired Routes
 
 **Files:**
+
 - Create `auth/tenant_tokens.rs`, `routes/tenant_tokens.rs`.
 - Modify `auth.rs`, `routes/auth.rs`, `routes.rs`, `bootstrap.rs`, `provisioning/tokens.rs`, `audit.rs`.
 
@@ -336,6 +338,7 @@ Expected: all focused auth/bootstrap tests pass.
 ## Task 3: Agent Credentials And gRPC Authentication
 
 **Files:**
+
 - Modify proto, agent config, hub gRPC service, agent repository, pairing route, tests.
 
 - [x] **Step 1: Update proto**
@@ -421,6 +424,7 @@ Expected: all focused tests pass.
 ## Task 4: Plugin Tickets, Plugin Routes, And Audit History
 
 **Files:**
+
 - Create `routes/plugin.rs`, `auth/plugin_tickets.rs`.
 - Modify `routes.rs`, `jobs.rs`, `audit.rs`, route tests.
 
@@ -500,6 +504,7 @@ Expected: all focused tests pass.
 ## Task 5: Recovery, Duplicate, Reprint, And Artifact UX Backend
 
 **Files:**
+
 - Modify `repositories/jobs.rs`, `routes/jobs.rs`, jobs tests.
 
 - [x] **Step 1: Add repository operations**
@@ -595,6 +600,7 @@ Expected: all job route/repository tests pass.
 ## Task 6: Operational Readiness, Metrics, Redaction, And Cleanup CLI
 
 **Files:**
+
 - Create `metrics.rs`, `redaction.rs`, `pandar-app/src/cleanup.rs`.
 - Modify `routes.rs`, `runtime.rs`, `printer_events.rs`, `sessions.rs`, `pandar-app` manifest/main.
 
@@ -680,6 +686,7 @@ cargo test -p pandar-app
 ## Task 7: Frontend Tenant Admin, Recovery, Artifact, And Plugin Sign-In UI
 
 **Files:**
+
 - Create `admin-panel.tsx`, `recovery-actions.tsx`, `plugin-sign-in/page.tsx`.
 - Modify `actions.ts`, `dashboard-runtime*.tsx`, `dashboard-types.ts`, `dispatch-form.tsx`, `page.tsx`.
 
@@ -736,6 +743,7 @@ Result: passed.
 ## Task 8: Phase 21 Network Plugin Crate
 
 **Files:**
+
 - Create `crates/pandar-network-plugin/*`.
 - Modify workspace `Cargo.toml`.
 
@@ -791,6 +799,7 @@ Result: passed.
 ## Task 9: Documentation, Roadmap, And Final Verification
 
 **Files:**
+
 - Modify `README.md`, `docs/development.md`, `docs/architecture.md`, `docs/roadmap.md`.
 
 - [x] **Step 1: Update README and development docs**

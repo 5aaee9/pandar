@@ -30,6 +30,7 @@
 ## Task 1: Add Preflight Validation Tests And Implementation
 
 **Files:**
+
 - Modify: `tools/scaled-artifact-smoke/src/main.rs`
 - Create: `tools/scaled-artifact-smoke/src/live.rs`
 
@@ -278,6 +279,7 @@ Expected: tests pass. The preflight command fails in this workspace with missing
 ## Task 2: Update Phase 26 Documentation And Evidence
 
 **Files:**
+
 - Modify: `docs/development.md`
 - Modify: `docs/release-installation.md`
 - Modify: `docs/compatibility/phase-26-soak-evidence.md`
@@ -318,8 +320,8 @@ In `docs/compatibility/phase-26-soak-evidence.md`, add a section between local d
 ```markdown
 ## Live Soak Preflight Evidence
 
-| Date | Commit | Command | Result | Notes |
-| --- | --- | --- | --- | --- |
+| Date       | Commit                     | Command                                                                                | Result  | Notes                                                                                                                                                                         |
+| ---------- | -------------------------- | -------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-06-24 | working tree before commit | `cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --live-preflight` | blocked | Preflight command exists and failed locally because disposable `PANDAR_SOAK_*` PostgreSQL, NATS, and object-storage variables are not configured. No live soak was attempted. |
 ```
 
@@ -338,6 +340,7 @@ Update `Immediate Next` only if needed to keep wording consistent; do not remove
 ## Task 3: Final Verification And Review
 
 **Files:**
+
 - All files changed in Tasks 1 and 2.
 
 - [ ] **Step 1: Run targeted checks**

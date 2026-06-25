@@ -55,7 +55,10 @@ impl fmt::Display for PreflightError {
                     .map(|value| format!("{} ({})", value.name, value.reason))
                     .collect::<Vec<_>>()
                     .join(", ");
-                write!(formatter, "invalid live soak environment variables: {details}")
+                write!(
+                    formatter,
+                    "invalid live soak environment variables: {details}"
+                )
             }
         }
     }
@@ -82,11 +85,8 @@ impl LiveConfig {
 
     pub fn from_values(values: BTreeMap<String, String>) -> anyhow::Result<Self> {
         validate(&values).map_err(|error| anyhow::anyhow!("{error}"))?;
-        let s3_force_path_style = parse_optional_bool(
-            &values,
-            "PANDAR_SOAK_ARTIFACT_S3_FORCE_PATH_STYLE",
-            true,
-        )?;
+        let s3_force_path_style =
+            parse_optional_bool(&values, "PANDAR_SOAK_ARTIFACT_S3_FORCE_PATH_STYLE", true)?;
 
         Ok(Self {
             database_url: required_value(&values, "PANDAR_SOAK_DATABASE_URL").to_owned(),
@@ -113,7 +113,11 @@ pub fn validate(values: &BTreeMap<String, String>) -> Result<(), PreflightError>
     let missing = REQUIRED_ENV
         .iter()
         .copied()
-        .filter(|name| values.get(*name).is_none_or(|value| value.trim().is_empty()))
+        .filter(|name| {
+            values
+                .get(*name)
+                .is_none_or(|value| value.trim().is_empty())
+        })
         .collect::<Vec<_>>();
     if !missing.is_empty() {
         return Err(PreflightError::Missing(missing));

@@ -29,6 +29,7 @@
 ## Milestone 1: Protocol And Core Models
 
 **Files:**
+
 - Modify: `proto/pandar/agent/v1/agent.proto`
 - Modify: `crates/pandar-core/src/job.rs`
 - Test: `crates/pandar-core` unit coverage via workspace tests
@@ -129,6 +130,7 @@ Expected: both commands compile or fail only on downstream code that has not yet
 ## Milestone 2: Agent Report Normalization And Forwarding
 
 **Files:**
+
 - Modify: `crates/pandar-agent/src/machine/mqtt.rs`
 - Modify: `crates/pandar-agent/src/machine/mqtt/tests.rs`
 - Modify: `crates/pandar-agent/src/lib.rs`
@@ -223,6 +225,7 @@ Expected: targeted agent tests pass.
 ## Milestone 3: Hub Schema And Repository Reconciliation
 
 **Files:**
+
 - Add: `crates/pandar-hub/migrations/sqlite/20260622020000_phase_9_print_reports.sql`
 - Add: `crates/pandar-hub/migrations/postgres/20260622020000_phase_9_print_reports.sql`
 - Modify: `crates/pandar-hub/src/repositories/jobs.rs`
@@ -432,6 +435,7 @@ Expected: SQLite repository tests pass.
 ## Milestone 4: Hub gRPC, HTTP, And Tenant WebSocket Events
 
 **Files:**
+
 - Add: `crates/pandar-hub/src/grpc/print_reports.rs`
 - Modify: `crates/pandar-hub/src/grpc.rs`
 - Modify: `crates/pandar-hub/src/printer_events.rs`
@@ -504,6 +508,7 @@ Expected: targeted hub gRPC/routes tests pass.
 ## Milestone 5: Frontend And Documentation
 
 **Files:**
+
 - Modify: `frontend/app/page.tsx`
 - Modify: `docs/architecture.md`
 - Modify: `docs/roadmap.md`
@@ -515,19 +520,19 @@ Add nested `print` to the `Job` type in `frontend/app/page.tsx`:
 
 ```ts
 print: {
-  status: string
-  printer_state: string | null
-  progress_percent: number | null
-  remaining_time_minutes: number | null
-  current_layer: number | null
-  total_layers: number | null
-  active_file: string | null
-  last_progress_percent: number | null
-  last_layer: number | null
-  error: string | null
-  started_at: string | null
-  finished_at: string | null
-  updated_at: string | null
+  status: string;
+  printer_state: string | null;
+  progress_percent: number | null;
+  remaining_time_minutes: number | null;
+  current_layer: number | null;
+  total_layers: number | null;
+  active_file: string | null;
+  last_progress_percent: number | null;
+  last_layer: number | null;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  updated_at: string | null;
 }
 ```
 
@@ -572,6 +577,7 @@ Expected: Next.js build succeeds.
 ## Milestone 6: Final Verification, Review, Commit, Push
 
 **Files:**
+
 - No feature files unless fixes are required.
 
 - [x] **Step 1: Required generated-output check**

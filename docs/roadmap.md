@@ -55,6 +55,7 @@
 - Verified a real LAN Bambu printer at `10...24` through the agent MQTT path, raised the MQTT packet limit for full `pushall` reports, and confirmed authenticated status refresh returns `IDLE`.
 - Added full-chain warning logs for MQTT report receive failures so errors such as `payload size limit exceeded` are visible during printer refresh/report polling.
 - Documented the 2026-06-24 Bambu LAN printer probe, including MQTT topics, tested commands, device details, transport findings, verification, and follow-up notes.
+- Added `treefmt-nix` flake integration with a standalone `nix/treefmt.nix` configuration for Nix, Rust, GitHub Actions, frontend/Markdown formatting, and EditorConfig validation.
 - Added refresh-time printer model discovery through MQTT `info.get_version`; refresh now fails and logs the full error chain when the model cannot be discovered instead of falling back to configured model metadata.
 - Added Phase 25 Task 6 Hub-mediated agent artifact downloads: agent bearer auth, agent/artifact ownership checks, storage-backed download responses, agent HTTP artifact fetching through `PANDAR_HUB_API_URL`, and local artifact-reader fallback for legacy command payloads.
 - Added Phase 25 Task 8 readiness and cleanup hardening: `/readyz` and Prometheus now report `artifact_storage`, scaled PostgreSQL+NATS filesystem deployments require an explicit shared-filesystem override or object storage, and cleanup execute deletes artifact storage objects before artifact rows while preserving rows on storage delete failure.

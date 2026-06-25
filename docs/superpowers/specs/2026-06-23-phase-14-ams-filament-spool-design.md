@@ -1,6 +1,7 @@
 # Phase 14 Spec: AMS, Filament, And Spool State
 
 ## Scope
+
 Phase 14 promotes Bambu AMS and external-spool state from raw MQTT report details into stable Pandar data that operators can inspect through the hub and frontend.
 
 The implementation must:
@@ -14,6 +15,7 @@ The implementation must:
 This phase does not integrate Spoolman or any other external inventory system. It establishes Pandar's internal material state model first.
 
 ## Reference Facts
+
 Use these facts from `reference/`:
 
 - `reference/bambuddy/backend/app/services/bambu_mqtt.py` treats `ams.tray_exist_bits` as firmware's canonical slot-presence bitmask and clears stale tray filament fields when a slot bit is absent.
@@ -32,6 +34,7 @@ Use these facts from `reference/`:
 - Do not infer exact remaining filament grams from Bambu `remain` fields; preserve uncertain values as raw estimates with explicit field names. Do not change Phase 15 live WebSocket consumption scope.
 
 ## Agent Normalization
+
 Add a focused material-state normalizer under `pandar-agent`, for example `crates/pandar-agent/src/machine/materials.rs`.
 
 The normalizer consumes raw MQTT report JSON and returns a normalized printer material patch. It is a patch, not a full snapshot. Empty or absent raw material fields produce no patch.
@@ -117,6 +120,7 @@ Normalization rules:
 - `tray_tar`, `ams_tray_now`, `ams_tray_tar`, `vt_tray`, and model-specific H2 disambiguation fields are not active-tray sources in Phase 14 unless they also resolve to the `tray_now` shapes above. Unknown or conflicting fields must be ignored rather than guessed.
 
 ## JSON Boundary Rules
+
 The hub applies these parsing rules:
 
 - Empty `printer_materials_json` means no material patch. Invalid JSON/root/type/`observed_at` ignores only the material patch, logs the full cause chain at warn level, and still reconciles print progress.
@@ -125,6 +129,7 @@ The hub applies these parsing rules:
 - Job responses render persisted `NULL` mappings as `null` and persisted `"[]"` as `[]`; corrupt persisted mapping JSON is a repository error with context.
 
 ## Material Merge Contract
+
 The hub merges material patches into `printer_material_snapshots` with these exact rules:
 
 - If `printer_materials_json` is empty, the report has no material patch and the snapshot is unchanged.
@@ -153,6 +158,7 @@ Extend `proto/pandar/agent/v1/agent.proto`:
 Generated protobuf artifacts must stay under Cargo `target` and remain untracked.
 
 ## Hub Persistence
+
 Add SQLite and PostgreSQL migrations with equivalent behavior.
 
 New latest-state tables:
@@ -269,7 +275,7 @@ Extend job create request:
 ```json
 {
   "ams_mapping": [0, -1, 254],
-  "ams_mapping2": [{"ams_id": 0, "slot_id": 0}]
+  "ams_mapping2": [{ "ams_id": 0, "slot_id": 0 }]
 }
 ```
 
@@ -338,6 +344,7 @@ The operations dashboard must:
 Existing printer/job WebSocket event production may include the enriched HTTP response shapes where those events are already emitted. Frontend WebSocket consumption remains Phase 15.
 
 ## Tests
+
 Required test coverage:
 
 - Agent material parser:
@@ -382,6 +389,7 @@ Required test coverage:
   - Parser/rendering helpers tolerate `materials = null`, empty trays, and missing usage rows.
 
 ## Documentation
+
 Update:
 
 - `docs/architecture.md` with the material-state boundary, mapping persistence, and Spoolman non-goal.

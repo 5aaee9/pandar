@@ -27,6 +27,7 @@
 ## Task 1: Hub WebSocket Ticket Auth
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/printer_events.rs`
 - Modify: `crates/pandar-hub/src/routes/printer_events.rs`
 - Modify: `crates/pandar-hub/src/routes.rs`
@@ -348,6 +349,7 @@ Expected: exit 0.
 ## Task 2: Frontend Ticket Proxy And Runtime Types
 
 **Files:**
+
 - Modify: `frontend/app/api-auth.ts`
 - Modify: `frontend/app/dashboard-types.ts`
 - Create: `frontend/app/api/tenants/[tenantId]/printer-events/ticket/route.ts`
@@ -357,20 +359,27 @@ Expected: exit 0.
 Modify `frontend/app/api-auth.ts` so `apiHeaders()` keeps existing behavior and add:
 
 ```ts
-export type AuthSource = 'request_cookie' | 'app_auth_bearer_token' | 'app_api_token' | 'none'
+export type AuthSource =
+  | "request_cookie"
+  | "app_auth_bearer_token"
+  | "app_api_token"
+  | "none";
 
-export async function authSource(): Promise<{ source: AuthSource; cookieName: string }> {
-  const cookieStore = await cookies()
+export async function authSource(): Promise<{
+  source: AuthSource;
+  cookieName: string;
+}> {
+  const cookieStore = await cookies();
   if (cookieStore.get(authCookieName)?.value) {
-    return { source: 'request_cookie', cookieName: authCookieName }
+    return { source: "request_cookie", cookieName: authCookieName };
   }
   if (staticAuthToken) {
-    return { source: 'app_auth_bearer_token', cookieName: authCookieName }
+    return { source: "app_auth_bearer_token", cookieName: authCookieName };
   }
   if (apiToken) {
-    return { source: 'app_api_token', cookieName: authCookieName }
+    return { source: "app_api_token", cookieName: authCookieName };
   }
-  return { source: 'none', cookieName: authCookieName }
+  return { source: "none", cookieName: authCookieName };
 }
 ```
 
@@ -382,37 +391,37 @@ Modify `frontend/app/dashboard-types.ts`:
 
 ```ts
 export type AuthMetadata = {
-  source: 'request_cookie' | 'app_auth_bearer_token' | 'app_api_token' | 'none'
-  cookieName: string
-}
+  source: "request_cookie" | "app_auth_bearer_token" | "app_api_token" | "none";
+  cookieName: string;
+};
 
 export type PrinterEvent =
   | {
-      type: 'printer_snapshot'
-      printer: Printer
+      type: "printer_snapshot";
+      printer: Printer;
     }
   | {
-      type: 'job_progress'
-      job: Job
-    }
+      type: "job_progress";
+      job: Job;
+    };
 
 export type PrinterEventTicket = {
-  ticket: string
-  expires_at: string
-}
+  ticket: string;
+  expires_at: string;
+};
 ```
 
 Extend `Job['artifact']` to include fields the Rust response already returns and the job detail UI needs:
 
 ```ts
 artifact: {
-  id: string
-  tenant_id: string
-  filename: string
-  content_type: string
-  size_bytes: number
-  storage_path: string
-  created_at: string
+  id: string;
+  tenant_id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  storage_path: string;
+  created_at: string;
 }
 ```
 
@@ -421,36 +430,39 @@ artifact: {
 Create `frontend/app/api/tenants/[tenantId]/printer-events/ticket/route.ts`:
 
 ```ts
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 
-import { apiHeaders } from '../../../../../api-auth'
-import type { PrinterEventTicket } from '../../../../../dashboard-types'
+import { apiHeaders } from "../../../../../api-auth";
+import type { PrinterEventTicket } from "../../../../../dashboard-types";
 
-const apiUrl = process.env.APP_API_URL ?? 'http://localhost:8080'
+const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 
 type RouteContext = {
   params: Promise<{
-    tenantId: string
-  }>
-}
+    tenantId: string;
+  }>;
+};
 
 export async function POST(_request: Request, context: RouteContext) {
-  const { tenantId } = await context.params
+  const { tenantId } = await context.params;
   const response = await fetch(
     `${apiUrl}/api/v1/tenants/${encodeURIComponent(tenantId)}/printer-events/tickets`,
     {
-      method: 'POST',
-      cache: 'no-store',
+      method: "POST",
+      cache: "no-store",
       headers: await apiHeaders(),
     },
-  )
+  );
 
   if (!response.ok) {
-    return NextResponse.json({ error: 'ticket_unavailable' }, { status: response.status })
+    return NextResponse.json(
+      { error: "ticket_unavailable" },
+      { status: response.status },
+    );
   }
 
-  const ticket = (await response.json()) as PrinterEventTicket
-  return NextResponse.json(ticket)
+  const ticket = (await response.json()) as PrinterEventTicket;
+  return NextResponse.json(ticket);
 }
 ```
 
@@ -469,6 +481,7 @@ Expected after Task 2 alone: build may still fail if `page.tsx` has not yet pass
 ## Task 3: Frontend Runtime Dashboard
 
 **Files:**
+
 - Create: `frontend/app/dashboard-runtime.tsx`
 - Modify: `frontend/app/page.tsx`
 - Modify: `frontend/app/dashboard-ui.tsx`
@@ -481,12 +494,12 @@ Expected after Task 2 alone: build may still fail if `page.tsx` has not yet pass
 Create `frontend/app/dashboard-runtime.tsx` with:
 
 ```tsx
-'use client'
+"use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { DiagnosticsSection, LinkedAgentsSection } from './diagnostics-panel'
-import { DispatchForm } from './dispatch-form'
+import { DiagnosticsSection, LinkedAgentsSection } from "./diagnostics-panel";
+import { DispatchForm } from "./dispatch-form";
 import type {
   Agent,
   AuthMetadata,
@@ -499,28 +512,34 @@ import type {
   Summary,
   Tenant,
   TenantList,
-} from './dashboard-types'
-import { EmptyState, formatBytes, formatDate, Metric, StatusBadge } from './dashboard-ui'
-import { formatLayers, formatProgress, formatRemaining } from './job-format'
+} from "./dashboard-types";
+import {
+  EmptyState,
+  formatBytes,
+  formatDate,
+  Metric,
+  StatusBadge,
+} from "./dashboard-ui";
+import { formatLayers, formatProgress, formatRemaining } from "./job-format";
 ```
 
 Define props:
 
 ```ts
 type RuntimeProps = {
-  apiUrl: string
-  configuredTenantId: string | undefined
-  selectedTenant: Tenant | null
-  tenants: Tenant[]
-  summary: Summary | null
-  printers: Printer[]
-  agents: Agent[]
-  jobs: Job[]
-  selectedCommand: Command | null
-  commandData: CommandResultData | null
-  errors: string[]
-  auth: AuthMetadata
-}
+  apiUrl: string;
+  configuredTenantId: string | undefined;
+  selectedTenant: Tenant | null;
+  tenants: Tenant[];
+  summary: Summary | null;
+  printers: Printer[];
+  agents: Agent[];
+  jobs: Job[];
+  selectedCommand: Command | null;
+  commandData: CommandResultData | null;
+  errors: string[];
+  auth: AuthMetadata;
+};
 ```
 
 The first render must match the previous dashboard content using prop state.
@@ -530,16 +549,16 @@ The first render must match the previous dashboard content using prop state.
 Move the existing `<main>` body from `frontend/app/page.tsx` into `DashboardRuntime`. Keep helper functions `formatPrinterMaterials` and `formatJobMaterial` in `dashboard-runtime.tsx` unless another component already owns them. Replace direct `printers`/`jobs` references with state variables:
 
 ```ts
-const [runtimePrinters, setRuntimePrinters] = useState(printers)
-const [runtimeJobs, setRuntimeJobs] = useState(jobs)
+const [runtimePrinters, setRuntimePrinters] = useState(printers);
+const [runtimeJobs, setRuntimeJobs] = useState(jobs);
 
 useEffect(() => {
-  setRuntimePrinters(printers)
-}, [printers])
+  setRuntimePrinters(printers);
+}, [printers]);
 
 useEffect(() => {
-  setRuntimeJobs(jobs)
-}, [jobs])
+  setRuntimeJobs(jobs);
+}, [jobs]);
 ```
 
 In `page.tsx`, import `DashboardRuntime` and return it after fetching data:
@@ -560,7 +579,7 @@ return (
     errors={errors}
     auth={await authSource()}
   />
-)
+);
 ```
 
 Remove imports from `page.tsx` that are now only used in the client component.
@@ -570,21 +589,26 @@ Remove imports from `page.tsx` that are now only used in the client component.
 In `dashboard-runtime.tsx`, add:
 
 ```ts
-type LiveState = 'connecting' | 'live' | 'disconnected' | 'unavailable' | 'error'
+type LiveState =
+  | "connecting"
+  | "live"
+  | "disconnected"
+  | "unavailable"
+  | "error";
 type NotificationKind =
-  | 'live_connection'
-  | 'printer_state'
-  | 'dispatch_upload_mqtt'
-  | 'physical_print'
-  | 'print_complete'
+  | "live_connection"
+  | "printer_state"
+  | "dispatch_upload_mqtt"
+  | "physical_print"
+  | "print_complete";
 
 type RuntimeNotification = {
-  id: string
-  kind: NotificationKind
-  title: string
-  detail: string
-  createdAt: string
-}
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  detail: string;
+  createdAt: string;
+};
 ```
 
 Add `buildWebSocketUrl(apiUrl, tenantId, ticket)` that uses `new URL(apiUrl)`, changes protocol to `ws:` or `wss:`, appends `/api/v1/tenants/${tenantId}/printer-events`, and sets `ticket`.
@@ -606,21 +630,21 @@ Add pure helpers in `dashboard-runtime.tsx`:
 
 ```ts
 function upsertPrinter(printers: Printer[], printer: Printer) {
-  return upsertById(printers, printer)
+  return upsertById(printers, printer);
 }
 
 function upsertJob(jobs: Job[], job: Job) {
-  return upsertById(jobs, job)
+  return upsertById(jobs, job);
 }
 
 function upsertById<T extends { id: string }>(items: T[], item: T) {
-  const index = items.findIndex((candidate) => candidate.id === item.id)
+  const index = items.findIndex((candidate) => candidate.id === item.id);
   if (index === -1) {
-    return [item, ...items]
+    return [item, ...items];
   }
-  const next = [...items]
-  next[index] = item
-  return next
+  const next = [...items];
+  next[index] = item;
+  return next;
 }
 ```
 
@@ -683,6 +707,7 @@ Expected: exit 0.
 ## Task 4: Documentation And Roadmap
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `docs/architecture.md`
 - Modify: `docs/roadmap.md`
@@ -722,6 +747,7 @@ Expected: docs reflect implemented behavior and do not claim durable replay or B
 ## Task 5: Full Verification And Final Review Prep
 
 **Files:**
+
 - No new feature files; run verification and inspect the diff.
 
 - [ ] **Step 1: Run Rust formatting check**

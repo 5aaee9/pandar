@@ -56,12 +56,12 @@ The control-plane subscriber task is started from `run_from_env` after `AppState
 
 ### Deployment Matrix
 
-| Database | Control Plane | Supported Shape |
-| --- | --- | --- |
-| SQLite | in-process | Single Hub process, lightweight deployment |
-| PostgreSQL | in-process | Single Hub process using PostgreSQL |
-| PostgreSQL | NATS | Horizontally scaled Hub replicas |
-| SQLite | NATS | Unsupported configuration |
+| Database   | Control Plane | Supported Shape                            |
+| ---------- | ------------- | ------------------------------------------ |
+| SQLite     | in-process    | Single Hub process, lightweight deployment |
+| PostgreSQL | in-process    | Single Hub process using PostgreSQL        |
+| PostgreSQL | NATS          | Horizontally scaled Hub replicas           |
+| SQLite     | NATS          | Unsupported configuration                  |
 
 If `PANDAR_CONTROL_PLANE=nats` is configured with SQLite, Hub startup must fail with a clear error.
 

@@ -87,7 +87,9 @@ form.addEventListener("submit", async (event) => {
         setStatus("Target server updated.");
     }
     catch (error) {
-        setStatus(error instanceof Error ? error.message : "Could not update target server.", true);
+        setStatus(error instanceof Error
+            ? error.message
+            : "Could not update target server.", true);
     }
     finally {
         submitButton.disabled = false;

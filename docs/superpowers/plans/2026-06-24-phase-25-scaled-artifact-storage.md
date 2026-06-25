@@ -64,6 +64,7 @@ Modify:
 ## Task 1: Storage Boundary And Filesystem Backend
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/artifacts/mod.rs`
 - Modify: `crates/pandar-hub/src/lib.rs`
 - Modify: `crates/pandar-hub/src/jobs.rs`
@@ -123,6 +124,7 @@ Expected: storage tests pass.
 ## Task 2: Multipart Upload Routes And Shared Job Creation Helper
 
 **Files:**
+
 - Modify: `Cargo.toml`
 - Modify: `crates/pandar-hub/Cargo.toml`
 - Modify: `crates/pandar-hub/src/routes.rs`
@@ -204,6 +206,7 @@ Expected: multipart route tests pass.
 ## Task 3: Frontend Upload Proxy And Browser Form
 
 **Files:**
+
 - Create: `frontend/app/api/tenants/[tenantId]/printers/[printerId]/jobs/route.ts`
 - Modify: `frontend/app/actions.ts`
 - Modify: `frontend/app/dispatch-form.tsx`
@@ -238,6 +241,7 @@ Expected: Next.js build succeeds.
 ## Task 4: Plugin Multipart Submission
 
 **Files:**
+
 - Modify: `Cargo.toml`
 - Modify: `crates/pandar-network-plugin/Cargo.toml`
 - Modify: `crates/pandar-network-plugin/src/lib.rs`
@@ -287,6 +291,7 @@ Expected: plugin tests pass.
 ## Task 5: Command Protocol And Dispatch Metadata
 
 **Files:**
+
 - Modify: `proto/pandar/agent/v1/agent.proto`
 - Modify: `crates/pandar-hub/src/repositories/jobs/create.rs`
 - Modify: `crates/pandar-hub/src/repositories/jobs.rs`
@@ -348,6 +353,7 @@ Expected: print commands include the Hub artifact path and agent precedence test
 ## Task 6: Agent Artifact Download Route And Reader
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/routes/artifacts.rs`
 - Create: `crates/pandar-hub/src/routes/tests/artifacts.rs`
 - Modify: `crates/pandar-hub/src/routes.rs`
@@ -420,6 +426,7 @@ Expected: route, repository, and agent print tests pass.
 ## Task 7: S3-Compatible Backend
 
 **Files:**
+
 - Modify: `Cargo.toml`
 - Modify: `crates/pandar-hub/Cargo.toml`
 - Create: `crates/pandar-hub/src/artifacts/s3.rs`
@@ -487,6 +494,7 @@ Expected: S3 config/backend tests pass without a live S3 service by using the fa
 ## Task 8: Cleanup, Readiness, Metrics, And Scaled Guard
 
 **Files:**
+
 - Modify: `crates/pandar-app/src/main.rs`
 - Modify: `crates/pandar-hub/src/cleanup.rs`
 - Modify: `crates/pandar-hub/src/readiness.rs`
@@ -527,6 +535,7 @@ Expected: readiness and cleanup tests pass.
 ## Task 9: Scaled Artifact Smoke Harness
 
 **Files:**
+
 - Create: `tools/scaled-artifact-smoke/Cargo.toml`
 - Create: `tools/scaled-artifact-smoke/src/main.rs`
 - Modify: root `Cargo.toml` workspace `exclude` if needed
@@ -568,6 +577,7 @@ Expected: exits 0 and prints a concise PASS summary.
 ## Task 10: Deployment Docs And Compose
 
 **Files:**
+
 - Modify: `docs/development.md`
 - Modify: `docs/architecture.md`
 - Modify: `docs/release-installation.md`
@@ -604,6 +614,7 @@ Expected: `artifact_base64` and `artifact_invalid_base64` appear only in histori
 ## Task 11: Roadmap And Final Verification
 
 **Files:**
+
 - Modify: `docs/roadmap.md`
 
 - [ ] **Step 1: Update roadmap**

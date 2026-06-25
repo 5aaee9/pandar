@@ -44,6 +44,7 @@ Spec review gate:
 ## Task 1: CLI Mode Parsing And Validation
 
 **Files:**
+
 - Modify: `tools/scaled-artifact-smoke/src/main.rs`
 - Modify: `tools/scaled-artifact-smoke/src/harness.rs`
 
@@ -222,6 +223,7 @@ Expected: parser tests pass.
 ## Task 2: Live Environment Config Mapping
 
 **Files:**
+
 - Modify: `tools/scaled-artifact-smoke/src/live.rs`
 
 - [x] **Step 1: Add failing live config tests**
@@ -424,6 +426,7 @@ Expected: live config tests pass.
 ## Task 3: Dry/Live SmokeWorld Construction
 
 **Files:**
+
 - Modify: `tools/scaled-artifact-smoke/src/fixture.rs`
 - Modify: `tools/scaled-artifact-smoke/src/scenarios.rs`
 - Modify: `tools/scaled-artifact-smoke/src/harness.rs`
@@ -663,6 +666,7 @@ Expected: suffix test passes and dry-run smoke passes.
 ## Task 4: Live Runner Summary And Docs
 
 **Files:**
+
 - Modify: `tools/scaled-artifact-smoke/src/harness.rs`
 - Modify: `docs/development.md`
 - Modify: `docs/compatibility/phase-26-soak-evidence.md`
@@ -717,6 +721,7 @@ Do not mark Phase 26 live soak as passed.
 ## Task 5: Verification And Commit
 
 **Files:**
+
 - All files modified above.
 
 - [x] **Step 1: Run targeted tests**

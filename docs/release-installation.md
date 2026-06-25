@@ -4,14 +4,14 @@
 
 Select the archive that matches the operator host OS and CPU architecture:
 
-| Host | Target label | Archive |
-| --- | --- | --- |
-| Linux x86_64/amd64 | `linux-amd64` | `pandar-release-<tag-or-sanitized-ref>-linux-amd64.tar.gz` |
-| Linux arm64/aarch64 | `linux-arm64` | `pandar-release-<tag-or-sanitized-ref>-linux-arm64.tar.gz` |
-| Windows x86_64/amd64 | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-windows-amd64.tar.gz` |
+| Host                  | Target label    | Archive                                                      |
+| --------------------- | --------------- | ------------------------------------------------------------ |
+| Linux x86_64/amd64    | `linux-amd64`   | `pandar-release-<tag-or-sanitized-ref>-linux-amd64.tar.gz`   |
+| Linux arm64/aarch64   | `linux-arm64`   | `pandar-release-<tag-or-sanitized-ref>-linux-arm64.tar.gz`   |
+| Windows x86_64/amd64  | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-windows-amd64.tar.gz` |
 | Windows arm64/aarch64 | `windows-arm64` | `pandar-release-<tag-or-sanitized-ref>-windows-arm64.tar.gz` |
-| macOS Intel | `macos-amd64` | `pandar-release-<tag-or-sanitized-ref>-macos-amd64.tar.gz` |
-| macOS Apple Silicon | `macos-arm64` | `pandar-release-<tag-or-sanitized-ref>-macos-arm64.tar.gz` |
+| macOS Intel           | `macos-amd64`   | `pandar-release-<tag-or-sanitized-ref>-macos-amd64.tar.gz`   |
+| macOS Apple Silicon   | `macos-arm64`   | `pandar-release-<tag-or-sanitized-ref>-macos-arm64.tar.gz`   |
 
 Each archive contains the `pandar` CLI binary, or `pandar.exe` on Windows, and the matching `pandar-network-plugin` dynamic library for the target platform.
 
@@ -97,11 +97,11 @@ Generated option documentation is in `docs/deployment/nixos/options.md`. Use it 
 
 Replace the Bambu Studio network plugin library with the archive's platform plugin file:
 
-| OS | Plugin file |
-| --- | --- |
-| Linux | `libpandar_network_plugin.so` |
-| Windows | `pandar_network_plugin.dll` |
-| macOS | `libpandar_network_plugin.dylib` |
+| OS      | Plugin file                      |
+| ------- | -------------------------------- |
+| Linux   | `libpandar_network_plugin.so`    |
+| Windows | `pandar_network_plugin.dll`      |
+| macOS   | `libpandar_network_plugin.dylib` |
 
 Keep the original Studio plugin file for rollback. Typical locations vary by Studio installation:
 
@@ -117,14 +117,14 @@ Target status is tracked in `docs/compatibility/release-artifacts.md`. For check
 
 CI release-smoke evidence and real host installation evidence are separate. A target can pass archive layout, checksum, CLI startup, and packaged plugin export checks in CI while still having `untested` real host installation status.
 
-| Target label | Current operator status | Reason | Next action |
-| --- | --- | --- | --- |
-| `linux-amd64` | `blocked` | Workflow-run artifact evidence and local Linux x86_64 host install evidence exist from run `28102001464`, but no tagged GitHub Release exists yet and real Bambu Studio plugin replacement is tracked separately. | Produce or select a tagged GitHub Release archive, repeat checksum and host install validation for that release artifact, then record the row in `docs/compatibility/release-artifacts.md`. |
-| `linux-arm64` | `blocked` | Workflow-run artifact evidence and local static release-smoke evidence exist from run `28102001464`, but no tagged GitHub Release or real Linux arm64 host install evidence exists yet. | Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, install on Linux arm64 hardware, verify checksum, run `pandar --help`, inspect the plugin, and record host install evidence before treating it as usable. |
-| `windows-amd64` | `blocked` | Workflow-run artifact evidence and local static PE export evidence exist from run `28102001464`, but no tagged GitHub Release or real Windows x86_64 host install evidence exists yet; artifacts are unsigned and may trigger platform warnings. | Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, install on Windows x86_64, verify checksum, run `pandar.exe --help`, replace the Studio plugin DLL for a controlled smoke, and record evidence. |
-| `windows-arm64` | `blocked` | Built and packaged in run `28102001464`, but release-smoke failed before upload because the runner lacked an LLVM PE inspector for ARM64 PE; after the LLVM inspector fix, follow-up run `28103772270` was billing-blocked before any build step started. Artifacts are unsigned and may trigger platform warnings. | Produce a tagged GitHub Release archive or re-run `release.yml` after billing is restored to produce an uploaded Windows arm64 workflow artifact, install on Windows arm64, verify checksum, run `pandar.exe --help`, replace the Studio plugin DLL for a controlled smoke, and record evidence. |
-| `macos-amd64` | `blocked` | Workflow-run artifact evidence and local static Mach-O archive inspection exist from run `28102001464`, but no tagged GitHub Release or real Intel macOS host install evidence exists yet; artifacts are unsigned and may trigger Gatekeeper warnings. | Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, install on Intel macOS, verify checksum, run `pandar --help`, replace the Studio plugin dylib for a controlled smoke, and record evidence. |
-| `macos-arm64` | `blocked` | Workflow-run artifact evidence and local static Mach-O archive inspection exist from run `28102001464`, but no tagged GitHub Release or real Apple Silicon macOS host install evidence exists yet; artifacts are unsigned and may trigger Gatekeeper warnings. | Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, install on Apple Silicon macOS, verify checksum, run `pandar --help`, replace the Studio plugin dylib for a controlled smoke, and record evidence. |
+| Target label    | Current operator status | Reason                                                                                                                                                                                                                                                                                                              | Next action                                                                                                                                                                                                                                                                                      |
+| --------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `linux-amd64`   | `blocked`               | Workflow-run artifact evidence and local Linux x86_64 host install evidence exist from run `28102001464`, but no tagged GitHub Release exists yet and real Bambu Studio plugin replacement is tracked separately.                                                                                                   | Produce or select a tagged GitHub Release archive, repeat checksum and host install validation for that release artifact, then record the row in `docs/compatibility/release-artifacts.md`.                                                                                                      |
+| `linux-arm64`   | `blocked`               | Workflow-run artifact evidence and local static release-smoke evidence exist from run `28102001464`, but no tagged GitHub Release or real Linux arm64 host install evidence exists yet.                                                                                                                             | Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, install on Linux arm64 hardware, verify checksum, run `pandar --help`, inspect the plugin, and record host install evidence before treating it as usable.                                         |
+| `windows-amd64` | `blocked`               | Workflow-run artifact evidence and local static PE export evidence exist from run `28102001464`, but no tagged GitHub Release or real Windows x86_64 host install evidence exists yet; artifacts are unsigned and may trigger platform warnings.                                                                    | Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, install on Windows x86_64, verify checksum, run `pandar.exe --help`, replace the Studio plugin DLL for a controlled smoke, and record evidence.                                                   |
+| `windows-arm64` | `blocked`               | Built and packaged in run `28102001464`, but release-smoke failed before upload because the runner lacked an LLVM PE inspector for ARM64 PE; after the LLVM inspector fix, follow-up run `28103772270` was billing-blocked before any build step started. Artifacts are unsigned and may trigger platform warnings. | Produce a tagged GitHub Release archive or re-run `release.yml` after billing is restored to produce an uploaded Windows arm64 workflow artifact, install on Windows arm64, verify checksum, run `pandar.exe --help`, replace the Studio plugin DLL for a controlled smoke, and record evidence. |
+| `macos-amd64`   | `blocked`               | Workflow-run artifact evidence and local static Mach-O archive inspection exist from run `28102001464`, but no tagged GitHub Release or real Intel macOS host install evidence exists yet; artifacts are unsigned and may trigger Gatekeeper warnings.                                                              | Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, install on Intel macOS, verify checksum, run `pandar --help`, replace the Studio plugin dylib for a controlled smoke, and record evidence.                                                        |
+| `macos-arm64`   | `blocked`               | Workflow-run artifact evidence and local static Mach-O archive inspection exist from run `28102001464`, but no tagged GitHub Release or real Apple Silicon macOS host install evidence exists yet; artifacts are unsigned and may trigger Gatekeeper warnings.                                                      | Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, install on Apple Silicon macOS, verify checksum, run `pandar --help`, replace the Studio plugin dylib for a controlled smoke, and record evidence.                                                |
 
 ## Operations Runbook
 

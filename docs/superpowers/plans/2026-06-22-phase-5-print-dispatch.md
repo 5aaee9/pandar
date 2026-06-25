@@ -37,6 +37,7 @@
 ## Milestone 1: Core Domain, Proto Contract, And File Splits
 
 **Files:**
+
 - Modify: `crates/pandar-core/src/lib.rs`
 - Create: `crates/pandar-core/src/ids.rs`, `tenant.rs`, `agent.rs`, `printer.rs`, `command.rs`, `job.rs`
 - Modify: `crates/pandar-core/src/tests.rs`
@@ -197,6 +198,7 @@ Expected: core tests pass and find prints nothing.
 ## Milestone 2: Hub Job Persistence, Spool Storage, And Command Ledger
 
 **Files:**
+
 - Create: `crates/pandar-hub/migrations/sqlite/20260622000000_phase_5_print_jobs.sql`
 - Create: `crates/pandar-hub/migrations/postgres/20260622000000_phase_5_print_jobs.sql`
 - Create: `crates/pandar-hub/src/jobs.rs`
@@ -420,6 +422,7 @@ Expected: all targeted repository and migration tests pass; PostgreSQL tests exe
 ## Milestone 3: Hub HTTP API And gRPC Print Command Flow
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/routes/jobs.rs`
 - Modify: `crates/pandar-hub/src/routes.rs`
 - Create: `crates/pandar-hub/src/routes/tests/jobs.rs`
@@ -514,6 +517,7 @@ Expected: hub route and gRPC tests pass.
 ## Milestone 4: Agent Print Execution
 
 **Files:**
+
 - Create: `crates/pandar-agent/src/artifacts.rs`
 - Create: `crates/pandar-agent/src/machine/print.rs`
 - Modify: `crates/pandar-agent/src/machine/mod.rs`
@@ -598,6 +602,7 @@ Expected: agent tests pass without real Bambu sockets.
 ## Milestone 5: Frontend Dashboard And Docs
 
 **Files:**
+
 - Modify: `frontend/app/page.tsx`
 - Create: `frontend/app/actions.ts`
 - Create: `frontend/app/jobs.tsx`
@@ -659,6 +664,7 @@ Expected: Next.js build and TypeScript pass.
 ## Milestone 6: Final Verification, Review, Commit, Push
 
 **Files:**
+
 - All changed files.
 
 - [ ] **Step 1: Run full verification**

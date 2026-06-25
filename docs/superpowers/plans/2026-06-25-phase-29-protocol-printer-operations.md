@@ -36,6 +36,7 @@
 ### Task 1: Protobuf Operation Contract
 
 **Files:**
+
 - Modify: `proto/pandar/agent/v1/agent.proto`
 - Modify: generated Rust users after build through later tasks
 
@@ -113,6 +114,7 @@ Expected: FAIL with compile errors in Hub and agent code that still imports or m
 ### Task 2: Hub Semantic Operation Payloads And Repository Enqueue
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/repositories/commands/operations.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands/audit.rs`
@@ -280,6 +282,7 @@ Expected: PASS.
 ### Task 3: Hub gRPC Conversion And HTTP Routes
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/grpc/commands.rs`
 - Modify: `crates/pandar-hub/src/grpc/tests/commands.rs`
 - Modify: `crates/pandar-hub/src/grpc/tests/print_jobs.rs`
@@ -447,6 +450,7 @@ Expected: PASS.
 ### Task 4: Agent Command Handling And Bambu Dispatch
 
 **Files:**
+
 - Create: `crates/pandar-agent/src/machine/operations.rs`
 - Modify: `crates/pandar-agent/src/machine/mod.rs`
 - Create: `crates/pandar-agent/src/commands/operations.rs`
@@ -542,6 +546,7 @@ Expected: PASS.
 ### Task 5: Network Plugin G-code Operation Parser And HTTP Helper
 
 **Files:**
+
 - Modify: `crates/pandar-network-plugin/src/lib.rs`
 - Modify: `crates/pandar-network-plugin/src/shim.cpp`
 - Modify: `crates/pandar-network-plugin/tests/http_boundary.rs`
@@ -641,6 +646,7 @@ Expected: PASS.
 ### Task 6: Documentation Updates
 
 **Files:**
+
 - Modify: `docs/roadmap.md`
 - Modify: `docs/development.md`
 - Modify: `docs/architecture.md`
@@ -680,6 +686,7 @@ In `docs/compatibility/phase-27-live-printer-controls.md`, add a Phase 29 note e
 ### Task 7: Final Verification And Cleanup
 
 **Files:**
+
 - All modified files.
 
 - [x] **Step 1: Format**

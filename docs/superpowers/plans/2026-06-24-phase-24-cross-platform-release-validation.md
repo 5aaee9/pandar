@@ -24,20 +24,21 @@
 
 The release-smoke checker receives the target label, runner OS, expected CLI filename, expected plugin filename, and archive path. It must fail for missing archive/checksum/layout/plugin export evidence that is expected on the runner. It may skip only checks that cannot run on the current runner, and it must print `SKIP <check>: <reason> (label=<target-label> runner=<runner-os>)`.
 
-| Target label | Runner | CLI startup | Plugin export inspection |
-| --- | --- | --- | --- |
-| `linux-amd64` | Ubuntu | run `pandar --help` | inspect ELF exports with `nm -D` or `readelf -Ws` |
-| `linux-arm64` | Ubuntu cross-build | skip CLI execution because target arch differs | inspect ELF exports with `nm -D` or `readelf -Ws` |
+| Target label    | Runner             | CLI startup                                        | Plugin export inspection                                                                              |
+| --------------- | ------------------ | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `linux-amd64`   | Ubuntu             | run `pandar --help`                                | inspect ELF exports with `nm -D` or `readelf -Ws`                                                     |
+| `linux-arm64`   | Ubuntu cross-build | skip CLI execution because target arch differs     | inspect ELF exports with `nm -D` or `readelf -Ws`                                                     |
 | `windows-amd64` | Ubuntu cross-build | skip CLI execution because PE cannot run on Ubuntu | inspect PE exports with `objdump`, `llvm-objdump`, or `llvm-nm`; fail if no PE inspector is available |
 | `windows-arm64` | Ubuntu cross-build | skip CLI execution because PE cannot run on Ubuntu | inspect PE exports with `objdump`, `llvm-objdump`, or `llvm-nm`; fail if no PE inspector is available |
-| `macos-amd64` | macOS Intel | run `pandar --help` | inspect Mach-O exports with `nm -gU` |
-| `macos-arm64` | macOS arm64 | run `pandar --help` | inspect Mach-O exports with `nm -gU` |
+| `macos-amd64`   | macOS Intel        | run `pandar --help`                                | inspect Mach-O exports with `nm -gU`                                                                  |
+| `macos-arm64`   | macOS arm64        | run `pandar --help`                                | inspect Mach-O exports with `nm -gU`                                                                  |
 
 Linux arm64 plugin artifacts stay in the release matrix for Phase 24 only if the packaged `libpandar_network_plugin.so` passes export inspection. If this fails in CI, the implementation must either fix the export path or remove/mark that target unsupported before final approval.
 
 ## Task 1: Release-Smoke Helper Skeleton And Layout Checks
 
 **Files:**
+
 - Modify: `Cargo.toml`
 - Create: `tools/release-smoke/Cargo.toml`
 - Create: `tools/release-smoke/src/main.rs`
@@ -182,6 +183,7 @@ Expected: layout pass and then later export/startup failures until Task 2 adds c
 ## Task 2: CLI Startup And Packaged Plugin Export Checks
 
 **Files:**
+
 - Modify: `tools/release-smoke/src/main.rs`
 
 - [ ] **Step 1: Load the canonical plugin symbol list**
@@ -260,6 +262,7 @@ Then create a temporary linux-amd64-style archive from `target/debug/pandar` and
 ## Task 3: Release Workflow Integration
 
 **Files:**
+
 - Modify: `.github/workflows/release.yml`
 
 - [ ] **Step 1: Define one sanitized release archive stem**
@@ -279,12 +282,12 @@ For tag releases, this preserves the spec contract `pandar-release-<tag>-<target
 Before `Smoke release artifact`, add:
 
 ```yaml
-      - name: Check Windows PE inspector
-        if: startsWith(matrix.label, 'windows-')
-        shell: bash
-        run: |
-          set -euo pipefail
-          command -v objdump
+- name: Check Windows PE inspector
+  if: startsWith(matrix.label, 'windows-')
+  shell: bash
+  run: |
+    set -euo pipefail
+    command -v objdump
 ```
 
 This documents that GNU `objdump` is the expected PE export inspector on Ubuntu cross-build release jobs.
@@ -294,26 +297,26 @@ This documents that GNU `objdump` is the expected PE export inspector on Ubuntu 
 After `Package artifacts` and before `Upload build artifact`, add:
 
 ```yaml
-      - name: Smoke release artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          ref_name="${GITHUB_REF_NAME:-manual}"
-          safe_ref="${ref_name//\//-}"
-          archive="dist/pandar-release-${safe_ref}-${{ matrix.label }}.tar.gz"
-          checksum="$archive.sha256"
-          (
-            cd dist
-            shasum -a 256 -c "$(basename "$checksum")"
-          )
-          cargo run --manifest-path tools/release-smoke/Cargo.toml -- \
-            --label "${{ matrix.label }}" \
-            --runner-os "${{ runner.os == 'macOS' && 'macos' || 'linux' }}" \
-            --archive "$archive" \
-            --checksum "$checksum" \
-            --cli-name "${{ matrix.cli-name }}" \
-            --plugin-name "${{ matrix.plugin-name }}" \
-            --repo-root "$GITHUB_WORKSPACE"
+- name: Smoke release artifact
+  shell: bash
+  run: |
+    set -euo pipefail
+    ref_name="${GITHUB_REF_NAME:-manual}"
+    safe_ref="${ref_name//\//-}"
+    archive="dist/pandar-release-${safe_ref}-${{ matrix.label }}.tar.gz"
+    checksum="$archive.sha256"
+    (
+      cd dist
+      shasum -a 256 -c "$(basename "$checksum")"
+    )
+    cargo run --manifest-path tools/release-smoke/Cargo.toml -- \
+      --label "${{ matrix.label }}" \
+      --runner-os "${{ runner.os == 'macOS' && 'macos' || 'linux' }}" \
+      --archive "$archive" \
+      --checksum "$checksum" \
+      --cli-name "${{ matrix.cli-name }}" \
+      --plugin-name "${{ matrix.plugin-name }}" \
+      --repo-root "$GITHUB_WORKSPACE"
 ```
 
 - [ ] **Step 4: Keep release publication behavior unchanged**
@@ -333,6 +336,7 @@ Expected: sanitized archive name is used consistently in package and smoke steps
 ## Task 4: Release Installation And Evidence Docs
 
 **Files:**
+
 - Create: `docs/release-installation.md`
 - Create: `docs/compatibility/release-artifacts.md`
 - Modify: `docs/development.md`
@@ -377,6 +381,7 @@ Release packaging references:
 ## Task 5: Roadmap Update
 
 **Files:**
+
 - Modify: `docs/roadmap.md`
 
 - [ ] **Step 1: Add Phase 24 completion bullets without marking real host evidence complete**
@@ -392,6 +397,7 @@ Do not rewrite Phase 24 exit criteria as completed unless real target evidence e
 ## Task 6: Final Verification And Review Inputs
 
 **Files:**
+
 - No new files.
 
 - [ ] **Step 1: Run focused checks**

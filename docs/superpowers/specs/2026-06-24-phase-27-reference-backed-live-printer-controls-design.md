@@ -11,11 +11,11 @@ Add typed live printer controls for pause, resume, stop, and print speed using t
 
 The command payloads are already represented by `crates/pandar-agent/src/machine/mqtt.rs` and match `reference/bambuddy/backend/app/services/bambu_mqtt.py`:
 
-| Control | MQTT JSON |
-| --- | --- |
-| Pause | `{"print":{"command":"pause","sequence_id":"0"}}` |
-| Resume | `{"print":{"command":"resume","sequence_id":"0"}}` |
-| Stop | `{"print":{"command":"stop","sequence_id":"0"}}` |
+| Control     | MQTT JSON                                                                |
+| ----------- | ------------------------------------------------------------------------ |
+| Pause       | `{"print":{"command":"pause","sequence_id":"0"}}`                        |
+| Resume      | `{"print":{"command":"resume","sequence_id":"0"}}`                       |
+| Stop        | `{"print":{"command":"stop","sequence_id":"0"}}`                         |
 | Print speed | `{"print":{"command":"print_speed","param":"<1..4>","sequence_id":"0"}}` |
 
 `reference/bambuddy/backend/app/services/bambu_mqtt.py` publishes these commands with QoS 1 and limits print speed to modes 1 through 4. Pandar must keep using `BAMBU_MQTT_QOS` for live-control publishes.

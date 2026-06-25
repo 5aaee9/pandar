@@ -266,20 +266,10 @@
         pandarAgentPackage = pandar-agent;
       };
 
-      formatter = pkgs.writeShellApplication {
-        name = "pandar-nixfmt";
-        runtimeInputs = [
-          pkgs.nixfmt
-        ];
-        text = ''
-          if [ "$#" -eq 0 ]; then
-            set -- flake.nix nix/*.nix
-          fi
-          exec nixfmt "$@"
-        '';
-      };
     in
     {
+      treefmt = import ./treefmt.nix;
+
       packages = {
         default = pandar-hub;
         inherit
@@ -334,6 +324,7 @@
         checks = config.checks;
 
         packages = [
+          config.treefmt.build.wrapper
           pkgs.cargo-nextest
           pkgs.nodejs_24
           pkgs.pkg-config
@@ -343,6 +334,6 @@
         ];
       };
 
-      inherit formatter;
+      formatter = config.treefmt.build.wrapper;
     };
 }

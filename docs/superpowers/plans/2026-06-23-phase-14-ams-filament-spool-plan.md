@@ -31,6 +31,7 @@
 Status: complete
 
 **Files:**
+
 - Modify: `proto/pandar/agent/v1/agent.proto`
 - Create: `crates/pandar-agent/src/machine/materials.rs`
 - Modify: `crates/pandar-agent/src/machine/mqtt.rs`
@@ -56,6 +57,7 @@ cargo test -p pandar-agent machine::mqtt
 Status: complete
 
 **Files:**
+
 - Create: `crates/pandar-hub/migrations/sqlite/20260623010000_phase_14_materials.sql`
 - Create: `crates/pandar-hub/migrations/postgres/20260623010000_phase_14_materials.sql`
 - Create: `crates/pandar-hub/src/entities/printer_material_snapshots.rs`
@@ -86,6 +88,7 @@ cargo test -p pandar-hub repositories::tests::materials
 Status: complete
 
 **Files:**
+
 - Modify: `crates/pandar-core/src/job.rs`
 - Modify: `crates/pandar-hub/src/repositories/jobs.rs`
 - Modify: `crates/pandar-hub/src/repositories/jobs/create.rs`
@@ -118,6 +121,7 @@ cargo test -p pandar-hub grpc::tests::print_jobs
 Status: complete
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/grpc/print_reports.rs`
 - Modify: `crates/pandar-hub/src/routes/printers.rs`
 - Modify: `crates/pandar-hub/src/routes/jobs.rs`
@@ -146,6 +150,7 @@ cd frontend && npm run build
 Status: in progress
 
 **Files:**
+
 - Modify before final implementation review: `docs/architecture.md`
 - Modify after implementation review and full verification: `docs/roadmap.md`
 

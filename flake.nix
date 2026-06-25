@@ -8,6 +8,11 @@
 
     crane.url = "github:ipetkov/crane";
 
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     fenix = {
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -25,6 +30,7 @@
       ];
 
       imports = [
+        inputs.treefmt-nix.flakeModule
         ./nix/pandar.nix
       ];
     };

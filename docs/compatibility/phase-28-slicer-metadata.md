@@ -26,7 +26,7 @@ Local verification covers parser precedence, malformed and unsupported files, re
 
 PostgreSQL behavior uses the same migration column and repository boundary as SQLite.
 
-| Date | Database | Command | Result | Notes |
-| --- | --- | --- | --- | --- |
+| Date       | Database                          | Command                                                                                                                                                   | Result | Notes                                                                                                                                  |
+| ---------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-06-24 | disposable local PostgreSQL 17.10 | `PANDAR_TEST_POSTGRES_URL=<disposable-url> cargo test -p pandar-hub postgres_job_metadata_round_trips_and_reuses_artifact_when_configured -- --nocapture` | passed | Verifies artifact metadata JSON create/list/get hydration and reprint/duplicate artifact reuse through the PostgreSQL repository path. |
-| 2026-06-24 | disposable local PostgreSQL 17.10 | `PANDAR_TEST_POSTGRES_URL=<disposable-url> cargo test -p pandar-hub metadata -- --nocapture` | passed | 26 metadata tests passed, including the PostgreSQL metadata repository test plus parser, route, plugin, and migration parity coverage. |
+| 2026-06-24 | disposable local PostgreSQL 17.10 | `PANDAR_TEST_POSTGRES_URL=<disposable-url> cargo test -p pandar-hub metadata -- --nocapture`                                                              | passed | 26 metadata tests passed, including the PostgreSQL metadata repository test plus parser, route, plugin, and migration parity coverage. |

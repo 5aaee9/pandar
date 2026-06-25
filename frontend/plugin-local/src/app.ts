@@ -13,7 +13,8 @@ const webUrlInput = document.querySelector<HTMLInputElement>("#web-url")!;
 const hubUrlInput = document.querySelector<HTMLInputElement>("#hub-url")!;
 const noticeList = document.querySelector<HTMLDivElement>("#notice-list")!;
 const statusMessage = document.querySelector<HTMLDivElement>("#status")!;
-const continueLink = document.querySelector<HTMLAnchorElement>("#continue-link")!;
+const continueLink =
+  document.querySelector<HTMLAnchorElement>("#continue-link")!;
 const submitButton = form.querySelector<HTMLButtonElement>("button")!;
 
 let callbackUrl = "";
@@ -29,8 +30,14 @@ const setStatus = (message: string, isError = false) => {
 };
 
 const updateContinueLink = () => {
-  continueLink.classList.toggle("disabled", isDirty || !savedWebUrl || !callbackUrl);
-  continueLink.setAttribute("aria-disabled", String(isDirty || !savedWebUrl || !callbackUrl));
+  continueLink.classList.toggle(
+    "disabled",
+    isDirty || !savedWebUrl || !callbackUrl,
+  );
+  continueLink.setAttribute(
+    "aria-disabled",
+    String(isDirty || !savedWebUrl || !callbackUrl),
+  );
   if (isDirty || !savedWebUrl || !callbackUrl) {
     continueLink.href = "#";
     return;
@@ -113,7 +120,12 @@ form.addEventListener("submit", async (event) => {
     applyConfig((await response.json()) as Config);
     setStatus("Target server updated.");
   } catch (error) {
-    setStatus(error instanceof Error ? error.message : "Could not update target server.", true);
+    setStatus(
+      error instanceof Error
+        ? error.message
+        : "Could not update target server.",
+      true,
+    );
   } finally {
     submitButton.disabled = false;
   }
@@ -130,6 +142,9 @@ webUrlInput.addEventListener("input", markDirty);
 hubUrlInput.addEventListener("input", markDirty);
 
 loadConfig().catch((error) => {
-  setStatus(error instanceof Error ? error.message : "Could not load target server.", true);
+  setStatus(
+    error instanceof Error ? error.message : "Could not load target server.",
+    true,
+  );
   updateContinueLink();
 });
