@@ -21,7 +21,7 @@ Bambu Studio -(network plugin ABI)-> pandar-network-plugin -(HTTP / WebSocket)->
 
 `pandar-network-plugin` is a Bambu Studio dynamic-library plugin replacement scaffold. It exposes the required network plugin ABI symbols while connecting only to `pandar-hub`. It must not connect directly to `pandar-agent` or Bambu machines; local machine access remains the agent's responsibility.
 
-End-user authentication can be delegated to Clerk or Logto, but tenant authorization remains inside Pandar. The hub verifies identity-provider JWTs, maps provider subjects to local users, and checks Rust-managed user-to-tenant membership plus tenant roles for every tenant-scoped operation.
+End-user authentication can be delegated to Clerk, Logto, or Better Auth, but tenant authorization remains inside Pandar. The hub verifies identity-provider JWTs, maps provider subjects to local tenant users, and checks Rust-managed user-to-tenant membership plus tenant roles for every tenant-scoped operation. Pandar user rows are tenant-local projections of external accounts; the primary product path does not make Pandar an account manager.
 
 ## Reference Scan
 
@@ -99,10 +99,11 @@ Evidence from `reference/bambuddy/backend/app/services/discovery.py`:
 
 ### External Identity Providers
 
-Evidence from Clerk and Logto documentation:
+Evidence from Clerk, Logto, and Better Auth documentation:
 
 - Clerk session tokens can be verified by backends with a public key or JWKS, expected signing algorithm, token expiration/not-before checks, and optional authorized-party checks for trusted frontend origins.
 - Logto access tokens for APIs are JWTs validated through JWKS, issuer, audience/API resource, expiration, and scope or organization-context checks.
+- Better Auth's JWT plugin exposes JWT/JWKS material. Its config uses plugin algorithm names such as `RSA256`; Pandar's verifier uses JWA names such as `RS256`.
 - Both providers supply authentication identity. Pandar should not use provider organizations as the tenant authorization source unless a future phase explicitly defines a synchronization model.
 
 Pandar's contract:
@@ -225,11 +226,20 @@ Phase 9 adds physical print reconciliation while preserving that Phase 5 dispatc
 
 Phase 10 adds external identity authentication while preserving API-token automation:
 
-- `user_identities` links provider subjects such as Clerk or Logto user ids to existing tenant-scoped Pandar users.
+- `user_identities` links provider subjects such as Clerk, Logto, or Better Auth user ids to tenant-scoped Pandar users.
 - The hub verifies RS256/RS384/RS512 JWTs through configured JWKS, issuer, optional audience, expiration, optional not-before, optional authorized-party, and optional scope rules.
 - HTTP tenant routes and `/printer-events` WebSocket authorization share the same API-token-first then external-JWT flow.
 - The verifier caches JWKS and refreshes when a token references an unknown `kid`.
 - Route tests use local RSA/JWKS fixtures and do not contact Clerk, Logto, or external JWKS endpoints.
+
+Phase 31 adds external self-service tenant onboarding:
+
+- `GET /api/v1/me` verifies an external JWT and returns profile claims plus tenant memberships without creating database rows.
+- `POST /api/v1/onboarding/tenants` creates a new tenant when self-create is enabled and creates the caller's tenant-local admin projection atomically.
+- Tenant admins create hash-stored join links with role, optional verified-email restriction, expiry, max uses, one-time plaintext token response, and audit records.
+- `POST /api/v1/join-links/accept` verifies the caller's external account, checks the join link, creates the tenant-local user projection and identity link, assigns the join-link role, and preserves an existing member's current role without consuming a use.
+- `pandar-web` can be configured for Clerk, Logto, or Better Auth provider metadata while the hub remains the authorization source.
+- Manual user creation and identity linking remain transitional/admin-only and are scheduled for deletion in Phase 32.
 
 Phase 11 adds explicit provisioning and bootstrap boundaries:
 

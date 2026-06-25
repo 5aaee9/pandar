@@ -3,8 +3,10 @@ use pandar_core::TenantId;
 
 use crate::{
     AppState,
+    identity::VerifiedExternalIdentity,
     repositories::{
-        AuditActor, AuthenticatedPrincipal, AuthenticatedUser, TenantTokenScope, UserRole,
+        AuditActor, AuthenticatedPrincipal, AuthenticatedUser, ExternalIdentityProfile,
+        TenantTokenScope, UserRole,
     },
     routes::ApiError,
 };
@@ -39,6 +41,21 @@ pub(super) async fn authorize_tenant_admin_principal(
     tenant_id: TenantId,
 ) -> Result<AuthenticatedPrincipal, ApiError> {
     authorize_principal_for_role(state, headers, tenant_id, UserRole::TenantAdmin).await
+}
+
+pub(super) async fn authorize_tenant_admin_user(
+    state: &AppState,
+    headers: &HeaderMap,
+    tenant_id: TenantId,
+) -> Result<AuthenticatedUser, ApiError> {
+    let principal = authorize_principal(state, headers, tenant_id).await?;
+    let AuthenticatedPrincipal::User(authenticated) = principal else {
+        return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
+    };
+    if !authenticated.user.role.allows(UserRole::TenantAdmin) {
+        return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
+    }
+    Ok(authenticated)
 }
 
 pub(super) async fn authorize_tenant_principal(
@@ -123,6 +140,58 @@ pub(super) async fn authorize_plugin_studio(
         return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
     }
     Ok(authenticated)
+}
+
+pub(super) async fn verify_external_identity(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<VerifiedExternalIdentity, ApiError> {
+    let Some(header) = headers.get(AUTHORIZATION) else {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "missing_auth_token",
+        ));
+    };
+    let header = header
+        .to_str()
+        .map_err(|_| ApiError::new(StatusCode::UNAUTHORIZED, "invalid_auth_token"))?;
+    let Some(token) = header.strip_prefix("Bearer ") else {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "invalid_auth_token",
+        ));
+    };
+    let Some(verifier) = state.external_auth() else {
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "invalid_auth_token",
+        ));
+    };
+    verifier.verify(token).await.map_err(|err| {
+        let error = anyhow::Error::from(err);
+        tracing::debug!(
+            error = %format!("{error:#}"),
+            "external bearer token verification failed"
+        );
+        ApiError::new(StatusCode::UNAUTHORIZED, "invalid_auth_token")
+    })
+}
+
+pub(super) fn external_profile(
+    verified: &VerifiedExternalIdentity,
+) -> Result<ExternalIdentityProfile, ApiError> {
+    let Some(email) = verified.verified_email() else {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "external_email_unverified",
+        ));
+    };
+    Ok(ExternalIdentityProfile {
+        provider: verified.provider.clone(),
+        subject: verified.subject.clone(),
+        email: email.to_owned(),
+        display_name: verified.display_name(),
+    })
 }
 
 async fn authorize_principal_for_role(

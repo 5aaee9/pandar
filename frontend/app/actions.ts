@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { apiHeaders } from "./api-auth";
-import type { Agent, TenantToken } from "./dashboard-types";
+import type { Agent, JoinLink, Tenant, TenantToken } from "./dashboard-types";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 
@@ -20,6 +20,13 @@ export type SecretActionState =
       kind: "agent_pairing";
       agentEnv: string;
       agent: Agent;
+      message: string;
+    }
+  | {
+      ok: true;
+      kind: "join_link";
+      joinLink: JoinLink;
+      token: string;
       message: string;
     }
   | {
@@ -166,6 +173,63 @@ export async function rotateTenantToken(
     token: body.token,
     message: "Tenant token rotated",
   };
+}
+
+export async function createTenantFromExternal(formData: FormData) {
+  const response = await postJson("/api/v1/onboarding/tenants", {
+    slug: stringField(formData, "slug"),
+    display_name: stringField(formData, "display_name"),
+  });
+  if (!response.ok) {
+    redirect(`/?status=${encodeURIComponent(await errorCode(response))}`);
+  }
+  const body = (await response.json()) as { tenant: Tenant };
+  redirect(`/?tenant=${encodeURIComponent(body.tenant.id)}&status=tenant_created`);
+}
+
+export async function createJoinLink(
+  _previousState: SecretActionState,
+  formData: FormData,
+): Promise<SecretActionState> {
+  const tenantId = stringField(formData, "tenant_id");
+  const response = await postJson(`/api/v1/tenants/${tenantId}/join-links`, {
+    role: stringField(formData, "role"),
+    email_constraint: nullableField(formData, "email_constraint"),
+    expires_in_seconds: numberOrNull(formData, "expires_in_seconds"),
+    max_uses: numberOrNull(formData, "max_uses"),
+  });
+  if (!response.ok) {
+    return { ok: false, error: await errorCode(response) };
+  }
+  const body = (await response.json()) as { join_link: JoinLink; token: string };
+  return {
+    ok: true,
+    kind: "join_link",
+    joinLink: body.join_link,
+    token: body.token,
+    message: "Join link created",
+  };
+}
+
+export async function revokeJoinLink(formData: FormData) {
+  const tenantId = stringField(formData, "tenant_id");
+  const joinLinkId = stringField(formData, "join_link_id");
+  const response = await fetch(`${apiUrl}/api/v1/tenants/${tenantId}/join-links/${joinLinkId}`, {
+    method: "DELETE",
+    headers: await apiHeaders("application/json"),
+  });
+  redirect(statusUrl(tenantId, response.ok ? "join_link_revoked" : await errorCode(response)));
+}
+
+export async function acceptJoinLink(formData: FormData) {
+  const response = await postJson("/api/v1/join-links/accept", {
+    token: stringField(formData, "token"),
+  });
+  if (!response.ok) {
+    redirect(`/?status=${encodeURIComponent(await errorCode(response))}`);
+  }
+  const body = (await response.json()) as { tenant: Tenant };
+  redirect(`/?tenant=${encodeURIComponent(body.tenant.id)}&status=join_link_accepted`);
 }
 
 export async function createTenantUser(formData: FormData) {
@@ -364,6 +428,11 @@ function nullableField(formData: FormData, name: string) {
 
 function optionalBoolean(formData: FormData, name: string) {
   return formData.has(name) ? formData.get(name) === "on" : null;
+}
+
+function numberOrNull(formData: FormData, name: string) {
+  const value = nullableField(formData, name);
+  return value ? Number(value) : null;
 }
 
 async function errorCode(response: Response) {

@@ -230,6 +230,7 @@ export function TenantSettings({
         </DetailGroup>
         <DetailGroup title="Authentication">
           <DetailLine label="Source" value={authLabel} />
+          <DetailLine label="Provider" value={auth.provider} />
           <DetailLine label="Cookie name" value={auth.cookieName} mono />
           <DetailLine label="Secret values" value="Hidden" />
         </DetailGroup>

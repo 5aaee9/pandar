@@ -93,6 +93,40 @@ export type TenantToken = {
   revoked_at: string | null;
 };
 
+export type JoinLink = {
+  id: string;
+  tenant_id: string;
+  role: "tenant_admin" | "operator" | "viewer";
+  email_constraint: string | null;
+  expires_at: string;
+  max_uses: number;
+  used_count: number;
+  created_by_user_id: string | null;
+  revoked_at: string | null;
+  created_at: string;
+};
+
+export type JoinLinkList = {
+  join_links: JoinLink[];
+};
+
+export type MeResponse = {
+  identity: {
+    provider: string;
+    subject: string;
+    email: string | null;
+    email_verified: boolean | null;
+    display_name: string;
+  };
+  tenants: Array<{
+    tenant_id: string;
+    tenant_slug: string;
+    display_name: string;
+    role: "tenant_admin" | "operator" | "viewer";
+  }>;
+  can_self_create_tenant: boolean;
+};
+
 export type AuditEvent = {
   id: string;
   tenant_id: string;
@@ -136,6 +170,7 @@ export type AuditEventList = {
 export type AuthMetadata = {
   source: "request_cookie" | "app_auth_bearer_token" | "app_api_token" | "none";
   cookieName: string;
+  provider: "clerk" | "logto" | "betterauth" | "none";
 };
 
 export type Command = {

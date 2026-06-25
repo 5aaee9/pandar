@@ -57,7 +57,9 @@ The release archive provides the operator CLI and Bambu Studio plugin library. D
 - `pandar-web`: Next.js frontend, default bind `0.0.0.0:3000`.
 - `pandar-agent`: local-network agent that connects outward to Hub gRPC and talks to Bambu machines.
 
-The hub needs `PANDAR_DATABASE_URL`. The frontend needs `APP_API_URL` and `APP_BASE_URL`. The agent needs `PANDAR_HUB_GRPC_URL`, tenant and agent IDs, an agent credential, and any `PANDAR_PRINTERS` entries for local machines.
+The hub needs `PANDAR_DATABASE_URL`. The frontend needs `APP_API_URL`, `APP_BASE_URL`, and provider metadata when external auth is used. The agent needs `PANDAR_HUB_GRPC_URL`, tenant and agent IDs, an agent credential, and any `PANDAR_PRINTERS` entries for local machines.
+
+For Clerk, Logto, or Better Auth deployments, configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, optional audience, and allowed algorithms. Configure `pandar-web` with `APP_AUTH_PROVIDER` and the matching provider metadata. Better Auth's JWT plugin uses values such as `keyPairConfig.alg = "RSA256"` while Pandar verifies the emitted token with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`.
 
 For agent artifact downloads, set `PANDAR_HUB_API_URL` when `PANDAR_HUB_GRPC_URL` is not an HTTP(S) URL. Agents authenticate artifact downloads with `PANDAR_AGENT_CREDENTIAL`; do not distribute object-store credentials to agents or browsers.
 
@@ -73,6 +75,12 @@ Use the PostgreSQL compose shape when the database must be external to the Hub c
 
 ```bash
 POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.postgres.yml up --build
+```
+
+Use external auth by setting both Hub verification variables and Web provider variables:
+
+```bash
+PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth PANDAR_EXTERNAL_AUTH_ISSUER=https://auth.example.com PANDAR_EXTERNAL_AUTH_JWKS_URL=https://auth.example.com/jwks PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256 APP_AUTH_PROVIDER=betterauth APP_AUTH_BETTER_AUTH_BASE_URL=https://auth.example.com docker compose -f docker-compose.sqlite.yml up --build
 ```
 
 Use the PostgreSQL plus NATS profile to run the broker-backed deployment shape with S3-compatible artifact storage:

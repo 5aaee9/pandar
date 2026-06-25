@@ -71,6 +71,10 @@ async fn required_scopes_can_be_satisfied_by_scope_string_and_scp_array() {
         aud: Some(AudienceClaimForTest::One("api://pandar".to_owned())),
         scope: Some("print:read print:write"),
         scp: vec!["printer:read".to_owned()],
+        email: None,
+        email_verified: None,
+        name: None,
+        preferred_username: None,
     });
 
     let identity = verifier.verify(&token).await.unwrap();
@@ -79,6 +83,78 @@ async fn required_scopes_can_be_satisfied_by_scope_string_and_scp_array() {
     assert_eq!(
         identity.scopes,
         vec!["print:read", "print:write", "printer:read"]
+    );
+}
+
+#[tokio::test]
+async fn profile_claims_are_extracted_from_valid_jwt() {
+    let config = config_from_vars([(AUDIENCE_VAR, "api://pandar")]);
+    let verifier = JwtVerifier::static_jwks(config, jwks());
+    let token = token(TestClaims {
+        iss: "https://issuer.example.test",
+        sub: "user_profile",
+        exp: jsonwebtoken::get_current_timestamp() + 300,
+        aud: Some(AudienceClaimForTest::One("api://pandar".to_owned())),
+        scope: None,
+        scp: Vec::new(),
+        email: Some("alice@example.test"),
+        email_verified: Some(true),
+        name: Some("Alice Doe"),
+        preferred_username: Some("alice"),
+    });
+
+    let identity = verifier.verify(&token).await.unwrap();
+
+    assert_eq!(identity.provider, "clerk");
+    assert_eq!(identity.subject, "user_profile");
+    assert_eq!(identity.email.as_deref(), Some("alice@example.test"));
+    assert_eq!(identity.email_verified, Some(true));
+    assert_eq!(identity.name.as_deref(), Some("Alice Doe"));
+    assert_eq!(identity.preferred_username.as_deref(), Some("alice"));
+    assert_eq!(identity.verified_email(), Some("alice@example.test"));
+    assert_eq!(identity.display_name(), "Alice Doe");
+}
+
+#[tokio::test]
+async fn display_name_falls_back_to_username_then_verified_email() {
+    let config = config_from_vars([(AUDIENCE_VAR, "api://pandar")]);
+    let verifier = JwtVerifier::static_jwks(config, jwks());
+    let username_token = token(TestClaims {
+        iss: "https://issuer.example.test",
+        sub: "user_username",
+        exp: jsonwebtoken::get_current_timestamp() + 300,
+        aud: Some(AudienceClaimForTest::One("api://pandar".to_owned())),
+        scope: None,
+        scp: Vec::new(),
+        email: Some("username@example.test"),
+        email_verified: Some(true),
+        name: Some(" "),
+        preferred_username: Some("alice"),
+    });
+    let email_token = token(TestClaims {
+        iss: "https://issuer.example.test",
+        sub: "user_email",
+        exp: jsonwebtoken::get_current_timestamp() + 300,
+        aud: Some(AudienceClaimForTest::One("api://pandar".to_owned())),
+        scope: None,
+        scp: Vec::new(),
+        email: Some("alice@example.test"),
+        email_verified: Some(true),
+        name: None,
+        preferred_username: None,
+    });
+
+    assert_eq!(
+        verifier
+            .verify(&username_token)
+            .await
+            .unwrap()
+            .display_name(),
+        "alice"
+    );
+    assert_eq!(
+        verifier.verify(&email_token).await.unwrap().display_name(),
+        "alice@example.test"
     );
 }
 
@@ -114,6 +190,14 @@ struct TestClaims {
     aud: Option<AudienceClaimForTest>,
     scope: Option<&'static str>,
     scp: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    email: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    email_verified: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    preferred_username: Option<&'static str>,
 }
 
 #[derive(Serialize)]

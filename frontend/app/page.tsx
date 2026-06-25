@@ -5,7 +5,9 @@ import type {
   AuditEventList,
   Command,
   FetchResult,
+  JoinLinkList,
   JobList,
+  MeResponse,
   PrinterList,
   Summary,
   TenantList,
@@ -14,6 +16,7 @@ import type {
   UserList,
 } from './dashboard-types'
 import { DashboardRuntime } from './dashboard-runtime'
+import { OnboardingPanel } from './onboarding-panel'
 
 const apiUrl = process.env.APP_API_URL ?? 'http://localhost:8080'
 const configuredTenantId = process.env.APP_TENANT_ID
@@ -46,22 +49,34 @@ async function fetchJson<T>(path: string, label: string): Promise<FetchResult<T>
 }
 
 export default async function Page({ searchParams }: PageProps) {
-  const [summaryResult, tenantsResult] = await Promise.all([
-    configuredTenantId
+  const auth = await authSource()
+  const useExternalOnboarding = auth.provider !== 'none' && !configuredTenantId
+  const [summaryResult, tenantsResult, meResult] = await Promise.all([
+    configuredTenantId || useExternalOnboarding
       ? Promise.resolve<FetchResult<Summary>>({
           data: null,
           error: null,
         })
       : fetchJson<Summary>('/api/v1/summary', 'Summary'),
-    configuredTenantId
+    configuredTenantId || useExternalOnboarding
       ? Promise.resolve<FetchResult<TenantList>>({
           data: { tenants: [] },
           error: null,
         })
       : fetchJson<TenantList>('/api/v1/tenants', 'Tenants'),
+    auth.provider === 'none'
+      ? Promise.resolve<FetchResult<MeResponse>>({ data: null, error: null })
+      : fetchJson<MeResponse>('/api/v1/me', 'Current identity'),
   ])
 
-  const tenants = tenantsResult.data?.tenants ?? []
+  const externalTenants =
+    meResult.data?.tenants.map((tenant) => ({
+      id: tenant.tenant_id,
+      slug: tenant.tenant_slug,
+      display_name: tenant.display_name,
+      created_at: '',
+    })) ?? []
+  const tenants = auth.provider === 'none' ? (tenantsResult.data?.tenants ?? []) : externalTenants
   const params = await searchParams
   const requestedTenant = Array.isArray(params?.tenant) ? params.tenant[0] : params?.tenant
   const requestedCommand = Array.isArray(params?.command) ? params.command[0] : params?.command
@@ -86,19 +101,23 @@ export default async function Page({ searchParams }: PageProps) {
   const jobsResult = selectedTenant
     ? await fetchJson<JobList>(`/api/v1/tenants/${selectedTenant.id}/jobs`, 'Jobs')
     : null
-  const [usersResult, tenantTokensResult, auditEventsResult] = selectedTenant
+  const [usersResult, tenantTokensResult, joinLinksResult, auditEventsResult] = selectedTenant
     ? await Promise.all([
         fetchJson<UserList>(`/api/v1/tenants/${selectedTenant.id}/users`, 'Users'),
         fetchJson<TenantTokenList>(
           `/api/v1/tenants/${selectedTenant.id}/tenant-tokens`,
           'Tenant tokens',
         ),
+        fetchJson<JoinLinkList>(
+          `/api/v1/tenants/${selectedTenant.id}/join-links`,
+          'Join links',
+        ),
         fetchJson<AuditEventList>(
           `/api/v1/tenants/${selectedTenant.id}/audit-events?limit=20`,
           'Audit events',
         ),
       ])
-    : [null, null, null]
+    : [null, null, null, null]
   const commandResult =
     selectedTenant && requestedCommand
       ? await fetchJson<Command>(
@@ -111,6 +130,7 @@ export default async function Page({ searchParams }: PageProps) {
   const jobs = jobsResult?.data?.jobs ?? []
   const users = usersResult?.data?.users ?? []
   const tenantTokens = tenantTokensResult?.data?.tenant_tokens ?? []
+  const joinLinks = joinLinksResult?.data?.join_links ?? []
   const auditEvents = auditEventsResult?.data?.audit_events ?? []
   const identityResults = selectedTenant
     ? await Promise.all(
@@ -126,6 +146,7 @@ export default async function Page({ searchParams }: PageProps) {
   const adminUnavailable = Boolean(
     usersResult?.error ||
       tenantTokensResult?.error ||
+      joinLinksResult?.error ||
       auditEventsResult?.error ||
       identityResults.some((result) => result.error),
   )
@@ -134,13 +155,16 @@ export default async function Page({ searchParams }: PageProps) {
   const errors = [
     summaryResult.error,
     tenantsResult.error,
+    meResult.error && tenants.length === 0 ? meResult.error : null,
     printersResult?.error,
     agentsResult?.error,
     jobsResult?.error,
     commandResult?.error,
   ].filter((error): error is string => Boolean(error))
 
-  return (
+  return meResult.data && tenants.length === 0 ? (
+    <OnboardingPanel me={meResult.data} />
+  ) : (
     <DashboardRuntime
       apiUrl={apiUrl}
       configuredTenantId={configuredTenantId}
@@ -153,13 +177,14 @@ export default async function Page({ searchParams }: PageProps) {
       users={users}
       userIdentities={userIdentities}
       tenantTokens={tenantTokens}
+      joinLinks={joinLinks}
       auditEvents={auditEvents}
       adminUnavailable={adminUnavailable}
       actionStatus={actionStatus}
       selectedCommand={selectedCommand}
       commandData={commandData}
       errors={errors}
-      auth={await authSource()}
+      auth={auth}
     />
   )
 }

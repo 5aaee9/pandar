@@ -2,15 +2,15 @@ import { useActionState } from 'react'
 
 import {
   createAgentPairing,
+  createJoinLink,
   createTenantToken,
-  createTenantUser,
-  linkUserIdentity,
+  revokeJoinLink,
   revokeTenantToken,
   rotateTenantToken,
   type SecretActionState,
   updateTenantUserRole,
 } from './actions'
-import type { Agent, AuditEvent, Tenant, TenantToken, User, UserIdentity } from './dashboard-types'
+import type { Agent, AuditEvent, JoinLink, Tenant, TenantToken, User, UserIdentity } from './dashboard-types'
 import { DetailLine, EmptyState, formatDate, SectionHeader, StatusBadge } from './dashboard-ui'
 
 type AdminPanelProps = {
@@ -18,6 +18,7 @@ type AdminPanelProps = {
   users: User[]
   userIdentities: UserIdentity[]
   tenantTokens: TenantToken[]
+  joinLinks: JoinLink[]
   agents: Agent[]
   auditEvents: AuditEvent[]
   unavailable: boolean
@@ -30,6 +31,7 @@ export function TenantAdminPanel({
   users,
   userIdentities,
   tenantTokens,
+  joinLinks,
   agents,
   auditEvents,
   unavailable,
@@ -65,7 +67,7 @@ export function TenantAdminPanel({
       />
 
       <div className="grid gap-4 border-b border-slate-200 px-4 py-4 lg:grid-cols-3">
-        <CreateUserForm tenantId={selectedTenant.id} />
+        <CreateJoinLinkForm tenantId={selectedTenant.id} />
         <CreateTenantTokenForm tenantId={selectedTenant.id} />
         <CreateAgentPairingForm tenantId={selectedTenant.id} />
       </div>
@@ -73,6 +75,7 @@ export function TenantAdminPanel({
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
         <div className="border-b border-slate-200 lg:border-b-0 lg:border-r">
           <UsersTable tenantId={selectedTenant.id} users={users} identities={userIdentities} />
+          <JoinLinksTable tenantId={selectedTenant.id} joinLinks={joinLinks} />
           <TenantTokensTable tenantId={selectedTenant.id} tokens={tenantTokens} />
         </div>
         <div>
@@ -84,15 +87,19 @@ export function TenantAdminPanel({
   )
 }
 
-function CreateUserForm({ tenantId }: { tenantId: string }) {
+function CreateJoinLinkForm({ tenantId }: { tenantId: string }) {
+  const [state, formAction, pending] = useActionState(createJoinLink, null)
+
   return (
-    <form action={createTenantUser} className="grid gap-2">
+    <form action={formAction} className="grid gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
-      <div className="text-sm font-semibold text-slate-950">Create user</div>
-      <Input name="email" label="Email" type="email" />
-      <Input name="display_name" label="Display name" />
+      <div className="text-sm font-semibold text-slate-950">Create join link</div>
       <Select name="role" label="Role" values={roles} />
-      <PrimaryButton label="Create user" />
+      <Input name="email_constraint" label="Verified email" type="email" />
+      <Input name="expires_in_seconds" label="TTL seconds" defaultValue="604800" />
+      <Input name="max_uses" label="Max uses" defaultValue="1" />
+      <PrimaryButton label={pending ? 'Creating...' : 'Create link'} />
+      <SecretActionResult state={state} />
     </form>
   )
 }
@@ -165,13 +172,6 @@ function UsersTable({
                     <td className="px-4 py-3"><StatusBadge value={user.role} /></td>
                     <td className="px-4 py-3 text-xs text-slate-700">
                       {linked.length === 0 ? '-' : linked.map((identity) => identity.provider).join(', ')}
-                      <form action={linkUserIdentity} className="mt-2 flex flex-wrap gap-2">
-                        <input name="tenant_id" type="hidden" value={tenantId} />
-                        <input name="user_id" type="hidden" value={user.id} />
-                        <input className="h-8 w-24 rounded border border-slate-300 px-2 text-xs" name="provider" placeholder="provider" />
-                        <input className="h-8 w-36 rounded border border-slate-300 px-2 text-xs" name="subject" placeholder="subject" />
-                        <button className="h-8 rounded border border-slate-300 px-2 text-xs font-medium" type="submit">Link</button>
-                      </form>
                     </td>
                     <td className="px-4 py-3">
                       <form action={updateTenantUserRole} className="flex flex-wrap gap-2">
@@ -188,6 +188,44 @@ function UsersTable({
               })}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function JoinLinksTable({ tenantId, joinLinks }: { tenantId: string; joinLinks: JoinLink[] }) {
+  return (
+    <div className="border-t border-slate-200">
+      <Subhead title="Join links" meta={`${joinLinks.length} links`} />
+      {joinLinks.length === 0 ? (
+        <EmptyState title="No join links" message="Create a join link to invite externally authenticated users." />
+      ) : (
+        <div className="divide-y divide-slate-200">
+          {joinLinks.map((link) => (
+            <div key={link.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[minmax(0,1fr)_auto]">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge value={link.role} />
+                  <span className="text-xs text-slate-600">
+                    {link.used_count}/{link.max_uses} used
+                  </span>
+                  {link.revoked_at ? <span className="text-xs font-medium text-red-700">Revoked</span> : null}
+                </div>
+                <div className="mt-1 font-mono text-xs text-slate-600">{link.id}</div>
+                <div className="mt-1 text-xs text-slate-600">
+                  {link.email_constraint ? `Email ${link.email_constraint}` : 'Any verified email'} · Expires {formatDate(link.expires_at)}
+                </div>
+              </div>
+              <form action={revokeJoinLink}>
+                <input name="tenant_id" type="hidden" value={tenantId} />
+                <input name="join_link_id" type="hidden" value={link.id} />
+                <button className="h-8 rounded border border-red-300 px-2 text-xs font-medium text-red-700" disabled={Boolean(link.revoked_at)} type="submit">
+                  {link.revoked_at ? 'Revoked' : 'Revoke'}
+                </button>
+              </form>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -258,6 +296,15 @@ function SecretActionResult({ state }: { state: SecretActionState }) {
         <div className="font-semibold">{state.message}</div>
         <code className="break-all rounded bg-white px-2 py-1 font-mono text-[11px] text-slate-950">{state.token}</code>
         <div>This token is shown once and is not persisted by the browser.</div>
+      </div>
+    )
+  }
+  if (state.kind === 'join_link') {
+    return (
+      <div className="grid gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-2 text-xs text-amber-950">
+        <div className="font-semibold">{state.message}</div>
+        <code className="break-all rounded bg-white px-2 py-1 font-mono text-[11px] text-slate-950">{`/join#${state.token}`}</code>
+        <div>This join token is shown once and is not persisted by the browser.</div>
       </div>
     )
   }

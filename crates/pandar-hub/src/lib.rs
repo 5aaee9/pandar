@@ -50,6 +50,7 @@ pub struct AppState {
     printer_event_tickets: PrinterEventTicketRepository,
     artifact_storage: Arc<dyn ArtifactStorage>,
     external_auth: Option<JwtVerifier>,
+    tenant_self_create_allowed: bool,
     bootstrap_token: Option<String>,
     printer_events: PrinterEventHub,
     sessions: SessionRegistry,
@@ -124,10 +125,12 @@ impl AppState {
         let bootstrap_token = std::env::var("PANDAR_BOOTSTRAP_TOKEN")
             .ok()
             .filter(|value| !value.trim().is_empty());
+        let tenant_self_create_allowed = tenant_self_create_allowed_from_env()?;
 
         Ok(
             Self::from_database_with_control_plane(database, artifact_storage, control_plane)
                 .with_external_auth_option(external_auth)
+                .with_tenant_self_create_allowed(tenant_self_create_allowed)
                 .with_bootstrap_token_option(bootstrap_token),
         )
     }
@@ -159,6 +162,7 @@ impl AppState {
             printer_event_tickets: PrinterEventTicketRepository::new(database),
             artifact_storage: artifact_storage.into_artifact_storage(),
             external_auth: None,
+            tenant_self_create_allowed: true,
             bootstrap_token: None,
             printer_events: PrinterEventHub::with_metrics(metrics.clone()),
             sessions: SessionRegistry::new(),
@@ -274,6 +278,20 @@ impl AppState {
 
     pub fn external_auth(&self) -> Option<&JwtVerifier> {
         self.external_auth.as_ref()
+    }
+
+    pub fn tenant_self_create_allowed(&self) -> bool {
+        self.tenant_self_create_allowed
+    }
+
+    fn with_tenant_self_create_allowed(mut self, allowed: bool) -> Self {
+        self.tenant_self_create_allowed = allowed;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_tenant_self_create_for_tests(self, allowed: bool) -> Self {
+        self.with_tenant_self_create_allowed(allowed)
     }
 
     pub fn bootstrap_token(&self) -> Option<&str> {
@@ -399,6 +417,20 @@ impl AppState {
     pub(crate) fn with_database_backend_for_tests(mut self, backend: db::DatabaseBackend) -> Self {
         self.database_backend_override = Some(backend);
         self
+    }
+}
+
+fn tenant_self_create_allowed_from_env() -> anyhow::Result<bool> {
+    let Some(value) = std::env::var("PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return Ok(true);
+    };
+    match value.trim() {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => anyhow::bail!("PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE must be true or false"),
     }
 }
 

@@ -17,6 +17,7 @@ use crate::{
 
 mod bootstrap;
 mod identities;
+mod onboarding;
 mod plugin_tickets;
 pub(crate) mod secrets;
 mod tenant_tokens;
@@ -24,6 +25,9 @@ mod tokens;
 mod users;
 
 pub use identities::UserIdentity;
+pub use onboarding::{
+    AcceptedJoinLink, ExternalIdentityProfile, ExternalMembership, JoinLink, JoinLinkWithPlaintext,
+};
 pub use plugin_tickets::{
     PluginLoginTicket, PluginLoginTicketExchange, PluginLoginTicketWithPlaintext,
 };

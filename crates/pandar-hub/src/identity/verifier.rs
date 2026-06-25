@@ -55,6 +55,14 @@ struct JwtClaims {
     scope: Option<String>,
     #[serde(default)]
     scp: Vec<String>,
+    #[serde(default)]
+    email: Option<String>,
+    #[serde(default)]
+    email_verified: Option<bool>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    preferred_username: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -81,6 +89,35 @@ pub struct VerifiedExternalIdentity {
     pub audiences: Vec<String>,
     pub authorized_party: Option<String>,
     pub scopes: Vec<String>,
+    pub email: Option<String>,
+    pub email_verified: Option<bool>,
+    pub name: Option<String>,
+    pub preferred_username: Option<String>,
+}
+
+impl VerifiedExternalIdentity {
+    pub fn verified_email(&self) -> Option<&str> {
+        match (self.email.as_deref(), self.email_verified) {
+            (Some(email), Some(true)) if !email.trim().is_empty() => Some(email.trim()),
+            _ => None,
+        }
+    }
+
+    pub fn display_name(&self) -> String {
+        self.name
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                self.preferred_username
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+            })
+            .or_else(|| self.verified_email())
+            .unwrap_or("")
+            .to_owned()
+    }
 }
 
 #[async_trait]
@@ -292,6 +329,10 @@ fn verified_identity(
             .unwrap_or_default(),
         authorized_party: claims.azp,
         scopes,
+        email: claims.email,
+        email_verified: claims.email_verified,
+        name: claims.name,
+        preferred_username: claims.preferred_username,
     })
 }
 

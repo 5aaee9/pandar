@@ -70,6 +70,47 @@
 - Added Phase 28 reference-backed slicer metadata: bounded 3MF metadata parsing, SQLite/PostgreSQL `job_artifacts.metadata_json` persistence, tenant preview API, job/plugin response metadata, dashboard upload preview, and compact job/recovery metadata summaries. Local parser, SQLite route/repository/plugin/frontend verification, and disposable PostgreSQL metadata repository verification are recorded.
 - Added Phase 29 protocol-level printer operations: Hub now persists and forwards semantic `printer_operation` commands instead of Bambu-specific control strings, tenant `/controls` and plugin `/operations` requests share semantic validation, agents translate operations to Bambu MQTT/G-code locally, and the network plugin parses supported Studio G-code messages into semantic operation JSON before contacting Hub.
 - Fixed Nix CI packaging inputs: cargo package/check derivations now provide the CA bundle through `SSL_CERT_FILE` / `NIX_SSL_CERT_FILE`, Rust checks include the plugin-local embedded assets, and `pandar-web` has the current fixed-output npm dependency hash.
+- Added Phase 30/31 external account onboarding: Better Auth is accepted as a Clerk/Logto-equivalent JWT/JWKS provider, verified identity data now carries email/display-name claims, external users can inspect `/api/v1/me`, self-create tenants when enabled, and accept tenant-admin join links that create tenant-local user projections.
+- Added join-link management with hash-only token storage, optional verified-email restriction, default single-use/seven-day expiry, revoke/list APIs, audited accept/create/revoke events, and frontend onboarding/join-link flows configured through `pandar-web` provider settings.
+
+## Completed: Phase 30 Better Auth Provider Compatibility
+
+Goal: support Better Auth as a Clerk/Logto-equivalent external auth provider through the existing JWT/JWKS verifier.
+
+- Completed Better Auth deployment guidance through the existing external JWT/JWKS verifier.
+- Completed `PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth` documentation with issuer, JWKS URL, audience, and Pandar-side `RS256` verification configuration.
+- Completed verified external identity data with profile claims for onboarding: verified email, display name, and username fallbacks.
+- Kept tenant authorization unchanged: Pandar still resolves `(tenant_id, provider, subject)` to a local tenant user and role.
+
+## Completed: Phase 31 External Self-Service Tenant Onboarding
+
+Goal: make external account sign-in the primary user entry point while Pandar remains authoritative for tenant membership and roles.
+
+- Completed `/api/v1/me` for external JWT users to inspect their identity and tenant memberships without side effects.
+- Completed verified external tenant self-create with the creator as tenant admin and `PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE` as the deployment gate.
+- Completed tenant-admin-managed join links with hash-only token storage, optional verified-email restriction, one-time plaintext response, default single-use behavior, and seven-day default expiry.
+- Completed join-link acceptance that creates tenant-local user projections and identity links, assigns the link role, and avoids role changes or use-count consumption for existing members.
+- Completed provider-configured `pandar-web` onboarding for Clerk, Logto, and Better Auth while preserving the bearer-token boundary to `pandar-hub`.
+- Hid manual user creation and manual identity-link forms from the primary frontend path while keeping the API as a transitional/admin-only capability.
+
+## Planned: Phase 32 Remove Manual Pandar User Creation And Linking
+
+Goal: finish the transition from Pandar-managed user provisioning to external-account-backed tenant membership.
+
+- Remove manual `POST /api/v1/tenants/{tenant_id}/users`.
+- Remove manual `POST /api/v1/tenants/{tenant_id}/users/{user_id}/identities`.
+- Keep user listing, identity listing, and tenant-local role updates.
+- Keep join links as the supported invite/onboarding path.
+- Preserve existing data without migrating away valid `users` or `user_identities` rows.
+
+## Planned: Phase 33 Self-Hosted Better Auth Bundle
+
+Goal: provide an integrated Better Auth deployment option for new Pandar installations.
+
+- Let `pandar-web` host or bundle Better Auth routes as a configured auth provider option.
+- Use a Better Auth-owned database/schema or SQLite file, separate from Pandar's Rust-owned business tables.
+- Configure Better Auth with `keyPairConfig.alg = "RSA256"` and configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` so verification remains on the external auth contract.
+- Do not provide Clerk/Logto migration in this phase; self-hosted Better Auth is a new-deployment option.
 
 ## Phase 1: Foundation
 

@@ -97,6 +97,8 @@ The Hub stores and forwards semantic operation JSON only. Bambu-specific MQTT an
 
 The frontend reads the hub through `APP_API_URL`, defaulting to `http://localhost:8080` when unset. `APP_BASE_URL` remains the frontend's public URL for deployment wiring.
 
+`APP_AUTH_PROVIDER` selects the browser-facing provider metadata for `pandar-web`. Supported values are `clerk`, `logto`, `betterauth`, or unset/`none`. Provider-specific frontend metadata is configured with `APP_AUTH_CLERK_PUBLISHABLE_KEY`, `APP_AUTH_LOGTO_ENDPOINT`, `APP_AUTH_LOGTO_APP_ID`, or `APP_AUTH_BETTER_AUTH_BASE_URL`. The frontend still forwards only a bearer token from the configured cookie/static bridge to `pandar-hub`; Pandar tenant membership is resolved by the hub.
+
 Server-side bearer credential precedence:
 
 1. Request cookie named by `APP_AUTH_COOKIE_NAME`, default `pandar_auth_token`.
@@ -199,9 +201,36 @@ PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256
 PANDAR_EXTERNAL_AUTH_AUTHORIZED_PARTIES=<optional comma-separated origins>
 PANDAR_EXTERNAL_AUTH_REQUIRED_SCOPES=<optional comma-separated scopes>
 PANDAR_EXTERNAL_AUTH_LEEWAY_SECONDS=60
+PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE=true
 ```
 
-If `PANDAR_EXTERNAL_AUTH_PROVIDER` is unset, external identity auth is disabled. Partial external-auth configuration fails hub startup instead of silently falling back.
+If `PANDAR_EXTERNAL_AUTH_PROVIDER` is unset, external identity auth is disabled. Partial external-auth configuration fails hub startup instead of silently falling back. `PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE` defaults to `true`; set it to `false` to require join links or bootstrap provisioning for first tenant membership.
+
+Better Auth is supported through the same external JWT/JWKS contract. Configure Better Auth's JWT plugin with an asymmetric key pair such as `keyPairConfig.alg = "RSA256"` and configure Pandar verification with the JWA algorithm value `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. Pandar expects a stable `sub` plus verified email claims before creating tenant-local user projections.
+
+External-account onboarding APIs:
+
+```bash
+curl -sS "$PANDAR_API/api/v1/me" \
+  -H "Authorization: Bearer $EXTERNAL_JWT"
+
+curl -sS -X POST "$PANDAR_API/api/v1/onboarding/tenants" \
+  -H "Authorization: Bearer $EXTERNAL_JWT" \
+  -H "content-type: application/json" \
+  -d '{"slug":"acme","display_name":"Acme"}'
+
+curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/join-links" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"role":"operator","email_constraint":"operator@example.com","expires_in_seconds":604800,"max_uses":1}'
+
+curl -sS -X POST "$PANDAR_API/api/v1/join-links/accept" \
+  -H "Authorization: Bearer $EXTERNAL_JWT" \
+  -H "content-type: application/json" \
+  -d '{"token":"pandar_join_..."}'
+```
+
+Join-link tokens are returned once and stored only as hashes. Accepting a link creates a tenant-local `users` row and `user_identities` link from the external identity; existing members keep their current role and do not consume a link use.
 
 Bootstrap cross-tenant administration with `PANDAR_BOOTSTRAP_TOKEN`:
 
@@ -236,6 +265,13 @@ curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/identitie
   -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
   -H "content-type: application/json" \
   -d '{"provider":"clerk","subject":"user_123"}'
+```
+
+Manual user creation and identity linking are transitional/admin-only compatibility APIs. New deployments should use external JWT sign-in plus self-create or join links instead.
+
+Tenant-token examples:
+
+```bash
 
 curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/tenant-tokens" \
   -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \

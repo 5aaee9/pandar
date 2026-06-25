@@ -17,6 +17,7 @@ mod basic;
 mod bootstrap;
 mod jobs;
 mod multipart;
+mod onboarding;
 mod plugin;
 mod plugin_multipart;
 mod plugin_redaction;
@@ -316,19 +317,51 @@ fn jwt_for(
     kid: &str,
     exp_offset_seconds: i64,
 ) -> String {
+    jwt_for_claims(ExternalAuthClaims {
+        kid,
+        iss: issuer,
+        sub: subject,
+        aud: audience,
+        exp_offset_seconds,
+        email: None,
+        email_verified: None,
+        name: None,
+        preferred_username: None,
+    })
+}
+
+fn jwt_for_profile(subject: &str, email: &str, email_verified: bool, name: &str) -> String {
+    jwt_for_claims(ExternalAuthClaims {
+        kid: "test-key",
+        iss: TEST_ISSUER,
+        sub: subject,
+        aud: TEST_AUDIENCE,
+        exp_offset_seconds: 3600,
+        email: Some(email),
+        email_verified: Some(email_verified),
+        name: Some(name),
+        preferred_username: None,
+    })
+}
+
+fn jwt_for_claims(claims: ExternalAuthClaims<'_>) -> String {
     let mut header = Header::new(Algorithm::RS256);
-    header.kid = Some(kid.to_owned());
+    header.kid = Some(claims.kid.to_owned());
     let now = jsonwebtoken::get_current_timestamp() as i64;
-    let exp = now.saturating_add(exp_offset_seconds).max(0) as u64;
+    let exp = now.saturating_add(claims.exp_offset_seconds).max(0) as u64;
     let nbf = now.saturating_sub(30).max(0) as u64;
     encode(
         &header,
-        &ExternalAuthClaims {
-            iss: issuer,
-            sub: subject,
-            aud: audience,
+        &EncodedExternalAuthClaims {
+            iss: claims.iss,
+            sub: claims.sub,
+            aud: claims.aud,
             exp,
             nbf,
+            email: claims.email,
+            email_verified: claims.email_verified,
+            name: claims.name,
+            preferred_username: claims.preferred_username,
         },
         &EncodingKey::from_rsa_pem(TEST_PRIVATE_KEY_PEM.as_bytes()).unwrap(),
     )
@@ -356,14 +389,40 @@ async fn external_auth_token_for_role(
         .link_external_identity(tenant_id, &user.id, TEST_PROVIDER, subject)
         .await
         .unwrap();
-    jwt_for(subject, TEST_ISSUER, TEST_AUDIENCE, "test-key", 3600)
+    jwt_for_profile(
+        subject,
+        &format!("{subject}@example.test"),
+        true,
+        "External Test User",
+    )
 }
 
 #[derive(Serialize)]
 struct ExternalAuthClaims<'a> {
+    kid: &'a str,
+    iss: &'a str,
+    sub: &'a str,
+    aud: &'a str,
+    exp_offset_seconds: i64,
+    email: Option<&'a str>,
+    email_verified: Option<bool>,
+    name: Option<&'a str>,
+    preferred_username: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct EncodedExternalAuthClaims<'a> {
     iss: &'a str,
     sub: &'a str,
     aud: &'a str,
     exp: u64,
     nbf: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    email: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    email_verified: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    preferred_username: Option<&'a str>,
 }

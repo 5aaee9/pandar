@@ -14,9 +14,11 @@ pub use audit::{
     AuditActor, AuditEvent, AuditEventListQuery, AuditEventRepository, RecordAuditEvent,
 };
 pub use auth::{
-    ApiToken, AuthRepository, AuthenticatedPrincipal, AuthenticatedTenantToken, AuthenticatedUser,
-    PluginLoginTicket, PluginLoginTicketExchange, PluginLoginTicketWithPlaintext, TenantToken,
-    TenantTokenScope, TenantTokenWithPlaintext, User, UserIdentity, UserRole,
+    AcceptedJoinLink, ApiToken, AuthRepository, AuthenticatedPrincipal, AuthenticatedTenantToken,
+    AuthenticatedUser, ExternalIdentityProfile, ExternalMembership, JoinLink,
+    JoinLinkWithPlaintext, PluginLoginTicket, PluginLoginTicketExchange,
+    PluginLoginTicketWithPlaintext, TenantToken, TenantTokenScope, TenantTokenWithPlaintext, User,
+    UserIdentity, UserRole,
 };
 pub use commands::{
     CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
@@ -49,6 +51,8 @@ pub enum RepositoryError {
     DuplicateTenantTokenHash,
     #[error("plugin login ticket hash already exists")]
     DuplicatePluginLoginTicketHash,
+    #[error("join link hash already exists")]
+    DuplicateJoinLinkHash,
     #[error("user email already exists for tenant")]
     DuplicateUserEmail,
     #[error("external identity already exists for tenant")]
@@ -65,6 +69,10 @@ pub enum RepositoryError {
     MissingTenantToken,
     #[error("plugin login ticket not found")]
     MissingPluginLoginTicket,
+    #[error("invalid join link")]
+    InvalidJoinLink,
+    #[error("join link email mismatch")]
+    JoinLinkEmailMismatch,
     #[error("agent not found")]
     MissingAgent,
     #[error("printer not found")]

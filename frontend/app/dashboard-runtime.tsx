@@ -13,6 +13,7 @@ import type {
   Command,
   CommandResultData,
   Job,
+  JoinLink,
   Printer,
   PrinterEvent,
   PrinterEventTicket,
@@ -51,6 +52,7 @@ type DashboardRuntimeProps = {
   users: User[]
   userIdentities: UserIdentity[]
   tenantTokens: TenantToken[]
+  joinLinks: JoinLink[]
   auditEvents: AuditEvent[]
   adminUnavailable: boolean
   actionStatus?: string
@@ -74,6 +76,7 @@ export function DashboardRuntime({
   users,
   userIdentities,
   tenantTokens,
+  joinLinks,
   auditEvents,
   adminUnavailable,
   actionStatus,
@@ -301,6 +304,7 @@ export function DashboardRuntime({
           users={users}
           userIdentities={userIdentities}
           tenantTokens={tenantTokens}
+          joinLinks={joinLinks}
           agents={agents}
           auditEvents={auditEvents}
           unavailable={adminUnavailable}

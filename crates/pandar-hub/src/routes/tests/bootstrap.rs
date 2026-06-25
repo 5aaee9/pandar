@@ -315,7 +315,7 @@ async fn postgres_database() -> Option<crate::db::Database> {
         panic!("expected PostgreSQL database");
     };
     sqlx::query(
-        "TRUNCATE audit_events, api_tokens, user_identities, jobs, job_artifacts, commands, printers, agents, users, tenants",
+        "TRUNCATE audit_events, api_tokens, user_identities, join_links, jobs, job_artifacts, commands, printers, agents, users, tenants",
     )
     .execute(pool)
     .await

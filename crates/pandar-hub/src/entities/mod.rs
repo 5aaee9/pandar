@@ -5,6 +5,7 @@ pub mod commands;
 pub mod job_artifacts;
 pub mod job_filament_usages;
 pub mod jobs;
+pub mod join_links;
 pub mod machine_events;
 pub mod plugin_login_tickets;
 pub mod printer_material_snapshots;

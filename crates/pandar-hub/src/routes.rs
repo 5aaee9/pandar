@@ -17,6 +17,8 @@ mod audit_events;
 mod auth;
 mod bootstrap;
 pub(crate) mod jobs;
+mod join_links;
+mod onboarding;
 mod plugin;
 mod printer_events;
 mod printer_operations;
@@ -32,6 +34,15 @@ pub fn router(state: AppState) -> Router {
         .route("/healthz", get(status::healthz))
         .route("/readyz", get(status::readyz))
         .route("/metrics", get(status::metrics))
+        .route("/api/v1/me", get(onboarding::me))
+        .route(
+            "/api/v1/onboarding/tenants",
+            post(onboarding::create_tenant),
+        )
+        .route(
+            "/api/v1/join-links/accept",
+            post(onboarding::accept_join_link),
+        )
         .route("/api/v1/summary", get(admin::summary))
         .route(
             "/api/v1/tenants",
@@ -76,6 +87,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/v1/tenants/{tenant_id}/tenant-tokens/{token_id}/rotate",
             post(tenant_tokens::rotate_tenant_token),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/join-links",
+            get(join_links::list_join_links).post(join_links::create_join_link),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/join-links/{join_link_id}",
+            axum::routing::delete(join_links::revoke_join_link),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/plugin/login-tickets",
@@ -283,6 +302,9 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::DuplicatePluginLoginTicketHash => {
                 Self::new(StatusCode::CONFLICT, "plugin_login_ticket_hash_exists")
             }
+            RepositoryError::DuplicateJoinLinkHash => {
+                Self::new(StatusCode::CONFLICT, "join_link_hash_exists")
+            }
             RepositoryError::DuplicateExternalIdentity => {
                 Self::new(StatusCode::CONFLICT, "external_identity_exists")
             }
@@ -303,6 +325,12 @@ impl From<RepositoryError> for ApiError {
             }
             RepositoryError::MissingPluginLoginTicket => {
                 Self::new(StatusCode::UNAUTHORIZED, "invalid_login_ticket")
+            }
+            RepositoryError::InvalidJoinLink => {
+                Self::new(StatusCode::NOT_FOUND, "invalid_join_link")
+            }
+            RepositoryError::JoinLinkEmailMismatch => {
+                Self::new(StatusCode::FORBIDDEN, "join_link_email_mismatch")
             }
             RepositoryError::MissingAgent => Self::new(StatusCode::NOT_FOUND, "agent_not_found"),
             RepositoryError::MissingCommand => {
