@@ -63,6 +63,10 @@
           || rel == "docs/superpowers"
           || rel == "docs/superpowers/specs"
           || lib.hasPrefix "docs/superpowers/specs/" rel
+          || rel == "frontend"
+          || rel == "frontend/plugin-local"
+          || rel == "frontend/plugin-local/dist"
+          || lib.hasPrefix "frontend/plugin-local/dist/" rel
           || rel == "proto"
           || lib.hasPrefix "proto/" rel;
       };
@@ -80,6 +84,8 @@
         src = rustSrc;
         version = "0.1.0";
         strictDeps = true;
+        SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+        NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
         inherit nativeBuildInputs buildInputs;
       };
 
@@ -108,7 +114,7 @@
         pname = "pandar-web";
         version = "0.1.0";
         src = lib.cleanSource "${root}/frontend";
-        npmDepsHash = "sha256-lf54i1KOPL3H9zl5iIWkk13S5JSrDTVnxYcsalVI3WU=";
+        npmDepsHash = "sha256-Bf6jGgmLvbK0dvLtq0Bh+tZQkmK19NoRx8fU6xU+el4=";
 
         nativeBuildInputs = [
           pkgs.makeWrapper
