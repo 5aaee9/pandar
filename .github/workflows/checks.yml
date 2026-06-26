@@ -48,7 +48,7 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: Set up hestia cache
-        uses: Mic92/hestia/action@v1.0.1
+        uses: Mic92/hestia@v1.0.1
         with:
           upstream-cache-filter: true
 
@@ -85,7 +85,7 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: Set up hestia cache
-        uses: Mic92/hestia/action@v1.0.1
+        uses: Mic92/hestia@v1.0.1
         with:
           upstream-cache-filter: true
 
@@ -134,7 +134,7 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: Set up hestia cache
-        uses: Mic92/hestia/action@v1.0.1
+        uses: Mic92/hestia@v1.0.1
         with:
           upstream-cache-filter: true
 
