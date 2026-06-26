@@ -32,13 +32,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7.0.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4.1.0
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4.2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -46,7 +46,7 @@ jobs:
 
       - name: Extract Docker metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6.1.0
         with:
           images: ghcr.io/5aaee9/pandar/${{ matrix.image.name }}
           tags: |
@@ -55,7 +55,7 @@ jobs:
             type=raw,value=main,enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7.2.0
         with:
           context: ${{ matrix.image.context }}
           file: ${{ matrix.image.dockerfile }}
@@ -64,7 +64,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Cleanup untagged image
-        uses: dataaxiom/ghcr-cleanup-action@v1
+        uses: dataaxiom/ghcr-cleanup-action@v1.2.2
         with:
           packages: pandar/${{ matrix.image.name }}
           delete-untagged: true
@@ -78,10 +78,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7.0.0
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5.0.1
 
       - name: Resolve chart version
         id: chart-version
@@ -127,7 +127,7 @@ jobs:
       - name: Remove replaceable main chart tag
         if: steps.chart-version.outputs.prerelease == 'true'
         continue-on-error: true
-        uses: dataaxiom/ghcr-cleanup-action@v1
+        uses: dataaxiom/ghcr-cleanup-action@v1.2.2
         with:
           packages: pandar/chart/pandar
           delete-tags: ${{ steps.chart-version.outputs.version }}
