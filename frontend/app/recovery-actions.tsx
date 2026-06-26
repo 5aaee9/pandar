@@ -1,4 +1,7 @@
+'use client'
+
 import { controlPrinter, duplicateJob, refreshPrinters, reprintJob, retryDispatchJob } from './actions'
+import { ConfirmForm } from './confirm-dialog'
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
 import { EmptyState, SectionHeader } from './dashboard-ui'
 import { formatArtifactMetadata, formatJobRecoveryState } from './dashboard-runtime-helpers'
@@ -83,7 +86,19 @@ function LiveControlPanel({ tenantId, printer }: { tenantId: string; printer: Pr
     <div className="mt-2 flex flex-wrap gap-2">
       <PrinterControlForm tenantId={tenantId} printerId={printer.id} action="pause" label="Queue pause" />
       <PrinterControlForm tenantId={tenantId} printerId={printer.id} action="resume" label="Queue resume" />
-      <PrinterControlForm tenantId={tenantId} printerId={printer.id} action="stop" label="Queue stop" />
+      <ConfirmForm
+        action={controlPrinter}
+        buttonClassName="h-8 rounded border border-slate-300 px-2 text-xs font-medium"
+        buttonLabel="Queue stop"
+        title="Stop print"
+        message="Stop this print? The current job cannot be resumed from where it stops."
+        confirmLabel="Stop print"
+        tone="danger"
+      >
+        <input name="tenant_id" type="hidden" value={tenantId} />
+        <input name="printer_id" type="hidden" value={printer.id} />
+        <input name="action" type="hidden" value="stop" />
+      </ConfirmForm>
       <form action={controlPrinter} className="flex gap-2">
         <input name="tenant_id" type="hidden" value={tenantId} />
         <input name="printer_id" type="hidden" value={printer.id} />
@@ -100,7 +115,17 @@ function LiveControlPanel({ tenantId, printer }: { tenantId: string; printer: Pr
   )
 }
 
-function PrinterControlForm({ tenantId, printerId, action, label }: { tenantId: string; printerId: string; action: string; label: string }) {
+function PrinterControlForm({
+  tenantId,
+  printerId,
+  action,
+  label,
+}: {
+  tenantId: string
+  printerId: string
+  action: string
+  label: string
+}) {
   return (
     <form action={controlPrinter}>
       <input name="tenant_id" type="hidden" value={tenantId} />

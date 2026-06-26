@@ -1,4 +1,4 @@
-import { useActionState } from 'react'
+import { useActionState, useRef, useState } from 'react'
 
 import {
   createAgentPairing,
@@ -11,7 +11,8 @@ import {
   updateTenantUserRole,
 } from './actions'
 import type { Agent, AuditEvent, JoinLink, Tenant, TenantToken, User, UserIdentity } from './dashboard-types'
-import { DetailLine, EmptyState, formatDate, SectionHeader, StatusBadge } from './dashboard-ui'
+import { DetailLine, EmptyState, formatDate, SectionHeader, StatusBadge, Tag } from './dashboard-ui'
+import { ConfirmDialog, ConfirmForm } from './confirm-dialog'
 
 type AdminPanelProps = {
   selectedTenant: Tenant | null
@@ -169,7 +170,7 @@ function UsersTable({
                       <div className="text-slate-700">{user.email}</div>
                       <div className="font-mono text-xs text-slate-600">{user.id}</div>
                     </td>
-                    <td className="px-4 py-3"><StatusBadge value={user.role} /></td>
+                    <td className="px-4 py-3"><Tag value={user.role} /></td>
                     <td className="px-4 py-3 text-xs text-slate-700">
                       {linked.length === 0 ? '-' : linked.map((identity) => identity.provider).join(', ')}
                     </td>
@@ -206,7 +207,7 @@ function JoinLinksTable({ tenantId, joinLinks }: { tenantId: string; joinLinks: 
             <div key={link.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[minmax(0,1fr)_auto]">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge value={link.role} />
+                  <Tag value={link.role} />
                   <span className="text-xs text-slate-600">
                     {link.used_count}/{link.max_uses} used
                   </span>
@@ -217,13 +218,19 @@ function JoinLinksTable({ tenantId, joinLinks }: { tenantId: string; joinLinks: 
                   {link.email_constraint ? `Email ${link.email_constraint}` : 'Any verified email'} · Expires {formatDate(link.expires_at)}
                 </div>
               </div>
-              <form action={revokeJoinLink}>
+              <ConfirmForm
+                action={revokeJoinLink}
+                buttonClassName="h-8 rounded border border-red-300 px-2 text-xs font-medium text-red-700"
+                buttonLabel={link.revoked_at ? 'Revoked' : 'Revoke'}
+                disabled={Boolean(link.revoked_at)}
+                title="Revoke join link"
+                message="Revoke this join link? It will no longer accept new members; existing members keep their access."
+                confirmLabel="Revoke link"
+                tone="danger"
+              >
                 <input name="tenant_id" type="hidden" value={tenantId} />
                 <input name="join_link_id" type="hidden" value={link.id} />
-                <button className="h-8 rounded border border-red-300 px-2 text-xs font-medium text-red-700" disabled={Boolean(link.revoked_at)} type="submit">
-                  {link.revoked_at ? 'Revoked' : 'Revoke'}
-                </button>
-              </form>
+              </ConfirmForm>
             </div>
           ))}
         </div>
@@ -245,20 +252,26 @@ function TenantTokensTable({ tenantId, tokens }: { tenantId: string; tokens: Ten
               <div className="min-w-0">
                 <div className="font-medium text-slate-950">{token.name}</div>
                 <div className="mt-1 flex flex-wrap gap-1">
-                  {token.scopes.map((scope) => <span key={scope} className="rounded bg-slate-100 px-2 py-1 text-xs">{scope}</span>)}
+                  {token.scopes.map((scope) => <Tag key={scope} value={scope} />)}
                 </div>
                 <div className="mt-1 font-mono text-xs text-slate-600">{token.id}</div>
                 <div className="mt-1 text-xs text-slate-600">Expires {token.expires_at ? formatDate(token.expires_at) : 'never'}</div>
               </div>
               <div className="flex flex-wrap items-start gap-2">
                 <RotateTenantTokenForm tenantId={tenantId} tokenId={token.id} />
-                <form action={revokeTenantToken}>
+                <ConfirmForm
+                  action={revokeTenantToken}
+                  buttonClassName="h-8 rounded border border-red-300 px-2 text-xs font-medium text-red-700"
+                  buttonLabel={token.revoked_at ? 'Revoked' : 'Revoke'}
+                  disabled={Boolean(token.revoked_at)}
+                  title="Revoke tenant token"
+                  message="Revoke this tenant token? Anything using it (automation, agents, plugins) will stop authenticating immediately."
+                  confirmLabel="Revoke token"
+                  tone="danger"
+                >
                   <input name="tenant_id" type="hidden" value={tenantId} />
                   <input name="token_id" type="hidden" value={token.id} />
-                  <button className="h-8 rounded border border-red-300 px-2 text-xs font-medium text-red-700" disabled={Boolean(token.revoked_at)} type="submit">
-                    {token.revoked_at ? 'Revoked' : 'Revoke'}
-                  </button>
-                </form>
+                </ConfirmForm>
               </div>
             </div>
           ))}
@@ -270,16 +283,32 @@ function TenantTokensTable({ tenantId, tokens }: { tenantId: string; tokens: Ten
 
 function RotateTenantTokenForm({ tenantId, tokenId }: { tenantId: string; tokenId: string }) {
   const [state, formAction, pending] = useActionState(rotateTenantToken, null)
+  const formRef = useRef<HTMLFormElement>(null)
+  const [open, setOpen] = useState(false)
 
   return (
-    <form action={formAction} className="grid gap-2">
-      <input name="tenant_id" type="hidden" value={tenantId} />
-      <input name="token_id" type="hidden" value={tokenId} />
-      <button className="h-8 rounded border border-slate-300 px-2 text-xs font-medium" type="submit">
-        {pending ? 'Rotating...' : 'Rotate'}
-      </button>
-      <SecretActionResult state={state} />
-    </form>
+    <>
+      <form ref={formRef} action={formAction} className="grid gap-2">
+        <input name="tenant_id" type="hidden" value={tenantId} />
+        <input name="token_id" type="hidden" value={tokenId} />
+        <button className="h-8 rounded border border-slate-300 px-2 text-xs font-medium" disabled={pending} onClick={() => setOpen(true)} type="button">
+          {pending ? 'Rotating...' : 'Rotate'}
+        </button>
+        <SecretActionResult state={state} />
+      </form>
+      <ConfirmDialog
+        open={open}
+        title="Rotate tenant token"
+        message="Rotate this tenant token? The current secret stops working immediately — update anything using it (automation, agents, plugins) with the new value."
+        confirmLabel="Rotate token"
+        tone="danger"
+        onConfirm={() => {
+          setOpen(false)
+          formRef.current?.requestSubmit()
+        }}
+        onCancel={() => setOpen(false)}
+      />
+    </>
   )
 }
 

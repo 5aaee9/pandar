@@ -1,22 +1,31 @@
 import type { ReactNode } from 'react'
 
-export function StatusBadge({ value }: { value: string }) {
-  const normalized = value.toLowerCase()
-  const className =
-    normalized === 'ok' || normalized === 'online' || normalized === 'succeeded'
-      ? 'bg-emerald-700 text-white'
-      : normalized === 'warning' ||
-          normalized === 'queued' ||
-          normalized === 'sent' ||
-          normalized === 'acknowledged'
-        ? 'bg-amber-600 text-white'
-        : normalized === 'problem' || normalized === 'failed' || normalized === 'offline'
-          ? 'bg-red-700 text-white'
-          : 'bg-slate-800 text-white'
+import { prettifyToken, statusMeta } from './dashboard-attention'
+import { PILL_TONES, StatusIcon } from './dashboard-status'
 
+export function StatusBadge({ value }: { value: string }) {
+  const { severity, label } = statusMeta(value)
   return (
-    <span className={`inline-flex rounded px-2 py-1 text-xs font-medium ${className}`}>
-      {value}
+    <span
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${PILL_TONES[severity]}`}
+    >
+      <StatusIcon severity={severity} className="h-3.5 w-3.5" />
+      {label}
+    </span>
+  )
+}
+
+const TAG_TONES = {
+  neutral: 'border-slate-200 bg-slate-100 text-slate-700',
+  accent: 'border-cyan-200 bg-cyan-50 text-cyan-800',
+  success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  warning: 'border-amber-200 bg-amber-50 text-amber-800',
+}
+
+export function Tag({ value, tone = 'neutral' }: { value: string; tone?: keyof typeof TAG_TONES }) {
+  return (
+    <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${TAG_TONES[tone]}`}>
+      {prettifyToken(value)}
     </span>
   )
 }

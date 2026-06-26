@@ -32,13 +32,15 @@ import {
   type LiveState,
   type RuntimeNotification,
 } from './dashboard-runtime-helpers'
+import { computeAttention, computeHealth, maxSeverity } from './dashboard-attention'
+import { Header } from './dashboard-header'
+import { FleetStatusStrip, NeedsAttention, SectionNav } from './dashboard-overview'
 import {
   JobHistory,
   PrinterInventory,
   RuntimeStatusPanel,
   TenantSettings,
 } from './dashboard-runtime-sections'
-import { Metric } from './dashboard-ui'
 
 type DashboardRuntimeProps = {
   apiUrl: string
@@ -66,8 +68,6 @@ const retryDelays = [1000, 2000, 5000, 10000]
 
 export function DashboardRuntime({
   apiUrl,
-  configuredTenantId,
-  summary,
   tenants,
   selectedTenant,
   initialPrinters,
@@ -91,6 +91,7 @@ export function DashboardRuntime({
   const [lastEventAt, setLastEventAt] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<RuntimeNotification[]>([])
   const notificationKeys = useRef<Set<string>>(new Set())
+  const [nowMs, setNowMs] = useState(0)
 
   useEffect(() => setPrinters(initialPrinters), [initialPrinters])
   useEffect(() => setJobs(initialJobs), [initialJobs])
@@ -248,6 +249,28 @@ export function DashboardRuntime({
     }
   }, [apiUrl, auth.source, selectedTenant])
 
+  useEffect(() => {
+    const update = () => setNowMs(Date.now())
+    update()
+    const interval = setInterval(update, 60_000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const fleetEmpty = printers.length === 0 && agents.length === 0 && jobs.length === 0
+  const health = useMemo(() => computeHealth(agents, printers, jobs), [agents, printers, jobs])
+  const attentionItems = useMemo(
+    () => computeAttention({ agents, printers, jobs, nowMs }),
+    [agents, printers, jobs, nowMs],
+  )
+  const topSeverity = useMemo(() => maxSeverity(attentionItems), [attentionItems])
+  const attentionBySection = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const item of attentionItems) {
+      counts[item.sectionId] = (counts[item.sectionId] ?? 0) + 1
+    }
+    return counts
+  }, [attentionItems])
+
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-5 text-slate-950 sm:px-6 lg:px-8">
       <section className="mx-auto flex max-w-7xl flex-col gap-5">
@@ -265,50 +288,69 @@ export function DashboardRuntime({
           </div>
         ) : null}
 
-        <RuntimeStatusPanel
-          auth={auth}
-          authLabel={authLabel}
+        <SectionNav attentionBySection={attentionBySection} />
+
+        <FleetStatusStrip
+          health={health}
+          attentionCount={attentionItems.length}
+          topSeverity={topSeverity}
           liveState={liveState}
           lastEventAt={lastEventAt}
-          notifications={notifications}
-          selectedTenant={selectedTenant}
+          fleetEmpty={fleetEmpty}
         />
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric label="Tenants" value={summary?.tenants ?? (configuredTenantId ? 1 : undefined)} />
-          <Metric label="Agents" value={summary?.agents ?? (configuredTenantId ? agents.length : undefined)} />
-          <Metric label="Printers" value={summary?.printers ?? (configuredTenantId ? printers.length : undefined)} />
-          <Metric label="Commands" value={summary?.commands} />
-        </section>
+        <NeedsAttention items={attentionItems} selectedTenant={selectedTenant} />
 
-        <LinkedAgentsSection selectedTenant={selectedTenant} agents={agents} />
-        <PrinterInventory selectedTenant={selectedTenant} printers={printers} />
-        <DispatchForm selectedTenant={selectedTenant} printers={printers} />
-        <RecoveryActions selectedTenant={selectedTenant} agents={agents} printers={printers} jobs={jobs} />
-        <DiagnosticsSection
-          selectedTenant={selectedTenant}
-          printers={printers}
-          selectedCommand={selectedCommand}
-          commandData={commandData}
-        />
-        <JobHistory selectedTenant={selectedTenant} jobs={jobs} />
-        <TenantSettings
-          auth={auth}
-          authLabel={authLabel}
-          selectedTenant={selectedTenant}
-          agents={agents}
-          printers={printers}
-        />
-        <TenantAdminPanel
-          selectedTenant={selectedTenant}
-          users={users}
-          userIdentities={userIdentities}
-          tenantTokens={tenantTokens}
-          joinLinks={joinLinks}
-          agents={agents}
-          auditEvents={auditEvents}
-          unavailable={adminUnavailable}
-        />
+        <div id="printers" className="flex scroll-mt-20 flex-col gap-5">
+          <LinkedAgentsSection selectedTenant={selectedTenant} agents={agents} />
+          <PrinterInventory selectedTenant={selectedTenant} printers={printers} />
+        </div>
+        <div id="jobs" className="scroll-mt-20">
+          <JobHistory selectedTenant={selectedTenant} jobs={jobs} />
+        </div>
+        <div id="dispatch" className="scroll-mt-20">
+          <DispatchForm selectedTenant={selectedTenant} printers={printers} />
+        </div>
+        <div id="recovery" className="scroll-mt-20">
+          <RecoveryActions selectedTenant={selectedTenant} agents={agents} printers={printers} jobs={jobs} />
+        </div>
+        <div id="diagnostics" className="scroll-mt-20">
+          <DiagnosticsSection
+            selectedTenant={selectedTenant}
+            printers={printers}
+            selectedCommand={selectedCommand}
+            commandData={commandData}
+          />
+        </div>
+        <div id="activity" className="scroll-mt-20">
+          <RuntimeStatusPanel
+            auth={auth}
+            authLabel={authLabel}
+            liveState={liveState}
+            lastEventAt={lastEventAt}
+            notifications={notifications}
+            selectedTenant={selectedTenant}
+          />
+        </div>
+        <div id="admin" className="flex scroll-mt-20 flex-col gap-5">
+          <TenantSettings
+            auth={auth}
+            authLabel={authLabel}
+            selectedTenant={selectedTenant}
+            agents={agents}
+            printers={printers}
+          />
+          <TenantAdminPanel
+            selectedTenant={selectedTenant}
+            users={users}
+            userIdentities={userIdentities}
+            tenantTokens={tenantTokens}
+            joinLinks={joinLinks}
+            agents={agents}
+            auditEvents={auditEvents}
+            unavailable={adminUnavailable}
+          />
+        </div>
       </section>
     </main>
   )
@@ -319,44 +361,4 @@ function formatActionStatus(status: string) {
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ')
-}
-
-function Header({
-  apiUrl,
-  tenants,
-  selectedTenant,
-}: {
-  apiUrl: string
-  tenants: Tenant[]
-  selectedTenant: Tenant | null
-}) {
-  return (
-    <header className="flex flex-col gap-3 border-b border-slate-300 pb-4 md:flex-row md:items-end md:justify-between">
-      <div>
-        <h1 className="text-2xl font-semibold">Pandar Operations</h1>
-        <p className="mt-1 text-sm text-slate-600">Tenant printer inventory from {apiUrl}</p>
-      </div>
-      {tenants.length > 1 ? (
-        <form className="flex min-w-72 items-end gap-2" action="/">
-          <label className="flex flex-1 flex-col gap-1 text-sm">
-            <span className="text-xs font-medium text-slate-500">Tenant</span>
-            <select
-              name="tenant"
-              defaultValue={selectedTenant?.id}
-              className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
-            >
-              {tenants.map((tenant) => (
-                <option key={tenant.id} value={tenant.id}>
-                  {tenant.display_name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white" type="submit">
-            View
-          </button>
-        </form>
-      ) : null}
-    </header>
-  )
 }

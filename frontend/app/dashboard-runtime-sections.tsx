@@ -1,4 +1,6 @@
 import type { Agent, AuthMetadata, Job, Printer, Tenant } from './dashboard-types'
+import { notificationSeverity } from './dashboard-attention'
+import { StatusIcon } from './dashboard-status'
 import {
   DetailGroup,
   DetailLine,
@@ -40,20 +42,29 @@ export function RuntimeStatusPanel({
         <RuntimeField label="Last event" value={lastEventAt ? formatDate(lastEventAt) : '-'} />
         <RuntimeField label="Auth" value={`${authLabel} · cookie ${auth.cookieName}`} />
       </div>
-      <div>
+      <div role="status" aria-live="polite" aria-label="Live notifications">
         <div className="text-xs font-medium uppercase text-slate-500">Notifications</div>
         {notifications.length === 0 ? (
           <div className="mt-2 text-sm text-slate-600">No live notifications</div>
         ) : (
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {notifications.map((notification) => (
-              <div key={`${notification.key}-${notification.timestamp}`} className="border-l-2 border-cyan-700 pl-2">
-                <div className="text-sm font-medium text-slate-950">{notification.title}</div>
-                <div className="truncate text-xs text-slate-600">{notification.detail}</div>
-                <div className="text-xs text-slate-500">{formatDate(notification.timestamp)}</div>
-              </div>
-            ))}
-          </div>
+          <ul className="mt-2 max-h-64 divide-y divide-slate-200 overflow-y-auto">
+            {notifications.map((notification) => {
+              const severity = notificationSeverity(notification.title, notification.detail)
+              return (
+                <li
+                  key={`${notification.key}-${notification.timestamp}`}
+                  className="flex min-w-0 items-start gap-2 py-1.5"
+                >
+                  <StatusIcon severity={severity} className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-slate-950">{notification.title}</div>
+                    <div className="truncate text-xs text-slate-600">{notification.detail}</div>
+                    <div className="text-xs text-slate-500">{formatDate(notification.timestamp)}</div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
         )}
       </div>
     </section>

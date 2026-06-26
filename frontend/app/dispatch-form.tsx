@@ -225,13 +225,16 @@ export function DispatchForm({
                   : 'Choose a file before dispatch.'}
             </div>
             <MetadataPreview preview={metadataPreview} />
-            <div className="mt-2 flex flex-wrap gap-1 text-xs">
-              {backendErrorCodes.map((code) => (
-                <span key={code} className="rounded bg-white px-2 py-1 text-slate-600">
-                  {code}
-                </span>
-              ))}
-            </div>
+            <details className="mt-2 text-xs text-slate-600">
+              <summary className="cursor-pointer select-none text-slate-500">Developer error codes</summary>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {backendErrorCodes.map((code) => (
+                  <code key={code} className="rounded bg-white px-1.5 py-0.5 text-slate-600">
+                    {code}
+                  </code>
+                ))}
+              </div>
+            </details>
           </div>
           <div className="flex flex-wrap gap-4 text-sm text-slate-700 lg:col-span-2">
             <label className="flex items-center gap-2">

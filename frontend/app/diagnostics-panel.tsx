@@ -1,5 +1,5 @@
 import { diagnosePrinter, discoverPrinters } from './actions'
-import { EmptyState, formatDate, StatusBadge } from './dashboard-ui'
+import { EmptyState, formatDate, StatusBadge, Tag } from './dashboard-ui'
 import type {
   Agent,
   Command,
@@ -291,15 +291,7 @@ function CompatibilityRow({
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-100 py-1.5 last:border-b-0">
       <dt className="min-w-0 truncate text-slate-700">{label}</dt>
       <dd className="flex items-center gap-2 text-right text-xs font-medium text-slate-700">
-        <span
-          className={
-            available
-              ? 'inline-flex rounded bg-emerald-700 px-2 py-1 text-white'
-              : 'inline-flex rounded bg-slate-200 px-2 py-1 text-slate-700'
-          }
-        >
-          {available ? 'Available' : 'Unavailable'}
-        </span>
+        <Tag value={available ? 'Available' : 'Unavailable'} tone={available ? 'success' : 'neutral'} />
         <span className="font-mono text-slate-500">{value}</span>
       </dd>
     </div>
