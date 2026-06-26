@@ -14,6 +14,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  helm-chart:
+    name: Helm chart
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint chart
+        run: helm lint docs/deployment/kubernetes
+
+      - name: Render chart
+        run: helm template pandar docs/deployment/kubernetes >/tmp/pandar-chart.yaml
+
   nix-quality-checks:
     name: Nix quality checks
     runs-on: ubuntu-latest

@@ -1,0 +1,75 @@
+{{- if .Values.ingress.hub.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "pandar.fullname" . }}-hub
+  labels:
+    {{- include "pandar.labels" . | nindent 4 }}
+    app.kubernetes.io/component: hub
+  {{- with .Values.ingress.hub.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.hub.className }}
+  ingressClassName: {{ .Values.ingress.hub.className }}
+  {{- end }}
+  {{- with .Values.ingress.hub.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hub.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "pandar.fullname" $ }}-hub
+                port:
+                  name: http
+          {{- end }}
+    {{- end }}
+{{- end }}
+{{- if and .Values.ingress.hub.enabled .Values.ingress.web.enabled }}
+---
+{{- end }}
+{{- if .Values.ingress.web.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "pandar.fullname" . }}-web
+  labels:
+    {{- include "pandar.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+  {{- with .Values.ingress.web.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.web.className }}
+  ingressClassName: {{ .Values.ingress.web.className }}
+  {{- end }}
+  {{- with .Values.ingress.web.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.web.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "pandar.fullname" $ }}-web
+                port:
+                  name: http
+          {{- end }}
+    {{- end }}
+{{- end }}

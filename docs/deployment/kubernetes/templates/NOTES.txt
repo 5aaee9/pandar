@@ -1,0 +1,13 @@
+Pandar has been installed.
+
+Web service:
+  {{ include "pandar.fullname" . }}-web:{{ .Values.web.service.port }}
+
+Hub HTTP service:
+  {{ include "pandar.fullname" . }}-hub:{{ .Values.hub.service.httpPort }}
+
+Hub gRPC service:
+  {{ include "pandar.fullname" . }}-hub:{{ .Values.hub.service.grpcPort }}
+
+For production PostgreSQL, create a Secret containing PANDAR_DATABASE_URL and set:
+  --set hub.database.existingSecret=<secret-name>

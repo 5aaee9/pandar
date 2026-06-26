@@ -1,0 +1,98 @@
+global:
+  imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+hub:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/5aaee9/pandar/hub
+    tag: ""
+    pullPolicy: IfNotPresent
+  database:
+    url: sqlite:///data/pandar.db
+    existingSecret: ""
+    existingSecretKey: PANDAR_DATABASE_URL
+  service:
+    type: ClusterIP
+    httpPort: 8080
+    grpcPort: 50051
+  env:
+    PANDAR_ARTIFACT_STORAGE: filesystem
+    PANDAR_SPOOL_DIR: /spool
+    PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE: "true"
+  extraEnv: []
+  persistence:
+    data:
+      enabled: true
+      existingClaim: ""
+      storageClass: ""
+      accessModes:
+        - ReadWriteOnce
+      size: 1Gi
+    spool:
+      enabled: true
+      existingClaim: ""
+      storageClass: ""
+      accessModes:
+        - ReadWriteOnce
+      size: 10Gi
+  resources: {}
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  securityContext: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+web:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/5aaee9/pandar/web
+    tag: ""
+    pullPolicy: IfNotPresent
+  appApiUrl: ""
+  service:
+    type: ClusterIP
+    port: 3000
+  env:
+    APP_AUTH_PROVIDER: none
+    APP_AUTH_COOKIE_NAME: pandar_auth_token
+  extraEnv: []
+  resources: {}
+  podAnnotations: {}
+  podLabels: {}
+  podSecurityContext: {}
+  securityContext: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+ingress:
+  hub:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: api.pandar.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+  web:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts:
+      - host: pandar.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []

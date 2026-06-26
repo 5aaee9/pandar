@@ -75,6 +75,7 @@
 - Fixed Nix quality CI drift by formatting generated NixOS option documentation with Prettier before comparing it to the checked-in Markdown, and formatted the current onboarding frontend/plan files under treefmt.
 - Added Docker publish GitHub Actions workflow for `ghcr.io/5aaee9/pandar/hub` and `ghcr.io/5aaee9/pandar/web`, reusing the existing hub and web Dockerfiles.
 - Renamed the hub container build file from `Dockerfile.api` to the root `Dockerfile` and updated Compose and CI references.
+- Added a Kubernetes Helm chart under `docs/deployment/kubernetes` for `pandar-hub` and `pandar-web`, with CI lint/render checks and OCI publishing to `ghcr.io/5aaee9/pandar/chart/pandar`.
 
 ## Completed: Phase 30 Better Auth Provider Compatibility
 
