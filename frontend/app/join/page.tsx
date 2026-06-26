@@ -1,10 +1,10 @@
-import { acceptJoinLink } from '../actions'
-import { authProviderConfig } from '../auth-provider'
-import { SectionHeader } from '../dashboard-ui'
-import { JoinTokenForm } from './token-form'
+import { acceptJoinLink } from "../actions";
+import { authProviderConfig } from "../auth-provider";
+import { SectionHeader } from "../dashboard-ui";
+import { JoinTokenForm } from "./token-form";
 
 export default function JoinPage() {
-  const auth = authProviderConfig()
+  const auth = authProviderConfig();
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-5 text-slate-950 sm:px-6 lg:px-8">
@@ -14,30 +14,45 @@ export default function JoinPage() {
           subtitle={`Accept an invitation with ${auth.provider} authentication`}
           meta={auth.cookieName}
         />
-        <ProviderLinks signInUrl={auth.signInUrl} signOutUrl={auth.signOutUrl} />
+        <ProviderLinks
+          signInUrl={auth.signInUrl}
+          signOutUrl={auth.signOutUrl}
+        />
         <JoinTokenForm action={acceptJoinLink} />
       </section>
     </main>
-  )
+  );
 }
 
-function ProviderLinks({ signInUrl, signOutUrl }: { signInUrl: string | null; signOutUrl: string | null }) {
+function ProviderLinks({
+  signInUrl,
+  signOutUrl,
+}: {
+  signInUrl: string | null;
+  signOutUrl: string | null;
+}) {
   if (!signInUrl && !signOutUrl) {
-    return null
+    return null;
   }
 
   return (
     <div className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-3">
       {signInUrl ? (
-        <a className="inline-flex h-8 items-center rounded-md border border-slate-300 px-3 text-sm font-medium" href={signInUrl}>
+        <a
+          className="inline-flex h-8 items-center rounded-md border border-slate-300 px-3 text-sm font-medium"
+          href={signInUrl}
+        >
           Sign in
         </a>
       ) : null}
       {signOutUrl ? (
-        <a className="inline-flex h-8 items-center rounded-md border border-slate-300 px-3 text-sm font-medium" href={signOutUrl}>
+        <a
+          className="inline-flex h-8 items-center rounded-md border border-slate-300 px-3 text-sm font-medium"
+          href={signOutUrl}
+        >
           Sign out
         </a>
       ) : null}
     </div>
-  )
+  );
 }

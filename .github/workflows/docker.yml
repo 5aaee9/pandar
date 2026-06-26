@@ -1,0 +1,70 @@
+name: Docker
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  docker:
+    name: Build and publish ${{ matrix.image.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: hub
+            context: .
+            dockerfile: Dockerfile
+          - name: web
+            context: frontend
+            dockerfile: frontend/Dockerfile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/5aaee9/pandar/${{ matrix.image.name }}
+          tags: |
+            type=ref,event=branch,enable=${{ github.event_name == 'push' }}
+            type=ref,event=tag
+            type=raw,value=main,enable=${{ github.event_name == 'workflow_dispatch' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Cleanup untagged image
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          packages: pandar/${{ matrix.image.name }}
+          delete-untagged: true

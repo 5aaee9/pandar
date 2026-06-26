@@ -2,7 +2,7 @@ services:
   pandar-api:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: Dockerfile
     image: pandar-api
     environment:
       PANDAR_DATABASE_URL: sqlite:///data/pandar.db

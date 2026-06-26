@@ -39,7 +39,11 @@ export async function authSource(): Promise<{
     return { source: "request_cookie", cookieName: authCookieName, provider };
   }
   if (staticAuthToken) {
-    return { source: "app_auth_bearer_token", cookieName: authCookieName, provider };
+    return {
+      source: "app_auth_bearer_token",
+      cookieName: authCookieName,
+      provider,
+    };
   }
   if (apiToken) {
     return { source: "app_api_token", cookieName: authCookieName, provider };

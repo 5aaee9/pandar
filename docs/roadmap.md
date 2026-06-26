@@ -72,6 +72,9 @@
 - Fixed Nix CI packaging inputs: cargo package/check derivations now provide the CA bundle through `SSL_CERT_FILE` / `NIX_SSL_CERT_FILE`, Rust checks include the plugin-local embedded assets, and `pandar-web` has the current fixed-output npm dependency hash.
 - Added Phase 30/31 external account onboarding: Better Auth is accepted as a Clerk/Logto-equivalent JWT/JWKS provider, verified identity data now carries email/display-name claims, external users can inspect `/api/v1/me`, self-create tenants when enabled, and accept tenant-admin join links that create tenant-local user projections.
 - Added join-link management with hash-only token storage, optional verified-email restriction, default single-use/seven-day expiry, revoke/list APIs, audited accept/create/revoke events, and frontend onboarding/join-link flows configured through `pandar-web` provider settings.
+- Fixed Nix quality CI drift by formatting generated NixOS option documentation with Prettier before comparing it to the checked-in Markdown, and formatted the current onboarding frontend/plan files under treefmt.
+- Added Docker publish GitHub Actions workflow for `ghcr.io/5aaee9/pandar/hub` and `ghcr.io/5aaee9/pandar/web`, reusing the existing hub and web Dockerfiles.
+- Renamed the hub container build file from `Dockerfile.api` to the root `Dockerfile` and updated Compose and CI references.
 
 ## Completed: Phase 30 Better Auth Provider Compatibility
 

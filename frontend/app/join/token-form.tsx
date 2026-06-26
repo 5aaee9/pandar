@@ -1,13 +1,17 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from "react";
 
-export function JoinTokenForm({ action }: { action: (formData: FormData) => void }) {
-  const [token, setToken] = useState('')
+export function JoinTokenForm({
+  action,
+}: {
+  action: (formData: FormData) => void;
+}) {
+  const [token, setToken] = useState("");
 
   useEffect(() => {
-    setToken(window.location.hash.slice(1))
-  }, [])
+    setToken(window.location.hash.slice(1));
+  }, []);
 
   return (
     <form action={action} className="grid gap-3 px-4 py-4">
@@ -21,9 +25,12 @@ export function JoinTokenForm({ action }: { action: (formData: FormData) => void
           value={token}
         />
       </label>
-      <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white" type="submit">
+      <button
+        className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white"
+        type="submit"
+      >
         Join tenant
       </button>
     </form>
-  )
+  );
 }

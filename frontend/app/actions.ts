@@ -184,7 +184,9 @@ export async function createTenantFromExternal(formData: FormData) {
     redirect(`/?status=${encodeURIComponent(await errorCode(response))}`);
   }
   const body = (await response.json()) as { tenant: Tenant };
-  redirect(`/?tenant=${encodeURIComponent(body.tenant.id)}&status=tenant_created`);
+  redirect(
+    `/?tenant=${encodeURIComponent(body.tenant.id)}&status=tenant_created`,
+  );
 }
 
 export async function createJoinLink(
@@ -201,7 +203,10 @@ export async function createJoinLink(
   if (!response.ok) {
     return { ok: false, error: await errorCode(response) };
   }
-  const body = (await response.json()) as { join_link: JoinLink; token: string };
+  const body = (await response.json()) as {
+    join_link: JoinLink;
+    token: string;
+  };
   return {
     ok: true,
     kind: "join_link",
@@ -214,11 +219,19 @@ export async function createJoinLink(
 export async function revokeJoinLink(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const joinLinkId = stringField(formData, "join_link_id");
-  const response = await fetch(`${apiUrl}/api/v1/tenants/${tenantId}/join-links/${joinLinkId}`, {
-    method: "DELETE",
-    headers: await apiHeaders("application/json"),
-  });
-  redirect(statusUrl(tenantId, response.ok ? "join_link_revoked" : await errorCode(response)));
+  const response = await fetch(
+    `${apiUrl}/api/v1/tenants/${tenantId}/join-links/${joinLinkId}`,
+    {
+      method: "DELETE",
+      headers: await apiHeaders("application/json"),
+    },
+  );
+  redirect(
+    statusUrl(
+      tenantId,
+      response.ok ? "join_link_revoked" : await errorCode(response),
+    ),
+  );
 }
 
 export async function acceptJoinLink(formData: FormData) {
@@ -229,7 +242,9 @@ export async function acceptJoinLink(formData: FormData) {
     redirect(`/?status=${encodeURIComponent(await errorCode(response))}`);
   }
   const body = (await response.json()) as { tenant: Tenant };
-  redirect(`/?tenant=${encodeURIComponent(body.tenant.id)}&status=join_link_accepted`);
+  redirect(
+    `/?tenant=${encodeURIComponent(body.tenant.id)}&status=join_link_accepted`,
+  );
 }
 
 export async function createTenantUser(formData: FormData) {

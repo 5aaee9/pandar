@@ -251,6 +251,7 @@
             { print }
           ' ${optionsDoc.optionsCommonMark} >> "$doc"
           sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$doc"
+          ${lib.getExe pkgs.prettier} --write "$doc"
           cp "$doc" "$out"
         '';
 

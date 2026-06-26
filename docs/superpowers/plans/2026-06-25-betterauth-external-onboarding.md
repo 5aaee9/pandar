@@ -56,6 +56,7 @@
 ## Task 1: External Identity Profile Claims
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/identity/verifier.rs`
 - Modify: `crates/pandar-hub/src/identity/verifier_tests.rs`
 - Test: `crates/pandar-hub/src/identity/verifier_tests.rs`
@@ -159,6 +160,7 @@ Expected: verifier tests pass.
 ## Task 2: Join Link Schema And Entity
 
 **Files:**
+
 - Create: `crates/pandar-hub/migrations/sqlite/20260625000000_phase_31_external_onboarding.sql`
 - Create: `crates/pandar-hub/migrations/postgres/20260625000000_phase_31_external_onboarding.sql`
 - Create: `crates/pandar-hub/src/entities/join_links.rs`
@@ -253,6 +255,7 @@ Expected: SQLite migration still succeeds.
 ## Task 3: Onboarding Repository
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/repositories/auth/onboarding.rs`
 - Modify: `crates/pandar-hub/src/repositories/auth.rs`
 - Modify: `crates/pandar-hub/src/repositories/mod.rs`
@@ -474,6 +477,7 @@ Expected: SQLite tests pass; PostgreSQL test passes when `PANDAR_TEST_POSTGRES_U
 ## Task 4: Hub Config And Onboarding Routes
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/lib.rs`
 - Modify: `crates/pandar-hub/src/routes/auth.rs`
 - Create: `crates/pandar-hub/src/routes/onboarding.rs`
@@ -633,6 +637,7 @@ Expected: tests pass.
 ## Task 5: Frontend Onboarding And Join Links
 
 **Files:**
+
 - Modify: `frontend/app/api-auth.ts`
 - Modify: `frontend/app/actions.ts`
 - Modify: `frontend/app/dashboard-types.ts`
@@ -674,11 +679,11 @@ Add `JoinLink` type without token hash.
 Read:
 
 ```ts
-APP_AUTH_PROVIDER
-APP_AUTH_CLERK_PUBLISHABLE_KEY
-APP_AUTH_LOGTO_ENDPOINT
-APP_AUTH_LOGTO_APP_ID
-APP_AUTH_BETTER_AUTH_BASE_URL
+APP_AUTH_PROVIDER;
+APP_AUTH_CLERK_PUBLISHABLE_KEY;
+APP_AUTH_LOGTO_ENDPOINT;
+APP_AUTH_LOGTO_APP_ID;
+APP_AUTH_BETTER_AUTH_BASE_URL;
 ```
 
 For this phase, do not add npm dependencies. Implement a provider-config helper that renders configured provider sign-in links and preserves the existing cookie/static bearer-token path:
@@ -704,10 +709,10 @@ Provider sign-in UI uses configured links only; bearer acquisition remains throu
 Add actions:
 
 ```ts
-createTenantFromExternal(formData)
-createJoinLink(previousState, formData)
-revokeJoinLink(formData)
-acceptJoinLink(formData)
+createTenantFromExternal(formData);
+createJoinLink(previousState, formData);
+revokeJoinLink(formData);
+acceptJoinLink(formData);
 ```
 
 `acceptJoinLink` posts JSON body `{ token }` to `/api/v1/join-links/accept`.
@@ -737,6 +742,7 @@ Expected: build passes.
 ## Task 6: Documentation
 
 **Files:**
+
 - Modify: `docs/development.md`
 - Modify: `docs/architecture.md`
 - Modify: `docs/release-installation.md`
@@ -767,7 +773,7 @@ jwt({
       alg: "RSA256",
     },
   },
-})
+});
 ```
 
 State that emitted JWT/JWK must verify with Pandar `RS256`.
