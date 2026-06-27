@@ -1,5 +1,9 @@
+'use client'
+
+import { useTranslations } from 'next-intl'
+
 import { refreshPrinters, reprintJob, retryDispatchJob } from './actions'
-import type { AttentionItem, Severity } from './dashboard-attention'
+import type { AttentionItem, Severity, TextKey } from './dashboard-attention'
 import type { LiveState, Translator } from './dashboard-runtime-helpers'
 import type { Tenant } from './dashboard-types'
 
@@ -168,6 +172,11 @@ export function StatCell({
   )
 }
 
+function AttentionText({ textKey }: { textKey: TextKey }) {
+  const t = useTranslations(textKey.namespace)
+  return <>{t(textKey.key, textKey.values)}</>
+}
+
 export function AttentionRow({
   item,
   showGroup,
@@ -187,8 +196,12 @@ export function AttentionRow({
       <div className="flex flex-wrap items-center gap-3">
         <StatusIcon severity={item.severity} className="h-4 w-4 shrink-0" />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-slate-900">{item.title}</div>
-          <div className="truncate text-xs text-slate-600">{item.label}</div>
+          <div className="truncate text-sm font-medium text-slate-900">
+            <AttentionText textKey={item.titleKey} />
+          </div>
+          <div className="truncate text-xs text-slate-600">
+            <AttentionText textKey={item.labelKey} />
+          </div>
         </div>
         <code className="hidden shrink-0 font-mono text-xs text-slate-600 sm:block">{item.mono}</code>
         <AttentionAction item={item} tenant={tenant} />
@@ -198,10 +211,11 @@ export function AttentionRow({
 }
 
 function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant | null }) {
+  const tAct = useTranslations('overview.action')
   if (!tenant) {
     return (
       <a href={`#${item.sectionId}`} className="text-xs font-medium text-cyan-700 hover:underline">
-        View
+        {tAct('view')}
       </a>
     )
   }
@@ -215,7 +229,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
           className={`h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-800 hover:bg-slate-50`}
           type="submit"
         >
-          Refresh
+          {tAct('refresh')}
         </button>
       </form>
     )
@@ -230,7 +244,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
           className={`h-8 rounded-md bg-cyan-700 px-2 text-xs font-medium text-white hover:bg-cyan-800`}
           type="submit"
         >
-          Reprint
+          {tAct('reprint')}
         </button>
       </form>
     )
@@ -245,7 +259,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
           className={`h-8 rounded-md bg-cyan-700 px-2 text-xs font-medium text-white hover:bg-cyan-800`}
           type="submit"
         >
-          Retry dispatch
+          {tAct('retryDispatch')}
         </button>
       </form>
     )
@@ -253,7 +267,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
 
   return (
     <a href={`#${item.sectionId}`} className="text-xs font-medium text-cyan-700 hover:underline">
-      View
+      {tAct('view')}
     </a>
   )
 }

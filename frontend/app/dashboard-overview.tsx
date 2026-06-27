@@ -39,11 +39,14 @@ export function FleetStatusStrip({
   lastEventAt: string | null
   fleetEmpty: boolean
 }) {
-  const verdict = computeVerdict({ attentionCount, topSeverity, liveState, fleetEmpty })
+  const t = useTranslations('overview.verdict')
+  const tStat = useTranslations('overview.stat')
+  const tAria = useTranslations('overview')
+  const verdict = computeVerdict({ attentionCount, topSeverity, liveState, fleetEmpty }, t)
 
   return (
     <section
-      aria-label="Fleet status"
+      aria-label={tAria('ariaFleet')}
       className={`overflow-hidden rounded-lg border ${verdict.tone.border} ${verdict.tone.surface}`}
     >
       <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-5">
@@ -60,23 +63,23 @@ export function FleetStatusStrip({
         >
           <StatCell
             href="#printers"
-            label="Printers"
-            value={fleetEmpty ? '—' : `${health.printersOnline}/${health.printersTotal} online`}
-            note={health.printersTotal - health.printersOnline > 0 ? `${health.printersTotal - health.printersOnline} offline` : null}
+            label={tStat('printers')}
+            value={fleetEmpty ? tStat('dash') : tStat('printersValue', { online: health.printersOnline, total: health.printersTotal })}
+            note={health.printersTotal - health.printersOnline > 0 ? tStat('printersNote', { count: health.printersTotal - health.printersOnline }) : null}
             state={health.printersOnline < health.printersTotal ? 'warning' : 'success'}
           />
           <StatCell
             href="#printers"
-            label="Agents"
-            value={fleetEmpty ? '—' : `${health.agentsConnected}/${health.agentsTotal} connected`}
-            note={health.agentsTotal - health.agentsConnected > 0 ? `${health.agentsTotal - health.agentsConnected} down` : null}
+            label={tStat('agents')}
+            value={fleetEmpty ? tStat('dash') : tStat('agentsValue', { connected: health.agentsConnected, total: health.agentsTotal })}
+            note={health.agentsTotal - health.agentsConnected > 0 ? tStat('agentsNote', { count: health.agentsTotal - health.agentsConnected }) : null}
             state={health.agentsConnected < health.agentsTotal ? 'warning' : 'success'}
           />
           <StatCell
             href="#jobs"
-            label="Active jobs"
-            value={fleetEmpty ? '—' : `${health.jobsActive} active`}
-            note={health.jobsFailed > 0 ? `${health.jobsFailed} failed` : null}
+            label={tStat('activeJobs')}
+            value={fleetEmpty ? tStat('dash') : tStat('activeJobsValue', { count: health.jobsActive })}
+            note={health.jobsFailed > 0 ? tStat('activeJobsNote', { count: health.jobsFailed }) : null}
             state={health.jobsFailed > 0 ? 'critical' : 'success'}
           />
         </div>
@@ -92,6 +95,7 @@ export function NeedsAttention({
   items: AttentionItem[]
   selectedTenant: Tenant | null
 }) {
+  const tAtt = useTranslations('overview')
   if (items.length === 0) {
     return null
   }
@@ -101,17 +105,17 @@ export function NeedsAttention({
 
   return (
     <section
-      aria-label="Needs attention"
+      aria-label={tAtt('ariaAttention')}
       className="overflow-hidden rounded-lg border border-slate-200 bg-white"
     >
       <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">Needs attention</h2>
+          <h2 className="text-base font-semibold text-slate-900">{tAtt('attentionTitle')}</h2>
           <p className="mt-0.5 text-sm text-slate-600">
-            {items.length} {items.length === 1 ? 'exception' : 'exceptions'} across the fleet
+            {tAtt('attentionSubtitle', { count: items.length })}
           </p>
         </div>
-        <span className="text-xs text-slate-600">Grouped by agent</span>
+        <span className="text-xs text-slate-600">{tAtt('groupedByAgent')}</span>
       </div>
       <ul className="divide-y divide-slate-200">
         {items.map((item) => {
@@ -141,9 +145,10 @@ export function SectionNav({
   attentionBySection: Record<string, number>
 }) {
   const tNav = useTranslations('nav')
+  const tAria = useTranslations('overview')
   const active = useActiveSection(NAV_SECTION_IDS)
   return (
-    <nav aria-label="Sections" className="sticky top-0 z-20 border-y border-slate-200 bg-slate-100/95 backdrop-blur">
+    <nav aria-label={tAria('ariaSections')} className="sticky top-0 z-20 border-y border-slate-200 bg-slate-100/95 backdrop-blur">
       <ul className="flex gap-1 overflow-x-auto px-1 py-2">
         {NAV_SECTION_IDS.map((section) => {
           const count = attentionBySection[section] ?? 0

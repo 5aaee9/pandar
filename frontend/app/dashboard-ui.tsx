@@ -1,13 +1,16 @@
 'use client'
 
 import { useId, type ReactNode } from 'react'
+import { useTranslations } from 'next-intl'
 
 import { LanguageSwitcher } from '../components/language-switcher'
 import { prettifyToken, statusMeta } from './dashboard-attention'
 import { PILL_TONES, StatusIcon } from './dashboard-status'
 
 export function StatusBadge({ value }: { value: string }) {
-  const { severity, label } = statusMeta(value)
+  const tTokens = useTranslations('tokens')
+  const tokenTranslator = (k: string) => (tTokens.has(k) ? tTokens(k) : undefined)
+  const { severity, label } = statusMeta(value, tokenTranslator)
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${PILL_TONES[severity]}`}
@@ -26,9 +29,11 @@ const TAG_TONES = {
 }
 
 export function Tag({ value, tone = 'neutral' }: { value: string; tone?: keyof typeof TAG_TONES }) {
+  const tTokens = useTranslations('tokens')
+  const tokenTranslator = (k: string) => (tTokens.has(k) ? tTokens(k) : undefined)
   return (
     <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${TAG_TONES[tone]}`}>
-      {prettifyToken(value)}
+      {prettifyToken(value, tokenTranslator)}
     </span>
   )
 }

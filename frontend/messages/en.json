@@ -110,6 +110,24 @@
       "nominal": { "title": "All systems nominal", "detail": "No exceptions across the fleet." },
       "needAttention": { "title": "{count, plural, =1 {# item needs attention} other {# items need attention}}", "detailCritical": "Failures detected — review below.", "detailOther": "Review the items below." }
     },
+    "stat": {
+      "printers": "Printers",
+      "printersValue": "{online}/{total} online",
+      "printersNote": "{count} offline",
+      "agents": "Agents",
+      "agentsValue": "{connected}/{total} connected",
+      "agentsNote": "{count} down",
+      "activeJobs": "Active jobs",
+      "activeJobsValue": "{count} active",
+      "activeJobsNote": "{count} failed",
+      "dash": "—"
+    },
+    "attentionTitle": "Needs attention",
+    "attentionSubtitle": "{count, plural, =1 {# exception} other {# exceptions}} across the fleet",
+    "groupedByAgent": "Grouped by agent",
+    "ariaFleet": "Fleet status",
+    "ariaAttention": "Needs attention",
+    "ariaSections": "Sections",
     "action": { "refresh": "Refresh", "reprint": "Reprint", "retryDispatch": "Retry dispatch", "view": "View" }
   },
   "job": { "filename": "{filename}" },

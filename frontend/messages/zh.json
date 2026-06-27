@@ -110,6 +110,24 @@
       "nominal": { "title": "一切正常", "detail": "机队没有异常。" },
       "needAttention": { "title": "{count, plural, other {# 项需要关注}}", "detailCritical": "检测到故障——请查看下方。", "detailOther": "请查看下方项目。" }
     },
+    "stat": {
+      "printers": "打印机",
+      "printersValue": "{online}/{total} 在线",
+      "printersNote": "{count} 离线",
+      "agents": "Agent",
+      "agentsValue": "{connected}/{total} 已连接",
+      "agentsNote": "{count} 下线",
+      "activeJobs": "进行中任务",
+      "activeJobsValue": "{count} 个进行中",
+      "activeJobsNote": "{count} 个失败",
+      "dash": "—"
+    },
+    "attentionTitle": "需要关注",
+    "attentionSubtitle": "机队中共 {count, plural, other {# 项异常}}",
+    "groupedByAgent": "按 Agent 分组",
+    "ariaFleet": "机队状态",
+    "ariaAttention": "需要关注",
+    "ariaSections": "分区",
     "action": { "refresh": "刷新", "reprint": "重新打印", "retryDispatch": "重试派发", "view": "查看" }
   },
   "job": { "filename": "{filename}" },

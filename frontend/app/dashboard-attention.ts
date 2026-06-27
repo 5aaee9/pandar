@@ -55,6 +55,12 @@ export type AttentionReason =
   | 'job_dispatch_failed'
   | 'job_stalled'
 
+export type TextKey = {
+  namespace: string
+  key: string
+  values?: Record<string, string | number>
+}
+
 export type AttentionItem = {
   id: string
   agentId: string
@@ -64,6 +70,8 @@ export type AttentionItem = {
   reason: AttentionReason
   title: string
   label: string
+  titleKey: TextKey
+  labelKey: TextKey
   mono: string
   sectionId: string
   ageMs: number | null
@@ -89,6 +97,8 @@ export function computeAttention(args: {
         reason: 'agent_unhealthy',
         title: `Agent ${prettifyToken(agent.status)}`,
         label: `${agent.name} is ${agent.status || 'offline'}`,
+        titleKey: { namespace: 'attention.agent', key: 'title', values: { status: prettifyToken(agent.status) } },
+        labelKey: { namespace: 'attention.agent', key: 'label', values: { name: agent.name, status: agent.status || 'offline' } },
         mono: agent.id,
         sectionId: 'printers',
         ageMs: null,
@@ -107,6 +117,8 @@ export function computeAttention(args: {
         reason: 'printer_offline',
         title: `Printer ${prettifyToken(printer.status)}`,
         label: `${printer.name} is ${printer.status}`,
+        titleKey: { namespace: 'attention.printer', key: 'title', values: { status: prettifyToken(printer.status) } },
+        labelKey: { namespace: 'attention.printer', key: 'label', values: { name: printer.name, status: printer.status } },
         mono: printer.serial_number,
         sectionId: 'printers',
         ageMs: null,
@@ -126,6 +138,11 @@ export function computeAttention(args: {
         reason: physical ? 'job_print_failed' : 'job_dispatch_failed',
         title: physical ? 'Print failed' : 'Dispatch failed',
         label: job.artifact.filename,
+        titleKey: {
+          namespace: physical ? 'attention.jobPrintFailed' : 'attention.jobDispatchFailed',
+          key: 'title',
+        },
+        labelKey: { namespace: 'job', key: 'filename', values: { filename: job.artifact.filename } },
         mono: job.id,
         sectionId: 'recovery',
         ageMs: null,
@@ -140,6 +157,15 @@ export function computeAttention(args: {
         reason: 'job_stalled',
         title: 'Job stalled',
         label: `${job.artifact.filename} · no progress for ${formatDuration(staleAgeMs(job, nowMs) ?? 0)}`,
+        titleKey: { namespace: 'attention.jobStalled', key: 'title' },
+        labelKey: {
+          namespace: 'attention.jobStalled',
+          key: 'label',
+          values: {
+            filename: job.artifact.filename,
+            duration: formatDuration(staleAgeMs(job, nowMs) ?? 0),
+          },
+        },
         mono: job.id,
         sectionId: 'jobs',
         ageMs: staleAgeMs(job, nowMs),
