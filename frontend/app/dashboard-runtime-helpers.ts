@@ -1,7 +1,10 @@
 import type { AuthMetadata, Job, Printer } from "./dashboard-types";
 import { formatDate as formatDateDefault } from "./dashboard-ui";
 
-export type Translator = (key: string, values?: Record<string, string | number>) => string;
+export type Translator = (
+  key: string,
+  values?: Record<string, string | number>,
+) => string;
 
 type DateFmt = (value: string) => string;
 
@@ -35,7 +38,10 @@ const enLiveState: Record<LiveState, string> = {
   error: "Unavailable",
 };
 
-export function formatLiveState(state: LiveState, t: Translator = (k) => enLiveState[state]): string {
+export function formatLiveState(
+  state: LiveState,
+  t: Translator = (k) => enLiveState[state],
+): string {
   switch (state) {
     case "live":
       return t("live");
@@ -157,15 +163,24 @@ export function formatPrinterMaterials(
   const active = materials.active_tray
     ? materials.active_tray.kind === "external"
       ? t("externalSpool")
-      : t("amsSlot", { ams: materials.active_tray.ams_id ?? "-", tray: materials.active_tray.tray_id ?? "-" })
+      : t("amsSlot", {
+          ams: materials.active_tray.ams_id ?? "-",
+          tray: materials.active_tray.tray_id ?? "-",
+        })
     : t("noActiveTray");
   return {
     summary: t("amsSummary", { trays: amsTrays, external }),
-    detail: t("activeDetail", { active, observed: formatDate(materials.observed_at) }),
+    detail: t("activeDetail", {
+      active,
+      observed: formatDate(materials.observed_at),
+    }),
   };
 }
 
-export function formatJobMaterial(job: Job, t: Translator = enMaterial): string {
+export function formatJobMaterial(
+  job: Job,
+  t: Translator = enMaterial,
+): string {
   const usage = job.material.filament_usage;
   if (usage.length > 0) {
     return usage
@@ -173,8 +188,15 @@ export function formatJobMaterial(job: Job, t: Translator = enMaterial): string 
         const slot =
           row.external_id !== null
             ? t("externalSlot", { tray: row.tray_id ?? "-" })
-            : t("amsSlot", { ams: row.ams_id ?? "-", tray: row.tray_id ?? "-" });
-        return t("usageRow", { index: row.slot_index, slot, type: row.filament_type ?? row.filament_id ?? "" }).trim();
+            : t("amsSlot", {
+                ams: row.ams_id ?? "-",
+                tray: row.tray_id ?? "-",
+              });
+        return t("usageRow", {
+          index: row.slot_index,
+          slot,
+          type: row.filament_type ?? row.filament_id ?? "",
+        }).trim();
       })
       .join(", ");
   }
@@ -215,7 +237,12 @@ export function formatArtifactMetadata(
       .filter(Boolean)
       .join(", ") || t("noFilament");
 
-  return t("artifactSummary", { name: metadata.display_name, plate: plateLabel, objects, filament });
+  return t("artifactSummary", {
+    name: metadata.display_name,
+    plate: plateLabel,
+    objects,
+    filament,
+  });
 }
 
 const enRecoveryState: Record<string, string> = {
@@ -268,6 +295,9 @@ export function jobRecoveryStateKey(job: Job): string {
   return "waitingStart";
 }
 
-export function formatJobRecoveryState(job: Job, t: Translator = (k) => enRecoveryState[k]): string {
+export function formatJobRecoveryState(
+  job: Job,
+  t: Translator = (k) => enRecoveryState[k],
+): string {
   return t(jobRecoveryStateKey(job));
 }

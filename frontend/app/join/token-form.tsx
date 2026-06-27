@@ -18,7 +18,9 @@ export function JoinTokenForm({
   return (
     <form action={action} className="grid gap-3 px-4 py-4">
       <label className="grid gap-1 text-sm">
-        <span className="text-xs font-medium text-slate-500">{t("joinToken")}</span>
+        <span className="text-xs font-medium text-slate-500">
+          {t("joinToken")}
+        </span>
         <input
           className="h-9 rounded-md border border-slate-300 px-2 font-mono text-sm text-slate-950"
           name="token"

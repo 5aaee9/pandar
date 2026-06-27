@@ -1,12 +1,12 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-import { defaultLocale, type Locale } from '../i18n/routing'
+import { defaultLocale, type Locale } from "../i18n/routing";
 
 type Settings = {
-  locale: Locale
-}
+  locale: Locale;
+};
 
 export const useSettings = create<Settings>()(
-  persist(() => ({ locale: defaultLocale }), { name: 'pandar.settings' }),
-)
+  persist(() => ({ locale: defaultLocale }), { name: "pandar.settings" }),
+);

@@ -146,16 +146,35 @@
     "printer": { "title": "Printer {status}", "label": "{name} is {status}" },
     "jobPrintFailed": { "title": "Print failed" },
     "jobDispatchFailed": { "title": "Dispatch failed" },
-    "jobStalled": { "title": "Job stalled", "label": "{filename} · no progress for {duration}" },
+    "jobStalled": {
+      "title": "Job stalled",
+      "label": "{filename} · no progress for {duration}"
+    },
     "unknownAgent": "Unknown agent"
   },
   "overview": {
     "verdict": {
-      "noFleet": { "title": "No fleet configured", "detail": "Connect an agent to start monitoring your printers." },
-      "liveUnavailable": { "title": "Live updates unavailable", "detail": "Reconnecting — showing the last known state." },
-      "liveDisconnected": { "title": "Live updates disconnected", "detail": "Reconnecting — showing the last known state." },
-      "nominal": { "title": "All systems nominal", "detail": "No exceptions across the fleet." },
-      "needAttention": { "title": "{count, plural, =1 {# item needs attention} other {# items need attention}}", "detailCritical": "Failures detected — review below.", "detailOther": "Review the items below." }
+      "noFleet": {
+        "title": "No fleet configured",
+        "detail": "Connect an agent to start monitoring your printers."
+      },
+      "liveUnavailable": {
+        "title": "Live updates unavailable",
+        "detail": "Reconnecting — showing the last known state."
+      },
+      "liveDisconnected": {
+        "title": "Live updates disconnected",
+        "detail": "Reconnecting — showing the last known state."
+      },
+      "nominal": {
+        "title": "All systems nominal",
+        "detail": "No exceptions across the fleet."
+      },
+      "needAttention": {
+        "title": "{count, plural, =1 {# item needs attention} other {# items need attention}}",
+        "detailCritical": "Failures detected — review below.",
+        "detailOther": "Review the items below."
+      }
     },
     "stat": {
       "printers": "Printers",
@@ -175,7 +194,12 @@
     "ariaFleet": "Fleet status",
     "ariaAttention": "Needs attention",
     "ariaSections": "Sections",
-    "action": { "refresh": "Refresh", "reprint": "Reprint", "retryDispatch": "Retry dispatch", "view": "View" }
+    "action": {
+      "refresh": "Refresh",
+      "reprint": "Reprint",
+      "retryDispatch": "Retry dispatch",
+      "view": "View"
+    }
   },
   "job": { "filename": "{filename}" },
   "jobFormat": {

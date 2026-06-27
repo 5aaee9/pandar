@@ -61,24 +61,24 @@ frontend/
 
 Full coverage: all ~260 user-visible English strings. Namespaces follow feature files so keys stay co-located with their components.
 
-| Namespace | Source file(s) | Notes |
-|---|---|---|
-| `common` | dashboard-ui, confirm-dialog | EmptyState, buttons (Cancel/Continue), Metric labels |
-| `header` | dashboard-header | "Pandar Operations", "Tenant", "View" |
-| `nav` | dashboard-overview (`NAV_SECTIONS`) | Printers / Print jobs / Dispatch / Recovery / Diagnostics / Live activity / Admin |
-| `overview` | dashboard-overview, dashboard-status | FleetStatusStrip, verdicts, StatCell ("online/offline/down/connected/active/failed") |
-| `attention` | dashboard-attention, dashboard-overview | NeedsAttention, exception counts |
-| `inventory` | dashboard-inventory | PrinterInventory, JobHistory |
-| `dispatch` | dispatch-form | |
-| `recovery` | recovery-actions, `formatJobRecoveryState` | recovery-state sentences, `formatDuration` |
-| `diagnostics` | diagnostics-panel | |
-| `runtime` | dashboard-runtime, dashboard-runtime-helpers | notifications, `ACTION_STATUS_MESSAGES`, `formatLiveState`, `formatAuthSource` |
-| `admin` | admin-panel | users, tenant tokens, join links, audit events |
-| `tenantSettings` | dashboard-runtime-sections | TenantSettings, RuntimeStatusPanel |
-| `onboarding` | onboarding-panel | |
-| `signIn` | plugin-sign-in, sign-in | |
-| `join` | join | |
-| `tokens` | dashboard-attention (`prettifyToken`/`statusMeta`) | known machine-status enums |
+| Namespace        | Source file(s)                                     | Notes                                                                                |
+| ---------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `common`         | dashboard-ui, confirm-dialog                       | EmptyState, buttons (Cancel/Continue), Metric labels                                 |
+| `header`         | dashboard-header                                   | "Pandar Operations", "Tenant", "View"                                                |
+| `nav`            | dashboard-overview (`NAV_SECTIONS`)                | Printers / Print jobs / Dispatch / Recovery / Diagnostics / Live activity / Admin    |
+| `overview`       | dashboard-overview, dashboard-status               | FleetStatusStrip, verdicts, StatCell ("online/offline/down/connected/active/failed") |
+| `attention`      | dashboard-attention, dashboard-overview            | NeedsAttention, exception counts                                                     |
+| `inventory`      | dashboard-inventory                                | PrinterInventory, JobHistory                                                         |
+| `dispatch`       | dispatch-form                                      |                                                                                      |
+| `recovery`       | recovery-actions, `formatJobRecoveryState`         | recovery-state sentences, `formatDuration`                                           |
+| `diagnostics`    | diagnostics-panel                                  |                                                                                      |
+| `runtime`        | dashboard-runtime, dashboard-runtime-helpers       | notifications, `ACTION_STATUS_MESSAGES`, `formatLiveState`, `formatAuthSource`       |
+| `admin`          | admin-panel                                        | users, tenant tokens, join links, audit events                                       |
+| `tenantSettings` | dashboard-runtime-sections                         | TenantSettings, RuntimeStatusPanel                                                   |
+| `onboarding`     | onboarding-panel                                   |                                                                                      |
+| `signIn`         | plugin-sign-in, sign-in                            |                                                                                      |
+| `join`           | join                                               |                                                                                      |
+| `tokens`         | dashboard-attention (`prettifyToken`/`statusMeta`) | known machine-status enums                                                           |
 
 ## Dynamic string builders — refactor plan
 
@@ -112,29 +112,29 @@ Each builder keeps its logic but returns translated strings via `t()`.
 Server action (`i18n/actions.ts` — kept separate from `app/actions.ts`, which holds dashboard-domain server actions):
 
 ```ts
-'use server'
-import { cookies } from 'next/headers'
+"use server";
+import { cookies } from "next/headers";
 
-export async function setLocale(locale: 'en' | 'zh') {
-  cookies().set('locale', locale, {
-    path: '/',
+export async function setLocale(locale: "en" | "zh") {
+  cookies().set("locale", locale, {
+    path: "/",
     maxAge: 60 * 60 * 24 * 365,
-    sameSite: 'lax',
-  })
+    sameSite: "lax",
+  });
 }
 ```
 
 ## zustand store (`lib/settings-store.ts`)
 
 ```ts
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-type Settings = { locale: 'en' | 'zh' }
+type Settings = { locale: "en" | "zh" };
 
 export const useSettings = create<Settings>()(
-  persist(() => ({ locale: 'en' }), { name: 'pandar.settings' }),
-)
+  persist(() => ({ locale: "en" }), { name: "pandar.settings" }),
+);
 ```
 
 zustand persists the user's choice and drives the switcher's optimistic UI. The cookie remains authoritative for what the server renders.

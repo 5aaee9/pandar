@@ -146,16 +146,32 @@
     "printer": { "title": "打印机 {status}", "label": "{name} 处于 {status}" },
     "jobPrintFailed": { "title": "打印失败" },
     "jobDispatchFailed": { "title": "派发失败" },
-    "jobStalled": { "title": "任务停滞", "label": "{filename} · {duration} 无进展" },
+    "jobStalled": {
+      "title": "任务停滞",
+      "label": "{filename} · {duration} 无进展"
+    },
     "unknownAgent": "未知 Agent"
   },
   "overview": {
     "verdict": {
-      "noFleet": { "title": "尚未配置机队", "detail": "连接一个 Agent 以开始监控打印机。" },
-      "liveUnavailable": { "title": "实时更新不可用", "detail": "正在重新连接——显示最近一次已知状态。" },
-      "liveDisconnected": { "title": "实时更新已断开", "detail": "正在重新连接——显示最近一次已知状态。" },
+      "noFleet": {
+        "title": "尚未配置机队",
+        "detail": "连接一个 Agent 以开始监控打印机。"
+      },
+      "liveUnavailable": {
+        "title": "实时更新不可用",
+        "detail": "正在重新连接——显示最近一次已知状态。"
+      },
+      "liveDisconnected": {
+        "title": "实时更新已断开",
+        "detail": "正在重新连接——显示最近一次已知状态。"
+      },
       "nominal": { "title": "一切正常", "detail": "机队没有异常。" },
-      "needAttention": { "title": "{count, plural, other {# 项需要关注}}", "detailCritical": "检测到故障——请查看下方。", "detailOther": "请查看下方项目。" }
+      "needAttention": {
+        "title": "{count, plural, other {# 项需要关注}}",
+        "detailCritical": "检测到故障——请查看下方。",
+        "detailOther": "请查看下方项目。"
+      }
     },
     "stat": {
       "printers": "打印机",
@@ -175,7 +191,12 @@
     "ariaFleet": "机队状态",
     "ariaAttention": "需要关注",
     "ariaSections": "分区",
-    "action": { "refresh": "刷新", "reprint": "重新打印", "retryDispatch": "重试派发", "view": "查看" }
+    "action": {
+      "refresh": "刷新",
+      "reprint": "重新打印",
+      "retryDispatch": "重试派发",
+      "view": "查看"
+    }
   },
   "job": { "filename": "{filename}" },
   "jobFormat": {

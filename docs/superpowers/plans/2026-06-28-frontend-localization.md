@@ -17,7 +17,7 @@
 - **No comments** added to code unless logic is non-self-evident (per `AGENTS.md`).
 - **Run `npm run lint` and `npm run build` from `frontend/`.** Build = `tsc` type-check via Next; catches RSC/client boundary + type errors.
 - **Preserve error context:** do not swallow the existing English fallback for backend-derived status tokens (`prettifyToken`).
-- **Commit policy:** only commit when the user explicitly asks (`AGENTS.md`). Task steps show `git add`/`git commit` as the *recommended* commit points but execution must ask first.
+- **Commit policy:** only commit when the user explicitly asks (`AGENTS.md`). Task steps show `git add`/`git commit` as the _recommended_ commit points but execution must ask first.
 - All file paths are relative to `frontend/` unless noted.
 
 ## Spec Reference
@@ -27,6 +27,7 @@
 ## File Structure (created/modified)
 
 **New files:**
+
 - `i18n/routing.ts` — locale constants.
 - `i18n/request.ts` — `getRequestConfig`: cookie → Accept-Language → `en`; loads messages.
 - `i18n/actions.ts` — `'use server'` `setLocale(locale)` action.
@@ -36,9 +37,11 @@
 - `components/formatted-date.tsx` — `<FormattedDate value={...} />` using `useFormatter().dateTime`.
 
 **Modified files (server):**
+
 - `app/layout.tsx` — wrap in `NextIntlClientProvider`, dynamic `<html lang>`, `generateMetadata`.
 
 **Modified files (helpers, signature changes — task 4):**
+
 - `app/dashboard-runtime-helpers.ts` — `formatLiveState`, `formatAuthSource`, `formatJobRecoveryState`, `formatDuration`, `formatPrinterMaterials`, `formatJobMaterial`, `formatArtifactMetadata` gain `t` (+ date) params.
 - `app/dashboard-attention.ts` — `AttentionItem` gains `reason`; `statusMeta`/`prettifyToken` gain `tokens` translation map + fallback.
 - `app/dashboard-status.tsx` — `computeVerdict` gains `t`; `AttentionAction` switches on `item.reason`.
@@ -91,12 +94,27 @@ export function Header({ apiUrl, tenants, selectedTenant }: Props) {
 ```
 
 with `messages/en.json`:
+
 ```json
-{ "header": { "title": "Pandar Operations", "inventoryFrom": "Tenant printer inventory from {apiUrl}", "view": "View" } }
+{
+  "header": {
+    "title": "Pandar Operations",
+    "inventoryFrom": "Tenant printer inventory from {apiUrl}",
+    "view": "View"
+  }
+}
 ```
+
 and `messages/zh.json`:
+
 ```json
-{ "header": { "title": "Pandar 运维控制台", "inventoryFrom": "来自 {apiUrl} 的租户打印机清单", "view": "查看" } }
+{
+  "header": {
+    "title": "Pandar 运维控制台",
+    "inventoryFrom": "来自 {apiUrl} 的租户打印机清单",
+    "view": "查看"
+  }
+}
 ```
 
 ---
@@ -104,6 +122,7 @@ and `messages/zh.json`:
 ## Task 1: Install next-intl and wire request config + root provider
 
 **Files:**
+
 - Create: `frontend/i18n/routing.ts`
 - Create: `frontend/i18n/request.ts`
 - Create: `frontend/messages/en.json`
@@ -112,25 +131,28 @@ and `messages/zh.json`:
 - Modify: `frontend/package.json` (via `npm install`)
 
 **Interfaces:**
+
 - Produces: `i18n/routing.ts` exports `locales` (`readonly ['en','zh']`), `defaultLocale` (`'en'`), `Locale` type, `isLocale(value)`. `i18n/request.ts` default-exports the `getRequestConfig` callable expected by `next-intl`. `app/layout.tsx` renders `<NextIntlClientProvider locale={locale} messages={messages}>`.
 
 - [ ] **Step 1: Install next-intl**
 
 Run:
+
 ```bash
 cd frontend && npm install next-intl@^3
 ```
+
 Expected: `next-intl` added to `dependencies` in `package.json`; `package-lock.json` updated.
 
 - [ ] **Step 2: Create `i18n/routing.ts`**
 
 ```ts
-export const locales = ['en', 'zh'] as const
-export type Locale = (typeof locales)[number]
-export const defaultLocale: Locale = 'en'
+export const locales = ["en", "zh"] as const;
+export type Locale = (typeof locales)[number];
+export const defaultLocale: Locale = "en";
 
 export function isLocale(value: string | undefined | null): value is Locale {
-  return value === 'en' || value === 'zh'
+  return value === "en" || value === "zh";
 }
 ```
 
@@ -139,31 +161,34 @@ export function isLocale(value: string | undefined | null): value is Locale {
 next-intl in non-segment mode: resolve the locale from cookie → `Accept-Language` → default, then load the messages JSON.
 
 ```ts
-import { getRequestConfig } from 'next-intl/server'
-import { headers, cookies } from 'next/headers'
+import { getRequestConfig } from "next-intl/server";
+import { headers, cookies } from "next/headers";
 
-import { defaultLocale, isLocale, type Locale } from './routing'
+import { defaultLocale, isLocale, type Locale } from "./routing";
 
 export default getRequestConfig(async () => {
-  const cookieStore = await cookies()
-  const headerList = await headers()
-  const cookieLocale = cookieStore.get('locale')?.value
-  const acceptLanguage = headerList.get('accept-language') ?? ''
-  const locale: Locale = resolveLocale(cookieLocale, acceptLanguage)
+  const cookieStore = await cookies();
+  const headerList = await headers();
+  const cookieLocale = cookieStore.get("locale")?.value;
+  const acceptLanguage = headerList.get("accept-language") ?? "";
+  const locale: Locale = resolveLocale(cookieLocale, acceptLanguage);
   return {
     locale,
     messages: (await import(`../messages/${locale}.json`)).default,
-  }
-})
+  };
+});
 
-function resolveLocale(cookie: string | undefined, acceptLanguage: string): Locale {
+function resolveLocale(
+  cookie: string | undefined,
+  acceptLanguage: string,
+): Locale {
   if (isLocale(cookie)) {
-    return cookie
+    return cookie;
   }
   if (/\bzh\b|zh-/i.test(acceptLanguage)) {
-    return 'zh'
+    return "zh";
   }
-  return defaultLocale
+  return defaultLocale;
 }
 ```
 
@@ -172,6 +197,7 @@ function resolveLocale(cookie: string | undefined, acceptLanguage: string): Loca
 Only the metadata keys are needed for this task; later tasks merge their namespaces. Use this exact content:
 
 `messages/en.json`:
+
 ```json
 {
   "meta": {
@@ -182,6 +208,7 @@ Only the metadata keys are needed for this task; later tasks merge their namespa
 ```
 
 `messages/zh.json`:
+
 ```json
 {
   "meta": {
@@ -196,27 +223,29 @@ Only the metadata keys are needed for this task; later tasks merge their namespa
 Replace the whole file. It must read the locale + messages on the server, set `<html lang>`, wrap children in the provider, and use `generateMetadata` for translated title/description.
 
 ```tsx
-import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
-import { NextIntlClientProvider } from 'next-intl'
-import { getLocale, getTranslations } from 'next-intl/server'
-import type { ReactNode } from 'react'
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getTranslations } from "next-intl/server";
+import type { ReactNode } from "react";
 
-import './globals.css'
+import "./globals.css";
 
 const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-})
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations('meta')
-  return { title: t('title'), description: t('description') }
+  const t = await getTranslations("meta");
+  return { title: t("title"), description: t("description") };
 }
 
-export default async function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
-  const locale = await getLocale()
+export default async function RootLayout({
+  children,
+}: Readonly<{ children: ReactNode }>) {
+  const locale = await getLocale();
   return (
     <html className={inter.variable} lang={locale}>
       <body>
@@ -225,7 +254,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         </NextIntlClientProvider>
       </body>
     </html>
-  )
+  );
 }
 ```
 
@@ -234,9 +263,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 - [ ] **Step 6: Build to verify wiring**
 
 Run:
+
 ```bash
 cd frontend && npm run lint && npm run build
 ```
+
 Expected: both succeed. `npm run build` confirms `i18n/request.ts` is picked up by Next's `i18n` directory convention. No runtime check yet (no rendered translations).
 
 - [ ] **Step 7: Manual smoke**
@@ -255,98 +286,102 @@ git commit -m "feat(frontend): wire next-intl locale resolution and root provide
 ## Task 2: zustand settings store + setLocale action + LanguageSwitcher
 
 **Files:**
+
 - Create: `frontend/lib/settings-store.ts`
 - Create: `frontend/i18n/actions.ts`
 - Create: `frontend/components/language-switcher.tsx`
 
 **Interfaces:**
+
 - Produces: `useSettings` zustand store with `{ locale: 'en' | 'zh' }` persisted under key `pandar.settings`, and `setLocale(locale: Locale): Promise<void>` server action. `<LanguageSwitcher />` is a client component rendering two toggle buttons.
 
 - [ ] **Step 1: Create `lib/settings-store.ts`**
 
 ```ts
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
-import { defaultLocale, type Locale } from '../i18n/routing'
+import { defaultLocale, type Locale } from "../i18n/routing";
 
 type Settings = {
-  locale: Locale
-}
+  locale: Locale;
+};
 
 export const useSettings = create<Settings>()(
-  persist(() => ({ locale: defaultLocale }), { name: 'pandar.settings' }),
-)
+  persist(() => ({ locale: defaultLocale }), { name: "pandar.settings" }),
+);
 ```
 
 - [ ] **Step 2: Create `i18n/actions.ts`**
 
 ```ts
-'use server'
+"use server";
 
-import { cookies } from 'next/headers'
+import { cookies } from "next/headers";
 
-import { isLocale, type Locale } from './routing'
+import { isLocale, type Locale } from "./routing";
 
 export async function setLocale(locale: Locale): Promise<void> {
   if (!isLocale(locale)) {
-    return
+    return;
   }
-  const cookieStore = await cookies()
-  cookieStore.set('locale', locale, {
-    path: '/',
+  const cookieStore = await cookies();
+  cookieStore.set("locale", locale, {
+    path: "/",
     maxAge: 60 * 60 * 24 * 365,
-    sameSite: 'lax',
-  })
+    sameSite: "lax",
+  });
 }
 ```
 
 - [ ] **Step 3: Create `components/language-switcher.tsx`**
 
 ```tsx
-'use client'
+"use client";
 
-import { useLocale } from 'next-intl'
-import { useRouter } from 'next/navigation'
-import { useTransition } from 'react'
+import { useLocale } from "next-intl";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 
-import { setLocale } from '../i18n/actions'
-import { locales, type Locale } from '../i18n/routing'
-import { useSettings } from '../lib/settings-store'
+import { setLocale } from "../i18n/actions";
+import { locales, type Locale } from "../i18n/routing";
+import { useSettings } from "../lib/settings-store";
 
 const LABELS: Record<Locale, string> = {
-  en: 'EN',
-  zh: '中文',
-}
+  en: "EN",
+  zh: "中文",
+};
 
 export function LanguageSwitcher() {
-  const active = useLocale() as Locale
-  const router = useRouter()
-  const [pending, startTransition] = useTransition()
-  const setSettings = useSettings((state) => state.locale)
+  const active = useLocale() as Locale;
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const setSettings = useSettings((state) => state.locale);
 
   const choose = (next: Locale) => {
     if (next === active || pending) {
-      return
+      return;
     }
     startTransition(async () => {
-      useSettings.setState({ locale: next })
-      await setLocale(next)
-      router.refresh()
-    })
-  }
+      useSettings.setState({ locale: next });
+      await setLocale(next);
+      router.refresh();
+    });
+  };
 
-  void setSettings
+  void setSettings;
 
   return (
     <div className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white p-0.5">
       {locales.map((locale) => {
-        const isActive = locale === active
+        const isActive = locale === active;
         return (
           <button
             key={locale}
             className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
-              isActive ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+              isActive
+                ? "bg-slate-900 text-white"
+                : "text-slate-600 hover:bg-slate-100"
             }`}
             disabled={pending}
             onClick={() => choose(locale)}
@@ -354,19 +389,21 @@ export function LanguageSwitcher() {
           >
             {LABELS[locale]}
           </button>
-        )
+        );
       })}
     </div>
-  )
+  );
 }
 ```
 
 - [ ] **Step 4: Build to verify**
 
 Run:
+
 ```bash
 cd frontend && npm run lint && npm run build
 ```
+
 Expected: succeeds. (The switcher is not yet rendered anywhere; placement happens in Task 5.)
 
 - [ ] **Step 5: Commit (if user permits)**
@@ -381,62 +418,78 @@ git commit -m "feat(frontend): add settings store, setLocale action, and languag
 ## Task 3: FormattedDate component + formatBytes localization
 
 **Files:**
+
 - Create: `frontend/components/formatted-date.tsx`
 - Modify: `frontend/app/dashboard-ui.tsx`
 
 **Interfaces:**
+
 - Produces: `<FormattedDate value={string} />` rendering a locale-aware date (`dateStyle: 'medium'`, `timeStyle: 'short'`, `timeZone: 'UTC'`). `formatBytes(value, formatNumber?)` keeps existing behavior when no formatter is passed (so non-component callers still compile) but accepts an optional `formatNumber: (n: number) => string` to localize the numeric portion.
 - `formatDate` in `dashboard-ui.tsx` is kept exported for now (still referenced by helpers until Task 4) but its callers migrate to `<FormattedDate>` where the call site is JSX.
 
 - [ ] **Step 1: Create `components/formatted-date.tsx`**
 
 ```tsx
-'use client'
+"use client";
 
-import { useFormatter } from 'next-intl'
+import { useFormatter } from "next-intl";
 
 const parseable = (value: string) => {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? null : date
-}
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
 
 export function FormattedDate({ value }: { value: string }) {
-  const date = parseable(value)
-  const format = useFormatter()
+  const date = parseable(value);
+  const format = useFormatter();
   if (!date) {
-    return <>{value}</>
+    return <>{value}</>;
   }
-  return <>{format.dateTime(date, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })}</>
+  return (
+    <>
+      {format.dateTime(date, {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "UTC",
+      })}
+    </>
+  );
 }
 ```
 
 - [ ] **Step 2: Update `formatBytes` in `app/dashboard-ui.tsx`**
 
 Find:
+
 ```ts
 export function formatBytes(value: number) {
   if (value < 1024) {
-    return `${value} B`
+    return `${value} B`;
   }
   if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KiB`
+    return `${(value / 1024).toFixed(1)} KiB`;
   }
 
-  return `${(value / (1024 * 1024)).toFixed(1)} MiB`
+  return `${(value / (1024 * 1024)).toFixed(1)} MiB`;
 }
 ```
+
 Replace with:
+
 ```ts
-export function formatBytes(value: number, formatNumber?: (n: number) => string) {
-  const fmt = (n: number) => (formatNumber ? formatNumber(n) : n.toFixed(1))
+export function formatBytes(
+  value: number,
+  formatNumber?: (n: number) => string,
+) {
+  const fmt = (n: number) => (formatNumber ? formatNumber(n) : n.toFixed(1));
   if (value < 1024) {
-    return `${formatNumber ? formatNumber(value) : value} B`
+    return `${formatNumber ? formatNumber(value) : value} B`;
   }
   if (value < 1024 * 1024) {
-    return `${fmt(value / 1024)} KiB`
+    return `${fmt(value / 1024)} KiB`;
   }
 
-  return `${fmt(value / (1024 * 1024))} MiB`
+  return `${fmt(value / (1024 * 1024))} MiB`;
 }
 ```
 
@@ -459,6 +512,7 @@ git commit -m "feat(frontend): add FormattedDate component and locale-ready form
 This is the linchpin task. It changes helper signatures so they accept a translator `t` (and a bound date formatter where they embed dates), and adds a locale-independent `reason` field to `AttentionItem` so action dispatch no longer keys off translated title text. **No new user-facing strings are rendered yet** (callers still pass English values until later tasks) — but the helpers become ready. The `runtime`, `recovery`, `tokens`, `attention`, and `overview` message namespaces used by these helpers are created here so later tasks can rely on them.
 
 **Files:**
+
 - Modify: `frontend/app/dashboard-runtime-helpers.ts`
 - Modify: `frontend/app/dashboard-attention.ts`
 - Modify: `frontend/app/dashboard-status.tsx`
@@ -468,6 +522,7 @@ This is the linchpin task. It changes helper signatures so they accept a transla
 - Modify: `frontend/messages/zh.json`
 
 **Interfaces:**
+
 - New types: `AttentionReason` = `'agent_unhealthy' | 'printer_offline' | 'job_print_failed' | 'job_dispatch_failed' | 'job_stalled'`. `AttentionItem` gains `reason: AttentionReason`; its `title`/`label` become **derived at render time** (helpers stop storing English).
 - Helper signatures (final form):
   - `formatLiveState(state, t)` → `string`
@@ -487,13 +542,32 @@ This is the linchpin task. It changes helper signatures so they accept a transla
 Merge these namespaces into the existing JSON objects (keep `meta` from Task 1). Final shape after this step:
 
 `messages/en.json`:
+
 ```json
 {
-  "meta": { "title": "Pandar", "description": "Bambu Studio cloud alternative" },
+  "meta": {
+    "title": "Pandar",
+    "description": "Bambu Studio cloud alternative"
+  },
   "runtime": {
-    "liveState": { "live": "Connected", "connecting": "Connecting", "disconnected": "Reconnecting", "idle": "Idle", "unavailable": "Unavailable", "error": "Unavailable" },
-    "authSource": { "request_cookie": "Request cookie", "app_auth_bearer_token": "App bearer token", "app_api_token": "App API token", "none": "No auth" },
-    "actionStatus": { "refresh_partial": "Some refreshes could not be queued — review the list", "retry_partial": "Some retries could not be queued — review the list" },
+    "liveState": {
+      "live": "Connected",
+      "connecting": "Connecting",
+      "disconnected": "Reconnecting",
+      "idle": "Idle",
+      "unavailable": "Unavailable",
+      "error": "Unavailable"
+    },
+    "authSource": {
+      "request_cookie": "Request cookie",
+      "app_auth_bearer_token": "App bearer token",
+      "app_api_token": "App API token",
+      "none": "No auth"
+    },
+    "actionStatus": {
+      "refresh_partial": "Some refreshes could not be queued — review the list",
+      "retry_partial": "Some retries could not be queued — review the list"
+    },
     "notification": {
       "liveTitle": "Live connection",
       "liveUnavailable": "Live updates unavailable because no server-side auth token is configured.",
@@ -551,29 +625,64 @@ Merge these namespaces into the existing JSON objects (keep `meta` from Task 1).
     "printer": { "title": "Printer {status}", "label": "{name} is {status}" },
     "jobPrintFailed": { "title": "Print failed" },
     "jobDispatchFailed": { "title": "Dispatch failed" },
-    "jobStalled": { "title": "Job stalled", "label": "{filename} · no progress for {duration}" },
+    "jobStalled": {
+      "title": "Job stalled",
+      "label": "{filename} · no progress for {duration}"
+    },
     "unknownAgent": "Unknown agent"
   },
   "overview": {
     "verdict": {
-      "noFleet": { "title": "No fleet configured", "detail": "Connect an agent to start monitoring your printers." },
-      "liveUnavailable": { "title": "Live updates unavailable", "detail": "Reconnecting — showing the last known state." },
-      "liveDisconnected": { "title": "Live updates disconnected", "detail": "Reconnecting — showing the last known state." },
-      "nominal": { "title": "All systems nominal", "detail": "No exceptions across the fleet." },
-      "needAttention": { "title": "{count, plural, =1 {# item needs attention} other {# items need attention}}", "detailCritical": "Failures detected — review below.", "detailOther": "Review the items below." }
+      "noFleet": {
+        "title": "No fleet configured",
+        "detail": "Connect an agent to start monitoring your printers."
+      },
+      "liveUnavailable": {
+        "title": "Live updates unavailable",
+        "detail": "Reconnecting — showing the last known state."
+      },
+      "liveDisconnected": {
+        "title": "Live updates disconnected",
+        "detail": "Reconnecting — showing the last known state."
+      },
+      "nominal": {
+        "title": "All systems nominal",
+        "detail": "No exceptions across the fleet."
+      },
+      "needAttention": {
+        "title": "{count, plural, =1 {# item needs attention} other {# items need attention}}",
+        "detailCritical": "Failures detected — review below.",
+        "detailOther": "Review the items below."
+      }
     }
   }
 }
 ```
 
 `messages/zh.json`:
+
 ```json
 {
   "meta": { "title": "Pandar", "description": "Bambu Studio 的云端替代方案" },
   "runtime": {
-    "liveState": { "live": "已连接", "connecting": "连接中", "disconnected": "重新连接中", "idle": "空闲", "unavailable": "不可用", "error": "不可用" },
-    "authSource": { "request_cookie": "请求 Cookie", "app_auth_bearer_token": "应用 Bearer 令牌", "app_api_token": "应用 API 令牌", "none": "无身份认证" },
-    "actionStatus": { "refresh_partial": "部分刷新未能入队——请检查列表", "retry_partial": "部分重试未能入队——请检查列表" },
+    "liveState": {
+      "live": "已连接",
+      "connecting": "连接中",
+      "disconnected": "重新连接中",
+      "idle": "空闲",
+      "unavailable": "不可用",
+      "error": "不可用"
+    },
+    "authSource": {
+      "request_cookie": "请求 Cookie",
+      "app_auth_bearer_token": "应用 Bearer 令牌",
+      "app_api_token": "应用 API 令牌",
+      "none": "无身份认证"
+    },
+    "actionStatus": {
+      "refresh_partial": "部分刷新未能入队——请检查列表",
+      "retry_partial": "部分重试未能入队——请检查列表"
+    },
     "notification": {
       "liveTitle": "实时连接",
       "liveUnavailable": "由于未配置服务端认证令牌，实时更新不可用。",
@@ -631,16 +740,32 @@ Merge these namespaces into the existing JSON objects (keep `meta` from Task 1).
     "printer": { "title": "打印机 {status}", "label": "{name} 处于 {status}" },
     "jobPrintFailed": { "title": "打印失败" },
     "jobDispatchFailed": { "title": "派发失败" },
-    "jobStalled": { "title": "任务停滞", "label": "{filename} · {duration} 无进展" },
+    "jobStalled": {
+      "title": "任务停滞",
+      "label": "{filename} · {duration} 无进展"
+    },
     "unknownAgent": "未知 Agent"
   },
   "overview": {
     "verdict": {
-      "noFleet": { "title": "尚未配置机队", "detail": "连接一个 Agent 以开始监控打印机。" },
-      "liveUnavailable": { "title": "实时更新不可用", "detail": "正在重新连接——显示最近一次已知状态。" },
-      "liveDisconnected": { "title": "实时更新已断开", "detail": "正在重新连接——显示最近一次已知状态。" },
+      "noFleet": {
+        "title": "尚未配置机队",
+        "detail": "连接一个 Agent 以开始监控打印机。"
+      },
+      "liveUnavailable": {
+        "title": "实时更新不可用",
+        "detail": "正在重新连接——显示最近一次已知状态。"
+      },
+      "liveDisconnected": {
+        "title": "实时更新已断开",
+        "detail": "正在重新连接——显示最近一次已知状态。"
+      },
       "nominal": { "title": "一切正常", "detail": "机队没有异常。" },
-      "needAttention": { "title": "{count, plural, other {# 项需要关注}}", "detailCritical": "检测到故障——请查看下方。", "detailOther": "请查看下方项目。" }
+      "needAttention": {
+        "title": "{count, plural, other {# 项需要关注}}",
+        "detailCritical": "检测到故障——请查看下方。",
+        "detailOther": "请查看下方项目。"
+      }
     }
   }
 }
@@ -649,14 +774,19 @@ Merge these namespaces into the existing JSON objects (keep `meta` from Task 1).
 - [ ] **Step 2: Add a shared `Translator` type and refactor `dashboard-runtime-helpers.ts`**
 
 At the top of `frontend/app/dashboard-runtime-helpers.ts`, add after existing imports:
+
 ```ts
 import type { Job, Printer } from "./dashboard-types";
 ```
+
 Add a type alias and refactor each function. The complete refactored helper section (replace `formatLiveState`, `formatAuthSource`, `formatJobRecoveryState`, `formatDuration`, `formatPrinterMaterials`, `formatJobMaterial`, `formatArtifactMetadata`):
 
 ```ts
-export type Translator = (key: string, values?: Record<string, string | number>) => string
-type DateFmt = (value: string) => string
+export type Translator = (
+  key: string,
+  values?: Record<string, string | number>,
+) => string;
+type DateFmt = (value: string) => string;
 
 export function formatLiveState(state: LiveState, t: Translator): string {
   switch (state) {
@@ -674,7 +804,10 @@ export function formatLiveState(state: LiveState, t: Translator): string {
   }
 }
 
-export function formatAuthSource(source: AuthMetadata["source"], t: Translator): string {
+export function formatAuthSource(
+  source: AuthMetadata["source"],
+  t: Translator,
+): string {
   return t(source);
 }
 
@@ -732,11 +865,17 @@ export function formatPrinterMaterials(
   const active = materials.active_tray
     ? materials.active_tray.kind === "external"
       ? t("externalSpool")
-      : t("amsSlot", { ams: materials.active_tray.ams_id ?? "-", tray: materials.active_tray.tray_id ?? "-" })
+      : t("amsSlot", {
+          ams: materials.active_tray.ams_id ?? "-",
+          tray: materials.active_tray.tray_id ?? "-",
+        })
     : t("noActiveTray");
   return {
     summary: t("amsSummary", { trays: amsTrays, external }),
-    detail: t("activeDetail", { active, observed: formatDate(materials.observed_at) }),
+    detail: t("activeDetail", {
+      active,
+      observed: formatDate(materials.observed_at),
+    }),
   };
 }
 
@@ -748,19 +887,34 @@ export function formatJobMaterial(job: Job, t: Translator): string {
         const slot =
           row.external_id !== null
             ? t("externalSlot", { tray: row.tray_id ?? "-" })
-            : t("amsSlot", { ams: row.ams_id ?? "-", tray: row.tray_id ?? "-" });
-        return t("usageRow", { index: row.slot_index, slot, type: row.filament_type ?? row.filament_id ?? "" }).trim();
+            : t("amsSlot", {
+                ams: row.ams_id ?? "-",
+                tray: row.tray_id ?? "-",
+              });
+        return t("usageRow", {
+          index: row.slot_index,
+          slot,
+          type: row.filament_type ?? row.filament_id ?? "",
+        }).trim();
       })
       .join(", ");
   }
   const mappings = [
-    job.material.ams_mapping ? t("amsMapping", { count: job.material.ams_mapping.length }) : null,
-    job.material.ams_mapping2 ? t("amsMapping2", { count: job.material.ams_mapping2.length }) : null,
+    job.material.ams_mapping
+      ? t("amsMapping", { count: job.material.ams_mapping.length })
+      : null,
+    job.material.ams_mapping2
+      ? t("amsMapping2", { count: job.material.ams_mapping2.length })
+      : null,
   ].filter(Boolean);
   return mappings.length > 0 ? mappings.join(", ") : t("noMapping");
 }
 
-export function formatArtifactMetadata(job: Job, t: Translator, formatDate: DateFmt): string {
+export function formatArtifactMetadata(
+  job: Job,
+  t: Translator,
+  formatDate: DateFmt,
+): string {
   const metadata = job.artifact.metadata;
   if (!metadata) {
     return t("noMetadata");
@@ -782,13 +936,19 @@ export function formatArtifactMetadata(job: Job, t: Translator, formatDate: Date
       .filter(Boolean)
       .join(", ") || t("noFilament");
 
-  return t("artifactSummary", { name: metadata.display_name, plate: plateLabel, objects, filament });
+  return t("artifactSummary", {
+    name: metadata.display_name,
+    plate: plateLabel,
+    objects,
+    filament,
+  });
 }
 ```
 
 The new `material` / `metadata` sub-keys these helpers reference go under a fresh `material` namespace. Add to `messages/en.json` `runtime`-adjacent top-level (merge into existing JSON, keep prior keys):
 
 `messages/en.json` add:
+
 ```json
 "material": {
   "noMaterial": "No material state",
@@ -813,6 +973,7 @@ The new `material` / `metadata` sub-keys these helpers reference go under a fres
 ```
 
 `messages/zh.json` add:
+
 ```json
 "material": {
   "noMaterial": "无耗材状态",
@@ -843,58 +1004,81 @@ The new `material` / `metadata` sub-keys these helpers reference go under a fres
 In `frontend/app/dashboard-attention.ts`:
 
 Add a type and field. Replace the `AttentionItem` type:
+
 ```ts
 export type AttentionReason =
-  | 'agent_unhealthy'
-  | 'printer_offline'
-  | 'job_print_failed'
-  | 'job_dispatch_failed'
-  | 'job_stalled'
+  | "agent_unhealthy"
+  | "printer_offline"
+  | "job_print_failed"
+  | "job_dispatch_failed"
+  | "job_stalled";
 
 export type AttentionItem = {
-  id: string
-  agentId: string
-  agentName: string
-  severity: Severity
-  kind: 'agent' | 'printer' | 'job'
-  reason: AttentionReason
-  mono: string
-  sectionId: string
-  ageMs: number | null
-  titleKey: { namespace: string; key: string; values?: Record<string, string | number> }
-  labelKey: { namespace: string; key: string; values?: Record<string, string | number> } | null
-}
+  id: string;
+  agentId: string;
+  agentName: string;
+  severity: Severity;
+  kind: "agent" | "printer" | "job";
+  reason: AttentionReason;
+  mono: string;
+  sectionId: string;
+  ageMs: number | null;
+  titleKey: {
+    namespace: string;
+    key: string;
+    values?: Record<string, string | number>;
+  };
+  labelKey: {
+    namespace: string;
+    key: string;
+    values?: Record<string, string | number>;
+  } | null;
+};
 ```
 
 Update `prettifyToken` and `statusMeta` to take a translator for the `tokens` namespace:
-```ts
-export type TokenTranslator = (token: string) => string
 
-export function prettifyToken(value: string, tokenTranslator?: TokenTranslator): string {
-  const translated = tokenTranslator?.(value.toLowerCase())
+```ts
+export type TokenTranslator = (token: string) => string;
+
+export function prettifyToken(
+  value: string,
+  tokenTranslator?: TokenTranslator,
+): string {
+  const translated = tokenTranslator?.(value.toLowerCase());
   if (translated) {
-    return translated
+    return translated;
   }
-  const cleaned = value.replace(/[_-]+/g, ' ').trim()
-  return cleaned.length ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : value
+  const cleaned = value.replace(/[_-]+/g, " ").trim();
+  return cleaned.length
+    ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+    : value;
 }
 
-export function statusMeta(value: string, tokenTranslator?: TokenTranslator): { severity: Severity; label: string } {
-  return { severity: statusSeverity(value), label: prettifyToken(value, tokenTranslator) }
+export function statusMeta(
+  value: string,
+  tokenTranslator?: TokenTranslator,
+): { severity: Severity; label: string } {
+  return {
+    severity: statusSeverity(value),
+    label: prettifyToken(value, tokenTranslator),
+  };
 }
 ```
+
 (`tokenTranslator` returns the translated token if known, else `undefined` so the prettify fallback runs. Callers build it as: `const tTokens = useTranslations('tokens'); const tokenTranslator = (k: string) => { try { return tTokens.has(k) ? tTokens(k) : undefined } catch { return undefined } }`.)
 
 Rewrite the `computeAttention` body to set `reason`, `titleKey`, `labelKey`, and drop English `title`/`label`. Use `prettifyToken` only for fallback display values stored inside `labelKey.values`:
+
 ```ts
 export function computeAttention(args: {
-  agents: Agent[]
-  printers: Printer[]
-  jobs: Job[]
-  nowMs: number
+  agents: Agent[];
+  printers: Printer[];
+  jobs: Job[];
+  nowMs: number;
 }): AttentionItem[] {
-  const { agents, printers, jobs, nowMs } = args
-  const items: AttentionItem[] = []
+  const { agents, printers, jobs, nowMs } = args;
+  const items: AttentionItem[] = [];
 
   for (const agent of agents) {
     if (!HEALTHY_AGENT_STATUSES.has(agent.status.toLowerCase())) {
@@ -903,14 +1087,22 @@ export function computeAttention(args: {
         agentId: agent.id,
         agentName: agent.name,
         severity: statusSeverity(agent.status),
-        kind: 'agent',
-        reason: 'agent_unhealthy',
+        kind: "agent",
+        reason: "agent_unhealthy",
         mono: agent.id,
-        sectionId: 'printers',
+        sectionId: "printers",
         ageMs: null,
-        titleKey: { namespace: 'attention.agent', key: 'title', values: { status: prettifyToken(agent.status) } },
-        labelKey: { namespace: 'attention.agent', key: 'label', values: { name: agent.name, status: agent.status || 'offline' } },
-      })
+        titleKey: {
+          namespace: "attention.agent",
+          key: "title",
+          values: { status: prettifyToken(agent.status) },
+        },
+        labelKey: {
+          namespace: "attention.agent",
+          key: "label",
+          values: { name: agent.name, status: agent.status || "offline" },
+        },
+      });
     }
   }
 
@@ -921,86 +1113,122 @@ export function computeAttention(args: {
         agentId: printer.agent_id,
         agentName: agentName(agents, printer.agent_id),
         severity: statusSeverity(printer.status),
-        kind: 'printer',
-        reason: 'printer_offline',
+        kind: "printer",
+        reason: "printer_offline",
         mono: printer.serial_number,
-        sectionId: 'printers',
+        sectionId: "printers",
         ageMs: null,
-        titleKey: { namespace: 'attention.printer', key: 'title', values: { status: prettifyToken(printer.status) } },
-        labelKey: { namespace: 'attention.printer', key: 'label', values: { name: printer.name, status: printer.status } },
-      })
+        titleKey: {
+          namespace: "attention.printer",
+          key: "title",
+          values: { status: prettifyToken(printer.status) },
+        },
+        labelKey: {
+          namespace: "attention.printer",
+          key: "label",
+          values: { name: printer.name, status: printer.status },
+        },
+      });
     }
   }
 
   for (const job of jobs) {
     if (isJobFailed(job)) {
-      const physical = job.print.status.toLowerCase() === 'failed'
+      const physical = job.print.status.toLowerCase() === "failed";
       items.push({
         id: `job:${job.id}:failed`,
         agentId: job.agent_id,
         agentName: agentName(agents, job.agent_id),
         severity: statusSeverity(physical ? job.print.status : job.status),
-        kind: 'job',
-        reason: physical ? 'job_print_failed' : 'job_dispatch_failed',
+        kind: "job",
+        reason: physical ? "job_print_failed" : "job_dispatch_failed",
         mono: job.id,
-        sectionId: 'recovery',
+        sectionId: "recovery",
         ageMs: null,
-        titleKey: { namespace: physical ? 'attention.jobPrintFailed' : 'attention.jobDispatchFailed', key: 'title' },
-        labelKey: { namespace: 'job', key: 'filename', values: { filename: job.artifact.filename } },
-      })
+        titleKey: {
+          namespace: physical
+            ? "attention.jobPrintFailed"
+            : "attention.jobDispatchFailed",
+          key: "title",
+        },
+        labelKey: {
+          namespace: "job",
+          key: "filename",
+          values: { filename: job.artifact.filename },
+        },
+      });
     } else if (nowMs > 0 && isJobActive(job) && isStale(job, nowMs)) {
       items.push({
         id: `job:${job.id}:stale`,
         agentId: job.agent_id,
         agentName: agentName(agents, job.agent_id),
-        severity: 'warning',
-        kind: 'job',
-        reason: 'job_stalled',
+        severity: "warning",
+        kind: "job",
+        reason: "job_stalled",
         mono: job.id,
-        sectionId: 'jobs',
+        sectionId: "jobs",
         ageMs: staleAgeMs(job, nowMs),
-        titleKey: { namespace: 'attention.jobStalled', key: 'title' },
-        labelKey: { namespace: 'attention.jobStalled', key: 'label', values: { filename: job.artifact.filename, duration: formatDuration(staleAgeMs(job, nowMs) ?? 0, enFallbackDuration) } },
-      })
+        titleKey: { namespace: "attention.jobStalled", key: "title" },
+        labelKey: {
+          namespace: "attention.jobStalled",
+          key: "label",
+          values: {
+            filename: job.artifact.filename,
+            duration: formatDuration(
+              staleAgeMs(job, nowMs) ?? 0,
+              enFallbackDuration,
+            ),
+          },
+        },
+      });
     }
   }
 
   return items.sort((a, b) => {
-    if (a.agentName !== b.agentName) return a.agentName.localeCompare(b.agentName)
-    return SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]
-  })
+    if (a.agentName !== b.agentName)
+      return a.agentName.localeCompare(b.agentName);
+    return SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+  });
 }
 
 const enFallbackDuration: Translator = (key, values) => {
-  const count = (values?.count as number) ?? 0
-  if (key === 'lessThanMinute') return 'less than a minute'
-  if (key === 'minutes') return `${count} minute${count === 1 ? '' : 's'}`
-  return `${count} hour${count === 1 ? '' : 's'}`
-}
+  const count = (values?.count as number) ?? 0;
+  if (key === "lessThanMinute") return "less than a minute";
+  if (key === "minutes") return `${count} minute${count === 1 ? "" : "s"}`;
+  return `${count} hour${count === 1 ? "" : "s"}`;
+};
 ```
+
 Also hoist the `agentName` helper to module scope (it was inline as a closure). Replace the inline closure with:
+
 ```ts
 function agentName(agents: Agent[], id: string): string {
-  return agents.find((agent) => agent.id === id)?.name ?? ''
+  return agents.find((agent) => agent.id === id)?.name ?? "";
 }
 ```
+
 (The display translation of "Unknown agent" is applied at render time via the `attention.unknownAgent` key when the name is empty — the rendering task handles that.)
 
 Add a new top-level `job.filename` key to messages (both locales):
 
 `messages/en.json` add top-level:
+
 ```json
 "job": { "filename": "{filename}" }
 ```
+
 `messages/zh.json` add:
+
 ```json
 "job": { "filename": "{filename}" }
 ```
 
 Also: `formatDuration` is still referenced by the old inline closure signature — now it takes a translator. The `enFallbackDuration` above keeps the `computeAttention` logic locale-independent (it only feeds the stored `labelKey.values.duration`, which is a pre-rendered string for the stale-time span). Rendering tasks can choose to re-render duration via a translator; for now storing the prettified-English duration in `labelKey.values` is acceptable because the duration text is part of a composed label that's itself retranslated. **Correction:** to keep duration translatable, do NOT pre-render it. Instead store the raw ms in values and translate in the message. Update the stale item:
+
 ```ts
 labelKey: { namespace: 'attention.jobStalled', key: 'labelMs', values: { filename: job.artifact.filename, minutes: Math.round((staleAgeMs(job, nowMs) ?? 0) / 60000) } },
 ```
+
 and message keys (en): `"label": "{filename} · no progress for {duration}"` (drop), add `"labelMs": "{filename} · no progress for {minutes, plural, =1 {1 minute} other {# minutes}}"`. zh: `"labelMs": "{filename} · {minutes, plural, other {# 分钟}} 无进展"`. Remove the `enFallbackDuration` constant and the `Translator` import here (unused after this correction). The `formatDuration` export in `dashboard-runtime-helpers.ts` remains for other callers.
 
 Apply this correction when writing the file (i.e., the stale branch uses `labelMs` + numeric `minutes`, not the pre-rendered string).
@@ -1008,64 +1236,103 @@ Apply this correction when writing the file (i.e., the stale branch uses `labelM
 - [ ] **Step 4: Refactor `computeVerdict` in `dashboard-status.tsx`**
 
 `computeVerdict` currently returns English `title`/`detail`. Change it to accept a translator scoped to `overview.verdict` and return translated strings. Replace the function body:
+
 ```ts
-export function computeVerdict(args: {
-  attentionCount: number
-  topSeverity: Severity | null
-  liveState: LiveState
-  fleetEmpty: boolean
-}, t: (key: string, values?: Record<string, string | number>) => string): Verdict {
-  const { attentionCount, topSeverity, liveState, fleetEmpty } = args
+export function computeVerdict(
+  args: {
+    attentionCount: number;
+    topSeverity: Severity | null;
+    liveState: LiveState;
+    fleetEmpty: boolean;
+  },
+  t: (key: string, values?: Record<string, string | number>) => string,
+): Verdict {
+  const { attentionCount, topSeverity, liveState, fleetEmpty } = args;
 
   if (fleetEmpty) {
-    return { title: t('noFleet.title'), detail: t('noFleet.detail'), severity: 'info', tone: TONES.info }
+    return {
+      title: t("noFleet.title"),
+      detail: t("noFleet.detail"),
+      severity: "info",
+      tone: TONES.info,
+    };
   }
-  if (liveState === 'unavailable' || liveState === 'error') {
-    return { title: t('liveUnavailable.title'), detail: t('liveUnavailable.detail'), severity: 'warning', tone: TONES.warning }
+  if (liveState === "unavailable" || liveState === "error") {
+    return {
+      title: t("liveUnavailable.title"),
+      detail: t("liveUnavailable.detail"),
+      severity: "warning",
+      tone: TONES.warning,
+    };
   }
-  if (liveState === 'disconnected') {
-    return { title: t('liveDisconnected.title'), detail: t('liveDisconnected.detail'), severity: 'warning', tone: TONES.warning }
+  if (liveState === "disconnected") {
+    return {
+      title: t("liveDisconnected.title"),
+      detail: t("liveDisconnected.detail"),
+      severity: "warning",
+      tone: TONES.warning,
+    };
   }
   if (attentionCount === 0) {
-    return { title: t('nominal.title'), detail: t('nominal.detail'), severity: 'success', tone: TONES.success }
+    return {
+      title: t("nominal.title"),
+      detail: t("nominal.detail"),
+      severity: "success",
+      tone: TONES.success,
+    };
   }
-  const severity = topSeverity ?? 'warning'
+  const severity = topSeverity ?? "warning";
   return {
-    title: t('needAttention.title', { count: attentionCount }),
-    detail: severity === 'critical' ? t('needAttention.detailCritical') : t('needAttention.detailOther'),
+    title: t("needAttention.title", { count: attentionCount }),
+    detail:
+      severity === "critical"
+        ? t("needAttention.detailCritical")
+        : t("needAttention.detailOther"),
     severity,
-    tone: severity === 'critical' ? TONES.critical : TONES.warning,
-  }
+    tone: severity === "critical" ? TONES.critical : TONES.warning,
+  };
 }
 ```
 
 Also update `AttentionAction` to switch on `item.reason` instead of `item.title`:
+
 - Replace `if (item.kind === 'job' && item.title === 'Print failed')` with `if (item.kind === 'job' && item.reason === 'job_print_failed')`.
 - Replace `if (item.kind === 'job' && item.title === 'Dispatch failed')` with `if (item.kind === 'job' && item.reason === 'job_dispatch_failed')`.
 
 The button labels (`Refresh`, `Reprint`, `Retry dispatch`, `View`) become translated in the `overview` task — leave them as English literals in this step (they compile fine) and replace in the consuming task. **However**, since `dashboard-status.tsx` has no `'use client'` directive and renders buttons, those literals will be replaced in Task 6 anyway. To avoid churn, replace them now with the `overview` translations: add to `messages/en.json` under `overview`:
+
 ```json
 "action": { "refresh": "Refresh", "reprint": "Reprint", "retryDispatch": "Retry dispatch", "view": "View" }
 ```
+
 zh:
+
 ```json
 "action": { "refresh": "刷新", "reprint": "重新打印", "retryDispatch": "重试派发", "view": "查看" }
 ```
+
 But `AttentionAction` is not a component that currently calls `useTranslations` — leave the literals English in this step and replace in Task 6 to keep this task focused on the signature/type changes. (Task 6 owns all `overview`/`status`/`attention` string rendering.)
 
 - [ ] **Step 5: Refactor `job-format.ts`**
 
 Replace `formatLayers` and `formatRemaining` to take a translator scoped to a new `jobFormat` namespace:
-```ts
-export type Translator = (key: string, values?: Record<string, string | number>) => string
 
-export function formatLayers(job: PrintJobForFormatting, t: Translator): string {
+```ts
+export type Translator = (
+  key: string,
+  values?: Record<string, string | number>,
+) => string;
+
+export function formatLayers(
+  job: PrintJobForFormatting,
+  t: Translator,
+): string {
   const current = job.print.current_layer ?? job.print.last_layer;
   if (current === null && job.print.total_layers === null) {
     return t("none");
   }
   if (current === null) {
-    return t("openTotal", { total: job.print.total_layers ?? '-' });
+    return t("openTotal", { total: job.print.total_layers ?? "-" });
   }
   if (job.print.total_layers === null) {
     return t("openCurrent", { current });
@@ -1085,11 +1352,13 @@ export function formatRemaining(minutes: number | null, t: Translator): string {
   return t("hoursMinutes", { hours, rest });
 }
 ```
+
 `formatProgress` stays unchanged (it's `"%"` + a number).
 
 Add `jobFormat` namespace to messages:
 
 `messages/en.json` add:
+
 ```json
 "jobFormat": {
   "layersNone": "Layers -",
@@ -1101,7 +1370,9 @@ Add `jobFormat` namespace to messages:
   "remainingHours": "Remaining {hours}h {rest}m"
 }
 ```
+
 `messages/zh.json` add:
+
 ```json
 "jobFormat": {
   "layersNone": "层数 -",
@@ -1113,6 +1384,7 @@ Add `jobFormat` namespace to messages:
   "remainingHours": "剩余 {hours} 小时 {rest} 分钟"
 }
 ```
+
 (The translator passed by the caller is scoped to `jobFormat`, so the leaf keys are `none`/`openTotal`/`openCurrent`/`both`/`none`/`minutes`/`hoursMinutes`. Adjust the message key names to match exactly: use `none`/`openTotal`/`openCurrent`/`both` for layers, and `none`/`minutes`/`hoursMinutes` for remaining. Collapsing both `none` keys is fine since they share a namespace — but they render different text ("Layers -" vs "Remaining -"). **Keep them distinct:** name them `layersNone`, `layersOpenTotal`, `layersOpenCurrent`, `layersBoth`, `remainingNone`, `remainingMinutes`, `remainingHours` and have the caller call `t('layersNone')` etc. Update the function bodies above to use those full keys.)
 
 Final corrected `job-format.ts` keys used: `layersNone`, `layersOpenTotal`, `layersOpenCurrent`, `layersBoth`, `remainingNone`, `remainingMinutes`, `remainingHours`.
@@ -1124,12 +1396,25 @@ Callers of the changed helpers now pass wrong arg counts (they will be fixed in 
 **Revised approach for build-green checkpoints:** give every changed helper a defaulted translator that reproduces the current English output, so callers that haven't been migrated yet continue to compile and render English. Migrated callers in later tasks pass a real translator.
 
 For example in `dashboard-runtime-helpers.ts`:
+
 ```ts
-const enLiveState: Record<LiveState, string> = { live: 'Connected', connecting: 'Connecting', disconnected: 'Reconnecting', idle: 'Idle', unavailable: 'Unavailable', error: 'Unavailable' }
-export function formatLiveState(state: LiveState, t: Translator = (k) => enLiveState[state]): string {
-  switch (state) { /* same as Step 2 */ }
+const enLiveState: Record<LiveState, string> = {
+  live: "Connected",
+  connecting: "Connecting",
+  disconnected: "Reconnecting",
+  idle: "Idle",
+  unavailable: "Unavailable",
+  error: "Unavailable",
+};
+export function formatLiveState(
+  state: LiveState,
+  t: Translator = (k) => enLiveState[state],
+): string {
+  switch (state /* same as Step 2 */) {
+  }
 }
 ```
+
 Apply the same default-translator pattern to `formatAuthSource`, `formatJobRecoveryState`, `formatDuration`, `formatPrinterMaterials` (default `formatDate` = existing impl), `formatJobMaterial`, `formatArtifactMetadata`, `computeVerdict` (default `t` = existing English map), `formatLayers`/`formatRemaining` (default `t` = existing English map), `prettifyToken`/`statusMeta` (already optional in Step 3).
 
 Concretely, each helper's default translator reproduces the **pre-refactor English output**. Provide those default maps inline at the helper. This keeps the public behavior identical until callers migrate.
@@ -1151,6 +1436,7 @@ git commit -m "refactor(frontend): make string builders locale-aware with defaul
 ## Task 5: Translate header + nav; place LanguageSwitcher
 
 **Files:**
+
 - Modify: `frontend/app/dashboard-header.tsx`
 - Modify: `frontend/app/dashboard-overview.tsx` (NAV_SECTIONS only — full overview translation is Task 6)
 - Modify: `frontend/app/dashboard-ui.tsx` (add switcher to `SectionHeader`)
@@ -1161,6 +1447,7 @@ git commit -m "refactor(frontend): make string builders locale-aware with defaul
 - [ ] **Step 1: Add `header` and `nav` namespaces**
 
 `messages/en.json` add:
+
 ```json
 "nav": {
   "printers": "Printers",
@@ -1178,7 +1465,9 @@ git commit -m "refactor(frontend): make string builders locale-aware with defaul
   "view": "View"
 }
 ```
+
 `messages/zh.json` add:
+
 ```json
 "nav": {
   "printers": "打印机",
@@ -1200,43 +1489,63 @@ git commit -m "refactor(frontend): make string builders locale-aware with defaul
 - [ ] **Step 2: Refactor `dashboard-header.tsx`**
 
 Add `import { useTranslations } from 'next-intl'` and `import { LanguageSwitcher } from '../components/language-switcher'`. Inside `Header`, `const t = useTranslations('header')`. Replace:
+
 - `"Pandar Operations"` → `{t('title')}`
 - `` `Tenant printer inventory from ${apiUrl}` `` → `{t('inventoryFrom', { apiUrl })}`
 - `"Tenant"` → `{t('tenant')}`
 - `"View"` → `{t('view')}`
 
 Add `<LanguageSwitcher />` inside the header next to the tenant form (or in the title row when there is only one tenant). Minimal placement: put it in the title `<div>` after the `<p>`:
+
 ```tsx
 <div>
-  <h1 className="text-2xl font-semibold">{t('title')}</h1>
-  <p className="mt-1 text-sm text-slate-600">{t('inventoryFrom', { apiUrl })}</p>
-  <div className="mt-2"><LanguageSwitcher /></div>
+  <h1 className="text-2xl font-semibold">{t("title")}</h1>
+  <p className="mt-1 text-sm text-slate-600">
+    {t("inventoryFrom", { apiUrl })}
+  </p>
+  <div className="mt-2">
+    <LanguageSwitcher />
+  </div>
 </div>
 ```
 
 - [ ] **Step 3: Make `NAV_SECTIONS` translation-driven in `dashboard-overview.tsx`**
 
 Change `NAV_SECTIONS` to IDs only and translate labels in `SectionNav`. Replace:
+
 ```ts
 export type NavSection = { id: string; label: string }
 export const NAV_SECTIONS: NavSection[] = [ ... ]
 ```
+
 with:
+
 ```ts
-export const NAV_SECTION_IDS = ['printers', 'jobs', 'dispatch', 'recovery', 'diagnostics', 'activity', 'admin'] as const
-export type NavSectionId = (typeof NAV_SECTION_IDS)[number]
+export const NAV_SECTION_IDS = [
+  "printers",
+  "jobs",
+  "dispatch",
+  "recovery",
+  "diagnostics",
+  "activity",
+  "admin",
+] as const;
+export type NavSectionId = (typeof NAV_SECTION_IDS)[number];
 ```
+
 In `SectionNav`, `const tNav = useTranslations('nav')`, and map over `NAV_SECTION_IDS`, rendering `{tNav(section)}`. (Other strings in `dashboard-overview.tsx` are handled in Task 6.)
 
 - [ ] **Step 4: Add switcher to `SectionHeader` in `dashboard-ui.tsx`**
 
 `dashboard-ui.tsx` already has `'use client'`. Add `import { LanguageSwitcher } from '../components/language-switcher'`. Render it in the `meta` cell of `SectionHeader`:
+
 ```tsx
 <div className="flex items-center gap-2 text-sm text-slate-600">
   <LanguageSwitcher />
   <span>{meta}</span>
 </div>
 ```
+
 (This puts the switcher on every standalone page that uses `SectionHeader`: onboarding, sign-in, join, plugin-sign-in.)
 
 - [ ] **Step 5: Build + smoke**
@@ -1255,6 +1564,7 @@ git commit -m "feat(frontend): translate header and nav, place language switcher
 ## Task 6: Translate overview, status, attention (rendering layer)
 
 **Files:**
+
 - Modify: `frontend/app/dashboard-overview.tsx` (FleetStatusStrip, NeedsAttention, StatCell usage, AttentionRow)
 - Modify: `frontend/app/dashboard-status.tsx` (AttentionAction button literals; StatCell stays presentational)
 - Modify: `frontend/app/dashboard-ui.tsx` (`StatusBadge` uses `statusMeta` with token translator)
@@ -1265,6 +1575,7 @@ git commit -m "feat(frontend): translate header and nav, place language switcher
 - [ ] **Step 1: Add the `overview.status`, `overview.attention` namespaces**
 
 `messages/en.json` under `overview` (merge with existing `overview.verdict`, `overview.action`):
+
 ```json
 "stat": {
   "printers": "Printers",
@@ -1285,7 +1596,9 @@ git commit -m "feat(frontend): translate header and nav, place language switcher
 "ariaAttention": "Needs attention",
 "ariaSections": "Sections"
 ```
+
 `messages/zh.json` under `overview`:
+
 ```json
 "stat": {
   "printers": "打印机",
@@ -1310,6 +1623,7 @@ git commit -m "feat(frontend): translate header and nav, place language switcher
 - [ ] **Step 2: Render `FleetStatusStrip` with translations**
 
 In `dashboard-overview.tsx`, inside `FleetStatusStrip` add `const t = useTranslations('overview.verdict')` and `const tStat = useTranslations('overview.stat')` and `const tAria = useTranslations('overview')`. Pass `t` to `computeVerdict({...}, t)`. Replace the three `<StatCell .../>` strings:
+
 - printers: `label={tStat('printers')}`, `value={fleetEmpty ? tStat('dash') : tStat('printersValue', { online: health.printersOnline, total: health.printersTotal })}`, `note={... ? tStat('printersNote', { count: health.printersTotal - health.printersOnline }) : null}`.
 - agents: analogous with `agentsValue`/`agentsNote`.
 - jobs: `activeJobs`/`activeJobsValue`/`activeJobsNote`.
@@ -1321,17 +1635,25 @@ Update `aria-label="Fleet status"` → `aria-label={tAria('ariaFleet')}`.
 In `NeedsAttention`: `const tAtt = useTranslations('overview')`. Replace `"Needs attention"` → `{tAtt('attentionTitle')}`, the subtitle expression → `{tAtt('attentionSubtitle', { count: items.length })}`, `"Grouped by agent"` → `{tAtt('groupedByAgent')}`, `aria-label="Needs attention"` → `aria-label={tAtt('ariaAttention')}`.
 
 `AttentionRow` renders `item.title`/`item.label`. These are now locale-neutral descriptors. Resolve them with next-intl's `useTranslations` by namespace. Because the namespace is dynamic, use `useTranslations()` (root) and a helper:
+
 ```tsx
-function useResolvedText(key: { namespace: string; key: string; values?: Record<string, string | number> }) {
-  const t = useTranslations(key.namespace)
-  return t(key.key, key.values)
+function useResolvedText(key: {
+  namespace: string;
+  key: string;
+  values?: Record<string, string | number>;
+}) {
+  const t = useTranslations(key.namespace);
+  return t(key.key, key.values);
 }
 ```
+
 Place this hook at module scope in `dashboard-status.tsx` (where `AttentionRow` lives). In `AttentionRow`:
+
 ```tsx
-const title = useResolvedText(item.titleKey)
-const label = item.labelKey ? useResolvedText(item.labelKey) : ''
+const title = useResolvedText(item.titleKey);
+const label = item.labelKey ? useResolvedText(item.labelKey) : "";
 ```
+
 Replace `{item.title}` → `{title}`, `{item.label}` → `{label || item.mono}`. (The `labelKey` for jobs is `job.filename` which echoes `{filename}`.)
 
 - [ ] **Step 4: Translate `AttentionAction` button literals in `dashboard-status.tsx`**
@@ -1341,13 +1663,16 @@ Replace `{item.title}` → `{title}`, `{item.label}` → `{label || item.mono}`.
 - [ ] **Step 5: Token-translate `StatusBadge` in `dashboard-ui.tsx`**
 
 In `StatusBadge`, build the token translator and pass to `statusMeta`:
+
 ```tsx
-import { useTranslations } from 'next-intl'
+import { useTranslations } from "next-intl";
 // inside StatusBadge:
-const tTokens = useTranslations('tokens')
-const tokenTranslator = (k: string) => (tTokens.has(k) ? tTokens(k) : undefined)
-const { severity, label } = statusMeta(value, tokenTranslator)
+const tTokens = useTranslations("tokens");
+const tokenTranslator = (k: string) =>
+  tTokens.has(k) ? tTokens(k) : undefined;
+const { severity, label } = statusMeta(value, tokenTranslator);
 ```
+
 (`tTokens.has` is supported by next-intl.) `Tag` uses `prettifyToken` — update similarly: `prettifyToken(value, tokenTranslator)`. Since `Tag` is generic (renders arbitrary tokens like roles/scopes), pass the same translator.
 
 - [ ] **Step 6: Build + smoke**
@@ -1366,6 +1691,7 @@ git commit -m "feat(frontend): translate overview, status, and attention renderi
 ## Task 7: Translate inventory + job-format rendering
 
 **Files:**
+
 - Modify: `frontend/app/dashboard-inventory.tsx`
 - Modify: `frontend/messages/en.json`, `frontend/messages/zh.json`
 
@@ -1374,6 +1700,7 @@ git commit -m "feat(frontend): translate overview, status, and attention renderi
 - [ ] **Step 1: Add `inventory` namespace**
 
 `messages/en.json` add:
+
 ```json
 "inventory": {
   "printersTitle": "Printer inventory",
@@ -1426,7 +1753,9 @@ git commit -m "feat(frontend): translate overview, status, and attention renderi
   "finishedLabel": "Finished:"
 }
 ```
+
 `messages/zh.json` add:
+
 ```json
 "inventory": {
   "printersTitle": "打印机清单",
@@ -1483,15 +1812,23 @@ git commit -m "feat(frontend): translate overview, status, and attention renderi
 - [ ] **Step 2: Wire translators into `dashboard-inventory.tsx`**
 
 In `PrinterInventory`: `const t = useTranslations('inventory')`, `const tMat = useTranslations('material')`, `const tRec = useTranslations('recovery.state')`. Build a date formatter bound to the locale:
+
 ```tsx
-import { useFormatter } from 'next-intl'
-const format = useFormatter()
+import { useFormatter } from "next-intl";
+const format = useFormatter();
 const formatDate = (value: string) => {
-  const d = new Date(value); if (Number.isNaN(d.getTime())) return value
-  return format.dateTime(d, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
-}
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return format.dateTime(d, {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "UTC",
+  });
+};
 ```
+
 Replace:
+
 - `SectionHeader title/subtitle/meta` → `t('printersTitle')`, `selectedTenant ? t('printersSubtitleTenant', { name, slug }) : t('printersSubtitleNone')`, `t('printersMeta', { count })`.
 - Empty states → corresponding `t(...)`.
 - `queryPlaceholder="Search name or serial"` → `t('searchName')` (also the `aria-label`).
@@ -1503,6 +1840,7 @@ Replace:
 - `"Managed by"` → `t('managedBy')`, `'Unknown agent'` → `t('unknownAgent')`.
 
 In `JobHistory`: same translator pattern plus `const tJf = useTranslations('jobFormat')`. Replace SectionHeader, empty states, filter labels, aria. In `JobRow`:
+
 - `aria-label={...}` composition: `t('dispatch')`/`t('print')` etc. plus `formatProgress`.
 - `"Updated {date}"` → `t('updated', { date: <raw> })` — but `t()` returns a string, cannot embed JSX. Instead render: `<span>{t('updated', { date: '' }).replace(/\s*$/, '')} </span><FormattedDate value={updated} />`. Simpler: split into two spans: `<span className="text-slate-500">{t('updatedPrefix')}</span> <FormattedDate value={updated} />` with key `"updatedPrefix": "Updated"`. **Use the split approach:** add `updatedPrefix`/`updatedPrefixZh`? No — single key `updatedPrefix` in both locales (`en: "Updated"`, `zh: "更新于"`). Update message files accordingly (replace `updated` key with `updatedPrefix`).
 - `StatusPill` labels `"Dispatch"`/`"Print"` → `t('dispatch')`/`t('print')`.
@@ -1532,12 +1870,14 @@ git commit -m "feat(frontend): translate printer inventory and job history"
 ## Task 8: Translate dispatch form
 
 **Files:**
+
 - Modify: `frontend/app/dispatch-form.tsx`
 - Modify: `frontend/messages/en.json`, `frontend/messages/zh.json`
 
 - [ ] **Step 1: Add `dispatch` namespace**
 
 `messages/en.json` add:
+
 ```json
 "dispatch": {
   "title": "Dispatch print job",
@@ -1572,7 +1912,9 @@ git commit -m "feat(frontend): translate printer inventory and job history"
   "objects": "Objects"
 }
 ```
+
 `messages/zh.json` add:
+
 ```json
 "dispatch": {
   "title": "派发打印任务",
@@ -1628,12 +1970,14 @@ git commit -m "feat(frontend): translate dispatch form"
 ## Task 9: Translate recovery actions
 
 **Files:**
+
 - Modify: `frontend/app/recovery-actions.tsx`
 - Modify: `frontend/messages/en.json`, `frontend/messages/zh.json`
 
 - [ ] **Step 1: Add `recoveryPage` namespace (recovery.state/duration already exist from Task 4)**
 
 `messages/en.json` add:
+
 ```json
 "recoveryPage": {
   "title": "Recovery actions",
@@ -1673,7 +2017,9 @@ git commit -m "feat(frontend): translate dispatch form"
   "queueSpeed": "Queue speed"
 }
 ```
+
 `messages/zh.json` add:
+
 ```json
 "recoveryPage": {
   "title": "恢复操作",
@@ -1717,6 +2063,7 @@ git commit -m "feat(frontend): translate dispatch form"
 - [ ] **Step 2: Wire `recovery-actions.tsx`**
 
 `const t = useTranslations('recoveryPage')`, `const tRec = useTranslations('recovery.state')`, `const tMat = useTranslations('material')`, `const format = useFormatter()`, `formatDate` bound fn. Replace literals:
+
 - SectionHeader title/subtitle/meta.
 - Empty states.
 - `"No agents available for manual refresh"`, `"Refresh all agents"`, `` `Refresh ${agent.name}` `` → `t('refreshAgent', { name })`.
@@ -1744,12 +2091,14 @@ git commit -m "feat(frontend): translate recovery actions"
 ## Task 10: Translate diagnostics panel
 
 **Files:**
+
 - Modify: `frontend/app/diagnostics-panel.tsx`
 - Modify: `frontend/messages/en.json`, `frontend/messages/zh.json`
 
 - [ ] **Step 1: Add `diagnostics` namespace**
 
 `messages/en.json` add:
+
 ```json
 "diagnostics": {
   "agentsTitle": "Linked agents",
@@ -1796,7 +2145,9 @@ git commit -m "feat(frontend): translate recovery actions"
   "unknown": "unknown"
 }
 ```
+
 `messages/zh.json` add:
+
 ```json
 "diagnostics": {
   "agentsTitle": "已连接 Agent",
@@ -1864,6 +2215,7 @@ git commit -m "feat(frontend): translate diagnostics panel"
 ## Task 11: Translate runtime sections (RuntimeStatusPanel, TenantSettings, dashboard-runtime notifications)
 
 **Files:**
+
 - Modify: `frontend/app/dashboard-runtime-sections.tsx`
 - Modify: `frontend/app/dashboard-runtime.tsx`
 - Modify: `frontend/messages/en.json`, `frontend/messages/zh.json`
@@ -1871,6 +2223,7 @@ git commit -m "feat(frontend): translate diagnostics panel"
 - [ ] **Step 1: Add `tenantSettings` namespace**
 
 `messages/en.json` add:
+
 ```json
 "tenantSettings": {
   "title": "Tenant settings",
@@ -1908,7 +2261,9 @@ git commit -m "feat(frontend): translate diagnostics panel"
   "liveNotificationsAria": "Live notifications"
 }
 ```
+
 `messages/zh.json` add:
+
 ```json
 "tenantSettings": {
   "title": "租户设置",
@@ -1953,42 +2308,58 @@ git commit -m "feat(frontend): translate diagnostics panel"
 
 - [ ] **Step 3: Wire notification + error/action strings in `dashboard-runtime.tsx`**
 
-In the `useEffect` that builds notifications, the `title`/`detail` strings are currently English. These run inside a client component effect. Add module-scoped access to translations: since this is inside `useEffect` (not render), `useTranslations` can't be called there. **Refactor:** move the notification *text* out of the effect by storing locale-neutral keys instead of English, and translate at render in `RuntimeStatusPanel`. Change `RuntimeNotification` to carry `titleKey`/`detailKey` (namespace+key+values) instead of `title`/`detail`. Then `RuntimeStatusPanel` (a client component) resolves them via the same `useResolvedText` hook pattern from Task 6 (hoist that hook to a shared `components/use-resolved-text.ts`).
+In the `useEffect` that builds notifications, the `title`/`detail` strings are currently English. These run inside a client component effect. Add module-scoped access to translations: since this is inside `useEffect` (not render), `useTranslations` can't be called there. **Refactor:** move the notification _text_ out of the effect by storing locale-neutral keys instead of English, and translate at render in `RuntimeStatusPanel`. Change `RuntimeNotification` to carry `titleKey`/`detailKey` (namespace+key+values) instead of `title`/`detail`. Then `RuntimeStatusPanel` (a client component) resolves them via the same `useResolvedText` hook pattern from Task 6 (hoist that hook to a shared `components/use-resolved-text.ts`).
 
 Concretely:
+
 - Create `frontend/components/use-resolved-text.ts`:
+
 ```ts
-'use client'
-import { useTranslations } from 'next-intl'
-type TextKey = { namespace: string; key: string; values?: Record<string, string | number> }
+"use client";
+import { useTranslations } from "next-intl";
+type TextKey = {
+  namespace: string;
+  key: string;
+  values?: Record<string, string | number>;
+};
 export function useResolvedText() {
   return (k: TextKey) => {
-    const t = useTranslations(k.namespace)
-    return t(k.key, k.values)
-  }
+    const t = useTranslations(k.namespace);
+    return t(k.key, k.values);
+  };
 }
 ```
+
 > Note: calling `useTranslations` inside the returned function violates rules-of-hooks (it's a hook). **Corrected:** make `useResolvedText` accept the key and call the hook at top level:
+
 ```ts
-'use client'
-import { useTranslations } from 'next-intl'
-type TextKey = { namespace: string; key: string; values?: Record<string, string | number> }
+"use client";
+import { useTranslations } from "next-intl";
+type TextKey = {
+  namespace: string;
+  key: string;
+  values?: Record<string, string | number>;
+};
 export function useResolvedText(k: TextKey): string {
-  const t = useTranslations(k.namespace)
-  return t(k.key, k.values)
+  const t = useTranslations(k.namespace);
+  return t(k.key, k.values);
 }
 ```
+
 Each notification row calls `useResolvedText(notification.titleKey)` — but hooks can't be called in a `.map`. **Final corrected approach:** resolve notification text by rendering a small `<NotificationRow>` child component (one hook call per row). Create `components/notification-row.tsx` that takes a `RuntimeNotification` and calls `useResolvedText` for title/detail. Move `RuntimeNotification` rendering into it. Apply this pattern. Update `RuntimeNotification` type in `dashboard-runtime-helpers.ts` to `{ key, titleKey, detailKey, timestamp }`.
 
 In `dashboard-runtime.tsx` effect, replace the English `title`/`detail` literals with `titleKey`/`detailKey` objects referencing `runtime.notification.*`. For dynamic details (`${printer.name} (${printer.serial_number})`, `${job.artifact.filename} dispatch ${job.status}`, `${formatJobRecoveryState(job)}`), store the values in `detailKey.values` and use message interpolation. The recovery-state string inside a notification is itself translated — for those, store a nested key reference: simpler is to store `jobId` and let `NotificationRow` call `formatJobRecoveryState(job,...)`. Since the effect doesn't have `job` easily, store the raw fields in values and translate with a dedicated message. Use `runtime.notification.jobDispatchDetail` = `"{filename} dispatch {status}"` (en) / `"{filename} 派发 {status}"` (zh). Add these keys to `runtime.notification`:
 
 `messages/en.json` add under `runtime.notification`:
+
 ```json
 "printerDetail": "{name} ({serial})",
 "jobDispatchDetail": "{filename} dispatch {status}",
 "jobErrorFallback": "{filename}"
 ```
+
 zh:
+
 ```json
 "printerDetail": "{name} ({serial})",
 "jobDispatchDetail": "{filename} 派发 {status}",
@@ -2013,12 +2384,14 @@ git commit -m "feat(frontend): translate runtime status, tenant settings, and no
 ## Task 12: Translate admin panel
 
 **Files:**
+
 - Modify: `frontend/app/admin-panel.tsx`
 - Modify: `frontend/messages/en.json`, `frontend/messages/zh.json`
 
 - [ ] **Step 1: Add `admin` namespace**
 
 `messages/en.json` add:
+
 ```json
 "admin": {
   "title": "Tenant administration",
@@ -2094,7 +2467,9 @@ git commit -m "feat(frontend): translate runtime status, tenant settings, and no
   "idLabel": "ID"
 }
 ```
+
 `messages/zh.json` add:
+
 ```json
 "admin": {
   "title": "租户管理",
@@ -2174,6 +2549,7 @@ git commit -m "feat(frontend): translate runtime status, tenant settings, and no
 - [ ] **Step 2: Wire `admin-panel.tsx`**
 
 `const t = useTranslations('admin')`, `const format = useFormatter()` + bound `formatDate`, `import { FormattedDate } from '../components/formatted-date'`. Replace every literal with its key. Note:
+
 - `roles` array values (`tenant_admin`, `operator`, `viewer`) stay as-is (they're role identifiers rendered in `<Tag>` and `<option>`; they pass through `prettifyToken`/token translator — add them to `tokens` namespace if user-facing display should translate, otherwise leave English). **Decision:** add role keys to `tokens`: `tenant_admin`/`operator`/`viewer` → en/zh, and pass the token translator into `Tag` (already done in Task 6 Step 5 for `Tag`). Add to both messages under `tokens`:
   - en: `"tenant_admin": "Tenant admin", "operator": "Operator", "viewer": "Viewer"`
   - zh: `"tenant_admin": "租户管理员", "operator": "操作员", "viewer": "查看者"`
@@ -2196,6 +2572,7 @@ git commit -m "feat(frontend): translate tenant admin panel"
 ## Task 13: Translate standalone pages (onboarding, sign-in, join)
 
 **Files:**
+
 - Modify: `frontend/app/onboarding-panel.tsx`
 - Modify: `frontend/app/plugin-sign-in/page.tsx`
 - Modify: `frontend/app/plugin-sign-in/plugin-ticket-form.tsx`
@@ -2206,6 +2583,7 @@ git commit -m "feat(frontend): translate tenant admin panel"
 - [ ] **Step 1: Add `onboarding`, `signIn`, `join` namespaces**
 
 `messages/en.json` add:
+
 ```json
 "onboarding": {
   "title": "Tenant onboarding",
@@ -2250,7 +2628,9 @@ git commit -m "feat(frontend): translate tenant admin panel"
   "signOut": "Sign out"
 }
 ```
+
 `messages/zh.json` add:
+
 ```json
 "onboarding": {
   "title": "租户开通",
@@ -2332,6 +2712,7 @@ git commit -m "feat(frontend): translate onboarding, sign-in, and join pages"
 ## Task 14: Final verification, cleanup, roadmap update
 
 **Files:**
+
 - Verify: all modified files.
 - Modify: `docs/roadmap.md` (project root).
 
@@ -2343,17 +2724,21 @@ Expected: both succeed with no warnings about missing keys.
 - [ ] **Step 2: Grep for leftover English literals in JSX**
 
 Run from `frontend/`:
+
 ```bash
 rg -n ">[A-Z][a-zA-Z ]{3,}<|placeholder=\"[A-Z]|aria-label=\"[A-Z][a-z]" app --glob '*.tsx'
 ```
+
 Expected: every remaining match is either a deliberately-untranslated diagnostic string (fetch-helper error builders in `plugin-sign-in/page.tsx`, `SecretActionResult.state.message`) or a `font-mono` identifier. If a real UI string slipped through, add it to the right namespace and replace. Iterate until clean.
 
 - [ ] **Step 3: Verify key parity between locales**
 
 Run:
+
 ```bash
 node -e "const en=require('./messages/en.json'),zh=require('./messages/zh.json'); function k(o,p){p=p||[];return Object.entries(o).flatMap(([kk,v])=>v&&typeof v==='object'?k(v,p.concat(kk)):[p.concat(kk).join('.')])} const a=new Set(k(en)),b=new Set(k(zh)); console.log('en-only',[...a].filter(x=>!b.has(x))); console.log('zh-only',[...b].filter(x=>!a.has(x)))"
 ```
+
 (workdir `frontend/`). Expected: both lists empty.
 
 - [ ] **Step 4: Manual end-to-end smoke**

@@ -38,13 +38,16 @@ const enJobFormat: Translator = (key, values) => {
   }
 };
 
-export function formatLayers(job: PrintJobForFormatting, t: Translator = enJobFormat): string {
+export function formatLayers(
+  job: PrintJobForFormatting,
+  t: Translator = enJobFormat,
+): string {
   const current = job.print.current_layer ?? job.print.last_layer;
   if (current === null && job.print.total_layers === null) {
     return t("layersNone");
   }
   if (current === null) {
-    return t("layersOpenTotal", { total: job.print.total_layers ?? '-' });
+    return t("layersOpenTotal", { total: job.print.total_layers ?? "-" });
   }
   if (job.print.total_layers === null) {
     return t("layersOpenCurrent", { current });
@@ -52,7 +55,10 @@ export function formatLayers(job: PrintJobForFormatting, t: Translator = enJobFo
   return t("layersBoth", { current, total: job.print.total_layers });
 }
 
-export function formatRemaining(minutes: number | null, t: Translator = enJobFormat): string {
+export function formatRemaining(
+  minutes: number | null,
+  t: Translator = enJobFormat,
+): string {
   if (minutes === null) {
     return t("remainingNone");
   }
