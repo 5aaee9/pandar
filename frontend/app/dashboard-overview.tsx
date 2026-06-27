@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
 
 import type { AttentionItem, Health, Severity } from './dashboard-attention'
@@ -12,17 +13,16 @@ import {
 import type { LiveState } from './dashboard-runtime-helpers'
 import type { Tenant } from './dashboard-types'
 
-export type NavSection = { id: string; label: string }
-
-export const NAV_SECTIONS: NavSection[] = [
-  { id: 'printers', label: 'Printers' },
-  { id: 'jobs', label: 'Print jobs' },
-  { id: 'dispatch', label: 'Dispatch' },
-  { id: 'recovery', label: 'Recovery' },
-  { id: 'diagnostics', label: 'Diagnostics' },
-  { id: 'activity', label: 'Live activity' },
-  { id: 'admin', label: 'Admin' },
-]
+export const NAV_SECTION_IDS = [
+  'printers',
+  'jobs',
+  'dispatch',
+  'recovery',
+  'diagnostics',
+  'activity',
+  'admin',
+] as const
+export type NavSectionId = (typeof NAV_SECTION_IDS)[number]
 
 export function FleetStatusStrip({
   health,
@@ -140,17 +140,18 @@ export function SectionNav({
 }: {
   attentionBySection: Record<string, number>
 }) {
-  const active = useActiveSection(NAV_SECTIONS.map((section) => section.id))
+  const tNav = useTranslations('nav')
+  const active = useActiveSection(NAV_SECTION_IDS)
   return (
     <nav aria-label="Sections" className="sticky top-0 z-20 border-y border-slate-200 bg-slate-100/95 backdrop-blur">
       <ul className="flex gap-1 overflow-x-auto px-1 py-2">
-        {NAV_SECTIONS.map((section) => {
-          const count = attentionBySection[section.id] ?? 0
-          const isActive = active === section.id
+        {NAV_SECTION_IDS.map((section) => {
+          const count = attentionBySection[section] ?? 0
+          const isActive = active === section
           return (
-            <li key={section.id}>
+            <li key={section}>
               <a
-                href={`#${section.id}`}
+                href={`#${section}`}
                 aria-current={isActive ? 'true' : undefined}
                 className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-sm transition-colors ${
                   isActive
@@ -158,7 +159,7 @@ export function SectionNav({
                     : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-900'
                 }`}
               >
-                {section.label}
+                {tNav(section)}
                 {count > 0 ? (
                   <span
                     className={`inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold ${
@@ -177,7 +178,7 @@ export function SectionNav({
   )
 }
 
-function useActiveSection(ids: string[]) {
+function useActiveSection(ids: readonly string[]) {
   const [active, setActive] = useState(ids[0] ?? '')
   const key = ids.join(',')
   useEffect(() => {

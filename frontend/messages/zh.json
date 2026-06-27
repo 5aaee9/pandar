@@ -121,5 +121,20 @@
     "remainingNone": "剩余 -",
     "remainingMinutes": "剩余 {minutes} 分钟",
     "remainingHours": "剩余 {hours} 小时 {rest} 分钟"
+  },
+  "nav": {
+    "printers": "打印机",
+    "jobs": "打印任务",
+    "dispatch": "派发",
+    "recovery": "恢复",
+    "diagnostics": "诊断",
+    "activity": "实时活动",
+    "admin": "管理"
+  },
+  "header": {
+    "title": "Pandar 运维控制台",
+    "inventoryFrom": "来自 {apiUrl} 的租户打印机清单",
+    "tenant": "租户",
+    "view": "查看"
   }
 }

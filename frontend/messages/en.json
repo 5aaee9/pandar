@@ -121,5 +121,20 @@
     "remainingNone": "Remaining -",
     "remainingMinutes": "Remaining {minutes}m",
     "remainingHours": "Remaining {hours}h {rest}m"
+  },
+  "nav": {
+    "printers": "Printers",
+    "jobs": "Print jobs",
+    "dispatch": "Dispatch",
+    "recovery": "Recovery",
+    "diagnostics": "Diagnostics",
+    "activity": "Live activity",
+    "admin": "Admin"
+  },
+  "header": {
+    "title": "Pandar Operations",
+    "inventoryFrom": "Tenant printer inventory from {apiUrl}",
+    "tenant": "Tenant",
+    "view": "View"
   }
 }
