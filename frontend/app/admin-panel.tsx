@@ -1,5 +1,7 @@
 import { useActionState, useRef, useState } from 'react'
+import { useFormatter, useTranslations } from 'next-intl'
 
+import { FormattedDate } from '../components/formatted-date'
 import {
   createAgentPairing,
   createJoinLink,
@@ -11,8 +13,17 @@ import {
   updateTenantUserRole,
 } from './actions'
 import type { Agent, AuditEvent, JoinLink, Tenant, TenantToken, User, UserIdentity } from './dashboard-types'
-import { DetailLine, EmptyState, formatDate, SectionHeader, StatusBadge, Tag } from './dashboard-ui'
+import { DetailLine, EmptyState, SectionHeader, StatusBadge, Tag } from './dashboard-ui'
 import { ConfirmDialog, ConfirmForm } from './confirm-dialog'
+
+function useAdminDate() {
+  const format = useFormatter()
+  return (value: string) => {
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return value
+    return format.dateTime(d, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
+  }
+}
 
 type AdminPanelProps = {
   selectedTenant: Tenant | null
@@ -37,11 +48,12 @@ export function TenantAdminPanel({
   auditEvents,
   unavailable,
 }: AdminPanelProps) {
+  const t = useTranslations('admin')
   if (!selectedTenant) {
     return (
       <section className="overflow-hidden rounded-md border border-slate-300 bg-slate-50">
-        <SectionHeader title="Tenant administration" subtitle="No tenant selected" meta="Admin" />
-        <EmptyState title="No tenant selected" message="Select a tenant to manage users, tokens, and agent pairings." />
+        <SectionHeader title={t('title')} subtitle={t('subtitleNone')} meta={t('metaAdmin')} />
+        <EmptyState title={t('noTenantTitle')} message={t('noTenantMessage')} />
       </section>
     )
   }
@@ -50,11 +62,11 @@ export function TenantAdminPanel({
     return (
       <section className="overflow-hidden rounded-md border border-slate-300 bg-slate-50">
         <SectionHeader
-          title="Tenant administration"
-          subtitle={`${selectedTenant.display_name} admin data is unavailable`}
-          meta="Restricted"
+          title={t('title')}
+          subtitle={t('subtitleUnavailable', { name: selectedTenant.display_name })}
+          meta={t('metaRestricted')}
         />
-        <EmptyState title="Admin data unavailable" message="The current auth context cannot read tenant admin resources." />
+        <EmptyState title={t('unavailableTitle')} message={t('unavailableMessage')} />
       </section>
     )
   }
@@ -62,9 +74,9 @@ export function TenantAdminPanel({
   return (
     <section className="overflow-hidden rounded-md border border-slate-300 bg-slate-50">
       <SectionHeader
-        title="Tenant administration"
-        subtitle={`${selectedTenant.display_name} users, tokens, and audit trail`}
-        meta="Secrets are not stored"
+        title={t('title')}
+        subtitle={t('subtitleTenant', { name: selectedTenant.display_name })}
+        meta={t('metaSecrets')}
       />
 
       <div className="grid gap-4 border-b border-slate-200 px-4 py-4 lg:grid-cols-3">
@@ -89,47 +101,50 @@ export function TenantAdminPanel({
 }
 
 function CreateJoinLinkForm({ tenantId }: { tenantId: string }) {
+  const t = useTranslations('admin')
   const [state, formAction, pending] = useActionState(createJoinLink, null)
 
   return (
     <form action={formAction} className="grid gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
-      <div className="text-sm font-semibold text-slate-950">Create join link</div>
-      <Select name="role" label="Role" values={roles} />
-      <Input name="email_constraint" label="Verified email" type="email" />
-      <Input name="expires_in_seconds" label="TTL seconds" defaultValue="604800" />
-      <Input name="max_uses" label="Max uses" defaultValue="1" />
-      <PrimaryButton label={pending ? 'Creating...' : 'Create link'} />
+      <div className="text-sm font-semibold text-slate-950">{t('createJoinLink')}</div>
+      <Select name="role" label={t('role')} values={roles} />
+      <Input name="email_constraint" label={t('verifiedEmail')} type="email" />
+      <Input name="expires_in_seconds" label={t('ttlSeconds')} defaultValue="604800" />
+      <Input name="max_uses" label={t('maxUses')} defaultValue="1" />
+      <PrimaryButton label={pending ? t('creating') : t('createLink')} />
       <SecretActionResult state={state} />
     </form>
   )
 }
 
 function CreateTenantTokenForm({ tenantId }: { tenantId: string }) {
+  const t = useTranslations('admin')
   const [state, formAction, pending] = useActionState(createTenantToken, null)
 
   return (
     <form action={formAction} className="grid gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
-      <div className="text-sm font-semibold text-slate-950">Create tenant token</div>
-      <Input name="name" label="Name" />
-      <Input name="scopes" label="Scopes" defaultValue="*" />
-      <Input name="expires_at" label="Expires at" placeholder="2026-12-31T00:00:00Z" />
-      <PrimaryButton label={pending ? 'Creating...' : 'Create token'} />
+      <div className="text-sm font-semibold text-slate-950">{t('createTenantToken')}</div>
+      <Input name="name" label={t('name')} />
+      <Input name="scopes" label={t('scopes')} defaultValue="*" />
+      <Input name="expires_at" label={t('expiresAt')} placeholder="2026-12-31T00:00:00Z" />
+      <PrimaryButton label={pending ? t('creating') : t('createToken')} />
       <SecretActionResult state={state} />
     </form>
   )
 }
 
 function CreateAgentPairingForm({ tenantId }: { tenantId: string }) {
+  const t = useTranslations('admin')
   const [state, formAction, pending] = useActionState(createAgentPairing, null)
 
   return (
     <form action={formAction} className="grid gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
-      <div className="text-sm font-semibold text-slate-950">Pair agent</div>
-      <Input name="name" label="Agent name" />
-      <PrimaryButton label={pending ? 'Creating...' : 'Create pairing'} />
+      <div className="text-sm font-semibold text-slate-950">{t('pairAgent')}</div>
+      <Input name="name" label={t('agentName')} />
+      <PrimaryButton label={pending ? t('creating') : t('createPairing')} />
       <SecretActionResult state={state} />
     </form>
   )
@@ -144,20 +159,21 @@ function UsersTable({
   users: User[]
   identities: UserIdentity[]
 }) {
+  const t = useTranslations('admin')
   return (
     <div>
-      <Subhead title="Users" meta={`${users.length} users`} />
+      <Subhead title={t('users')} meta={t('usersMeta', { count: users.length })} />
       {users.length === 0 ? (
-        <EmptyState title="No users" message="Create a tenant user to assign operator or viewer access." />
+        <EmptyState title={t('noUsersTitle')} message={t('noUsersMessage')} />
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
-                <th className="px-4 py-2">User</th>
-                <th className="px-4 py-2">Role</th>
-                <th className="px-4 py-2">Identities</th>
-                <th className="px-4 py-2">Update</th>
+                <th className="px-4 py-2">{t('colUser')}</th>
+                <th className="px-4 py-2">{t('colRole')}</th>
+                <th className="px-4 py-2">{t('colIdentities')}</th>
+                <th className="px-4 py-2">{t('colUpdate')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -181,7 +197,7 @@ function UsersTable({
                         <select name="role" defaultValue={user.role} className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs">
                           {roles.map((role) => <option key={role} value={role}>{role}</option>)}
                         </select>
-                        <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">Save</button>
+                        <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">{t('save')}</button>
                       </form>
                     </td>
                   </tr>
@@ -196,11 +212,13 @@ function UsersTable({
 }
 
 function JoinLinksTable({ tenantId, joinLinks }: { tenantId: string; joinLinks: JoinLink[] }) {
+  const t = useTranslations('admin')
+  const formatDate = useAdminDate()
   return (
     <div className="border-t border-slate-200">
-      <Subhead title="Join links" meta={`${joinLinks.length} links`} />
+      <Subhead title={t('joinLinks')} meta={t('joinLinksMeta', { count: joinLinks.length })} />
       {joinLinks.length === 0 ? (
-        <EmptyState title="No join links" message="Create a join link to invite externally authenticated users." />
+        <EmptyState title={t('noJoinLinksTitle')} message={t('noJoinLinksMessage')} />
       ) : (
         <div className="divide-y divide-slate-200">
           {joinLinks.map((link) => (
@@ -209,23 +227,23 @@ function JoinLinksTable({ tenantId, joinLinks }: { tenantId: string; joinLinks: 
                 <div className="flex flex-wrap items-center gap-2">
                   <Tag value={link.role} />
                   <span className="text-xs text-slate-600">
-                    {link.used_count}/{link.max_uses} used
+                    {t('usedRatio', { used: link.used_count, max: link.max_uses })}
                   </span>
-                  {link.revoked_at ? <span className="text-xs font-medium text-red-700">Revoked</span> : null}
+                  {link.revoked_at ? <span className="text-xs font-medium text-red-700">{t('revoked')}</span> : null}
                 </div>
                 <div className="mt-1 font-mono text-xs text-slate-600">{link.id}</div>
                 <div className="mt-1 text-xs text-slate-600">
-                  {link.email_constraint ? `Email ${link.email_constraint}` : 'Any verified email'} · Expires {formatDate(link.expires_at)}
+                  {link.email_constraint ? t('emailConstraint', { email: link.email_constraint }) : t('anyVerifiedEmail')} · {t('expires', { date: formatDate(link.expires_at) })}
                 </div>
               </div>
               <ConfirmForm
                 action={revokeJoinLink}
                 buttonClassName="h-8 rounded-md border border-red-300 px-2 text-xs font-medium text-red-700"
-                buttonLabel={link.revoked_at ? 'Revoked' : 'Revoke'}
+                buttonLabel={link.revoked_at ? t('revoked') : t('revoke')}
                 disabled={Boolean(link.revoked_at)}
-                title="Revoke join link"
-                message="Revoke this join link? It will no longer accept new members; existing members keep their access."
-                confirmLabel="Revoke link"
+                title={t('revokeJoinTitle')}
+                message={t('revokeJoinMessage')}
+                confirmLabel={t('revokeJoinConfirm')}
                 tone="danger"
               >
                 <input name="tenant_id" type="hidden" value={tenantId} />
@@ -240,11 +258,13 @@ function JoinLinksTable({ tenantId, joinLinks }: { tenantId: string; joinLinks: 
 }
 
 function TenantTokensTable({ tenantId, tokens }: { tenantId: string; tokens: TenantToken[] }) {
+  const t = useTranslations('admin')
+  const formatDate = useAdminDate()
   return (
     <div className="border-t border-slate-200">
-      <Subhead title="Tenant tokens" meta={`${tokens.length} tokens`} />
+      <Subhead title={t('tenantTokens')} meta={t('tenantTokensMeta', { count: tokens.length })} />
       {tokens.length === 0 ? (
-        <EmptyState title="No tenant tokens" message="Create scoped tenant tokens for automation or plugin login." />
+        <EmptyState title={t('noTokensTitle')} message={t('noTokensMessage')} />
       ) : (
         <div className="divide-y divide-slate-200">
           {tokens.map((token) => (
@@ -255,18 +275,18 @@ function TenantTokensTable({ tenantId, tokens }: { tenantId: string; tokens: Ten
                   {token.scopes.map((scope) => <Tag key={scope} value={scope} />)}
                 </div>
                 <div className="mt-1 font-mono text-xs text-slate-600">{token.id}</div>
-                <div className="mt-1 text-xs text-slate-600">Expires {token.expires_at ? formatDate(token.expires_at) : 'never'}</div>
+                <div className="mt-1 text-xs text-slate-600">{token.expires_at ? t('expires', { date: formatDate(token.expires_at) }) : t('expiresNever')}</div>
               </div>
               <div className="flex flex-wrap items-start gap-2">
                 <RotateTenantTokenForm tenantId={tenantId} tokenId={token.id} />
                 <ConfirmForm
                   action={revokeTenantToken}
                   buttonClassName="h-8 rounded-md border border-red-300 px-2 text-xs font-medium text-red-700"
-                  buttonLabel={token.revoked_at ? 'Revoked' : 'Revoke'}
+                  buttonLabel={token.revoked_at ? t('revoked') : t('revoke')}
                   disabled={Boolean(token.revoked_at)}
-                  title="Revoke tenant token"
-                  message="Revoke this tenant token? Anything using it (automation, agents, plugins) will stop authenticating immediately."
-                  confirmLabel="Revoke token"
+                  title={t('revokeTokenTitle')}
+                  message={t('revokeTokenMessage')}
+                  confirmLabel={t('revokeTokenConfirm')}
                   tone="danger"
                 >
                   <input name="tenant_id" type="hidden" value={tenantId} />
@@ -282,6 +302,7 @@ function TenantTokensTable({ tenantId, tokens }: { tenantId: string; tokens: Ten
 }
 
 function RotateTenantTokenForm({ tenantId, tokenId }: { tenantId: string; tokenId: string }) {
+  const t = useTranslations('admin')
   const [state, formAction, pending] = useActionState(rotateTenantToken, null)
   const formRef = useRef<HTMLFormElement>(null)
   const [open, setOpen] = useState(false)
@@ -292,15 +313,15 @@ function RotateTenantTokenForm({ tenantId, tokenId }: { tenantId: string; tokenI
         <input name="tenant_id" type="hidden" value={tenantId} />
         <input name="token_id" type="hidden" value={tokenId} />
         <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" disabled={pending} onClick={() => setOpen(true)} type="button">
-          {pending ? 'Rotating...' : 'Rotate'}
+          {pending ? t('rotating') : t('rotate')}
         </button>
         <SecretActionResult state={state} />
       </form>
       <ConfirmDialog
         open={open}
-        title="Rotate tenant token"
-        message="Rotate this tenant token? The current secret stops working immediately — update anything using it (automation, agents, plugins) with the new value."
-        confirmLabel="Rotate token"
+        title={t('rotateTokenTitle')}
+        message={t('rotateTokenMessage')}
+        confirmLabel={t('rotateTokenConfirm')}
         tone="danger"
         onConfirm={() => {
           setOpen(false)
@@ -313,6 +334,7 @@ function RotateTenantTokenForm({ tenantId, tokenId }: { tenantId: string; tokenI
 }
 
 function SecretActionResult({ state }: { state: SecretActionState }) {
+  const t = useTranslations('admin')
   if (!state) {
     return null
   }
@@ -324,7 +346,7 @@ function SecretActionResult({ state }: { state: SecretActionState }) {
       <div className="grid gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-2 text-xs text-amber-950">
         <div className="font-semibold">{state.message}</div>
         <code className="break-all rounded bg-white px-2 py-1 font-mono text-[11px] text-slate-950">{state.token}</code>
-        <div>This token is shown once and is not persisted by the browser.</div>
+        <div>{t('tokenShownOnce')}</div>
       </div>
     )
   }
@@ -333,7 +355,7 @@ function SecretActionResult({ state }: { state: SecretActionState }) {
       <div className="grid gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-2 text-xs text-amber-950">
         <div className="font-semibold">{state.message}</div>
         <code className="break-all rounded bg-white px-2 py-1 font-mono text-[11px] text-slate-950">{`/join#${state.token}`}</code>
-        <div>This join token is shown once and is not persisted by the browser.</div>
+        <div>{t('joinTokenShownOnce')}</div>
       </div>
     )
   }
@@ -341,23 +363,24 @@ function SecretActionResult({ state }: { state: SecretActionState }) {
     <div className="grid gap-1 rounded border border-amber-200 bg-amber-50 px-2 py-2 text-xs text-amber-950">
       <div className="font-semibold">{state.message}</div>
       <pre className="overflow-x-auto rounded bg-white px-2 py-1 font-mono text-[11px] text-slate-950">{state.agentEnv}</pre>
-      <div>This pairing output is shown once and is not persisted by the browser.</div>
+      <div>{t('pairingShownOnce')}</div>
     </div>
   )
 }
 
 function AgentsList({ agents }: { agents: Agent[] }) {
+  const t = useTranslations('admin')
   return (
     <div>
-      <Subhead title="Agents" meta={`${agents.length} linked`} />
+      <Subhead title={t('agents')} meta={t('agentsMeta', { count: agents.length })} />
       <div className="grid gap-2 px-4 py-3">
-        {agents.length === 0 ? <div className="text-sm text-slate-600">No linked agents</div> : agents.map((agent) => (
+        {agents.length === 0 ? <div className="text-sm text-slate-600">{t('noLinkedAgents')}</div> : agents.map((agent) => (
           <div key={agent.id} className="rounded border border-slate-200 px-3 py-2 text-sm">
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium text-slate-950">{agent.name}</span>
               <StatusBadge value={agent.status} />
             </div>
-            <DetailLine label="ID" value={agent.id} mono />
+            <DetailLine label={t('idLabel')} value={agent.id} mono />
           </div>
         ))}
       </div>
@@ -366,14 +389,15 @@ function AgentsList({ agents }: { agents: Agent[] }) {
 }
 
 function AuditList({ events }: { events: AuditEvent[] }) {
+  const t = useTranslations('admin')
   return (
     <div className="border-t border-slate-200">
-      <Subhead title="Audit events" meta={`${events.length} recent`} />
+      <Subhead title={t('auditEvents')} meta={t('auditMeta', { count: events.length })} />
       <div className="divide-y divide-slate-200">
-        {events.length === 0 ? <div className="px-4 py-3 text-sm text-slate-600">No audit events</div> : events.map((event) => (
+        {events.length === 0 ? <div className="px-4 py-3 text-sm text-slate-600">{t('noAuditEvents')}</div> : events.map((event) => (
           <div key={event.id} className="px-4 py-3 text-sm">
             <div className="font-medium text-slate-950">{event.action}</div>
-            <div className="mt-1 text-xs text-slate-600">{event.actor_type} · {event.target_type} · {formatDate(event.created_at)}</div>
+            <div className="mt-1 text-xs text-slate-600">{event.actor_type} · {event.target_type} · <FormattedDate value={event.created_at} /></div>
           </div>
         ))}
       </div>
