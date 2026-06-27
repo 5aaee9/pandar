@@ -214,9 +214,9 @@ export function maxSeverity(items: AttentionItem[]): Severity | null {
 
 export function notificationSeverity(title: string, detail: string): Severity {
   const text = `${title} ${detail}`.toLowerCase()
-  if (text.includes('failed') || text.includes('offline') || text.includes('unavailable')) return 'critical'
-  if (text.includes('disconnected') || text.includes('stalled') || text.includes('stale')) return 'warning'
-  if (text.includes('complete') || text.includes('completed') || text.includes('running')) return 'success'
+  if (text.includes('failed') || text.includes('unavailable')) return 'critical'
+  if (text.includes('disconnected') || text.includes('stalled')) return 'warning'
+  if (text.includes('complete')) return 'success'
   return 'info'
 }
 

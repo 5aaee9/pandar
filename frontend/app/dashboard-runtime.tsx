@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
 
 import { DiagnosticsSection, LinkedAgentsSection } from './diagnostics-panel'
 import { DispatchForm } from './dispatch-form'
@@ -24,8 +25,7 @@ import type {
   UserIdentity,
 } from './dashboard-types'
 import {
-  formatAuthSource,
-  formatJobRecoveryState,
+  jobRecoveryStateKey,
   mergeJob,
   mergePrinter,
   printerEventWebSocketUrl,
@@ -92,8 +92,6 @@ export function DashboardRuntime({
   useEffect(() => setPrinters(initialPrinters), [initialPrinters])
   useEffect(() => setJobs(initialJobs), [initialJobs])
 
-  const authLabel = useMemo(() => formatAuthSource(auth.source), [auth.source])
-
   useEffect(() => {
     const addNotification = (notification: RuntimeNotification) => {
       if (notificationKeys.current.has(notification.key)) {
@@ -108,8 +106,8 @@ export function DashboardRuntime({
       if (selectedTenant) {
         addNotification({
           key: `live:${selectedTenant.id}:auth-unavailable`,
-          title: 'Live connection',
-          detail: 'Live updates unavailable because no server-side auth token is configured.',
+          titleKey: { namespace: 'runtime.notification', key: 'liveTitle' },
+          detailKey: { namespace: 'runtime.notification', key: 'liveUnavailable' },
           timestamp: new Date().toISOString(),
         })
       }
@@ -133,8 +131,11 @@ export function DashboardRuntime({
         notifiedOutage = outage
         addNotification({
           key: `live:${selectedTenant.id}:disconnected:${outage}`,
-          title: 'Live connection',
-          detail: failures >= 3 ? 'Live updates unavailable; retrying.' : 'Live updates disconnected; retrying.',
+          titleKey: { namespace: 'runtime.notification', key: 'liveTitle' },
+          detailKey: {
+            namespace: 'runtime.notification',
+            key: failures >= 3 ? 'liveRetryingUnavailable' : 'liveDisconnectedRetrying',
+          },
           timestamp: new Date().toISOString(),
         })
       }
@@ -195,8 +196,12 @@ export function DashboardRuntime({
       }
       addNotification({
         key: `printer:${printer.id}:offline:${printer.last_seen_at}`,
-        title: 'Printer state',
-        detail: `${printer.name} (${printer.serial_number})`,
+        titleKey: { namespace: 'runtime.notification', key: 'printerStateTitle' },
+        detailKey: {
+          namespace: 'runtime.notification',
+          key: 'printerDetail',
+          values: { name: printer.name, serial: printer.serial_number },
+        },
         timestamp,
       })
     }
@@ -211,24 +216,42 @@ export function DashboardRuntime({
       ) {
         addNotification({
           key: `job:${job.id}:dispatch:${job.status}:${job.error ?? ''}`,
-          title: formatJobRecoveryState(job),
-          detail: job.error ?? `${job.artifact.filename} dispatch ${job.status}`,
+          titleKey: { namespace: 'recovery.state', key: jobRecoveryStateKey(job) },
+          detailKey: job.error
+            ? {
+                namespace: 'runtime.notification',
+                key: 'jobErrorFallback',
+                values: { filename: job.artifact.filename },
+              }
+            : {
+                namespace: 'runtime.notification',
+                key: 'jobDispatchDetail',
+                values: { filename: job.artifact.filename, status: job.status },
+              },
           timestamp,
         })
       }
       if (job.print.status !== previous.print.status && job.print.status.toLowerCase() === 'failed') {
         addNotification({
           key: `job:${job.id}:print:failed:${job.print.error ?? ''}`,
-          title: 'Print failed',
-          detail: job.print.error ?? job.artifact.filename,
+          titleKey: { namespace: 'runtime.notification', key: 'printFailedTitle' },
+          detailKey: {
+            namespace: 'runtime.notification',
+            key: 'jobErrorFallback',
+            values: { filename: job.print.error ?? job.artifact.filename },
+          },
           timestamp,
         })
       }
       if (job.print.status !== previous.print.status && job.print.status.toLowerCase() === 'completed') {
         addNotification({
           key: `job:${job.id}:print:completed`,
-          title: 'Print complete',
-          detail: job.artifact.filename,
+          titleKey: { namespace: 'runtime.notification', key: 'printCompleteTitle' },
+          detailKey: {
+            namespace: 'runtime.notification',
+            key: 'jobErrorFallback',
+            values: { filename: job.artifact.filename },
+          },
           timestamp,
         })
       }
@@ -267,6 +290,9 @@ export function DashboardRuntime({
     return counts
   }, [attentionItems])
 
+  const tErr = useTranslations('runtime.notification')
+  const tStatus = useTranslations('runtime.actionStatus')
+
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-5 text-slate-950 sm:px-6 lg:px-8">
       <section className="mx-auto flex max-w-7xl flex-col gap-5">
@@ -274,13 +300,13 @@ export function DashboardRuntime({
 
         {errors.length > 0 ? (
           <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
-            Hub data is incomplete. {errors.join('; ')}.
+            {tErr('errorsIncomplete')} {errors.join('; ')}.
           </div>
         ) : null}
 
         {actionStatus ? (
           <div className="rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-950">
-            {formatActionStatus(actionStatus)}
+            {formatActionStatus(actionStatus, tStatus)}
           </div>
         ) : null}
 
@@ -321,7 +347,6 @@ export function DashboardRuntime({
         <div id="activity" className="scroll-mt-20">
           <RuntimeStatusPanel
             auth={auth}
-            authLabel={authLabel}
             liveState={liveState}
             lastEventAt={lastEventAt}
             notifications={notifications}
@@ -331,7 +356,6 @@ export function DashboardRuntime({
         <div id="admin" className="flex scroll-mt-20 flex-col gap-5">
           <TenantSettings
             auth={auth}
-            authLabel={authLabel}
             selectedTenant={selectedTenant}
             agents={agents}
             printers={printers}
@@ -352,14 +376,9 @@ export function DashboardRuntime({
   )
 }
 
-const ACTION_STATUS_MESSAGES: Record<string, string> = {
-  refresh_partial: 'Some refreshes could not be queued — review the list',
-  retry_partial: 'Some retries could not be queued — review the list',
-}
-
-function formatActionStatus(status: string) {
-  if (ACTION_STATUS_MESSAGES[status]) {
-    return ACTION_STATUS_MESSAGES[status]
+function formatActionStatus(status: string, tStatus: ReturnType<typeof useTranslations>) {
+  if (tStatus.has(status)) {
+    return tStatus(status)
   }
   return status
     .split('_')

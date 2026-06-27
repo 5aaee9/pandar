@@ -13,10 +13,16 @@ export type LiveState =
   | "unavailable"
   | "error";
 
+export type TextKey = {
+  namespace: string;
+  key: string;
+  values?: Record<string, string | number>;
+};
+
 export type RuntimeNotification = {
   key: string;
-  title: string;
-  detail: string;
+  titleKey: TextKey;
+  detailKey: TextKey;
   timestamp: string;
 };
 
@@ -224,26 +230,26 @@ const enRecoveryState: Record<string, string> = {
   waitingStart: "Waiting for the print to start",
 };
 
-export function formatJobRecoveryState(job: Job, t: Translator = (k) => enRecoveryState[k]): string {
+export function jobRecoveryStateKey(job: Job): string {
   const dispatch = job.status.toLowerCase();
   const command = job.command.status.toLowerCase();
   const physical = job.print.status.toLowerCase();
   const message = `${job.error ?? ""} ${job.print.error ?? ""}`.toLowerCase();
 
   if (physical === "running") {
-    return t("printing");
+    return "printing";
   }
   if (physical === "completed") {
-    return t("completed");
+    return "completed";
   }
   if (physical === "failed") {
-    return t("failed");
+    return "failed";
   }
   if (physical === "cancelled") {
-    return t("cancelled");
+    return "cancelled";
   }
   if (dispatch === "queued" || command === "queued") {
-    return t("waitingAgent");
+    return "waitingAgent";
   }
   if (
     message.includes("upload") ||
@@ -251,13 +257,17 @@ export function formatJobRecoveryState(job: Job, t: Translator = (k) => enRecove
     message.includes("sftp") ||
     message.includes("file")
   ) {
-    return t("fileFailed");
+    return "fileFailed";
   }
   if (message.includes("mqtt") || message.includes("publish")) {
-    return t("mqttFailed");
+    return "mqttFailed";
   }
   if (dispatch === "failed" || command === "failed") {
-    return t("queueFailed");
+    return "queueFailed";
   }
-  return t("waitingStart");
+  return "waitingStart";
+}
+
+export function formatJobRecoveryState(job: Job, t: Translator = (k) => enRecoveryState[k]): string {
+  return t(jobRecoveryStateKey(job));
 }

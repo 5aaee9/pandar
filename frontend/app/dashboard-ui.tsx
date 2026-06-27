@@ -128,7 +128,7 @@ export function DetailGroup({ title, children }: { title: string; children: Reac
   )
 }
 
-export function DetailLine({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+export function DetailLine({ label, value, mono }: { label: string; value: ReactNode; mono?: boolean }) {
   return (
     <div className="grid gap-1 sm:grid-cols-[7rem_minmax(0,1fr)]">
       <div className="text-slate-500">{label}</div>
