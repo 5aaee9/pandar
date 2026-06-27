@@ -433,5 +433,47 @@
     "auditMeta": "{count} recent",
     "noAuditEvents": "No audit events",
     "idLabel": "ID"
+  },
+  "onboarding": {
+    "title": "Tenant onboarding",
+    "subtitle": "{name} authenticated by {provider}",
+    "noEmail": "No verified email",
+    "verifiedTitle": "Verified email required",
+    "verifiedMessage": "Verify the email address in the external auth provider before creating or joining a tenant.",
+    "createTitle": "Create tenant",
+    "createMessage": "The current external identity becomes tenant admin.",
+    "tenantName": "Tenant name",
+    "tenantSlug": "Tenant slug",
+    "createSubmit": "Create tenant",
+    "joinTitle": "Join tenant",
+    "joinMessage": "Open an invitation URL from a tenant admin, or paste the token on the join page.",
+    "openJoin": "Open join page",
+    "signIn": "Sign in",
+    "signOut": "Sign out"
+  },
+  "signIn": {
+    "title": "Studio sign-in",
+    "subtitle": "Create a one-use Pandar plugin login ticket",
+    "meta": "Plugin",
+    "externalUnavailableTitle": "External auth unavailable",
+    "externalConfigMessage": "Configure external auth before creating plugin login tickets.",
+    "authUnavailableTitle": "Auth token unavailable",
+    "authMessage": "Authenticate before creating plugin login tickets.",
+    "tenantLookupTitle": "Tenant lookup unavailable",
+    "noTenantsTitle": "No tenants available",
+    "noTenantsMessage": "Authenticate with a tenant-scoped account before signing in from Studio.",
+    "selectTenant": "Select tenant",
+    "tenant": "Tenant",
+    "continue": "Continue",
+    "callbackUrl": "Local callback URL",
+    "signInSubmit": "Sign in to Studio"
+  },
+  "join": {
+    "title": "Join tenant",
+    "subtitle": "Accept an invitation with {provider} authentication",
+    "joinToken": "Join token",
+    "joinSubmit": "Join tenant",
+    "signIn": "Sign in",
+    "signOut": "Sign out"
   }
 }

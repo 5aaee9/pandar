@@ -433,5 +433,47 @@
     "auditMeta": "近期 {count} 条",
     "noAuditEvents": "无审计事件",
     "idLabel": "ID"
+  },
+  "onboarding": {
+    "title": "租户开通",
+    "subtitle": "{name} 由 {provider} 认证",
+    "noEmail": "无已验证邮箱",
+    "verifiedTitle": "需要已验证邮箱",
+    "verifiedMessage": "请在创建或加入租户前，先在外部认证提供商中验证邮箱地址。",
+    "createTitle": "创建租户",
+    "createMessage": "当前外部身份将成为租户管理员。",
+    "tenantName": "租户名称",
+    "tenantSlug": "租户 Slug",
+    "createSubmit": "创建租户",
+    "joinTitle": "加入租户",
+    "joinMessage": "打开租户管理员提供的邀请 URL，或在加入页面粘贴令牌。",
+    "openJoin": "打开加入页面",
+    "signIn": "登录",
+    "signOut": "退出登录"
+  },
+  "signIn": {
+    "title": "Studio 登录",
+    "subtitle": "创建一次性的 Pandar 插件登录票据",
+    "meta": "插件",
+    "externalUnavailableTitle": "外部认证不可用",
+    "externalConfigMessage": "创建插件登录票据前请先配置外部认证。",
+    "authUnavailableTitle": "认证令牌不可用",
+    "authMessage": "创建插件登录票据前请先完成认证。",
+    "tenantLookupTitle": "租户查询不可用",
+    "noTenantsTitle": "无可用租户",
+    "noTenantsMessage": "从 Studio 登录前，请使用具备租户权限的账号进行认证。",
+    "selectTenant": "选择租户",
+    "tenant": "租户",
+    "continue": "继续",
+    "callbackUrl": "本地回调 URL",
+    "signInSubmit": "登录到 Studio"
+  },
+  "join": {
+    "title": "加入租户",
+    "subtitle": "使用 {provider} 认证接受邀请",
+    "joinToken": "加入令牌",
+    "joinSubmit": "加入租户",
+    "signIn": "登录",
+    "signOut": "退出登录"
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 import type { Tenant } from "../dashboard-types";
 
@@ -29,6 +30,7 @@ export function PluginTicketForm({
   redirectUrl,
   selectedTenant,
 }: PluginTicketFormProps) {
+  const t = useTranslations("signIn");
   const [callbackUrl, setCallbackUrl] = useState(redirectUrl);
 
   useEffect(() => {
@@ -70,7 +72,7 @@ export function PluginTicketForm({
       <input name="tenant_id" type="hidden" value={selectedTenant.id} />
       <label className="grid gap-1 text-sm">
         <span className="text-xs font-medium text-slate-500">
-          Local callback URL
+          {t("callbackUrl")}
         </span>
         <input
           className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950"
@@ -87,7 +89,7 @@ export function PluginTicketForm({
         className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white"
         type="submit"
       >
-        Sign in to Studio
+        {t("signInSubmit")}
       </button>
     </form>
   );

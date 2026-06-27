@@ -1,3 +1,5 @@
+import { getTranslations } from "next-intl/server";
+
 import { createPluginTicket } from "../actions";
 import { apiHeaders, authSource } from "../api-auth";
 import type { Tenant, TenantList } from "../dashboard-types";
@@ -80,6 +82,7 @@ async function fetchExternalAuthStatus(): Promise<ReadinessResult> {
 }
 
 export default async function PluginSignInPage({ searchParams }: PageProps) {
+  const t = await getTranslations("signIn");
   const auth = await authSource();
   const params = await searchParams;
   const [tenantResult, readiness] = await Promise.all([
@@ -100,40 +103,40 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
     <main className="min-h-screen bg-slate-100 px-4 py-5 text-slate-950 sm:px-6 lg:px-8">
       <section className="mx-auto max-w-2xl overflow-hidden rounded-md border border-slate-300 bg-white">
         <SectionHeader
-          title="Studio sign-in"
-          subtitle="Create a one-use Pandar plugin login ticket"
-          meta="Plugin"
+          title={t("title")}
+          subtitle={t("subtitle")}
+          meta={t("meta")}
         />
 
         {readiness.error ? (
           <EmptyState
-            title="External auth unavailable"
+            title={t("externalUnavailableTitle")}
             message={readiness.error}
           />
         ) : !readiness.externalAuthEnabled ? (
           <EmptyState
-            title="External auth unavailable"
-            message="Configure external auth before creating plugin login tickets."
+            title={t("externalUnavailableTitle")}
+            message={t("externalConfigMessage")}
           />
         ) : auth.source === "none" ? (
           <EmptyState
-            title="Auth token unavailable"
-            message="Authenticate before creating plugin login tickets."
+            title={t("authUnavailableTitle")}
+            message={t("authMessage")}
           />
         ) : tenantResult.error ? (
           <EmptyState
-            title="Tenant lookup unavailable"
+            title={t("tenantLookupTitle")}
             message={tenantResult.error}
           />
         ) : tenants.length === 0 ? (
           <EmptyState
-            title="No tenants available"
-            message="Authenticate with a tenant-scoped account before signing in from Studio."
+            title={t("noTenantsTitle")}
+            message={t("noTenantsMessage")}
           />
         ) : !selectedTenant ? (
           <div className="grid gap-3 px-4 py-4">
             <div className="text-sm font-semibold text-slate-950">
-              Select tenant
+              {t("selectTenant")}
             </div>
             <form className="grid gap-3" action="/plugin-sign-in">
               <input
@@ -143,7 +146,7 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
               />
               <label className="grid gap-1 text-sm">
                 <span className="text-xs font-medium text-slate-500">
-                  Tenant
+                  {t("tenant")}
                 </span>
                 <select
                   className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
@@ -160,7 +163,7 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
                 className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white"
                 type="submit"
               >
-                Continue
+                {t("continue")}
               </button>
             </form>
           </div>
