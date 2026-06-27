@@ -2,6 +2,7 @@ import { notificationSeverity } from './dashboard-attention'
 import { StatusIcon } from './dashboard-status'
 import type { Agent, AuthMetadata, Printer, Tenant } from './dashboard-types'
 import { DetailGroup, DetailLine, formatDate, SectionHeader } from './dashboard-ui'
+import { formatLiveState } from './dashboard-runtime-helpers'
 import type { LiveState, RuntimeNotification } from './dashboard-runtime-helpers'
 
 export function RuntimeStatusPanel({
@@ -23,7 +24,7 @@ export function RuntimeStatusPanel({
     <section className="grid gap-3 rounded-md border border-slate-300 bg-white px-4 py-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
       <div className="grid gap-2 text-sm sm:grid-cols-2">
         <RuntimeField label="Tenant" value={selectedTenant ? selectedTenant.display_name : 'No tenant'} />
-        <RuntimeField label="WebSocket" value={liveState} />
+        <RuntimeField label="WebSocket" value={formatLiveState(liveState)} />
         <RuntimeField label="Last event" value={lastEventAt ? formatDate(lastEventAt) : '-'} />
         <RuntimeField label="Auth" value={`${authLabel} · cookie ${auth.cookieName}`} />
       </div>

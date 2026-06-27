@@ -16,6 +16,22 @@ export type RuntimeNotification = {
   timestamp: string;
 };
 
+export function formatLiveState(state: LiveState): string {
+  switch (state) {
+    case "live":
+      return "Connected";
+    case "connecting":
+      return "Connecting";
+    case "disconnected":
+      return "Reconnecting";
+    case "idle":
+      return "Idle";
+    case "unavailable":
+    case "error":
+      return "Unavailable";
+  }
+}
+
 export function mergePrinter(printers: Printer[], printer: Printer) {
   return printers.some((current) => current.id === printer.id)
     ? printers.map((current) => (current.id === printer.id ? printer : current))

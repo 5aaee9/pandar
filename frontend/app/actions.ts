@@ -75,6 +75,24 @@ export async function refreshPrinters(formData: FormData) {
   );
 }
 
+export async function refreshAllAgents(formData: FormData) {
+  const tenantId = stringField(formData, "tenant_id");
+  const agentIds = formData
+    .getAll("agent_id")
+    .filter((value): value is string => typeof value === "string");
+  let allOk = true;
+  for (const agentId of agentIds) {
+    const response = await postJson(
+      `/api/v1/tenants/${tenantId}/agents/${agentId}/refresh-printers`,
+      {},
+    );
+    if (!response.ok) {
+      allOk = false;
+    }
+  }
+  redirect(statusUrl(tenantId, allOk ? "refresh_queued" : "refresh_partial"));
+}
+
 export async function diagnosePrinter(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const agentId = stringField(formData, "agent_id");
@@ -338,6 +356,24 @@ export async function retryDispatchJob(formData: FormData) {
       response.ok ? "retry_queued" : await errorCode(response),
     ),
   );
+}
+
+export async function retryDispatchJobs(formData: FormData) {
+  const tenantId = stringField(formData, "tenant_id");
+  const jobIds = formData
+    .getAll("job_id")
+    .filter((value): value is string => typeof value === "string");
+  let allOk = true;
+  for (const jobId of jobIds) {
+    const response = await postJson(
+      `/api/v1/tenants/${tenantId}/jobs/${jobId}/retry-dispatch`,
+      { reason: null },
+    );
+    if (!response.ok) {
+      allOk = false;
+    }
+  }
+  redirect(statusUrl(tenantId, allOk ? "retry_queued" : "retry_partial"));
 }
 
 export async function reprintJob(formData: FormData) {

@@ -352,7 +352,15 @@ export function DashboardRuntime({
   )
 }
 
+const ACTION_STATUS_MESSAGES: Record<string, string> = {
+  refresh_partial: 'Some refreshes could not be queued — review the list',
+  retry_partial: 'Some retries could not be queued — review the list',
+}
+
 function formatActionStatus(status: string) {
+  if (ACTION_STATUS_MESSAGES[status]) {
+    return ACTION_STATUS_MESSAGES[status]
+  }
   return status
     .split('_')
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
