@@ -327,6 +327,7 @@
         packages = [
           config.treefmt.build.wrapper
           pkgs.cargo-nextest
+          pkgs.lefthook
           pkgs.nodejs_24
           pkgs.pkg-config
           pkgs.protobuf

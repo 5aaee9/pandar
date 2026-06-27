@@ -1,0 +1,11 @@
+pre-commit:
+  commands:
+    format:
+      run: |
+        staged_files="$(mktemp)"
+        git diff --cached --name-only --diff-filter=ACMR -z > "$staged_files"
+        nix fmt
+        if [ -s "$staged_files" ]; then
+          git add --pathspec-from-file="$staged_files" --pathspec-file-nul
+        fi
+        rm -f "$staged_files"
