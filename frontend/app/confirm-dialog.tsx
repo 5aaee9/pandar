@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useTranslations } from 'next-intl'
 
 const DIALOG_CLASS =
   'pandar-dialog m-0 flex h-screen w-screen max-w-none items-center justify-center bg-transparent p-0'
@@ -11,8 +12,8 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   tone = 'danger',
   onConfirm,
   onCancel,
@@ -26,6 +27,7 @@ export function ConfirmDialog({
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const tCommon = useTranslations('common')
   const ref = useRef<HTMLDialogElement>(null)
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function ConfirmDialog({
             onClick={onCancel}
             type="button"
           >
-            {cancelLabel}
+            {cancelLabel ?? tCommon('cancel')}
           </button>
           <button
             className={`h-9 rounded-md border border-transparent px-3 text-sm font-medium text-white ${
@@ -72,7 +74,7 @@ export function ConfirmDialog({
             onClick={onConfirm}
             type="button"
           >
-            {confirmLabel}
+            {confirmLabel ?? tCommon('confirm')}
           </button>
         </div>
       </div>

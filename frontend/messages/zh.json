@@ -3,6 +3,10 @@
     "title": "Pandar",
     "description": "Bambu Studio 的云端替代方案"
   },
+  "common": {
+    "confirm": "确认",
+    "cancel": "取消"
+  },
   "runtime": {
     "liveState": {
       "live": "已连接",

@@ -3,6 +3,10 @@
     "title": "Pandar",
     "description": "Bambu Studio cloud alternative"
   },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
   "runtime": {
     "liveState": {
       "live": "Connected",
