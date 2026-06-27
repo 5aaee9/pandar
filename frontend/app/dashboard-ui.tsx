@@ -86,15 +86,16 @@ export function formatDate(value: string) {
   })
 }
 
-export function formatBytes(value: number) {
+export function formatBytes(value: number, formatNumber?: (n: number) => string) {
+  const fmt = (n: number) => (formatNumber ? formatNumber(n) : n.toFixed(1))
   if (value < 1024) {
-    return `${value} B`
+    return `${formatNumber ? formatNumber(value) : value} B`
   }
   if (value < 1024 * 1024) {
-    return `${(value / 1024).toFixed(1)} KiB`
+    return `${fmt(value / 1024)} KiB`
   }
 
-  return `${(value / (1024 * 1024)).toFixed(1)} MiB`
+  return `${fmt(value / (1024 * 1024))} MiB`
 }
 
 export function SectionHeader({ title, subtitle, meta }: { title: string; subtitle: string; meta: string }) {
