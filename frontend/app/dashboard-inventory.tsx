@@ -274,6 +274,8 @@ function JobRow({
   const tRec = useTranslations('recovery.state')
   const tJf = useTranslations('jobFormat')
   const formatDate = useLocaleDate()
+  const format = useFormatter()
+  const num = (n: number) => format.number(n)
   const updated = job.print.updated_at ?? job.updated_at
   return (
     <div
@@ -319,7 +321,7 @@ function JobRow({
           </div>
           <div>
             <span className="text-slate-500">{t('artifactLabel')} </span>
-            {job.artifact.content_type} · {formatBytes(job.artifact.size_bytes)}
+            {job.artifact.content_type} · {formatBytes(job.artifact.size_bytes, num)}
           </div>
           <div>
             <span className="text-slate-500">{t('materialLabel')} </span>

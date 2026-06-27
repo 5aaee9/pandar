@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { acceptJoinLink } from "../actions";
 import { authProviderConfig } from "../auth-provider";
 import { SectionHeader } from "../dashboard-ui";
+import { LanguageSwitcher } from "../../components/language-switcher";
 import { JoinTokenForm } from "./token-form";
 
 export default async function JoinPage() {
@@ -17,6 +18,9 @@ export default async function JoinPage() {
           subtitle={t("subtitle", { provider: auth.provider })}
           meta={auth.cookieName}
         />
+        <div className="flex justify-end px-4 py-2">
+          <LanguageSwitcher />
+        </div>
         <ProviderLinks
           signInUrl={auth.signInUrl}
           signOutUrl={auth.signOutUrl}

@@ -19,7 +19,7 @@ function resolveLocale(cookie: string | undefined, acceptLanguage: string): Loca
   if (isLocale(cookie)) {
     return cookie
   }
-  if (/\bzh\b|zh-/i.test(acceptLanguage)) {
+  if (/\bzh(?:\b|[-_])/i.test(acceptLanguage)) {
     return 'zh'
   }
   return defaultLocale

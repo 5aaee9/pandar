@@ -4,6 +4,7 @@ import { createTenantFromExternal } from './actions'
 import { authProviderConfig } from './auth-provider'
 import type { MeResponse } from './dashboard-types'
 import { EmptyState, SectionHeader } from './dashboard-ui'
+import { LanguageSwitcher } from '../components/language-switcher'
 
 export async function OnboardingPanel({ me }: { me: MeResponse }) {
   const t = await getTranslations('onboarding')
@@ -17,6 +18,9 @@ export async function OnboardingPanel({ me }: { me: MeResponse }) {
           subtitle={t('subtitle', { name: me.identity.display_name, provider: auth.provider })}
           meta={me.identity.email ?? t('noEmail')}
         />
+        <div className="flex justify-end px-4 py-2">
+          <LanguageSwitcher />
+        </div>
 
         <ProviderLinks signInUrl={auth.signInUrl} signOutUrl={auth.signOutUrl} />
 

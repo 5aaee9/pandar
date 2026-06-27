@@ -4,6 +4,7 @@ import { createPluginTicket } from "../actions";
 import { apiHeaders, authSource } from "../api-auth";
 import type { Tenant, TenantList } from "../dashboard-types";
 import { EmptyState, SectionHeader } from "../dashboard-ui";
+import { LanguageSwitcher } from "../../components/language-switcher";
 import { PluginTicketForm } from "./plugin-ticket-form";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
@@ -107,6 +108,9 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
           subtitle={t("subtitle")}
           meta={t("meta")}
         />
+        <div className="flex justify-end px-4 py-2">
+          <LanguageSwitcher />
+        </div>
 
         {readiness.error ? (
           <EmptyState
