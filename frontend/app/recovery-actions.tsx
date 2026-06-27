@@ -23,7 +23,7 @@ export function RecoveryActions({
     <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
       <SectionHeader
         title="Recovery actions"
-        subtitle="Manual refresh, dispatch retry, reprint, and duplicate-and-print"
+        subtitle="Refresh, dispatch retry, reprint, live print controls, and duplicate — shown per job state"
         meta={`${jobs.length} jobs`}
       />
       {!selectedTenant ? (
@@ -47,7 +47,7 @@ export function RecoveryActions({
             <EmptyState title="No jobs" message="Jobs will appear here when dispatch history exists." />
           ) : (
             <div className="divide-y divide-slate-200">
-              {jobs.slice(0, 8).map((job) => {
+              {jobs.map((job) => {
                 const printer = printers.find((candidate) => candidate.id === job.printer_id)
                 return (
                   <div key={job.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[minmax(0,1fr)_minmax(320px,auto)]">
@@ -55,11 +55,17 @@ export function RecoveryActions({
                       <div className="truncate font-medium text-slate-950">{job.artifact.filename}</div>
                       <div className="truncate text-xs text-slate-700">{formatArtifactMetadata(job)}</div>
                       <div className="mt-1 text-xs text-slate-600">{formatJobRecoveryState(job)}</div>
-                      <LiveControlPanel tenantId={selectedTenant.id} printer={printer} />
+                      {printRunning(job) ? (
+                        <LiveControlPanel tenantId={selectedTenant.id} printer={printer} />
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <ReasonForm action={retryDispatchJob} tenantId={selectedTenant.id} jobId={job.id} label="Retry dispatch" />
-                      <ReasonForm action={reprintJob} tenantId={selectedTenant.id} jobId={job.id} label="Reprint" />
+                      {dispatchFailed(job) ? (
+                        <ReasonForm action={retryDispatchJob} tenantId={selectedTenant.id} jobId={job.id} label="Retry dispatch" />
+                      ) : null}
+                      {printTerminal(job) ? (
+                        <ReasonForm action={reprintJob} tenantId={selectedTenant.id} jobId={job.id} label="Reprint" />
+                      ) : null}
                       <DuplicateForm tenantId={selectedTenant.id} jobId={job.id} printers={printers} />
                     </div>
                   </div>
@@ -88,7 +94,7 @@ function LiveControlPanel({ tenantId, printer }: { tenantId: string; printer: Pr
       <PrinterControlForm tenantId={tenantId} printerId={printer.id} action="resume" label="Queue resume" />
       <ConfirmForm
         action={controlPrinter}
-        buttonClassName="h-8 rounded border border-slate-300 px-2 text-xs font-medium"
+        buttonClassName="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium"
         buttonLabel="Queue stop"
         title="Stop print"
         message="Stop this print? The current job cannot be resumed from where it stops."
@@ -103,13 +109,13 @@ function LiveControlPanel({ tenantId, printer }: { tenantId: string; printer: Pr
         <input name="tenant_id" type="hidden" value={tenantId} />
         <input name="printer_id" type="hidden" value={printer.id} />
         <input name="action" type="hidden" value="set_print_speed" />
-        <select name="speed_mode" className="h-8 w-24 rounded border border-slate-300 bg-white px-2 text-xs">
+        <select name="speed_mode" className="h-8 w-24 rounded-md border border-slate-300 bg-white px-2 text-xs">
           <option value="1">Silent</option>
           <option value="2">Standard</option>
           <option value="3">Sport</option>
           <option value="4">Ludicrous</option>
         </select>
-        <button className="h-8 rounded border border-slate-300 px-2 text-xs font-medium" type="submit">Queue speed</button>
+        <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">Queue speed</button>
       </form>
     </div>
   )
@@ -131,7 +137,7 @@ function PrinterControlForm({
       <input name="tenant_id" type="hidden" value={tenantId} />
       <input name="printer_id" type="hidden" value={printerId} />
       <input name="action" type="hidden" value={action} />
-      <button className="h-8 rounded border border-slate-300 px-2 text-xs font-medium" type="submit">{label}</button>
+      <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">{label}</button>
     </form>
   )
 }
@@ -141,13 +147,25 @@ function liveControlsAvailable(printer: Printer) {
   return normalized ? liveControlModelKeys.has(normalized) : false
 }
 
+function dispatchFailed(job: Job): boolean {
+  return job.status.toLowerCase() === 'failed' || job.command.status.toLowerCase() === 'failed'
+}
+
+function printRunning(job: Job): boolean {
+  return job.print.status.toLowerCase() === 'running'
+}
+
+function printTerminal(job: Job): boolean {
+  return ['completed', 'failed', 'cancelled'].includes(job.print.status.toLowerCase())
+}
+
 function ReasonForm({ action, tenantId, jobId, label }: { action: (formData: FormData) => void; tenantId: string; jobId: string; label: string }) {
   return (
     <form action={action} className="flex gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
       <input name="job_id" type="hidden" value={jobId} />
-      <input className="h-8 w-28 rounded border border-slate-300 px-2 text-xs" name="reason" placeholder="reason" />
-      <button className="h-8 rounded border border-slate-300 px-2 text-xs font-medium" type="submit">{label}</button>
+      <input className="h-8 w-28 rounded-md border border-slate-300 px-2 text-xs" name="reason" placeholder="reason" />
+      <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">{label}</button>
     </form>
   )
 }
@@ -157,12 +175,12 @@ function DuplicateForm({ tenantId, jobId, printers }: { tenantId: string; jobId:
     <form action={duplicateJob} className="flex flex-wrap gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
       <input name="job_id" type="hidden" value={jobId} />
-      <select name="printer_id" className="h-8 rounded border border-slate-300 bg-white px-2 text-xs">
+      <select name="printer_id" className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs">
         <option value="">Same printer</option>
         {printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
       </select>
-      <input className="h-8 w-16 rounded border border-slate-300 px-2 text-xs" min="1" name="plate_id" placeholder="plate" type="number" />
-      <button className="h-8 rounded border border-slate-300 px-2 text-xs font-medium" type="submit">Duplicate</button>
+      <input className="h-8 w-16 rounded-md border border-slate-300 px-2 text-xs" min="1" name="plate_id" placeholder="plate" type="number" />
+      <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">Duplicate</button>
     </form>
   )
 }

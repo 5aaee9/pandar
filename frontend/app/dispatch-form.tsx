@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
 import type { ArtifactMetadata } from './dashboard-types'
-import { formatBytes } from './dashboard-ui'
+import { formatBytes, HelpTip } from './dashboard-ui'
 
 type DispatchTenant = {
   id: string
@@ -187,17 +187,21 @@ export function DispatchForm({
               ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs font-medium text-slate-500">Plate</span>
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="flex items-center gap-1 text-xs font-medium text-slate-500">
+              Plate
+              <HelpTip label="Plate">Which plate from the project file to print. Use 1 if the file has a single plate.</HelpTip>
+            </span>
             <input
-              name="plate_id"
+              aria-label="Plate"
               className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950"
               defaultValue="1"
               min="1"
+              name="plate_id"
               type="number"
               required
             />
-          </label>
+          </div>
           <label className="flex flex-col gap-1 text-sm lg:col-span-2">
             <span className="text-xs font-medium text-slate-500">Artifact</span>
             <input
@@ -237,22 +241,31 @@ export function DispatchForm({
             </details>
           </div>
           <div className="flex flex-wrap gap-4 text-sm text-slate-700 lg:col-span-2">
-            <label className="flex items-center gap-2">
-              <input name="use_ams" type="checkbox" value="true" defaultChecked />
-              Use AMS
-            </label>
-            <label className="flex items-center gap-2">
-              <input name="flow_cali" type="checkbox" value="true" />
-              Flow calibration
-            </label>
-            <label className="flex items-center gap-2">
-              <input name="timelapse" type="checkbox" value="true" />
-              Timelapse
-            </label>
+            <span className="flex items-center gap-1.5">
+              <label className="flex items-center gap-2">
+                <input name="use_ams" type="checkbox" value="true" defaultChecked />
+                Use AMS
+              </label>
+              <HelpTip label="Use AMS">Use the printer's AMS units to pick filament for each part of the print.</HelpTip>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <label className="flex items-center gap-2">
+                <input name="flow_cali" type="checkbox" value="true" />
+                Flow calibration
+              </label>
+              <HelpTip label="Flow calibration">Run flow dynamics calibration first. Improves extrusion accuracy but adds time before the print.</HelpTip>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <label className="flex items-center gap-2">
+                <input name="timelapse" type="checkbox" value="true" />
+                Timelapse
+              </label>
+              <HelpTip label="Timelapse">Record a timelapse of the print with the printer's camera.</HelpTip>
+            </span>
           </div>
           <div className="lg:col-span-2">
             <button
-              className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white disabled:bg-slate-300 disabled:text-slate-600"
+              className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800 disabled:bg-slate-300 disabled:text-slate-600"
               disabled={artifact.state !== 'ready' || submitting}
               type="submit"
             >

@@ -1,4 +1,6 @@
-import type { ReactNode } from 'react'
+'use client'
+
+import { useId, type ReactNode } from 'react'
 
 import { prettifyToken, statusMeta } from './dashboard-attention'
 import { PILL_TONES, StatusIcon } from './dashboard-status'
@@ -30,10 +32,33 @@ export function Tag({ value, tone = 'neutral' }: { value: string; tone?: keyof t
   )
 }
 
+export function HelpTip({ label, children }: { label: string; children: ReactNode }) {
+  const tipId = useId()
+  return (
+    <span className="group relative inline-flex shrink-0">
+      <button
+        aria-describedby={tipId}
+        aria-label={`More about ${label}`}
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-300 bg-white text-[10px] leading-none text-slate-500 hover:bg-slate-100"
+        type="button"
+      >
+        ?
+      </button>
+      <span
+        className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-1 w-56 -translate-x-1/2 rounded-md bg-slate-900 px-2 py-1 text-center text-xs font-normal text-slate-100 opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+        id={tipId}
+        role="tooltip"
+      >
+        {children}
+      </span>
+    </span>
+  )
+}
+
 export function Metric({ label, value }: { label: string; value: number | undefined }) {
   return (
     <div className="rounded-md border border-slate-300 bg-white px-4 py-3">
-      <div className="text-xs font-medium uppercase text-slate-500">{label}</div>
+      <div className="text-xs font-medium text-slate-500">{label}</div>
       <div className="mt-1 text-2xl font-semibold">{value ?? '-'}</div>
     </div>
   )
@@ -87,7 +112,7 @@ export function SectionHeader({ title, subtitle, meta }: { title: string; subtit
 export function DetailGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div>
-      <div className="text-xs font-medium uppercase text-slate-500">{title}</div>
+      <div className="text-xs font-medium text-slate-500">{title}</div>
       <div className="mt-2 grid gap-1">{children}</div>
     </div>
   )

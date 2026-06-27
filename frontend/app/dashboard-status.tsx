@@ -3,9 +3,6 @@ import type { AttentionItem, Severity } from './dashboard-attention'
 import type { LiveState } from './dashboard-runtime-helpers'
 import type { Tenant } from './dashboard-types'
 
-export const FOCUS_RING =
-  'rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-100'
-
 export const PILL_TONES: Record<Severity, string> = {
   success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
   warning: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -148,7 +145,7 @@ export function StatCell({
   state: Severity
 }) {
   return (
-    <a href={href} className={`block px-3 py-1 transition-colors hover:bg-slate-100/70 ${FOCUS_RING}`}>
+    <a href={href} className="block rounded-md px-3 py-1 transition-colors hover:bg-slate-100/70">
       <div className="flex items-center gap-1.5">
         <StatusIcon severity={state} className="h-3.5 w-3.5" />
         <span className="text-xs text-slate-600">{label}</span>
@@ -191,7 +188,7 @@ export function AttentionRow({
 function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant | null }) {
   if (!tenant) {
     return (
-      <a href={`#${item.sectionId}`} className={`text-xs font-medium text-cyan-700 hover:underline ${FOCUS_RING}`}>
+      <a href={`#${item.sectionId}`} className="text-xs font-medium text-cyan-700 hover:underline">
         View
       </a>
     )
@@ -203,7 +200,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
         <input name="tenant_id" type="hidden" value={tenant.id} />
         <input name="agent_id" type="hidden" value={item.agentId} />
         <button
-          className={`h-7 border border-slate-300 bg-white px-2 text-xs font-medium text-slate-800 hover:bg-slate-50 ${FOCUS_RING}`}
+          className={`h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-800 hover:bg-slate-50`}
           type="submit"
         >
           Refresh
@@ -218,7 +215,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
         <input name="tenant_id" type="hidden" value={tenant.id} />
         <input name="job_id" type="hidden" value={item.mono} />
         <button
-          className={`h-7 bg-cyan-700 px-2 text-xs font-medium text-white hover:bg-cyan-800 ${FOCUS_RING}`}
+          className={`h-8 rounded-md bg-cyan-700 px-2 text-xs font-medium text-white hover:bg-cyan-800`}
           type="submit"
         >
           Reprint
@@ -233,7 +230,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
         <input name="tenant_id" type="hidden" value={tenant.id} />
         <input name="job_id" type="hidden" value={item.mono} />
         <button
-          className={`h-7 bg-cyan-700 px-2 text-xs font-medium text-white hover:bg-cyan-800 ${FOCUS_RING}`}
+          className={`h-8 rounded-md bg-cyan-700 px-2 text-xs font-medium text-white hover:bg-cyan-800`}
           type="submit"
         >
           Retry dispatch
@@ -243,7 +240,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
   }
 
   return (
-    <a href={`#${item.sectionId}`} className={`text-xs font-medium text-cyan-700 hover:underline ${FOCUS_RING}`}>
+    <a href={`#${item.sectionId}`} className="text-xs font-medium text-cyan-700 hover:underline">
       View
     </a>
   )

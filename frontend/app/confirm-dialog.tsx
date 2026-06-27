@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
-import { FOCUS_RING } from './dashboard-status'
-
 const DIALOG_CLASS =
   'pandar-dialog m-0 flex h-screen w-screen max-w-none items-center justify-center bg-transparent p-0'
 const CARD_CLASS =
@@ -61,14 +59,14 @@ export function ConfirmDialog({
         <div className="mt-5 flex justify-end gap-2">
           <button
             autoFocus
-            className={`h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 hover:bg-slate-50 ${FOCUS_RING}`}
+            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 hover:bg-slate-50"
             onClick={onCancel}
             type="button"
           >
             {cancelLabel}
           </button>
           <button
-            className={`h-9 rounded-md border border-transparent px-3 text-sm font-medium text-white ${FOCUS_RING} ${
+            className={`h-9 rounded-md border border-transparent px-3 text-sm font-medium text-white ${
               tone === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-cyan-700 hover:bg-cyan-800'
             }`}
             onClick={onConfirm}

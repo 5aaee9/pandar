@@ -4,7 +4,7 @@ export const STALE_MS = 15 * 60 * 1000
 
 export type Severity = 'critical' | 'warning' | 'success' | 'info'
 
-const OFFLINE_PRINTER_STATUSES = new Set(['offline', 'problem'])
+export const OFFLINE_PRINTER_STATUSES = new Set(['offline', 'problem'])
 const ONLINE_AGENT_STATUSES = new Set(['online'])
 const HEALTHY_AGENT_STATUSES = new Set(['online', 'connecting'])
 const TERMINAL_JOB_STATUSES = new Set(['completed', 'failed', 'cancelled'])

@@ -31,7 +31,7 @@ export function OnboardingPanel({ me }: { me: MeResponse }) {
               </div>
               <Input name="display_name" label="Tenant name" />
               <Input name="slug" label="Tenant slug" />
-              <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white" type="submit">
+              <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800" type="submit">
                 Create tenant
               </button>
             </form>

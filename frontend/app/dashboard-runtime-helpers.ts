@@ -137,13 +137,19 @@ export function formatJobRecoveryState(job: Job) {
   const message = `${job.error ?? ""} ${job.print.error ?? ""}`.toLowerCase();
 
   if (physical === "running") {
-    return "Physical print running";
+    return "Printing now";
   }
-  if (["completed", "failed", "cancelled"].includes(physical)) {
-    return `Physical print ${physical}`;
+  if (physical === "completed") {
+    return "Print completed";
+  }
+  if (physical === "failed") {
+    return "Print failed";
+  }
+  if (physical === "cancelled") {
+    return "Print cancelled";
   }
   if (dispatch === "queued" || command === "queued") {
-    return "Agent offline before dispatch";
+    return "Waiting for the agent to come back online";
   }
   if (
     message.includes("upload") ||
@@ -151,13 +157,13 @@ export function formatJobRecoveryState(job: Job) {
     message.includes("sftp") ||
     message.includes("file")
   ) {
-    return "File transfer failure";
+    return "Could not send the file to the printer";
   }
   if (message.includes("mqtt") || message.includes("publish")) {
-    return "MQTT publish failure";
+    return "Printer did not accept the start command";
   }
   if (dispatch === "failed" || command === "failed") {
-    return "Hub enqueue failure";
+    return "Could not queue the job at the hub";
   }
-  return "Awaiting physical print";
+  return "Waiting for the print to start";
 }

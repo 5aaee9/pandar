@@ -6,7 +6,6 @@ import type { AttentionItem, Health, Severity } from './dashboard-attention'
 import {
   AttentionRow,
   computeVerdict,
-  FOCUS_RING,
   StatCell,
   StatusIcon,
 } from './dashboard-status'
@@ -153,7 +152,7 @@ export function SectionNav({
               <a
                 href={`#${section.id}`}
                 aria-current={isActive ? 'true' : undefined}
-                className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-sm transition-colors ${FOCUS_RING} ${
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-sm transition-colors ${
                   isActive
                     ? 'bg-slate-900 text-white'
                     : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-900'

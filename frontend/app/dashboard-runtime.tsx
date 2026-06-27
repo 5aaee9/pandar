@@ -34,13 +34,9 @@ import {
 } from './dashboard-runtime-helpers'
 import { computeAttention, computeHealth, maxSeverity } from './dashboard-attention'
 import { Header } from './dashboard-header'
+import { JobHistory, PrinterInventory } from './dashboard-inventory'
 import { FleetStatusStrip, NeedsAttention, SectionNav } from './dashboard-overview'
-import {
-  JobHistory,
-  PrinterInventory,
-  RuntimeStatusPanel,
-  TenantSettings,
-} from './dashboard-runtime-sections'
+import { RuntimeStatusPanel, TenantSettings } from './dashboard-runtime-sections'
 
 type DashboardRuntimeProps = {
   apiUrl: string
@@ -223,7 +219,7 @@ export function DashboardRuntime({
       if (job.print.status !== previous.print.status && job.print.status.toLowerCase() === 'failed') {
         addNotification({
           key: `job:${job.id}:print:failed:${job.print.error ?? ''}`,
-          title: 'Physical print',
+          title: 'Print failed',
           detail: job.print.error ?? job.artifact.filename,
           timestamp,
         })
@@ -303,10 +299,10 @@ export function DashboardRuntime({
 
         <div id="printers" className="flex scroll-mt-20 flex-col gap-5">
           <LinkedAgentsSection selectedTenant={selectedTenant} agents={agents} />
-          <PrinterInventory selectedTenant={selectedTenant} printers={printers} />
+          <PrinterInventory selectedTenant={selectedTenant} printers={printers} agents={agents} />
         </div>
         <div id="jobs" className="scroll-mt-20">
-          <JobHistory selectedTenant={selectedTenant} jobs={jobs} />
+          <JobHistory selectedTenant={selectedTenant} jobs={jobs} printers={printers} agents={agents} />
         </div>
         <div id="dispatch" className="scroll-mt-20">
           <DispatchForm selectedTenant={selectedTenant} printers={printers} />

@@ -31,7 +31,7 @@ export function Header({
               ))}
             </select>
           </label>
-          <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white" type="submit">
+          <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800" type="submit">
             View
           </button>
         </form>

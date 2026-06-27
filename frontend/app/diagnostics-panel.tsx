@@ -1,5 +1,5 @@
 import { diagnosePrinter, discoverPrinters } from './actions'
-import { EmptyState, formatDate, StatusBadge, Tag } from './dashboard-ui'
+import { EmptyState, formatDate, HelpTip, StatusBadge, Tag } from './dashboard-ui'
 import type {
   Agent,
   Command,
@@ -41,7 +41,7 @@ export function LinkedAgentsSection({
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-600">
+            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
                 <th className="px-4 py-2">Agent</th>
                 <th className="px-4 py-2">Status</th>
@@ -76,7 +76,7 @@ export function LinkedAgentsSection({
                         />
                       </label>
                       <button
-                        className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white"
+                        className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800"
                         type="submit"
                       >
                         Discover
@@ -177,7 +177,7 @@ function DiscoveryResult({ result }: { result: DiscoveryResultData }) {
   ) : (
     <div className="overflow-x-auto">
       <table className="min-w-full border-collapse text-left text-sm">
-        <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-600">
+        <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
           <tr>
             <th className="px-4 py-2">Name</th>
             <th className="px-4 py-2">Serial</th>
@@ -218,7 +218,7 @@ function DiagnosticResult({ result }: { result: DiagnosticResultData }) {
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-600">
+            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
                 <th className="px-4 py-2">Check</th>
                 <th className="px-4 py-2">Status</th>
@@ -253,16 +253,19 @@ function DiagnosticResult({ result }: { result: DiagnosticResultData }) {
             label="External storage"
             value={compatibility?.external_storage ?? 'unknown'}
             available={compatibility?.external_storage === 'supported'}
+            help="Whether the printer can read print files from its SD card or external storage."
           />
           <CompatibilityRow
             label="FTPS TLS 1.2 cap"
             value={compatibility?.ftps_tls_1_2_cap ? 'available' : 'unavailable'}
             available={compatibility?.ftps_tls_1_2_cap === true}
+            help="Printer firmware caps FTPS at TLS 1.2. The agent uses a compatible TLS profile when available."
           />
           <CompatibilityRow
             label="Clear-data fallback"
             value={compatibility?.ftps_clear_data_fallback ? 'available' : 'unavailable'}
             available={compatibility?.ftps_clear_data_fallback === true}
+            help="Whether the agent can fall back to clear-data FTPS transfer for this model family."
           />
           {Object.entries(features).map(([name, value]) => (
             <CompatibilityRow
@@ -282,14 +285,19 @@ function CompatibilityRow({
   label,
   value,
   available,
+  help,
 }: {
   label: string
   value: string
   available: boolean
+  help?: string
 }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-100 py-1.5 last:border-b-0">
-      <dt className="min-w-0 truncate text-slate-700">{label}</dt>
+      <dt className="flex min-w-0 items-center gap-1 text-slate-700">
+        <span className="truncate">{label}</span>
+        {help ? <HelpTip label={label}>{help}</HelpTip> : null}
+      </dt>
       <dd className="flex items-center gap-2 text-right text-xs font-medium text-slate-700">
         <Tag value={available ? 'Available' : 'Unavailable'} tone={available ? 'success' : 'neutral'} />
         <span className="font-mono text-slate-500">{value}</span>

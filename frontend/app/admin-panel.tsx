@@ -39,7 +39,7 @@ export function TenantAdminPanel({
 }: AdminPanelProps) {
   if (!selectedTenant) {
     return (
-      <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
+      <section className="overflow-hidden rounded-md border border-slate-300 bg-slate-50">
         <SectionHeader title="Tenant administration" subtitle="No tenant selected" meta="Admin" />
         <EmptyState title="No tenant selected" message="Select a tenant to manage users, tokens, and agent pairings." />
       </section>
@@ -48,7 +48,7 @@ export function TenantAdminPanel({
 
   if (unavailable) {
     return (
-      <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
+      <section className="overflow-hidden rounded-md border border-slate-300 bg-slate-50">
         <SectionHeader
           title="Tenant administration"
           subtitle={`${selectedTenant.display_name} admin data is unavailable`}
@@ -60,7 +60,7 @@ export function TenantAdminPanel({
   }
 
   return (
-    <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
+    <section className="overflow-hidden rounded-md border border-slate-300 bg-slate-50">
       <SectionHeader
         title="Tenant administration"
         subtitle={`${selectedTenant.display_name} users, tokens, and audit trail`}
@@ -152,7 +152,7 @@ function UsersTable({
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-600">
+            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
               <tr>
                 <th className="px-4 py-2">User</th>
                 <th className="px-4 py-2">Role</th>
@@ -178,10 +178,10 @@ function UsersTable({
                       <form action={updateTenantUserRole} className="flex flex-wrap gap-2">
                         <input name="tenant_id" type="hidden" value={tenantId} />
                         <input name="user_id" type="hidden" value={user.id} />
-                        <select name="role" defaultValue={user.role} className="h-8 rounded border border-slate-300 bg-white px-2 text-xs">
+                        <select name="role" defaultValue={user.role} className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs">
                           {roles.map((role) => <option key={role} value={role}>{role}</option>)}
                         </select>
-                        <button className="h-8 rounded border border-slate-300 px-2 text-xs font-medium" type="submit">Save</button>
+                        <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">Save</button>
                       </form>
                     </td>
                   </tr>
@@ -220,7 +220,7 @@ function JoinLinksTable({ tenantId, joinLinks }: { tenantId: string; joinLinks: 
               </div>
               <ConfirmForm
                 action={revokeJoinLink}
-                buttonClassName="h-8 rounded border border-red-300 px-2 text-xs font-medium text-red-700"
+                buttonClassName="h-8 rounded-md border border-red-300 px-2 text-xs font-medium text-red-700"
                 buttonLabel={link.revoked_at ? 'Revoked' : 'Revoke'}
                 disabled={Boolean(link.revoked_at)}
                 title="Revoke join link"
@@ -261,7 +261,7 @@ function TenantTokensTable({ tenantId, tokens }: { tenantId: string; tokens: Ten
                 <RotateTenantTokenForm tenantId={tenantId} tokenId={token.id} />
                 <ConfirmForm
                   action={revokeTenantToken}
-                  buttonClassName="h-8 rounded border border-red-300 px-2 text-xs font-medium text-red-700"
+                  buttonClassName="h-8 rounded-md border border-red-300 px-2 text-xs font-medium text-red-700"
                   buttonLabel={token.revoked_at ? 'Revoked' : 'Revoke'}
                   disabled={Boolean(token.revoked_at)}
                   title="Revoke tenant token"
@@ -291,7 +291,7 @@ function RotateTenantTokenForm({ tenantId, tokenId }: { tenantId: string; tokenI
       <form ref={formRef} action={formAction} className="grid gap-2">
         <input name="tenant_id" type="hidden" value={tenantId} />
         <input name="token_id" type="hidden" value={tokenId} />
-        <button className="h-8 rounded border border-slate-300 px-2 text-xs font-medium" disabled={pending} onClick={() => setOpen(true)} type="button">
+        <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" disabled={pending} onClick={() => setOpen(true)} type="button">
           {pending ? 'Rotating...' : 'Rotate'}
         </button>
         <SecretActionResult state={state} />
@@ -402,7 +402,7 @@ function Select({ name, label, values }: { name: string; label: string; values: 
 }
 
 function PrimaryButton({ label }: { label: string }) {
-  return <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white" type="submit">{label}</button>
+  return <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800" type="submit">{label}</button>
 }
 
 function Subhead({ title, meta }: { title: string; meta: string }) {
