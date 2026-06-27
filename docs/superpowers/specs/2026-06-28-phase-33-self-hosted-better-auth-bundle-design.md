@@ -106,34 +106,41 @@ New top-level directory `auth/` — a minimal Next.js (App Router) app:
   - plugins: `passkey()` from `@better-auth/passkey` and `jwt()` from
     `better-auth/plugins`.
   - `jwt({ jwks: { keyPairConfig: { alg: "RS256" }, jwksPath: "/jwks" },
-jwt: { definePayload, issuer, audience } })`. Notes: - Better Auth's JWT plugin key-generation label is the JWA algorithm string
-    `"RS256"`, matching `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. (The jwt
-    plugin default is EdDSA; the target deployment configures pandar for
-    RS256 verification, so RS256 key generation is mandatory.) This corrects
-    the earlier Phase 30 design note and roadmap entry that used `RSA256`;
-    Better Auth 1.6.22 package types expose `RS256`. - Better Auth generates the RSA keypair and persists it in its own `jwks`
-    database table, so the `kid` is stable across restarts. **No external JWT
-    signing key secret is required.** - Better Auth's JWT plugin default JWKS path is `/jwks`; because the app is
-    mounted at `basePath: "/api/auth"`, the public JWKS URL is
-    `/api/auth/jwks` → `PANDAR_EXTERNAL_AUTH_JWKS_URL`. - Better Auth's JWT server plugin exposes `/token`; mounted under
-    `basePath: "/api/auth"` this becomes `/api/auth/token`. Better Auth
-    1.6.22's `jwtClient()` only exposes `jwks`, so the issuer page retrieves
-    the bearer JWT with a same-origin `fetch("/api/auth/token", {
-credentials: "include" })` instead of a typed client helper. - `definePayload` must emit pandar's expected snake-case profile claims:
-    `{ email, email_verified, name, preferred_username }` (Better Auth's
-    default payload uses camelCase `emailVerified`, which pandar does not read).
-    The JWT `sub` claim is not emitted by `definePayload`; Better Auth 1.6.22
-    sets it after `definePayload` using `jwt.getSubject` or the default
-    `session.user.id`, and this phase keeps that default. For passkey-only
-    users, `preferred_username` is the normalized email local part before `@`. - `issuer` and `audience` default to `baseURL`; pandar is configured with
-    matching `PANDAR_EXTERNAL_AUTH_ISSUER`/`PANDAR_EXTERNAL_AUTH_AUDIENCE`.
-    Better Auth's JWT plugin emits `iss`/`aud` from this `jwt.issuer` /
-    `jwt.audience` configuration; `definePayload` only supplies identity
-    profile claims. - The JWT lifetime is configured from `PANDAR_AUTH_JWT_MAX_AGE_SECONDS`
-    and mapped to Better Auth `jwt.expirationTime` as a seconds string such as
-    `"43200s"`. It defaults to the same 12-hour value as the dashboard cookie.
-    There is no refresh path in this phase; users sign in again when the JWT
-    expires.
+jwt: { definePayload, issuer, audience } })`. Notes:
+    - Better Auth's JWT plugin key-generation label is the JWA algorithm string
+      `"RS256"`, matching `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. (The jwt
+      plugin default is EdDSA; the target deployment configures pandar for
+      RS256 verification, so RS256 key generation is mandatory.) This corrects
+      the earlier Phase 30 design note and roadmap entry that used `RSA256`;
+      Better Auth 1.6.22 package types expose `RS256`.
+    - Better Auth generates the RSA keypair and persists it in its own `jwks`
+      database table, so the `kid` is stable across restarts. **No external JWT
+      signing key secret is required.**
+    - Better Auth's JWT plugin default JWKS path is `/jwks`; because the app is
+      mounted at `basePath: "/api/auth"`, the public JWKS URL is
+      `/api/auth/jwks` → `PANDAR_EXTERNAL_AUTH_JWKS_URL`.
+    - Better Auth's JWT server plugin exposes `/token`; mounted under
+      `basePath: "/api/auth"` this becomes `/api/auth/token`. Better Auth
+      1.6.22's `jwtClient()` only exposes `jwks`, so the issuer page retrieves
+      the bearer JWT with a same-origin `fetch("/api/auth/token", {
+credentials: "include" })` instead of a typed client helper.
+    - `definePayload` must emit pandar's expected snake-case profile claims:
+      `{ email, email_verified, name, preferred_username }` (Better Auth's
+      default payload uses camelCase `emailVerified`, which pandar does not read).
+      The JWT `sub` claim is not emitted by `definePayload`; Better Auth 1.6.22
+      sets it after `definePayload` using `jwt.getSubject` or the default
+      `session.user.id`, and this phase keeps that default. For passkey-only
+      users, `preferred_username` is the normalized email local part before `@`.
+    - `issuer` and `audience` default to `baseURL`; pandar is configured with
+      matching `PANDAR_EXTERNAL_AUTH_ISSUER`/`PANDAR_EXTERNAL_AUTH_AUDIENCE`.
+      Better Auth's JWT plugin emits `iss`/`aud` from this `jwt.issuer` /
+      `jwt.audience` configuration; `definePayload` only supplies identity
+      profile claims.
+    - The JWT lifetime is configured from `PANDAR_AUTH_JWT_MAX_AGE_SECONDS`
+      and mapped to Better Auth `jwt.expirationTime` as a seconds string such as
+      `"43200s"`. It defaults to the same 12-hour value as the dashboard cookie.
+      There is no refresh path in this phase; users sign in again when the JWT
+      expires.
 - `BETTER_AUTH_SECRET` for Better Auth session/cookie signing and default JWKS
   private-key encryption, injected via env.
 - `PANDAR_AUTH_DASHBOARD_CALLBACK_URL` for the post-token dashboard callback.
