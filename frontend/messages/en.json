@@ -2,5 +2,124 @@
   "meta": {
     "title": "Pandar",
     "description": "Bambu Studio cloud alternative"
+  },
+  "runtime": {
+    "liveState": {
+      "live": "Connected",
+      "connecting": "Connecting",
+      "disconnected": "Reconnecting",
+      "idle": "Idle",
+      "unavailable": "Unavailable",
+      "error": "Unavailable"
+    },
+    "authSource": {
+      "request_cookie": "Request cookie",
+      "app_auth_bearer_token": "App bearer token",
+      "app_api_token": "App API token",
+      "none": "No auth"
+    },
+    "actionStatus": {
+      "refresh_partial": "Some refreshes could not be queued — review the list",
+      "retry_partial": "Some retries could not be queued — review the list"
+    },
+    "notification": {
+      "liveTitle": "Live connection",
+      "liveUnavailable": "Live updates unavailable because no server-side auth token is configured.",
+      "liveRetryingUnavailable": "Live updates unavailable; retrying.",
+      "liveDisconnectedRetrying": "Live updates disconnected; retrying.",
+      "printerStateTitle": "Printer state",
+      "printFailedTitle": "Print failed",
+      "printCompleteTitle": "Print complete",
+      "errorsIncomplete": "Hub data is incomplete."
+    }
+  },
+  "recovery": {
+    "state": {
+      "printing": "Printing now",
+      "completed": "Print completed",
+      "failed": "Print failed",
+      "cancelled": "Print cancelled",
+      "waitingAgent": "Waiting for the agent to come back online",
+      "fileFailed": "Could not send the file to the printer",
+      "mqttFailed": "Printer did not accept the start command",
+      "queueFailed": "Could not queue the job at the hub",
+      "waitingStart": "Waiting for the print to start"
+    },
+    "duration": {
+      "lessThanMinute": "less than a minute",
+      "minutes": "{count, plural, =1 {1 minute} other {# minutes}}",
+      "hours": "{count, plural, =1 {1 hour} other {# hours}}"
+    }
+  },
+  "tokens": {
+    "online": "Online",
+    "offline": "Offline",
+    "problem": "Problem",
+    "connecting": "Connecting",
+    "running": "Running",
+    "printing": "Printing",
+    "ready": "Ready",
+    "queued": "Queued",
+    "sent": "Sent",
+    "acknowledged": "Acknowledged",
+    "pending": "Pending",
+    "succeeded": "Succeeded",
+    "completed": "Completed",
+    "failed": "Failed",
+    "cancelled": "Cancelled",
+    "unavailable": "Unavailable",
+    "error": "Error",
+    "down": "Down",
+    "warning": "Warning",
+    "degraded": "Degraded",
+    "ok": "OK"
+  },
+  "material": {
+    "noMaterial": "No material state",
+    "awaitingReport": "Awaiting printer report",
+    "externalSpool": "External spool",
+    "amsSlot": "AMS {ams}:{tray}",
+    "noActiveTray": "No active tray",
+    "amsSummary": "{trays, plural, =1 {1 AMS tray} other {# AMS trays}}, {external} external",
+    "activeDetail": "{active} · {observed}",
+    "externalSlot": "external {tray}",
+    "usageRow": "{index}: {slot} {type}",
+    "amsMapping": "ams_mapping {count}",
+    "amsMapping2": "ams_mapping2 {count}",
+    "noMapping": "No material mapping",
+    "noMetadata": "No slicer metadata",
+    "plate": "plate {id}",
+    "plateNone": "plate -",
+    "noObjects": "no objects",
+    "noFilament": "no filament",
+    "artifactSummary": "{name} · {plate} · {objects} · {filament}"
+  },
+  "attention": {
+    "agent": { "title": "Agent {status}", "label": "{name} is {status}" },
+    "printer": { "title": "Printer {status}", "label": "{name} is {status}" },
+    "jobPrintFailed": { "title": "Print failed" },
+    "jobDispatchFailed": { "title": "Dispatch failed" },
+    "jobStalled": { "title": "Job stalled", "label": "{filename} · no progress for {duration}" },
+    "unknownAgent": "Unknown agent"
+  },
+  "overview": {
+    "verdict": {
+      "noFleet": { "title": "No fleet configured", "detail": "Connect an agent to start monitoring your printers." },
+      "liveUnavailable": { "title": "Live updates unavailable", "detail": "Reconnecting — showing the last known state." },
+      "liveDisconnected": { "title": "Live updates disconnected", "detail": "Reconnecting — showing the last known state." },
+      "nominal": { "title": "All systems nominal", "detail": "No exceptions across the fleet." },
+      "needAttention": { "title": "{count, plural, =1 {# item needs attention} other {# items need attention}}", "detailCritical": "Failures detected — review below.", "detailOther": "Review the items below." }
+    },
+    "action": { "refresh": "Refresh", "reprint": "Reprint", "retryDispatch": "Retry dispatch", "view": "View" }
+  },
+  "job": { "filename": "{filename}" },
+  "jobFormat": {
+    "layersNone": "Layers -",
+    "layersOpenTotal": "Layers -/{total}",
+    "layersOpenCurrent": "Layers {current}",
+    "layersBoth": "Layers {current}/{total}",
+    "remainingNone": "Remaining -",
+    "remainingMinutes": "Remaining {minutes}m",
+    "remainingHours": "Remaining {hours}h {rest}m"
   }
 }

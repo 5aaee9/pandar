@@ -2,5 +2,124 @@
   "meta": {
     "title": "Pandar",
     "description": "Bambu Studio 的云端替代方案"
+  },
+  "runtime": {
+    "liveState": {
+      "live": "已连接",
+      "connecting": "连接中",
+      "disconnected": "重新连接中",
+      "idle": "空闲",
+      "unavailable": "不可用",
+      "error": "不可用"
+    },
+    "authSource": {
+      "request_cookie": "请求 Cookie",
+      "app_auth_bearer_token": "应用 Bearer 令牌",
+      "app_api_token": "应用 API 令牌",
+      "none": "无身份认证"
+    },
+    "actionStatus": {
+      "refresh_partial": "部分刷新未能入队——请检查列表",
+      "retry_partial": "部分重试未能入队——请检查列表"
+    },
+    "notification": {
+      "liveTitle": "实时连接",
+      "liveUnavailable": "由于未配置服务端认证令牌，实时更新不可用。",
+      "liveRetryingUnavailable": "实时更新不可用，正在重试。",
+      "liveDisconnectedRetrying": "实时更新已断开，正在重试。",
+      "printerStateTitle": "打印机状态",
+      "printFailedTitle": "打印失败",
+      "printCompleteTitle": "打印完成",
+      "errorsIncomplete": "Hub 数据不完整。"
+    }
+  },
+  "recovery": {
+    "state": {
+      "printing": "正在打印",
+      "completed": "打印已完成",
+      "failed": "打印失败",
+      "cancelled": "打印已取消",
+      "waitingAgent": "等待 Agent 重新上线",
+      "fileFailed": "无法将文件发送到打印机",
+      "mqttFailed": "打印机未接受启动指令",
+      "queueFailed": "无法在 Hub 排队该任务",
+      "waitingStart": "等待开始打印"
+    },
+    "duration": {
+      "lessThanMinute": "不到一分钟",
+      "minutes": "{count, plural, other {# 分钟}}",
+      "hours": "{count, plural, other {# 小时}}"
+    }
+  },
+  "tokens": {
+    "online": "在线",
+    "offline": "离线",
+    "problem": "异常",
+    "connecting": "连接中",
+    "running": "运行中",
+    "printing": "打印中",
+    "ready": "就绪",
+    "queued": "已排队",
+    "sent": "已发送",
+    "acknowledged": "已确认",
+    "pending": "待处理",
+    "succeeded": "成功",
+    "completed": "已完成",
+    "failed": "失败",
+    "cancelled": "已取消",
+    "unavailable": "不可用",
+    "error": "错误",
+    "down": "离线",
+    "warning": "警告",
+    "degraded": "降级",
+    "ok": "正常"
+  },
+  "material": {
+    "noMaterial": "无耗材状态",
+    "awaitingReport": "等待打印机上报",
+    "externalSpool": "外部料盘",
+    "amsSlot": "AMS {ams}:{tray}",
+    "noActiveTray": "无激活料槽",
+    "amsSummary": "{trays, plural, other {# 个 AMS 料槽}}，{external} 个外部",
+    "activeDetail": "{active} · {observed}",
+    "externalSlot": "外部 {tray}",
+    "usageRow": "{index}：{slot} {type}",
+    "amsMapping": "ams_mapping {count}",
+    "amsMapping2": "ams_mapping2 {count}",
+    "noMapping": "无耗材映射",
+    "noMetadata": "无切片元数据",
+    "plate": "盘子 {id}",
+    "plateNone": "盘子 -",
+    "noObjects": "无对象",
+    "noFilament": "无耗材",
+    "artifactSummary": "{name} · {plate} · {objects} · {filament}"
+  },
+  "attention": {
+    "agent": { "title": "Agent {status}", "label": "{name} 处于 {status}" },
+    "printer": { "title": "打印机 {status}", "label": "{name} 处于 {status}" },
+    "jobPrintFailed": { "title": "打印失败" },
+    "jobDispatchFailed": { "title": "派发失败" },
+    "jobStalled": { "title": "任务停滞", "label": "{filename} · {duration} 无进展" },
+    "unknownAgent": "未知 Agent"
+  },
+  "overview": {
+    "verdict": {
+      "noFleet": { "title": "尚未配置机队", "detail": "连接一个 Agent 以开始监控打印机。" },
+      "liveUnavailable": { "title": "实时更新不可用", "detail": "正在重新连接——显示最近一次已知状态。" },
+      "liveDisconnected": { "title": "实时更新已断开", "detail": "正在重新连接——显示最近一次已知状态。" },
+      "nominal": { "title": "一切正常", "detail": "机队没有异常。" },
+      "needAttention": { "title": "{count, plural, other {# 项需要关注}}", "detailCritical": "检测到故障——请查看下方。", "detailOther": "请查看下方项目。" }
+    },
+    "action": { "refresh": "刷新", "reprint": "重新打印", "retryDispatch": "重试派发", "view": "查看" }
+  },
+  "job": { "filename": "{filename}" },
+  "jobFormat": {
+    "layersNone": "层数 -",
+    "layersOpenTotal": "层数 -/{total}",
+    "layersOpenCurrent": "层数 {current}",
+    "layersBoth": "层数 {current}/{total}",
+    "remainingNone": "剩余 -",
+    "remainingMinutes": "剩余 {minutes} 分钟",
+    "remainingHours": "剩余 {hours} 小时 {rest} 分钟"
   }
 }

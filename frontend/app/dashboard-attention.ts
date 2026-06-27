@@ -1,3 +1,4 @@
+import type { Translator } from './dashboard-runtime-helpers'
 import type { Agent, Job, Printer } from './dashboard-types'
 
 export const STALE_MS = 15 * 60 * 1000
@@ -47,12 +48,20 @@ function isJobFailed(job: Job): boolean {
   return job.status.toLowerCase() === 'failed' || job.print.status.toLowerCase() === 'failed'
 }
 
+export type AttentionReason =
+  | 'agent_unhealthy'
+  | 'printer_offline'
+  | 'job_print_failed'
+  | 'job_dispatch_failed'
+  | 'job_stalled'
+
 export type AttentionItem = {
   id: string
   agentId: string
   agentName: string
   severity: Severity
   kind: 'agent' | 'printer' | 'job'
+  reason: AttentionReason
   title: string
   label: string
   mono: string
@@ -67,7 +76,6 @@ export function computeAttention(args: {
   nowMs: number
 }): AttentionItem[] {
   const { agents, printers, jobs, nowMs } = args
-  const agentName = (id: string) => agents.find((agent) => agent.id === id)?.name ?? 'Unknown agent'
   const items: AttentionItem[] = []
 
   for (const agent of agents) {
@@ -78,6 +86,7 @@ export function computeAttention(args: {
         agentName: agent.name,
         severity: statusSeverity(agent.status),
         kind: 'agent',
+        reason: 'agent_unhealthy',
         title: `Agent ${prettifyToken(agent.status)}`,
         label: `${agent.name} is ${agent.status || 'offline'}`,
         mono: agent.id,
@@ -92,9 +101,10 @@ export function computeAttention(args: {
       items.push({
         id: `printer:${printer.id}`,
         agentId: printer.agent_id,
-        agentName: agentName(printer.agent_id),
+        agentName: agentName(agents, printer.agent_id),
         severity: statusSeverity(printer.status),
         kind: 'printer',
+        reason: 'printer_offline',
         title: `Printer ${prettifyToken(printer.status)}`,
         label: `${printer.name} is ${printer.status}`,
         mono: printer.serial_number,
@@ -110,9 +120,10 @@ export function computeAttention(args: {
       items.push({
         id: `job:${job.id}:failed`,
         agentId: job.agent_id,
-        agentName: agentName(job.agent_id),
+        agentName: agentName(agents, job.agent_id),
         severity: statusSeverity(physical ? job.print.status : job.status),
         kind: 'job',
+        reason: physical ? 'job_print_failed' : 'job_dispatch_failed',
         title: physical ? 'Print failed' : 'Dispatch failed',
         label: job.artifact.filename,
         mono: job.id,
@@ -123,9 +134,10 @@ export function computeAttention(args: {
       items.push({
         id: `job:${job.id}:stale`,
         agentId: job.agent_id,
-        agentName: agentName(job.agent_id),
+        agentName: agentName(agents, job.agent_id),
         severity: 'warning',
         kind: 'job',
+        reason: 'job_stalled',
         title: 'Job stalled',
         label: `${job.artifact.filename} · no progress for ${formatDuration(staleAgeMs(job, nowMs) ?? 0)}`,
         mono: job.id,
@@ -139,6 +151,10 @@ export function computeAttention(args: {
     if (a.agentName !== b.agentName) return a.agentName.localeCompare(b.agentName)
     return SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]
   })
+}
+
+function agentName(agents: Agent[], id: string): string {
+  return agents.find((agent) => agent.id === id)?.name ?? 'Unknown agent'
 }
 
 function latestJobUpdateMs(job: Job): number {
@@ -178,13 +194,19 @@ export function notificationSeverity(title: string, detail: string): Severity {
   return 'info'
 }
 
-export function formatDuration(ms: number): string {
+const enDuration: Translator = (key, values) => {
+  const count = (values?.count as number) ?? 0
+  if (key === 'lessThanMinute') return 'less than a minute'
+  if (key === 'minutes') return count === 1 ? '1 minute' : `${count} minutes`
+  return count === 1 ? '1 hour' : `${count} hours`
+}
+
+export function formatDuration(ms: number, t: Translator = enDuration): string {
   const minutes = Math.round(ms / 60000)
-  if (minutes < 1) return 'less than a minute'
-  if (minutes === 1) return '1 minute'
-  if (minutes < 60) return `${minutes} minutes`
+  if (minutes < 1) return t('lessThanMinute')
+  if (minutes < 60) return t('minutes', { count: minutes })
   const hours = Math.round(minutes / 60)
-  return hours === 1 ? '1 hour' : `${hours} hours`
+  return t('hours', { count: hours })
 }
 
 const STATUS_SEVERITY: Array<{ severity: Severity; tokens: string[] }> = [
@@ -203,11 +225,17 @@ export function statusSeverity(value: string): Severity {
   return 'info'
 }
 
-export function prettifyToken(value: string): string {
+export type TokenTranslator = (token: string) => string | undefined
+
+export function prettifyToken(value: string, tokenTranslator?: TokenTranslator): string {
+  const translated = tokenTranslator?.(value.toLowerCase())
+  if (translated) {
+    return translated
+  }
   const cleaned = value.replace(/[_-]+/g, ' ').trim()
   return cleaned.length ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : value
 }
 
-export function statusMeta(value: string): { severity: Severity; label: string } {
-  return { severity: statusSeverity(value), label: prettifyToken(value) }
+export function statusMeta(value: string, tokenTranslator?: TokenTranslator): { severity: Severity; label: string } {
+  return { severity: statusSeverity(value), label: prettifyToken(value, tokenTranslator) }
 }

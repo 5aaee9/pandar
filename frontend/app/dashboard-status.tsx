@@ -1,6 +1,6 @@
 import { refreshPrinters, reprintJob, retryDispatchJob } from './actions'
 import type { AttentionItem, Severity } from './dashboard-attention'
-import type { LiveState } from './dashboard-runtime-helpers'
+import type { LiveState, Translator } from './dashboard-runtime-helpers'
 import type { Tenant } from './dashboard-types'
 
 export const PILL_TONES: Record<Severity, string> = {
@@ -24,53 +24,65 @@ type Verdict = {
   tone: { border: string; surface: string; ink: string; sub: string }
 }
 
+const enVerdict: Translator = (key, values) => {
+  const v = values ?? {}
+  switch (key) {
+    case 'noFleet.title':
+      return 'No fleet configured'
+    case 'noFleet.detail':
+      return 'Connect an agent to start monitoring your printers.'
+    case 'liveUnavailable.title':
+      return 'Live updates unavailable'
+    case 'liveUnavailable.detail':
+      return 'Reconnecting — showing the last known state.'
+    case 'liveDisconnected.title':
+      return 'Live updates disconnected'
+    case 'liveDisconnected.detail':
+      return 'Reconnecting — showing the last known state.'
+    case 'nominal.title':
+      return 'All systems nominal'
+    case 'nominal.detail':
+      return 'No exceptions across the fleet.'
+    case 'needAttention.title': {
+      const count = (v.count as number) ?? 0
+      return `${count} ${count === 1 ? 'item' : 'items'} need attention`
+    }
+    case 'needAttention.detailCritical':
+      return 'Failures detected — review below.'
+    case 'needAttention.detailOther':
+      return 'Review the items below.'
+    default:
+      return key
+  }
+}
+
 export function computeVerdict(args: {
   attentionCount: number
   topSeverity: Severity | null
   liveState: LiveState
   fleetEmpty: boolean
-}): Verdict {
+}, t: Translator = enVerdict): Verdict {
   const { attentionCount, topSeverity, liveState, fleetEmpty } = args
 
   if (fleetEmpty) {
-    return {
-      title: 'No fleet configured',
-      detail: 'Connect an agent to start monitoring your printers.',
-      severity: 'info',
-      tone: TONES.info,
-    }
+    return { title: t('noFleet.title'), detail: t('noFleet.detail'), severity: 'info', tone: TONES.info }
   }
 
   if (liveState === 'unavailable' || liveState === 'error') {
-    return {
-      title: 'Live updates unavailable',
-      detail: 'Reconnecting — showing the last known state.',
-      severity: 'warning',
-      tone: TONES.warning,
-    }
+    return { title: t('liveUnavailable.title'), detail: t('liveUnavailable.detail'), severity: 'warning', tone: TONES.warning }
   }
   if (liveState === 'disconnected') {
-    return {
-      title: 'Live updates disconnected',
-      detail: 'Reconnecting — showing the last known state.',
-      severity: 'warning',
-      tone: TONES.warning,
-    }
+    return { title: t('liveDisconnected.title'), detail: t('liveDisconnected.detail'), severity: 'warning', tone: TONES.warning }
   }
 
   if (attentionCount === 0) {
-    return {
-      title: 'All systems nominal',
-      detail: 'No exceptions across the fleet.',
-      severity: 'success',
-      tone: TONES.success,
-    }
+    return { title: t('nominal.title'), detail: t('nominal.detail'), severity: 'success', tone: TONES.success }
   }
 
   const severity = topSeverity ?? 'warning'
   return {
-    title: `${attentionCount} ${attentionCount === 1 ? 'item' : 'items'} need attention`,
-    detail: severity === 'critical' ? 'Failures detected — review below.' : 'Review the items below.',
+    title: t('needAttention.title', { count: attentionCount }),
+    detail: severity === 'critical' ? t('needAttention.detailCritical') : t('needAttention.detailOther'),
     severity,
     tone: severity === 'critical' ? TONES.critical : TONES.warning,
   }
@@ -209,7 +221,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
     )
   }
 
-  if (item.kind === 'job' && item.title === 'Print failed') {
+  if (item.kind === 'job' && item.reason === 'job_print_failed') {
     return (
       <form action={reprintJob}>
         <input name="tenant_id" type="hidden" value={tenant.id} />
@@ -224,7 +236,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
     )
   }
 
-  if (item.kind === 'job' && item.title === 'Dispatch failed') {
+  if (item.kind === 'job' && item.reason === 'job_dispatch_failed') {
     return (
       <form action={retryDispatchJob}>
         <input name="tenant_id" type="hidden" value={tenant.id} />
