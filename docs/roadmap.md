@@ -98,6 +98,7 @@
 - Added frontend localization (中文 / English) via next-intl in cookie-based non-segment mode. Locale is resolved from the `locale` cookie with Accept-Language negotiation on first visit and mirrored in the zustand `pandar.settings` store; the existing `[locale]/sign-in` Bambu Studio WebView alias is preserved. Translated all user-facing strings across the dashboard, dispatch, recovery, diagnostics, runtime, tenant settings, admin, and the standalone onboarding/sign-in/join pages; dates and numbers are locale-formatted; known machine-status tokens translate with a prettify fallback. A language switcher in the dashboard header and standalone page section headers toggles locale via a server action + `router.refresh()`.
 - Fixed GitHub Checks web packaging after localization: refreshed the Nix `pandar-web` npm dependency hash for the updated lockfile and removed `next/font/google` so sandboxed Nix builds do not require Google Fonts network access.
 - Added a Lefthook pre-commit formatter hook that runs `nix fmt` before commits, then re-stages only the files that were already staged before formatting; the Nix dev shell now includes `lefthook` for hook installation.
+- Rejected explicit `none` external auth providers so deployments must configure a real identity provider value when enabling external identity auth.
 
 ## Completed: Phase 30 Better Auth Provider Compatibility
 

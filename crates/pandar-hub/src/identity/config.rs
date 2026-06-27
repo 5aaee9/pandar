@@ -41,6 +41,8 @@ pub enum ExternalAuthConfigError {
     PartialWithoutProvider,
     #[error("missing external auth config value: {0}")]
     Missing(&'static str),
+    #[error("external auth provider must be configured")]
+    ProviderRequired,
     #[error("unsupported external auth algorithm: {0}")]
     UnsupportedAlgorithm(String),
     #[error("invalid external auth leeway seconds")]
@@ -70,6 +72,9 @@ impl ExternalAuthConfig {
             }
             return Ok(None);
         };
+        if provider.eq_ignore_ascii_case("none") {
+            return Err(ExternalAuthConfigError::ProviderRequired);
+        }
 
         let issuer = required(&vars, ISSUER_VAR)?;
         let jwks_url = required(&vars, JWKS_URL_VAR)?;
@@ -222,5 +227,12 @@ mod tests {
                 "HS256".to_owned()
             ))
         );
+    }
+
+    #[test]
+    fn none_provider_config_rejected() {
+        let result = ExternalAuthConfig::from_vars(base_vars([(super::PROVIDER_VAR, "none")]));
+
+        assert_eq!(result, Err(ExternalAuthConfigError::ProviderRequired));
     }
 }
