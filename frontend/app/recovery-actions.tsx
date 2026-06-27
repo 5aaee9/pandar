@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useFormatter, useTranslations } from 'next-intl'
 
 import { controlPrinter, duplicateJob, refreshAllAgents, refreshPrinters, reprintJob, retryDispatchJob, retryDispatchJobs } from './actions'
 import { ConfirmForm } from './confirm-dialog'
@@ -9,6 +10,15 @@ import { EmptyState, SectionHeader } from './dashboard-ui'
 import { formatArtifactMetadata, formatJobRecoveryState } from './dashboard-runtime-helpers'
 
 const liveControlModelKeys = new Set(['A1', 'A1MINI', 'A1M', 'A1MIN', 'BAMBULABA1MINI', 'BAMBULABA1', 'P2S', 'N7', 'X2D', 'N6'])
+
+function useLocaleDate() {
+  const format = useFormatter()
+  return (value: string) => {
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return value
+    return format.dateTime(d, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
+  }
+}
 
 export function RecoveryActions({
   selectedTenant,
@@ -21,6 +31,10 @@ export function RecoveryActions({
   printers: Printer[]
   jobs: Job[]
 }) {
+  const t = useTranslations('recoveryPage')
+  const tRec = useTranslations('recovery.state')
+  const tMat = useTranslations('material')
+  const formatDate = useLocaleDate()
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const toggleJob = (jobId: string) => {
@@ -45,17 +59,17 @@ export function RecoveryActions({
   return (
     <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
       <SectionHeader
-        title="Recovery actions"
-        subtitle="Refresh, dispatch retry, reprint, live print controls, and duplicate — shown per job state"
-        meta={`${jobs.length} jobs`}
+        title={t('title')}
+        subtitle={t('subtitle')}
+        meta={t('meta', { count: jobs.length })}
       />
       {!selectedTenant ? (
-        <EmptyState title="No tenant selected" message="Select a tenant to run recovery actions." />
+        <EmptyState title={t('noTenantTitle')} message={t('noTenantMessage')} />
       ) : (
         <div>
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3">
             {agents.length === 0 ? (
-              <div className="text-sm text-slate-600">No agents available for manual refresh</div>
+              <div className="text-sm text-slate-600">{t('noAgentsRefresh')}</div>
             ) : (
               <>
                 {agents.length > 1 ? (
@@ -65,7 +79,7 @@ export function RecoveryActions({
                       <input key={agent.id} name="agent_id" type="hidden" value={agent.id} />
                     ))}
                     <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800" type="submit">
-                      Refresh all agents
+                      {t('refreshAllAgents')}
                     </button>
                   </form>
                 ) : null}
@@ -74,7 +88,7 @@ export function RecoveryActions({
                     <input name="tenant_id" type="hidden" value={selectedTenant.id} />
                     <input name="agent_id" type="hidden" value={agent.id} />
                     <button className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-800" type="submit">
-                      Refresh {agent.name}
+                      {t('refreshAgent', { name: agent.name })}
                     </button>
                   </form>
                 ))}
@@ -82,7 +96,7 @@ export function RecoveryActions({
             )}
           </div>
           {jobs.length === 0 ? (
-            <EmptyState title="No jobs" message="Jobs will appear here when dispatch history exists." />
+            <EmptyState title={t('noJobsTitle')} message={t('noJobsMessage')} />
           ) : (
             <>
               {failedJobIds.length > 0 ? (
@@ -93,15 +107,15 @@ export function RecoveryActions({
                 >
                   <span className="text-slate-600">
                     {selected.size > 0
-                      ? `${selected.size} of ${failedJobIds.length} failed selected`
-                      : `${failedJobIds.length} failed`}
+                      ? t('selectedOfFailed', { selected: selected.size, failed: failedJobIds.length })
+                      : t('failedCount', { failed: failedJobIds.length })}
                   </span>
                   <button
                     className="font-medium text-cyan-700 hover:underline"
                     onClick={toggleSelectAll}
                     type="button"
                   >
-                    {allSelected ? 'Deselect all' : 'Select all'}
+                    {allSelected ? t('deselectAll') : t('selectAll')}
                   </button>
                   {selected.size > 0 ? (
                     <form action={retryDispatchJobs}>
@@ -110,7 +124,7 @@ export function RecoveryActions({
                         <input key={jobId} name="job_id" type="hidden" value={jobId} />
                       ))}
                       <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800" type="submit">
-                        Retry {selected.size} selected
+                        {t('retrySelected', { count: selected.size })}
                       </button>
                     </form>
                   ) : null}
@@ -126,7 +140,7 @@ export function RecoveryActions({
                         <div className="flex items-start gap-2">
                           {failed ? (
                             <input
-                              aria-label={`Select ${job.artifact.filename}`}
+                              aria-label={t('selectJobAria', { filename: job.artifact.filename })}
                               checked={selected.has(job.id)}
                               onChange={() => toggleJob(job.id)}
                               type="checkbox"
@@ -135,8 +149,8 @@ export function RecoveryActions({
                           ) : null}
                           <div className="min-w-0">
                             <div className="truncate font-medium text-slate-950">{job.artifact.filename}</div>
-                            <div className="truncate text-xs text-slate-700">{formatArtifactMetadata(job)}</div>
-                            <div className="mt-1 text-xs text-slate-600">{formatJobRecoveryState(job)}</div>
+                            <div className="truncate text-xs text-slate-700">{formatArtifactMetadata(job, tMat, formatDate)}</div>
+                            <div className="mt-1 text-xs text-slate-600">{formatJobRecoveryState(job, tRec)}</div>
                           </div>
                         </div>
                         {printRunning(job) ? (
@@ -145,10 +159,10 @@ export function RecoveryActions({
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {failed ? (
-                          <ReasonForm action={retryDispatchJob} tenantId={selectedTenant.id} jobId={job.id} label="Retry dispatch" />
+                          <ReasonForm action={retryDispatchJob} tenantId={selectedTenant.id} jobId={job.id} label={t('retryDispatch')} placeholder={t('reasonPlaceholder')} />
                         ) : null}
                         {printTerminal(job) ? (
-                          <ReasonForm action={reprintJob} tenantId={selectedTenant.id} jobId={job.id} label="Reprint" />
+                          <ReasonForm action={reprintJob} tenantId={selectedTenant.id} jobId={job.id} label={t('reprint')} placeholder={t('reasonPlaceholder')} />
                         ) : null}
                         <DuplicateForm tenantId={selectedTenant.id} jobId={job.id} printers={printers} />
                       </div>
@@ -165,25 +179,27 @@ export function RecoveryActions({
 }
 
 function LiveControlPanel({ tenantId, printer }: { tenantId: string; printer: Printer | undefined }) {
+  const t = useTranslations('recoveryPage')
+
   if (!printer) {
-    return <div className="mt-1 text-xs text-slate-600">Printer record unavailable for live controls</div>
+    return <div className="mt-1 text-xs text-slate-600">{t('printerUnavailable')}</div>
   }
 
   if (!liveControlsAvailable(printer)) {
-    return <div className="mt-1 text-xs text-slate-600">Live controls unavailable for unknown printer model</div>
+    return <div className="mt-1 text-xs text-slate-600">{t('liveUnavailable')}</div>
   }
 
   return (
     <div className="mt-2 flex flex-wrap gap-2">
-      <PrinterControlForm tenantId={tenantId} printerId={printer.id} action="pause" label="Queue pause" />
-      <PrinterControlForm tenantId={tenantId} printerId={printer.id} action="resume" label="Queue resume" />
+      <PrinterControlForm tenantId={tenantId} printerId={printer.id} action="pause" label={t('queuePause')} />
+      <PrinterControlForm tenantId={tenantId} printerId={printer.id} action="resume" label={t('queueResume')} />
       <ConfirmForm
         action={controlPrinter}
         buttonClassName="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium"
-        buttonLabel="Queue stop"
-        title="Stop print"
-        message="Stop this print? The current job cannot be resumed from where it stops."
-        confirmLabel="Stop print"
+        buttonLabel={t('queueStop')}
+        title={t('stopTitle')}
+        message={t('stopMessage')}
+        confirmLabel={t('stopConfirm')}
         tone="danger"
       >
         <input name="tenant_id" type="hidden" value={tenantId} />
@@ -195,12 +211,12 @@ function LiveControlPanel({ tenantId, printer }: { tenantId: string; printer: Pr
         <input name="printer_id" type="hidden" value={printer.id} />
         <input name="action" type="hidden" value="set_print_speed" />
         <select name="speed_mode" className="h-8 w-24 rounded-md border border-slate-300 bg-white px-2 text-xs">
-          <option value="1">Silent</option>
-          <option value="2">Standard</option>
-          <option value="3">Sport</option>
-          <option value="4">Ludicrous</option>
+          <option value="1">{t('silent')}</option>
+          <option value="2">{t('standard')}</option>
+          <option value="3">{t('sport')}</option>
+          <option value="4">{t('ludicrous')}</option>
         </select>
-        <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">Queue speed</button>
+        <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">{t('queueSpeed')}</button>
       </form>
     </div>
   )
@@ -244,28 +260,29 @@ function printTerminal(job: Job): boolean {
   return ['completed', 'failed', 'cancelled'].includes(job.print.status.toLowerCase())
 }
 
-function ReasonForm({ action, tenantId, jobId, label }: { action: (formData: FormData) => void; tenantId: string; jobId: string; label: string }) {
+function ReasonForm({ action, tenantId, jobId, label, placeholder }: { action: (formData: FormData) => void; tenantId: string; jobId: string; label: string; placeholder: string }) {
   return (
     <form action={action} className="flex gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
       <input name="job_id" type="hidden" value={jobId} />
-      <input className="h-8 w-28 rounded-md border border-slate-300 px-2 text-xs" name="reason" placeholder="reason" />
+      <input className="h-8 w-28 rounded-md border border-slate-300 px-2 text-xs" name="reason" placeholder={placeholder} />
       <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">{label}</button>
     </form>
   )
 }
 
 function DuplicateForm({ tenantId, jobId, printers }: { tenantId: string; jobId: string; printers: Printer[] }) {
+  const t = useTranslations('recoveryPage')
   return (
     <form action={duplicateJob} className="flex flex-wrap gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
       <input name="job_id" type="hidden" value={jobId} />
       <select name="printer_id" className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs">
-        <option value="">Same printer</option>
+        <option value="">{t('samePrinter')}</option>
         {printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
       </select>
-      <input className="h-8 w-16 rounded-md border border-slate-300 px-2 text-xs" min="1" name="plate_id" placeholder="plate" type="number" />
-      <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">Duplicate</button>
+      <input className="h-8 w-16 rounded-md border border-slate-300 px-2 text-xs" min="1" name="plate_id" placeholder={t('platePlaceholder')} type="number" />
+      <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">{t('duplicate')}</button>
     </form>
   )
 }
