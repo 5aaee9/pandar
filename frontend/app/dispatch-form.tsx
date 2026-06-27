@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useFormatter, useTranslations } from 'next-intl'
 
 import type { ArtifactMetadata } from './dashboard-types'
 import { formatBytes, HelpTip } from './dashboard-ui'
@@ -31,6 +32,9 @@ export function DispatchForm({
   selectedTenant: DispatchTenant | null
   printers: DispatchPrinter[]
 }) {
+  const t = useTranslations('dispatch')
+  const format = useFormatter()
+  const num = (n: number) => format.number(n)
   const [selectedPrinterId, setSelectedPrinterId] = useState(printers[0]?.id ?? '')
   const [artifact, setArtifact] = useState<{
     file: File | null
@@ -149,19 +153,19 @@ export function DispatchForm({
     <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
       <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold">Dispatch print job</h2>
+          <h2 className="text-base font-semibold">{t('title')}</h2>
           <p className="mt-0.5 text-sm text-slate-600">
-            Upload a project artifact to the selected tenant printer
+            {t('subtitle')}
           </p>
         </div>
       </div>
 
       {!selectedTenant ? (
-        <DispatchEmptyState title="No tenant selected" message="Select a tenant to dispatch jobs." />
+        <DispatchEmptyState title={t('noTenantTitle')} message={t('noTenantMessage')} />
       ) : printers.length === 0 ? (
         <DispatchEmptyState
-          title="No printers available"
-          message="A reported printer is required before jobs can be dispatched."
+          title={t('noPrintersTitle')}
+          message={t('noPrintersMessage')}
         />
       ) : (
         <form
@@ -172,7 +176,7 @@ export function DispatchForm({
           onSubmit={(event) => void submitPrintJob(event)}
         >
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs font-medium text-slate-500">Printer</span>
+            <span className="text-xs font-medium text-slate-500">{t('printer')}</span>
             <select
               name="printer_id"
               className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
@@ -189,11 +193,11 @@ export function DispatchForm({
           </label>
           <div className="flex flex-col gap-1 text-sm">
             <span className="flex items-center gap-1 text-xs font-medium text-slate-500">
-              Plate
-              <HelpTip label="Plate">Which plate from the project file to print. Use 1 if the file has a single plate.</HelpTip>
+              {t('plate')}
+              <HelpTip label={t('plate')}>{t('plateHelp')}</HelpTip>
             </span>
             <input
-              aria-label="Plate"
+              aria-label={t('plate')}
               className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950"
               defaultValue="1"
               min="1"
@@ -203,7 +207,7 @@ export function DispatchForm({
             />
           </div>
           <label className="flex flex-col gap-1 text-sm lg:col-span-2">
-            <span className="text-xs font-medium text-slate-500">Artifact</span>
+            <span className="text-xs font-medium text-slate-500">{t('artifact')}</span>
             <input
               accept=".3mf,.gcode,.gcode.3mf,application/octet-stream,model/3mf"
               className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-950 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium"
@@ -212,25 +216,25 @@ export function DispatchForm({
               type="file"
               required
             />
-            <span className="text-xs text-slate-600">Maximum artifact size {formatBytes(maxArtifactBytes)}</span>
+            <span className="text-xs text-slate-600">{t('maxSize', { size: formatBytes(maxArtifactBytes, num) })}</span>
           </label>
           <input name="use_ams" type="hidden" value="false" />
           <input name="flow_cali" type="hidden" value="false" />
           <input name="timelapse" type="hidden" value="false" />
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 lg:col-span-2">
             <div className="font-medium text-slate-950">
-              {selectedFilename || 'No artifact selected'}
+              {selectedFilename || t('noArtifact')}
             </div>
             <div className="mt-1 text-xs">
               {artifact.state === 'ready'
-                ? `${formatBytes(artifact.size)} selected`
+                ? t('readySize', { size: formatBytes(artifact.size, num) })
                 : artifact.state === 'too_large'
-                  ? `${formatBytes(artifact.size)} exceeds the configured limit`
-                  : 'Choose a file before dispatch.'}
+                  ? t('tooLargeSize', { size: formatBytes(artifact.size, num) })
+                  : t('chooseFile')}
             </div>
             <MetadataPreview preview={metadataPreview} />
             <details className="mt-2 text-xs text-slate-600">
-              <summary className="cursor-pointer select-none text-slate-500">Developer error codes</summary>
+              <summary className="cursor-pointer select-none text-slate-500">{t('errorCodes')}</summary>
               <div className="mt-1 flex flex-wrap gap-1">
                 {backendErrorCodes.map((code) => (
                   <code key={code} className="rounded bg-white px-1.5 py-0.5 text-slate-600">
@@ -244,23 +248,23 @@ export function DispatchForm({
             <span className="flex items-center gap-1.5">
               <label className="flex items-center gap-2">
                 <input name="use_ams" type="checkbox" value="true" defaultChecked />
-                Use AMS
+                {t('useAms')}
               </label>
-              <HelpTip label="Use AMS">Use the printer's AMS units to pick filament for each part of the print.</HelpTip>
+              <HelpTip label={t('useAms')}>{t('useAmsHelp')}</HelpTip>
             </span>
             <span className="flex items-center gap-1.5">
               <label className="flex items-center gap-2">
                 <input name="flow_cali" type="checkbox" value="true" />
-                Flow calibration
+                {t('flowCali')}
               </label>
-              <HelpTip label="Flow calibration">Run flow dynamics calibration first. Improves extrusion accuracy but adds time before the print.</HelpTip>
+              <HelpTip label={t('flowCali')}>{t('flowCaliHelp')}</HelpTip>
             </span>
             <span className="flex items-center gap-1.5">
               <label className="flex items-center gap-2">
                 <input name="timelapse" type="checkbox" value="true" />
-                Timelapse
+                {t('timelapse')}
               </label>
-              <HelpTip label="Timelapse">Record a timelapse of the print with the printer's camera.</HelpTip>
+              <HelpTip label={t('timelapse')}>{t('timelapseHelp')}</HelpTip>
             </span>
           </div>
           <div className="lg:col-span-2">
@@ -269,7 +273,7 @@ export function DispatchForm({
               disabled={artifact.state !== 'ready' || submitting}
               type="submit"
             >
-              {submitting ? 'Dispatching' : 'Dispatch'}
+              {submitting ? t('dispatching') : t('dispatch')}
             </button>
           </div>
         </form>
@@ -303,17 +307,18 @@ function MetadataPreview({
     metadata: ArtifactMetadata | null
   }
 }) {
+  const t = useTranslations('dispatch')
   if (preview.state === 'idle') {
     return null
   }
   if (preview.state === 'loading') {
-    return <div className="mt-2 text-xs text-slate-600">Reading slicer metadata</div>
+    return <div className="mt-2 text-xs text-slate-600">{t('readingMetadata')}</div>
   }
   if (preview.state === 'unavailable') {
-    return <div className="mt-2 text-xs text-slate-600">No slicer metadata found</div>
+    return <div className="mt-2 text-xs text-slate-600">{t('metadataUnavailableFound')}</div>
   }
   if (preview.state === 'error' || !preview.metadata) {
-    return <div className="mt-2 text-xs text-slate-600">Metadata preview unavailable</div>
+    return <div className="mt-2 text-xs text-slate-600">{t('metadataUnavailable')}</div>
   }
 
   const metadata = preview.metadata
@@ -324,17 +329,17 @@ function MetadataPreview({
   return (
     <div className="mt-2 grid gap-1 text-xs text-slate-700 sm:grid-cols-3">
       <div className="min-w-0">
-        <span className="text-slate-500">Project </span>
+        <span className="text-slate-500">{t('project')} </span>
         <span className="font-medium text-slate-900">{metadata.display_name}</span>
       </div>
       <div>
-        <span className="text-slate-500">Plate </span>
+        <span className="text-slate-500">{t('plateLabel')} </span>
         <span className="font-medium text-slate-900">
           {metadata.default_plate_id ?? '-'}
         </span>
       </div>
       <div className="truncate">
-        <span className="text-slate-500">Objects </span>
+        <span className="text-slate-500">{t('objects')} </span>
         <span className="font-medium text-slate-900">
           {primaryPlate?.objects.length ? primaryPlate.objects.join(', ') : '-'}
         </span>
