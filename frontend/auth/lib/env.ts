@@ -1,7 +1,8 @@
 const DEFAULT_BASE_URL = "http://127.0.0.1:3001";
 const DEFAULT_DASHBOARD_URL = "http://127.0.0.1:3000";
 const DEFAULT_JWT_MAX_AGE_SECONDS = 43_200;
-const DEVELOPMENT_SECRET = "pandar-auth-development-secret-change-before-production";
+const DEVELOPMENT_SECRET =
+  "pandar-auth-development-secret-change-before-production";
 
 type Env = {
   databaseFile: string;

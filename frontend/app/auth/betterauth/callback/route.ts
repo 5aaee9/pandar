@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import {
   authCookieOptions,
-  isCompactJwt,
+  isAllowedDashboardJwt,
   readAuthCookieConfig,
 } from "../cookie";
 
@@ -17,7 +17,7 @@ export function GET() {
 
 export async function POST(request: Request) {
   const token = (await request.text()).trim();
-  if (!isCompactJwt(token)) {
+  if (!isAllowedDashboardJwt(token)) {
     return new NextResponse("malformed token", { status: 400 });
   }
 

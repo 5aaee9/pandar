@@ -60,9 +60,9 @@ cookie as the bearer token, and `pandar-hub` validates it via JWKS. First
 verified dashboard onboarding can then create a tenant (`tenant_admin`) through
 the existing Phase 31 tenant-create action.
 
-## 5. Issuer application (`auth/`)
+## 5. Issuer application (`frontend/auth/`)
 
-New top-level directory `auth/` — a minimal Next.js (App Router) app:
+Directory `frontend/auth/` — a minimal Next.js (App Router) app:
 
 - `app/api/auth/[...all]/route.ts` mounts the Better Auth handler with
   `basePath: "/api/auth"`.
@@ -105,30 +105,32 @@ New top-level directory `auth/` — a minimal Next.js (App Router) app:
     cross-origin browser calls from the dashboard.
   - plugins: `passkey()` from `@better-auth/passkey` and `jwt()` from
     `better-auth/plugins`.
-  - `jwt({ jwks: { keyPairConfig: { alg: "RS256" }, jwksPath: "/jwks" },
-jwt: { definePayload, issuer, audience } })`. Notes:
-    - Better Auth's JWT plugin key-generation label is the JWA algorithm string
-      `"RS256"`, matching `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. (The jwt
-      plugin default is EdDSA; the target deployment configures pandar for
-      RS256 verification, so RS256 key generation is mandatory.) This corrects
-      the earlier Phase 30 design note and roadmap entry that used `RSA256`;
-      Better Auth 1.6.22 package types expose `RS256`.
+  - Better Auth's JWT plugin config sets RS256 JWKS at `/jwks` and supplies
+    `definePayload`, `issuer`, and `audience`. Notes:
+    - Better Auth 1.6.22 delegates key generation to `jose.generateKeyPair`,
+      whose RSA signing algorithm value is `"RS256"`, matching
+      `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. (The jwt plugin default is
+      EdDSA; the target deployment configures pandar for RS256 verification, so
+      RS256 key generation is mandatory.) A smoke check signs a token and
+      confirms the JWT header is `alg: "RS256"` and the matching JWKS entry is
+      `kty: "RSA"`.
     - Better Auth generates the RSA keypair and persists it in its own `jwks`
       database table, so the `kid` is stable across restarts. **No external JWT
       signing key secret is required.**
     - Better Auth's JWT plugin default JWKS path is `/jwks`; because the app is
       mounted at `basePath: "/api/auth"`, the public JWKS URL is
-      `/api/auth/jwks` → `PANDAR_EXTERNAL_AUTH_JWKS_URL`.
+      `/api/auth/jwks` -> `PANDAR_EXTERNAL_AUTH_JWKS_URL`.
     - Better Auth's JWT server plugin exposes `/token`; mounted under
       `basePath: "/api/auth"` this becomes `/api/auth/token`. Better Auth
       1.6.22's `jwtClient()` only exposes `jwks`, so the issuer page retrieves
-      the bearer JWT with a same-origin `fetch("/api/auth/token", {
-credentials: "include" })` instead of a typed client helper.
+      the bearer JWT with a same-origin
+      `fetch("/api/auth/token", { credentials: "include" })` instead of a typed
+      client helper.
     - `definePayload` must emit pandar's expected snake-case profile claims:
       `{ email, email_verified, name, preferred_username }` (Better Auth's
-      default payload uses camelCase `emailVerified`, which pandar does not read).
-      The JWT `sub` claim is not emitted by `definePayload`; Better Auth 1.6.22
-      sets it after `definePayload` using `jwt.getSubject` or the default
+      default payload uses camelCase `emailVerified`, which pandar does not
+      read). The JWT `sub` claim is not emitted by `definePayload`; Better Auth
+      1.6.22 sets it after `definePayload` using `jwt.getSubject` or the default
       `session.user.id`, and this phase keeps that default. For passkey-only
       users, `preferred_username` is the normalized email local part before `@`.
     - `issuer` and `audience` default to `baseURL`; pandar is configured with
@@ -146,22 +148,22 @@ credentials: "include" })` instead of a typed client helper.
 - `PANDAR_AUTH_DASHBOARD_CALLBACK_URL` for the post-token dashboard callback.
 - `PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL` for the dashboard cookie-clearing
   callback after issuer sign-out.
-- `auth/next.config.ts` sets `output: "standalone"` so the Nix package can
+- `frontend/auth/next.config.ts` sets `output: "standalone"` so the Nix package can
   install the same standalone server shape as `pandar-web`.
-- `auth/lib/env.ts` maps process env to typed config, including
+- `frontend/auth/lib/env.ts` maps process env to typed config, including
   `PANDAR_AUTH_DATABASE_FILE -> databaseFile`,
   `PANDAR_AUTH_BASE_URL -> baseURL`, trusted origins, dashboard callback/signout
   URLs, and `PANDAR_AUTH_JWT_MAX_AGE_SECONDS -> jwtMaxAgeSeconds`.
 - `APP_AUTH_COOKIE_MAX_AGE_SECONDS` is a new `pandar-web` env var introduced by
   the callback route in this phase; existing frontend auth forwarding does not
   read it today.
-- `auth/package.json` scripts:
+- `frontend/auth/package.json` scripts:
   - `build`: `next build`
   - `start`: `next start`
   - `migrate`: `auth migrate --config ./lib/auth.ts --yes`
 - Database migration: Better Auth needs its `passkey` and `jwks` tables. The
   CLI is the `auth@1.6.22` npm package, not the runtime `better-auth` package
-  itself. `auth/package.json` must include `auth: "1.6.22"` as a local
+  itself. `frontend/auth/package.json` must include `auth: "1.6.22"` as a local
   dependency so `npm run migrate` resolves the pinned CLI from
   `node_modules/.bin/auth`; do not use `npx auth@latest` in packaged runtime
   paths. The package installs a migration source tree at
@@ -187,13 +189,14 @@ enrolment does not prove email ownership, and the target deployment runs no
 SMTP. Resolution: use Better Auth's **passkey-first onboarding**
 (`passkey({ registration: { requireSession: false, resolveUser } })`). The
 signup page passes the entered email/name through the passkey registration
-`context`. `resolveUser` parses that context, normalizes the email, uses
-`ctx.context.internalAdapter.findUserByEmail(email)` to find an existing Better
-Auth user or `ctx.context.internalAdapter.createUser({ email, name,
-emailVerified: true })` to create one, and returns `{ id, name, displayName }`
-for that user. After passkey registration, the page performs passkey sign-in so
-Better Auth creates the session used by `/api/auth/token`. The JWT (via
-`definePayload`) then carries `email_verified: true`.
+`context`. `resolveUser` parses that context, normalizes the email, rejects the
+registration if `ctx.context.internalAdapter.findUserByEmail(email)` already
+returns a user, otherwise creates a new user with
+`ctx.context.internalAdapter.createUser({ email, name, emailVerified: true })`,
+and returns `{ id, name, displayName }` for that new user. After passkey
+registration, the page performs passkey sign-in so Better Auth creates the
+session used by `/api/auth/token`. The JWT (via `definePayload`) then carries
+`email_verified: true`.
 
 Implementation evidence for Better Auth 1.6.22 was checked from the published
 packages before planning:
@@ -202,10 +205,9 @@ packages before planning:
   `requireSession?: boolean` and `resolveUser?: ({ ctx, context }) => ...`.
 - The passkey client exposes `authClient.passkey.addPasskey({ context })` and
   `authClient.signIn.passkey()`.
-- Better Auth's internal adapter exposes `findUserByEmail`, `createUser`, and
-  `updateUser`; if `createUser({ email, name, emailVerified: true })` changes in
-  a later version, the fallback is to create/find the user, then stamp
-  `emailVerified: true` with `updateUser` before returning from `resolveUser`.
+- Better Auth's internal adapter exposes `findUserByEmail` and `createUser`.
+  The signup path must not attach a new passkey to a pre-existing email account;
+  if the email already exists, the user must use sign-in instead.
 - The JWT server plugin exposes `/token`; Better Auth 1.6.22's `jwtClient()` only
   exposes `jwks`, so direct same-origin `fetch("/api/auth/token", {
 credentials: "include" })` is intentional.
@@ -320,8 +322,8 @@ required.
 - Update `docs/roadmap.md` to mark Phase 33 completed and record the callback,
   Nix package/module, and issuer security trade-off.
 - Update the prior Phase 30–33 Better Auth design note if needed so Better Auth
-  1.6.22 is consistently documented with `keyPairConfig.alg = "RS256"` rather
-  than the earlier `RSA256` wording; current roadmap text is already corrected.
+  1.6.22 is consistently documented with `keyPairConfig.alg = "RS256"` and the
+  JWT/JWKS smoke check records the emitted `alg: "RS256"` and `kty: "RSA"`.
 - Refresh `docs/deployment/nixos/options.md` from the generated NixOS option
   documentation so `pandar-nixos-options-doc` stays green.
 - No Rust API docs are required because `pandar-hub` keeps the existing

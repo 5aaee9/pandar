@@ -2,6 +2,7 @@ export type AuthCookieConfig = {
   name: string;
   maxAgeSeconds: number;
   secure: boolean;
+  issuer: string | null;
 };
 
 type AuthCookieOptions = {
@@ -21,6 +22,7 @@ export function readAuthCookieConfig(): AuthCookieConfig {
     name: process.env.APP_AUTH_COOKIE_NAME || defaultCookieName,
     maxAgeSeconds: maxAgeSeconds(),
     secure: process.env.APP_BASE_URL?.startsWith("https://") ?? false,
+    issuer: issuer(),
   };
 }
 
@@ -46,10 +48,51 @@ export function isCompactJwt(value: string) {
   return compactJwtPattern.test(value);
 }
 
+export function isAllowedDashboardJwt(value: string) {
+  if (!isCompactJwt(value)) {
+    return false;
+  }
+
+  const expectedIssuer = issuer();
+  if (!expectedIssuer) {
+    return true;
+  }
+
+  const payload = decodeJwtPayload(value);
+  if (!payload) {
+    return false;
+  }
+
+  return (
+    payload.iss === expectedIssuer &&
+    (payload.aud === expectedIssuer ||
+      (Array.isArray(payload.aud) && payload.aud.includes(expectedIssuer)))
+  );
+}
+
 function maxAgeSeconds() {
   const parsed = Number.parseInt(
     process.env.APP_AUTH_COOKIE_MAX_AGE_SECONDS ?? "",
     10,
   );
   return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultMaxAgeSeconds;
+}
+
+function issuer() {
+  const value = process.env.APP_AUTH_BETTER_AUTH_BASE_URL?.trim();
+  return value ? value.replace(/\/+$/, "") : null;
+}
+
+function decodeJwtPayload(
+  value: string,
+): { iss?: unknown; aud?: unknown } | null {
+  const payload = value.split(".")[1];
+  try {
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      iss?: unknown;
+      aud?: unknown;
+    };
+  } catch {
+    return null;
+  }
 }

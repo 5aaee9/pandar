@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the reviewed Phase 33 design: a sibling `auth/` Next.js Better Auth issuer app, dashboard callback/sign-out routes, Nix package/module wiring, and docs for self-hosted passkey Better Auth deployments.
+**Goal:** Implement the reviewed Phase 33 design: a sibling `frontend/auth/` Next.js Better Auth issuer app, dashboard callback/sign-out routes, Nix package/module wiring, and docs for self-hosted passkey Better Auth deployments.
 
 **Spec Reference:** `docs/superpowers/specs/2026-06-28-phase-33-self-hosted-better-auth-bundle-design.md`
 
-**Architecture:** Keep `pandar-hub` unchanged. `auth/` owns Better Auth runtime, passkey registration, JWT/JWKS issuance, and its SQLite database. `frontend/` remains provider-neutral and only receives a compact JWT through a fragment-to-POST callback before forwarding the cookie as an API bearer token.
+**Architecture:** Keep `pandar-hub` unchanged. `frontend/auth/` owns Better Auth runtime, passkey registration, JWT/JWKS issuance, and its SQLite database. `frontend/` remains provider-neutral and only receives a compact JWT through a fragment-to-POST callback before forwarding the cookie as an API bearer token.
 
 **Tech Stack:** Next.js 16 App Router, React 19, Better Auth 1.6.22, `@better-auth/passkey` 1.6.22, `auth` CLI 1.6.22, `better-sqlite3`, Nix `buildNpmPackage`, NixOS module options, TypeScript.
 
@@ -22,26 +22,26 @@
 
 ## File Structure
 
-New `auth/` files:
+New `frontend/auth/` files:
 
-- `auth/package.json`
-- `auth/package-lock.json`
-- `auth/.gitignore`
-- `auth/next.config.ts`
-- `auth/tsconfig.json`
-- `auth/app/layout.tsx`
-- `auth/app/api/auth/[...all]/route.ts`
-- `auth/app/sign-in/page.tsx`
-- `auth/app/sign-in/sign-in-form.tsx`
-- `auth/app/sign-up/page.tsx`
-- `auth/app/sign-up/sign-up-form.tsx`
-- `auth/app/sign-out/page.tsx`
-- `auth/app/sign-out/sign-out-client.tsx`
-- `auth/app/globals.css`
-- `auth/lib/auth.ts`
-- `auth/lib/auth-client.ts`
-- `auth/lib/env.ts`
-- `auth/lib/token.ts`
+- `frontend/auth/package.json`
+- `frontend/auth/package-lock.json`
+- `frontend/auth/.gitignore`
+- `frontend/auth/next.config.ts`
+- `frontend/auth/tsconfig.json`
+- `frontend/auth/app/layout.tsx`
+- `frontend/auth/app/api/auth/[...all]/route.ts`
+- `frontend/auth/app/sign-in/page.tsx`
+- `frontend/auth/app/sign-in/sign-in-form.tsx`
+- `frontend/auth/app/sign-up/page.tsx`
+- `frontend/auth/app/sign-up/sign-up-form.tsx`
+- `frontend/auth/app/sign-out/page.tsx`
+- `frontend/auth/app/sign-out/sign-out-client.tsx`
+- `frontend/auth/app/globals.css`
+- `frontend/auth/lib/auth.ts`
+- `frontend/auth/lib/auth-client.ts`
+- `frontend/auth/lib/env.ts`
+- `frontend/auth/lib/token.ts`
 
 Frontend files:
 
@@ -67,15 +67,15 @@ Docs:
 
 **Files:**
 
-- Create: `auth/package.json`
-- Create: `auth/package-lock.json`
-- Create: `auth/.gitignore`
-- Create: `auth/next.config.ts`
-- Create: `auth/tsconfig.json`
-- Create: `auth/app/layout.tsx`
-- Create: `auth/app/globals.css`
+- Create: `frontend/auth/package.json`
+- Create: `frontend/auth/package-lock.json`
+- Create: `frontend/auth/.gitignore`
+- Create: `frontend/auth/next.config.ts`
+- Create: `frontend/auth/tsconfig.json`
+- Create: `frontend/auth/app/layout.tsx`
+- Create: `frontend/auth/app/globals.css`
 
-- [ ] **Step 1: Create `auth/package.json` with pinned dependencies**
+- [ ] **Step 1: Create `frontend/auth/package.json` with pinned dependencies**
 
 Include scripts:
 
@@ -89,23 +89,23 @@ Include scripts:
 
 Dependencies must include `auth@1.6.22`, `better-auth@1.6.22`, `@better-auth/passkey@1.6.22`, `better-sqlite3`, `next`, `react`, and `react-dom`. Dev dependencies must include TypeScript and relevant React/Node types.
 
-- [ ] **Step 2: Generate `auth/package-lock.json`**
+- [ ] **Step 2: Generate `frontend/auth/package-lock.json`**
 
 Run:
 
 ```bash
-cd auth && npm install
+cd frontend/auth && npm install
 ```
 
 Expected: lockfile pins the same Better Auth major/minor versions and includes `auth` CLI bin metadata.
 
-- [ ] **Step 3: Add `auth/.gitignore`**
+- [ ] **Step 3: Add `frontend/auth/.gitignore`**
 
-Ignore `node_modules`, `.next`, `out`, and local env files under `auth/`.
+Ignore `node_modules`, `.next`, `out`, and local env files under `frontend/auth/`.
 
 - [ ] **Step 4: Add Next standalone config**
 
-`auth/next.config.ts` must set:
+`frontend/auth/next.config.ts` must set:
 
 ```ts
 const nextConfig = {
@@ -119,14 +119,14 @@ Use the same modern module resolution style as `frontend/`, without adding unuse
 
 - [ ] **Step 6: Add root layout**
 
-Create `auth/app/layout.tsx`, import `./globals.css`, and render a minimal `<html>`/`<body>` shell. This is required for App Router builds.
+Create `frontend/auth/app/layout.tsx`, import `./globals.css`, and render a minimal `<html>`/`<body>` shell. This is required for App Router builds.
 
 - [ ] **Step 7: Verify scaffold**
 
 Run:
 
 ```bash
-cd auth && npx tsc --noEmit
+cd frontend/auth && npx tsc --noEmit
 ```
 
 Expected: dependency install, TypeScript config, and root layout compile before Better Auth routes are added.
@@ -135,15 +135,15 @@ Expected: dependency install, TypeScript config, and root layout compile before 
 
 **Files:**
 
-- Create: `auth/lib/env.ts`
-- Create: `auth/lib/auth.ts`
-- Create: `auth/lib/auth-client.ts`
-- Create: `auth/lib/token.ts`
-- Create: `auth/app/api/auth/[...all]/route.ts`
+- Create: `frontend/auth/lib/env.ts`
+- Create: `frontend/auth/lib/auth.ts`
+- Create: `frontend/auth/lib/auth-client.ts`
+- Create: `frontend/auth/lib/token.ts`
+- Create: `frontend/auth/app/api/auth/[...all]/route.ts`
 
 - [ ] **Step 1: Implement typed env mapping**
 
-`auth/lib/env.ts` must map:
+`frontend/auth/lib/env.ts` must map:
 
 - `PANDAR_AUTH_DATABASE_FILE -> databaseFile`
 - `PANDAR_AUTH_BASE_URL -> baseURL`
@@ -157,7 +157,7 @@ Use defaults from the spec for local development.
 
 - [ ] **Step 2: Implement Better Auth server config**
 
-`auth/lib/auth.ts` must:
+`frontend/auth/lib/auth.ts` must:
 
 - create `new Database(env.databaseFile)`
 - configure `baseURL`, `trustedOrigins`, and `secret`
@@ -169,18 +169,18 @@ Use defaults from the spec for local development.
 
 - [ ] **Step 3: Implement passkey-first `resolveUser`**
 
-Parse the client context as JSON with email/name, normalize email, find or create a user with `emailVerified: true`, and return `{ id, name, displayName }`. If needed, use `updateUser` to stamp `emailVerified: true` after finding/creating.
+Parse the client context as JSON with email/name, normalize email, reject signup when that email already exists, create a new user with `emailVerified: true`, and return `{ id, name, displayName }`. Existing users must use sign-in; signup must not attach a new passkey to an existing account.
 
 - [ ] **Step 4: Mount Better Auth handler**
 
-`auth/app/api/auth/[...all]/route.ts` exports `GET` and `POST` from `toNextJsHandler(auth.handler)` with `basePath: "/api/auth"` configured in Better Auth.
+`frontend/auth/app/api/auth/[...all]/route.ts` exports `GET` and `POST` from `toNextJsHandler(auth.handler)` with `basePath: "/api/auth"` configured in Better Auth.
 
 - [ ] **Step 5: Verify server types**
 
 Run:
 
 ```bash
-cd auth && npm run build
+cd frontend/auth && npm run build
 ```
 
 Expected: Better Auth imports and route handler compile.
@@ -189,18 +189,18 @@ Expected: Better Auth imports and route handler compile.
 
 **Files:**
 
-- Create: `auth/app/sign-in/page.tsx`
-- Create: `auth/app/sign-in/sign-in-form.tsx`
-- Create: `auth/app/sign-up/page.tsx`
-- Create: `auth/app/sign-up/sign-up-form.tsx`
-- Create: `auth/app/sign-out/page.tsx`
-- Create: `auth/app/sign-out/sign-out-client.tsx`
-- Create/modify: `auth/lib/auth-client.ts`
-- Create/modify: `auth/lib/token.ts`
+- Create: `frontend/auth/app/sign-in/page.tsx`
+- Create: `frontend/auth/app/sign-in/sign-in-form.tsx`
+- Create: `frontend/auth/app/sign-up/page.tsx`
+- Create: `frontend/auth/app/sign-up/sign-up-form.tsx`
+- Create: `frontend/auth/app/sign-out/page.tsx`
+- Create: `frontend/auth/app/sign-out/sign-out-client.tsx`
+- Create/modify: `frontend/auth/lib/auth-client.ts`
+- Create/modify: `frontend/auth/lib/token.ts`
 
 - [ ] **Step 1: Implement Better Auth client**
 
-Use Better Auth React client with `passkeyClient()`. Keep it scoped to `auth/`.
+Use Better Auth React client with `passkeyClient()`. Keep it scoped to `frontend/auth/`.
 
 - [ ] **Step 2: Implement token retrieval helper**
 
@@ -209,22 +209,22 @@ Client code must receive `dashboardCallbackUrl` or `dashboardSignOutUrl` as prop
 
 - [ ] **Step 3: Implement returning-user sign-in**
 
-`auth/app/sign-in/page.tsx` is a Server Component that reads `env.dashboardCallbackUrl` and renders `sign-in-form.tsx`. The client form calls `authClient.signIn.passkey()`, then the token helper, then redirects to the dashboard callback fragment.
+`frontend/auth/app/sign-in/page.tsx` is a Server Component that reads `env.dashboardCallbackUrl` and renders `sign-in-form.tsx`. The client form calls `authClient.signIn.passkey()`, then the token helper, then redirects to the dashboard callback fragment.
 
 - [ ] **Step 4: Implement open signup**
 
-`auth/app/sign-up/page.tsx` is a Server Component that reads `env.dashboardCallbackUrl` and renders `sign-up-form.tsx`. The client form collects email/name, calls `authClient.passkey.addPasskey({ context })`, then `authClient.signIn.passkey()`, then the token helper.
+`frontend/auth/app/sign-up/page.tsx` is a Server Component that reads `env.dashboardCallbackUrl` and renders `sign-up-form.tsx`. The client form collects email/name, calls `authClient.passkey.addPasskey({ context })`, then `authClient.signIn.passkey()`, then the token helper.
 
 - [ ] **Step 5: Implement issuer sign-out**
 
-`auth/app/sign-out/page.tsx` is a Server Component that reads `env.dashboardSignOutUrl` and renders `sign-out-client.tsx`. The client component calls `authClient.signOut()` and redirects to the provided dashboard sign-out URL.
+`frontend/auth/app/sign-out/page.tsx` is a Server Component that reads `env.dashboardSignOutUrl` and renders `sign-out-client.tsx`. The client component calls `authClient.signOut()` and redirects to the provided dashboard sign-out URL.
 
 - [ ] **Step 6: Verify auth app build**
 
 Run:
 
 ```bash
-cd auth && npm run build
+cd frontend/auth && npm run build
 ```
 
 Expected: build passes.
@@ -280,7 +280,7 @@ Use a small Node smoke script or direct route-helper test; do not add a broad fr
 
 - [ ] **Step 1: Add `pandar-auth` package**
 
-Use `pkgs.buildNpmPackage` over `auth/`, include native inputs for `better-sqlite3` (`python3`, `pkg-config`, node-gyp-compatible build support, `makeWrapper`) and SQLite build/runtime inputs (`pkgs.sqlite` / its dev output as needed), and install:
+Use `pkgs.buildNpmPackage` over `frontend/auth/`, include native inputs for `better-sqlite3` (`python3`, `pkg-config`, node-gyp-compatible build support, `makeWrapper`) and SQLite build/runtime inputs (`pkgs.sqlite` / its dev output as needed), and install:
 
 - Next standalone output under `$out/share/pandar-auth`
 - the runtime `node_modules` entries that standalone does not reliably bundle for native addons, especially `better-sqlite3` and its compiled `.node` binding
@@ -355,7 +355,7 @@ Update each operator doc with concrete content:
 
 - `docs/architecture.md`: add the sibling `pandar-auth` issuer to the deployment/authentication architecture and note that `pandar-hub` still verifies only JWKS/JWT.
 - `docs/release-installation.md`: document the `pandar-auth` package, `services.pandar-auth` module, required env/secrets, callback/sign-out URLs, and `PANDAR_EXTERNAL_AUTH_*` hub wiring.
-- `docs/development.md`: add local development commands for `auth/`, including `npm install`, `npm run migrate`, `npm run build`, required env vars, and the Better Auth secret/JWKS rotation warning.
+- `docs/development.md`: add local development commands for `frontend/auth/`, including `npm install`, `npm run migrate`, `npm run build`, required env vars, and the Better Auth secret/JWKS rotation warning.
 
 All docs should mention required `BETTER_AUTH_SECRET`, `APP_AUTH_COOKIE_MAX_AGE_SECONDS`, and the JWKS private-key encryption rotation warning where operator-relevant.
 
@@ -368,7 +368,7 @@ Mark Phase 33 complete and list the issuer app, dashboard callback, Nix package/
 Run:
 
 ```bash
-rg -n "RSA256|services\\.pandar-auth|pandar-auth|BETTER_AUTH_SECRET|APP_AUTH_COOKIE_MAX_AGE_SECONDS" docs frontend auth nix
+rg -n "RSA256|services\\.pandar-auth|pandar-auth|BETTER_AUTH_SECRET|APP_AUTH_COOKIE_MAX_AGE_SECONDS" docs frontend frontend/auth nix
 ```
 
 Expected: `RSA256` appears only in historical correction notes; new service/env references are present.
@@ -380,8 +380,9 @@ Expected: `RSA256` appears only in historical correction notes; new service/env 
 Run:
 
 ```bash
-cd auth && npm run build
-cd ../frontend && npm run build
+cd frontend/auth && npm run build
+node scripts/smoke-jwt-and-registration.mjs
+cd .. && npm run build
 ```
 
 - [ ] **Step 2: Rust formatting/lint/tests**
@@ -413,7 +414,7 @@ Run the Task 4 smoke verification for callback and sign-out cookie behavior with
 Confirm from files/build output:
 
 - `frontend/package.json` has no Better Auth dependencies.
-- `auth/package-lock.json` includes `auth@1.6.22`.
+- `frontend/auth/package-lock.json` includes `auth@1.6.22`.
 - `pandar-hub` Rust files are unchanged unless a build-required mechanical update was unavoidable.
 - `/api/auth/jwks` and `/api/auth/token` remain under Better Auth `basePath: "/api/auth"`.
 

@@ -21,10 +21,6 @@ type InternalAdapter = {
     emailVerified: boolean;
     name: string;
   }): Promise<BetterAuthUser>;
-  updateUser(
-    id: string,
-    user: Partial<Pick<BetterAuthUser, "emailVerified" | "name">>,
-  ): Promise<BetterAuthUser>;
 };
 
 type ResolveUserContext = {
@@ -84,28 +80,24 @@ export const auth = betterAuth({
         requireSession: false,
         resolveUser: async ({ ctx, context }) => {
           const { email, name } = parseRegistrationContext(context);
-          const { internalAdapter } = ctx.context as unknown as ResolveUserContext;
+          const { internalAdapter } =
+            ctx.context as unknown as ResolveUserContext;
 
           const existingUser = await internalAdapter.findUserByEmail(email);
-          const user =
-            existingUser?.user ??
-            (await internalAdapter.createUser({
-              email,
-              name,
-              emailVerified: true,
-            }));
+          if (existingUser) {
+            throw new Error("An account already exists for this email");
+          }
 
-          const verifiedUser = user.emailVerified
-            ? user
-            : await internalAdapter.updateUser(user.id, {
-                emailVerified: true,
-                name,
-              });
+          const user = await internalAdapter.createUser({
+            email,
+            name,
+            emailVerified: true,
+          });
 
           return {
-            id: verifiedUser.id,
-            name: verifiedUser.name || name,
-            displayName: verifiedUser.name || name,
+            id: user.id,
+            name: user.name || name,
+            displayName: user.name || name,
           };
         },
       },

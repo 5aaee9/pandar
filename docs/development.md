@@ -206,12 +206,12 @@ PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE=true
 
 If `PANDAR_EXTERNAL_AUTH_PROVIDER` is unset, external identity auth is disabled. Partial external-auth configuration fails hub startup instead of silently falling back. `PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE` defaults to `true`; set it to `false` to require join links or bootstrap provisioning for first tenant membership.
 
-Better Auth is supported through the same external JWT/JWKS contract. Configure Better Auth 1.6.22's JWT plugin with `keyPairConfig.alg = "RS256"` and configure Pandar verification with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. Pandar expects a stable `sub` plus verified email claims before creating tenant-local user projections.
+Better Auth is supported through the same external JWT/JWKS contract. Configure Better Auth 1.6.22's JWT plugin with `keyPairConfig.alg = "RS256"` and configure Pandar verification with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. Better Auth delegates key generation to `jose`, where the RSA signing algorithm value is `RS256`; Pandar's smoke check signs a token and confirms the JWT header is `alg: "RS256"` and the JWKS key is `kty: "RSA"`. Pandar expects a stable `sub` plus verified email claims before creating tenant-local user projections.
 
-Self-hosted Better Auth issuer development lives under `auth/`:
+Self-hosted Better Auth issuer development lives under `frontend/auth/`:
 
 ```bash
-cd auth
+cd frontend/auth
 npm install
 PANDAR_AUTH_DATABASE_FILE=/tmp/pandar-auth.db \
 PANDAR_AUTH_BASE_URL=http://127.0.0.1:3001 \
@@ -220,6 +220,7 @@ PANDAR_AUTH_DASHBOARD_CALLBACK_URL=http://127.0.0.1:3000/auth/betterauth/callbac
 PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL=http://127.0.0.1:3000/auth/betterauth/sign-out \
 BETTER_AUTH_SECRET=local-development-secret \
 npm run migrate
+node scripts/smoke-jwt-and-registration.mjs
 npm run build
 ```
 

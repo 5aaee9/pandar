@@ -115,11 +115,21 @@
         pkgs.sqlite
         pkgs.stdenv.cc.cc.lib
       ];
+      frontendRoot = toString "${root}/frontend";
+      frontendSource = lib.cleanSourceWith {
+        src = "${root}/frontend";
+        filter =
+          path: _type:
+          let
+            relativePath = lib.removePrefix "${frontendRoot}/" (toString path);
+          in
+          relativePath != "auth" && !lib.hasPrefix "auth/" relativePath;
+      };
 
       pandar-auth = pkgs.buildNpmPackage {
         pname = "pandar-auth";
         version = "0.1.0";
-        src = lib.cleanSource "${root}/auth";
+        src = lib.cleanSource "${root}/frontend/auth";
         npmDepsHash = "sha256-SpM7vTYz8/krjBpuuY0YTSgqseSEb60WvHOJDFonjTA=";
 
         nativeBuildInputs = [
@@ -180,7 +190,7 @@
       pandar-web = pkgs.buildNpmPackage {
         pname = "pandar-web";
         version = "0.1.0";
-        src = lib.cleanSource "${root}/frontend";
+        src = frontendSource;
         npmDepsHash = "sha256-RFtVgXp+lm4gPCzq/I0q0+yc1HhtumsNfWprNYuKvP0=";
 
         nativeBuildInputs = [
