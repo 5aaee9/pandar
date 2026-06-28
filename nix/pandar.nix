@@ -156,6 +156,7 @@
           mkdir -p "$out/share/pandar-auth/migrate-src"
           cp package.json package-lock.json tsconfig.json "$out/share/pandar-auth/migrate-src/"
           cp -r lib "$out/share/pandar-auth/migrate-src/lib"
+          cp -r scripts "$out/share/pandar-auth/migrate-src/scripts"
           cp -r node_modules "$out/share/pandar-auth/migrate-src/node_modules"
 
           mkdir -p "$out/bin"
@@ -352,6 +353,29 @@
         touch "$out"
       '';
 
+      pandarAuthJwtSmokeCheck = pkgs.runCommand "pandar-auth-jwt-smoke-check" { } ''
+        cd ${pandar-auth}/share/pandar-auth/migrate-src
+        export BETTER_AUTH_SECRET="pandar-auth-smoke-secret-at-least-32-chars"
+        export PANDAR_AUTH_BASE_URL="http://127.0.0.1:3001"
+        export PANDAR_AUTH_TRUSTED_ORIGINS="http://127.0.0.1:3000"
+        export PANDAR_AUTH_DASHBOARD_CALLBACK_URL="http://127.0.0.1:3000/auth/betterauth/callback"
+        export PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL="http://127.0.0.1:3000/auth/betterauth/sign-out"
+        export PANDAR_AUTH_DATABASE_FILE="$TMPDIR/pandar-auth-smoke.db"
+        export PANDAR_AUTH_JWT_MAX_AGE_SECONDS="3600"
+        LD_LIBRARY_PATH=${pandarAuthLibraryPath} ${pkgs.nodejs_24}/bin/node \
+          --experimental-strip-types \
+          scripts/smoke-jwt-and-registration.mjs
+        touch "$out"
+      '';
+
+      pandarAuthCookieSmokeCheck = pkgs.runCommand "pandar-auth-cookie-smoke-check" { } ''
+        cd ${frontendSource}
+        ${pkgs.nodejs_24}/bin/node \
+          --experimental-strip-types \
+          app/auth/betterauth/cookie.smoke.mjs
+        touch "$out"
+      '';
+
       pandarNixosOptionsDoc =
         let
           nixosSystem = inputs.nixpkgs.lib.nixosSystem {
@@ -434,6 +458,8 @@
           ;
 
         pandar-auth-migrate = pandarAuthMigrateCheck;
+        pandar-auth-jwt-smoke = pandarAuthJwtSmokeCheck;
+        pandar-auth-cookie-smoke = pandarAuthCookieSmokeCheck;
         pandar-nixos-module = pandarNixosModuleCheck;
         pandar-nixos-options-doc = pandarNixosOptionsDocCheck;
         pandar-nixos-test-sqlite = pandarNixosTests.sqlite;
