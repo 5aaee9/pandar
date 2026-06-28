@@ -20,7 +20,7 @@ Bambu Studio -(network plugin ABI)-> pandar-network-plugin -(HTTP / WebSocket)->
 
 `frontend` is the product UI. It should talk only to `pandar-hub`, never directly to agents or printers. When configured for the self-hosted Better Auth issuer, it receives a compact JWT through `/auth/betterauth/callback`, stores it as the HTTP-only bearer cookie, and keeps `better-auth` runtime dependencies out of the dashboard bundle.
 
-`pandar-auth` is the optional self-hosted Better Auth issuer app. It owns passkey registration/sign-in, its own SQLite database, and JWT/JWKS issuance. The hub does not read Better Auth tables; it only verifies emitted JWTs through the existing external-auth contract.
+`pandar-auth` is the optional self-hosted Better Auth issuer app. It owns email magic-link sign-in, optional post-login passkey binding, its own SQLite database, and JWT/JWKS issuance. The hub does not read Better Auth tables; it only verifies emitted JWTs through the existing external-auth contract.
 
 `pandar-network-plugin` is a Bambu Studio dynamic-library plugin replacement scaffold. It exposes the required network plugin ABI symbols while connecting only to `pandar-hub`. It must not connect directly to `pandar-agent` or Bambu machines; local machine access remains the agent's responsibility.
 
@@ -119,7 +119,7 @@ Pandar's contract:
 
 Phase 10 implements this contract in `pandar-hub` with one configured external identity profile per hub process. The hub parses `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, optional audience, RS-family algorithm allow-list, optional Clerk-style authorized parties, optional Logto-style required scopes, and clock leeway at startup. Partial external-auth configuration is a startup error.
 
-The self-hosted Better Auth issuer is packaged as a sibling Next.js app named `pandar-auth`. It configures Better Auth's passkey and JWT plugins, exposes JWKS at `/api/auth/jwks`, exposes session JWT retrieval at `/api/auth/token`, and redirects successful sign-ins back to `pandar-web`'s callback fragment. `BETTER_AUTH_SECRET` signs Better Auth sessions and, by default, encrypts the persisted JWKS private key in the issuer database; rotating it without re-encrypting or clearing JWKS rows breaks issuer signing until the key material is repaired.
+The self-hosted Better Auth issuer is packaged as a sibling Next.js app named `pandar-auth`. It configures Better Auth's magic-link, passkey, and JWT plugins, exposes JWKS at `/api/auth/jwks`, exposes session JWT retrieval at `/api/auth/token`, and redirects successful sign-ins back to `pandar-web`'s callback fragment. Email delivery is selected at deployment time through Resend or SMTP. `BETTER_AUTH_SECRET` signs Better Auth sessions and, by default, encrypts the persisted JWKS private key in the issuer database; rotating it without re-encrypting or clearing JWKS rows breaks issuer signing until the key material is repaired.
 
 Tenant route authentication checks bearer credentials in this order:
 

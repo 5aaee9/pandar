@@ -1,57 +1,107 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 import { authClient } from "../../lib/auth-client";
 import type { SignInMessages } from "../../lib/i18n";
-import { redirectWithAuthToken } from "../../lib/token";
 
 type SignInFormProps = {
-  dashboardCallbackUrl: string;
   messages: SignInMessages;
 };
 
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback;
-}
+const RESEND_COOLDOWN_SECONDS = 60;
 
-export function SignInForm({ dashboardCallbackUrl, messages }: SignInFormProps) {
+export function SignInForm({ messages }: SignInFormProps) {
   const [pending, setPending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
 
-  async function signIn() {
+  useEffect(() => {
+    if (cooldown <= 0) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setCooldown((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [cooldown]);
+
+  async function sendMagicLink(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (pending || (sent && cooldown > 0)) {
+      return;
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const name = normalizedEmail.split("@", 1)[0] || normalizedEmail;
     setPending(true);
     setError(null);
 
     try {
-      const result = await authClient.signIn.passkey();
+      const result = await authClient.signIn.magicLink({
+        email: normalizedEmail,
+        name,
+        callbackURL: "/auth/complete",
+        newUserCallbackURL: "/auth/complete",
+        errorCallbackURL: "/sign-in",
+      });
       if (result.error) {
-        throw new Error(result.error.message || messages.passkeySignInFailed);
+        throw new Error(result.error.message || messages.magicLinkSendFailed);
       }
 
-      await redirectWithAuthToken(dashboardCallbackUrl, messages);
-    } catch (caught) {
-      setError(errorMessage(caught, messages.unableSignIn));
+      setSent(true);
+      setCooldown(RESEND_COOLDOWN_SECONDS);
+    } catch {
+      setError(messages.unableSignIn);
+    } finally {
       setPending(false);
     }
   }
 
   return (
-    <div className="auth-form">
+    <form className="auth-form" onSubmit={sendMagicLink}>
+      <label className="auth-field">
+        <span>{messages.email}</span>
+        <input
+          autoComplete="email"
+          inputMode="email"
+          name="email"
+          required
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.currentTarget.value)}
+        />
+      </label>
       {error ? (
         <div className="auth-error" role="alert">
-          <span>{messages.signInFailed}</span>
+          <span>{messages.magicLinkSendFailed}</span>
           {error}
+        </div>
+      ) : null}
+      {sent ? (
+        <div className="auth-status" role="status">
+          <strong>{messages.magicLinkEmailSent}</strong>
+          <span>{messages.magicLinkSentBody}</span>
+          <span>{messages.magicLinkCheckInbox}</span>
         </div>
       ) : null}
       <button
         className="auth-button"
-        disabled={pending}
-        type="button"
-        onClick={signIn}
+        disabled={pending || (sent && cooldown > 0)}
+        type="submit"
       >
-        {pending ? messages.signingIn : messages.signInWithPasskey}
+        {pending
+          ? messages.magicLinkSending
+          : sent && cooldown > 0
+            ? messages.magicLinkResendCooldown(cooldown)
+            : sent
+              ? messages.magicLinkResend
+              : messages.magicLinkSubmit}
       </button>
-    </div>
+    </form>
   );
 }

@@ -68,12 +68,33 @@ input {
   padding: 32px 16px;
 }
 
-.auth-panel {
-  width: min(100%, 420px);
+.auth-shell {
+  display: grid;
+  width: min(100%, 860px);
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel);
+}
+
+.auth-hero {
+  min-height: 190px;
+  background:
+    radial-gradient(circle at 24% 18%, rgb(20 184 166 / 0.38), transparent 28%),
+    radial-gradient(circle at 70% 36%, rgb(14 165 233 / 0.26), transparent 30%),
+    linear-gradient(135deg, #0f766e, #0f172a 68%);
+  background-position: center;
+  background-size: cover;
+}
+
+.auth-panel {
+  width: min(100%, 420px);
+  background: var(--panel);
   padding: 24px;
+}
+
+.auth-shell .auth-panel {
+  width: 100%;
 }
 
 .auth-panel h1 {
@@ -193,6 +214,10 @@ input {
   opacity: 0.72;
 }
 
+.auth-button:disabled:not(:first-child) {
+  cursor: not-allowed;
+}
+
 .auth-link {
   color: var(--accent);
   font-size: 14px;
@@ -281,6 +306,21 @@ input {
 .auth-secondary-button:hover {
   border-color: #94a3b8;
   background: #f8fafc;
+}
+
+.auth-secondary-button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+@media (min-width: 760px) {
+  .auth-shell {
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
+  }
+
+  .auth-hero {
+    min-height: 520px;
+  }
 }
 
 @keyframes auth-spin {

@@ -269,10 +269,68 @@ in
         description = "Better Auth JWT expiration in seconds passed through PANDAR_AUTH_JWT_MAX_AGE_SECONDS.";
       };
 
+      email = {
+        magicLinkTtlSeconds = lib.mkOption {
+          type = lib.types.ints.positive;
+          default = 1800;
+          description = "Email magic-link expiration in seconds passed through PANDAR_AUTH_MAGIC_LINK_TTL_SECONDS.";
+        };
+
+        provider = lib.mkOption {
+          type = lib.types.enum [
+            "resend"
+            "smtp"
+          ];
+          default = "resend";
+          description = "Email delivery provider passed through PANDAR_AUTH_EMAIL_PROVIDER.";
+        };
+
+        from = lib.mkOption {
+          type = lib.types.str;
+          description = "From address passed through PANDAR_AUTH_EMAIL_FROM.";
+        };
+
+        brandName = lib.mkOption {
+          type = lib.types.str;
+          default = "Pandar";
+          description = "Brand name used in magic-link email copy, passed through PANDAR_AUTH_EMAIL_BRAND_NAME.";
+        };
+
+        smtp = {
+          host = lib.mkOption {
+            type = lib.types.str;
+            default = "";
+            description = "SMTP host passed through PANDAR_AUTH_SMTP_HOST when email.provider is smtp.";
+          };
+
+          port = lib.mkOption {
+            type = lib.types.ints.positive;
+            default = 587;
+            description = "SMTP port passed through PANDAR_AUTH_SMTP_PORT when email.provider is smtp.";
+          };
+
+          username = lib.mkOption {
+            type = lib.types.str;
+            default = "";
+            description = "SMTP username passed through PANDAR_AUTH_SMTP_USERNAME when email.provider is smtp.";
+          };
+
+          tls = lib.mkOption {
+            type = lib.types.enum [
+              "starttls"
+              "tls"
+              "none"
+            ];
+            default = "starttls";
+            description = "SMTP TLS mode passed through PANDAR_AUTH_SMTP_TLS when email.provider is smtp.";
+          };
+        };
+      };
+
       environmentFile = lib.mkOption {
         type = lib.types.nullOr lib.types.path;
         default = null;
-        description = "Optional systemd EnvironmentFile for Better Auth secrets such as BETTER_AUTH_SECRET.";
+        description = "Optional systemd EnvironmentFile for Better Auth secrets such as BETTER_AUTH_SECRET, RESEND_API_KEY, or PANDAR_AUTH_SMTP_PASSWORD.";
       };
 
       extraEnvironment = lib.mkOption {
@@ -298,6 +356,35 @@ in
           assertion =
             !authCfg.enable || authCfg.environmentFile != null || authCfg.extraEnvironment ? BETTER_AUTH_SECRET;
           message = "services.pandar-auth requires BETTER_AUTH_SECRET through services.pandar-auth.environmentFile or services.pandar-auth.extraEnvironment.";
+        }
+        {
+          assertion = !authCfg.enable || authCfg.email.from != "";
+          message = "services.pandar-auth.email.from is required.";
+        }
+        {
+          assertion =
+            !authCfg.enable
+            || authCfg.email.provider != "resend"
+            || authCfg.environmentFile != null
+            || authCfg.extraEnvironment ? RESEND_API_KEY;
+          message = "services.pandar-auth with email.provider = \"resend\" requires RESEND_API_KEY through services.pandar-auth.environmentFile or services.pandar-auth.extraEnvironment.";
+        }
+        {
+          assertion = !authCfg.enable || authCfg.email.provider != "smtp" || authCfg.email.smtp.host != "";
+          message = "services.pandar-auth.email.smtp.host is required when email.provider is \"smtp\".";
+        }
+        {
+          assertion =
+            !authCfg.enable || authCfg.email.provider != "smtp" || authCfg.email.smtp.username != "";
+          message = "services.pandar-auth.email.smtp.username is required when email.provider is \"smtp\".";
+        }
+        {
+          assertion =
+            !authCfg.enable
+            || authCfg.email.provider != "smtp"
+            || authCfg.environmentFile != null
+            || authCfg.extraEnvironment ? PANDAR_AUTH_SMTP_PASSWORD;
+          message = "services.pandar-auth with email.provider = \"smtp\" requires PANDAR_AUTH_SMTP_PASSWORD through services.pandar-auth.environmentFile or services.pandar-auth.extraEnvironment.";
         }
       ];
     }
@@ -417,6 +504,16 @@ in
           PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL = authCfg.dashboardSignOutUrl;
           PANDAR_AUTH_DATABASE_FILE = toString authCfg.databaseFile;
           PANDAR_AUTH_JWT_MAX_AGE_SECONDS = toString authCfg.jwtMaxAgeSeconds;
+          PANDAR_AUTH_MAGIC_LINK_TTL_SECONDS = toString authCfg.email.magicLinkTtlSeconds;
+          PANDAR_AUTH_EMAIL_PROVIDER = authCfg.email.provider;
+          PANDAR_AUTH_EMAIL_FROM = authCfg.email.from;
+          PANDAR_AUTH_EMAIL_BRAND_NAME = authCfg.email.brandName;
+        }
+        // lib.optionalAttrs (authCfg.email.provider == "smtp") {
+          PANDAR_AUTH_SMTP_HOST = authCfg.email.smtp.host;
+          PANDAR_AUTH_SMTP_PORT = toString authCfg.email.smtp.port;
+          PANDAR_AUTH_SMTP_USERNAME = authCfg.email.smtp.username;
+          PANDAR_AUTH_SMTP_TLS = authCfg.email.smtp.tls;
         }
         // authCfg.extraEnvironment;
 

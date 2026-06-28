@@ -483,9 +483,107 @@ _Default:_
 "/var/lib/pandar-auth/auth.db"
 ```
 
+## services\.pandar-auth\.email\.brandName
+
+Brand name used in magic-link email copy, passed through PANDAR_AUTH_EMAIL_BRAND_NAME\.
+
+_Type:_
+string
+
+_Default:_
+
+```nix
+"Pandar"
+```
+
+## services\.pandar-auth\.email\.from
+
+From address passed through PANDAR_AUTH_EMAIL_FROM\.
+
+_Type:_
+string
+
+## services\.pandar-auth\.email\.magicLinkTtlSeconds
+
+Email magic-link expiration in seconds passed through PANDAR_AUTH_MAGIC_LINK_TTL_SECONDS\.
+
+_Type:_
+positive integer, meaning >0
+
+_Default:_
+
+```nix
+1800
+```
+
+## services\.pandar-auth\.email\.provider
+
+Email delivery provider passed through PANDAR_AUTH_EMAIL_PROVIDER\.
+
+_Type:_
+one of “resend”, “smtp”
+
+_Default:_
+
+```nix
+"resend"
+```
+
+## services\.pandar-auth\.email\.smtp\.host
+
+SMTP host passed through PANDAR_AUTH_SMTP_HOST when email\.provider is smtp\.
+
+_Type:_
+string
+
+_Default:_
+
+```nix
+""
+```
+
+## services\.pandar-auth\.email\.smtp\.port
+
+SMTP port passed through PANDAR_AUTH_SMTP_PORT when email\.provider is smtp\.
+
+_Type:_
+positive integer, meaning >0
+
+_Default:_
+
+```nix
+587
+```
+
+## services\.pandar-auth\.email\.smtp\.tls
+
+SMTP TLS mode passed through PANDAR_AUTH_SMTP_TLS when email\.provider is smtp\.
+
+_Type:_
+one of “starttls”, “tls”, “none”
+
+_Default:_
+
+```nix
+"starttls"
+```
+
+## services\.pandar-auth\.email\.smtp\.username
+
+SMTP username passed through PANDAR_AUTH_SMTP_USERNAME when email\.provider is smtp\.
+
+_Type:_
+string
+
+_Default:_
+
+```nix
+""
+```
+
 ## services\.pandar-auth\.environmentFile
 
-Optional systemd EnvironmentFile for Better Auth secrets such as BETTER_AUTH_SECRET\.
+Optional systemd EnvironmentFile for Better Auth secrets such as BETTER_AUTH_SECRET, RESEND_API_KEY, or PANDAR_AUTH_SMTP_PASSWORD\.
 
 _Type:_
 null or absolute path

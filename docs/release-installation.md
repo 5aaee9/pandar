@@ -70,7 +70,12 @@ PANDAR_AUTH_DASHBOARD_CALLBACK_URL=https://pandar.example.com/auth/betterauth/ca
 PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL=https://pandar.example.com/auth/betterauth/sign-out
 PANDAR_AUTH_DATABASE_FILE=/var/lib/pandar-auth/auth.db
 PANDAR_AUTH_JWT_MAX_AGE_SECONDS=43200
+PANDAR_AUTH_MAGIC_LINK_TTL_SECONDS=1800
+PANDAR_AUTH_EMAIL_PROVIDER=resend
+PANDAR_AUTH_EMAIL_FROM='Pandar <auth@example.com>'
+PANDAR_AUTH_EMAIL_BRAND_NAME=Pandar
 BETTER_AUTH_SECRET=<long random secret>
+RESEND_API_KEY=<resend api key>
 
 APP_AUTH_PROVIDER=betterauth
 APP_AUTH_BETTER_AUTH_BASE_URL=https://auth.example.com
@@ -83,6 +88,8 @@ PANDAR_EXTERNAL_AUTH_AUDIENCE=https://auth.example.com
 PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256
 PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE=true
 ```
+
+For SMTP delivery, set `PANDAR_AUTH_EMAIL_PROVIDER=smtp` instead of `resend` and provide `PANDAR_AUTH_SMTP_HOST`, `PANDAR_AUTH_SMTP_PORT`, `PANDAR_AUTH_SMTP_USERNAME`, `PANDAR_AUTH_SMTP_PASSWORD`, and `PANDAR_AUTH_SMTP_TLS=starttls|tls|none`. Runtime startup fails when the selected email provider is incomplete; builds use dummy email settings only so the Next.js package can be compiled without production secrets.
 
 `BETTER_AUTH_SECRET` is also used by Better Auth to encrypt stored JWKS private keys by default. Rotating it without re-encrypting or clearing the issuer `jwks` table makes existing signing keys undecryptable and breaks JWT issuance.
 
@@ -126,7 +133,7 @@ Back up SQLite deployments by capturing both the SQLite database file and the fi
 
 NixOS deployments use the flake module exposed as `nixosModules.default` and `nixosModules.pandar`. Configure Hub, Web, and Agent through `services.pandar`.
 
-The optional self-hosted issuer is configured separately through `services.pandar-auth`. It has its own package, bind address, SQLite database path, callback/sign-out URLs, and `environmentFile` for `BETTER_AUTH_SECRET`. Generated option documentation is in `docs/deployment/nixos/options.md`. Use it as the source for exact option names, package overrides, environment files, bind addresses, and agent credential wiring.
+The optional self-hosted issuer is configured separately through `services.pandar-auth`. It has its own package, bind address, SQLite database path, callback/sign-out URLs, email delivery options, and `environmentFile` for secrets such as `BETTER_AUTH_SECRET`, `RESEND_API_KEY`, and `PANDAR_AUTH_SMTP_PASSWORD`. Generated option documentation is in `docs/deployment/nixos/options.md`. Use it as the source for exact option names, package overrides, environment files, bind addresses, and agent credential wiring.
 
 ## Bambu Studio Plugin Replacement
 

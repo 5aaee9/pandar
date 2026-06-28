@@ -130,7 +130,7 @@
         pname = "pandar-auth";
         version = "0.1.0";
         src = lib.cleanSource "${root}/frontend/auth";
-        npmDepsHash = "sha256-SpM7vTYz8/krjBpuuY0YTSgqseSEb60WvHOJDFonjTA=";
+        npmDepsHash = "sha256-iTTmuaITXFAnrxFwHYkbg6L1NFwBkCb2W9t00J8dQGg=";
 
         nativeBuildInputs = [
           pkgs.makeWrapper
@@ -290,6 +290,18 @@
                   dashboardSignOutUrl = "https://app.example/auth/betterauth/sign-out";
                   databaseFile = "/var/lib/pandar-auth/auth.db";
                   jwtMaxAgeSeconds = 3600;
+                  email = {
+                    magicLinkTtlSeconds = 1800;
+                    provider = "smtp";
+                    from = "Pandar <auth@example>";
+                    brandName = "Pandar Cloud";
+                    smtp = {
+                      host = "smtp.example";
+                      port = 465;
+                      username = "pandar-auth";
+                      tls = "tls";
+                    };
+                  };
                   environmentFile = "/run/secrets/pandar-auth.env";
                 };
                 system.stateVersion = "25.11";
@@ -330,6 +342,14 @@
           test "${authService.environment.PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL}" = "https://app.example/auth/betterauth/sign-out"
           test "${authService.environment.PANDAR_AUTH_DATABASE_FILE}" = "/var/lib/pandar-auth/auth.db"
           test "${authService.environment.PANDAR_AUTH_JWT_MAX_AGE_SECONDS}" = "3600"
+          test "${authService.environment.PANDAR_AUTH_MAGIC_LINK_TTL_SECONDS}" = "1800"
+          test "${authService.environment.PANDAR_AUTH_EMAIL_PROVIDER}" = "smtp"
+          test "${authService.environment.PANDAR_AUTH_EMAIL_FROM}" = "Pandar <auth@example>"
+          test "${authService.environment.PANDAR_AUTH_EMAIL_BRAND_NAME}" = "Pandar Cloud"
+          test "${authService.environment.PANDAR_AUTH_SMTP_HOST}" = "smtp.example"
+          test "${authService.environment.PANDAR_AUTH_SMTP_PORT}" = "465"
+          test "${authService.environment.PANDAR_AUTH_SMTP_USERNAME}" = "pandar-auth"
+          test "${authService.environment.PANDAR_AUTH_SMTP_TLS}" = "tls"
           test "${authService.serviceConfig.EnvironmentFile}" = "/run/secrets/pandar-auth.env"
           touch "$out"
         '';
@@ -342,6 +362,11 @@
         export PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL="http://127.0.0.1:3000/auth/betterauth/sign-out"
         export PANDAR_AUTH_DATABASE_FILE="$TMPDIR/auth.db"
         export PANDAR_AUTH_JWT_MAX_AGE_SECONDS="3600"
+        export PANDAR_AUTH_MAGIC_LINK_TTL_SECONDS="1800"
+        export PANDAR_AUTH_EMAIL_PROVIDER="resend"
+        export PANDAR_AUTH_EMAIL_FROM="Pandar <auth@example.invalid>"
+        export PANDAR_AUTH_EMAIL_BRAND_NAME="Pandar"
+        export RESEND_API_KEY="re_test_key"
 
         cd ${pandar-auth}/share/pandar-auth
         LD_LIBRARY_PATH=${pandarAuthLibraryPath} ${pkgs.nodejs_24}/bin/node -e 'require("better-sqlite3")'
@@ -362,6 +387,11 @@
         export PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL="http://127.0.0.1:3000/auth/betterauth/sign-out"
         export PANDAR_AUTH_DATABASE_FILE="$TMPDIR/pandar-auth-smoke.db"
         export PANDAR_AUTH_JWT_MAX_AGE_SECONDS="3600"
+        export PANDAR_AUTH_MAGIC_LINK_TTL_SECONDS="1800"
+        export PANDAR_AUTH_EMAIL_PROVIDER="resend"
+        export PANDAR_AUTH_EMAIL_FROM="Pandar <auth@example.invalid>"
+        export PANDAR_AUTH_EMAIL_BRAND_NAME="Pandar"
+        export RESEND_API_KEY="re_test_key"
         LD_LIBRARY_PATH=${pandarAuthLibraryPath} ${pkgs.nodejs_24}/bin/node \
           --experimental-strip-types \
           scripts/smoke-jwt-and-registration.mjs

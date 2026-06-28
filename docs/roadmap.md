@@ -135,13 +135,23 @@ Goal: finish the transition from Pandar-managed user provisioning to external-ac
 
 Goal: provide an integrated Better Auth deployment option for new Pandar installations.
 
-- Added a `frontend/auth` `pandar-auth` issuer app for passkey signup/sign-in, Better Auth-owned SQLite state, RS256 JWT issuance, and JWKS exposure.
+- Added a `frontend/auth` `pandar-auth` issuer app for email magic-link sign-in, optional post-login passkey binding, Better Auth-owned SQLite state, RS256 JWT issuance, and JWKS exposure.
 - Added dashboard callback/sign-out routes so `pandar-web` can receive a self-hosted Better Auth JWT without adding Better Auth dependencies to the provider-neutral frontend.
 - Hardened Better Auth signup so existing email accounts must sign in instead of receiving newly registered passkeys, and the dashboard callback checks Better Auth issuer/audience shape before storing the bearer cookie.
 - Added Nix packaging and a top-level `services.pandar-auth` NixOS module for the issuer, including migration startup and generated option docs.
 - Documented the self-hosted issuer deployment wiring, including `PANDAR_EXTERNAL_AUTH_*`, `APP_AUTH_*`, `PANDAR_AUTH_*`, and the `BETTER_AUTH_SECRET` JWKS private-key encryption rotation warning.
 - Clerk/Logto migration remains out of scope; self-hosted Better Auth is a new-deployment option.
 - Hardened `pandar-web` external-auth entry so source-less Clerk/Logto/Better Auth dashboard requests redirect to the configured sign-in URL, stale dashboard cookies are cleared before provider sign-in, and a Nix `pandar-web-auth-redirect-smoke` check locks the redirect/open-redirect behavior.
+
+## Completed: Phase 34 Self-Hosted Better Auth Email Login
+
+Goal: make the self-hosted Better Auth issuer easier to deploy without requiring passkey enrollment before first login.
+
+- Replaced passkey-first signup/sign-in with email magic-link login and first-time user creation through Better Auth.
+- Added Resend and SMTP email delivery configuration, with 30-minute default magic-link expiry and runtime validation for the selected provider.
+- Added optional passkey binding immediately after magic-link login with a clear Skip action.
+- Redirected `/sign-up` to `/sign-in`; dashboard user management remains later-phase work.
+- Updated deployment docs and NixOS options for `services.pandar-auth` email delivery.
 
 ## Phase 1: Foundation
 

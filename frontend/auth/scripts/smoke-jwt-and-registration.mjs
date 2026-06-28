@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +10,9 @@ const tempDir = await mkdtemp(join(tmpdir(), "pandar-auth-smoke-"));
 process.env.PANDAR_AUTH_DATABASE_FILE = join(tempDir, "auth.db");
 process.env.PANDAR_AUTH_BASE_URL = "http://127.0.0.1:3001";
 process.env.BETTER_AUTH_SECRET = "pandar-auth-smoke-secret-at-least-32-chars";
+process.env.PANDAR_AUTH_EMAIL_PROVIDER = "resend";
+process.env.PANDAR_AUTH_EMAIL_FROM = "Pandar <smoke@example.com>";
+process.env.RESEND_API_KEY = "re_smoke";
 
 try {
   const db = new Database(process.env.PANDAR_AUTH_DATABASE_FILE);
@@ -50,96 +54,28 @@ try {
 
   const header = decodeProtectedHeader(signed.token);
   const payload = decodeJwt(signed.token);
-  if (header.alg !== "RS256") {
-    throw new Error(`expected JWT header alg RS256, got ${header.alg}`);
-  }
-  if (payload.sub !== "smoke-user") {
-    throw new Error(`expected JWT sub smoke-user, got ${payload.sub}`);
-  }
+  assert.equal(header.alg, "RS256");
+  assert.equal(payload.sub, "smoke-user");
+  assert.equal(payload.email, "smoke@example.com");
+  assert.equal(payload.email_verified, true);
+  assert.equal(payload.name, "Smoke User");
+  assert.equal(payload.preferred_username, "smoke");
 
   const jwks = await auth.api.getJwks();
   const key = jwks.keys.find((candidate) => candidate.kid === header.kid);
-  if (!key) {
-    throw new Error(`JWKS did not include signed token kid ${header.kid}`);
-  }
-  if (key.kty !== "RSA") {
-    throw new Error(`expected JWKS key kty RSA, got ${key.kty}`);
-  }
-  if (key.alg !== "RS256") {
-    throw new Error(`expected JWKS key alg RS256, got ${key.alg}`);
-  }
+  assert.ok(key, `JWKS did not include signed token kid ${header.kid}`);
+  assert.equal(key.kty, "RSA");
+  assert.equal(key.alg, "RS256");
 
-  db.prepare(
-    "insert into user (id, name, email, emailVerified, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?)",
-  ).run(
-    "existing-user",
-    "Existing User",
-    "victim@example.com",
-    1,
-    new Date().toISOString(),
-    new Date().toISOString(),
+  const passkeyPlugin = auth.options.plugins.find(
+    (plugin) => plugin.id === "passkey",
   );
-
-  const resolveUser = auth.options.plugins[0].options.registration.resolveUser;
-  let reusedExistingUser = false;
-  try {
-    const result = await resolveUser({
-      context: JSON.stringify({
-        email: "victim@example.com",
-        name: "Attacker",
-      }),
-      ctx: {
-        context: {
-          internalAdapter: {
-            async findUserByEmail(email) {
-              const row = db
-                .prepare("select * from user where email = ?")
-                .get(email);
-              return row
-                ? {
-                    user: {
-                      id: row.id,
-                      email: row.email,
-                      emailVerified: Boolean(row.emailVerified),
-                      name: row.name,
-                    },
-                    accounts: [],
-                  }
-                : null;
-            },
-            async createUser(user) {
-              db.prepare(
-                "insert into user (id, name, email, emailVerified, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?)",
-              ).run(
-                "new-user",
-                user.name,
-                user.email,
-                user.emailVerified ? 1 : 0,
-                new Date().toISOString(),
-                new Date().toISOString(),
-              );
-              return {
-                id: "new-user",
-                ...user,
-              };
-            },
-            async updateUser() {
-              throw new Error(
-                "existing user must not be updated during signup",
-              );
-            },
-          },
-        },
-      },
-    });
-    reusedExistingUser = result.id === "existing-user";
-  } catch {
-    reusedExistingUser = false;
-  }
-
-  if (reusedExistingUser) {
-    throw new Error("signup resolveUser reused an existing email account");
-  }
+  assert.ok(passkeyPlugin, "passkey plugin is registered");
+  assert.notEqual(passkeyPlugin.options?.registration?.requireSession, false);
+  assert.doesNotMatch(
+    JSON.stringify(passkeyPlugin.options ?? {}),
+    /"requireSession"\s*:\s*false/,
+  );
 } finally {
   await rm(tempDir, { recursive: true, force: true });
 }
