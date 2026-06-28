@@ -508,6 +508,23 @@
     "developerDetails": "开发者详情",
     "returnDashboard": "返回控制台"
   },
+  "dashboardShell": {
+    "brand": "Pandar",
+    "navigation": "控制台",
+    "tenants": "租户",
+    "tenant": "租户",
+    "noTenant": "无租户",
+    "hub": "Hub",
+    "devices": "设备",
+    "agents": "Agent",
+    "users": "用户",
+    "settings": "设置",
+    "logout": "退出登录",
+    "account": "账号",
+    "logoutTitle": "会话",
+    "logoutDescription": "通过已配置的身份提供商退出登录。",
+    "logoutUnavailable": "未配置外部退出登录 URL，因此无法退出登录。"
+  },
   "join": {
     "title": "加入租户",
     "subtitle": "使用 {provider} 认证接受邀请",

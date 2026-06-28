@@ -140,7 +140,7 @@ export function DispatchForm({
       })
       const status = response.ok ? 'job_created' : await errorCode(response)
       window.location.assign(
-        `/?tenant=${encodeURIComponent(selectedTenant.id)}&status=${encodeURIComponent(status)}`,
+        `/devices?tenant=${encodeURIComponent(selectedTenant.id)}&status=${encodeURIComponent(status)}`,
       )
     } finally {
       setSubmitting(false)

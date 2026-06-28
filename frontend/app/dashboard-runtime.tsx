@@ -3,10 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { DiagnosticsSection, LinkedAgentsSection } from './diagnostics-panel'
-import { DispatchForm } from './dispatch-form'
-import { RecoveryActions } from './recovery-actions'
-import { TenantAdminPanel } from './admin-panel'
+import { AppSidebar } from '../components/app-sidebar'
+import { SidebarInset, SidebarProvider } from '../components/ui/sidebar'
 import type {
   Agent,
   AuthMetadata,
@@ -24,6 +22,7 @@ import type {
   User,
   UserIdentity,
 } from './dashboard-types'
+import { DashboardViewContent } from './dashboard-view-content'
 import {
   jobRecoveryStateKey,
   mergeJob,
@@ -33,14 +32,13 @@ import {
   type RuntimeNotification,
 } from './dashboard-runtime-helpers'
 import { computeAttention, computeHealth, maxSeverity } from './dashboard-attention'
-import { Header } from './dashboard-header'
-import { JobHistory, PrinterInventory } from './dashboard-inventory'
-import { FleetStatusStrip, NeedsAttention, SectionNav } from './dashboard-overview'
-import { RuntimeStatusPanel, TenantSettings } from './dashboard-runtime-sections'
+import { DashboardShellHeader } from './dashboard-shell-header'
+import type { DashboardQuery, DashboardView } from './dashboard-shell'
 
 type DashboardRuntimeProps = {
   apiUrl: string
   configuredTenantId?: string
+  view: DashboardView
   summary: Summary | null
   tenants: Tenant[]
   selectedTenant: Tenant | null
@@ -55,6 +53,7 @@ type DashboardRuntimeProps = {
   adminUnavailable: boolean
   actionStatus?: string
   selectedCommand: Command | null
+  selectedCommandId?: string
   commandData: CommandResultData | null
   errors: string[]
   auth: AuthMetadata
@@ -66,6 +65,7 @@ export function DashboardRuntime({
   apiUrl,
   tenants,
   selectedTenant,
+  view,
   initialPrinters,
   agents,
   initialJobs,
@@ -77,6 +77,7 @@ export function DashboardRuntime({
   adminUnavailable,
   actionStatus,
   selectedCommand,
+  selectedCommandId,
   commandData,
   errors,
   auth,
@@ -282,97 +283,70 @@ export function DashboardRuntime({
     [agents, printers, jobs, nowMs],
   )
   const topSeverity = useMemo(() => maxSeverity(attentionItems), [attentionItems])
-  const attentionBySection = useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const item of attentionItems) {
-      counts[item.sectionId] = (counts[item.sectionId] ?? 0) + 1
-    }
-    return counts
-  }, [attentionItems])
 
   const tErr = useTranslations('runtime.notification')
   const tStatus = useTranslations('runtime.actionStatus')
+  const dashboardQuery: DashboardQuery = {
+    tenant: selectedTenant?.id,
+    command: view === 'agents' ? selectedCommandId : undefined,
+    status: actionStatus,
+  }
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-5 text-slate-950 sm:px-6 lg:px-8">
-      <section className="mx-auto flex max-w-7xl flex-col gap-5">
-        <Header apiUrl={apiUrl} tenants={tenants} selectedTenant={selectedTenant} />
-
-        {errors.length > 0 ? (
-          <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
-            {tErr('errorsIncomplete')} {errors.join('; ')}.
-          </div>
-        ) : null}
-
-        {actionStatus ? (
-          <div className="rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-950">
-            {formatActionStatus(actionStatus, tStatus)}
-          </div>
-        ) : null}
-
-        <SectionNav attentionBySection={attentionBySection} />
-
-        <FleetStatusStrip
-          health={health}
-          attentionCount={attentionItems.length}
-          topSeverity={topSeverity}
-          liveState={liveState}
-          lastEventAt={lastEventAt}
-          fleetEmpty={fleetEmpty}
+    <SidebarProvider>
+      <AppSidebar
+        activeView={view}
+        auth={auth}
+        query={dashboardQuery}
+        selectedTenant={selectedTenant}
+        tenants={tenants}
+      />
+      <SidebarInset className="min-h-svh bg-slate-100 text-slate-950">
+        <DashboardShellHeader
+          query={dashboardQuery}
+          selectedTenant={selectedTenant}
+          tenants={tenants}
+          view={view}
         />
+        <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
+          {errors.length > 0 ? (
+            <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
+              {tErr('errorsIncomplete')} {errors.join('; ')}.
+            </div>
+          ) : null}
 
-        <NeedsAttention items={attentionItems} selectedTenant={selectedTenant} />
+          {actionStatus ? (
+            <div className="rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-950">
+              {formatActionStatus(actionStatus, tStatus)}
+            </div>
+          ) : null}
 
-        <div id="printers" className="flex scroll-mt-20 flex-col gap-5">
-          <LinkedAgentsSection selectedTenant={selectedTenant} agents={agents} />
-          <PrinterInventory selectedTenant={selectedTenant} printers={printers} agents={agents} />
-        </div>
-        <div id="jobs" className="scroll-mt-20">
-          <JobHistory selectedTenant={selectedTenant} jobs={jobs} printers={printers} agents={agents} />
-        </div>
-        <div id="dispatch" className="scroll-mt-20">
-          <DispatchForm selectedTenant={selectedTenant} printers={printers} />
-        </div>
-        <div id="recovery" className="scroll-mt-20">
-          <RecoveryActions selectedTenant={selectedTenant} agents={agents} printers={printers} jobs={jobs} />
-        </div>
-        <div id="diagnostics" className="scroll-mt-20">
-          <DiagnosticsSection
-            selectedTenant={selectedTenant}
-            printers={printers}
-            selectedCommand={selectedCommand}
-            commandData={commandData}
-          />
-        </div>
-        <div id="activity" className="scroll-mt-20">
-          <RuntimeStatusPanel
+          <DashboardViewContent
+            view={view}
             auth={auth}
+            selectedTenant={selectedTenant}
+            health={health}
+            attentionItems={attentionItems}
+            topSeverity={topSeverity}
             liveState={liveState}
             lastEventAt={lastEventAt}
-            notifications={notifications}
-            selectedTenant={selectedTenant}
-          />
-        </div>
-        <div id="admin" className="flex scroll-mt-20 flex-col gap-5">
-          <TenantSettings
-            auth={auth}
-            selectedTenant={selectedTenant}
-            agents={agents}
+            fleetEmpty={fleetEmpty}
             printers={printers}
-          />
-          <TenantAdminPanel
-            selectedTenant={selectedTenant}
+            agents={agents}
+            jobs={jobs}
+            selectedCommand={selectedCommand}
+            commandData={commandData}
+            notifications={notifications}
             users={users}
             userIdentities={userIdentities}
             tenantTokens={tenantTokens}
             joinLinks={joinLinks}
-            agents={agents}
             auditEvents={auditEvents}
-            unavailable={adminUnavailable}
+            adminUnavailable={adminUnavailable}
           />
-        </div>
-      </section>
-    </main>
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 

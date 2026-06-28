@@ -55,9 +55,7 @@ export async function discoverPrinters(formData: FormData) {
   }
 
   const command = (await response.json()) as { id: string };
-  redirect(
-    `/?tenant=${encodeURIComponent(tenantId)}&command=${encodeURIComponent(command.id)}`,
-  );
+  redirect(commandUrl(tenantId, command.id));
 }
 
 export async function refreshPrinters(formData: FormData) {
@@ -112,9 +110,7 @@ export async function diagnosePrinter(formData: FormData) {
   }
 
   const command = (await response.json()) as { id: string };
-  redirect(
-    `/?tenant=${encodeURIComponent(tenantId)}&command=${encodeURIComponent(command.id)}`,
-  );
+  redirect(commandUrl(tenantId, command.id));
 }
 
 export async function createTenantToken(
@@ -496,5 +492,9 @@ async function errorCode(response: Response) {
 }
 
 function statusUrl(tenantId: string, status: string) {
-  return `/?tenant=${encodeURIComponent(tenantId)}&status=${encodeURIComponent(status)}`;
+  return `/devices?tenant=${encodeURIComponent(tenantId)}&status=${encodeURIComponent(status)}`;
+}
+
+function commandUrl(tenantId: string, commandId: string) {
+  return `/agents?tenant=${encodeURIComponent(tenantId)}&command=${encodeURIComponent(commandId)}`;
 }

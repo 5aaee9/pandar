@@ -171,6 +171,8 @@ export type AuthMetadata = {
   source: "request_cookie" | "app_auth_bearer_token" | "app_api_token" | "none";
   cookieName: string;
   provider: "clerk" | "logto" | "betterauth" | "none";
+  signInUrl: string | null;
+  signOutUrl: string | null;
 };
 
 export type Command = {

@@ -511,6 +511,23 @@
     "developerDetails": "Developer details",
     "returnDashboard": "Return to dashboard"
   },
+  "dashboardShell": {
+    "brand": "Pandar",
+    "navigation": "Dashboard",
+    "tenants": "Tenants",
+    "tenant": "Tenant",
+    "noTenant": "No tenant",
+    "hub": "Hub",
+    "devices": "Devices",
+    "agents": "Agents",
+    "users": "Users",
+    "settings": "Settings",
+    "logout": "Logout",
+    "account": "Account",
+    "logoutTitle": "Session",
+    "logoutDescription": "Sign out through the configured identity provider.",
+    "logoutUnavailable": "Logout is unavailable because no external sign-out URL is configured."
+  },
   "join": {
     "title": "Join tenant",
     "subtitle": "Accept an invitation with {provider} authentication",

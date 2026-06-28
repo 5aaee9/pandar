@@ -101,6 +101,7 @@
 - Rejected explicit `none` external auth providers so deployments must configure a real identity provider value when enabling external identity auth.
 - Polished and clarified the auth surfaces against the Instrument Console system: the standalone Better Auth issuer now uses the slate/cyan flat-panel vocabulary instead of a warm one-off card, sign-in/sign-up/sign-out share explicit alert treatment, issuer pages show the session issuer/return target/lifetime, and the Studio plugin sign-in route has operator-facing recovery copy for auth/readiness/tenant failures, callback URL trust-boundary copy and URL validation, visible Studio/default callback state, a header-integrated language switcher, and an explicit tenant/ticket confirmation block.
 - Fixed the standalone Better Auth issuer sign-in page by keeping cooldown copy serializable across the Server Component to Client Component boundary, avoiding production `/sign-in` render failures.
+- Replaced the one-page dashboard shell with shadcn `sidebar-08`: `/devices`, `/agents`, `/users`, and `/settings` now share a route-backed sidebar layout, root `/` redirects preserve dashboard query state, action feedback targets the relevant page, tenant switching preserves status and agent command context, and Logout is exposed only when the configured auth provider supplies a sign-out URL. The generated sidebar primitive was split under the frontend module-size limit while preserving the public shadcn import path.
 
 ## Completed: Phase 30 Better Auth Provider Compatibility
 
