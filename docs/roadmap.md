@@ -130,14 +130,15 @@ Goal: finish the transition from Pandar-managed user provisioning to external-ac
 - Keep join links as the supported invite/onboarding path.
 - Preserve existing data without migrating away valid `users` or `user_identities` rows.
 
-## Planned: Phase 33 Self-Hosted Better Auth Bundle
+## Completed: Phase 33 Self-Hosted Better Auth Bundle
 
 Goal: provide an integrated Better Auth deployment option for new Pandar installations.
 
-- Let `pandar-web` host or bundle Better Auth routes as a configured auth provider option.
-- Use a Better Auth-owned database/schema or SQLite file, separate from Pandar's Rust-owned business tables.
-- Configure Better Auth with `keyPairConfig.alg = "RSA256"` and configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` so verification remains on the external auth contract.
-- Do not provide Clerk/Logto migration in this phase; self-hosted Better Auth is a new-deployment option.
+- Added a sibling `pandar-auth` issuer app for passkey signup/sign-in, Better Auth-owned SQLite state, RS256 JWT issuance, and JWKS exposure.
+- Added dashboard callback/sign-out routes so `pandar-web` can receive a self-hosted Better Auth JWT without adding Better Auth dependencies to the provider-neutral frontend.
+- Added Nix packaging and a top-level `services.pandar-auth` NixOS module for the issuer, including migration startup and generated option docs.
+- Documented the self-hosted issuer deployment wiring, including `PANDAR_EXTERNAL_AUTH_*`, `APP_AUTH_*`, `PANDAR_AUTH_*`, and the `BETTER_AUTH_SECRET` JWKS private-key encryption rotation warning.
+- Clerk/Logto migration remains out of scope; self-hosted Better Auth is a new-deployment option.
 
 ## Phase 1: Foundation
 

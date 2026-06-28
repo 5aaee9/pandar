@@ -758,7 +758,7 @@ Document:
 ```bash
 PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth
 PANDAR_EXTERNAL_AUTH_ISSUER=https://auth.example.com
-PANDAR_EXTERNAL_AUTH_JWKS_URL=https://auth.example.com/jwks
+PANDAR_EXTERNAL_AUTH_JWKS_URL=https://auth.example.com/api/auth/jwks
 PANDAR_EXTERNAL_AUTH_AUDIENCE=https://api.example.com
 PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256
 PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE=true
@@ -770,7 +770,7 @@ Show Better Auth configuration with:
 jwt({
   jwks: {
     keyPairConfig: {
-      alg: "RSA256",
+      alg: "RS256",
     },
   },
 });
@@ -785,7 +785,7 @@ node -e 'const token=process.env.BETTER_AUTH_TEST_JWT; console.log(JSON.parse(Bu
 curl -fsS "$PANDAR_EXTERNAL_AUTH_JWKS_URL" | jq '.keys[] | {kty, alg, kid}'
 ```
 
-Expected: Better Auth is configured with `keyPairConfig.alg: "RSA256"`, the emitted JWT header is compatible with Pandar `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`, and the JWKS exposes RSA key material (`kty: "RSA"`). If JWKS `alg` is present, it must not conflict with `RS256`.
+Expected: Better Auth is configured with `keyPairConfig.alg: "RS256"`, the emitted JWT header is compatible with Pandar `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`, and the JWKS exposes RSA key material (`kty: "RSA"`). If JWKS `alg` is present, it must not conflict with `RS256`.
 
 - [ ] **Step 2: Update architecture docs**
 

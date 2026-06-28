@@ -206,7 +206,28 @@ PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE=true
 
 If `PANDAR_EXTERNAL_AUTH_PROVIDER` is unset, external identity auth is disabled. Partial external-auth configuration fails hub startup instead of silently falling back. `PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE` defaults to `true`; set it to `false` to require join links or bootstrap provisioning for first tenant membership.
 
-Better Auth is supported through the same external JWT/JWKS contract. Configure Better Auth's JWT plugin with an asymmetric key pair such as `keyPairConfig.alg = "RSA256"` and configure Pandar verification with the JWA algorithm value `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. Pandar expects a stable `sub` plus verified email claims before creating tenant-local user projections.
+Better Auth is supported through the same external JWT/JWKS contract. Configure Better Auth 1.6.22's JWT plugin with `keyPairConfig.alg = "RS256"` and configure Pandar verification with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. Pandar expects a stable `sub` plus verified email claims before creating tenant-local user projections.
+
+Self-hosted Better Auth issuer development lives under `auth/`:
+
+```bash
+cd auth
+npm install
+PANDAR_AUTH_DATABASE_FILE=/tmp/pandar-auth.db \
+PANDAR_AUTH_BASE_URL=http://127.0.0.1:3001 \
+PANDAR_AUTH_TRUSTED_ORIGINS=http://127.0.0.1:3000 \
+PANDAR_AUTH_DASHBOARD_CALLBACK_URL=http://127.0.0.1:3000/auth/betterauth/callback \
+PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL=http://127.0.0.1:3000/auth/betterauth/sign-out \
+BETTER_AUTH_SECRET=local-development-secret \
+npm run migrate
+npm run build
+```
+
+For local end-to-end testing, run `pandar-auth` on port 3001, `pandar-web` on port 3000 with `APP_AUTH_PROVIDER=betterauth`, `APP_AUTH_BETTER_AUTH_BASE_URL=http://127.0.0.1:3001`, and `APP_AUTH_COOKIE_MAX_AGE_SECONDS=43200`, then configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth`, `PANDAR_EXTERNAL_AUTH_ISSUER=http://127.0.0.1:3001`, `PANDAR_EXTERNAL_AUTH_JWKS_URL=http://127.0.0.1:3001/api/auth/jwks`, `PANDAR_EXTERNAL_AUTH_AUDIENCE=http://127.0.0.1:3001`, and `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`.
+
+`BETTER_AUTH_SECRET` signs Better Auth sessions and encrypts Better Auth's stored JWKS private key by default. If that secret changes, clear or re-encrypt the issuer `jwks` table before expecting JWT issuance to continue.
+
+Keep the local `APP_AUTH_COOKIE_MAX_AGE_SECONDS` value aligned with `PANDAR_AUTH_JWT_MAX_AGE_SECONDS` so the browser cookie and issuer token expire together during Better Auth testing.
 
 External-account onboarding APIs:
 

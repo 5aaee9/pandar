@@ -7,7 +7,7 @@ Support Better Auth as a first-class external auth provider alongside Clerk and 
 ## Decisions From Design Review
 
 - Better Auth is consumed as an external OAuth/OIDC/JWT issuer, not as a Pandar-owned session cookie.
-- The first Better Auth-compatible path supports Better Auth RSA JWT keys exposed through JWKS. Better Auth's JWT plugin key-generation option is `RSA256`, while Pandar verifies the emitted JWT/JWK with the JWA algorithm `RS256`. `ES256`, `EdDSA`, and `PS256` are future work unless Pandar's Rust verifier is explicitly expanded.
+- The first Better Auth-compatible path supports Better Auth RSA JWT keys exposed through JWKS. Better Auth 1.6.22's JWT plugin key-generation option is `RS256`, matching Pandar's `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` verifier setting. Earlier notes in this design used `RSA256`; Phase 33 corrects that against the published 1.6.22 package types. `ES256`, `EdDSA`, and `PS256` are future work unless Pandar's Rust verifier is explicitly expanded.
 - External account managers own human account identity. Pandar owns tenant membership and tenant role.
 - Pandar `users` remain tenant-local projections of external accounts, not global accounts.
 - Automatic user projection creation requires a verified email claim.
@@ -46,7 +46,7 @@ Phase 30 makes Better Auth a documented and test-covered external provider witho
 ### Backend Behavior
 
 - `pandar-hub` accepts `PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth`.
-- Documentation shows Better Auth configured with `jwt({ jwks: { keyPairConfig: { alg: "RSA256" } } })`, and explicitly distinguishes that Better Auth configuration value from Pandar's `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` verifier setting.
+- Documentation shows Better Auth configured with `jwt({ jwks: { keyPairConfig: { alg: "RS256" } } })`, matching Pandar's `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` verifier setting.
 - The JWT verifier extracts identity profile claims needed by later onboarding:
   - `sub`
   - `email`
@@ -315,7 +315,7 @@ Scope:
 
 - `pandar-web` hosts Better Auth routes or a sidecar-compatible handler.
 - Better Auth uses its own database, database schema, or SQLite file.
-- Better Auth is configured with its `RSA256` JWT key-pair option and emits JWT/JWK material compatible with Pandar's `RS256` verifier.
+- Better Auth is configured with its `RS256` JWT key-pair option and emits JWT/JWK material compatible with Pandar's `RS256` verifier.
 - `pandar-hub` still verifies Better Auth through `PANDAR_EXTERNAL_AUTH_*`.
 - Pandar does not read Better Auth database tables.
 
@@ -338,13 +338,13 @@ Out of scope:
 ## Documentation And Deployment Impact
 
 - Update `docs/roadmap.md` after implementation to move completed items into the completed section and keep Phase 32/33 as future work until implemented.
-- Update `docs/development.md` with Better Auth `RSA256` key-pair configuration, Pandar `RS256` verifier configuration, frontend provider environment variables, verified-email requirements, tenant self-create, and join-link usage.
+- Update `docs/development.md` with Better Auth `RS256` key-pair configuration, Pandar `RS256` verifier configuration, frontend provider environment variables, verified-email requirements, tenant self-create, and join-link usage.
 - Update `docs/architecture.md` with the account-identity versus tenant-membership boundary, `/api/v1/me`, join links, and the self-hosted Better Auth future phase.
 - Update Docker/NixOS/deployment examples when `pandar-web` provider selection requires new environment variables.
 
 ## Acceptance Criteria
 
-- Better Auth RSA JWTs can be configured and documented like Clerk and Logto, with docs distinguishing Better Auth `keyPairConfig.alg = "RSA256"` from Pandar `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`.
+- Better Auth RSA JWTs can be configured and documented like Clerk and Logto, with docs using Better Auth `keyPairConfig.alg = "RS256"` and Pandar `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`.
 - Existing linked external identity authorization still works.
 - `/api/v1/me` returns external identity and linked tenant memberships without side effects.
 - `/api/v1/me` exposes whether tenant self-create is currently allowed.
@@ -363,6 +363,6 @@ Out of scope:
 - Audit tests prove tenant self-create, join-link create, join-link revoke, and successful new-member accept events are recorded without raw external subjects or secrets.
 - Manual user creation/linking is hidden from the primary frontend path in Phase 31 and scheduled for removal in Phase 32.
 - `pandar-web` chooses auth provider from configuration and keeps a provider-neutral bearer boundary to `pandar-hub`.
-- Docs cover hub env vars, frontend provider env vars, Better Auth `RSA256`/JWKS setup, Pandar `RS256` verification, verified-email requirements, join-link behavior, and self-hosted Better Auth as later new-deployment-only scope.
+- Docs cover hub env vars, frontend provider env vars, Better Auth `RS256`/JWKS setup, Pandar `RS256` verification, verified-email requirements, join-link behavior, and self-hosted Better Auth as later new-deployment-only scope.
 - A documentation or smoke-test step confirms Better Auth's emitted JWT header/JWK is hub-compatible with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`.
 - Self-hosted Better Auth is documented as a later new-deployment-only phase with an independent Better Auth database/schema.

@@ -5,7 +5,8 @@ Pandar is a self-hosted Bambu Studio cloud alternative. The system is split into
 ## System Shape
 
 ```text
-Client -(HTTP / WebSocket)-> pandar-hub
+Client -(HTTP / WebSocket)-> pandar-web -(HTTP / WebSocket)-> pandar-hub
+pandar-auth -(JWT / JWKS)-> pandar-hub
 pandar-agent -(gRPC stream)-> pandar-hub
 pandar-agent -(MQTT + file transfer)-> Bambu machines
 Bambu Studio -(network plugin ABI)-> pandar-network-plugin -(HTTP / WebSocket)-> pandar-hub
@@ -17,7 +18,9 @@ Bambu Studio -(network plugin ABI)-> pandar-network-plugin -(HTTP / WebSocket)->
 
 `pandar-core` owns shared domain types and wire contracts used by hub and agent. Protocol-specific printer code should stay out of core unless it is a stable, shared data model.
 
-`frontend` is the product UI. It should talk only to `pandar-hub`, never directly to agents or printers.
+`frontend` is the product UI. It should talk only to `pandar-hub`, never directly to agents or printers. When configured for the self-hosted Better Auth issuer, it receives a compact JWT through `/auth/betterauth/callback`, stores it as the HTTP-only bearer cookie, and keeps `better-auth` runtime dependencies out of the dashboard bundle.
+
+`pandar-auth` is the optional self-hosted Better Auth issuer app. It owns passkey registration/sign-in, its own SQLite database, and JWT/JWKS issuance. The hub does not read Better Auth tables; it only verifies emitted JWTs through the existing external-auth contract.
 
 `pandar-network-plugin` is a Bambu Studio dynamic-library plugin replacement scaffold. It exposes the required network plugin ABI symbols while connecting only to `pandar-hub`. It must not connect directly to `pandar-agent` or Bambu machines; local machine access remains the agent's responsibility.
 
@@ -103,7 +106,7 @@ Evidence from Clerk, Logto, and Better Auth documentation:
 
 - Clerk session tokens can be verified by backends with a public key or JWKS, expected signing algorithm, token expiration/not-before checks, and optional authorized-party checks for trusted frontend origins.
 - Logto access tokens for APIs are JWTs validated through JWKS, issuer, audience/API resource, expiration, and scope or organization-context checks.
-- Better Auth's JWT plugin exposes JWT/JWKS material. Its config uses plugin algorithm names such as `RSA256`; Pandar's verifier uses JWA names such as `RS256`.
+- Better Auth's JWT plugin exposes JWT/JWKS material. Better Auth 1.6.22 uses the JWA algorithm value `RS256` for RSA key generation, matching Pandar's `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` verifier setting.
 - Both providers supply authentication identity. Pandar should not use provider organizations as the tenant authorization source unless a future phase explicitly defines a synchronization model.
 
 Pandar's contract:
@@ -115,6 +118,8 @@ Pandar's contract:
 5. Preserve tenant-owned tokens as service credentials for automation and non-browser clients.
 
 Phase 10 implements this contract in `pandar-hub` with one configured external identity profile per hub process. The hub parses `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, optional audience, RS-family algorithm allow-list, optional Clerk-style authorized parties, optional Logto-style required scopes, and clock leeway at startup. Partial external-auth configuration is a startup error.
+
+The self-hosted Better Auth issuer is packaged as a sibling Next.js app named `pandar-auth`. It configures Better Auth's passkey and JWT plugins, exposes JWKS at `/api/auth/jwks`, exposes session JWT retrieval at `/api/auth/token`, and redirects successful sign-ins back to `pandar-web`'s callback fragment. `BETTER_AUTH_SECRET` signs Better Auth sessions and, by default, encrypts the persisted JWKS private key in the issuer database; rotating it without re-encrypting or clearing JWKS rows breaks issuer signing until the key material is repaired.
 
 Tenant route authentication checks bearer credentials in this order:
 

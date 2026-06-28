@@ -1,13 +1,19 @@
 {
   lib,
   pkgs,
+  pandarAuthPackage,
   pandarHubPackage,
   pandarWebPackage,
   pandarAgentPackage,
 }:
 let
   pandarModule = import ./nixos-module.nix {
-    inherit pandarHubPackage pandarWebPackage pandarAgentPackage;
+    inherit
+      pandarAuthPackage
+      pandarHubPackage
+      pandarWebPackage
+      pandarAgentPackage
+      ;
   };
 
   baseNode =

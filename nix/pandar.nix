@@ -10,6 +10,7 @@
         { config }:
         import ./nixos-module.nix {
           pandarAgentPackage = config.packages.pandar-agent;
+          pandarAuthPackage = config.packages.pandar-auth;
           pandarHubPackage = config.packages.pandar-hub;
           pandarWebPackage = config.packages.pandar-web;
         }
@@ -110,6 +111,72 @@
       pandar-cli = buildRustPackage "pandar-cli" "-p pandar-app --bin pandar";
       pandar-network-plugin = buildRustPackage "pandar-network-plugin" "-p pandar-network-plugin";
 
+      pandarAuthLibraryPath = lib.makeLibraryPath [
+        pkgs.sqlite
+        pkgs.stdenv.cc.cc.lib
+      ];
+
+      pandar-auth = pkgs.buildNpmPackage {
+        pname = "pandar-auth";
+        version = "0.1.0";
+        src = lib.cleanSource "${root}/auth";
+        npmDepsHash = "sha256-SpM7vTYz8/krjBpuuY0YTSgqseSEb60WvHOJDFonjTA=";
+
+        nativeBuildInputs = [
+          pkgs.makeWrapper
+          pkgs.pkg-config
+          pkgs.python3
+        ];
+
+        buildInputs = [
+          pkgs.sqlite
+        ];
+
+        env = {
+          NEXT_TELEMETRY_DISABLED = "1";
+        };
+
+        installPhase = ''
+          runHook preInstall
+
+          mkdir -p "$out/share/pandar-auth"
+          cp -r .next/standalone/. "$out/share/pandar-auth/"
+          cp -r .next/static "$out/share/pandar-auth/.next/static"
+
+          mkdir -p "$out/share/pandar-auth/migrate-src"
+          cp package.json package-lock.json tsconfig.json "$out/share/pandar-auth/migrate-src/"
+          cp -r lib "$out/share/pandar-auth/migrate-src/lib"
+          cp -r node_modules "$out/share/pandar-auth/migrate-src/node_modules"
+
+          mkdir -p "$out/bin"
+          makeWrapper ${pkgs.nodejs_24}/bin/node "$out/bin/pandar-auth" \
+            --add-flags "$out/share/pandar-auth/server.js" \
+            --set-default NODE_ENV production \
+            --set-default PORT 3001 \
+            --prefix LD_LIBRARY_PATH : ${pandarAuthLibraryPath}
+
+          cat > "$out/bin/pandar-auth-migrate" <<EOF
+          #!${pkgs.runtimeShell}
+          set -euo pipefail
+          export NODE_ENV="''${NODE_ENV:-production}"
+          export LD_LIBRARY_PATH="${pandarAuthLibraryPath}''${LD_LIBRARY_PATH:+:}''${LD_LIBRARY_PATH:-}"
+          cd "$out/share/pandar-auth/migrate-src"
+          exec ${pkgs.nodejs_24}/bin/node node_modules/auth/dist/index.mjs migrate --config ./lib/auth.ts --yes "\$@"
+          EOF
+          chmod +x "$out/bin/pandar-auth-migrate"
+
+          cat > "$out/share/pandar-auth/migrate-src/migrate-check.mjs" <<'EOF'
+          import { getMigrations } from "better-auth/db/migration";
+          import { auth } from "./lib/auth.ts";
+
+          const { runMigrations } = await getMigrations(auth.options);
+          await runMigrations();
+          EOF
+
+          runHook postInstall
+        '';
+      };
+
       pandar-web = pkgs.buildNpmPackage {
         pname = "pandar-web";
         version = "0.1.0";
@@ -149,6 +216,7 @@
             modules = [
               (import ./nixos-module.nix {
                 pandarAgentPackage = pandar-agent;
+                pandarAuthPackage = pandar-auth;
                 pandarHubPackage = pandar-hub;
                 pandarWebPackage = pandar-web;
               })
@@ -174,6 +242,7 @@
             modules = [
               (import ./nixos-module.nix {
                 pandarAgentPackage = pandar-agent;
+                pandarAuthPackage = pandar-auth;
                 pandarHubPackage = pandar-hub;
                 pandarWebPackage = pandar-web;
               })
@@ -191,17 +260,46 @@
               }
             ];
           };
+          authNixosSystem = inputs.nixpkgs.lib.nixosSystem {
+            inherit system;
+            modules = [
+              (import ./nixos-module.nix {
+                pandarAgentPackage = pandar-agent;
+                pandarAuthPackage = pandar-auth;
+                pandarHubPackage = pandar-hub;
+                pandarWebPackage = pandar-web;
+              })
+              {
+                services.pandar-auth = {
+                  enable = true;
+                  bind = "127.0.0.1:3001";
+                  baseURL = "https://auth.example";
+                  trustedOrigins = [ "https://app.example" ];
+                  dashboardCallbackUrl = "https://app.example/auth/betterauth/callback";
+                  dashboardSignOutUrl = "https://app.example/auth/betterauth/sign-out";
+                  databaseFile = "/var/lib/pandar-auth/auth.db";
+                  jwtMaxAgeSeconds = 3600;
+                  environmentFile = "/run/secrets/pandar-auth.env";
+                };
+                system.stateVersion = "25.11";
+              }
+            ];
+          };
           serviceHub = serviceNixosSystem.config.systemd.services.pandar-hub;
           serviceWeb = serviceNixosSystem.config.systemd.services.pandar-web;
           serviceAgent = serviceNixosSystem.config.systemd.services.pandar-agent;
           serviceNatsEnabled = if serviceNixosSystem.config.services.nats.enable then "1" else "0";
           externalHub = externalNixosSystem.config.systemd.services.pandar-hub;
           externalNatsEnabled = if externalNixosSystem.config.services.nats.enable then "1" else "0";
+          authService = authNixosSystem.config.systemd.services.pandar-auth;
+          authHubPresent = if authNixosSystem.config.systemd.services ? pandar-hub then "1" else "0";
         in
         pkgs.runCommand "pandar-nixos-module-check" { } ''
           test "${serviceHub.serviceConfig.ExecStart}" = "${pandar-hub}/bin/pandar-hub"
           test "${serviceWeb.serviceConfig.ExecStart}" = "${pandar-web}/bin/pandar-web"
           test "${serviceAgent.serviceConfig.ExecStart}" = "${pandar-agent}/bin/pandar-agent"
+          test "${authService.serviceConfig.ExecStart}" = "${pandar-auth}/bin/pandar-auth"
+          test "${authService.serviceConfig.ExecStartPre}" = "${pandar-auth}/bin/pandar-auth-migrate"
           test "${serviceNatsEnabled}" = "1"
           test "${serviceHub.environment.PANDAR_CONTROL_PLANE}" = "nats"
           test "${serviceHub.environment.PANDAR_NATS_URL}" = "nats://127.0.0.1:4222"
@@ -212,8 +310,37 @@
           test "${externalHub.environment.PANDAR_CONTROL_PLANE}" = "nats"
           test "${externalHub.environment.PANDAR_NATS_URL}" = "nats://broker.example:4222"
           test "${externalHub.environment.PANDAR_NATS_SUBJECT}" = "pandar.external.control"
+          test "${authHubPresent}" = "0"
+          test "${authService.environment.HOSTNAME}" = "127.0.0.1"
+          test "${authService.environment.PORT}" = "3001"
+          test "${authService.environment.PANDAR_AUTH_BASE_URL}" = "https://auth.example"
+          test "${authService.environment.PANDAR_AUTH_TRUSTED_ORIGINS}" = "https://app.example"
+          test "${authService.environment.PANDAR_AUTH_DASHBOARD_CALLBACK_URL}" = "https://app.example/auth/betterauth/callback"
+          test "${authService.environment.PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL}" = "https://app.example/auth/betterauth/sign-out"
+          test "${authService.environment.PANDAR_AUTH_DATABASE_FILE}" = "/var/lib/pandar-auth/auth.db"
+          test "${authService.environment.PANDAR_AUTH_JWT_MAX_AGE_SECONDS}" = "3600"
+          test "${authService.serviceConfig.EnvironmentFile}" = "/run/secrets/pandar-auth.env"
           touch "$out"
         '';
+
+      pandarAuthMigrateCheck = pkgs.runCommand "pandar-auth-migrate-check" { } ''
+        export BETTER_AUTH_SECRET="pandar-auth-test-secret"
+        export PANDAR_AUTH_BASE_URL="http://127.0.0.1:3001"
+        export PANDAR_AUTH_TRUSTED_ORIGINS="http://127.0.0.1:3000"
+        export PANDAR_AUTH_DASHBOARD_CALLBACK_URL="http://127.0.0.1:3000/auth/betterauth/callback"
+        export PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL="http://127.0.0.1:3000/auth/betterauth/sign-out"
+        export PANDAR_AUTH_DATABASE_FILE="$TMPDIR/auth.db"
+        export PANDAR_AUTH_JWT_MAX_AGE_SECONDS="3600"
+
+        cd ${pandar-auth}/share/pandar-auth
+        LD_LIBRARY_PATH=${pandarAuthLibraryPath} ${pkgs.nodejs_24}/bin/node -e 'require("better-sqlite3")'
+
+        cd ${pandar-auth}/share/pandar-auth/migrate-src
+        ${pkgs.nodejs_24}/bin/node migrate-check.mjs
+        ${lib.getExe pkgs.sqlite} "$PANDAR_AUTH_DATABASE_FILE" ".tables" | grep -F jwks
+        ${lib.getExe pkgs.sqlite} "$PANDAR_AUTH_DATABASE_FILE" ".tables" | grep -F passkey
+        touch "$out"
+      '';
 
       pandarNixosOptionsDoc =
         let
@@ -222,6 +349,7 @@
             modules = [
               (import ./nixos-module.nix {
                 pandarAgentPackage = pandar-agent;
+                pandarAuthPackage = pandar-auth;
                 pandarHubPackage = pandar-hub;
                 pandarWebPackage = pandar-web;
               })
@@ -233,6 +361,7 @@
           optionsDoc = pkgs.nixosOptionsDoc {
             options = {
               services.pandar = nixosSystem.options.services.pandar;
+              services.pandar-auth = nixosSystem.options.services.pandar-auth;
             };
           };
         in
@@ -262,6 +391,7 @@
 
       pandarNixosTests = import ./nixos-tests.nix {
         inherit lib pkgs;
+        pandarAuthPackage = pandar-auth;
         pandarHubPackage = pandar-hub;
         pandarWebPackage = pandar-web;
         pandarAgentPackage = pandar-agent;
@@ -278,6 +408,7 @@
           pandar-agent
           pandar-cli
           pandar-network-plugin
+          pandar-auth
           pandar-web
           ;
       };
@@ -288,9 +419,11 @@
           pandar-agent
           pandar-cli
           pandar-network-plugin
+          pandar-auth
           pandar-web
           ;
 
+        pandar-auth-migrate = pandarAuthMigrateCheck;
         pandar-nixos-module = pandarNixosModuleCheck;
         pandar-nixos-options-doc = pandarNixosOptionsDocCheck;
         pandar-nixos-test-sqlite = pandarNixosTests.sqlite;

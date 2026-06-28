@@ -385,3 +385,154 @@ _Default:_
 ```nix
 3000
 ```
+
+## services\.pandar-auth\.enable
+
+Whether to enable self-hosted Pandar Better Auth issuer\.
+
+_Type:_
+boolean
+
+_Default:_
+
+```nix
+false
+```
+
+_Example:_
+
+```nix
+true
+```
+
+## services\.pandar-auth\.package
+
+pandar-auth package to run\.
+
+_Type:_
+package
+
+_Default:_
+
+```nix
+<derivation pandar-auth-0.1.0>
+```
+
+## services\.pandar-auth\.baseURL
+
+Public Better Auth URL passed through PANDAR_AUTH_BASE_URL\.
+
+_Type:_
+string
+
+_Default:_
+
+```nix
+"http://127.0.0.1:3001"
+```
+
+## services\.pandar-auth\.bind
+
+HTTP bind address for pandar-auth, formatted as host:port\.
+
+_Type:_
+string
+
+_Default:_
+
+```nix
+"127.0.0.1:3001"
+```
+
+## services\.pandar-auth\.dashboardCallbackUrl
+
+Dashboard callback URL passed through PANDAR_AUTH_DASHBOARD_CALLBACK_URL\.
+
+_Type:_
+string
+
+_Default:_
+
+```nix
+"http://127.0.0.1:3000/auth/betterauth/callback"
+```
+
+## services\.pandar-auth\.dashboardSignOutUrl
+
+Dashboard sign-out URL passed through PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL\.
+
+_Type:_
+string
+
+_Default:_
+
+```nix
+"http://127.0.0.1:3000/auth/betterauth/sign-out"
+```
+
+## services\.pandar-auth\.databaseFile
+
+SQLite database file passed through PANDAR_AUTH_DATABASE_FILE\.
+
+_Type:_
+absolute path
+
+_Default:_
+
+```nix
+"/var/lib/pandar-auth/auth.db"
+```
+
+## services\.pandar-auth\.environmentFile
+
+Optional systemd EnvironmentFile for Better Auth secrets such as BETTER_AUTH_SECRET\.
+
+_Type:_
+null or absolute path
+
+_Default:_
+
+```nix
+null
+```
+
+## services\.pandar-auth\.extraEnvironment
+
+Extra environment variables for pandar-auth\.
+
+_Type:_
+attribute set of string
+
+_Default:_
+
+```nix
+{ }
+```
+
+## services\.pandar-auth\.jwtMaxAgeSeconds
+
+Better Auth JWT expiration in seconds passed through PANDAR_AUTH_JWT_MAX_AGE_SECONDS\.
+
+_Type:_
+positive integer, meaning >0
+
+_Default:_
+
+```nix
+43200
+```
+
+## services\.pandar-auth\.trustedOrigins
+
+Trusted dashboard origins passed through PANDAR_AUTH_TRUSTED_ORIGINS\.
+
+_Type:_
+list of string
+
+_Default:_
+
+```nix
+[
+  "http://127.0.0.1:3000"
+]
+```

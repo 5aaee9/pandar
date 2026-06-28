@@ -95,6 +95,7 @@ jobs:
             .#checks.${{ matrix.system }}.pandar-hub \
             .#checks.${{ matrix.system }}.pandar-agent \
             .#checks.${{ matrix.system }}.pandar-cli \
+            .#checks.${{ matrix.system }}.pandar-auth \
             .#checks.${{ matrix.system }}.pandar-web
           )
           if [ "${{ matrix.system }}" = "x86_64-linux" ]; then

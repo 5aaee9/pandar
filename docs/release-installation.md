@@ -59,7 +59,34 @@ The release archive provides the operator CLI and Bambu Studio plugin library. D
 
 The hub needs `PANDAR_DATABASE_URL`. The frontend needs `APP_API_URL`, `APP_BASE_URL`, and provider metadata when external auth is used. The agent needs `PANDAR_HUB_GRPC_URL`, tenant and agent IDs, an agent credential, and any `PANDAR_PRINTERS` entries for local machines.
 
-For Clerk, Logto, or Better Auth deployments, configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, optional audience, and allowed algorithms. Configure `pandar-web` with `APP_AUTH_PROVIDER` and the matching provider metadata. Better Auth's JWT plugin uses values such as `keyPairConfig.alg = "RSA256"` while Pandar verifies the emitted token with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`.
+For Clerk, Logto, or Better Auth deployments, configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, optional audience, and allowed algorithms. Configure `pandar-web` with `APP_AUTH_PROVIDER` and the matching provider metadata. Better Auth 1.6.22 uses `keyPairConfig.alg = "RS256"` for RSA JWT signing, matching Pandar's `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` verifier setting.
+
+For a self-hosted Better Auth deployment, run the optional `pandar-auth` service and point the other services at it:
+
+```bash
+PANDAR_AUTH_BASE_URL=https://auth.example.com
+PANDAR_AUTH_TRUSTED_ORIGINS=https://pandar.example.com
+PANDAR_AUTH_DASHBOARD_CALLBACK_URL=https://pandar.example.com/auth/betterauth/callback
+PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL=https://pandar.example.com/auth/betterauth/sign-out
+PANDAR_AUTH_DATABASE_FILE=/var/lib/pandar-auth/auth.db
+PANDAR_AUTH_JWT_MAX_AGE_SECONDS=43200
+BETTER_AUTH_SECRET=<long random secret>
+
+APP_AUTH_PROVIDER=betterauth
+APP_AUTH_BETTER_AUTH_BASE_URL=https://auth.example.com
+APP_AUTH_COOKIE_MAX_AGE_SECONDS=43200
+
+PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth
+PANDAR_EXTERNAL_AUTH_ISSUER=https://auth.example.com
+PANDAR_EXTERNAL_AUTH_JWKS_URL=https://auth.example.com/api/auth/jwks
+PANDAR_EXTERNAL_AUTH_AUDIENCE=https://auth.example.com
+PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256
+PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE=true
+```
+
+`BETTER_AUTH_SECRET` is also used by Better Auth to encrypt stored JWKS private keys by default. Rotating it without re-encrypting or clearing the issuer `jwks` table makes existing signing keys undecryptable and breaks JWT issuance.
+
+Keep `PANDAR_AUTH_JWT_MAX_AGE_SECONDS` and `APP_AUTH_COOKIE_MAX_AGE_SECONDS` aligned. If the dashboard cookie outlives the JWT, authenticated dashboard requests will fail until the user signs in again; if the cookie is shorter, users reauthenticate earlier than the issuer token requires.
 
 For agent artifact downloads, set `PANDAR_HUB_API_URL` when `PANDAR_HUB_GRPC_URL` is not an HTTP(S) URL. Agents authenticate artifact downloads with `PANDAR_AGENT_CREDENTIAL`; do not distribute object-store credentials to agents or browsers.
 
@@ -80,7 +107,7 @@ POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tena
 Use external auth by setting both Hub verification variables and Web provider variables:
 
 ```bash
-PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth PANDAR_EXTERNAL_AUTH_ISSUER=https://auth.example.com PANDAR_EXTERNAL_AUTH_JWKS_URL=https://auth.example.com/jwks PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256 APP_AUTH_PROVIDER=betterauth APP_AUTH_BETTER_AUTH_BASE_URL=https://auth.example.com docker compose -f docker-compose.sqlite.yml up --build
+PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth PANDAR_EXTERNAL_AUTH_ISSUER=https://auth.example.com PANDAR_EXTERNAL_AUTH_JWKS_URL=https://auth.example.com/api/auth/jwks PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256 APP_AUTH_PROVIDER=betterauth APP_AUTH_BETTER_AUTH_BASE_URL=https://auth.example.com docker compose -f docker-compose.sqlite.yml up --build
 ```
 
 Use the PostgreSQL plus NATS profile to run the broker-backed deployment shape with S3-compatible artifact storage:
@@ -99,7 +126,7 @@ Back up SQLite deployments by capturing both the SQLite database file and the fi
 
 NixOS deployments use the flake module exposed as `nixosModules.default` and `nixosModules.pandar`. Configure Hub, Web, and Agent through `services.pandar`.
 
-Generated option documentation is in `docs/deployment/nixos/options.md`. Use it as the source for exact option names, package overrides, environment files, bind addresses, and agent credential wiring.
+The optional self-hosted issuer is configured separately through `services.pandar-auth`. It has its own package, bind address, SQLite database path, callback/sign-out URLs, and `environmentFile` for `BETTER_AUTH_SECRET`. Generated option documentation is in `docs/deployment/nixos/options.md`. Use it as the source for exact option names, package overrides, environment files, bind addresses, and agent credential wiring.
 
 ## Bambu Studio Plugin Replacement
 
