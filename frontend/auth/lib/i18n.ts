@@ -54,6 +54,8 @@ type SignInMessages = Pick<
   | "magicLinkSubmit"
   | "magicLinkSentBody"
   | "magicLinkSending"
+  | "signIn"
+  | "signInIntro"
   | "unableSignIn"
 >;
 
