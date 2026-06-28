@@ -326,6 +326,6 @@ export type PrinterEventTicket = {
 };
 
 export type FetchResult<T> =
-  | { data: T; error: null }
-  | { data: null; error: null }
-  | { data: null; error: string };
+  | { data: T; error: null; status?: number }
+  | { data: null; error: null; status?: number }
+  | { data: null; error: string; status?: number };

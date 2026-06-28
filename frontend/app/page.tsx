@@ -1,4 +1,8 @@
+import { redirect } from 'next/navigation'
+
 import { apiHeaders, authSource } from './api-auth'
+import { dashboardAuthRedirectTarget } from './auth-redirect'
+import { authProviderConfig } from './auth-provider'
 import { parseCommandResult } from './command-result-parser'
 import type {
   AgentList,
@@ -36,10 +40,10 @@ async function fetchJson<T>(path: string, label: string): Promise<FetchResult<T>
       headers: await apiHeaders(),
     })
     if (!response.ok) {
-      return { data: null, error: `${label} returned ${response.status}` }
+      return { data: null, error: `${label} returned ${response.status}`, status: response.status }
     }
 
-    return { data: (await response.json()) as T, error: null }
+    return { data: (await response.json()) as T, error: null, status: response.status }
   } catch (error) {
     return {
       data: null,
@@ -50,6 +54,15 @@ async function fetchJson<T>(path: string, label: string): Promise<FetchResult<T>
 
 export default async function Page({ searchParams }: PageProps) {
   const auth = await authSource()
+  const authProvider = authProviderConfig()
+  const initialRedirect = dashboardAuthRedirectTarget({
+    source: auth.source,
+    provider: authProvider,
+  })
+  if (initialRedirect) {
+    redirect(initialRedirect)
+  }
+
   const useExternalOnboarding = auth.provider !== 'none' && !configuredTenantId
   const [summaryResult, tenantsResult, meResult] = await Promise.all([
     configuredTenantId || useExternalOnboarding
@@ -68,6 +81,14 @@ export default async function Page({ searchParams }: PageProps) {
       ? Promise.resolve<FetchResult<MeResponse>>({ data: null, error: null })
       : fetchJson<MeResponse>('/api/v1/me', 'Current identity'),
   ])
+  const meRedirect = dashboardAuthRedirectTarget({
+    source: auth.source,
+    provider: authProvider,
+    meStatus: meResult.status,
+  })
+  if (meRedirect) {
+    redirect(meRedirect)
+  }
 
   const externalTenants =
     meResult.data?.tenants.map((tenant) => ({

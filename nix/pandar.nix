@@ -376,6 +376,14 @@
         touch "$out"
       '';
 
+      pandarWebAuthRedirectSmokeCheck = pkgs.runCommand "pandar-web-auth-redirect-smoke-check" { } ''
+        cd ${frontendSource}
+        ${pkgs.nodejs_24}/bin/node \
+          --experimental-strip-types \
+          app/auth-redirect.smoke.mjs
+        touch "$out"
+      '';
+
       pandarNixosOptionsDoc =
         let
           nixosSystem = inputs.nixpkgs.lib.nixosSystem {
@@ -460,6 +468,7 @@
         pandar-auth-migrate = pandarAuthMigrateCheck;
         pandar-auth-jwt-smoke = pandarAuthJwtSmokeCheck;
         pandar-auth-cookie-smoke = pandarAuthCookieSmokeCheck;
+        pandar-web-auth-redirect-smoke = pandarWebAuthRedirectSmokeCheck;
         pandar-nixos-module = pandarNixosModuleCheck;
         pandar-nixos-options-doc = pandarNixosOptionsDocCheck;
         pandar-nixos-test-sqlite = pandarNixosTests.sqlite;
