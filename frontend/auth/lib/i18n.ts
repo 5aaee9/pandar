@@ -14,7 +14,7 @@ type AuthMessages = {
   magicLinkCheckInbox: string;
   magicLinkEmailSent: string;
   magicLinkResend: string;
-  magicLinkResendCooldown: (seconds: number) => string;
+  magicLinkResendCooldown: string;
   magicLinkSendFailed: string;
   magicLinkSubmit: string;
   magicLinkSentBody: string;
@@ -96,7 +96,7 @@ const messages: Record<Locale, AuthMessages> = {
     magicLinkCheckInbox: "Check your inbox",
     magicLinkEmailSent: "Magic link sent",
     magicLinkResend: "Resend magic link",
-    magicLinkResendCooldown: (seconds) => `Resend in ${seconds}s`,
+    magicLinkResendCooldown: "Resend in {seconds}s",
     magicLinkSendFailed: "Unable to send sign-in link",
     magicLinkSubmit: "Send magic link",
     magicLinkSentBody:
@@ -141,7 +141,7 @@ const messages: Record<Locale, AuthMessages> = {
     magicLinkCheckInbox: "请检查邮箱",
     magicLinkEmailSent: "登录链接已发送",
     magicLinkResend: "重新发送登录链接",
-    magicLinkResendCooldown: (seconds) => `${seconds} 秒后可重新发送`,
+    magicLinkResendCooldown: "{seconds} 秒后可重新发送",
     magicLinkSendFailed: "无法发送登录链接",
     magicLinkSubmit: "发送登录链接",
     magicLinkSentBody:

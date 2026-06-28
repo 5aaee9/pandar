@@ -11,6 +11,10 @@ type SignInFormProps = {
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
+function formatCooldown(template: string, seconds: number): string {
+  return template.replace("{seconds}", String(seconds));
+}
+
 export function SignInForm({ messages }: SignInFormProps) {
   const [pending, setPending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -97,7 +101,7 @@ export function SignInForm({ messages }: SignInFormProps) {
         {pending
           ? messages.magicLinkSending
           : sent && cooldown > 0
-            ? messages.magicLinkResendCooldown(cooldown)
+            ? formatCooldown(messages.magicLinkResendCooldown, cooldown)
             : sent
               ? messages.magicLinkResend
               : messages.magicLinkSubmit}
