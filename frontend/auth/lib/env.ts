@@ -40,14 +40,19 @@ function readSecret(): string {
 function readTrustedOrigins(baseURL: string): string[] {
   const value = process.env.PANDAR_AUTH_TRUSTED_ORIGINS?.trim();
   if (!value) {
-    return [DEFAULT_DASHBOARD_URL];
+    return [baseURL, DEFAULT_DASHBOARD_URL];
   }
 
-  return value
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0)
-    .map(trimTrailingSlash);
+  return [
+    ...new Set([
+      baseURL,
+      ...value
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter((origin) => origin.length > 0)
+        .map(trimTrailingSlash),
+    ]),
+  ];
 }
 
 function readPositiveInteger(name: string, fallback: number): number {

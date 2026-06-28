@@ -3,17 +3,19 @@
 import { FormEvent, useState } from "react";
 
 import { authClient } from "../../lib/auth-client";
+import type { SignUpMessages } from "../../lib/i18n";
 import { redirectWithAuthToken } from "../../lib/token";
 
 type SignUpFormProps = {
   dashboardCallbackUrl: string;
+  messages: SignUpMessages;
 };
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unable to create account";
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
 }
 
-export function SignUpForm({ dashboardCallbackUrl }: SignUpFormProps) {
+export function SignUpForm({ dashboardCallbackUrl, messages }: SignUpFormProps) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,17 +34,19 @@ export function SignUpForm({ dashboardCallbackUrl }: SignUpFormProps) {
         name,
       });
       if (addPasskey.error) {
-        throw new Error(addPasskey.error.message || "Passkey registration failed");
+        throw new Error(
+          addPasskey.error.message || messages.passkeyRegistrationFailed,
+        );
       }
 
       const signIn = await authClient.signIn.passkey();
       if (signIn.error) {
-        throw new Error(signIn.error.message || "Passkey sign-in failed");
+        throw new Error(signIn.error.message || messages.passkeySignInFailed);
       }
 
-      await redirectWithAuthToken(dashboardCallbackUrl);
+      await redirectWithAuthToken(dashboardCallbackUrl, messages);
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(errorMessage(caught, messages.unableCreateAccount));
       setPending(false);
     }
   }
@@ -50,7 +54,7 @@ export function SignUpForm({ dashboardCallbackUrl }: SignUpFormProps) {
   return (
     <form className="auth-form" onSubmit={signUp}>
       <label className="auth-field">
-        <span>Email</span>
+        <span>{messages.email}</span>
         <input
           autoComplete="email webauthn"
           inputMode="email"
@@ -60,12 +64,18 @@ export function SignUpForm({ dashboardCallbackUrl }: SignUpFormProps) {
         />
       </label>
       <label className="auth-field">
-        <span>Name</span>
+        <span>{messages.name}</span>
         <input autoComplete="name" name="name" required type="text" />
       </label>
-      {error ? <div className="auth-error">{error}</div> : null}
+      {error ? (
+        <div className="auth-error" role="alert">
+          <span>{messages.registerFailed}</span>
+          {error}
+        </div>
+      ) : null}
+      <p className="auth-note">{messages.deviceConfirmation}</p>
       <button className="auth-button" disabled={pending} type="submit">
-        {pending ? "Creating account..." : "Create account with passkey"}
+        {pending ? messages.signingUp : messages.createAccountWithPasskey}
       </button>
     </form>
   );

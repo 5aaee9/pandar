@@ -99,6 +99,7 @@
 - Fixed GitHub Checks web packaging after localization: refreshed the Nix `pandar-web` npm dependency hash for the updated lockfile and removed `next/font/google` so sandboxed Nix builds do not require Google Fonts network access.
 - Added a Lefthook pre-commit formatter hook that runs `nix fmt` before commits, then re-stages only the files that were already staged before formatting; the Nix dev shell now includes `lefthook` for hook installation.
 - Rejected explicit `none` external auth providers so deployments must configure a real identity provider value when enabling external identity auth.
+- Polished and clarified the auth surfaces against the Instrument Console system: the standalone Better Auth issuer now uses the slate/cyan flat-panel vocabulary instead of a warm one-off card, sign-in/sign-up/sign-out share explicit alert treatment, issuer pages show the session issuer/return target/lifetime, and the Studio plugin sign-in route has operator-facing recovery copy for auth/readiness/tenant failures, callback URL trust-boundary copy and URL validation, visible Studio/default callback state, a header-integrated language switcher, and an explicit tenant/ticket confirmation block.
 
 ## Completed: Phase 30 Better Auth Provider Compatibility
 
@@ -727,6 +728,8 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Fixed filesystem artifact storage key validation on Windows so rooted paths such as `/tmp/escape` are rejected consistently.
 - Made the Phase 21 network plugin export verification locate Visual Studio `dumpbin.exe` on Windows when it is not on `PATH`.
 - Added Bambu Studio sign-in route aliases so Studio's localized `/en/sign-in` WebView entry reaches the plugin sign-in page instead of a Next.js 404.
+- Polished auth recovery UI after Impeccable critique: plugin sign-in failures now keep actions and developer details in separate stable rows, passkey setup previews the browser/device confirmation prompt, auth buttons have explicit spacing, and sign-out shows visible progress or retry controls before returning to the dashboard.
+- Completed the follow-up auth hardening pass from the 34/40 Impeccable critique: plugin failure states now include an explicit action-required status marker, the standalone auth issuer resolves English/Chinese copy from the same locale cookie/headers as the dashboard, auth trusted origins include the issuer base URL by default, sign-out inspects Better Auth client errors before redirecting, and Studio plugin sign-in skips redundant tenant selection when exactly one tenant is available.
 
 Exit criteria:
 
