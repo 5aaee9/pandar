@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { LogIn } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export function JoinTokenForm({
   action,
@@ -16,25 +21,25 @@ export function JoinTokenForm({
   }, []);
 
   return (
-    <form action={action} className="grid gap-3 px-4 py-4">
-      <label className="grid gap-1 text-sm">
-        <span className="text-xs font-medium text-slate-500">
-          {t("joinToken")}
-        </span>
-        <input
-          className="h-9 rounded-md border border-slate-300 px-2 font-mono text-sm text-slate-950"
+    <form action={action} className="grid gap-4 px-4 py-4">
+      <div className="grid gap-1.5">
+        <Label htmlFor="join-token">{t("joinToken")}</Label>
+        <Input
+          className="font-mono"
+          id="join-token"
           name="token"
           onChange={(event) => setToken(event.target.value)}
           required
           value={token}
         />
-      </label>
-      <button
-        className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white"
+      </div>
+      <Button
+        className="justify-center bg-cyan-700 text-white hover:bg-cyan-800"
         type="submit"
       >
+        <LogIn className="size-4" />
         {t("joinSubmit")}
-      </button>
+      </Button>
     </form>
   );
 }

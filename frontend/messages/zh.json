@@ -473,6 +473,11 @@
     "joinTitle": "加入租户",
     "joinMessage": "打开租户管理员提供的邀请 URL，或在加入页面粘贴令牌。",
     "openJoin": "打开加入页面",
+    "accessAction": "创建或加入租户",
+    "accessActionLabel": "选择租户访问操作",
+    "accessActionDescription": "选择此认证身份获取租户访问权限的方式。",
+    "accessGroup": "租户访问",
+    "cancel": "取消",
     "signIn": "登录",
     "signOut": "退出登录"
   },

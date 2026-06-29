@@ -4,6 +4,7 @@ import { createTenantFromExternal } from './actions'
 import { authProviderConfig } from './auth-provider'
 import type { MeResponse } from './dashboard-types'
 import { EmptyState, SectionHeader } from './dashboard-ui'
+import { TenantAccessSwitcher } from './tenant-access-switcher'
 import { LanguageSwitcher } from '../components/language-switcher'
 
 export async function OnboardingPanel({ me }: { me: MeResponse }) {
@@ -30,29 +31,10 @@ export async function OnboardingPanel({ me }: { me: MeResponse }) {
             message={t('verifiedMessage')}
           />
         ) : (
-          <div className="grid gap-4 px-4 py-4 md:grid-cols-2">
-            <form action={createTenantFromExternal} className="grid gap-3">
-              <div>
-                <div className="text-sm font-semibold text-slate-950">{t('createTitle')}</div>
-                <div className="mt-1 text-sm text-slate-600">{t('createMessage')}</div>
-              </div>
-              <Input name="display_name" label={t('tenantName')} />
-              <Input name="slug" label={t('tenantSlug')} />
-              <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800" type="submit">
-                {t('createSubmit')}
-              </button>
-            </form>
-
-            <div className="grid gap-3">
-              <div>
-                <div className="text-sm font-semibold text-slate-950">{t('joinTitle')}</div>
-                <div className="mt-1 text-sm text-slate-600">{t('joinMessage')}</div>
-              </div>
-              <a className="inline-flex h-9 items-center justify-center rounded-md border border-slate-300 px-3 text-sm font-medium" href="/join">
-                {t('openJoin')}
-              </a>
-            </div>
-          </div>
+          <TenantAccessSwitcher
+            createAction={createTenantFromExternal}
+            identityEmail={me.identity.email ?? t('noEmail')}
+          />
         )}
       </section>
     </main>
@@ -78,14 +60,5 @@ async function ProviderLinks({ signInUrl, signOutUrl }: { signInUrl: string | nu
         </a>
       ) : null}
     </div>
-  )
-}
-
-function Input({ name, label }: { name: string; label: string }) {
-  return (
-    <label className="grid gap-1 text-sm">
-      <span className="text-xs font-medium text-slate-500">{label}</span>
-      <input className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950" name={name} required />
-    </label>
   )
 }

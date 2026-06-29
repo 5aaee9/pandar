@@ -476,6 +476,11 @@
     "joinTitle": "Join tenant",
     "joinMessage": "Open an invitation URL from a tenant admin, or paste the token on the join page.",
     "openJoin": "Open join page",
+    "accessAction": "Create or join tenant",
+    "accessActionLabel": "Select tenant access action",
+    "accessActionDescription": "Choose how this authenticated identity should get tenant access.",
+    "accessGroup": "Tenant access",
+    "cancel": "Cancel",
     "signIn": "Sign in",
     "signOut": "Sign out"
   },
