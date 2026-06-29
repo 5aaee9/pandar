@@ -130,7 +130,7 @@
         pname = "pandar-auth";
         version = "0.1.0";
         src = lib.cleanSource "${root}/frontend/auth";
-        npmDepsHash = "sha256-asLz6O5uL6BofKjh/Ra6vh8LqChwjAjobH4q9dF4La4=";
+        npmDepsHash = "sha256-fPAmC4jFbveAbXIpmYC7w4eFov075Dm46BQ24uomMaE=";
 
         nativeBuildInputs = [
           pkgs.makeWrapper

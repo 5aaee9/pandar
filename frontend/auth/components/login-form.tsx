@@ -5,6 +5,7 @@ import { GalleryVerticalEnd } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
 import type { SignInMessages } from "@/lib/i18n";
+import { redirectWithAuthToken } from "@/lib/token";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +18,7 @@ import {
 import { Input } from "@/components/ui/input";
 
 type LoginFormProps = React.ComponentProps<"div"> & {
+  dashboardCallbackUrl: string;
   messages: SignInMessages;
 };
 
@@ -26,8 +28,13 @@ function formatCooldown(template: string, seconds: number): string {
   return template.replace("{seconds}", String(seconds));
 }
 
-export function LoginForm({ className, messages, ...props }: LoginFormProps) {
-  const [pending, setPending] = useState(false);
+export function LoginForm({
+  className,
+  dashboardCallbackUrl,
+  messages,
+  ...props
+}: LoginFormProps) {
+  const [pending, setPending] = useState<"magic-link" | "passkey" | null>(null);
   const [sent, setSent] = useState(false);
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +60,7 @@ export function LoginForm({ className, messages, ...props }: LoginFormProps) {
 
     const normalizedEmail = email.trim().toLowerCase();
     const name = normalizedEmail.split("@", 1)[0] || normalizedEmail;
-    setPending(true);
+    setPending("magic-link");
     setError(null);
 
     try {
@@ -73,7 +80,28 @@ export function LoginForm({ className, messages, ...props }: LoginFormProps) {
     } catch {
       setError(messages.unableSignIn);
     } finally {
-      setPending(false);
+      setPending(null);
+    }
+  }
+
+  async function signInWithPasskey() {
+    if (pending) {
+      return;
+    }
+
+    setPending("passkey");
+    setError(null);
+
+    try {
+      const result = await authClient.signIn.passkey();
+      if (result.error) {
+        throw new Error(result.error.message || messages.passkeySignInFailed);
+      }
+
+      await redirectWithAuthToken(dashboardCallbackUrl, messages);
+    } catch {
+      setError(messages.passkeySignInFailed);
+      setPending(null);
     }
   }
 
@@ -118,16 +146,18 @@ export function LoginForm({ className, messages, ...props }: LoginFormProps) {
                   {messages.magicLinkEmailSent}
                 </span>
                 <span className="mt-1 block">{messages.magicLinkSentBody}</span>
-                <span className="mt-1 block">{messages.magicLinkCheckInbox}</span>
+                <span className="mt-1 block">
+                  {messages.magicLinkCheckInbox}
+                </span>
               </FieldDescription>
             </Field>
           ) : null}
           <Field>
             <Button
-              disabled={pending || (sent && cooldown > 0)}
+              disabled={pending !== null || (sent && cooldown > 0)}
               type="submit"
             >
-              {pending
+              {pending === "magic-link"
                 ? messages.magicLinkSending
                 : sent && cooldown > 0
                   ? formatCooldown(messages.magicLinkResendCooldown, cooldown)
@@ -138,6 +168,23 @@ export function LoginForm({ className, messages, ...props }: LoginFormProps) {
           </Field>
         </FieldGroup>
       </form>
+      <div className="grid gap-4">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="h-px flex-1 bg-border" />
+          <span>{messages.or}</span>
+          <span className="h-px flex-1 bg-border" />
+        </div>
+        <Button
+          disabled={pending !== null}
+          type="button"
+          variant="outline"
+          onClick={signInWithPasskey}
+        >
+          {pending === "passkey"
+            ? messages.passkeySigningIn
+            : messages.passkeySignIn}
+        </Button>
+      </div>
     </div>
   );
 }

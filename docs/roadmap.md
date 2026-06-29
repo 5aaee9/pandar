@@ -153,6 +153,7 @@ Goal: make the self-hosted Better Auth issuer easier to deploy without requiring
 - Replaced passkey-first signup/sign-in with email magic-link login and first-time user creation through Better Auth.
 - Added Resend and SMTP email delivery configuration, with 30-minute default magic-link expiry and runtime validation for the selected provider.
 - Added optional passkey binding immediately after magic-link login with a clear Skip action.
+- Restored direct passkey sign-in on the issuer login page for users who already bound a passkey, while keeping email magic links as the default path.
 - Redirected `/sign-up` to `/sign-in`; dashboard user management remains later-phase work.
 - Updated deployment docs and NixOS options for `services.pandar-auth` email delivery.
 

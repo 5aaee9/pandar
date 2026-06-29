@@ -22,6 +22,10 @@ type AuthMessages = {
   passkeyAdded: string;
   passkeyAddFailed: string;
   passkeyOptionalIntro: string;
+  passkeySignIn: string;
+  passkeySignInFailed: string;
+  passkeySigningIn: string;
+  or: string;
   returnToDashboard: string;
   returningDashboard: string;
   returnsTo: string;
@@ -45,6 +49,8 @@ type AuthMessages = {
 
 type SignInMessages = Pick<
   AuthMessages,
+  | "dashboardTokenEmpty"
+  | "dashboardTokenFailed"
   | "email"
   | "magicLinkCheckInbox"
   | "magicLinkEmailSent"
@@ -54,6 +60,10 @@ type SignInMessages = Pick<
   | "magicLinkSubmit"
   | "magicLinkSentBody"
   | "magicLinkSending"
+  | "or"
+  | "passkeySignIn"
+  | "passkeySignInFailed"
+  | "passkeySigningIn"
   | "signIn"
   | "signInIntro"
   | "unableSignIn"
@@ -109,6 +119,10 @@ const messages: Record<Locale, AuthMessages> = {
       "Unable to add a passkey right now. You can continue without one.",
     passkeyOptionalIntro:
       "Add a passkey to make future sign-ins faster on this device. This step is optional.",
+    passkeySignIn: "Sign in with passkey",
+    passkeySignInFailed: "Unable to sign in with a passkey",
+    passkeySigningIn: "Waiting for passkey...",
+    or: "or",
     returnToDashboard: "Return to dashboard",
     returningDashboard: "Returning to the Pandar dashboard.",
     returnsTo: "Returns to",
@@ -153,6 +167,10 @@ const messages: Record<Locale, AuthMessages> = {
     passkeyAddFailed: "暂时无法添加通行密钥。你可以先跳过并继续。",
     passkeyOptionalIntro:
       "添加通行密钥后，此设备之后登录会更快。此步骤可以跳过。",
+    passkeySignIn: "使用通行密钥登录",
+    passkeySignInFailed: "无法使用通行密钥登录",
+    passkeySigningIn: "正在等待通行密钥...",
+    or: "或",
     returnToDashboard: "返回控制台",
     returningDashboard: "正在返回 Pandar 控制台。",
     returnsTo: "返回到",
