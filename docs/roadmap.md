@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.
 - Created the initial Rust workspace with `pandar-core`, `pandar-hub`, `pandar-agent`, and `pandar-app`.
 - Added a repository-backed Axum hub with health, summary, tenant create/list, and tenant-scoped agent create/list endpoints.
 - Added a minimal agent CLI boundary and a Bambu machine gateway trait for future SFTP/MQTT work.

@@ -386,6 +386,22 @@
     "unavailable": "不可用",
     "unknown": "未知"
   },
+  "agentPairing": {
+    "title": "配对本地 Agent",
+    "subtitleTenant": "为 {name} ({slug}) 创建一次性配对。",
+    "subtitleNone": "请先选择租户，再创建 Agent 配对。",
+    "subtitleRestricted": "只有租户管理员或具备 Agent 注册权限的主体可以创建配对。",
+    "summary": "配对会为运行 pandar-agent 的机器生成环境变量块。输出只显示一次，离开此页面前请先复制。",
+    "stepsTitle": "设置流程",
+    "stepSelectTenant": "先选择租户，然后创建配对。",
+    "stepCreate": "为 {name} 创建配对。",
+    "stepCopy": "将生成的环境变量块复制到运行 pandar-agent 的机器。",
+    "stepStart": "启动或重启 pandar-agent，待其上线后再运行发现。",
+    "restrictedTitle": "配对需要管理员权限",
+    "restrictedDetail": "请使用租户管理员账号或具备注册范围的令牌后再创建此配对。",
+    "noTenantTitle": "需要选择租户",
+    "noTenantDetail": "请从页头选择租户以启用配对创建。"
+  },
   "admin": {
     "title": "租户管理",
     "subtitleNone": "未选择租户",

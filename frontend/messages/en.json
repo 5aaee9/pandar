@@ -389,6 +389,22 @@
     "unavailable": "Unavailable",
     "unknown": "unknown"
   },
+  "agentPairing": {
+    "title": "Pair a local agent",
+    "subtitleTenant": "Create a one-time pairing for {name} ({slug}).",
+    "subtitleNone": "Select a tenant before creating an agent pairing.",
+    "subtitleRestricted": "Only a tenant administrator or agent-registration-capable principal can create pairings.",
+    "summary": "Pairing produces an environment block for the machine running pandar-agent. The output is shown once, so copy it before leaving this page.",
+    "stepsTitle": "Setup flow",
+    "stepSelectTenant": "Select a tenant, then create a pairing.",
+    "stepCreate": "Create a pairing for {name}.",
+    "stepCopy": "Copy the generated environment block into the machine running pandar-agent.",
+    "stepStart": "Start or restart pandar-agent, then run discovery after it appears online.",
+    "restrictedTitle": "Pairing requires admin access",
+    "restrictedDetail": "Use a tenant admin account or scoped registration token before creating this pairing.",
+    "noTenantTitle": "Tenant required",
+    "noTenantDetail": "Choose a tenant from the header to enable pairing creation."
+  },
   "admin": {
     "title": "Tenant administration",
     "subtitleNone": "No tenant selected",

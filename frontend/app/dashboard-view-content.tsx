@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 
+import { AgentPairingGuidance } from './agent-pairing-guidance'
 import { DiagnosticsSection, LinkedAgentsSection } from './diagnostics-panel'
 import { DispatchForm } from './dispatch-form'
 import { RecoveryActions } from './recovery-actions'
@@ -108,9 +109,11 @@ function AgentsView({
   printers,
   selectedCommand,
   commandData,
+  adminUnavailable,
 }: DashboardViewContentProps) {
   return (
     <>
+      <AgentPairingGuidance selectedTenant={selectedTenant} restricted={adminUnavailable} />
       <LinkedAgentsSection selectedTenant={selectedTenant} agents={agents} />
       <DiagnosticsSection
         selectedTenant={selectedTenant}
