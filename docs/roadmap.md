@@ -105,6 +105,7 @@
 - Replaced the one-page dashboard shell with shadcn `sidebar-08`: `/devices`, `/agents`, `/users`, and `/settings` now share a route-backed sidebar layout, root `/` redirects preserve dashboard query state, action feedback targets the relevant page, tenant switching preserves status and agent command context, and Logout is exposed only when the configured auth provider supplies a sign-out URL. The generated sidebar primitive was split under the frontend module-size limit while preserving the public shadcn import path.
 - Fixed the post-sidebar Nix web check by refreshing `pandar-web`'s npm dependency hash for the updated lockfile and removing the reintroduced `next/font/google` dependency so sandboxed `nix build .#pandar-web` stays offline-deterministic.
 - Reworked external tenant onboarding/joining into an organization-switcher-style flow: verified users now open a compact tenant access switcher, create tenants through a shadcn dialog wired to the existing server action, and join tenants from a matching token form with hash-prefill behavior. Added main-frontend Vitest + React Testing Library coverage for the switcher, dialog fields, and join-token prefill.
+- Fixed the GitHub Checks workflow after the passkey autofill frontend lockfile update by refreshing the Nix `pandar-web` npm dependency hash used by package and NixOS module checks.
 
 ## Completed: Phase 30 Better Auth Provider Compatibility
 
