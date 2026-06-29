@@ -4,12 +4,7 @@ import { getLocale, getMessages, getTranslations } from 'next-intl/server'
 import type { ReactNode } from 'react'
 
 import './globals.css'
-import { Geist } from "next/font/google";
-import { cn } from "@/lib/utils";
-import { TooltipProvider } from "@/components/ui/tooltip";
-
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
-
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('meta')
@@ -24,7 +19,7 @@ export default async function RootLayout({
   const locale = await getLocale()
   const messages = await getMessages()
   return (
-    <html lang={locale} className={cn("font-sans", geist.variable)}>
+    <html lang={locale} className="font-sans">
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>
           <TooltipProvider>{children}</TooltipProvider>

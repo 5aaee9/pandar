@@ -192,7 +192,7 @@
         pname = "pandar-web";
         version = "0.1.0";
         src = frontendSource;
-        npmDepsHash = "sha256-RFtVgXp+lm4gPCzq/I0q0+yc1HhtumsNfWprNYuKvP0=";
+        npmDepsHash = "sha256-e5NQd3hrPjb1k40EdpQgpDSe5h4UXCqOAgOq4YVW8YI=";
 
         nativeBuildInputs = [
           pkgs.makeWrapper
