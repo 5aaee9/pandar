@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { GalleryVerticalEnd } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
@@ -39,6 +39,21 @@ export function LoginForm({
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
+  const redirectStartedRef = useRef(false);
+
+  async function redirectAfterPasskeySignIn() {
+    if (redirectStartedRef.current) {
+      return;
+    }
+
+    redirectStartedRef.current = true;
+    try {
+      await redirectWithAuthToken(dashboardCallbackUrl, messages);
+    } catch (error) {
+      redirectStartedRef.current = false;
+      throw error;
+    }
+  }
 
   useEffect(() => {
     if (cooldown <= 0) {
@@ -51,6 +66,45 @@ export function LoginForm({
 
     return () => window.clearTimeout(timer);
   }, [cooldown]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function preloadPasskeyAutofill() {
+      const publicKeyCredential = window.PublicKeyCredential;
+      if (!publicKeyCredential?.isConditionalMediationAvailable) {
+        return;
+      }
+
+      try {
+        const available =
+          await publicKeyCredential.isConditionalMediationAvailable();
+        if (!available || !active) {
+          return;
+        }
+
+        const result = await authClient.signIn.passkey({ autoFill: true });
+        if (!active) {
+          return;
+        }
+        if (result.error) {
+          throw result.error;
+        }
+
+        await redirectAfterPasskeySignIn();
+      } catch (error) {
+        if (active) {
+          console.warn("Passkey autofill sign-in failed", error);
+        }
+      }
+    }
+
+    void preloadPasskeyAutofill();
+
+    return () => {
+      active = false;
+    };
+  }, [dashboardCallbackUrl, messages]);
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -98,7 +152,7 @@ export function LoginForm({
         throw new Error(result.error.message || messages.passkeySignInFailed);
       }
 
-      await redirectWithAuthToken(dashboardCallbackUrl, messages);
+      await redirectAfterPasskeySignIn();
     } catch {
       setError(messages.passkeySignInFailed);
       setPending(null);
@@ -123,7 +177,7 @@ export function LoginForm({
             <FieldLabel htmlFor="email">{messages.email}</FieldLabel>
             <Input
               id="email"
-              autoComplete="email"
+              autoComplete="username webauthn"
               inputMode="email"
               name="email"
               placeholder="name@example.com"
