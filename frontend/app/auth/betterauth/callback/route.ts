@@ -1,52 +1,33 @@
 import { NextResponse } from "next/server";
 
+import { betterAuthCallbackRedirect } from "../callback-redirect";
 import {
   authCookieOptions,
   isAllowedDashboardJwt,
   readAuthCookieConfig,
 } from "../cookie";
 
-export function GET() {
-  return new NextResponse(callbackHtml(), {
-    headers: {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "no-store",
-    },
-  });
-}
-
-export async function POST(request: Request) {
-  const token = (await request.text()).trim();
-  if (!isAllowedDashboardJwt(token)) {
-    return new NextResponse("malformed token", { status: 400 });
+export function GET(request: Request) {
+  const result = betterAuthCallbackRedirect(request.url, isAllowedDashboardJwt);
+  if (!result.ok) {
+    return new NextResponse(result.body, {
+      status: result.status,
+      headers: {
+        "cache-control": "no-store",
+      },
+    });
   }
 
-  const response = NextResponse.redirect(new URL("/", request.url), 303);
-  response.cookies.set(readAuthCookieConfig().name, token, authCookieOptions());
+  const response = NextResponse.redirect(
+    new URL(result.target, request.url),
+    result.status,
+  );
+  response.cookies.set(
+    readAuthCookieConfig().name,
+    result.token,
+    authCookieOptions(),
+  );
+  response.headers.set("cache-control", "no-store");
+  response.headers.set("referrer-policy", "no-referrer");
   return response;
-}
-
-function callbackHtml() {
-  return `<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>Signing in</title></head>
-<body>
-<script>
-(async () => {
-  const params = new URLSearchParams(location.hash.slice(1));
-  const token = params.get("token") || "";
-  const response = await fetch(location.pathname + location.search, {
-    method: "POST",
-    headers: { "content-type": "text/plain;charset=UTF-8" },
-    body: token
-  });
-  if (response.ok) {
-    location.replace(response.url || "/");
-    return;
-  }
-  document.body.textContent = "Sign-in failed.";
-})();
-</script>
-</body>
-</html>`;
 }

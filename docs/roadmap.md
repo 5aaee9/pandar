@@ -144,6 +144,7 @@ Goal: provide an integrated Better Auth deployment option for new Pandar install
 - Added a `frontend/auth` `pandar-auth` issuer app for email magic-link sign-in, optional post-login passkey binding, Better Auth-owned SQLite state, RS256 JWT issuance, and JWKS exposure.
 - Added dashboard callback/sign-out routes so `pandar-web` can receive a self-hosted Better Auth JWT without adding Better Auth dependencies to the provider-neutral frontend.
 - Hardened Better Auth signup so existing email accounts must sign in instead of receiving newly registered passkeys, and the dashboard callback checks Better Auth issuer/audience shape before storing the bearer cookie.
+- Updated the Better Auth dashboard return flow to use a direct `GET /auth/betterauth/callback?token=...` server redirect, removing the blank HTML/POST bridge while preserving existing JWT validation and cookie semantics.
 - Added Nix packaging and a top-level `services.pandar-auth` NixOS module for the issuer, including migration startup and generated option docs.
 - Documented the self-hosted issuer deployment wiring, including `PANDAR_EXTERNAL_AUTH_*`, `APP_AUTH_*`, `PANDAR_AUTH_*`, and the `BETTER_AUTH_SECRET` JWKS private-key encryption rotation warning.
 - Clerk/Logto migration remains out of scope; self-hosted Better Auth is a new-deployment option.

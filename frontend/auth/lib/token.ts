@@ -24,7 +24,7 @@ export async function redirectWithAuthToken(
     throw new Error(messages.dashboardTokenEmpty);
   }
 
-  window.location.href = `${dashboardCallbackUrl}#token=${encodeURIComponent(
-    body.token,
-  )}`;
+  const callbackUrl = new URL(dashboardCallbackUrl);
+  callbackUrl.searchParams.set("token", body.token);
+  window.location.href = callbackUrl.toString();
 }
