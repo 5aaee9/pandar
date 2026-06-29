@@ -96,7 +96,7 @@ Logout behavior:
 - Redirects or updated action URLs preserve `tenant`, `command`, and `status` semantics from the current dashboard.
 - Existing panels continue to use current data and actions; no backend endpoint is changed.
 - Existing i18n files contain labels needed by the new shell in English and Chinese.
-- Focused smoke test follows the repo's standalone smoke pattern at `frontend/app/dashboard-shell.smoke.mjs` and is runnable with `node --experimental-transform-types app/dashboard-shell.smoke.mjs` from `frontend/`. It covers the dashboard route/view contract, query preservation, and visible Logout href behavior.
+- Focused dashboard shell coverage runs through `frontend/app/dashboard-shell.test.tsx` with `npm --prefix frontend run test -- app/dashboard-shell.test.tsx`. It covers the dashboard route/view contract, query preservation, visible Logout href behavior, and tenant-switch rendering behavior.
 - `npm run build` in `frontend/` succeeds.
 - Rust verification required by repo policy is run after code changes: `cargo fmt`, `cargo clippy`, and `cargo nextest run --manifest-path "Cargo.toml" --workspace`. If a command fails for pre-existing or environment reasons, capture the exact failure.
 
