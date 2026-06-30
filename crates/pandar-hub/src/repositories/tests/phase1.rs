@@ -231,6 +231,88 @@ async fn agent_get_update_connection_and_mark_offline_work() {
 }
 
 #[tokio::test]
+async fn agent_delete_offline_removes_agent_cascades_and_audits() {
+    let (database, tenants, agents, printers, commands, _) = repositories().await;
+    let tenant = tenants.create("delete-acme", "Delete Acme").await.unwrap();
+    let admin = AuthRepository::new(database.clone())
+        .create_user(
+            tenant.id,
+            "delete-admin@example.test",
+            "Delete Admin",
+            crate::repositories::UserRole::TenantAdmin,
+        )
+        .await
+        .unwrap();
+    let agent = agents.create(tenant.id, "stale-agent").await.unwrap();
+    let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)
+        .await
+        .unwrap();
+    insert_command_fixture(&database, tenant.id, agent.id, Some(&printer_id))
+        .await
+        .unwrap();
+
+    let deleted = agents
+        .delete_offline_with_audit(
+            tenant.id,
+            agent.id,
+            crate::repositories::AuditActor::user(admin.id.clone()),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(deleted, agent);
+    assert_eq!(agents.get(agent.id).await.unwrap(), None);
+    assert_eq!(printers.count().await.unwrap(), 0);
+    assert_eq!(commands.count().await.unwrap(), 0);
+
+    let audit = AuditEventRepository::new(database);
+    let events = audit.list_for_tenant(tenant.id).await.unwrap();
+    let event = events
+        .iter()
+        .find(|event| event.action == "agent.delete")
+        .expect("agent delete audit event");
+    assert_eq!(event.target_type, "agent");
+    assert_eq!(
+        event.target_id.as_deref(),
+        Some(agent.id.to_string().as_str())
+    );
+    let metadata: serde_json::Value = serde_json::from_str(&event.metadata_json).unwrap();
+    assert_eq!(metadata["agent_name"], "stale-agent");
+    assert_eq!(metadata["previous_status"], "offline");
+}
+
+#[tokio::test]
+async fn agent_delete_rejects_online_agent() {
+    let (_, tenants, agents, _, _, _) = repositories().await;
+    let tenant = tenants.create("online-acme", "Online Acme").await.unwrap();
+    let agent = agents.create(tenant.id, "online-agent").await.unwrap();
+    agents
+        .update_connection(
+            agent.id,
+            AgentStatus::Online,
+            Some("0.2.0"),
+            "2026-06-20T01:00:00Z",
+        )
+        .await
+        .unwrap();
+
+    let err = agents
+        .delete_offline_with_audit(
+            tenant.id,
+            agent.id,
+            crate::repositories::AuditActor::user("test-user"),
+        )
+        .await
+        .unwrap_err();
+
+    assert!(matches!(err, RepositoryError::AgentOnline));
+    assert_eq!(
+        agents.get(agent.id).await.unwrap().unwrap().status,
+        AgentStatus::Online
+    );
+}
+
+#[tokio::test]
 async fn summary_counts_include_printer_and_command_fixtures() {
     let (database, tenants, agents, printers, commands, _) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();

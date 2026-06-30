@@ -477,6 +477,7 @@ Exit criteria:
 Goal: turn the existing provisioning APIs into a usable tenant-admin surface without moving authorization decisions out of Rust.
 
 - Completed frontend tenant administration for users, roles, external identity links, tenant tokens, agent pairing, linked agents, and recent audit events.
+- Completed tenant-admin removal for stale linked agents: `/agents` now exposes a confirmed delete action for non-online agents, the Hub rejects online-agent deletion with `agent_online`, and successful removals are audited while existing agent-owned rows cascade through the database.
 - Kept Clerk/Logto as authentication providers only; tenant membership and roles remain Pandar-owned data.
 - Completed copy-once handling by discarding plaintext token/pairing responses in browser UI state and avoiding local storage, cookies, and Zustand for secrets.
 - Completed compact unavailable rendering when admin resources cannot be read by the current auth context.

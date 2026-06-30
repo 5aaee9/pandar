@@ -3,7 +3,7 @@ use axum::{
     extract::DefaultBodyLimit,
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use pandar_core::{Agent, Tenant, TenantId};
 use serde::Serialize;
@@ -55,6 +55,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/v1/tenants/{tenant_id}/agents",
             get(agents::list_agents).post(agents::create_agent),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/agents/{agent_id}",
+            delete(agents::delete_agent),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/users",
@@ -333,6 +337,7 @@ impl From<RepositoryError> for ApiError {
                 Self::new(StatusCode::FORBIDDEN, "join_link_email_mismatch")
             }
             RepositoryError::MissingAgent => Self::new(StatusCode::NOT_FOUND, "agent_not_found"),
+            RepositoryError::AgentOnline => Self::new(StatusCode::CONFLICT, "agent_online"),
             RepositoryError::MissingCommand => {
                 Self::new(StatusCode::NOT_FOUND, "command_not_found")
             }

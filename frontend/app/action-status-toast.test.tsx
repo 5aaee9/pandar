@@ -80,11 +80,13 @@ describe("action status toast helpers", () => {
     );
 
     expect(formatActionStatus("refresh_queued", tStatus)).toBe("Refresh queued");
+    expect(formatActionStatus("agent_deleted", tStatus)).toBe("Agent deleted");
     expect(formatActionStatus("artifact_too_large", tStatus)).toBe("Artifact Too Large");
   });
 
   it("classifies status tone deterministically", () => {
     expect(actionStatusTone("refresh_queued")).toBe("success");
+    expect(actionStatusTone("agent_deleted")).toBe("success");
     expect(actionStatusTone("refresh_partial")).toBe("warning");
     expect(actionStatusTone("http_500")).toBe("error");
     expect(actionStatusTone("artifact_too_large")).toBe("error");

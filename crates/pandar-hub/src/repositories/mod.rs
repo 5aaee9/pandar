@@ -75,6 +75,8 @@ pub enum RepositoryError {
     JoinLinkEmailMismatch,
     #[error("agent not found")]
     MissingAgent,
+    #[error("agent is online")]
+    AgentOnline,
     #[error("printer not found")]
     MissingPrinter,
     #[error("command not found")]

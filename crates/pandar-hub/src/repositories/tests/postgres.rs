@@ -40,10 +40,20 @@ async fn postgres_core_repository_behavior_when_configured() {
 
     let tenants = TenantRepository::new(database.clone());
     let agents = AgentRepository::new(database.clone());
+    let auth = AuthRepository::new(database.clone());
     let printers = PrinterRepository::new(database.clone());
     let commands = CommandRepository::new(database.clone());
 
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let admin = auth
+        .create_user(
+            tenant.id,
+            "postgres-admin@example.test",
+            "Postgres Admin",
+            UserRole::TenantAdmin,
+        )
+        .await
+        .unwrap();
     let agent = agents.create(tenant.id, "agent").await.unwrap();
     let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)
         .await
@@ -64,6 +74,14 @@ async fn postgres_core_repository_behavior_when_configured() {
     ));
     assert_eq!(printers.count().await.unwrap(), 1);
     assert_eq!(commands.count().await.unwrap(), 1);
+
+    let stale = agents.create(tenant.id, "stale-agent").await.unwrap();
+    let deleted = agents
+        .delete_offline_with_audit(tenant.id, stale.id, AuditActor::user(admin.id.clone()))
+        .await
+        .unwrap();
+    assert_eq!(deleted, stale);
+    assert_eq!(agents.get(stale.id).await.unwrap(), None);
 }
 
 #[tokio::test]

@@ -4,6 +4,7 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
 };
+use pandar_core::AgentId;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -60,4 +61,24 @@ pub(in crate::routes) async fn list_agents(
         .collect();
 
     Ok(Json(AgentListResponse { agents }))
+}
+
+pub(in crate::routes) async fn delete_agent(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((tenant_id, agent_id)): Path<(String, String)>,
+) -> Result<Json<AgentResponse>, ApiError> {
+    let tenant_id = parse_tenant_id(&tenant_id)?;
+    let agent_id = parse_agent_id(&agent_id)?;
+    let auth = auth::authorize_tenant_admin_principal(&state, &headers, tenant_id).await?;
+    let deleted = state
+        .agents()
+        .delete_offline_with_audit(tenant_id, agent_id, auth::audit_actor(&auth))
+        .await?;
+
+    Ok(Json(AgentResponse::from(deleted)))
+}
+
+fn parse_agent_id(value: &str) -> Result<AgentId, ApiError> {
+    AgentId::parse(value).map_err(|_| ApiError::bad_request("invalid_agent_id"))
 }

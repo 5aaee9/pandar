@@ -108,6 +108,59 @@ impl AgentRepository {
             .transpose()
     }
 
+    pub async fn delete_offline_with_audit(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        actor: AuditActor,
+    ) -> RepositoryResult<Agent> {
+        let connection = self.database.sea_orm_connection();
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin agent delete audit transaction")?;
+        let Some(model) = agents::Entity::find_by_id(agent_id.to_string())
+            .one(&tx)
+            .await
+            .context("failed to get agent before delete")?
+        else {
+            return Err(RepositoryError::MissingAgent);
+        };
+        if model.tenant_id != tenant_id.to_string() {
+            return Err(RepositoryError::MissingAgent);
+        }
+
+        let agent = agent_from_model(model)?;
+        if agent.status == AgentStatus::Online {
+            return Err(RepositoryError::AgentOnline);
+        }
+
+        insert_audit_event_tx(
+            &tx,
+            &record_audit_event(
+                tenant_id,
+                actor,
+                "agent.delete",
+                "agent",
+                Some(agent_id.to_string()),
+                serde_json::json!({
+                    "agent_name": agent.name.clone(),
+                    "previous_status": agent.status.as_str(),
+                }),
+            ),
+        )
+        .await?;
+        agents::Entity::delete_by_id(agent_id.to_string())
+            .exec(&tx)
+            .await
+            .context("failed to delete agent")?;
+        tx.commit()
+            .await
+            .context("failed to commit agent delete audit transaction")?;
+
+        Ok(agent)
+    }
+
     pub async fn get_credential_record(
         &self,
         agent_id: AgentId,

@@ -16,6 +16,7 @@ vi.mock("./actions", () => ({
   createJoinLink: vi.fn(),
   createTenantFromExternal: vi.fn(),
   createTenantToken: vi.fn(),
+  deleteAgent: vi.fn(),
   diagnosePrinter: vi.fn(),
   discoverPrinters: vi.fn(),
   duplicateJob: vi.fn(),
@@ -149,5 +150,29 @@ describe("Agents view pairing guidance", () => {
       screen.getByText("Use a tenant admin account or scoped registration token before creating this pairing."),
     ).toBeVisible();
     expect(screen.queryByLabelText("Agent name")).not.toBeInTheDocument();
+  });
+
+  it("renders delete controls only for agents that are not online", () => {
+    renderAgentsView({
+      agents: [
+        {
+          id: "agent-offline",
+          tenant_id: tenant.id,
+          name: "Offline agent",
+          status: "offline",
+          created_at: "2026-06-30T00:00:00Z",
+        },
+        {
+          id: "agent-online",
+          tenant_id: tenant.id,
+          name: "Online agent",
+          status: "online",
+          created_at: "2026-06-30T00:00:00Z",
+        },
+      ],
+    });
+
+    expect(screen.getByRole("button", { name: "Delete Offline agent" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Online agent is online" })).toBeDisabled();
   });
 });

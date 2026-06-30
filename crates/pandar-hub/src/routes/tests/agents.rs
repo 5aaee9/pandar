@@ -307,6 +307,187 @@ async fn agent_list_returns_created_records() {
 }
 
 #[tokio::test]
+async fn tenant_admin_can_delete_offline_agent() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (_, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = agent["tenant_id"].as_str().unwrap();
+    let agent_id = agent["id"].as_str().unwrap();
+
+    let (status, body) = request_as(
+        app.clone(),
+        Method::DELETE,
+        &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}"),
+        None,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, agent);
+
+    let (status, body) = request_as(
+        app,
+        Method::GET,
+        &format!("/api/v1/tenants/{tenant_id}/agents"),
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({ "agents": [] }));
+
+    let events = state
+        .audit_events()
+        .list_for_tenant(TenantId::parse(tenant_id).unwrap())
+        .await
+        .unwrap();
+    let event = events
+        .iter()
+        .find(|event| event.action == "agent.delete")
+        .expect("agent delete audit event");
+    assert_eq!(event.target_id.as_deref(), Some(agent_id));
+    let metadata = serde_json::from_str::<serde_json::Value>(&event.metadata_json).unwrap();
+    assert_eq!(metadata["agent_name"], "shop-agent");
+    assert_eq!(metadata["previous_status"], "offline");
+}
+
+#[tokio::test]
+async fn agent_delete_rejects_online_agent() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (_, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(agent["tenant_id"].as_str().unwrap()).unwrap();
+    let agent_id = pandar_core::AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    state
+        .agents()
+        .update_connection(
+            agent_id,
+            pandar_core::AgentStatus::Online,
+            Some("0.2.0"),
+            "2026-06-20T01:00:00Z",
+        )
+        .await
+        .unwrap();
+
+    let (status, body) = request_as(
+        app,
+        Method::DELETE,
+        &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}"),
+        None,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body, json!({ "error": "agent_online" }));
+    assert!(state.agents().get(agent_id).await.unwrap().is_some());
+}
+
+#[tokio::test]
+async fn viewer_cannot_delete_agent() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (_, agent, _) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = agent["tenant_id"].as_str().unwrap();
+    let token = auth_token_for_role(
+        &state,
+        tenant_id,
+        crate::repositories::UserRole::Viewer,
+        "viewer-delete-agent",
+    )
+    .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::DELETE,
+        &format!(
+            "/api/v1/tenants/{}/agents/{}",
+            tenant_id,
+            agent["id"].as_str().unwrap()
+        ),
+        None,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "role_forbidden" }));
+}
+
+#[tokio::test]
+async fn agent_delete_rejects_cross_tenant_agent() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (_, agent, _) = tenant_and_agent(&state, app.clone()).await;
+    let other_tenant = state
+        .tenants()
+        .create("other-delete", "Other Delete")
+        .await
+        .unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &other_tenant.id.to_string(),
+        crate::repositories::UserRole::TenantAdmin,
+        "cross-tenant-delete-agent",
+    )
+    .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::DELETE,
+        &format!(
+            "/api/v1/tenants/{}/agents/{}",
+            other_tenant.id,
+            agent["id"].as_str().unwrap()
+        ),
+        None,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body, json!({ "error": "agent_not_found" }));
+}
+
+#[tokio::test]
+async fn agent_delete_rejects_invalid_or_missing_agent() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant_id = tenant["id"].as_str().unwrap();
+    let token = auth_token_for_role(
+        &state,
+        tenant_id,
+        crate::repositories::UserRole::TenantAdmin,
+        "delete-missing-agent",
+    )
+    .await;
+
+    let (status, body) = request_as(
+        app.clone(),
+        Method::DELETE,
+        &format!("/api/v1/tenants/{tenant_id}/agents/not-a-uuid"),
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body, json!({ "error": "invalid_agent_id" }));
+
+    let (status, body) = request_as(
+        app,
+        Method::DELETE,
+        &format!("/api/v1/tenants/{tenant_id}/agents/00000000-0000-0000-0000-000000000001"),
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body, json!({ "error": "agent_not_found" }));
+}
+
+#[tokio::test]
 async fn invalid_tenant_id_on_agent_list_returns_bad_request() {
     let (status, body) = request(
         app().await,

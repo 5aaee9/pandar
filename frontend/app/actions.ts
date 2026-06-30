@@ -93,6 +93,25 @@ export async function refreshAllAgents(formData: FormData) {
   redirect(statusUrl(tenantId, allOk ? "refresh_queued" : "refresh_partial"));
 }
 
+export async function deleteAgent(formData: FormData) {
+  await requireAuth();
+  const tenantId = stringField(formData, "tenant_id");
+  const agentId = stringField(formData, "agent_id");
+  const response = await fetch(
+    `${apiUrl}/api/v1/tenants/${tenantId}/agents/${agentId}`,
+    {
+      method: "DELETE",
+      headers: await apiHeaders("application/json"),
+    },
+  );
+  redirect(
+    agentsStatusUrl(
+      tenantId,
+      response.ok ? "agent_deleted" : await errorCode(response),
+    ),
+  );
+}
+
 export async function diagnosePrinter(formData: FormData) {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
@@ -511,6 +530,10 @@ async function errorCode(response: Response) {
 
 function statusUrl(tenantId: string, status: string) {
   return `/devices?tenant=${encodeURIComponent(tenantId)}&status=${encodeURIComponent(status)}`;
+}
+
+function agentsStatusUrl(tenantId: string, status: string) {
+  return `/agents?tenant=${encodeURIComponent(tenantId)}&status=${encodeURIComponent(status)}`;
 }
 
 function commandUrl(tenantId: string, commandId: string) {
