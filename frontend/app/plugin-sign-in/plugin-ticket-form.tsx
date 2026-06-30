@@ -33,7 +33,8 @@ export function PluginTicketForm({
   selectedTenant,
 }: PluginTicketFormProps) {
   const t = useTranslations("signIn");
-  const [callbackUrl, setCallbackUrl] = useState(redirectUrl);
+  const [studioCallbackUrl, setStudioCallbackUrl] = useState<string | null>(null);
+  const [customCallbackUrl, setCustomCallbackUrl] = useState<string | null>(null);
   const [callbackSource, setCallbackSource] = useState<"default" | "studio">(
     "default",
   );
@@ -58,7 +59,8 @@ export function PluginTicketForm({
         data.sequence_id === sequenceId &&
         data.response?.base_url
       ) {
-        setCallbackUrl(data.response.base_url);
+        setStudioCallbackUrl(data.response.base_url);
+        setCustomCallbackUrl(null);
         setCallbackSource("studio");
       }
     }
@@ -75,6 +77,7 @@ export function PluginTicketForm({
 
   const callbackSourceLabel =
     callbackSource === "studio" ? t("callbackDetected") : t("callbackDefault");
+  const callbackUrl = customCallbackUrl ?? studioCallbackUrl ?? redirectUrl;
 
   return (
     <form action={action} className="grid gap-4 px-4 py-4">
@@ -91,7 +94,10 @@ export function PluginTicketForm({
         <input
           className="h-9 rounded-md border border-slate-300 px-2 font-mono text-xs text-slate-950 hover:border-slate-400"
           name="redirect_url"
-          onChange={(event) => setCallbackUrl(event.currentTarget.value)}
+          onChange={(event) => {
+            setCustomCallbackUrl(event.currentTarget.value);
+            setCallbackSource("default");
+          }}
           required
           type="url"
           value={callbackUrl}

@@ -83,10 +83,12 @@ async function fetchExternalAuthStatus(): Promise<ReadinessResult> {
 }
 
 export default async function PluginSignInPage({ searchParams }: PageProps) {
-  const t = await getTranslations("signIn");
-  const auth = await authSource();
+  const [t, auth, params] = await Promise.all([
+    getTranslations("signIn"),
+    authSource(),
+    searchParams,
+  ]);
   const provider = authProviderConfig();
-  const params = await searchParams;
   const [tenantResult, readiness] = await Promise.all([
     fetchTenants(),
     fetchExternalAuthStatus(),

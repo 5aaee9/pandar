@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useReducer, useRef } from "react";
 import { GalleryVerticalEnd } from "lucide-react";
 
 import { authClient } from "@/lib/auth-client";
@@ -24,6 +24,47 @@ type LoginFormProps = React.ComponentProps<"div"> & {
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
+type LoginState = {
+  pending: "magic-link" | "passkey" | null;
+  sent: boolean;
+  email: string;
+  error: string | null;
+  cooldown: number;
+};
+
+type LoginAction =
+  | { type: "email"; value: string }
+  | { type: "pending"; value: LoginState["pending"] }
+  | { type: "error"; value: string | null }
+  | { type: "sent"; value: boolean }
+  | { type: "cooldown"; value: number }
+  | { type: "tick" };
+
+const initialLoginState: LoginState = {
+  pending: null,
+  sent: false,
+  email: "",
+  error: null,
+  cooldown: 0,
+};
+
+function loginReducer(state: LoginState, action: LoginAction): LoginState {
+  switch (action.type) {
+    case "email":
+      return { ...state, email: action.value };
+    case "pending":
+      return { ...state, pending: action.value };
+    case "error":
+      return { ...state, error: action.value };
+    case "sent":
+      return { ...state, sent: action.value };
+    case "cooldown":
+      return { ...state, cooldown: action.value };
+    case "tick":
+      return { ...state, cooldown: Math.max(0, state.cooldown - 1) };
+  }
+}
+
 function formatCooldown(template: string, seconds: number): string {
   return template.replace("{seconds}", String(seconds));
 }
@@ -34,14 +75,11 @@ export function LoginForm({
   messages,
   ...props
 }: LoginFormProps) {
-  const [pending, setPending] = useState<"magic-link" | "passkey" | null>(null);
-  const [sent, setSent] = useState(false);
-  const [email, setEmail] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [cooldown, setCooldown] = useState(0);
+  const [{ pending, sent, email, error, cooldown }, dispatchLogin] =
+    useReducer(loginReducer, initialLoginState);
   const redirectStartedRef = useRef(false);
 
-  async function redirectAfterPasskeySignIn() {
+  const redirectAfterPasskeySignIn = useCallback(async () => {
     if (redirectStartedRef.current) {
       return;
     }
@@ -53,7 +91,7 @@ export function LoginForm({
       redirectStartedRef.current = false;
       throw error;
     }
-  }
+  }, [dashboardCallbackUrl, messages]);
 
   useEffect(() => {
     if (cooldown <= 0) {
@@ -61,7 +99,7 @@ export function LoginForm({
     }
 
     const timer = window.setTimeout(() => {
-      setCooldown((current) => Math.max(0, current - 1));
+      dispatchLogin({ type: "tick" });
     }, 1000);
 
     return () => window.clearTimeout(timer);
@@ -104,7 +142,7 @@ export function LoginForm({
     return () => {
       active = false;
     };
-  }, [dashboardCallbackUrl, messages]);
+  }, [redirectAfterPasskeySignIn]);
 
   async function sendMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -114,8 +152,8 @@ export function LoginForm({
 
     const normalizedEmail = email.trim().toLowerCase();
     const name = normalizedEmail.split("@", 1)[0] || normalizedEmail;
-    setPending("magic-link");
-    setError(null);
+    dispatchLogin({ type: "pending", value: "magic-link" });
+    dispatchLogin({ type: "error", value: null });
 
     try {
       const result = await authClient.signIn.magicLink({
@@ -129,12 +167,12 @@ export function LoginForm({
         throw new Error(result.error.message || messages.magicLinkSendFailed);
       }
 
-      setSent(true);
-      setCooldown(RESEND_COOLDOWN_SECONDS);
+      dispatchLogin({ type: "sent", value: true });
+      dispatchLogin({ type: "cooldown", value: RESEND_COOLDOWN_SECONDS });
     } catch {
-      setError(messages.unableSignIn);
+      dispatchLogin({ type: "error", value: messages.unableSignIn });
     } finally {
-      setPending(null);
+      dispatchLogin({ type: "pending", value: null });
     }
   }
 
@@ -143,8 +181,8 @@ export function LoginForm({
       return;
     }
 
-    setPending("passkey");
-    setError(null);
+    dispatchLogin({ type: "pending", value: "passkey" });
+    dispatchLogin({ type: "error", value: null });
 
     try {
       const result = await authClient.signIn.passkey();
@@ -154,8 +192,8 @@ export function LoginForm({
 
       await redirectAfterPasskeySignIn();
     } catch {
-      setError(messages.passkeySignInFailed);
-      setPending(null);
+      dispatchLogin({ type: "error", value: messages.passkeySignInFailed });
+      dispatchLogin({ type: "pending", value: null });
     }
   }
 
@@ -184,7 +222,12 @@ export function LoginForm({
               required
               type="email"
               value={email}
-              onChange={(event) => setEmail(event.currentTarget.value)}
+              onChange={(event) =>
+                dispatchLogin({
+                  type: "email",
+                  value: event.currentTarget.value,
+                })
+              }
             />
             {error ? (
               <FieldError>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { authClient } from "../../lib/auth-client";
 import type { SignOutMessages } from "../../lib/i18n";
@@ -19,6 +19,14 @@ export function SignOutClient({
   const [state, setState] = useState<SignOutState>("signing-out");
   const [error, setError] = useState<string | null>(null);
 
+  const clearDashboardSession = useCallback(() => {
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = dashboardSignOutUrl;
+    document.body.append(form);
+    form.submit();
+  }, [dashboardSignOutUrl]);
+
   useEffect(() => {
     let cancelled = false;
     let redirectTimer: number | undefined;
@@ -32,7 +40,7 @@ export function SignOutClient({
         if (!cancelled) {
           setState("returning");
           redirectTimer = window.setTimeout(() => {
-            window.location.assign(dashboardSignOutUrl);
+            void clearDashboardSession();
           }, 1200);
         }
       } catch (caught) {
@@ -53,7 +61,7 @@ export function SignOutClient({
         window.clearTimeout(redirectTimer);
       }
     };
-  }, [dashboardSignOutUrl]);
+  }, [clearDashboardSession, messages.unableSignOut]);
 
   if (state === "failed") {
     return (
@@ -68,16 +76,18 @@ export function SignOutClient({
           >
             {messages.retrySignOut}
           </button>
-          <a className="auth-secondary-button" href={dashboardSignOutUrl}>
-            {messages.returnToDashboard}
-          </a>
+          <form action={dashboardSignOutUrl} method="post">
+            <button className="auth-secondary-button" type="submit">
+              {messages.returnToDashboard}
+            </button>
+          </form>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="auth-status" role="status" aria-live="polite">
+    <output className="auth-status" aria-live="polite">
       <div className="auth-status-row">
         <span className="auth-spinner" aria-hidden="true" />
         <strong>
@@ -91,6 +101,6 @@ export function SignOutClient({
           ? messages.returningDashboard
           : messages.signingOutIntro}
       </span>
-    </div>
+    </output>
   );
 }

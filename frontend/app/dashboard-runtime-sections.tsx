@@ -45,7 +45,7 @@ export function RuntimeStatusPanel({
           value={t('authValue', { label: formatAuthSource(auth.source, tAuth), cookie: auth.cookieName })}
         />
       </div>
-      <div role="status" aria-live="polite" aria-label={t('liveNotificationsAria')}>
+      <output aria-live="polite" aria-label={t('liveNotificationsAria')}>
         <div className="text-xs font-medium text-slate-500">{t('notifications')}</div>
         {notifications.length === 0 ? (
           <div className="mt-2 text-sm text-slate-600">{t('noNotifications')}</div>
@@ -56,7 +56,7 @@ export function RuntimeStatusPanel({
             ))}
           </ul>
         )}
-      </div>
+      </output>
     </section>
   )
 }

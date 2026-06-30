@@ -6,7 +6,8 @@ import { useFormatter, useTranslations } from 'next-intl'
 import { FormattedDate } from '../components/formatted-date'
 import { OFFLINE_PRINTER_STATUSES } from './dashboard-attention'
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
-import { EmptyState, formatBytes, SectionHeader, StatusBadge } from './dashboard-ui'
+import { formatBytes } from './dashboard-format'
+import { EmptyState, SectionHeader, StatusBadge } from './dashboard-ui'
 import {
   formatArtifactMetadata,
   formatJobMaterial,
@@ -197,7 +198,7 @@ export function JobHistory({
           {filtered.length === 0 ? (
             <EmptyState title={t('jobsNoMatchesTitle')} message={t('jobsNoMatchesMessage')} />
           ) : (
-            <div className="divide-y divide-slate-200" role="list" aria-label={t('jobsAria')}>
+            <ul className="divide-y divide-slate-200" aria-label={t('jobsAria')}>
               {filtered.map((job) => {
                 const printer = printers.find((candidate) => candidate.id === job.printer_id)
                 const agent = agents.find((candidate) => candidate.id === job.agent_id)
@@ -210,7 +211,7 @@ export function JobHistory({
                   />
                 )
               })}
-            </div>
+            </ul>
           )}
         </>
       )}
@@ -278,10 +279,9 @@ function JobRow({
   const num = (n: number) => format.number(n)
   const updated = job.print.updated_at ?? job.updated_at
   return (
-    <div
+    <li
       aria-label={`${job.artifact.filename}, ${t('dispatch')} ${job.status}, ${t('print')} ${job.print.status}, ${formatProgress(job)}`}
       className="px-4 py-3"
-      role="listitem"
     >
       <div className="grid gap-3 text-sm xl:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div className="min-w-0">
@@ -357,7 +357,7 @@ function JobRow({
           </div>
         </div>
       </details>
-    </div>
+    </li>
   )
 }
 

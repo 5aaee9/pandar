@@ -253,7 +253,7 @@ in
 
       dashboardSignOutUrl = lib.mkOption {
         type = lib.types.str;
-        default = "http://127.0.0.1:3000/auth/betterauth/sign-out";
+        default = "http://127.0.0.1:3000/auth/betterauth/session";
         description = "Dashboard sign-out URL passed through PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL.";
       };
 

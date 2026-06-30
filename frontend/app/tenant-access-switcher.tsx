@@ -49,9 +49,9 @@ export function TenantAccessSwitcher({
             render={
               <Button
                 aria-expanded={open}
+                aria-haspopup="menu"
                 aria-label={t("accessActionLabel")}
                 className="h-11 w-full justify-between rounded-md border-slate-300 bg-white px-3 text-slate-950 hover:bg-slate-50 sm:w-[300px]"
-                role="combobox"
                 variant="outline"
               />
             }

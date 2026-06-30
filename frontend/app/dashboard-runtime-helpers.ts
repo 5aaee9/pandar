@@ -1,5 +1,5 @@
 import type { AuthMetadata, Job, Printer } from "./dashboard-types";
-import { formatDate as formatDateDefault } from "./dashboard-ui";
+import { formatDate as formatDateDefault } from "./dashboard-format";
 
 export type Translator = (
   key: string,
@@ -55,18 +55,6 @@ export function formatLiveState(
     case "error":
       return t("unavailable");
   }
-}
-
-export function mergePrinter(printers: Printer[], printer: Printer) {
-  return printers.some((current) => current.id === printer.id)
-    ? printers.map((current) => (current.id === printer.id ? printer : current))
-    : [printer, ...printers];
-}
-
-export function mergeJob(jobs: Job[], job: Job) {
-  return jobs.some((current) => current.id === job.id)
-    ? jobs.map((current) => (current.id === job.id ? job : current))
-    : [job, ...jobs];
 }
 
 export function printerEventWebSocketUrl(
@@ -233,8 +221,10 @@ export function formatArtifactMetadata(
     : t("noObjects");
   const filament =
     plate?.filaments
-      .map((row) => row.filament_type ?? row.filament_id)
-      .filter(Boolean)
+      .flatMap((row) => {
+        const filament = row.filament_type ?? row.filament_id;
+        return filament ? [filament] : [];
+      })
       .join(", ") || t("noFilament");
 
   return t("artifactSummary", {

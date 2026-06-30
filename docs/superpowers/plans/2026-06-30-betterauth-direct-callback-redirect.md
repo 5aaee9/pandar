@@ -25,7 +25,7 @@
 **Files:**
 
 - Create: `frontend/app/auth/betterauth/callback-redirect.ts`
-- Create: `frontend/app/auth/betterauth/callback.smoke.mjs`
+- Create: `frontend/scripts/auth/betterauth/callback.smoke.mjs`
 - Create: `frontend/auth/scripts/smoke-dashboard-token-redirect.mjs`
 - Modify: `frontend/app/auth/betterauth/callback/route.ts`
 - Modify: `frontend/auth/lib/token.ts`
@@ -40,7 +40,7 @@
 
 - [ ] **Step 1: Write the failing dashboard callback smoke test**
 
-Create `frontend/app/auth/betterauth/callback.smoke.mjs`:
+Create `frontend/scripts/auth/betterauth/callback.smoke.mjs`:
 
 ```js
 import assert from "node:assert/strict";
@@ -132,7 +132,7 @@ assert.doesNotMatch(
 
 - [ ] **Step 2: Run dashboard callback smoke to verify it fails**
 
-Run: `cd frontend && node --experimental-strip-types app/auth/betterauth/callback.smoke.mjs`
+Run: `cd frontend && node --experimental-strip-types scripts/auth/betterauth/callback.smoke.mjs`
 
 Expected: FAIL because `callback-redirect.ts` does not exist yet, or because the current route still contains the HTML/POST bridge.
 
@@ -308,7 +308,7 @@ Remove the old `#token=${encodeURIComponent(...)}` construction.
 Run:
 
 ```bash
-(cd frontend && node --experimental-strip-types app/auth/betterauth/callback.smoke.mjs)
+(cd frontend && node --experimental-strip-types scripts/auth/betterauth/callback.smoke.mjs)
 (cd frontend/auth && node --experimental-strip-types scripts/smoke-dashboard-token-redirect.mjs)
 ```
 

@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { ArtifactMetadata } from './dashboard-types'
-import { formatBytes, HelpTip } from './dashboard-ui'
+import { formatBytes } from './dashboard-format'
+import { HelpTip } from './dashboard-ui'
 
 type DispatchTenant = {
   id: string
@@ -35,7 +36,7 @@ export function DispatchForm({
   const t = useTranslations('dispatch')
   const format = useFormatter()
   const num = (n: number) => format.number(n)
-  const [selectedPrinterId, setSelectedPrinterId] = useState(printers[0]?.id ?? '')
+  const [preferredPrinterId, setPreferredPrinterId] = useState('')
   const [artifact, setArtifact] = useState<{
     file: File | null
     size: number
@@ -55,11 +56,9 @@ export function DispatchForm({
   const [submitting, setSubmitting] = useState(false)
   const previewRequestRef = useRef(0)
 
-  useEffect(() => {
-    if (!printers.some((printer) => printer.id === selectedPrinterId)) {
-      setSelectedPrinterId(printers[0]?.id ?? '')
-    }
-  }, [printers, selectedPrinterId])
+  const selectedPrinterId = printers.some((printer) => printer.id === preferredPrinterId)
+    ? preferredPrinterId
+    : (printers[0]?.id ?? '')
 
   const selectArtifact = (file: File | null) => {
     if (!file) {
@@ -93,13 +92,14 @@ export function DispatchForm({
     const requestId = previewRequestRef.current + 1
     previewRequestRef.current = requestId
     setMetadataPreview({ state: 'loading', metadata: null })
+    const isStale = () => requestId !== previewRequestRef.current
 
     try {
       const response = await fetch(metadataPreviewPath(selectedTenant.id), {
         method: 'POST',
         body: formData,
       })
-      if (requestId !== previewRequestRef.current) {
+      if (isStale()) {
         return
       }
       if (!response.ok) {
@@ -107,7 +107,7 @@ export function DispatchForm({
         return
       }
       const body = (await response.json()) as { metadata?: ArtifactMetadata | null }
-      if (requestId !== previewRequestRef.current) {
+      if (isStale()) {
         return
       }
       setMetadataPreview(
@@ -116,7 +116,7 @@ export function DispatchForm({
           : { state: 'unavailable', metadata: null },
       )
     } catch {
-      if (requestId !== previewRequestRef.current) {
+      if (isStale()) {
         return
       }
       setMetadataPreview({ state: 'error', metadata: null })
@@ -180,7 +180,7 @@ export function DispatchForm({
             <select
               name="printer_id"
               className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
-              onChange={(event) => setSelectedPrinterId(event.currentTarget.value)}
+              onChange={(event) => setPreferredPrinterId(event.currentTarget.value)}
               required
               value={selectedPrinterId}
             >
@@ -269,7 +269,7 @@ export function DispatchForm({
           </div>
           <div className="lg:col-span-2">
             <button
-              className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800 disabled:bg-slate-300 disabled:text-slate-600"
+              className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800 disabled:bg-slate-300 disabled:text-white"
               disabled={artifact.state !== 'ready' || submitting}
               type="submit"
             >

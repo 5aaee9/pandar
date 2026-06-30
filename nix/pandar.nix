@@ -161,7 +161,7 @@
         src = frontendWorkspaceSource;
         npmWorkspace = "pandar-auth";
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-ZBZDEj3zGkSDz6tiuKNbJsK63QHIKEqg1sFw7cvKgo0=";
+        npmDepsHash = "sha256-23LDr/5jiJKmSR+ll4C63E0JKKIFeRJNtBlQXksVjqk=";
 
         nativeBuildInputs = [
           pkgs.makeWrapper
@@ -245,7 +245,7 @@
         version = "0.1.0";
         src = frontendWorkspaceSource;
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-dsLB/8FVpSa0zV6FV+UyZk9jnsnQjDAbBzucICJ/gCE=";
+        npmDepsHash = "sha256-23LDr/5jiJKmSR+ll4C63E0JKKIFeRJNtBlQXksVjqk=";
         npmBuildScript = "build:web";
 
         nativeBuildInputs = [
@@ -350,7 +350,7 @@
                   baseURL = "https://auth.example";
                   trustedOrigins = [ "https://app.example" ];
                   dashboardCallbackUrl = "https://app.example/auth/betterauth/callback";
-                  dashboardSignOutUrl = "https://app.example/auth/betterauth/sign-out";
+                  dashboardSignOutUrl = "https://app.example/auth/betterauth/session";
                   databaseFile = "/var/lib/pandar-auth/auth.db";
                   jwtMaxAgeSeconds = 3600;
                   email = {
@@ -402,7 +402,7 @@
           test "${authService.environment.PANDAR_AUTH_BASE_URL}" = "https://auth.example"
           test "${authService.environment.PANDAR_AUTH_TRUSTED_ORIGINS}" = "https://app.example"
           test "${authService.environment.PANDAR_AUTH_DASHBOARD_CALLBACK_URL}" = "https://app.example/auth/betterauth/callback"
-          test "${authService.environment.PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL}" = "https://app.example/auth/betterauth/sign-out"
+          test "${authService.environment.PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL}" = "https://app.example/auth/betterauth/session"
           test "${authService.environment.PANDAR_AUTH_DATABASE_FILE}" = "/var/lib/pandar-auth/auth.db"
           test "${authService.environment.PANDAR_AUTH_JWT_MAX_AGE_SECONDS}" = "3600"
           test "${authService.environment.PANDAR_AUTH_MAGIC_LINK_TTL_SECONDS}" = "1800"
@@ -422,7 +422,7 @@
         export PANDAR_AUTH_BASE_URL="http://127.0.0.1:3001"
         export PANDAR_AUTH_TRUSTED_ORIGINS="http://127.0.0.1:3000"
         export PANDAR_AUTH_DASHBOARD_CALLBACK_URL="http://127.0.0.1:3000/auth/betterauth/callback"
-        export PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL="http://127.0.0.1:3000/auth/betterauth/sign-out"
+        export PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL="http://127.0.0.1:3000/auth/betterauth/session"
         export PANDAR_AUTH_DATABASE_FILE="$TMPDIR/auth.db"
         export PANDAR_AUTH_JWT_MAX_AGE_SECONDS="3600"
         export PANDAR_AUTH_MAGIC_LINK_TTL_SECONDS="1800"
@@ -448,7 +448,7 @@
         export PANDAR_AUTH_BASE_URL="http://127.0.0.1:3001"
         export PANDAR_AUTH_TRUSTED_ORIGINS="http://127.0.0.1:3000"
         export PANDAR_AUTH_DASHBOARD_CALLBACK_URL="http://127.0.0.1:3000/auth/betterauth/callback"
-        export PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL="http://127.0.0.1:3000/auth/betterauth/sign-out"
+        export PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL="http://127.0.0.1:3000/auth/betterauth/session"
         export PANDAR_AUTH_DATABASE_FILE="$TMPDIR/pandar-auth-smoke.db"
         export PANDAR_AUTH_JWT_MAX_AGE_SECONDS="3600"
         export PANDAR_AUTH_MAGIC_LINK_TTL_SECONDS="1800"
@@ -466,7 +466,7 @@
         cd ${frontendSource}
         ${pkgs.nodejs_24}/bin/node \
           --experimental-strip-types \
-          app/auth/betterauth/cookie.smoke.mjs
+          scripts/auth/betterauth/cookie.smoke.mjs
         touch "$out"
       '';
 
@@ -474,7 +474,7 @@
         cd ${frontendSource}
         ${pkgs.nodejs_24}/bin/node \
           --experimental-strip-types \
-          app/auth-redirect.smoke.mjs
+          scripts/auth-redirect.smoke.mjs
         touch "$out"
       '';
 

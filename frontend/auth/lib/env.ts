@@ -201,7 +201,7 @@ export const env: Env = {
   ),
   dashboardSignOutUrl: readString(
     "PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL",
-    `${DEFAULT_DASHBOARD_URL}/auth/betterauth/sign-out`,
+    `${DEFAULT_DASHBOARD_URL}/auth/betterauth/session`,
   ),
   jwtMaxAgeSeconds: readPositiveInteger(
     "PANDAR_AUTH_JWT_MAX_AGE_SECONDS",

@@ -1,19 +1,7 @@
 import assert from "node:assert/strict";
-import { pathToFileURL } from "node:url";
 
-const authRedirectModuleUrl = pathToFileURL(
-  new URL("./auth-redirect.ts", import.meta.url).pathname,
-);
-const signOutRedirectModuleUrl = pathToFileURL(
-  new URL("./auth/betterauth/sign-out-redirect.ts", import.meta.url).pathname,
-);
-
-const { dashboardAuthRedirectTarget } = await import(
-  authRedirectModuleUrl.href
-);
-const { safeSignOutRedirectTarget } = await import(
-  signOutRedirectModuleUrl.href
-);
+import { dashboardAuthRedirectTarget } from "../app/auth-redirect.ts";
+import { safeSignOutRedirectTarget } from "../app/auth/betterauth/sign-out-redirect.ts";
 
 const betterAuth = {
   provider: "betterauth",
@@ -90,7 +78,7 @@ assert.equal(
     provider: betterAuth,
     meStatus: 401,
   }),
-  "/auth/betterauth/sign-out?next=https%3A%2F%2Fauth.example%2Fsign-in",
+  "https://auth.example/sign-in",
 );
 assert.equal(
   dashboardAuthRedirectTarget({
@@ -98,7 +86,7 @@ assert.equal(
     provider: logto,
     meStatus: 401,
   }),
-  "/auth/betterauth/sign-out?next=https%3A%2F%2Flogto.example%2Fsign-in",
+  "https://logto.example/sign-in",
 );
 assert.equal(
   dashboardAuthRedirectTarget({
@@ -106,7 +94,7 @@ assert.equal(
     provider: clerk,
     meStatus: 401,
   }),
-  "/auth/betterauth/sign-out?next=%2Fsign-in",
+  "/sign-in",
 );
 assert.equal(
   dashboardAuthRedirectTarget({

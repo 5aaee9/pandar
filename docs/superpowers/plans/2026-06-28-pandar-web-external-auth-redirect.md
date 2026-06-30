@@ -14,7 +14,7 @@
 
 - Create `frontend/app/auth-redirect.ts`: pure dashboard auth redirect decision helper. No value imports from `api-auth.ts` or any Next runtime module.
 - Create `frontend/app/auth/betterauth/sign-out-redirect.ts`: pure sign-out `next` allowlist helper. No Next runtime imports.
-- Create `frontend/app/auth-redirect.smoke.mjs`: Node smoke test importing the pure TypeScript helpers with `pathToFileURL`.
+- Create `frontend/scripts/auth-redirect.smoke.mjs`: Node smoke test importing the pure TypeScript helpers with `pathToFileURL`.
 - Modify `frontend/app/dashboard-types.ts`: add optional `status?: number` to each `FetchResult` variant.
 - Modify `frontend/app/page.tsx`: add redirect wiring and propagate `fetchJson` status.
 - Modify `frontend/app/auth/betterauth/sign-out/route.ts`: delegate safe post-sign-out target selection to the new pure helper.
@@ -27,11 +27,11 @@
 
 - Create: `frontend/app/auth-redirect.ts`
 - Create: `frontend/app/auth/betterauth/sign-out-redirect.ts`
-- Create: `frontend/app/auth-redirect.smoke.mjs`
+- Create: `frontend/scripts/auth-redirect.smoke.mjs`
 
 - [ ] **Step 1: Add the red smoke test**
 
-Create `frontend/app/auth-redirect.smoke.mjs`:
+Create `frontend/scripts/auth-redirect.smoke.mjs`:
 
 ```js
 import assert from "node:assert/strict";
@@ -207,7 +207,7 @@ Run:
 
 ```bash
 cd frontend
-node --experimental-strip-types app/auth-redirect.smoke.mjs
+node --experimental-strip-types scripts/auth-redirect.smoke.mjs
 ```
 
 Expected: FAIL with a module-not-found error for `auth-redirect.ts` or `sign-out-redirect.ts`.
@@ -270,7 +270,7 @@ Run:
 
 ```bash
 cd frontend
-node --experimental-strip-types app/auth-redirect.smoke.mjs
+node --experimental-strip-types scripts/auth-redirect.smoke.mjs
 ```
 
 Expected: PASS with exit code 0.
@@ -282,7 +282,7 @@ Expected: PASS with exit code 0.
 - Modify: `frontend/app/dashboard-types.ts`
 - Modify: `frontend/app/page.tsx`
 - Modify: `frontend/app/auth/betterauth/sign-out/route.ts`
-- Test: `frontend/app/auth-redirect.smoke.mjs`
+- Test: `frontend/scripts/auth-redirect.smoke.mjs`
 
 - [ ] **Step 1: Add optional HTTP status to `FetchResult`**
 
@@ -396,7 +396,7 @@ Run:
 
 ```bash
 cd frontend
-node --experimental-strip-types app/auth-redirect.smoke.mjs
+node --experimental-strip-types scripts/auth-redirect.smoke.mjs
 npm run build
 ```
 
@@ -418,7 +418,7 @@ pandarWebAuthRedirectSmokeCheck = pkgs.runCommand "pandar-web-auth-redirect-smok
   cd ${frontendSource}
   ${pkgs.nodejs_24}/bin/node \
     --experimental-strip-types \
-    app/auth-redirect.smoke.mjs
+    scripts/auth-redirect.smoke.mjs
   touch "$out"
 '';
 ```
@@ -456,7 +456,7 @@ Expected: all commands exit 0 and `nix flake check --no-build --show-trace` list
 
 ```bash
 cd frontend
-node --experimental-strip-types app/auth-redirect.smoke.mjs
+node --experimental-strip-types scripts/auth-redirect.smoke.mjs
 ```
 
 - [ ] Run the frontend build:

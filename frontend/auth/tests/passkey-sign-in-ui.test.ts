@@ -54,4 +54,19 @@ describe("passkey sign-in UI", () => {
       expect(i18n).toMatch(new RegExp(`${key}:`));
     }
   });
+
+  it("returns to the dashboard through a POST navigation after issuer sign-out", async () => {
+    const signOutClient = await readSource("app/sign-out/sign-out-client.tsx");
+    const env = await readSource("lib/env.ts");
+
+    expect(env).toMatch(/DEFAULT_DASHBOARD_URL}\/auth\/betterauth\/session/);
+    expect(signOutClient).not.toMatch(/fetch\(dashboardSignOutUrl/);
+    expect(signOutClient).toMatch(/document\.createElement\("form"\)/);
+    expect(signOutClient).toMatch(/form\.method = "post"/);
+    expect(signOutClient).toMatch(/form\.action = dashboardSignOutUrl/);
+    expect(signOutClient).toMatch(/form\.submit\(\)/);
+    expect(signOutClient).toMatch(
+      /<form action=\{dashboardSignOutUrl\} method="post">/,
+    );
+  });
 });

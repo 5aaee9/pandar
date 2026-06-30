@@ -53,7 +53,7 @@ Update `fetchJson` in `page.tsx` to include optional `status?: number` on `Fetch
 
 ## Test Plan
 
-Add `frontend/app/auth-redirect.smoke.mjs`, run with Node 24 `--experimental-strip-types`, importing the TypeScript helpers directly. The smoke script must avoid importing Next route handlers so it can run in the lightweight Nix check without a Next server runtime.
+Add `frontend/scripts/auth-redirect.smoke.mjs`, run with Node 24 `--experimental-strip-types`, importing the TypeScript helpers directly. The smoke script must avoid importing Next route handlers so it can run in the lightweight Nix check without a Next server runtime.
 
 Assertions for `frontend/app/auth-redirect.ts`:
 

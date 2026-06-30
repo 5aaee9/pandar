@@ -4,6 +4,8 @@ import { apiHeaders } from "../../../../../../api-auth";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 
+export const dynamic = "force-dynamic";
+
 type RouteContext = {
   params: Promise<{
     tenantId: string;
@@ -18,17 +20,15 @@ export async function POST(request: Request, context: RouteContext) {
   if (contentType) {
     headers.set("content-type", contentType);
   }
+  const upstreamUrl = `${apiUrl}/api/v1/tenants/${encodeURIComponent(tenantId)}/printers/${encodeURIComponent(printerId)}/jobs`;
 
-  const response = await fetch(
-    `${apiUrl}/api/v1/tenants/${encodeURIComponent(tenantId)}/printers/${encodeURIComponent(printerId)}/jobs`,
-    {
-      method: "POST",
-      cache: "no-store",
-      headers,
-      body: request.body,
-      duplex: "half",
-    } as RequestInit & { duplex: "half" },
-  );
+  const response = await fetch(upstreamUrl, {
+    method: "POST",
+    cache: "no-store",
+    headers,
+    body: request.body,
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
 
   return new NextResponse(response.body, {
     status: response.status,

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 
 import { authProviderConfig } from "./auth-provider";
+import { redirect } from "next/navigation";
 
 const apiToken = process.env.APP_API_TOKEN;
 const staticAuthToken = process.env.APP_AUTH_BEARER_TOKEN;
@@ -26,6 +27,17 @@ export async function apiHeaders(contentType?: string) {
   }
 
   return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+export async function requireAuth() {
+  const cookieStore = await cookies();
+  if (!cookieStore.get(authCookieName)?.value) {
+    const signInUrl = authProviderConfig().signInUrl;
+    if (signInUrl) {
+      redirect(signInUrl);
+    }
+    throw new Error("Authentication required");
+  }
 }
 
 export async function authSource(): Promise<{

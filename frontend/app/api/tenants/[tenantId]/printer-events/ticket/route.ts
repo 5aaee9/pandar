@@ -5,6 +5,8 @@ import type { PrinterEventTicket } from "../../../../../dashboard-types";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 
+export const dynamic = "force-dynamic";
+
 type RouteContext = {
   params: Promise<{
     tenantId: string;
@@ -13,14 +15,12 @@ type RouteContext = {
 
 export async function POST(_request: Request, context: RouteContext) {
   const { tenantId } = await context.params;
-  const response = await fetch(
-    `${apiUrl}/api/v1/tenants/${encodeURIComponent(tenantId)}/printer-events/tickets`,
-    {
-      method: "POST",
-      cache: "no-store",
-      headers: await apiHeaders(),
-    },
-  );
+  const upstreamUrl = `${apiUrl}/api/v1/tenants/${encodeURIComponent(tenantId)}/printer-events/tickets`;
+  const response = await fetch(upstreamUrl, {
+    method: "POST",
+    cache: "no-store",
+    headers: await apiHeaders(),
+  });
 
   if (!response.ok) {
     return NextResponse.json(

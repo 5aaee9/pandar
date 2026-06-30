@@ -42,10 +42,10 @@ export async function OnboardingPanel({ me }: { me: MeResponse }) {
 }
 
 async function ProviderLinks({ signInUrl, signOutUrl }: { signInUrl: string | null; signOutUrl: string | null }) {
-  const t = await getTranslations('onboarding')
   if (!signInUrl && !signOutUrl) {
     return null
   }
+  const t = await getTranslations('onboarding')
 
   return (
     <div className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-3">

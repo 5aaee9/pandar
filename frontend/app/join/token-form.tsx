@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { LogIn } from "lucide-react";
 
@@ -14,17 +14,16 @@ export function JoinTokenForm({
   action: (formData: FormData) => void;
 }) {
   const t = useTranslations("join");
-  const [token, setToken] = useState("");
-
-  useEffect(() => {
-    setToken(window.location.hash.slice(1));
-  }, []);
+  const [token, setToken] = useState(() =>
+    typeof window === "undefined" ? "" : window.location.hash.slice(1),
+  );
 
   return (
     <form action={action} className="grid gap-4 px-4 py-4">
       <div className="grid gap-1.5">
         <Label htmlFor="join-token">{t("joinToken")}</Label>
         <Input
+          suppressHydrationWarning
           className="font-mono"
           id="join-token"
           name="token"

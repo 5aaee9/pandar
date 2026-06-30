@@ -67,7 +67,7 @@ For a self-hosted Better Auth deployment, run the optional `pandar-auth` service
 PANDAR_AUTH_BASE_URL=https://auth.example.com
 PANDAR_AUTH_TRUSTED_ORIGINS=https://pandar.example.com
 PANDAR_AUTH_DASHBOARD_CALLBACK_URL=https://pandar.example.com/auth/betterauth/callback
-PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL=https://pandar.example.com/auth/betterauth/sign-out
+PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL=https://pandar.example.com/auth/betterauth/session
 PANDAR_AUTH_DATABASE_FILE=/var/lib/pandar-auth/auth.db
 PANDAR_AUTH_JWT_MAX_AGE_SECONDS=43200
 PANDAR_AUTH_MAGIC_LINK_TTL_SECONDS=1800

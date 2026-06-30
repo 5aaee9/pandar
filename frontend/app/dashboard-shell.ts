@@ -40,7 +40,7 @@ export function dashboardTenantHref(
   });
 }
 
-export function dashboardPath(view: DashboardView, query: DashboardQuery = {}) {
+function dashboardPath(view: DashboardView, query: DashboardQuery = {}) {
   const params = new URLSearchParams();
   if (query.tenant) params.set("tenant", query.tenant);
   if (query.command) params.set("command", query.command);

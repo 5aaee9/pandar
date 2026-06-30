@@ -18,7 +18,7 @@ In scope:
 - Change the `pandar-web` Better Auth callback `GET` handler to read `token` from the query string, validate it with the existing compact-JWT and issuer/audience checks, set the existing HTTP-only bearer cookie, and redirect directly to `/` with `303 See Other`.
 - Add a framework-free `frontend/app/auth/betterauth/callback-redirect.ts` helper so the callback redirect decision can be tested under bare Node, following the existing `sign-out-redirect.ts` smoke-test pattern.
 - Remove the callback page HTML/script and remove the callback `POST` handler because the callback no longer needs a browser bridge.
-- Add `frontend/app/auth/betterauth/callback.smoke.mjs` to exercise the callback helper and route-wrapper source contract.
+- Add `frontend/scripts/auth/betterauth/callback.smoke.mjs` to exercise the callback helper and route-wrapper source contract.
 - Add `frontend/auth/scripts/smoke-dashboard-token-redirect.mjs` to exercise the issuer redirect helper directly.
 - Update `docs/architecture.md` and `docs/roadmap.md` to describe the direct callback redirect contract. Leave existing `docs/superpowers/` specs and plans as historical records.
 
@@ -91,7 +91,7 @@ The issuer redirect helper and dashboard callback handler must deploy together. 
 
 ## Validation
 
-- From `frontend`, run `node --experimental-strip-types app/auth/betterauth/callback.smoke.mjs`. This smoke check imports `frontend/app/auth/betterauth/callback-redirect.ts`, calls the helper with valid, missing, and malformed tokens, and asserts the status, target, token, and error body. It also reads `frontend/app/auth/betterauth/callback/route.ts` as source text to assert the route calls `NextResponse.redirect`, sets the auth cookie, sets `cache-control: no-store`, sets `referrer-policy: no-referrer`, and does not export `POST` or `callbackHtml`.
+- From `frontend`, run `node --experimental-strip-types scripts/auth/betterauth/callback.smoke.mjs`. This smoke check imports `frontend/app/auth/betterauth/callback-redirect.ts`, calls the helper with valid, missing, and malformed tokens, and asserts the status, target, token, and error body. It also reads `frontend/app/auth/betterauth/callback/route.ts` as source text to assert the route calls `NextResponse.redirect`, sets the auth cookie, sets `cache-control: no-store`, sets `referrer-policy: no-referrer`, and does not export `POST` or `callbackHtml`.
 - From `frontend/auth`, run `node --experimental-strip-types scripts/smoke-dashboard-token-redirect.mjs`. This smoke check imports `frontend/auth/lib/token.ts`, stubs `fetch` and `window.location`, and asserts the helper uses `URL.searchParams` to set a query parameter named `token`, preserves an existing query parameter, and does not use `#token=`.
 - From `frontend/auth`, run `npm test` for the existing Vitest suite.
 - Run `npm run build` in `frontend/auth` and `frontend` if dependency and environment availability allow it.

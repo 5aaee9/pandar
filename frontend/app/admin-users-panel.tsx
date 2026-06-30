@@ -5,7 +5,8 @@ import { createJoinLink, revokeJoinLink, updateTenantUserRole } from './actions'
 import type { JoinLink, Tenant, User, UserIdentity } from './dashboard-types'
 import { EmptyState, Tag } from './dashboard-ui'
 import { ConfirmForm } from './confirm-dialog'
-import { Input, PrimaryButton, SecretActionResult, Select, Subhead, roles, useAdminDate } from './admin-panel-shared'
+import { roles, useAdminDate } from './admin-model'
+import { Input, PrimaryButton, SecretActionResult, Select, Subhead } from './admin-panel-shared'
 
 export function CreateJoinLinkForm({ tenantId }: { tenantId: string }) {
   const t = useTranslations('admin')

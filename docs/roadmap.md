@@ -110,6 +110,7 @@
 - Fixed the GitHub Checks workflow after the passkey autofill frontend lockfile update by refreshing the Nix `pandar-web` npm dependency hash used by package and NixOS module checks.
 - Consolidated frontend npm package management at the repository root: `pandar-web`, `pandar-auth`, and `pandar-plugin-local` now share one root workspace lockfile and root build/test scripts; shared dependency versions were aligned, auth reuses the dashboard `cn` helper through a thin re-export, and Nix/Docker/developer docs were updated for root-workspace builds.
 - Replaced redirect-backed dashboard action prompts (`status=...`, such as refresh/retry/dispatch queued results) with shadcn Sonner toasts; consumed statuses are removed from the URL and dashboard navigation while durable live notifications, admin secret results, and data-integrity errors remain in-page.
+- Completed a React Doctor hardening pass across `pandar-web` and `pandar-auth`: exported server actions now require request-cookie auth before side effects, the dashboard sign-out cookie clear moved to a POST-only route, locale mutation moved from a server action to an explicit route handler, stale-effect/state and accessibility findings were removed, unused frontend surfaces were deleted or moved out of the app tree, and `npx react-doctor@latest --verbose` now reports 100/100 for both frontend projects.
 
 ## Completed: Phase 30 Better Auth Provider Compatibility
 

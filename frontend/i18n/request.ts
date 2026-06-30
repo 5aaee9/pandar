@@ -1,17 +1,23 @@
 import { getRequestConfig } from "next-intl/server";
 import { headers, cookies } from "next/headers";
 
+import enMessages from "../messages/en.json";
+import zhMessages from "../messages/zh.json";
 import { defaultLocale, isLocale, type Locale } from "./routing";
 
+const messagesByLocale = {
+  en: enMessages,
+  zh: zhMessages,
+} satisfies Record<Locale, unknown>;
+
 export default getRequestConfig(async () => {
-  const cookieStore = await cookies();
-  const headerList = await headers();
+  const [cookieStore, headerList] = await Promise.all([cookies(), headers()]);
   const cookieLocale = cookieStore.get("locale")?.value;
   const acceptLanguage = headerList.get("accept-language") ?? "";
   const locale: Locale = resolveLocale(cookieLocale, acceptLanguage);
   return {
     locale,
-    messages: (await import(`../messages/${locale}.json`)).default,
+    messages: messagesByLocale[locale],
   };
 });
 

@@ -25,7 +25,7 @@ export function dashboardAuthRedirectTarget({
     return provider.signInUrl;
   }
   if (source === "request_cookie" && meStatus === 401) {
-    return `/auth/betterauth/sign-out?next=${encodeURIComponent(provider.signInUrl)}`;
+    return provider.signInUrl;
   }
   return null;
 }

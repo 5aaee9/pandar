@@ -25,9 +25,11 @@ describe("tenant onboarding access", () => {
       />,
     );
 
-    await user.click(
-      screen.getByRole("combobox", { name: "Select tenant access action" }),
-    );
+    const trigger = screen.getByRole("button", {
+      name: "Select tenant access action",
+    });
+    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    await user.click(trigger);
 
     expect(screen.getByRole("menu")).toBeVisible();
     expect(
@@ -48,7 +50,7 @@ describe("tenant onboarding access", () => {
     );
 
     await user.click(
-      screen.getByRole("combobox", { name: "Select tenant access action" }),
+      screen.getByRole("button", { name: "Select tenant access action" }),
     );
     await user.click(screen.getByRole("menuitem", { name: /create tenant/i }));
 

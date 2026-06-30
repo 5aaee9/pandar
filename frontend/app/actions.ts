@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 
-import { apiHeaders } from "./api-auth";
+import { apiHeaders, requireAuth } from "./api-auth";
 import type { Agent, JoinLink, Tenant, TenantToken } from "./dashboard-types";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
@@ -36,6 +36,7 @@ export type SecretActionState =
   | null;
 
 export async function discoverPrinters(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const agentId = stringField(formData, "agent_id");
   const timeoutValue = stringField(formData, "timeout_seconds");
@@ -59,6 +60,7 @@ export async function discoverPrinters(formData: FormData) {
 }
 
 export async function refreshPrinters(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const agentId = stringField(formData, "agent_id");
   const response = await postJson(
@@ -74,24 +76,25 @@ export async function refreshPrinters(formData: FormData) {
 }
 
 export async function refreshAllAgents(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const agentIds = formData
     .getAll("agent_id")
     .filter((value): value is string => typeof value === "string");
-  let allOk = true;
-  for (const agentId of agentIds) {
-    const response = await postJson(
-      `/api/v1/tenants/${tenantId}/agents/${agentId}/refresh-printers`,
-      {},
-    );
-    if (!response.ok) {
-      allOk = false;
-    }
-  }
+  const responses = await Promise.all(
+    agentIds.map((agentId) =>
+      postJson(
+        `/api/v1/tenants/${tenantId}/agents/${agentId}/refresh-printers`,
+        {},
+      ),
+    ),
+  );
+  const allOk = responses.every((response) => response.ok);
   redirect(statusUrl(tenantId, allOk ? "refresh_queued" : "refresh_partial"));
 }
 
 export async function diagnosePrinter(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const agentId = stringField(formData, "agent_id");
   const response = await fetch(
@@ -117,11 +120,12 @@ export async function createTenantToken(
   _previousState: SecretActionState,
   formData: FormData,
 ): Promise<SecretActionState> {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
-  const scopes = stringField(formData, "scopes")
-    .split(",")
-    .map((scope) => scope.trim())
-    .filter(Boolean);
+  const scopes = stringField(formData, "scopes").split(",").flatMap((scope) => {
+    const trimmed = scope.trim();
+    return trimmed ? [trimmed] : [];
+  });
   const response = await postJson(`/api/v1/tenants/${tenantId}/tenant-tokens`, {
     name: stringField(formData, "name"),
     scopes,
@@ -144,6 +148,7 @@ export async function createTenantToken(
 }
 
 export async function revokeTenantToken(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const tokenId = stringField(formData, "token_id");
   const response = await fetch(
@@ -165,6 +170,7 @@ export async function rotateTenantToken(
   _previousState: SecretActionState,
   formData: FormData,
 ): Promise<SecretActionState> {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const tokenId = stringField(formData, "token_id");
   const response = await postJson(
@@ -190,6 +196,7 @@ export async function rotateTenantToken(
 }
 
 export async function createTenantFromExternal(formData: FormData) {
+  await requireAuth();
   const response = await postJson("/api/v1/onboarding/tenants", {
     slug: stringField(formData, "slug"),
     display_name: stringField(formData, "display_name"),
@@ -207,6 +214,7 @@ export async function createJoinLink(
   _previousState: SecretActionState,
   formData: FormData,
 ): Promise<SecretActionState> {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const response = await postJson(`/api/v1/tenants/${tenantId}/join-links`, {
     role: stringField(formData, "role"),
@@ -231,6 +239,7 @@ export async function createJoinLink(
 }
 
 export async function revokeJoinLink(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const joinLinkId = stringField(formData, "join_link_id");
   const response = await fetch(
@@ -249,6 +258,7 @@ export async function revokeJoinLink(formData: FormData) {
 }
 
 export async function acceptJoinLink(formData: FormData) {
+  await requireAuth();
   const response = await postJson("/api/v1/join-links/accept", {
     token: stringField(formData, "token"),
   });
@@ -262,6 +272,7 @@ export async function acceptJoinLink(formData: FormData) {
 }
 
 export async function createTenantUser(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const response = await postJson(`/api/v1/tenants/${tenantId}/users`, {
     email: stringField(formData, "email"),
@@ -277,6 +288,7 @@ export async function createTenantUser(formData: FormData) {
 }
 
 export async function updateTenantUserRole(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const userId = stringField(formData, "user_id");
   const response = await fetch(
@@ -296,6 +308,7 @@ export async function updateTenantUserRole(formData: FormData) {
 }
 
 export async function linkUserIdentity(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const userId = stringField(formData, "user_id");
   const response = await postJson(
@@ -317,6 +330,7 @@ export async function createAgentPairing(
   _previousState: SecretActionState,
   formData: FormData,
 ): Promise<SecretActionState> {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const response = await postJson(
     `/api/v1/tenants/${tenantId}/agent-pairings`,
@@ -338,6 +352,7 @@ export async function createAgentPairing(
 }
 
 export async function retryDispatchJob(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const jobId = stringField(formData, "job_id");
   const response = await postJson(
@@ -355,24 +370,24 @@ export async function retryDispatchJob(formData: FormData) {
 }
 
 export async function retryDispatchJobs(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const jobIds = formData
     .getAll("job_id")
     .filter((value): value is string => typeof value === "string");
-  let allOk = true;
-  for (const jobId of jobIds) {
-    const response = await postJson(
-      `/api/v1/tenants/${tenantId}/jobs/${jobId}/retry-dispatch`,
-      { reason: null },
-    );
-    if (!response.ok) {
-      allOk = false;
-    }
-  }
+  const responses = await Promise.all(
+    jobIds.map((jobId) =>
+      postJson(`/api/v1/tenants/${tenantId}/jobs/${jobId}/retry-dispatch`, {
+        reason: null,
+      }),
+    ),
+  );
+  const allOk = responses.every((response) => response.ok);
   redirect(statusUrl(tenantId, allOk ? "retry_queued" : "retry_partial"));
 }
 
 export async function reprintJob(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const jobId = stringField(formData, "job_id");
   const response = await postJson(
@@ -390,6 +405,7 @@ export async function reprintJob(formData: FormData) {
 }
 
 export async function duplicateJob(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const jobId = stringField(formData, "job_id");
   const plateId = nullableField(formData, "plate_id");
@@ -414,6 +430,7 @@ export async function duplicateJob(formData: FormData) {
 }
 
 export async function controlPrinter(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const printerId = stringField(formData, "printer_id");
   const action = stringField(formData, "action");
@@ -434,6 +451,7 @@ export async function controlPrinter(formData: FormData) {
 }
 
 export async function createPluginTicket(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const redirectUrl = stringField(formData, "redirect_url");
   const response = await postJson(

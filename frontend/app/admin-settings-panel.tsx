@@ -11,7 +11,8 @@ import {
 import type { Agent, AuditEvent, Tenant, TenantToken } from './dashboard-types'
 import { DetailLine, EmptyState, StatusBadge, Tag } from './dashboard-ui'
 import { ConfirmDialog, ConfirmForm } from './confirm-dialog'
-import { Input, PrimaryButton, SecretActionResult, Subhead, useAdminDate } from './admin-panel-shared'
+import { useAdminDate } from './admin-model'
+import { Input, PrimaryButton, SecretActionResult, Subhead } from './admin-panel-shared'
 
 export function CreateTenantTokenForm({ tenantId }: { tenantId: string }) {
   const t = useTranslations('admin')

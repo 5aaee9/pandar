@@ -1,15 +1,12 @@
-import { StrictMode, useState } from "react";
+import { StrictMode } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
-import {
-  ActionStatusToast,
-  actionStatusTone,
-  formatActionStatus,
-} from "./action-status-toast";
+import { actionStatusTone, formatActionStatus } from "./action-status";
+import { ActionStatusToast } from "./action-status-toast";
 import { DashboardShellHeader } from "./dashboard-shell-header";
 import type { DashboardQuery, DashboardView } from "./dashboard-shell";
 import type { Tenant } from "./dashboard-types";
@@ -96,21 +93,18 @@ describe("action status toast helpers", () => {
 
 describe("ActionStatusToast", () => {
   it("shows a success toast and clears only the status query parameter", async () => {
-    const onConsumed = vi.fn();
     setUrl("/devices?tenant=t1&status=refresh_queued");
 
-    renderWithMessages(<ActionStatusToast status="refresh_queued" onConsumed={onConsumed} />);
+    renderWithMessages(<ActionStatusToast status="refresh_queued" />);
 
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Refresh queued"));
-    expect(onConsumed).toHaveBeenCalledWith("refresh_queued");
     expect(window.location.pathname + window.location.search).toBe("/devices?tenant=t1");
   });
 
   it("shows a warning toast and preserves tenant plus command query parameters", async () => {
-    const onConsumed = vi.fn();
     setUrl("/devices?tenant=t1&command=c1&status=refresh_partial");
 
-    renderWithMessages(<ActionStatusToast status="refresh_partial" onConsumed={onConsumed} />);
+    renderWithMessages(<ActionStatusToast status="refresh_partial" />);
 
     await waitFor(() =>
       expect(toast.warning).toHaveBeenCalledWith(
@@ -121,21 +115,19 @@ describe("ActionStatusToast", () => {
   });
 
   it("shows an error toast for unexpected backend error codes", async () => {
-    const onConsumed = vi.fn();
     setUrl("/devices?tenant=t1&status=artifact_too_large");
 
-    renderWithMessages(<ActionStatusToast status="artifact_too_large" onConsumed={onConsumed} />);
+    renderWithMessages(<ActionStatusToast status="artifact_too_large" />);
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Artifact Too Large"));
   });
 
   it("does not duplicate toasts under Strict Mode effect replay", async () => {
-    const onConsumed = vi.fn();
     setUrl("/devices?tenant=t1&status=refresh_queued");
 
     renderWithMessages(
       <StrictMode>
-        <ActionStatusToast status="refresh_queued" onConsumed={onConsumed} />
+        <ActionStatusToast status="refresh_queued" />
       </StrictMode>,
     );
 
@@ -148,31 +140,28 @@ const tenants: Tenant[] = [
   { id: "t2", slug: "tenant-two", display_name: "Tenant Two", created_at: "2026-06-30T00:00:00Z" },
 ];
 
-function DashboardHeaderWithConsumedStatus({ actionStatus }: { actionStatus: string }) {
-  const [consumedStatus, setConsumedStatus] = useState<string | null>(null);
-  const pendingActionStatus = actionStatus && consumedStatus !== actionStatus ? actionStatus : undefined;
+function DashboardHeaderWithActionStatus({ actionStatus }: { actionStatus: string }) {
   const query: DashboardQuery = {
     tenant: "t1",
     command: "cmd1",
-    status: pendingActionStatus,
   };
   const view: DashboardView = "agents";
   return (
     <>
-      <ActionStatusToast status={pendingActionStatus} onConsumed={setConsumedStatus} />
+      <ActionStatusToast status={actionStatus} />
       <DashboardShellHeader query={query} selectedTenant={tenants[0]} tenants={tenants} view={view} />
     </>
   );
 }
 
-describe("consumed action status navigation", () => {
-  it("does not preserve consumed status when switching tenants", async () => {
+describe("action status navigation", () => {
+  it("does not preserve action status when switching tenants", async () => {
     const user = userEvent.setup();
     const assign = vi.fn<(url: string) => void>();
     stubLocationAssign(assign);
     setUrl("/agents?tenant=t1&command=cmd1&status=refresh_queued");
 
-    renderWithMessages(<DashboardHeaderWithConsumedStatus actionStatus="refresh_queued" />);
+    renderWithMessages(<DashboardHeaderWithActionStatus actionStatus="refresh_queued" />);
     await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
 
     await user.selectOptions(screen.getByRole("combobox"), "t2");

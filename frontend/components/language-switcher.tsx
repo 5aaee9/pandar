@@ -4,7 +4,6 @@ import { useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { useTransition } from 'react'
 
-import { setLocale } from '../i18n/actions'
 import { locales, type Locale } from '../i18n/routing'
 import { useSettings } from '../lib/settings-store'
 
@@ -24,7 +23,11 @@ export function LanguageSwitcher() {
     }
     startTransition(async () => {
       useSettings.setState({ locale: next })
-      await setLocale(next)
+      await fetch('/api/locale', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ locale: next }),
+      })
       router.refresh()
     })
   }

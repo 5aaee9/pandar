@@ -154,6 +154,7 @@ export function computeAttention(args: {
   }
 
   for (const job of jobs) {
+    const artifactFilename = job.artifact.filename;
     if (isJobFailed(job)) {
       const physical = job.print.status.toLowerCase() === "failed";
       items.push({
@@ -164,7 +165,7 @@ export function computeAttention(args: {
         kind: "job",
         reason: physical ? "job_print_failed" : "job_dispatch_failed",
         title: physical ? "Print failed" : "Dispatch failed",
-        label: job.artifact.filename,
+        label: artifactFilename,
         titleKey: {
           namespace: physical
             ? "attention.jobPrintFailed"
@@ -174,7 +175,7 @@ export function computeAttention(args: {
         labelKey: {
           namespace: "job",
           key: "filename",
-          values: { filename: job.artifact.filename },
+          values: { filename: artifactFilename },
         },
         mono: job.id,
         sectionId: "recovery",
@@ -189,13 +190,13 @@ export function computeAttention(args: {
         kind: "job",
         reason: "job_stalled",
         title: "Job stalled",
-        label: `${job.artifact.filename} · no progress for ${formatDuration(staleAgeMs(job, nowMs) ?? 0)}`,
+        label: `${artifactFilename} · no progress for ${formatDuration(staleAgeMs(job, nowMs) ?? 0)}`,
         titleKey: { namespace: "attention.jobStalled", key: "title" },
         labelKey: {
           namespace: "attention.jobStalled",
           key: "label",
           values: {
-            filename: job.artifact.filename,
+            filename: artifactFilename,
             duration: formatDuration(staleAgeMs(job, nowMs) ?? 0),
           },
         },
@@ -266,7 +267,7 @@ const enDuration: Translator = (key, values) => {
   return count === 1 ? "1 hour" : `${count} hours`;
 };
 
-export function formatDuration(ms: number, t: Translator = enDuration): string {
+function formatDuration(ms: number, t: Translator = enDuration): string {
   const minutes = Math.round(ms / 60000);
   if (minutes < 1) return t("lessThanMinute");
   if (minutes < 60) return t("minutes", { count: minutes });
@@ -306,10 +307,15 @@ const STATUS_SEVERITY: Array<{ severity: Severity; tokens: string[] }> = [
   },
 ];
 
-export function statusSeverity(value: string): Severity {
+const STATUS_SEVERITY_LOOKUP = STATUS_SEVERITY.map((group) => ({
+  severity: group.severity,
+  tokens: new Set(group.tokens),
+}));
+
+function statusSeverity(value: string): Severity {
   const normalized = value.toLowerCase();
-  for (const group of STATUS_SEVERITY) {
-    if (group.tokens.includes(normalized)) {
+  for (const group of STATUS_SEVERITY_LOOKUP) {
+    if (group.tokens.has(normalized)) {
       return group.severity;
     }
   }

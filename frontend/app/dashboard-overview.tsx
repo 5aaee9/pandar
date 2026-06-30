@@ -1,28 +1,14 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { useEffect, useState } from 'react'
 
-import type { AttentionItem, Health, Severity } from './dashboard-attention'
+import type { Health, Severity } from './dashboard-attention'
 import {
-  AttentionRow,
-  computeVerdict,
   StatCell,
   StatusIcon,
 } from './dashboard-status'
+import { computeVerdict } from './dashboard-status-model'
 import type { LiveState } from './dashboard-runtime-helpers'
-import type { Tenant } from './dashboard-types'
-
-export const NAV_SECTION_IDS = [
-  'printers',
-  'jobs',
-  'dispatch',
-  'recovery',
-  'diagnostics',
-  'activity',
-  'admin',
-] as const
-export type NavSectionId = (typeof NAV_SECTION_IDS)[number]
 
 export function FleetStatusStrip({
   health,
@@ -86,142 +72,4 @@ export function FleetStatusStrip({
       </div>
     </section>
   )
-}
-
-export function NeedsAttention({
-  items,
-  selectedTenant,
-}: {
-  items: AttentionItem[]
-  selectedTenant: Tenant | null
-}) {
-  const tAtt = useTranslations('overview')
-  if (items.length === 0) {
-    return null
-  }
-
-  let lastAgent = ''
-  let groupIndex = -1
-
-  return (
-    <section
-      aria-label={tAtt('ariaAttention')}
-      className="overflow-hidden rounded-lg border border-slate-200 bg-white"
-    >
-      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <div>
-          <h2 className="text-base font-semibold text-slate-900">{tAtt('attentionTitle')}</h2>
-          <p className="mt-0.5 text-sm text-slate-600">
-            {tAtt('attentionSubtitle', { count: items.length })}
-          </p>
-        </div>
-        <span className="text-xs text-slate-600">{tAtt('groupedByAgent')}</span>
-      </div>
-      <ul className="divide-y divide-slate-200">
-        {items.map((item) => {
-          const showGroup = item.agentName !== lastAgent
-          if (showGroup) {
-            lastAgent = item.agentName
-            groupIndex += 1
-          }
-          return (
-            <AttentionRow
-              key={item.id}
-              item={item}
-              showGroup={showGroup}
-              zebra={groupIndex % 2 === 1}
-              tenant={selectedTenant}
-            />
-          )
-        })}
-      </ul>
-    </section>
-  )
-}
-
-export function SectionNav({
-  attentionBySection,
-}: {
-  attentionBySection: Record<string, number>
-}) {
-  const tNav = useTranslations('nav')
-  const tAria = useTranslations('overview')
-  const active = useActiveSection(NAV_SECTION_IDS)
-  return (
-    <nav aria-label={tAria('ariaSections')} className="sticky top-0 z-20 border-y border-slate-200 bg-slate-100/95 backdrop-blur">
-      <ul className="flex gap-1 overflow-x-auto px-1 py-2">
-        {NAV_SECTION_IDS.map((section) => {
-          const count = attentionBySection[section] ?? 0
-          const isActive = active === section
-          return (
-            <li key={section}>
-              <a
-                href={`#${section}`}
-                aria-current={isActive ? 'true' : undefined}
-                className={`flex items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-sm transition-colors ${
-                  isActive
-                    ? 'bg-slate-900 text-white'
-                    : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-900'
-                }`}
-              >
-                {tNav(section)}
-                {count > 0 ? (
-                  <span
-                    className={`inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold ${
-                      isActive ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'
-                    }`}
-                  >
-                    {count}
-                  </span>
-                ) : null}
-              </a>
-            </li>
-          )
-        })}
-      </ul>
-    </nav>
-  )
-}
-
-function useActiveSection(ids: readonly string[]) {
-  const [active, setActive] = useState(ids[0] ?? '')
-  const key = ids.join(',')
-  useEffect(() => {
-    const visible = new Map<string, number>()
-    const elements = ids
-      .map((id) => document.getElementById(id))
-      .filter((element): element is HTMLElement => element !== null)
-    if (elements.length === 0) {
-      return
-    }
-    const pick = () => {
-      let best: { id: string; ratio: number } | null = null
-      for (const [id, ratio] of visible) {
-        if (ratio > 0 && (!best || ratio > best.ratio)) {
-          best = { id, ratio }
-        }
-      }
-      if (best) {
-        setActive(best.id)
-      }
-    }
-    const observers: IntersectionObserver[] = []
-    for (const element of elements) {
-      const id = element.id
-      const observer = new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            visible.set(id, entry.isIntersecting ? entry.intersectionRatio : 0)
-          }
-          pick()
-        },
-        { rootMargin: '-20% 0px -70% 0px', threshold: [0, 0.25, 0.5, 1] },
-      )
-      observer.observe(element)
-      observers.push(observer)
-    }
-    return () => observers.forEach((observer) => observer.disconnect())
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key])
-  return active
 }

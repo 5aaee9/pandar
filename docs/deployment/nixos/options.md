@@ -467,7 +467,7 @@ string
 _Default:_
 
 ```nix
-"http://127.0.0.1:3000/auth/betterauth/sign-out"
+"http://127.0.0.1:3000/auth/betterauth/session"
 ```
 
 ## services\.pandar-auth\.databaseFile

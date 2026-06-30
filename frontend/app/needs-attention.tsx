@@ -1,0 +1,58 @@
+'use client'
+
+import { useTranslations } from 'next-intl'
+
+import type { AttentionItem } from './dashboard-attention'
+import { AttentionRow } from './dashboard-status'
+import type { Tenant } from './dashboard-types'
+
+export function NeedsAttention({
+  items,
+  selectedTenant,
+}: {
+  items: AttentionItem[]
+  selectedTenant: Tenant | null
+}) {
+  const tAtt = useTranslations('overview')
+  if (items.length === 0) {
+    return null
+  }
+
+  let lastAgent = ''
+  let groupIndex = -1
+
+  return (
+    <section
+      aria-label={tAtt('ariaAttention')}
+      className="overflow-hidden rounded-lg border border-slate-200 bg-white"
+    >
+      <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">{tAtt('attentionTitle')}</h2>
+          <p className="mt-0.5 text-sm text-slate-600">
+            {tAtt('attentionSubtitle', { count: items.length })}
+          </p>
+        </div>
+        <span className="text-xs text-slate-600">{tAtt('groupedByAgent')}</span>
+      </div>
+      <ul className="divide-y divide-slate-200">
+        {items.map((item) => {
+          const showGroup = item.agentName !== lastAgent
+          if (showGroup) {
+            lastAgent = item.agentName
+            groupIndex += 1
+          }
+          return (
+            <AttentionRow
+              key={item.id}
+              item={item}
+              showGroup={showGroup}
+              zebra={groupIndex % 2 === 1}
+              tenant={selectedTenant}
+            />
+          )
+        })}
+      </ul>
+    </section>
+  )
+}

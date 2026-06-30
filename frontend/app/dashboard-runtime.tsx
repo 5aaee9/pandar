@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { AppSidebar } from '../components/app-sidebar'
@@ -25,8 +25,6 @@ import type {
 import { DashboardViewContent } from './dashboard-view-content'
 import {
   jobRecoveryStateKey,
-  mergeJob,
-  mergePrinter,
   printerEventWebSocketUrl,
   type LiveState,
   type RuntimeNotification,
@@ -62,6 +60,78 @@ type DashboardRuntimeProps = {
 
 const retryDelays = [1000, 2000, 5000, 10000]
 
+type RuntimeState = {
+  liveState: LiveState
+  lastEventAt: string | null
+  notifications: RuntimeNotification[]
+  printerUpdates: Record<string, Printer>
+  jobUpdates: Record<string, Job>
+  nowMs: number
+}
+
+type RuntimeAction =
+  | { type: 'live-state'; value: LiveState }
+  | { type: 'last-event'; value: string }
+  | { type: 'notification'; value: RuntimeNotification }
+  | { type: 'printer'; value: Printer }
+  | { type: 'job'; value: Job }
+  | { type: 'tick'; value: number }
+
+function initialRuntimeState(): RuntimeState {
+  return {
+    liveState: 'idle',
+    lastEventAt: null,
+    notifications: [],
+    printerUpdates: {},
+    jobUpdates: {},
+    nowMs: Date.now(),
+  }
+}
+
+function runtimeReducer(state: RuntimeState, action: RuntimeAction): RuntimeState {
+  switch (action.type) {
+    case 'live-state':
+      return { ...state, liveState: action.value }
+    case 'last-event':
+      return { ...state, lastEventAt: action.value }
+    case 'notification':
+      return { ...state, notifications: [action.value, ...state.notifications].slice(0, 12) }
+    case 'printer':
+      return {
+        ...state,
+        printerUpdates: { ...state.printerUpdates, [action.value.id]: action.value },
+      }
+    case 'job':
+      return {
+        ...state,
+        jobUpdates: { ...state.jobUpdates, [action.value.id]: action.value },
+      }
+    case 'tick':
+      return { ...state, nowMs: action.value }
+  }
+}
+
+function applyUpdates<T extends { id: string }>(base: T[], updates: Record<string, T>) {
+  const seen = new Set<string>()
+  const merged = base.map((item) => {
+    seen.add(item.id)
+    return updates[item.id] ?? item
+  })
+  const added = Object.values(updates).filter((item) => !seen.has(item.id))
+  return [...added, ...merged]
+}
+
+async function requestPrinterEventTicket(tenantId: string) {
+  const response = await fetch(
+    `/api/tenants/${encodeURIComponent(tenantId)}/printer-events/ticket`,
+    { method: 'POST' },
+  )
+  if (!response.ok) {
+    throw new Error(`ticket ${response.status}`)
+  }
+  return (await response.json()) as PrinterEventTicket
+}
+
 export function DashboardRuntime({
   apiUrl,
   tenants,
@@ -83,33 +153,35 @@ export function DashboardRuntime({
   errors,
   auth,
 }: DashboardRuntimeProps) {
-  const [printers, setPrinters] = useState(initialPrinters)
-  const [jobs, setJobs] = useState(initialJobs)
-  const [liveState, setLiveState] = useState<LiveState>('idle')
-  const [lastEventAt, setLastEventAt] = useState<string | null>(null)
-  const [notifications, setNotifications] = useState<RuntimeNotification[]>([])
-  const notificationKeys = useRef<Set<string>>(new Set())
-  const [nowMs, setNowMs] = useState(0)
-  const [consumedActionStatus, setConsumedActionStatus] = useState<string | null>(null)
-  const pendingActionStatus = actionStatus && consumedActionStatus !== actionStatus ? actionStatus : undefined
-  const consumeActionStatus = useCallback((status: string) => {
-    setConsumedActionStatus(status)
-  }, [])
-
-  useEffect(() => setPrinters(initialPrinters), [initialPrinters])
-  useEffect(() => setJobs(initialJobs), [initialJobs])
+  const [runtime, dispatchRuntime] = useReducer(runtimeReducer, undefined, initialRuntimeState)
+  const notificationKeys = useRef<Set<string> | null>(null)
+  if (notificationKeys.current === null) {
+    notificationKeys.current = new Set()
+  }
+  const printers = useMemo(
+    () => applyUpdates(initialPrinters, runtime.printerUpdates),
+    [initialPrinters, runtime.printerUpdates],
+  )
+  const jobs = useMemo(
+    () => applyUpdates(initialJobs, runtime.jobUpdates),
+    [initialJobs, runtime.jobUpdates],
+  )
+  const printersRef = useRef(printers)
+  const jobsRef = useRef(jobs)
+  printersRef.current = printers
+  jobsRef.current = jobs
 
   useEffect(() => {
     const addNotification = (notification: RuntimeNotification) => {
-      if (notificationKeys.current.has(notification.key)) {
+      if (notificationKeys.current?.has(notification.key)) {
         return
       }
-      notificationKeys.current.add(notification.key)
-      setNotifications((current) => [notification, ...current].slice(0, 12))
+      notificationKeys.current?.add(notification.key)
+      dispatchRuntime({ type: 'notification', value: notification })
     }
 
     if (!selectedTenant || auth.source === 'none') {
-      setLiveState(selectedTenant ? 'unavailable' : 'idle')
+      dispatchRuntime({ type: 'live-state', value: selectedTenant ? 'unavailable' : 'idle' })
       if (selectedTenant) {
         addNotification({
           key: `live:${selectedTenant.id}:auth-unavailable`,
@@ -133,7 +205,7 @@ export function DashboardRuntime({
         return
       }
       const delay = retryDelays[Math.min(failures - 1, retryDelays.length - 1)]
-      setLiveState(failures >= 3 ? 'unavailable' : 'disconnected')
+      dispatchRuntime({ type: 'live-state', value: failures >= 3 ? 'unavailable' : 'disconnected' })
       if (notifiedOutage !== outage) {
         notifiedOutage = outage
         addNotification({
@@ -150,38 +222,27 @@ export function DashboardRuntime({
     }
 
     const connect = async () => {
-      setLiveState('connecting')
+      dispatchRuntime({ type: 'live-state', value: 'connecting' })
       try {
-        const response = await fetch(
-          `/api/tenants/${encodeURIComponent(selectedTenant.id)}/printer-events/ticket`,
-          { method: 'POST' },
-        )
-        if (!response.ok) {
-          throw new Error(`ticket ${response.status}`)
-        }
-        const { ticket } = (await response.json()) as PrinterEventTicket
+        const { ticket } = await requestPrinterEventTicket(selectedTenant.id)
         socket = new WebSocket(printerEventWebSocketUrl(apiUrl, selectedTenant.id, ticket))
         socket.onopen = () => {
           failures = 0
           outage += 1
-          setLiveState('live')
+          dispatchRuntime({ type: 'live-state', value: 'live' })
         }
         socket.onmessage = (message) => {
           const event = JSON.parse(message.data as string) as PrinterEvent
           const observedAt = new Date().toISOString()
-          setLastEventAt(observedAt)
+          dispatchRuntime({ type: 'last-event', value: observedAt })
           if (event.type === 'printer_snapshot') {
-            setPrinters((current) => {
-              const previous = current.find((printer) => printer.id === event.printer.id) ?? null
-              notifyPrinter(previous, event.printer, observedAt)
-              return mergePrinter(current, event.printer)
-            })
+            const previous = printersRef.current.find((printer) => printer.id === event.printer.id) ?? null
+            notifyPrinter(previous, event.printer, observedAt)
+            dispatchRuntime({ type: 'printer', value: event.printer })
           } else {
-            setJobs((current) => {
-              const previous = current.find((job) => job.id === event.job.id) ?? null
-              notifyJob(previous, event.job, observedAt)
-              return mergeJob(current, event.job)
-            })
+            const previous = jobsRef.current.find((job) => job.id === event.job.id) ?? null
+            notifyJob(previous, event.job, observedAt)
+            dispatchRuntime({ type: 'job', value: event.job })
           }
         }
         socket.onerror = () => {
@@ -276,8 +337,7 @@ export function DashboardRuntime({
   }, [apiUrl, auth.source, selectedTenant])
 
   useEffect(() => {
-    const update = () => setNowMs(Date.now())
-    update()
+    const update = () => dispatchRuntime({ type: 'tick', value: Date.now() })
     const interval = setInterval(update, 60_000)
     return () => clearInterval(interval)
   }, [])
@@ -285,8 +345,8 @@ export function DashboardRuntime({
   const fleetEmpty = printers.length === 0 && agents.length === 0 && jobs.length === 0
   const health = useMemo(() => computeHealth(agents, printers, jobs), [agents, printers, jobs])
   const attentionItems = useMemo(
-    () => computeAttention({ agents, printers, jobs, nowMs }),
-    [agents, printers, jobs, nowMs],
+    () => computeAttention({ agents, printers, jobs, nowMs: runtime.nowMs }),
+    [agents, printers, jobs, runtime.nowMs],
   )
   const topSeverity = useMemo(() => maxSeverity(attentionItems), [attentionItems])
 
@@ -294,7 +354,6 @@ export function DashboardRuntime({
   const dashboardQuery: DashboardQuery = {
     tenant: selectedTenant?.id,
     command: view === 'agents' ? selectedCommandId : undefined,
-    status: pendingActionStatus,
   }
 
   return (
@@ -314,7 +373,7 @@ export function DashboardRuntime({
           view={view}
         />
         <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
-          <ActionStatusToast status={pendingActionStatus} onConsumed={consumeActionStatus} />
+          <ActionStatusToast status={actionStatus} />
 
           {errors.length > 0 ? (
             <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
@@ -329,15 +388,15 @@ export function DashboardRuntime({
             health={health}
             attentionItems={attentionItems}
             topSeverity={topSeverity}
-            liveState={liveState}
-            lastEventAt={lastEventAt}
+            liveState={runtime.liveState}
+            lastEventAt={runtime.lastEventAt}
             fleetEmpty={fleetEmpty}
             printers={printers}
             agents={agents}
             jobs={jobs}
             selectedCommand={selectedCommand}
             commandData={commandData}
-            notifications={notifications}
+            notifications={runtime.notifications}
             users={users}
             userIdentities={userIdentities}
             tenantTokens={tenantTokens}

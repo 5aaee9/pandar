@@ -4,7 +4,8 @@ import { useId, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { prettifyToken, statusMeta } from './dashboard-attention'
-import { PILL_TONES, StatusIcon } from './dashboard-status'
+import { StatusIcon } from './dashboard-status'
+import { PILL_TONES } from './dashboard-status-model'
 
 export function StatusBadge({ value }: { value: string }) {
   const tTokens = useTranslations('tokens')
@@ -60,15 +61,6 @@ export function HelpTip({ label, children }: { label: string; children: ReactNod
   )
 }
 
-export function Metric({ label, value }: { label: string; value: number | undefined }) {
-  return (
-    <div className="rounded-md border border-slate-300 bg-white px-4 py-3">
-      <div className="text-xs font-medium text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold">{value ?? '-'}</div>
-    </div>
-  )
-}
-
 export function EmptyState({ title, message }: { title: string; message: string }) {
   return (
     <div className="px-4 py-12 text-center">
@@ -76,31 +68,6 @@ export function EmptyState({ title, message }: { title: string; message: string 
       <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">{message}</p>
     </div>
   )
-}
-
-export function formatDate(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return value
-  }
-
-  return date.toLocaleString('en-US', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    timeZone: 'UTC',
-  })
-}
-
-export function formatBytes(value: number, formatNumber?: (n: number) => string) {
-  const fmt = (n: number) => (formatNumber ? formatNumber(n) : n.toFixed(1))
-  if (value < 1024) {
-    return `${formatNumber ? formatNumber(value) : value} B`
-  }
-  if (value < 1024 * 1024) {
-    return `${fmt(value / 1024)} KiB`
-  }
-
-  return `${fmt(value / (1024 * 1024))} MiB`
 }
 
 export function SectionHeader({ title, subtitle, meta }: { title: string; subtitle: string; meta: string }) {

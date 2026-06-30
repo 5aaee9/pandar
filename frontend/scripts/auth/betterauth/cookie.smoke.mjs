@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
-import { pathToFileURL } from "node:url";
 
-const cookieModuleUrl = pathToFileURL(
-  new URL("./cookie.ts", import.meta.url).pathname,
-);
-const {
+import {
   authCookieOptions,
   clearedAuthCookieOptions,
   isAllowedDashboardJwt,
   isCompactJwt,
   readAuthCookieConfig,
-} = await import(cookieModuleUrl.href);
+} from "../../../app/auth/betterauth/cookie.ts";
 
 const originalEnv = { ...process.env };
 

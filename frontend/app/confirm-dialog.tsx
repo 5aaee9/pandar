@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 
 const DIALOG_CLASS =
@@ -30,37 +30,20 @@ export function ConfirmDialog({
   const tCommon = useTranslations('common')
   const ref = useRef<HTMLDialogElement>(null)
 
-  useEffect(() => {
-    const dialog = ref.current
-    if (!dialog) {
-      return
-    }
-    if (open && !dialog.open) {
-      dialog.showModal()
-    } else if (!open && dialog.open) {
-      dialog.close()
-    }
-  }, [open])
-
   return (
     <dialog
       ref={ref}
       aria-label={title}
       aria-modal="true"
-      className={DIALOG_CLASS}
+      className={`${DIALOG_CLASS} ${open ? '' : 'hidden'}`}
       onClose={onCancel}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          onCancel()
-        }
-      }}
+      open={open}
     >
       <div className={CARD_CLASS}>
         <h2 className="text-base font-semibold text-slate-900">{title}</h2>
         <p className="mt-1.5 text-sm text-slate-600">{message}</p>
         <div className="mt-5 flex justify-end gap-2">
           <button
-            autoFocus
             className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 hover:bg-slate-50"
             onClick={onCancel}
             type="button"
@@ -107,6 +90,8 @@ export function ConfirmForm({
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const [open, setOpen] = useState(false)
+  const openDialog = () => setOpen(true)
+  const closeDialog = () => setOpen(false)
 
   return (
     <>
@@ -115,7 +100,7 @@ export function ConfirmForm({
         <button
           className={buttonClassName}
           disabled={disabled}
-          onClick={() => setOpen(true)}
+          onClick={openDialog}
           type="button"
         >
           {buttonLabel}
@@ -129,10 +114,10 @@ export function ConfirmForm({
         cancelLabel={cancelLabel}
         tone={tone}
         onConfirm={() => {
-          setOpen(false)
+          closeDialog()
           formRef.current?.requestSubmit()
         }}
-        onCancel={() => setOpen(false)}
+        onCancel={closeDialog}
       />
     </>
   )

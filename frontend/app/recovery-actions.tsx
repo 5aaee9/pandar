@@ -49,7 +49,12 @@ export function RecoveryActions({
     })
   }
 
-  const failedJobIds = jobs.filter((job) => dispatchFailed(job)).map((job) => job.id)
+  const failedJobIds = jobs.reduce<string[]>((ids, job) => {
+    if (dispatchFailed(job)) {
+      ids.push(job.id)
+    }
+    return ids
+  }, [])
   const allSelected = failedJobIds.length > 0 && failedJobIds.every((id) => selected.has(id))
 
   const toggleSelectAll = () => {
@@ -100,10 +105,9 @@ export function RecoveryActions({
           ) : (
             <>
               {failedJobIds.length > 0 ? (
-                <div
+                <output
                   aria-live="polite"
                   className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm"
-                  role="status"
                 >
                   <span className="text-slate-600">
                     {selected.size > 0
@@ -128,7 +132,7 @@ export function RecoveryActions({
                       </button>
                     </form>
                   ) : null}
-                </div>
+                </output>
               ) : null}
               <div className="divide-y divide-slate-200">
                 {jobs.map((job) => {
@@ -265,7 +269,12 @@ function ReasonForm({ action, tenantId, jobId, label, placeholder }: { action: (
     <form action={action} className="flex gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
       <input name="job_id" type="hidden" value={jobId} />
-      <input className="h-8 w-28 rounded-md border border-slate-300 px-2 text-xs" name="reason" placeholder={placeholder} />
+      <input
+        aria-label={label}
+        className="h-8 w-28 rounded-md border border-slate-300 px-2 text-xs"
+        name="reason"
+        placeholder={placeholder}
+      />
       <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">{label}</button>
     </form>
   )
@@ -277,11 +286,22 @@ function DuplicateForm({ tenantId, jobId, printers }: { tenantId: string; jobId:
     <form action={duplicateJob} className="flex flex-wrap gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
       <input name="job_id" type="hidden" value={jobId} />
-      <select name="printer_id" className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs">
+      <select
+        aria-label={t('samePrinter')}
+        name="printer_id"
+        className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs"
+      >
         <option value="">{t('samePrinter')}</option>
         {printers.map((printer) => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
       </select>
-      <input className="h-8 w-16 rounded-md border border-slate-300 px-2 text-xs" min="1" name="plate_id" placeholder={t('platePlaceholder')} type="number" />
+      <input
+        aria-label={t('platePlaceholder')}
+        className="h-8 w-16 rounded-md border border-slate-300 px-2 text-xs"
+        min="1"
+        name="plate_id"
+        placeholder={t('platePlaceholder')}
+        type="number"
+      />
       <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">{t('duplicate')}</button>
     </form>
   )

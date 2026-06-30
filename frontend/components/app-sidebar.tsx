@@ -65,17 +65,22 @@ export function AppSidebar({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" render={<a href={dashboardSidebarHref("devices", query)} />}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-                <Building2Icon className="size-4" />
-              </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold">{t("brand")}</span>
-                <span className="truncate text-xs text-sidebar-foreground/70">
-                  {selectedTenant ? selectedTenant.display_name : t("noTenant")}
-                </span>
-              </div>
-            </SidebarMenuButton>
+            <SidebarMenuButton
+              size="lg"
+              render={
+                <a href={dashboardSidebarHref("devices", query)}>
+                  <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+                    <Building2Icon className="size-4" />
+                  </div>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-semibold">{t("brand")}</span>
+                    <span className="truncate text-xs text-sidebar-foreground/70">
+                      {selectedTenant ? selectedTenant.display_name : t("noTenant")}
+                    </span>
+                  </div>
+                </a>
+              }
+            />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -90,11 +95,13 @@ export function AppSidebar({
                   <SidebarMenuButton
                     isActive={activeView === item.view}
                     tooltip={t(item.view)}
-                    render={<a href={dashboardSidebarHref(item.view, query)} />}
-                  >
-                    <Icon />
-                    <span>{t(item.view)}</span>
-                  </SidebarMenuButton>
+                    render={
+                      <a href={dashboardSidebarHref(item.view, query)}>
+                        <Icon />
+                        <span>{t(item.view)}</span>
+                      </a>
+                    }
+                  />
                 </SidebarMenuItem>
               )
             })}
@@ -115,10 +122,12 @@ export function AppSidebar({
                 <SidebarMenuItem key={tenant.id}>
                   <SidebarMenuButton
                     isActive={tenant.id === selectedTenant?.id}
-                    render={<a href={dashboardTenantHref(activeView, tenant.id, query)} />}
-                  >
-                    <span>{tenant.display_name}</span>
-                  </SidebarMenuButton>
+                    render={
+                      <a href={dashboardTenantHref(activeView, tenant.id, query)}>
+                        <span>{tenant.display_name}</span>
+                      </a>
+                    }
+                  />
                 </SidebarMenuItem>
               ))
             )}
@@ -129,10 +138,14 @@ export function AppSidebar({
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton render={<a href={signOutHref} />}>
-                <LogOutIcon />
-                <span>{t("logout")}</span>
-              </SidebarMenuButton>
+              <SidebarMenuButton
+                render={
+                  <a href={signOutHref}>
+                    <LogOutIcon />
+                    <span>{t("logout")}</span>
+                  </a>
+                }
+              />
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>

@@ -150,6 +150,7 @@ export function SidebarRail({ className, ...props }: React.ComponentProps<"butto
       data-sidebar="rail"
       data-slot="sidebar-rail"
       aria-label="Toggle Sidebar"
+      type="button"
       tabIndex={-1}
       onClick={toggleSidebar}
       title="Toggle Sidebar"

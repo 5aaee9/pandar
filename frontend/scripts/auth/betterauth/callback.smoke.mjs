@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
 
-const helperModuleUrl = pathToFileURL(
-  new URL("./callback-redirect.ts", import.meta.url).pathname,
-);
-const { betterAuthCallbackRedirect } = await import(helperModuleUrl.href);
+import { betterAuthCallbackRedirect } from "../../../app/auth/betterauth/callback-redirect.ts";
 
 const validToken = "header.payload.signature";
 const acceptsOnlyValidToken = (token) => token === validToken;
@@ -51,7 +47,7 @@ assert.deepEqual(
 );
 
 const routeSource = await readFile(
-  new URL("./callback/route.ts", import.meta.url),
+  new URL("../../../app/auth/betterauth/callback/route.ts", import.meta.url),
   "utf8",
 );
 
