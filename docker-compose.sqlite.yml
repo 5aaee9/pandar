@@ -25,8 +25,8 @@ services:
 
   pandar-web:
     build:
-      context: frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     image: pandar-web
     environment:
       APP_API_URL: http://pandar-api:8080

@@ -27,7 +27,7 @@ jobs:
             context: .
             dockerfile: Dockerfile
           - name: web
-            context: frontend
+            context: .
             dockerfile: frontend/Dockerfile
 
     steps:

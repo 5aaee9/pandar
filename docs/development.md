@@ -211,7 +211,6 @@ Better Auth is supported through the same external JWT/JWKS contract. Configure 
 Self-hosted Better Auth issuer development lives under `frontend/auth/`:
 
 ```bash
-cd frontend/auth
 npm install
 PANDAR_AUTH_DATABASE_FILE=/tmp/pandar-auth.db \
 PANDAR_AUTH_BASE_URL=http://127.0.0.1:3001 \
@@ -223,9 +222,9 @@ PANDAR_AUTH_EMAIL_PROVIDER=resend \
 PANDAR_AUTH_EMAIL_FROM='Pandar <auth@example.invalid>' \
 RESEND_API_KEY=re_test_key \
 BETTER_AUTH_SECRET=local-development-secret \
-npm run migrate
-node scripts/smoke-jwt-and-registration.mjs
-npm run build
+npm run migrate --workspace pandar-auth
+node --experimental-strip-types frontend/auth/scripts/smoke-jwt-and-registration.mjs
+npm run build:auth
 ```
 
 The self-hosted issuer signs users in with email magic links by default and auto-creates first-time Better Auth users from verified email links. `PANDAR_AUTH_EMAIL_PROVIDER` must be `resend` or `smtp` at runtime. Resend uses `RESEND_API_KEY` plus `PANDAR_AUTH_EMAIL_FROM`; SMTP uses `PANDAR_AUTH_SMTP_HOST`, `PANDAR_AUTH_SMTP_PORT`, `PANDAR_AUTH_SMTP_USERNAME`, `PANDAR_AUTH_SMTP_PASSWORD`, and optional `PANDAR_AUTH_SMTP_TLS=starttls|tls|none`. Magic links expire after 30 minutes by default. After a magic-link login, `/auth/complete` offers optional passkey binding with a visible Skip action.
@@ -406,7 +405,7 @@ Release packaging references:
 cargo fmt
 cargo clippy --workspace
 cargo nextest run --manifest-path "Cargo.toml" --workspace
-npm --prefix frontend run build
+npm run build:web
 ```
 
 Focused hub checks:

@@ -1,0 +1,14 @@
+.git
+target
+node_modules
+.next
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/tsconfig.tsbuildinfo
+frontend/auth/node_modules
+frontend/auth/.next
+frontend/auth/out
+frontend/auth/tsconfig.tsbuildinfo
+frontend/plugin-local/node_modules
+frontend/plugin-local/tsconfig.tsbuildinfo

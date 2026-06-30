@@ -115,22 +115,53 @@
         pkgs.sqlite
         pkgs.stdenv.cc.cc.lib
       ];
-      frontendRoot = toString "${root}/frontend";
-      frontendSource = lib.cleanSourceWith {
-        src = "${root}/frontend";
+      frontendWorkspaceRoot = toString root;
+      frontendWorkspaceSource = lib.cleanSourceWith {
+        src = root;
         filter =
-          path: _type:
+          path: type:
           let
-            relativePath = lib.removePrefix "${frontendRoot}/" (toString path);
+            relativePath = lib.removePrefix "${frontendWorkspaceRoot}/" (toString path);
+            isGenerated =
+              relativePath == "node_modules"
+              || lib.hasPrefix "node_modules/" relativePath
+              || relativePath == ".next"
+              || lib.hasPrefix ".next/" relativePath
+              || relativePath == "frontend/node_modules"
+              || lib.hasPrefix "frontend/node_modules/" relativePath
+              || relativePath == "frontend/.next"
+              || lib.hasPrefix "frontend/.next/" relativePath
+              || relativePath == "frontend/out"
+              || lib.hasPrefix "frontend/out/" relativePath
+              || relativePath == "frontend/tsconfig.tsbuildinfo"
+              || relativePath == "frontend/auth/node_modules"
+              || lib.hasPrefix "frontend/auth/node_modules/" relativePath
+              || relativePath == "frontend/auth/.next"
+              || lib.hasPrefix "frontend/auth/.next/" relativePath
+              || relativePath == "frontend/auth/out"
+              || lib.hasPrefix "frontend/auth/out/" relativePath
+              || relativePath == "frontend/auth/tsconfig.tsbuildinfo"
+              || relativePath == "frontend/plugin-local/node_modules"
+              || lib.hasPrefix "frontend/plugin-local/node_modules/" relativePath
+              || relativePath == "frontend/plugin-local/tsconfig.tsbuildinfo";
           in
-          relativePath != "auth" && !lib.hasPrefix "auth/" relativePath;
+          !isGenerated
+          && (
+            relativePath == "package.json"
+            || relativePath == "package-lock.json"
+            || relativePath == "frontend"
+            || lib.hasPrefix "frontend/" relativePath
+          );
       };
+      frontendSource = "${frontendWorkspaceSource}/frontend";
 
       pandar-auth = pkgs.buildNpmPackage {
         pname = "pandar-auth";
         version = "0.1.0";
-        src = lib.cleanSource "${root}/frontend/auth";
-        npmDepsHash = "sha256-fPAmC4jFbveAbXIpmYC7w4eFov075Dm46BQ24uomMaE=";
+        src = frontendWorkspaceSource;
+        npmWorkspace = "pandar-auth";
+        npmDepsFetcherVersion = 2;
+        npmDepsHash = "sha256-ZBZDEj3zGkSDz6tiuKNbJsK63QHIKEqg1sFw7cvKgo0=";
 
         nativeBuildInputs = [
           pkgs.makeWrapper
@@ -149,15 +180,36 @@
         installPhase = ''
           runHook preInstall
 
+          test -f package.json
+          test -f package-lock.json
+          test -f frontend/auth/package.json
+          test -d frontend/auth/.next/standalone
+          test -f frontend/auth/.next/standalone/frontend/auth/server.js
+          test -f frontend/lib/utils.ts
+          test -d node_modules
+
           mkdir -p "$out/share/pandar-auth"
-          cp -r .next/standalone/. "$out/share/pandar-auth/"
-          cp -r .next/static "$out/share/pandar-auth/.next/static"
+          cp -r frontend/auth/.next/standalone/. "$out/share/pandar-auth/"
+          cp -r "$out/share/pandar-auth/frontend/auth/." "$out/share/pandar-auth/"
+          ln -s share/pandar-auth/node_modules "$out/node_modules"
+          cp -r frontend/auth/.next/static "$out/share/pandar-auth/.next/static"
 
           mkdir -p "$out/share/pandar-auth/migrate-src"
-          cp package.json package-lock.json tsconfig.json "$out/share/pandar-auth/migrate-src/"
-          cp -r lib "$out/share/pandar-auth/migrate-src/lib"
-          cp -r scripts "$out/share/pandar-auth/migrate-src/scripts"
+          cp frontend/auth/package.json frontend/auth/tsconfig.json "$out/share/pandar-auth/migrate-src/"
+          cp -r frontend/auth/lib "$out/share/pandar-auth/migrate-src/lib"
+          cp -r frontend/auth/scripts "$out/share/pandar-auth/migrate-src/scripts"
           cp -r node_modules "$out/share/pandar-auth/migrate-src/node_modules"
+          mkdir -p "$out/share/pandar-auth/migrate-src/frontend"
+          mkdir -p "$out/share/pandar-auth/migrate-src/frontend/auth"
+          mkdir -p "$out/share/pandar-auth/migrate-src/frontend/plugin-local"
+          cp frontend/package.json "$out/share/pandar-auth/migrate-src/frontend/package.json"
+          cp frontend/auth/package.json "$out/share/pandar-auth/migrate-src/frontend/auth/package.json"
+          cp frontend/plugin-local/package.json "$out/share/pandar-auth/migrate-src/frontend/plugin-local/package.json"
+          ln -s ../migrate-src/node_modules/clsx "$out/share/pandar-auth/node_modules/clsx"
+          ln -s ../migrate-src/node_modules/tailwind-merge "$out/share/pandar-auth/node_modules/tailwind-merge"
+          mkdir -p "$out/share/pandar-auth/lib"
+          cp frontend/lib/utils.ts "$out/share/pandar-auth/lib/utils.ts"
+          ln -s utils.ts "$out/share/pandar-auth/lib/utils"
 
           mkdir -p "$out/bin"
           makeWrapper ${pkgs.nodejs_24}/bin/node "$out/bin/pandar-auth" \
@@ -191,8 +243,10 @@
       pandar-web = pkgs.buildNpmPackage {
         pname = "pandar-web";
         version = "0.1.0";
-        src = frontendSource;
-        npmDepsHash = "sha256-asw9b4XXfr57vyMTV2jrAlqQOhBvduQW9QY2NWsSE4c=";
+        src = frontendWorkspaceSource;
+        npmDepsFetcherVersion = 2;
+        npmDepsHash = "sha256-ZBZDEj3zGkSDz6tiuKNbJsK63QHIKEqg1sFw7cvKgo0=";
+        npmBuildScript = "build:web";
 
         nativeBuildInputs = [
           pkgs.makeWrapper
@@ -205,10 +259,19 @@
         installPhase = ''
           runHook preInstall
 
+          test -f package.json
+          test -f package-lock.json
+          test -f frontend/package.json
+          test -f frontend/plugin-local/dist/index.html
+          test -d frontend/.next/standalone
+          test -f frontend/.next/standalone/frontend/server.js
+          test -d node_modules
+
           mkdir -p "$out/share/pandar-web"
-          cp -r .next/standalone/. "$out/share/pandar-web/"
-          cp -r .next/static "$out/share/pandar-web/.next/static"
-          cp -r public "$out/share/pandar-web/public"
+          cp -r frontend/.next/standalone/. "$out/share/pandar-web/"
+          cp -r "$out/share/pandar-web/frontend/." "$out/share/pandar-web/"
+          cp -r frontend/.next/static "$out/share/pandar-web/.next/static"
+          cp -r frontend/public "$out/share/pandar-web/public"
 
           mkdir -p "$out/bin"
           makeWrapper ${pkgs.nodejs_24}/bin/node "$out/bin/pandar-web" \
@@ -372,6 +435,7 @@
         LD_LIBRARY_PATH=${pandarAuthLibraryPath} ${pkgs.nodejs_24}/bin/node -e 'require("better-sqlite3")'
 
         cd ${pandar-auth}/share/pandar-auth/migrate-src
+        ${pkgs.nodejs_24}/bin/node --experimental-strip-types -e 'await import("./lib/utils.ts")'
         ${pkgs.nodejs_24}/bin/node migrate-check.mjs
         ${lib.getExe pkgs.sqlite} "$PANDAR_AUTH_DATABASE_FILE" ".tables" | grep -F jwks
         ${lib.getExe pkgs.sqlite} "$PANDAR_AUTH_DATABASE_FILE" ".tables" | grep -F passkey

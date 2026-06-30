@@ -44,5 +44,5 @@ Communication with Bambu machines should be implemented from reference behavior 
 cargo fmt
 cargo clippy --workspace
 cargo nextest run --manifest-path "Cargo.toml" --workspace
-npm --prefix frontend run build
+npm run build:web
 ```

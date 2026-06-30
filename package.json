@@ -1,0 +1,13 @@
+{
+  "name": "pandar-frontend-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["frontend", "frontend/auth", "frontend/plugin-local"],
+  "scripts": {
+    "build:plugin-local": "npm run build --workspace pandar-plugin-local",
+    "build:web": "npm run build:plugin-local && npm run build --workspace pandar-web",
+    "build:auth": "npm run build --workspace pandar-auth",
+    "test:web": "npm run test --workspace pandar-web",
+    "test:auth": "npm run test --workspace pandar-auth"
+  }
+}
