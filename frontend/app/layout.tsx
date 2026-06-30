@@ -4,6 +4,7 @@ import { getLocale, getMessages, getTranslations } from 'next-intl/server'
 import type { ReactNode } from 'react'
 
 import './globals.css'
+import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -23,6 +24,7 @@ export default async function RootLayout({
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>
           <TooltipProvider>{children}</TooltipProvider>
+          <Toaster />
         </NextIntlClientProvider>
       </body>
     </html>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { AppSidebar } from '../components/app-sidebar'
@@ -34,6 +34,7 @@ import {
 import { computeAttention, computeHealth, maxSeverity } from './dashboard-attention'
 import { DashboardShellHeader } from './dashboard-shell-header'
 import type { DashboardQuery, DashboardView } from './dashboard-shell'
+import { ActionStatusToast } from './action-status-toast'
 
 type DashboardRuntimeProps = {
   apiUrl: string
@@ -89,6 +90,11 @@ export function DashboardRuntime({
   const [notifications, setNotifications] = useState<RuntimeNotification[]>([])
   const notificationKeys = useRef<Set<string>>(new Set())
   const [nowMs, setNowMs] = useState(0)
+  const [consumedActionStatus, setConsumedActionStatus] = useState<string | null>(null)
+  const pendingActionStatus = actionStatus && consumedActionStatus !== actionStatus ? actionStatus : undefined
+  const consumeActionStatus = useCallback((status: string) => {
+    setConsumedActionStatus(status)
+  }, [])
 
   useEffect(() => setPrinters(initialPrinters), [initialPrinters])
   useEffect(() => setJobs(initialJobs), [initialJobs])
@@ -285,11 +291,10 @@ export function DashboardRuntime({
   const topSeverity = useMemo(() => maxSeverity(attentionItems), [attentionItems])
 
   const tErr = useTranslations('runtime.notification')
-  const tStatus = useTranslations('runtime.actionStatus')
   const dashboardQuery: DashboardQuery = {
     tenant: selectedTenant?.id,
     command: view === 'agents' ? selectedCommandId : undefined,
-    status: actionStatus,
+    status: pendingActionStatus,
   }
 
   return (
@@ -309,15 +314,11 @@ export function DashboardRuntime({
           view={view}
         />
         <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
+          <ActionStatusToast status={pendingActionStatus} onConsumed={consumeActionStatus} />
+
           {errors.length > 0 ? (
             <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
               {tErr('errorsIncomplete')} {errors.join('; ')}.
-            </div>
-          ) : null}
-
-          {actionStatus ? (
-            <div className="rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-950">
-              {formatActionStatus(actionStatus, tStatus)}
             </div>
           ) : null}
 
@@ -348,14 +349,4 @@ export function DashboardRuntime({
       </SidebarInset>
     </SidebarProvider>
   )
-}
-
-function formatActionStatus(status: string, tStatus: ReturnType<typeof useTranslations>) {
-  if (tStatus.has(status)) {
-    return tStatus(status)
-  }
-  return status
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
 }

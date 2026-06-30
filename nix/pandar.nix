@@ -245,7 +245,7 @@
         version = "0.1.0";
         src = frontendWorkspaceSource;
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-ZBZDEj3zGkSDz6tiuKNbJsK63QHIKEqg1sFw7cvKgo0=";
+        npmDepsHash = "sha256-dsLB/8FVpSa0zV6FV+UyZk9jnsnQjDAbBzucICJ/gCE=";
         npmBuildScript = "build:web";
 
         nativeBuildInputs = [

@@ -109,6 +109,7 @@
 - Reworked external tenant onboarding/joining into an organization-switcher-style flow: verified users now open a compact tenant access switcher, create tenants through a shadcn dialog wired to the existing server action, and join tenants from a matching token form with hash-prefill behavior. Added main-frontend Vitest + React Testing Library coverage for the switcher, dialog fields, and join-token prefill.
 - Fixed the GitHub Checks workflow after the passkey autofill frontend lockfile update by refreshing the Nix `pandar-web` npm dependency hash used by package and NixOS module checks.
 - Consolidated frontend npm package management at the repository root: `pandar-web`, `pandar-auth`, and `pandar-plugin-local` now share one root workspace lockfile and root build/test scripts; shared dependency versions were aligned, auth reuses the dashboard `cn` helper through a thin re-export, and Nix/Docker/developer docs were updated for root-workspace builds.
+- Replaced redirect-backed dashboard action prompts (`status=...`, such as refresh/retry/dispatch queued results) with shadcn Sonner toasts; consumed statuses are removed from the URL and dashboard navigation while durable live notifications, admin secret results, and data-integrity errors remain in-page.
 
 ## Completed: Phase 30 Better Auth Provider Compatibility
 

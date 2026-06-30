@@ -23,8 +23,21 @@
       "none": "无身份认证"
     },
     "actionStatus": {
+      "refresh_queued": "刷新已入队",
       "refresh_partial": "部分刷新未能入队——请检查列表",
-      "retry_partial": "部分重试未能入队——请检查列表"
+      "job_created": "打印任务已入队",
+      "tenant_created": "租户已创建",
+      "tenant_token_revoked": "租户 API 令牌已撤销",
+      "join_link_accepted": "加入链接已接受",
+      "join_link_revoked": "加入链接已撤销",
+      "user_created": "用户已创建",
+      "user_role_updated": "用户角色已更新",
+      "identity_linked": "身份已关联",
+      "retry_queued": "重试已入队",
+      "retry_partial": "部分重试未能入队——请检查列表",
+      "reprint_queued": "重新打印已入队",
+      "duplicate_queued": "复制任务已入队",
+      "printer_control_queued": "打印机控制已入队"
     },
     "notification": {
       "liveTitle": "实时连接",

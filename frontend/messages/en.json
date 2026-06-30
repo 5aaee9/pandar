@@ -23,8 +23,21 @@
       "none": "No auth"
     },
     "actionStatus": {
+      "refresh_queued": "Refresh queued",
       "refresh_partial": "Some refreshes could not be queued — review the list",
-      "retry_partial": "Some retries could not be queued — review the list"
+      "job_created": "Print job queued",
+      "tenant_created": "Tenant created",
+      "tenant_token_revoked": "Tenant token revoked",
+      "join_link_accepted": "Join link accepted",
+      "join_link_revoked": "Join link revoked",
+      "user_created": "User created",
+      "user_role_updated": "User role updated",
+      "identity_linked": "Identity linked",
+      "retry_queued": "Retry queued",
+      "retry_partial": "Some retries could not be queued — review the list",
+      "reprint_queued": "Reprint queued",
+      "duplicate_queued": "Duplicate queued",
+      "printer_control_queued": "Printer control queued"
     },
     "notification": {
       "liveTitle": "Live connection",
