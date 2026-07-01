@@ -188,6 +188,10 @@ pub fn router(state: AppState) -> Router {
             post(printers::diagnose_printer),
         )
         .route(
+            "/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer",
+            post(printers::link_printer),
+        )
+        .route(
             "/api/v1/tenants/{tenant_id}/commands/{command_id}",
             get(printers::get_command),
         )

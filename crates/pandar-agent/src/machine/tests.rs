@@ -1,13 +1,17 @@
 use std::time::Duration;
 
+use async_trait::async_trait;
 use serde_json::json;
+use tokio::sync::{Mutex, Notify, mpsc};
 
 use super::*;
+use crate::AgentConfig;
 use crate::machine::{
     file_transfer::{
         FakeMachineFileTransfer, FileTransferRequest, TransferProtectionMode::ProtectedData,
     },
-    mqtt::FakeMqttTransport,
+    mqtt::{BambuMqttTransport, FakeMqttTransport, PublishedMqttCommand},
+    runtime::test_support::{TestRuntimeBambuMachineGateway, assert_locked_for_a_moment},
 };
 
 fn endpoint(serial: &str) -> BambuPrinterEndpoint {
@@ -26,6 +30,16 @@ fn endpoint_without_model(serial: &str) -> BambuPrinterEndpoint {
     endpoint
 }
 
+fn runtime_endpoint(serial: &str, name: &str, access_code: &str) -> BambuPrinterEndpoint {
+    BambuPrinterEndpoint {
+        host: "192.0.2.10".to_string(),
+        serial: serial.to_string(),
+        access_code: access_code.to_string(),
+        model: Some("X1 Carbon".to_string()),
+        name: Some(name.to_string()),
+    }
+}
+
 fn get_version_report(model: &str) -> serde_json::Value {
     json!({
         "info": {
@@ -33,6 +47,37 @@ fn get_version_report(model: &str) -> serde_json::Value {
             "module": [{"name": "ota", "product_name": model}]
         }
     })
+}
+
+fn runtime_reports(model: &str, state: &str) -> [serde_json::Value; 2] {
+    [
+        get_version_report(model),
+        json!({"print": {"state": state}}),
+    ]
+}
+
+fn runtime_transport(
+    report_sets: impl IntoIterator<Item = (&'static str, &'static str)>,
+) -> FakeMqttTransport {
+    FakeMqttTransport::with_reports(
+        report_sets
+            .into_iter()
+            .flat_map(|(model, state)| runtime_reports(model, state)),
+    )
+}
+
+fn test_config() -> AgentConfig {
+    AgentConfig {
+        hub_grpc_url: "http://hub.internal:50051".to_owned(),
+        hub_api_url: None,
+        agent_name: "garage".to_owned(),
+        agent_id: "agent-id".to_owned(),
+        tenant_id: "tenant-id".to_owned(),
+        agent_credential: "pandar_ac_test".to_owned(),
+        agent_version: "9.8.7".to_owned(),
+        printers: "[]".to_owned(),
+        artifact_root: ".".into(),
+    }
 }
 
 #[tokio::test]
@@ -427,5 +472,364 @@ fn print_project_file() -> PrintProjectFile {
         timelapse: true,
         ams_mapping_json: String::new(),
         ams_mapping2_json: String::new(),
+    }
+}
+
+mod runtime {
+    use super::*;
+
+    #[tokio::test]
+    async fn empty_runtime_gateway_refresh_printers_returns_empty() {
+        let gateway = TestRuntimeBambuMachineGateway::new(
+            Vec::<(
+                BambuPrinterEndpoint,
+                FakeMqttTransport,
+                FakeMachineFileTransfer,
+            )>::new(),
+            FakeMachineFileTransfer::default(),
+            Duration::from_secs(1),
+        );
+
+        assert_eq!(gateway.refresh_printers().await.unwrap(), Vec::new());
+    }
+
+    #[tokio::test]
+    async fn successful_link_printer_installs_endpoint_for_later_refresh() {
+        let gateway = TestRuntimeBambuMachineGateway::new(
+            Vec::new(),
+            FakeMachineFileTransfer::default(),
+            Duration::from_secs(1),
+        );
+        gateway
+            .push_command_transport(runtime_transport([
+                ("X1 Carbon", "READY"),
+                ("X1 Carbon", "IDLE"),
+            ]))
+            .await;
+        let (sender, _) = mpsc::channel(1);
+
+        let snapshot = gateway
+            .link_printer(
+                runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+                &test_config(),
+                &sender,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(snapshot.state, "READY");
+        assert_eq!(gateway.report_task_count("SERIAL1").await, 1);
+        assert_eq!(
+            gateway.refresh_printers().await.unwrap(),
+            vec![MachineSnapshot {
+                serial: "SERIAL1".to_string(),
+                name: "office".to_string(),
+                model: Some("X1 Carbon".to_string()),
+                state: "IDLE".to_string(),
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn same_serial_replacement_after_validation_success_leaves_one_report_task() {
+        let gateway = TestRuntimeBambuMachineGateway::new(
+            Vec::new(),
+            FakeMachineFileTransfer::default(),
+            Duration::from_secs(1),
+        );
+        gateway
+            .push_command_transport(runtime_transport([("X1 Carbon", "READY")]))
+            .await;
+        gateway
+            .push_command_transport(runtime_transport([("P2S", "RUNNING"), ("P2S", "PAUSED")]))
+            .await;
+        let (sender, _) = mpsc::channel(1);
+
+        gateway
+            .link_printer(
+                runtime_endpoint("SERIAL1", "old office", "ACCESS-1"),
+                &test_config(),
+                &sender,
+            )
+            .await
+            .unwrap();
+        gateway
+            .link_printer(
+                runtime_endpoint("SERIAL1", "new office", "ACCESS-2"),
+                &test_config(),
+                &sender,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(gateway.report_task_count("SERIAL1").await, 1);
+        assert_eq!(
+            gateway.refresh_printers().await.unwrap(),
+            vec![MachineSnapshot {
+                serial: "SERIAL1".to_string(),
+                name: "new office".to_string(),
+                model: Some("P2S".to_string()),
+                state: "PAUSED".to_string(),
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn same_serial_replacement_after_validation_failure_leaves_previous_endpoint_active() {
+        let gateway = TestRuntimeBambuMachineGateway::new(
+            Vec::new(),
+            FakeMachineFileTransfer::default(),
+            Duration::from_secs(1),
+        );
+        gateway
+            .push_command_transport(runtime_transport([
+                ("X1 Carbon", "READY"),
+                ("X1 Carbon", "IDLE"),
+            ]))
+            .await;
+        gateway
+            .push_command_transport(FakeMqttTransport::with_timeout())
+            .await;
+        let (sender, _) = mpsc::channel(1);
+
+        gateway
+            .link_printer(
+                runtime_endpoint("SERIAL1", "old office", "ACCESS-1"),
+                &test_config(),
+                &sender,
+            )
+            .await
+            .unwrap();
+        let err = gateway
+            .link_printer(
+                runtime_endpoint("SERIAL1", "new office", "ACCESS-2"),
+                &test_config(),
+                &sender,
+            )
+            .await
+            .unwrap_err();
+
+        assert!(format!("{err:#}").contains("validate runtime printer SERIAL1"));
+        assert_eq!(gateway.report_task_count("SERIAL1").await, 1);
+        assert_eq!(
+            gateway.refresh_printers().await.unwrap(),
+            vec![MachineSnapshot {
+                serial: "SERIAL1".to_string(),
+                name: "old office".to_string(),
+                model: Some("X1 Carbon".to_string()),
+                state: "IDLE".to_string(),
+            }]
+        );
+    }
+
+    #[tokio::test]
+    async fn concurrent_same_serial_link_printer_calls_are_serialized() {
+        let gateway = std::sync::Arc::new(TestRuntimeBambuMachineGateway::new(
+            Vec::new(),
+            FakeMachineFileTransfer::default(),
+            Duration::from_secs(1),
+        ));
+        let paused = PausedMqttTransport::new();
+        gateway.push_command_transport(paused.clone()).await;
+        gateway
+            .push_command_transport(PausedMqttTransport::ready("P2S", "IDLE"))
+            .await;
+        let (sender, _) = mpsc::channel(1);
+        let config = test_config();
+
+        let first_gateway = std::sync::Arc::clone(&gateway);
+        let first_sender = sender.clone();
+        let first_config = config.clone();
+        let first = tokio::spawn(async move {
+            first_gateway
+                .link_printer(
+                    runtime_endpoint("SERIAL1", "first", "ACCESS-1"),
+                    &first_config,
+                    &first_sender,
+                )
+                .await
+        });
+        paused.wait_until_blocked().await;
+        assert_locked_for_a_moment(&gateway).await.unwrap();
+
+        let second_gateway = std::sync::Arc::clone(&gateway);
+        let second_sender = sender.clone();
+        let second_config = config.clone();
+        let second = tokio::spawn(async move {
+            second_gateway
+                .link_printer(
+                    runtime_endpoint("SERIAL1", "second", "ACCESS-2"),
+                    &second_config,
+                    &second_sender,
+                )
+                .await
+        });
+        tokio::task::yield_now().await;
+        assert!(!second.is_finished());
+
+        paused.release();
+        first.await.unwrap().unwrap();
+        second.await.unwrap().unwrap();
+        assert_eq!(gateway.report_task_count("SERIAL1").await, 1);
+    }
+
+    #[tokio::test]
+    async fn runtime_install_keeps_lock_until_report_task_replacement_finishes() {
+        let gateway = std::sync::Arc::new(TestRuntimeBambuMachineGateway::new(
+            Vec::new(),
+            FakeMachineFileTransfer::default(),
+            Duration::from_secs(1),
+        ));
+        gateway
+            .push_command_transport(runtime_transport([("X1 Carbon", "READY")]))
+            .await;
+        let pause = gateway.pause_report_task_replacement().await;
+        let (sender, _) = mpsc::channel(1);
+        let config = test_config();
+
+        let link_gateway = std::sync::Arc::clone(&gateway);
+        let link_sender = sender.clone();
+        let link_config = config.clone();
+        let link = tokio::spawn(async move {
+            link_gateway
+                .link_printer(
+                    runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+                    &link_config,
+                    &link_sender,
+                )
+                .await
+        });
+        pause.wait_until_blocked().await;
+
+        assert_locked_for_a_moment(&gateway).await.unwrap();
+
+        pause.release();
+        link.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn report_forwarding_preparation_failure_leaves_previous_endpoint_active() {
+        let gateway = TestRuntimeBambuMachineGateway::new(
+            Vec::new(),
+            FakeMachineFileTransfer::default(),
+            Duration::from_secs(1),
+        );
+        gateway
+            .push_command_transport(runtime_transport([
+                ("X1 Carbon", "READY"),
+                ("X1 Carbon", "IDLE"),
+            ]))
+            .await;
+        gateway
+            .push_command_transport(runtime_transport([("P2S", "RUNNING")]))
+            .await;
+        let (sender, _) = mpsc::channel(1);
+
+        gateway
+            .link_printer(
+                runtime_endpoint("SERIAL1", "old office", "ACCESS-1"),
+                &test_config(),
+                &sender,
+            )
+            .await
+            .unwrap();
+        gateway
+            .push_report_preparation_error(anyhow::anyhow!("prepare report transport failed"))
+            .await;
+        let err = gateway
+            .link_printer(
+                runtime_endpoint("SERIAL1", "new office", "ACCESS-2"),
+                &test_config(),
+                &sender,
+            )
+            .await
+            .unwrap_err();
+
+        assert!(format!("{err:#}").contains("prepare report transport failed"));
+        assert_eq!(gateway.report_task_count("SERIAL1").await, 1);
+        assert_eq!(
+            gateway.refresh_printers().await.unwrap(),
+            vec![MachineSnapshot {
+                serial: "SERIAL1".to_string(),
+                name: "old office".to_string(),
+                model: Some("X1 Carbon".to_string()),
+                state: "IDLE".to_string(),
+            }]
+        );
+    }
+
+    #[derive(Clone)]
+    struct PausedMqttTransport {
+        state: std::sync::Arc<PausedMqttTransportState>,
+    }
+
+    struct PausedMqttTransportState {
+        blocked: Notify,
+        release: Notify,
+        reports: Mutex<Vec<serde_json::Value>>,
+        pause_first_report: bool,
+    }
+
+    impl PausedMqttTransport {
+        fn new() -> Self {
+            Self {
+                state: std::sync::Arc::new(PausedMqttTransportState {
+                    blocked: Notify::new(),
+                    release: Notify::new(),
+                    reports: Mutex::new(vec![
+                        get_version_report("X1 Carbon"),
+                        json!({"print": {"state": "READY"}}),
+                    ]),
+                    pause_first_report: true,
+                }),
+            }
+        }
+
+        fn ready(model: &str, state: &str) -> Self {
+            Self {
+                state: std::sync::Arc::new(PausedMqttTransportState {
+                    blocked: Notify::new(),
+                    release: Notify::new(),
+                    reports: Mutex::new(vec![
+                        get_version_report(model),
+                        json!({"print": {"state": state}}),
+                    ]),
+                    pause_first_report: false,
+                }),
+            }
+        }
+
+        async fn wait_until_blocked(&self) {
+            self.state.blocked.notified().await;
+        }
+
+        fn release(&self) {
+            self.state.release.notify_waiters();
+        }
+    }
+
+    #[async_trait]
+    impl BambuMqttTransport for PausedMqttTransport {
+        async fn subscribe(&self, _topic: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn publish(&self, _command: PublishedMqttCommand) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn next_report(&self, _timeout: Duration) -> anyhow::Result<serde_json::Value> {
+            if self.state.pause_first_report {
+                let mut reports = self.state.reports.lock().await;
+                if reports.len() == 2 {
+                    self.state.blocked.notify_waiters();
+                    drop(reports);
+                    self.state.release.notified().await;
+                    reports = self.state.reports.lock().await;
+                }
+                return Ok(reports.remove(0));
+            }
+            Ok(self.state.reports.lock().await.remove(0))
+        }
     }
 }

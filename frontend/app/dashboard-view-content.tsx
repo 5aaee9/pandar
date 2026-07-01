@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { AgentPairingGuidance } from './agent-pairing-guidance'
 import { DiagnosticsSection, LinkedAgentsSection } from './diagnostics-panel'
 import { DispatchForm } from './dispatch-form'
+import { LinkPrinterForm } from './link-printer-form'
 import { RecoveryActions } from './recovery-actions'
 import {
   CreateAgentPairingForm,
@@ -115,6 +116,7 @@ function AgentsView({
   return (
     <>
       <AgentPairingGuidance selectedTenant={selectedTenant} restricted={adminUnavailable} />
+      <LinkPrinterForm selectedTenant={selectedTenant} agents={agents} />
       <LinkedAgentsSection selectedTenant={selectedTenant} agents={agents} />
       <DiagnosticsSection
         selectedTenant={selectedTenant}

@@ -17,10 +17,10 @@ use events::event;
 
 use crate::{
     AgentConfig,
-    machine::{BambuMachineGateway, MachineSnapshot},
+    machine::{BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot},
     protocol::agent::v1::{
-        AgentEvent, CommandAck, CommandResult, PrintProjectFile, PrinterSnapshot, agent_event,
-        hub_command,
+        AgentEvent, CommandAck, CommandResult, LinkPrinter, PrintProjectFile, PrinterSnapshot,
+        agent_event, hub_command,
     },
 };
 
@@ -33,10 +33,13 @@ pub async fn handle_command_with_gateway<G>(
 where
     G: BambuMachineGateway,
 {
+    let command_id = command.command_id.clone();
     match command.command {
+        Some(hub_command::Command::LinkPrinter(link)) => {
+            emit_link_printer_events(config, gateway, sender, &command_id, link).await
+        }
         Some(hub_command::Command::PrintProjectFile(print)) => {
-            emit_print_project_file_events(config, gateway, sender, &command.command_id, print)
-                .await
+            emit_print_project_file_events(config, gateway, sender, &command_id, print).await
         }
         other => {
             handle_command_with_reader(
@@ -45,7 +48,7 @@ where
                 &FilesystemArtifactReader::new(config.artifact_root.clone()),
                 sender,
                 crate::protocol::agent::v1::HubCommand {
-                    command_id: command.command_id,
+                    command_id,
                     command: other,
                 },
             )
@@ -102,6 +105,9 @@ where
         }
         Some(hub_command::Command::PrinterOperation(operation)) => {
             operations::emit_events(config, gateway, sender, &command.command_id, operation).await
+        }
+        Some(hub_command::Command::LinkPrinter(link)) => {
+            emit_link_printer_events(config, gateway, sender, &command.command_id, link).await
         }
         None => Ok(()),
     }
@@ -217,6 +223,83 @@ where
     }
 
     Ok(())
+}
+
+async fn emit_link_printer_events<G>(
+    config: &AgentConfig,
+    gateway: &G,
+    sender: &mpsc::Sender<AgentEvent>,
+    command_id: &str,
+    command: LinkPrinter,
+) -> anyhow::Result<()>
+where
+    G: BambuMachineGateway,
+{
+    let endpoint = BambuPrinterEndpoint {
+        host: command.host,
+        serial: command.serial_number,
+        access_code: command.access_code,
+        name: non_blank_string(command.name),
+        model: non_blank_string(command.model),
+    };
+
+    sender
+        .send(ack_event(config, command_id))
+        .await
+        .context("queue link-printer command ack")?;
+
+    match gateway.link_printer(endpoint.clone(), config, sender).await {
+        Ok(snapshot) => {
+            sender
+                .send(printer_snapshot_event(config, snapshot.clone()))
+                .await
+                .context("queue linked printer snapshot event")?;
+            let result_json = serde_json::json!({
+                "type": "printer_link",
+                "serial_number": snapshot.serial,
+                "host": endpoint.host,
+                "name": snapshot.name,
+                "model": snapshot.model,
+                "status": snapshot.state,
+            })
+            .to_string();
+            sender
+                .send(success_event_with_result(config, command_id, result_json))
+                .await
+                .context("queue link-printer command success")?;
+        }
+        Err(err) => {
+            let error = redact_link_error(gateway, &format!("{err:#}"), &endpoint.access_code);
+            tracing::warn!(
+                serial = %endpoint.serial,
+                error = %error,
+                "runtime printer link failed"
+            );
+            sender
+                .send(failure_event(config, command_id, error))
+                .await
+                .context("queue link-printer command failure")?;
+        }
+    }
+
+    Ok(())
+}
+
+fn non_blank_string(value: String) -> Option<String> {
+    let value = value.trim();
+    (!value.is_empty()).then(|| value.to_owned())
+}
+
+fn redact_link_error<G>(gateway: &G, message: &str, access_code: &str) -> String
+where
+    G: BambuMachineGateway,
+{
+    let redacted = gateway.redact_error(message);
+    if access_code.is_empty() {
+        redacted
+    } else {
+        redacted.replace(access_code, "[REDACTED_ACCESS_CODE]")
+    }
 }
 
 async fn emit_print_project_file_events<G>(

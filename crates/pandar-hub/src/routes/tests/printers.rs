@@ -1,6 +1,16 @@
+use std::{
+    io::{self, Write},
+    sync::{Arc, Mutex},
+};
+
 use super::*;
-use pandar_core::AgentId;
+use pandar_core::{AgentId, TenantId};
 use serde_json::json;
+use tokio::sync::mpsc;
+use tonic::Status;
+use tracing_subscriber::fmt::MakeWriter;
+
+use crate::protocol::agent::v1::{HubCommand, hub_command};
 
 #[tokio::test]
 async fn printer_list_returns_tenant_printers() {
@@ -224,4 +234,362 @@ async fn refresh_printers_returns_command_record() {
             .iter()
             .any(|event| event.action == "agent.refresh_printers")
     );
+}
+
+#[tokio::test]
+async fn link_printer_requires_operator_role() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, _) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = tenant["id"].as_str().unwrap();
+    let agent_id = agent["id"].as_str().unwrap();
+    let token = auth_token_for_role(
+        &state,
+        tenant_id,
+        crate::repositories::UserRole::Viewer,
+        "viewer-link-printer-token",
+    )
+    .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer"),
+        Some(link_printer_body("SECRET-LINK-CODE")),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(state.commands().count().await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn link_printer_rejects_missing_local_session_without_command_row() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = tenant["id"].as_str().unwrap();
+    let agent_id = agent["id"].as_str().unwrap();
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer"),
+        Some(link_printer_body("SECRET-LINK-CODE")),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body, json!({ "error": "agent_not_connected" }));
+    assert_eq!(state.commands().count().await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn link_printer_missing_local_session_does_not_log_access_code() {
+    let logs = CapturedLogs::new();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(logs.writer())
+        .with_ansi(false)
+        .finish();
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = tenant["id"].as_str().unwrap();
+    let agent_id = agent["id"].as_str().unwrap();
+    let access_code = "SECRET-LINK-CODE";
+
+    let _ = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer"),
+        Some(link_printer_body(access_code)),
+        &token,
+    )
+    .await;
+    drop(_guard);
+
+    assert!(!logs.to_string().contains(access_code));
+}
+
+#[tokio::test]
+async fn link_printer_direct_sends_secret_but_persists_only_redacted_payload() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let (command_sender, mut command_receiver) = tokio::sync::mpsc::channel(1);
+    register_route_test_session(&state, tenant_id, agent_id, command_sender).await;
+    let access_code = "SECRET-LINK-CODE";
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer"),
+        Some(link_printer_body(access_code)),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["kind"], "link_printer");
+    assert_eq!(body["status"], "sent");
+    assert!(!body.to_string().contains(access_code));
+    assert!(!body["payload_json"].as_str().unwrap().contains(access_code));
+
+    let sent = command_receiver.recv().await.unwrap().unwrap();
+    match sent.command.unwrap() {
+        hub_command::Command::LinkPrinter(command) => {
+            assert_eq!(command.access_code, access_code);
+            assert_eq!(command.host, "192.0.2.10");
+            assert_eq!(command.serial_number, "SERIAL123");
+        }
+        other => panic!("expected link printer command, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn link_printer_maps_absent_or_blank_optional_name_model_to_empty_proto_strings() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let (command_sender, mut command_receiver) = tokio::sync::mpsc::channel(1);
+    register_route_test_session(&state, tenant_id, agent_id, command_sender).await;
+
+    for body in [
+        json!({
+            "host": "192.0.2.10",
+            "serial_number": "SERIAL123",
+            "access_code": "SECRET-LINK-CODE"
+        }),
+        json!({
+            "host": "192.0.2.11",
+            "serial_number": "SERIAL456",
+            "access_code": "SECRET-LINK-CODE",
+            "name": "   ",
+            "model": "   "
+        }),
+    ] {
+        let (status, response) = request_as(
+            app.clone(),
+            Method::POST,
+            &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer"),
+            Some(body),
+            &token,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let sent = command_receiver.recv().await.unwrap().unwrap();
+        match sent.command.unwrap() {
+            hub_command::Command::LinkPrinter(command) => {
+                assert_eq!(command.name, "");
+                assert_eq!(command.model, "");
+            }
+            other => panic!("expected link printer command, got {other:?}"),
+        }
+        assert_eq!(response["status"], "sent");
+    }
+}
+
+#[tokio::test]
+async fn link_printer_marks_command_failed_when_live_channel_closed_after_row_creation() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let (command_sender, command_receiver) = tokio::sync::mpsc::channel(1);
+    drop(command_receiver);
+    register_route_test_session(&state, tenant_id, agent_id, command_sender).await;
+    let access_code = "SECRET-LINK-CODE";
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer"),
+        Some(link_printer_body(access_code)),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["kind"], "link_printer");
+    assert_eq!(body["status"], "failed");
+    assert_eq!(
+        body["error"],
+        "agent command channel unavailable before printer link completed"
+    );
+    assert!(!body.to_string().contains(access_code));
+    assert_eq!(state.commands().count().await.unwrap(), 1);
+    let command_id = pandar_core::CommandId::parse(body["id"].as_str().unwrap()).unwrap();
+    let stored = state
+        .commands()
+        .get_for_tenant(tenant_id, command_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.status, pandar_core::CommandStatus::Failed);
+    assert_eq!(
+        stored.error.as_deref(),
+        Some("agent command channel unavailable before printer link completed")
+    );
+    assert!(
+        !state
+            .sessions()
+            .pending_live_command_ids()
+            .await
+            .contains(&command_id)
+    );
+}
+
+#[tokio::test]
+async fn link_printer_rejects_blank_required_fields() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = tenant["id"].as_str().unwrap();
+    let agent_id = agent["id"].as_str().unwrap();
+
+    for body in [
+        json!({ "host": "", "serial_number": "SERIAL123", "access_code": "SECRET-LINK-CODE" }),
+        json!({ "host": "192.0.2.10", "serial_number": "", "access_code": "SECRET-LINK-CODE" }),
+        json!({ "host": "192.0.2.10", "serial_number": "SERIAL123", "access_code": "" }),
+    ] {
+        let (status, body) = request_as(
+            app.clone(),
+            Method::POST,
+            &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer"),
+            Some(body),
+            &token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body, json!({ "error": "bad_request" }));
+    }
+
+    assert_eq!(state.commands().count().await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn link_printer_rejects_unknown_fields() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = tenant["id"].as_str().unwrap();
+    let agent_id = agent["id"].as_str().unwrap();
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer"),
+        Some(json!({
+            "host": "192.0.2.10",
+            "serial_number": "SERIAL123",
+            "access_code": "SECRET-LINK-CODE",
+            "unexpected": true
+        })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body, json!({ "error": "bad_request" }));
+    assert_eq!(state.commands().count().await.unwrap(), 0);
+}
+
+fn link_printer_body(access_code: &str) -> serde_json::Value {
+    json!({
+        "host": "192.0.2.10",
+        "serial_number": "SERIAL123",
+        "access_code": access_code,
+        "name": "Office X1C",
+        "model": "X1 Carbon"
+    })
+}
+
+async fn register_route_test_session(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    command_sender: mpsc::Sender<Result<HubCommand, Status>>,
+) {
+    state
+        .sessions()
+        .register(crate::sessions::AgentSession {
+            token: crate::sessions::SessionToken::new(),
+            tenant_id,
+            agent_id,
+            name: "shop-agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: pandar_core::created_at_now(),
+            last_heartbeat_at: pandar_core::created_at_now(),
+            wake_sender: mpsc::channel(1).0,
+            close_sender: mpsc::channel(1).0,
+            command_sender,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
+        })
+        .await;
+}
+
+#[derive(Clone)]
+struct CapturedLogs {
+    output: Arc<Mutex<Vec<u8>>>,
+}
+
+impl CapturedLogs {
+    fn new() -> Self {
+        Self {
+            output: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn writer(&self) -> TestLogWriter {
+        TestLogWriter {
+            output: self.output.clone(),
+        }
+    }
+}
+
+impl std::fmt::Display for CapturedLogs {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let output = self.output.lock().unwrap().clone();
+        formatter.write_str(&String::from_utf8_lossy(&output))
+    }
+}
+
+#[derive(Clone)]
+struct TestLogWriter {
+    output: Arc<Mutex<Vec<u8>>>,
+}
+
+impl<'writer> MakeWriter<'writer> for TestLogWriter {
+    type Writer = TestLogBuffer;
+
+    fn make_writer(&'writer self) -> Self::Writer {
+        TestLogBuffer {
+            output: self.output.clone(),
+        }
+    }
+}
+
+struct TestLogBuffer {
+    output: Arc<Mutex<Vec<u8>>>,
+}
+
+impl Write for TestLogBuffer {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.output.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }

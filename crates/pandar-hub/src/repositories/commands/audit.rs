@@ -1,5 +1,5 @@
 use anyhow::Context;
-use pandar_core::{AgentId, CommandId, CommandRecord, TenantId};
+use pandar_core::{AgentId, CommandId, CommandRecord, CommandStatus, TenantId};
 use sea_orm::{EntityTrait, TransactionTrait};
 
 use crate::{
@@ -8,8 +8,8 @@ use crate::{
         AuditActor, RepositoryError, RepositoryResult,
         audit::{insert_audit_event_tx, record_audit_event},
         commands::{
-            DiagnosePrinterPayload, DiscoverPrintersPayload, PrinterOperationKind,
-            PrinterOperationPayload,
+            DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload,
+            PrinterOperationKind, PrinterOperationPayload,
             inserts::{self, InsertCommand},
             operation_audit_metadata, ownership,
             rows::command_from_model,
@@ -139,6 +139,53 @@ pub async fn enqueue_printer_operation_with_audit(
     tx.commit()
         .await
         .context("failed to commit printer operation command audit transaction")?;
+
+    get_command(database, id)
+        .await?
+        .ok_or(RepositoryError::MissingCommand)
+}
+
+pub async fn create_link_printer_sent_with_audit(
+    database: &Database,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    payload: LinkPrinterPayload,
+    actor: AuditActor,
+) -> RepositoryResult<CommandRecord> {
+    ownership::verify_agent_owner(database, tenant_id, agent_id).await?;
+    let redacted_payload = payload.redacted();
+    let payload_json = serde_json::to_string(&redacted_payload)
+        .context("failed to serialize link printer command payload")?;
+    let event = record_audit_event(
+        tenant_id,
+        actor,
+        "agent.link_printer",
+        "agent",
+        Some(agent_id.to_string()),
+        serde_json::json!({
+            "host": payload.host,
+            "serial_number": payload.serial_number,
+            "name": payload.name,
+            "model": payload.model,
+        }),
+    );
+    let id = CommandId::new();
+    let now = pandar_core::created_at_now();
+    let connection = database.sea_orm_connection();
+    let tx = connection
+        .begin()
+        .await
+        .context("failed to begin link printer command audit transaction")?;
+    inserts::insert_with_status(
+        &tx,
+        insert_command(id, tenant_id, agent_id, "link_printer", &payload_json, &now),
+        CommandStatus::Sent,
+    )
+    .await?;
+    insert_audit_event_tx(&tx, &event).await?;
+    tx.commit()
+        .await
+        .context("failed to commit link printer command audit transaction")?;
 
     get_command(database, id)
         .await?

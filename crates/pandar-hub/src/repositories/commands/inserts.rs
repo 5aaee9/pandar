@@ -16,7 +16,11 @@ pub struct InsertCommand<'a> {
     pub created_at: &'a str,
 }
 
-pub async fn insert<C>(connection: &C, input: InsertCommand<'_>) -> RepositoryResult<()>
+pub async fn insert_with_status<C>(
+    connection: &C,
+    input: InsertCommand<'_>,
+    status: CommandStatus,
+) -> RepositoryResult<()>
 where
     C: ConnectionTrait,
 {
@@ -26,7 +30,7 @@ where
         agent_id: Set(input.agent_id.to_string()),
         printer_id: Set(input.printer_id.map(str::to_owned)),
         kind: Set(input.kind.to_owned()),
-        status: Set(CommandStatus::Queued.as_str().to_owned()),
+        status: Set(status.as_str().to_owned()),
         payload_json: Set(input.payload_json.to_owned()),
         result_json: Set(None),
         error: Set(None),
@@ -39,4 +43,11 @@ where
     .map_err(|err| {
         RepositoryError::Database(anyhow::Error::new(err).context("failed to insert command"))
     })
+}
+
+pub async fn insert<C>(connection: &C, input: InsertCommand<'_>) -> RepositoryResult<()>
+where
+    C: ConnectionTrait,
+{
+    insert_with_status(connection, input, CommandStatus::Queued).await
 }

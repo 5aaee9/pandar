@@ -4,10 +4,10 @@ use tonic::Status;
 use crate::{
     AppState,
     protocol::agent::v1::{
-        Axis, AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
-        MoveAxesOperation, PauseOperation, PrintProjectFile, PrinterOperation, RefreshPrinters,
-        ResumeOperation, SetHotendTemperatureOperation, SetPrintSpeedOperation, StopOperation,
-        hub_command, printer_operation,
+        Axis, AxisMovement, CommandResult, DiagnosePrinter, DiscoverPrinters, HomeOperation,
+        HubCommand, MoveAxesOperation, PauseOperation, PrintProjectFile, PrinterOperation,
+        RefreshPrinters, ResumeOperation, SetHotendTemperatureOperation, SetPrintSpeedOperation,
+        StopOperation, hub_command, printer_operation,
     },
     repositories::{
         DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, PrinterAxis,
@@ -79,12 +79,14 @@ pub async fn handle_ack_and_job(
     command_id: CommandId,
     accepted: bool,
     error: String,
+    link_printer_access_code: Option<&str>,
 ) -> Result<(), Status> {
     let command = state
         .commands()
         .load_owned(command_id, tenant_id, agent_id)
         .await
         .map_err(repository_status)?;
+    let error = redact_command_error(&command.kind, &error, link_printer_access_code);
     if accepted {
         if command.kind == "print_project_file" {
             state
@@ -122,15 +124,17 @@ pub async fn handle_result_and_job(
     tenant_id: TenantId,
     agent_id: AgentId,
     command_id: CommandId,
-    success: bool,
-    error: String,
-    result_json: String,
+    result: CommandResult,
+    link_printer_access_code: Option<&str>,
 ) -> Result<(), Status> {
     let command = state
         .commands()
         .load_owned(command_id, tenant_id, agent_id)
         .await
         .map_err(repository_status)?;
+    let success = result.success;
+    let error = redact_command_error(&command.kind, &result.error, link_printer_access_code);
+    let result_json = result.result_json;
     if success {
         if command.kind == "print_project_file" {
             state
@@ -145,7 +149,7 @@ pub async fn handle_result_and_job(
                     command_id,
                     tenant_id,
                     agent_id,
-                    optional_result_json(result_json),
+                    optional_result_json(&command.kind, result_json, link_printer_access_code),
                 )
                 .await
                 .map_err(repository_status)?;
@@ -165,7 +169,7 @@ pub async fn handle_result_and_job(
                     tenant_id,
                     agent_id,
                     error,
-                    optional_result_json(result_json),
+                    optional_result_json(&command.kind, result_json, link_printer_access_code),
                 )
                 .await
                 .map_err(repository_status)?;
@@ -237,6 +241,15 @@ pub fn hub_command_from_record_with_options(
                 serial_number: payload.serial_number,
                 operation: Some(proto_printer_operation(payload.operation)),
             })
+        }
+        "link_printer" => {
+            tracing::error!(
+                command_id = %command.id,
+                "link printer command reached durable queued-command conversion"
+            );
+            return Err(Status::failed_precondition(
+                "link printer command requires live secret dispatch",
+            ));
         }
         "print_project_file" => {
             let payload: PrintProjectFilePayload = serde_json::from_str(&command.payload_json)
@@ -384,8 +397,41 @@ fn parse_mapping<T: serde::de::DeserializeOwned>(
     })
 }
 
-fn optional_result_json(result_json: String) -> Option<String> {
-    (!result_json.is_empty()).then_some(result_json)
+fn redact_command_error(kind: &str, error: &str, link_printer_access_code: Option<&str>) -> String {
+    if kind == "link_printer" {
+        if let Some(access_code) = link_printer_access_code {
+            return crate::redaction::redact_link_printer_secret(error, access_code);
+        }
+
+        let redacted = crate::redaction::redact_secrets(error);
+        if redacted == error && !error.is_empty() {
+            return "[redacted]".to_owned();
+        }
+        return redacted;
+    }
+
+    crate::redaction::redact_secrets(error)
+}
+
+fn optional_result_json(
+    kind: &str,
+    result_json: String,
+    link_printer_access_code: Option<&str>,
+) -> Option<String> {
+    (!result_json.is_empty()).then(|| {
+        if kind == "link_printer" {
+            if let Some(access_code) = link_printer_access_code {
+                return crate::redaction::redact_link_printer_result_json(
+                    &result_json,
+                    access_code,
+                );
+            }
+
+            return crate::redaction::redact_link_printer_result_json_without_secret(&result_json);
+        }
+
+        crate::redaction::redact_result_json(&result_json)
+    })
 }
 
 pub fn parse_command_id(command_id: &str) -> Result<CommandId, Status> {

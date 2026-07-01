@@ -135,6 +135,27 @@ export async function diagnosePrinter(formData: FormData) {
   redirect(commandUrl(tenantId, command.id));
 }
 
+export async function linkPrinter(formData: FormData) {
+  await requireAuth();
+  const tenantId = stringField(formData, "tenant_id");
+  const agentId = stringField(formData, "agent_id");
+  const response = await postJson(
+    `/api/v1/tenants/${tenantId}/agents/${agentId}/link-printer`,
+    {
+      host: stringField(formData, "host"),
+      serial_number: stringField(formData, "serial_number"),
+      access_code: stringField(formData, "access_code"),
+      name: nullableField(formData, "name"),
+      model: nullableField(formData, "model"),
+    },
+  );
+  if (!response.ok) {
+    redirect(agentsStatusUrl(tenantId, await errorCode(response)));
+  }
+  const command = (await response.json()) as { id: string };
+  redirect(commandUrl(tenantId, command.id));
+}
+
 export async function createTenantToken(
   _previousState: SecretActionState,
   formData: FormData,

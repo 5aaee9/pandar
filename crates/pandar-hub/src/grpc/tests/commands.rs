@@ -1,19 +1,40 @@
+use std::{
+    io::{self, Write},
+    sync::{Arc, Mutex},
+};
+
 use pandar_core::{AgentId, CommandId, CommandRecord, CommandRecordParts, CommandStatus, TenantId};
 use tokio_stream::StreamExt;
 use tonic::Code;
+use tracing_subscriber::fmt::MakeWriter;
 
 use super::*;
-use crate::protocol::agent::v1::Axis;
-use crate::protocol::agent::v1::printer_operation;
+use crate::protocol::agent::v1::{
+    Axis, CommandAck, CommandResult, HubCommand, LinkPrinter, printer_operation,
+};
 use crate::{
     grpc::commands::{
-        CommandConversionOptions, hub_command_from_record, hub_command_from_record_with_options,
+        CommandConversionOptions, handle_result_and_job, hub_command_from_record,
+        hub_command_from_record_with_options,
     },
     repositories::{
-        DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, PrinterAxis,
-        PrinterOperationKind, PrinterOperationPayload,
+        DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload,
+        PrintProjectFilePayload, PrinterAxis, PrinterOperationKind, PrinterOperationPayload,
     },
 };
+
+fn command_result_payload(
+    success: bool,
+    error: impl Into<String>,
+    result_json: impl Into<String>,
+) -> CommandResult {
+    CommandResult {
+        command_id: String::new(),
+        success,
+        error: error.into(),
+        result_json: result_json.into(),
+    }
+}
 
 #[tokio::test]
 async fn grpc_wrong_agent_ack_is_permission_denied() {
@@ -369,6 +390,654 @@ async fn grpc_command_result_persists_result_json() {
     assert_eq!(persisted.result_json.as_deref(), Some(result_json));
 }
 
+#[test]
+fn grpc_hub_command_from_record_rejects_persisted_link_printer_replay() {
+    let command = CommandRecord::from_parts(CommandRecordParts {
+        id: CommandId::new(),
+        tenant_id: TenantId::new(),
+        agent_id: AgentId::new(),
+        printer_id: None,
+        kind: "link_printer".to_string(),
+        status: "sent".to_string(),
+        payload_json:
+            r#"{"host":"192.0.2.10","serial_number":"SERIAL123","access_code":"[redacted]"}"#
+                .to_string(),
+        result_json: None,
+        error: None,
+        created_at: "2026-07-01T00:00:00Z".to_string(),
+        updated_at: "2026-07-01T00:00:00Z".to_string(),
+    })
+    .unwrap();
+
+    let err = hub_command_from_record(command).unwrap_err();
+
+    assert_eq!(err.code(), Code::FailedPrecondition);
+    assert_eq!(
+        err.message(),
+        "link printer command requires live secret dispatch"
+    );
+}
+
+#[tokio::test]
+async fn grpc_link_printer_failed_result_redacts_access_code() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let access_code = "SECRET-LINK-CODE";
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                host: "192.0.2.10".to_owned(),
+                serial_number: "SERIAL123".to_owned(),
+                access_code: access_code.to_owned(),
+                name: None,
+                model: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+
+    handle_result_and_job(
+        &state,
+        tenant_id,
+        agent_id,
+        command.id,
+        command_result_payload(
+            false,
+            format!("validation failed for access_code={access_code}"),
+            String::new(),
+        ),
+        None,
+    )
+    .await
+    .unwrap();
+
+    let stored = state
+        .commands()
+        .get_for_tenant(tenant_id, command.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.status, CommandStatus::Failed);
+    assert!(!stored.error.unwrap().contains(access_code));
+}
+
+#[tokio::test]
+async fn grpc_link_printer_result_json_redacts_access_code() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let access_code = "SECRET-LINK-CODE";
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                host: "192.0.2.10".to_owned(),
+                serial_number: "SERIAL123".to_owned(),
+                access_code: access_code.to_owned(),
+                name: None,
+                model: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+    let result_json = format!(r#"{{"access_code":"{access_code}","status":"rejected"}}"#);
+
+    handle_result_and_job(
+        &state,
+        tenant_id,
+        agent_id,
+        command.id,
+        command_result_payload(false, String::new(), result_json),
+        Some(access_code),
+    )
+    .await
+    .unwrap();
+
+    let stored = state
+        .commands()
+        .get_for_tenant(tenant_id, command.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let stored_result = stored.result_json.unwrap();
+    assert!(!stored_result.contains(access_code));
+    let parsed: serde_json::Value = serde_json::from_str(&stored_result).unwrap();
+    assert_eq!(parsed["access_code"], "[redacted]");
+    assert_eq!(parsed["status"], "rejected");
+}
+
+#[tokio::test]
+async fn grpc_link_printer_numeric_result_json_redacts_digit_access_code() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let access_code = "12345678";
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                host: "192.0.2.10".to_owned(),
+                serial_number: "SERIAL123".to_owned(),
+                access_code: access_code.to_owned(),
+                name: None,
+                model: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+
+    handle_result_and_job(
+        &state,
+        tenant_id,
+        agent_id,
+        command.id,
+        command_result_payload(
+            false,
+            String::new(),
+            r#"{"echoed":12345678,"status":"rejected"}"#.to_owned(),
+        ),
+        Some(access_code),
+    )
+    .await
+    .unwrap();
+
+    let stored = state
+        .commands()
+        .get_for_tenant(tenant_id, command.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let stored_result = stored.result_json.unwrap();
+    assert!(!stored_result.contains(access_code));
+    let parsed: serde_json::Value = serde_json::from_str(&stored_result).unwrap();
+    assert_eq!(parsed["echoed"], "[redacted]");
+    assert_eq!(parsed["status"], "rejected");
+}
+
+#[tokio::test]
+async fn grpc_link_printer_result_json_redacts_access_code_object_key() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let access_code = "SECRET-LINK-CODE";
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                host: "192.0.2.10".to_owned(),
+                serial_number: "SERIAL123".to_owned(),
+                access_code: access_code.to_owned(),
+                name: None,
+                model: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+
+    handle_result_and_job(
+        &state,
+        tenant_id,
+        agent_id,
+        command.id,
+        command_result_payload(
+            false,
+            String::new(),
+            format!(r#"{{"{access_code}":"rejected","status":"failed"}}"#),
+        ),
+        Some(access_code),
+    )
+    .await
+    .unwrap();
+
+    let stored = state
+        .commands()
+        .get_for_tenant(tenant_id, command.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let stored_result = stored.result_json.unwrap();
+    assert!(!stored_result.contains(access_code));
+    let parsed: serde_json::Value = serde_json::from_str(&stored_result).unwrap();
+    let object = parsed.as_object().unwrap();
+    assert!(object.keys().all(|key| !key.contains(access_code)));
+}
+
+#[tokio::test]
+async fn grpc_late_link_printer_result_logs_without_access_code() {
+    let logs = CapturedLogs::new();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(logs.writer())
+        .with_ansi(false)
+        .finish();
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let access_code = "SECRET-LINK-CODE";
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                host: "192.0.2.10".to_owned(),
+                serial_number: "SERIAL123".to_owned(),
+                access_code: access_code.to_owned(),
+                name: None,
+                model: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+    state
+        .commands()
+        .mark_succeeded(command.id, tenant_id, agent_id)
+        .await
+        .unwrap();
+
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let err = handle_result_and_job(
+        &state,
+        tenant_id,
+        agent_id,
+        command.id,
+        command_result_payload(
+            false,
+            format!("validation failed for access_code={access_code}"),
+            String::new(),
+        ),
+        None,
+    )
+    .await
+    .unwrap_err();
+    tracing::error!(error = %crate::redaction::redact_secrets(&format!("{err:#}")), "failed to process late link printer result");
+    drop(_guard);
+
+    let captured = logs.to_string();
+    assert!(captured.contains("failed to process late link printer result"));
+    assert!(!captured.contains(access_code));
+}
+
+#[tokio::test]
+async fn grpc_late_link_printer_result_stream_keeps_session_and_pending_redacted() {
+    let logs = CapturedLogs::new();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(logs.writer())
+        .with_ansi(false)
+        .finish();
+    let _guard = tracing::subscriber::set_default(subscriber);
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let access_code = "SECRET-LINK-CODE";
+    let (mut stream, sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+    let token = state.sessions().get(agent_id).await.unwrap().token;
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                host: "192.0.2.10".to_owned(),
+                serial_number: "SERIAL123".to_owned(),
+                access_code: access_code.to_owned(),
+                name: None,
+                model: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+    state
+        .sessions()
+        .try_dispatch_live_command(
+            tenant_id,
+            agent_id,
+            token,
+            command.id,
+            link_printer_hub_command(command.id, access_code),
+        )
+        .await
+        .unwrap();
+    let _ = stream.next().await.unwrap().unwrap();
+    state
+        .commands()
+        .mark_failed(
+            command.id,
+            tenant_id,
+            agent_id,
+            "stale cleanup failed first",
+        )
+        .await
+        .unwrap();
+
+    sender
+        .send(Ok(result_event(
+            tenant_id,
+            agent_id,
+            command.id,
+            false,
+            format!("printer rejected {access_code}"),
+            format!(r#"{{"message":"{access_code}"}}"#),
+        )))
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+    assert_eq!(state.sessions().get(agent_id).await.unwrap().token, token);
+    let stored = state
+        .commands()
+        .get_for_tenant(tenant_id, command.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.status, CommandStatus::Failed);
+    assert_eq!(stored.error.as_deref(), Some("stale cleanup failed first"));
+    assert!(
+        state
+            .sessions()
+            .pending_live_command_ids()
+            .await
+            .contains(&command.id)
+    );
+    drop(_guard);
+
+    let captured = logs.to_string();
+    assert!(captured.contains("ignored late live printer link command result"));
+    assert!(!captured.contains(access_code));
+}
+
+#[tokio::test]
+async fn grpc_link_printer_stream_result_redacts_standalone_access_code() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let access_code = "SECRET-LINK-CODE";
+    let (mut stream, sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+    let token = state.sessions().get(agent_id).await.unwrap().token;
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                host: "192.0.2.10".to_owned(),
+                serial_number: "SERIAL123".to_owned(),
+                access_code: access_code.to_owned(),
+                name: None,
+                model: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+    state
+        .sessions()
+        .try_dispatch_live_command(
+            tenant_id,
+            agent_id,
+            token,
+            command.id,
+            link_printer_hub_command(command.id, access_code),
+        )
+        .await
+        .unwrap();
+    let _ = stream.next().await.unwrap().unwrap();
+
+    sender
+        .send(Ok(result_event(
+            tenant_id,
+            agent_id,
+            command.id,
+            false,
+            format!("printer rejected {access_code}"),
+            format!(r#"{{"message":"{access_code}"}}"#),
+        )))
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+    let stored = state
+        .commands()
+        .get_for_tenant(tenant_id, command.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.status, CommandStatus::Failed);
+    assert!(!stored.error.unwrap().contains(access_code));
+    assert!(!stored.result_json.unwrap().contains(access_code));
+    assert!(
+        !state
+            .sessions()
+            .pending_live_command_ids()
+            .await
+            .contains(&command.id)
+    );
+}
+
+#[tokio::test]
+async fn grpc_link_printer_rejected_ack_redacts_pending_secret_from_error() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let access_code = "SECRET-LINK-CODE";
+    let (mut stream, sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+    let token = state.sessions().get(agent_id).await.unwrap().token;
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                host: "192.0.2.10".to_owned(),
+                serial_number: "SERIAL123".to_owned(),
+                access_code: access_code.to_owned(),
+                name: None,
+                model: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+    state
+        .sessions()
+        .try_dispatch_live_command(
+            tenant_id,
+            agent_id,
+            token,
+            command.id,
+            link_printer_hub_command(command.id, access_code),
+        )
+        .await
+        .unwrap();
+    let _ = stream.next().await.unwrap().unwrap();
+
+    sender
+        .send(Ok(failed_ack_event(
+            tenant_id,
+            agent_id,
+            command.id,
+            access_code,
+        )))
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+    let stored = state
+        .commands()
+        .get_for_tenant(tenant_id, command.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.status, CommandStatus::Failed);
+    assert!(!stored.error.unwrap().contains(access_code));
+}
+
+#[tokio::test]
+async fn grpc_link_printer_result_without_pending_secret_redacts_untrusted_strings() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let access_code = "SECRET-LINK-CODE";
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                host: "192.0.2.10".to_owned(),
+                serial_number: "SERIAL123".to_owned(),
+                access_code: access_code.to_owned(),
+                name: None,
+                model: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+
+    handle_result_and_job(
+        &state,
+        tenant_id,
+        agent_id,
+        command.id,
+        command_result_payload(
+            false,
+            format!("printer rejected {access_code}"),
+            format!(r#"{{"message":"{access_code}","status":"rejected"}}"#),
+        ),
+        None,
+    )
+    .await
+    .unwrap();
+
+    let stored = state
+        .commands()
+        .get_for_tenant(tenant_id, command.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!stored.error.unwrap().contains(access_code));
+    let result_json = stored.result_json.unwrap();
+    assert!(!result_json.contains(access_code));
+    let parsed: serde_json::Value = serde_json::from_str(&result_json).unwrap();
+    let object = parsed.as_object().unwrap();
+    assert!(object.keys().all(|key| !key.contains(access_code)));
+    assert!(object.values().all(|value| value == "[redacted]"));
+}
+
+#[tokio::test]
+async fn grpc_link_printer_result_without_pending_secret_redacts_numeric_values() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let access_code = "12345678";
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                host: "192.0.2.10".to_owned(),
+                serial_number: "SERIAL123".to_owned(),
+                access_code: access_code.to_owned(),
+                name: None,
+                model: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+
+    handle_result_and_job(
+        &state,
+        tenant_id,
+        agent_id,
+        command.id,
+        command_result_payload(
+            false,
+            String::new(),
+            r#"{"echoed":12345678,"status":"rejected"}"#.to_owned(),
+        ),
+        None,
+    )
+    .await
+    .unwrap();
+
+    let stored = state
+        .commands()
+        .get_for_tenant(tenant_id, command.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let result_json = stored.result_json.unwrap();
+    assert!(!result_json.contains(access_code));
+    let parsed: serde_json::Value = serde_json::from_str(&result_json).unwrap();
+    let object = parsed.as_object().unwrap();
+    assert!(object.keys().all(|key| !key.contains(access_code)));
+    assert!(object.values().all(|value| value == "[redacted]"));
+}
+
+#[tokio::test]
+async fn grpc_link_printer_result_without_pending_secret_redacts_numeric_object_key() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let access_code = "12345678";
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                host: "192.0.2.10".to_owned(),
+                serial_number: "SERIAL123".to_owned(),
+                access_code: access_code.to_owned(),
+                name: None,
+                model: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+
+    handle_result_and_job(
+        &state,
+        tenant_id,
+        agent_id,
+        command.id,
+        command_result_payload(
+            false,
+            String::new(),
+            r#"{"12345678":"rejected","status":"failed"}"#.to_owned(),
+        ),
+        None,
+    )
+    .await
+    .unwrap();
+
+    let stored = state
+        .commands()
+        .get_for_tenant(tenant_id, command.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let result_json = stored.result_json.unwrap();
+    assert!(!result_json.contains(access_code));
+    let parsed: serde_json::Value = serde_json::from_str(&result_json).unwrap();
+    let object = parsed.as_object().unwrap();
+    assert!(object.keys().all(|key| !key.contains(access_code)));
+}
+
 #[tokio::test]
 async fn grpc_unknown_command_ack_streams_not_found() {
     let state = fixture_state().await;
@@ -384,6 +1053,114 @@ async fn grpc_unknown_command_ack_streams_not_found() {
     let err = stream.next().await.unwrap().unwrap_err();
 
     assert_eq!(err.code(), Code::NotFound);
+}
+
+fn result_event(
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    command_id: CommandId,
+    success: bool,
+    error: String,
+    result_json: String,
+) -> AgentEvent {
+    AgentEvent {
+        tenant_id: tenant_id.to_string(),
+        agent_id: agent_id.to_string(),
+        event_id: "event".to_string(),
+        event: Some(agent_event::Event::CommandResult(CommandResult {
+            command_id: command_id.to_string(),
+            success,
+            error,
+            result_json,
+        })),
+    }
+}
+
+fn failed_ack_event(
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    command_id: CommandId,
+    error: &str,
+) -> AgentEvent {
+    AgentEvent {
+        tenant_id: tenant_id.to_string(),
+        agent_id: agent_id.to_string(),
+        event_id: "event".to_string(),
+        event: Some(agent_event::Event::CommandAck(CommandAck {
+            command_id: command_id.to_string(),
+            accepted: false,
+            error: error.to_owned(),
+        })),
+    }
+}
+
+fn link_printer_hub_command(command_id: CommandId, access_code: &str) -> HubCommand {
+    HubCommand {
+        command_id: command_id.to_string(),
+        command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
+            host: "192.0.2.10".to_owned(),
+            serial_number: "SERIAL123".to_owned(),
+            access_code: access_code.to_owned(),
+            name: String::new(),
+            model: String::new(),
+        })),
+    }
+}
+
+#[derive(Clone)]
+struct CapturedLogs {
+    output: Arc<Mutex<Vec<u8>>>,
+}
+
+impl CapturedLogs {
+    fn new() -> Self {
+        Self {
+            output: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn writer(&self) -> TestLogWriter {
+        TestLogWriter {
+            output: self.output.clone(),
+        }
+    }
+}
+
+impl std::fmt::Display for CapturedLogs {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let output = self.output.lock().unwrap().clone();
+        formatter.write_str(&String::from_utf8_lossy(&output))
+    }
+}
+
+#[derive(Clone)]
+struct TestLogWriter {
+    output: Arc<Mutex<Vec<u8>>>,
+}
+
+impl<'writer> MakeWriter<'writer> for TestLogWriter {
+    type Writer = TestLogBuffer;
+
+    fn make_writer(&'writer self) -> Self::Writer {
+        TestLogBuffer {
+            output: self.output.clone(),
+        }
+    }
+}
+
+struct TestLogBuffer {
+    output: Arc<Mutex<Vec<u8>>>,
+}
+
+impl Write for TestLogBuffer {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.output.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 #[tokio::test]

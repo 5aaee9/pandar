@@ -21,8 +21,9 @@ pub use auth::{
     UserIdentity, UserRole,
 };
 pub use commands::{
-    CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
-    PrinterAxis, PrinterAxisMovement, PrinterOperationKind, PrinterOperationPayload,
+    CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload,
+    PrintProjectFilePayload, PrinterAxis, PrinterAxisMovement, PrinterOperationKind,
+    PrinterOperationPayload,
 };
 pub use jobs::{
     AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, CreatePrintJob, DuplicatePrintJob,

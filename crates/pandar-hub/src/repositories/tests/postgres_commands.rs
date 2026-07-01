@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use super::*;
 use crate::repositories::tests::postgres::postgres_database;
-use crate::repositories::{AuditActor, PrinterOperationKind};
+use crate::repositories::{AuditActor, LinkPrinterPayload, PrinterOperationKind};
 
 #[tokio::test]
 async fn postgres_command_repository_behavior_when_configured() {
@@ -290,6 +290,114 @@ async fn postgres_printer_operation_enqueue_behavior_when_configured() {
         .unwrap_err();
 
     assert!(matches!(err, RepositoryError::PrinterControlUnavailable));
+}
+
+#[tokio::test]
+async fn postgres_link_printer_command_behavior_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    let tenants = TenantRepository::new(database.clone());
+    let agents = AgentRepository::new(database.clone());
+    let commands = CommandRepository::new(database.clone());
+    let audit = AuditEventRepository::new(database.clone());
+    let tenant = tenants
+        .create("link-printer", "Link Printer Labs")
+        .await
+        .unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let old_owned = commands
+        .create_link_printer_sent_with_audit(
+            tenant.id,
+            agent.id,
+            link_payload("OWNED"),
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+    let old_unowned = commands
+        .create_link_printer_sent_with_audit(
+            tenant.id,
+            agent.id,
+            link_payload("UNOWNED"),
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+
+    let payload: Value = serde_json::from_str(&old_owned.payload_json).unwrap();
+    assert_eq!(old_owned.kind, "link_printer");
+    assert_eq!(old_owned.status, CommandStatus::Sent);
+    assert_eq!(payload["access_code"], "[redacted]");
+    assert!(!old_owned.payload_json.contains("SECRET-OWNED"));
+    let event = audit
+        .list_for_tenant(tenant.id)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|event| event.action == "agent.link_printer")
+        .expect("link printer audit event");
+    assert!(!event.metadata_json.contains("SECRET-OWNED"));
+
+    set_command_updated_at(&database, old_owned.id, "2026-07-01T00:00:00Z").await;
+    set_command_updated_at(&database, old_unowned.id, "2026-07-01T00:00:00Z").await;
+
+    let failed = commands
+        .fail_stale_unowned_link_printer_commands(
+            "2026-07-01T00:06:00Z",
+            std::time::Duration::from_secs(300),
+            &[old_owned.id],
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(failed, 1);
+    assert_eq!(
+        commands
+            .get_for_tenant(tenant.id, old_owned.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        CommandStatus::Sent,
+    );
+    assert_eq!(
+        commands
+            .get_for_tenant(tenant.id, old_unowned.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        CommandStatus::Failed,
+    );
+}
+
+async fn set_command_updated_at(
+    database: &crate::db::Database,
+    command_id: CommandId,
+    updated_at: &str,
+) {
+    let crate::db::Database::Postgres(pool) = database else {
+        panic!("expected PostgreSQL database");
+    };
+    sqlx::query("UPDATE commands SET updated_at = $2 WHERE id = $1")
+        .bind(command_id.to_string())
+        .bind(updated_at)
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+fn link_payload(serial: &str) -> LinkPrinterPayload {
+    LinkPrinterPayload {
+        host: "192.0.2.10".to_owned(),
+        serial_number: serial.to_owned(),
+        access_code: format!("SECRET-{serial}"),
+        name: None,
+        model: None,
+    }
 }
 
 fn test_audit_actor() -> AuditActor {

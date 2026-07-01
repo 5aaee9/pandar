@@ -20,6 +20,7 @@ vi.mock("./actions", () => ({
   diagnosePrinter: vi.fn(),
   discoverPrinters: vi.fn(),
   duplicateJob: vi.fn(),
+  linkPrinter: vi.fn(),
   refreshAllAgents: vi.fn(),
   refreshPrinters: vi.fn(),
   retryDispatchJob: vi.fn(),
@@ -174,5 +175,44 @@ describe("Agents view pairing guidance", () => {
 
     expect(screen.getByRole("button", { name: "Delete Offline agent" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Online agent is online" })).toBeDisabled();
+  });
+
+  it("renders link-printer form between pairing guidance and linked agents", () => {
+    renderAgentsView({
+      agents: [
+        { id: "agent-online", tenant_id: tenant.id, name: "Online agent", status: "online", created_at: "2026-06-30T00:00:00Z" },
+        { id: "agent-offline", tenant_id: tenant.id, name: "Offline agent", status: "offline", created_at: "2026-06-30T00:00:00Z" },
+      ],
+    });
+
+    const pairingHeading = screen.getByRole("heading", { name: "Pair a local agent" });
+    const linkHeading = screen.getByRole("heading", { name: "Link printer to agent" });
+    const linkedAgentsHeading = screen.getByRole("heading", { name: "Linked agents" });
+
+    expect(pairingHeading.compareDocumentPosition(linkHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(linkHeading.compareDocumentPosition(linkedAgentsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByLabelText("Agent")).toHaveValue("agent-online");
+    expect(screen.getByLabelText("Host or IP address")).toHaveAttribute("name", "host");
+    expect(screen.getByLabelText("Serial number")).toHaveAttribute("name", "serial_number");
+    expect(screen.getByLabelText("Access code")).toHaveAttribute("type", "password");
+    expect(screen.getByRole("button", { name: "Link printer" })).toHaveAttribute("type", "submit");
+  });
+
+  it("shows link-printer empty state when no tenant is selected", () => {
+    renderAgentsView({ selectedTenant: null });
+
+    expect(screen.getByRole("heading", { name: "Link printer to agent" })).toBeVisible();
+    expect(screen.getByText("Select a tenant to link a printer."));
+    expect(screen.getByText("Choose a tenant from the header before submitting printer credentials."));
+    expect(screen.queryByLabelText("Access code")).not.toBeInTheDocument();
+  });
+
+  it("shows link-printer empty state when no agents are linked", () => {
+    renderAgentsView();
+
+    expect(screen.getByRole("heading", { name: "Link printer to agent" })).toBeVisible();
+    expect(screen.getByText("No agents available for printer linking."));
+    expect(screen.getByText("Pair an agent before linking a printer."));
+    expect(screen.queryByLabelText("Access code")).not.toBeInTheDocument();
   });
 });

@@ -87,10 +87,19 @@ message HubCommand {
     DiscoverPrinters discover_printers = 12;
     DiagnosePrinter diagnose_printer = 13;
     PrinterOperation printer_operation = 14;
+    LinkPrinter link_printer = 15;
   }
 }
 
 message RefreshPrinters {}
+
+message LinkPrinter {
+  string host = 1;
+  string serial_number = 2;
+  string access_code = 3;
+  string name = 4;
+  string model = 5;
+}
 
 message DiscoverPrinters {
   uint32 timeout_seconds = 1;

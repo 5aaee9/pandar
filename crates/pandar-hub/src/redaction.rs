@@ -6,6 +6,171 @@ pub fn redact_secrets(message: &str) -> String {
         .join("\n")
 }
 
+pub fn redact_link_printer_secret(message: &str, access_code: &str) -> String {
+    let redacted = redact_secrets(message);
+    if access_code.is_empty() {
+        redacted
+    } else {
+        redacted.replace(access_code, "[redacted]")
+    }
+}
+
+pub fn redact_link_printer_result_json(result_json: &str, access_code: &str) -> String {
+    let redacted = redact_result_json(result_json);
+    if access_code.is_empty() {
+        return redact_link_printer_result_json_without_secret(&redacted);
+    }
+
+    match serde_json::from_str::<serde_json::Value>(&redacted) {
+        Ok(mut value) => {
+            if redact_json_string(&mut value, access_code) {
+                value.to_string()
+            } else {
+                redacted
+            }
+        }
+        Err(_) => redacted.replace(access_code, "[redacted]"),
+    }
+}
+
+pub fn redact_link_printer_result_json_without_secret(result_json: &str) -> String {
+    let redacted = redact_result_json(result_json);
+    match serde_json::from_str::<serde_json::Value>(&redacted) {
+        Ok(mut value) => {
+            redact_all_json_strings(&mut value);
+            value.to_string()
+        }
+        Err(_) => "[redacted]".to_owned(),
+    }
+}
+
+pub fn redact_result_json(result_json: &str) -> String {
+    match serde_json::from_str::<serde_json::Value>(result_json) {
+        Ok(mut value) => {
+            if redact_json_value(&mut value) {
+                value.to_string()
+            } else {
+                result_json.to_owned()
+            }
+        }
+        Err(_) => redact_secrets(result_json),
+    }
+}
+
+fn redact_json_value(value: &mut serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Object(object) => {
+            let mut changed = false;
+            for (key, value) in object {
+                if is_credential_key(key) {
+                    *value = serde_json::Value::String("[redacted]".to_owned());
+                    changed = true;
+                } else {
+                    changed |= redact_json_value(value);
+                }
+            }
+            changed
+        }
+        serde_json::Value::Array(items) => {
+            let mut changed = false;
+            for item in items {
+                changed |= redact_json_value(item);
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn redact_json_string(value: &mut serde_json::Value, secret: &str) -> bool {
+    match value {
+        serde_json::Value::String(value) if value.contains(secret) => {
+            *value = value.replace(secret, "[redacted]");
+            true
+        }
+        serde_json::Value::Number(number) => {
+            let matches_secret = number.to_string() == secret;
+            if matches_secret {
+                *value = serde_json::Value::String("[redacted]".to_owned());
+            }
+            matches_secret
+        }
+        serde_json::Value::Object(object) => {
+            let mut changed = false;
+            let entries = std::mem::take(object);
+            for (key, mut value) in entries {
+                let redacted_key = if key.contains(secret) {
+                    changed = true;
+                    key.replace(secret, "[redacted]")
+                } else {
+                    key
+                };
+                changed |= redact_json_string(&mut value, secret);
+                object.insert(redacted_key, value);
+            }
+            changed
+        }
+        serde_json::Value::Array(items) => {
+            let mut changed = false;
+            for item in items {
+                changed |= redact_json_string(item, secret);
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn redact_all_json_strings(value: &mut serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::String(value) => {
+            *value = "[redacted]".to_owned();
+            true
+        }
+        value @ serde_json::Value::Number(_) => {
+            *value = serde_json::Value::String("[redacted]".to_owned());
+            true
+        }
+        serde_json::Value::Object(object) => {
+            let mut changed = false;
+            let entries = std::mem::take(object);
+            for (index, (_, mut value)) in entries.into_iter().enumerate() {
+                changed = true;
+                changed |= redact_all_json_strings(&mut value);
+                object.insert(format!("[redacted_{index}]"), value);
+            }
+            changed
+        }
+        serde_json::Value::Array(items) => {
+            let mut changed = false;
+            for item in items {
+                changed |= redact_all_json_strings(item);
+            }
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn is_credential_key(key: &str) -> bool {
+    let normalized: String = key
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect();
+    [
+        "accesscode",
+        "password",
+        "token",
+        "auth",
+        "credential",
+        "ticket",
+        "bearer",
+    ]
+    .iter()
+    .any(|secret| normalized.contains(secret))
+}
+
 fn redact_line(line: &str) -> String {
     let mut redacted = line.to_owned();
     for key in [
@@ -92,7 +257,10 @@ fn redact_key_value(line: &str, key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::redact_secrets;
+    use super::{
+        redact_link_printer_result_json, redact_link_printer_result_json_without_secret,
+        redact_link_printer_secret, redact_secrets,
+    };
 
     #[test]
     fn redacts_tokens_credentials_and_artifact_paths() {
@@ -142,5 +310,40 @@ Caused by:
         assert!(redacted.contains("Not a directory"));
         assert!(!redacted.contains("/tmp/pandar"));
         assert!(!redacted.contains("not-a-directory"));
+    }
+
+    #[test]
+    fn redacts_link_printer_secret_as_key_value_and_standalone_value() {
+        let message = "failed with access_code=SECRET-LINK-CODE\nCaused by:\n    printer rejected SECRET-LINK-CODE";
+
+        let redacted = redact_link_printer_secret(message, "SECRET-LINK-CODE");
+
+        assert!(redacted.contains("Caused by:"));
+        assert!(!redacted.contains("SECRET-LINK-CODE"));
+        assert!(redacted.contains("[redacted]"));
+    }
+
+    #[test]
+    fn redacts_link_printer_secret_from_result_json_string_values() {
+        let redacted = redact_link_printer_result_json(
+            r#"{"message":"printer rejected SECRET-LINK-CODE"}"#,
+            "SECRET-LINK-CODE",
+        );
+
+        assert!(!redacted.contains("SECRET-LINK-CODE"));
+        assert!(redacted.contains("[redacted]"));
+    }
+
+    #[test]
+    fn redacts_link_printer_result_json_strings_without_secret_context() {
+        let redacted = redact_link_printer_result_json_without_secret(
+            r#"{"message":"printer rejected SECRET-LINK-CODE","status":"failed"}"#,
+        );
+
+        assert!(!redacted.contains("SECRET-LINK-CODE"));
+        let parsed: serde_json::Value = serde_json::from_str(&redacted).unwrap();
+        let object = parsed.as_object().unwrap();
+        assert!(object.keys().all(|key| key.starts_with("[redacted_")));
+        assert!(object.values().all(|value| value == "[redacted]"));
     }
 }

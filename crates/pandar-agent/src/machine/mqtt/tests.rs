@@ -68,6 +68,7 @@ fn lan_mqtt_accepts_full_pushall_reports() {
 
 #[test]
 fn mqtt_report_error_log_preserves_error_chain() {
+    let _capture_guard = crate::TRACING_CAPTURE_LOCK.lock().unwrap();
     let logs = CapturedLogs::default();
     let subscriber = tracing_subscriber::fmt()
         .with_writer(logs.clone())
@@ -523,8 +524,9 @@ async fn refresh_get_version_publish_failure_fails_before_pushall() {
     assert!(transport.published_commands().await.is_empty());
 }
 
-#[tokio::test]
-async fn refresh_discovery_failure_log_includes_serial_and_error_chain() {
+#[test]
+fn refresh_discovery_failure_log_includes_serial_and_error_chain() {
+    let _capture_guard = crate::TRACING_CAPTURE_LOCK.lock().unwrap();
     let logs = CapturedLogs::default();
     let subscriber = tracing_subscriber::fmt()
         .with_writer(logs.clone())
@@ -533,10 +535,17 @@ async fn refresh_discovery_failure_log_includes_serial_and_error_chain() {
         .finish();
     let transport = FakeMqttTransport::with_publish_failure(BambuMqttCommand::GetVersion.payload());
 
-    let _guard = tracing::subscriber::set_default(subscriber);
-    refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
-        .await
-        .unwrap_err();
+    tracing::subscriber::with_default(subscriber, || {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
+                    .await
+                    .unwrap_err();
+            });
+    });
 
     let captured = logs.contents();
     assert!(captured.contains("printer model discovery failed"));

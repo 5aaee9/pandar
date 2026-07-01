@@ -352,6 +352,8 @@ async fn agent_credential_revoke_closes_current_session() {
             last_heartbeat_at: pandar_core::created_at_now(),
             wake_sender,
             close_sender,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
 
@@ -444,6 +446,8 @@ async fn agent_credential_rotate_closes_current_session() {
             last_heartbeat_at: pandar_core::created_at_now(),
             wake_sender,
             close_sender,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
 
@@ -500,6 +504,8 @@ async fn agent_credential_revoke_closes_sibling_session() {
             last_heartbeat_at: pandar_core::created_at_now(),
             wake_sender,
             close_sender,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
 

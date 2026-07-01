@@ -8,16 +8,19 @@ use crate::{AppState, cluster::HubControlMessage, metrics::ControlPlaneMetric};
 
 const STALE_SESSION_TIMEOUT: Duration = Duration::from_secs(45);
 const STALE_SESSION_SWEEP_INTERVAL: Duration = Duration::from_secs(15);
+const STALE_LINK_PRINTER_COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub fn spawn_session_expiry(state: AppState) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(STALE_SESSION_SWEEP_INTERVAL);
         loop {
             ticker.tick().await;
-            if let Err(err) =
-                expire_stale_sessions_once(&state, &pandar_core::created_at_now()).await
-            {
+            let now = pandar_core::created_at_now();
+            if let Err(err) = expire_stale_sessions_once(&state, &now).await {
                 tracing::error!(error = %format!("{err:#}"), "failed to expire stale agent sessions");
+            }
+            if let Err(err) = fail_stale_link_printer_commands_once(&state, &now).await {
+                log_stale_link_printer_cleanup_error(&err);
             }
         }
     })
@@ -134,12 +137,45 @@ async fn expire_stale_sessions_with_timeout(
         .map(|expired| expired.len())
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
+async fn fail_stale_link_printer_commands_once(state: &AppState, now: &str) -> anyhow::Result<u64> {
+    fail_stale_link_printer_commands_with_timeout(state, now, STALE_LINK_PRINTER_COMMAND_TIMEOUT)
+        .await
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+async fn fail_stale_link_printer_commands_with_timeout(
+    state: &AppState,
+    now: &str,
+    timeout: Duration,
+) -> anyhow::Result<u64> {
+    let pending = state.sessions().pending_live_command_ids().await;
+    state
+        .commands()
+        .fail_stale_unowned_link_printer_commands(now, timeout, &pending)
+        .await
+        .context("failed to fail stale unowned link printer commands")
+}
+
+fn log_stale_link_printer_cleanup_error(err: &anyhow::Error) {
+    tracing::error!(
+        error = %crate::redaction::redact_secrets(&format!("{err:#}")),
+        "failed to expire stale live printer link commands"
+    );
+}
+
 #[cfg(test)]
 mod tests {
+    use std::io::{self, Write};
+    use std::sync::{Arc, Mutex};
+
+    use pandar_core::CommandStatus;
     use pandar_core::{AgentId, AgentStatus, TenantId};
     use tokio::sync::mpsc;
+    use tracing_subscriber::fmt::MakeWriter;
 
     use super::*;
+    use crate::repositories::{AuditActor, LinkPrinterPayload};
     use crate::sessions::{AgentSession, SessionToken};
 
     #[tokio::test]
@@ -171,6 +207,8 @@ mod tests {
                 last_heartbeat_at: "2026-06-20T00:00:00Z".to_string(),
                 wake_sender,
                 close_sender,
+                command_sender: mpsc::channel(1).0,
+                pending_live_commands: crate::sessions::empty_pending_live_commands(),
             })
             .await;
 
@@ -186,6 +224,112 @@ mod tests {
         assert!(state.sessions().get(agent.id).await.is_none());
         let persisted = state.agents().get(agent.id).await.unwrap().unwrap();
         assert_eq!(persisted.status, AgentStatus::Offline);
+    }
+
+    #[tokio::test]
+    async fn runtime_stale_link_printer_cleanup_skips_pending_live_commands() {
+        let state = AppState::sqlite_for_tests().await.unwrap();
+        let tenant = state
+            .tenants()
+            .create("cleanup-acme", "Cleanup Acme")
+            .await
+            .unwrap();
+        let agent = state
+            .agents()
+            .create(tenant.id, "cleanup-agent")
+            .await
+            .unwrap();
+        let owned = state
+            .commands()
+            .create_link_printer_sent_with_audit(
+                tenant.id,
+                agent.id,
+                link_payload("OWNED"),
+                test_audit_actor(),
+            )
+            .await
+            .unwrap();
+        let unowned = state
+            .commands()
+            .create_link_printer_sent_with_audit(
+                tenant.id,
+                agent.id,
+                link_payload("UNOWNED"),
+                test_audit_actor(),
+            )
+            .await
+            .unwrap();
+        set_command_updated_at(&state, owned.id, "2026-07-01T00:00:00Z").await;
+        set_command_updated_at(&state, unowned.id, "2026-07-01T00:00:00Z").await;
+        let (command_sender, _command_receiver) = mpsc::channel(1);
+        let pending = crate::sessions::empty_pending_live_commands();
+        pending
+            .lock()
+            .unwrap()
+            .insert(owned.id, crate::sessions::PendingLiveCommand::new(None));
+        state
+            .sessions()
+            .register(AgentSession {
+                token: SessionToken::new(),
+                tenant_id: tenant.id,
+                agent_id: agent.id,
+                name: agent.name,
+                version: "0.1.0".to_owned(),
+                connected_at: pandar_core::created_at_now(),
+                last_heartbeat_at: pandar_core::created_at_now(),
+                wake_sender: mpsc::channel(1).0,
+                close_sender: mpsc::channel(1).0,
+                command_sender,
+                pending_live_commands: pending,
+            })
+            .await;
+
+        let failed = fail_stale_link_printer_commands_with_timeout(
+            &state,
+            "2026-07-01T00:06:00Z",
+            Duration::from_secs(300),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(failed, 1);
+        assert_eq!(
+            state
+                .commands()
+                .get_for_tenant(tenant.id, owned.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            CommandStatus::Sent
+        );
+        assert_eq!(
+            state
+                .commands()
+                .get_for_tenant(tenant.id, unowned.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .status,
+            CommandStatus::Failed
+        );
+    }
+
+    #[test]
+    fn runtime_stale_link_printer_cleanup_log_redacts_access_code() {
+        let logs = CapturedLogs::new();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(logs.writer())
+            .with_ansi(false)
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+        let err = anyhow::anyhow!("database failed with access_code=SECRET-LINK-CODE")
+            .context("failed to sweep link printer commands");
+
+        log_stale_link_printer_cleanup_error(&err);
+        drop(_guard);
+
+        assert!(!logs.to_string().contains("SECRET-LINK-CODE"));
     }
 
     #[tokio::test]
@@ -322,8 +466,96 @@ mod tests {
                 last_heartbeat_at: pandar_core::created_at_now(),
                 wake_sender,
                 close_sender,
+                command_sender: mpsc::channel(1).0,
+                pending_live_commands: crate::sessions::empty_pending_live_commands(),
             })
             .await;
         (wake_receiver, close_receiver)
+    }
+
+    fn link_payload(serial: &str) -> LinkPrinterPayload {
+        LinkPrinterPayload {
+            host: "192.0.2.10".to_owned(),
+            serial_number: serial.to_owned(),
+            access_code: format!("SECRET-{serial}"),
+            name: None,
+            model: None,
+        }
+    }
+
+    fn test_audit_actor() -> AuditActor {
+        AuditActor::tenant_token(None, "test-runtime-token", vec!["*"])
+    }
+
+    async fn set_command_updated_at(
+        state: &AppState,
+        command_id: pandar_core::CommandId,
+        updated_at: &str,
+    ) {
+        let crate::db::Database::Sqlite(pool) = state.database() else {
+            panic!("expected SQLite database");
+        };
+        sqlx::query("UPDATE commands SET updated_at = ?2 WHERE id = ?1")
+            .bind(command_id.to_string())
+            .bind(updated_at)
+            .execute(pool)
+            .await
+            .unwrap();
+    }
+
+    #[derive(Clone)]
+    struct CapturedLogs {
+        output: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl CapturedLogs {
+        fn new() -> Self {
+            Self {
+                output: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+
+        fn writer(&self) -> TestLogWriter {
+            TestLogWriter {
+                output: self.output.clone(),
+            }
+        }
+    }
+
+    impl std::fmt::Display for CapturedLogs {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let output = self.output.lock().unwrap().clone();
+            formatter.write_str(&String::from_utf8_lossy(&output))
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestLogWriter {
+        output: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl<'writer> MakeWriter<'writer> for TestLogWriter {
+        type Writer = TestLogBuffer;
+
+        fn make_writer(&'writer self) -> Self::Writer {
+            TestLogBuffer {
+                output: self.output.clone(),
+            }
+        }
+    }
+
+    struct TestLogBuffer {
+        output: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl Write for TestLogBuffer {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.output.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
     }
 }

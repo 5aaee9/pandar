@@ -3,13 +3,14 @@ import { useTranslations } from 'next-intl'
 import { FormattedDate } from '../components/formatted-date'
 import { deleteAgent, diagnosePrinter, discoverPrinters } from './actions'
 import { ConfirmForm } from './confirm-dialog'
-import { EmptyState, HelpTip, StatusBadge, Tag } from './dashboard-ui'
+import { DetailLine, EmptyState, HelpTip, StatusBadge, Tag } from './dashboard-ui'
 import type {
   Agent,
   Command,
   CommandResultData,
   DiagnosticResultData,
   DiscoveryResultData,
+  PrinterLinkResultData,
   Printer,
   Tenant,
 } from './dashboard-types'
@@ -179,6 +180,8 @@ export function DiagnosticsSection({
         <DiscoveryResult result={commandData} />
       ) : commandData?.type === 'printer_diagnostic' ? (
         <DiagnosticResult result={commandData} />
+      ) : commandData?.type === 'printer_link' ? (
+        <PrinterLinkResult result={commandData} />
       ) : (
         <EmptyState
           title={t('noStructuredTitle')}
@@ -219,6 +222,19 @@ function DiscoveryResult({ result }: { result: DiscoveryResultData }) {
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+function PrinterLinkResult({ result }: { result: PrinterLinkResultData }) {
+  const t = useTranslations('diagnostics')
+  return (
+    <div className="grid gap-3 px-4 py-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
+      <DetailLine label={t('colHost')} value={result.host} mono />
+      <DetailLine label={t('colSerial')} value={result.serial_number} mono />
+      <DetailLine label={t('colName')} value={result.name ?? '-'} />
+      <DetailLine label={t('colModel')} value={result.model ?? '-'} />
+      <DetailLine label={t('colStatus')} value={<StatusBadge value={result.status} />} />
     </div>
   )
 }

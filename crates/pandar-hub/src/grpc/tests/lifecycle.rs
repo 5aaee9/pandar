@@ -2,6 +2,10 @@ use tokio_stream::StreamExt;
 use tonic::Code;
 
 use super::*;
+use crate::{
+    protocol::agent::v1::{HubCommand, LinkPrinter, hub_command},
+    repositories::LinkPrinterPayload,
+};
 use pandar_core::CommandStatus;
 
 #[tokio::test]
@@ -142,4 +146,144 @@ async fn invalid_heartbeat_timestamp_streams_invalid_argument() {
     let err = stream.next().await.unwrap().unwrap_err();
 
     assert_eq!(err.code(), Code::InvalidArgument);
+}
+
+#[tokio::test]
+async fn stream_close_fails_only_closing_session_pending_live_commands() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let (mut old_stream, old_sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+    let old_token = state.sessions().get(agent_id).await.unwrap().token;
+    let old_command = link_printer_command(&state, tenant_id, agent_id, "OLD").await;
+    state
+        .sessions()
+        .try_dispatch_live_command(
+            tenant_id,
+            agent_id,
+            old_token,
+            old_command,
+            link_hub_command(old_command, "OLD"),
+        )
+        .await
+        .unwrap();
+    let _ = old_stream.next().await.unwrap().unwrap();
+
+    let (_new_stream, _new_sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+    let new_token = state.sessions().get(agent_id).await.unwrap().token;
+    let new_command = link_printer_command(&state, tenant_id, agent_id, "NEW").await;
+    state
+        .sessions()
+        .try_dispatch_live_command(
+            tenant_id,
+            agent_id,
+            new_token,
+            new_command,
+            link_hub_command(new_command, "NEW"),
+        )
+        .await
+        .unwrap();
+
+    drop(old_sender);
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+    assert_eq!(
+        state
+            .commands()
+            .get_for_tenant(tenant_id, old_command)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        CommandStatus::Sent
+    );
+    assert_eq!(
+        state
+            .commands()
+            .get_for_tenant(tenant_id, new_command)
+            .await
+            .unwrap()
+            .unwrap()
+            .status,
+        CommandStatus::Sent
+    );
+}
+
+#[tokio::test]
+async fn current_stream_close_fails_pending_live_commands() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let (mut stream, sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+    let token = state.sessions().get(agent_id).await.unwrap().token;
+    let command_id = link_printer_command(&state, tenant_id, agent_id, "CLOSE").await;
+    state
+        .sessions()
+        .try_dispatch_live_command(
+            tenant_id,
+            agent_id,
+            token,
+            command_id,
+            link_hub_command(command_id, "CLOSE"),
+        )
+        .await
+        .unwrap();
+    let _ = stream.next().await.unwrap().unwrap();
+
+    drop(sender);
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+    let command = state
+        .commands()
+        .get_for_tenant(tenant_id, command_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(command.status, CommandStatus::Failed);
+    assert_eq!(
+        command.error.as_deref(),
+        Some("agent connection closed before printer link completed")
+    );
+}
+
+async fn link_printer_command(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    serial: &str,
+) -> CommandId {
+    state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                host: "192.0.2.10".to_owned(),
+                serial_number: serial.to_owned(),
+                access_code: format!("SECRET-{serial}"),
+                name: None,
+                model: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap()
+        .id
+}
+
+fn link_hub_command(command_id: CommandId, serial: &str) -> HubCommand {
+    HubCommand {
+        command_id: command_id.to_string(),
+        command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
+            host: "192.0.2.10".to_owned(),
+            serial_number: serial.to_owned(),
+            access_code: format!("SECRET-{serial}"),
+            name: String::new(),
+            model: String::new(),
+        })),
+    }
 }

@@ -37,6 +37,8 @@ PANDAR_PRINTERS='[{"host":"192.0.2.10","serial":"01S00EXAMPLE","access_code":"12
 
 The value is a JSON array. `host`, `serial`, and `access_code` are required; `model` and `name` are optional. Empty, whitespace, or `[]` means no configured printers and the agent will not open Bambu machine sockets. Invalid printer config fails at startup with `PANDAR_PRINTERS` context.
 
+Printers can also be linked at runtime from the dashboard Agents page. Runtime-linked printers are held only in the running `pandar-agent` process: they do not survive an agent restart unless the same printer is added to `PANDAR_PRINTERS`. The Hub never stores the submitted Bambu access code. In multi-Hub deployments, runtime linking must be routed to the Hub process that owns the agent's reverse gRPC stream; otherwise the API returns `agent_not_connected` and no command row is created.
+
 `RefreshPrinters` discovers the printer model at refresh time through the Bambu LAN MQTT `info.get_version` command before requesting the normal `pushall` state report. If model discovery cannot publish, time out, or parse the `ota.product_name` field, the refresh command fails and logs the full error chain instead of falling back to `PANDAR_PRINTERS[].model`. The optional configured `model` remains local metadata for paths that still need a conservative compatibility profile.
 
 Reverse sessions require `PANDAR_AGENT_CREDENTIAL`. Tenant admins create or rotate agent credentials through tenant-token-backed pairing and enrollment APIs. Plaintext credentials are returned once and only hashes are stored by the hub.

@@ -221,7 +221,16 @@ export type DiagnosticResultData = {
   };
 };
 
-export type CommandResultData = DiscoveryResultData | DiagnosticResultData;
+export type PrinterLinkResultData = {
+  type: "printer_link";
+  serial_number: string;
+  host: string;
+  name?: string;
+  model?: string;
+  status: string;
+};
+
+export type CommandResultData = DiscoveryResultData | DiagnosticResultData | PrinterLinkResultData;
 
 export type ArtifactMetadata = {
   display_name: string;

@@ -2,7 +2,10 @@ mod artifacts;
 mod diagnostics;
 mod print;
 
-use std::sync::Arc;
+use std::{
+    io::{self, Write},
+    sync::{Arc, Mutex as StdMutex},
+};
 
 use anyhow::Context;
 use async_trait::async_trait;
@@ -17,7 +20,7 @@ use crate::{
     },
     protocol::agent::v1::{
         Axis, AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
-        MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
+        LinkPrinter, MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
         RefreshPrinters, SetHotendTemperatureOperation, SetPrintSpeedOperation, printer_operation,
     },
 };
@@ -212,6 +215,19 @@ fn refresh_command(command_id: String) -> HubCommand {
     }
 }
 
+fn link_printer_command(command_id: String, access_code: &str) -> HubCommand {
+    HubCommand {
+        command_id,
+        command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
+            host: "192.0.2.10".to_owned(),
+            serial_number: "SERIAL123".to_owned(),
+            access_code: access_code.to_owned(),
+            name: "Office X1C".to_owned(),
+            model: "X1 Carbon".to_owned(),
+        })),
+    }
+}
+
 pub(super) fn discover_command(command_id: String) -> HubCommand {
     HubCommand {
         command_id,
@@ -399,6 +415,219 @@ async fn command_failure_redacts_access_code() {
             assert_eq!(result.result_json, "");
         }
         other => panic!("expected command result, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn link_printer_emits_ack_snapshot_and_success_without_access_code() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = LinkGateway::success(snapshot(
+        "SERIAL123",
+        "Office X1C",
+        Some("X1 Carbon"),
+        "READY",
+    ));
+    let (sender, mut receiver) = mpsc::channel(3);
+    let access_code = "SECRET-LINK-CODE";
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        link_printer_command(command_id.clone(), access_code),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_snapshot(
+        receiver.recv().await.unwrap(),
+        "SERIAL123",
+        "Office X1C",
+        "X1 Carbon",
+        "READY",
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(result.success);
+            assert!(!result.result_json.contains(access_code));
+            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(json["type"], "printer_link");
+            assert_eq!(json["serial_number"], "SERIAL123");
+            assert_eq!(json["host"], "192.0.2.10");
+            assert_eq!(json["status"], "READY");
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert!(receiver.recv().await.is_none());
+}
+
+#[tokio::test]
+async fn link_printer_failure_redacts_access_code_from_result_error() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let access_code = "SECRET-LINK-CODE";
+    let gateway = LinkGateway::failure(access_code);
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        link_printer_command(command_id.clone(), access_code),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(!result.success);
+            assert!(result.error.contains("validate runtime printer"));
+            assert!(result.error.contains("[REDACTED_ACCESS_CODE]"));
+            assert!(!result.error.contains(access_code));
+            assert_eq!(result.result_json, "");
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert!(receiver.recv().await.is_none());
+}
+
+#[test]
+fn link_printer_failure_log_redacts_access_code() {
+    let _capture_guard = crate::TRACING_CAPTURE_LOCK.lock().unwrap();
+    let logs = CapturedLogs::default();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(logs.clone())
+        .with_ansi(false)
+        .without_time()
+        .finish();
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let access_code = "SECRET-LINK-CODE";
+    let gateway = LinkGateway::failure(access_code);
+    let (sender, _receiver) = mpsc::channel(2);
+
+    tracing::subscriber::with_default(subscriber, || {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                handle_command_with_gateway(
+                    &config,
+                    &gateway,
+                    &sender,
+                    link_printer_command(command_id, access_code),
+                )
+                .await
+            })
+            .unwrap();
+    });
+
+    let captured = logs.contents();
+    assert!(captured.contains("runtime printer link failed"));
+    assert!(captured.contains("[REDACTED_ACCESS_CODE]"));
+    assert!(!captured.contains(access_code));
+}
+
+#[derive(Debug, Clone)]
+struct LinkGateway {
+    result: Arc<Mutex<anyhow::Result<MachineSnapshot>>>,
+    access_code: Option<String>,
+}
+
+impl LinkGateway {
+    fn success(snapshot: MachineSnapshot) -> Self {
+        Self {
+            result: Arc::new(Mutex::new(Ok(snapshot))),
+            access_code: None,
+        }
+    }
+
+    fn failure(access_code: &str) -> Self {
+        Self {
+            result: Arc::new(Mutex::new(
+                Err(anyhow::anyhow!("bad access code {access_code}"))
+                    .context("validate runtime printer SERIAL123"),
+            )),
+            access_code: Some(access_code.to_owned()),
+        }
+    }
+}
+
+#[async_trait]
+impl BambuMachineGateway for LinkGateway {
+    fn redact_error(&self, message: &str) -> String {
+        match &self.access_code {
+            Some(access_code) => message.replace(access_code, "[REDACTED_ACCESS_CODE]"),
+            None => message.to_owned(),
+        }
+    }
+
+    async fn discover_printers(
+        &self,
+        _timeout_seconds: u32,
+    ) -> anyhow::Result<PrinterDiscoveryResult> {
+        unreachable!("link printer tests do not discover printers")
+    }
+
+    async fn diagnose_printer(
+        &self,
+        _serial_number: &str,
+    ) -> anyhow::Result<PrinterDiagnosticResult> {
+        unreachable!("link printer tests do not diagnose printers")
+    }
+
+    async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
+        unreachable!("link printer tests do not refresh printers")
+    }
+
+    async fn validate_printer(&self, _serial_number: &str) -> anyhow::Result<()> {
+        unreachable!("link printer tests do not validate by serial")
+    }
+
+    async fn print_project_file(
+        &self,
+        _serial_number: &str,
+        _command: &crate::protocol::agent::v1::PrintProjectFile,
+        _artifact: Vec<u8>,
+    ) -> anyhow::Result<()> {
+        unreachable!("link printer tests do not dispatch print commands")
+    }
+
+    async fn operate_printer(
+        &self,
+        _serial_number: &str,
+        _operation: MachinePrinterOperation,
+    ) -> anyhow::Result<()> {
+        unreachable!("link printer tests do not dispatch printer operation commands")
+    }
+
+    async fn link_printer(
+        &self,
+        endpoint: BambuPrinterEndpoint,
+        _config: &AgentConfig,
+        _sender: &mpsc::Sender<AgentEvent>,
+    ) -> anyhow::Result<MachineSnapshot> {
+        assert_eq!(endpoint.host, "192.0.2.10");
+        assert_eq!(endpoint.serial, "SERIAL123");
+        assert_eq!(endpoint.name.as_deref(), Some("Office X1C"));
+        assert_eq!(endpoint.model.as_deref(), Some("X1 Carbon"));
+        let mut result = self.result.lock().await;
+        std::mem::replace(
+            &mut *result,
+            Ok(snapshot("SERIAL123", "unused", None, "unused")),
+        )
     }
 }
 
@@ -1076,5 +1305,41 @@ impl BambuMachineGateway for OperationGateway {
             Some(error) => Err(anyhow::anyhow!(error.clone())),
             None => Ok(()),
         }
+    }
+}
+
+#[derive(Clone, Default)]
+struct CapturedLogs {
+    buffer: Arc<StdMutex<Vec<u8>>>,
+}
+
+impl CapturedLogs {
+    fn contents(&self) -> String {
+        String::from_utf8(self.buffer.lock().unwrap().clone()).unwrap()
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for CapturedLogs {
+    type Writer = CapturedLogWriter;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        CapturedLogWriter {
+            buffer: Arc::clone(&self.buffer),
+        }
+    }
+}
+
+struct CapturedLogWriter {
+    buffer: Arc<StdMutex<Vec<u8>>>,
+}
+
+impl Write for CapturedLogWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.buffer.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }

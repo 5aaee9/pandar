@@ -6,6 +6,7 @@ pub mod ftps;
 pub mod materials;
 pub mod mqtt;
 mod operations;
+pub mod runtime;
 
 use std::time::Duration;
 
@@ -23,7 +24,10 @@ use mqtt::{
 use operations::dispatch_printer_operation;
 pub use operations::{PrinterAxis, PrinterOperation};
 
-use crate::protocol::agent::v1::PrintProjectFile;
+use crate::{
+    AgentConfig,
+    protocol::agent::v1::{AgentEvent, PrintProjectFile},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub struct BambuPrinterEndpoint {
@@ -67,6 +71,15 @@ pub trait BambuMachineGateway: Send + Sync {
         _operation: PrinterOperation,
     ) -> anyhow::Result<()> {
         bail!("no Bambu printer configured for serial {serial_number}")
+    }
+    async fn link_printer(
+        &self,
+        endpoint: BambuPrinterEndpoint,
+        config: &AgentConfig,
+        sender: &tokio::sync::mpsc::Sender<AgentEvent>,
+    ) -> anyhow::Result<MachineSnapshot> {
+        let _ = (endpoint, config, sender);
+        bail!("runtime printer linking is not supported by this gateway")
     }
 }
 
@@ -255,6 +268,19 @@ where
 impl<T, F> ConfiguredBambuMachineGateway<T, F> {
     pub fn configured_printer_count(&self) -> usize {
         self.printers.len()
+    }
+
+    pub fn endpoints(&self) -> Vec<BambuPrinterEndpoint> {
+        self.printers
+            .iter()
+            .map(|(endpoint, _, _)| endpoint.clone())
+            .collect()
+    }
+
+    pub fn replace_printer(&mut self, endpoint: BambuPrinterEndpoint, mqtt: T, transfer: F) {
+        self.printers
+            .retain(|(existing, _, _)| existing.serial != endpoint.serial);
+        self.printers.push((endpoint, mqtt, transfer));
     }
 
     pub fn with_file_transfer(

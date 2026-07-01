@@ -4,7 +4,7 @@ use tokio_stream::{StreamExt, iter, wrappers::ReceiverStream};
 use tonic::{Code, Status};
 
 use super::*;
-use crate::protocol::agent::v1::{AgentHeartbeat, agent_event, hub_command};
+use crate::protocol::agent::v1::{AgentHeartbeat, CommandAck, agent_event, hub_command};
 
 mod commands;
 mod lifecycle;

@@ -1,11 +1,19 @@
-use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    future::Future,
+    sync::{Arc, Mutex as StdMutex},
+    time::Duration,
+};
 
 use anyhow::Context;
-use pandar_core::{AgentId, TenantId};
+use pandar_core::{AgentId, CommandId, TenantId};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use tokio::sync::{Mutex, mpsc};
+use tonic::Status;
 use uuid::Uuid;
 
+use crate::protocol::agent::v1::HubCommand;
+use crate::protocol::agent::v1::hub_command;
 use crate::repositories::{AgentRepository, RepositoryError, RepositoryResult};
 
 #[cfg(test)]
@@ -27,6 +35,36 @@ pub struct AgentSession {
     pub last_heartbeat_at: String,
     pub wake_sender: mpsc::Sender<()>,
     pub close_sender: mpsc::Sender<()>,
+    pub command_sender: mpsc::Sender<Result<HubCommand, Status>>,
+    pub pending_live_commands: PendingLiveCommands,
+}
+
+pub type PendingLiveCommands = Arc<StdMutex<HashMap<CommandId, PendingLiveCommand>>>;
+
+#[derive(Debug, Clone)]
+pub struct PendingLiveCommand {
+    access_code: Option<String>,
+}
+
+impl PendingLiveCommand {
+    pub fn new(access_code: Option<String>) -> Self {
+        Self { access_code }
+    }
+
+    pub fn access_code(&self) -> Option<&str> {
+        self.access_code.as_deref()
+    }
+}
+
+pub fn empty_pending_live_commands() -> PendingLiveCommands {
+    Arc::new(StdMutex::new(HashMap::new()))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiveDispatchError {
+    NotCurrent,
+    ChannelClosed,
+    ChannelFull,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -121,6 +159,119 @@ impl SessionRegistry {
             .await
             .get(&agent_id)
             .is_some_and(|session| session.token == token)
+    }
+
+    pub async fn current_token(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+    ) -> Option<SessionToken> {
+        self.sessions
+            .lock()
+            .await
+            .get(&agent_id)
+            .filter(|session| session.tenant_id == tenant_id)
+            .map(|session| session.token)
+    }
+
+    pub async fn try_dispatch_live_command(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        token: SessionToken,
+        command_id: CommandId,
+        command: HubCommand,
+    ) -> Result<(), LiveDispatchError> {
+        let sessions = self.sessions.lock().await;
+        let Some(session) = sessions
+            .get(&agent_id)
+            .filter(|session| session.tenant_id == tenant_id && session.token == token)
+        else {
+            return Err(LiveDispatchError::NotCurrent);
+        };
+
+        let pending = PendingLiveCommand::new(live_command_access_code(&command));
+        session
+            .pending_live_commands
+            .lock()
+            .expect("pending live commands mutex should not be poisoned")
+            .insert(command_id, pending);
+        match session.command_sender.try_send(Ok(command)) {
+            Ok(()) => Ok(()),
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                session
+                    .pending_live_commands
+                    .lock()
+                    .expect("pending live commands mutex should not be poisoned")
+                    .remove(&command_id);
+                Err(LiveDispatchError::ChannelClosed)
+            }
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                session
+                    .pending_live_commands
+                    .lock()
+                    .expect("pending live commands mutex should not be poisoned")
+                    .remove(&command_id);
+                Err(LiveDispatchError::ChannelFull)
+            }
+        }
+    }
+
+    pub async fn pending_live_command_ids(&self) -> Vec<CommandId> {
+        let sessions = self.sessions.lock().await;
+        let mut pending = HashSet::new();
+        for session in sessions.values() {
+            pending.extend(
+                session
+                    .pending_live_commands
+                    .lock()
+                    .expect("pending live commands mutex should not be poisoned")
+                    .keys()
+                    .copied(),
+            );
+        }
+        pending.into_iter().collect()
+    }
+
+    pub async fn pending_live_command_access_code(
+        &self,
+        agent_id: AgentId,
+        token: SessionToken,
+        command_id: CommandId,
+    ) -> Option<String> {
+        let sessions = self.sessions.lock().await;
+        let session = sessions
+            .get(&agent_id)
+            .filter(|session| session.token == token)?;
+
+        session
+            .pending_live_commands
+            .lock()
+            .expect("pending live commands mutex should not be poisoned")
+            .get(&command_id)
+            .and_then(|pending| pending.access_code().map(ToOwned::to_owned))
+    }
+
+    pub async fn remove_pending_live_command(
+        &self,
+        agent_id: AgentId,
+        token: SessionToken,
+        command_id: CommandId,
+    ) -> bool {
+        let sessions = self.sessions.lock().await;
+        let Some(session) = sessions
+            .get(&agent_id)
+            .filter(|session| session.token == token)
+        else {
+            return false;
+        };
+
+        session
+            .pending_live_commands
+            .lock()
+            .expect("pending live commands mutex should not be poisoned")
+            .remove(&command_id)
+            .is_some()
     }
 
     pub async fn while_current<T, Fut>(
@@ -233,10 +384,48 @@ fn stale_before(observed_at: &str, cutoff: OffsetDateTime) -> bool {
         .unwrap_or(false)
 }
 
+fn live_command_access_code(command: &HubCommand) -> Option<String> {
+    match command.command.as_ref()? {
+        hub_command::Command::LinkPrinter(command) => Some(command.access_code.clone()),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::AppState;
+    use crate::protocol::agent::v1::{LinkPrinter, hub_command};
+
+    fn test_session(
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        token: SessionToken,
+        command_sender: mpsc::Sender<Result<HubCommand, Status>>,
+    ) -> AgentSession {
+        let (wake_sender, _) = mpsc::channel(1);
+        let (close_sender, _) = mpsc::channel(1);
+        AgentSession {
+            token,
+            tenant_id,
+            agent_id,
+            name: "agent".to_string(),
+            version: "0.1.0".to_string(),
+            connected_at: "2026-06-20T00:00:00Z".to_string(),
+            last_heartbeat_at: "2026-06-20T00:00:00Z".to_string(),
+            wake_sender,
+            close_sender,
+            command_sender,
+            pending_live_commands: empty_pending_live_commands(),
+        }
+    }
+
+    fn test_command(command_id: CommandId) -> HubCommand {
+        HubCommand {
+            command_id: command_id.to_string(),
+            command: None,
+        }
+    }
 
     #[tokio::test]
     async fn sessions_register_touch_and_remove() {
@@ -257,6 +446,8 @@ mod tests {
                 last_heartbeat_at: "2026-06-20T00:00:00Z".to_string(),
                 wake_sender,
                 close_sender,
+                command_sender: mpsc::channel(1).0,
+                pending_live_commands: empty_pending_live_commands(),
             })
             .await;
 
@@ -292,6 +483,8 @@ mod tests {
                 last_heartbeat_at: "2026-06-20T00:00:00Z".to_string(),
                 wake_sender: old_wake_sender,
                 close_sender: old_close_sender,
+                command_sender: mpsc::channel(1).0,
+                pending_live_commands: empty_pending_live_commands(),
             })
             .await;
         registry
@@ -305,6 +498,8 @@ mod tests {
                 last_heartbeat_at: "2026-06-20T00:00:10Z".to_string(),
                 wake_sender: new_wake_sender,
                 close_sender: new_close_sender,
+                command_sender: mpsc::channel(1).0,
+                pending_live_commands: empty_pending_live_commands(),
             })
             .await;
 
@@ -337,6 +532,8 @@ mod tests {
                 last_heartbeat_at: "2026-06-20T00:00:00Z".to_string(),
                 wake_sender,
                 close_sender,
+                command_sender: mpsc::channel(1).0,
+                pending_live_commands: empty_pending_live_commands(),
             })
             .await;
 
@@ -373,6 +570,8 @@ mod tests {
                 last_heartbeat_at: "2026-06-20T00:00:00Z".to_string(),
                 wake_sender,
                 close_sender,
+                command_sender: mpsc::channel(1).0,
+                pending_live_commands: empty_pending_live_commands(),
             })
             .await;
 
@@ -400,6 +599,153 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sessions_live_dispatch_rechecks_token_before_send() {
+        let registry = SessionRegistry::new();
+        let tenant_id = TenantId::new();
+        let agent_id = AgentId::new();
+        let old_token = SessionToken::new();
+        let new_token = SessionToken::new();
+        let (old_command_sender, mut old_command_receiver) = mpsc::channel(1);
+        let (new_command_sender, _new_command_receiver) = mpsc::channel(1);
+
+        registry
+            .register(test_session(
+                tenant_id,
+                agent_id,
+                old_token,
+                old_command_sender,
+            ))
+            .await;
+        registry
+            .register(test_session(
+                tenant_id,
+                agent_id,
+                new_token,
+                new_command_sender,
+            ))
+            .await;
+
+        let err = registry
+            .try_dispatch_live_command(
+                tenant_id,
+                agent_id,
+                old_token,
+                CommandId::new(),
+                test_command(CommandId::new()),
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(err, LiveDispatchError::NotCurrent);
+        assert!(old_command_receiver.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn sessions_pending_live_command_ids_aggregates_all_sessions() {
+        let registry = SessionRegistry::new();
+        let tenant_id = TenantId::new();
+        let agent_a = AgentId::new();
+        let agent_b = AgentId::new();
+        let token_a = SessionToken::new();
+        let token_b = SessionToken::new();
+        let (sender_a, _receiver_a) = mpsc::channel(2);
+        let (sender_b, _receiver_b) = mpsc::channel(2);
+        let command_a = CommandId::new();
+        let command_b = CommandId::new();
+
+        registry
+            .register(test_session(tenant_id, agent_a, token_a, sender_a))
+            .await;
+        registry
+            .register(test_session(tenant_id, agent_b, token_b, sender_b))
+            .await;
+
+        registry
+            .try_dispatch_live_command(
+                tenant_id,
+                agent_a,
+                token_a,
+                command_a,
+                test_command(command_a),
+            )
+            .await
+            .unwrap();
+        registry
+            .try_dispatch_live_command(
+                tenant_id,
+                agent_b,
+                token_b,
+                command_b,
+                test_command(command_b),
+            )
+            .await
+            .unwrap();
+
+        let pending = registry.pending_live_command_ids().await;
+
+        assert!(pending.contains(&command_a));
+        assert!(pending.contains(&command_b));
+    }
+
+    #[tokio::test]
+    async fn sessions_replacement_race_does_not_leave_pending_command() {
+        let registry = SessionRegistry::new();
+        let tenant_id = TenantId::new();
+        let agent_id = AgentId::new();
+        let old_token = SessionToken::new();
+        let new_token = SessionToken::new();
+        let (old_command_sender, mut old_command_receiver) = mpsc::channel(1);
+        let (new_command_sender, _new_command_receiver) = mpsc::channel(1);
+        let command_id = CommandId::new();
+
+        registry
+            .register(test_session(
+                tenant_id,
+                agent_id,
+                old_token,
+                old_command_sender,
+            ))
+            .await;
+        registry
+            .register(test_session(
+                tenant_id,
+                agent_id,
+                new_token,
+                new_command_sender,
+            ))
+            .await;
+
+        let err = registry
+            .try_dispatch_live_command(
+                tenant_id,
+                agent_id,
+                old_token,
+                command_id,
+                HubCommand {
+                    command_id: command_id.to_string(),
+                    command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
+                        host: "192.0.2.10".to_owned(),
+                        serial_number: "SERIAL123".to_owned(),
+                        access_code: "SECRET-LINK-CODE".to_owned(),
+                        name: String::new(),
+                        model: String::new(),
+                    })),
+                },
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(err, LiveDispatchError::NotCurrent);
+        assert!(old_command_receiver.try_recv().is_err());
+        assert!(
+            !registry
+                .pending_live_command_ids()
+                .await
+                .contains(&command_id)
+        );
+    }
+
+    #[tokio::test]
     async fn sessions_wake_local_agent_wakes_matching_online_agent() {
         let state = AppState::sqlite_for_tests().await.unwrap();
         let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
@@ -419,6 +765,8 @@ mod tests {
                 last_heartbeat_at: "2026-06-20T00:00:00Z".to_string(),
                 wake_sender,
                 close_sender,
+                command_sender: mpsc::channel(1).0,
+                pending_live_commands: empty_pending_live_commands(),
             })
             .await;
 
@@ -463,6 +811,8 @@ mod tests {
                 last_heartbeat_at: "2026-06-20T00:00:00Z".to_string(),
                 wake_sender,
                 close_sender,
+                command_sender: mpsc::channel(1).0,
+                pending_live_commands: empty_pending_live_commands(),
             })
             .await;
 

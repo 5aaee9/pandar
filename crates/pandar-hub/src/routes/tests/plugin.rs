@@ -379,6 +379,8 @@ async fn plugin_print_wakes_agent_on_sibling_instance() {
             last_heartbeat_at: pandar_core::created_at_now(),
             wake_sender,
             close_sender,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
 

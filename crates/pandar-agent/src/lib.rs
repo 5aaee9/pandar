@@ -5,24 +5,25 @@ use tokio::{
     sync::mpsc,
     time::{Duration, sleep},
 };
-use tokio_stream::{StreamExt, wrappers::ReceiverStream};
-use tonic::Request;
+use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
+use tonic::{Request, Status};
 
 pub mod commands;
 pub mod machine;
 pub mod protocol;
 
 use commands::{handle_command_with_gateway, parse_printer_config};
-use machine::{
-    BambuPrinterEndpoint, ConfiguredBambuMachineGateway, NoopMachineGateway,
-    mqtt::{RumqttcBambuMqttTransport, forward_print_reports},
-};
+use machine::{BambuMachineGateway, BambuPrinterEndpoint, runtime::RuntimeBambuMachineGateway};
 use protocol::agent::v1::{
-    AgentEvent, AgentHeartbeat, AgentHello, agent_control_client::AgentControlClient, agent_event,
+    AgentEvent, AgentHeartbeat, AgentHello, HubCommand, agent_control_client::AgentControlClient,
+    agent_event,
 };
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
 const DEFAULT_REPORT_TIMEOUT: Duration = Duration::from_secs(10);
+
+#[cfg(test)]
+pub(crate) static TRACING_CAPTURE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[derive(Debug, Clone, Parser, PartialEq, Eq)]
 #[command(
@@ -89,9 +90,10 @@ pub fn heartbeat_event(config: &AgentConfig) -> AgentEvent {
 
 pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
     let printers = startup_printers(&config)?;
+    let gateway = RuntimeBambuMachineGateway::new(config.clone(), printers, DEFAULT_REPORT_TIMEOUT);
     let mut backoff = ReconnectBackoff::new();
     loop {
-        match run_once(config.clone(), printers.clone()).await {
+        match run_once(config.clone(), &gateway).await {
             Ok(RunOutcome::ConnectedThenEnded) => backoff.reset(),
             Err(err) => {
                 tracing::error!(error = %format!("{err:#}"), "agent reverse connection failed");
@@ -113,7 +115,7 @@ fn startup_printers(config: &AgentConfig) -> anyhow::Result<Vec<BambuPrinterEndp
 
 async fn run_once(
     config: AgentConfig,
-    printers: Vec<BambuPrinterEndpoint>,
+    gateway: &RuntimeBambuMachineGateway,
 ) -> anyhow::Result<RunOutcome> {
     let mut client = AgentControlClient::connect(config.hub_grpc_url.clone())
         .await
@@ -144,60 +146,28 @@ async fn run_once(
         }
     });
 
-    let mut commands = response.into_inner();
-    if printers.is_empty() {
-        let gateway = NoopMachineGateway;
-        while let Some(command) = commands
-            .next()
-            .await
-            .transpose()
-            .context("read hub command from reverse stream")?
-        {
-            handle_command_with_gateway(&config, &gateway, &sender, command).await?;
-        }
-    } else {
-        for printer in &printers {
-            let report_config = config.clone();
-            let report_sender = sender.clone();
-            let report_printer = printer.clone();
-            tokio::spawn(async move {
-                let transport = RumqttcBambuMqttTransport::connect_for_reports(&report_printer);
-                if let Err(err) = forward_print_reports(
-                    &report_config,
-                    &transport,
-                    &report_printer,
-                    DEFAULT_REPORT_TIMEOUT,
-                    &report_sender,
-                )
-                .await
-                {
-                    tracing::warn!(
-                        serial = %report_printer.serial,
-                        error = %format!("{err:#}"),
-                        "printer report forwarding ended"
-                    );
-                }
-            });
-        }
+    gateway.start_initial_report_forwarders(&sender).await;
 
-        let gateway = ConfiguredBambuMachineGateway::new(
-            printers
-                .into_iter()
-                .map(|endpoint| {
-                    let transport = RumqttcBambuMqttTransport::connect(&endpoint);
-                    (endpoint, transport)
-                })
-                .collect(),
-            DEFAULT_REPORT_TIMEOUT,
-        );
-        while let Some(command) = commands
-            .next()
-            .await
-            .transpose()
-            .context("read hub command from reverse stream")?
-        {
-            handle_command_with_gateway(&config, &gateway, &sender, command).await?;
-        }
+    handle_command_stream_with_gateway(&config, gateway, &sender, response.into_inner()).await
+}
+
+async fn handle_command_stream_with_gateway<G, S>(
+    config: &AgentConfig,
+    gateway: &G,
+    sender: &mpsc::Sender<AgentEvent>,
+    mut commands: S,
+) -> anyhow::Result<RunOutcome>
+where
+    G: BambuMachineGateway,
+    S: Stream<Item = Result<HubCommand, Status>> + Unpin,
+{
+    while let Some(command) = commands
+        .next()
+        .await
+        .transpose()
+        .context("read hub command from reverse stream")?
+    {
+        handle_command_with_gateway(config, gateway, sender, command).await?;
     }
 
     Ok(RunOutcome::ConnectedThenEnded)
@@ -248,7 +218,14 @@ fn event(config: &AgentConfig, event_id: &str, event: agent_event::Event) -> Age
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
+    use crate::machine::{
+        BambuMachineGateway, file_transfer::FakeMachineFileTransfer, mqtt::FakeMqttTransport,
+        runtime::test_support::TestRuntimeBambuMachineGateway,
+    };
+    use crate::protocol::agent::v1::{HubCommand, LinkPrinter, hub_command};
 
     #[test]
     fn parses_agent_cli_config() {
@@ -338,6 +315,50 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn ended_command_stream_preserves_runtime_linked_printer_for_reconnect() {
+        let gateway = TestRuntimeBambuMachineGateway::new(
+            Vec::new(),
+            FakeMachineFileTransfer::default(),
+            Duration::from_secs(1),
+        );
+        gateway
+            .push_command_transport(FakeMqttTransport::with_reports([
+                get_version_report("X1 Carbon"),
+                json!({"print": {"state": "READY"}}),
+                get_version_report("X1 Carbon"),
+                json!({"print": {"state": "IDLE"}}),
+            ]))
+            .await;
+        let config = test_config();
+        let (sender, mut events) = mpsc::channel(8);
+
+        handle_command_stream_with_gateway(
+            &config,
+            &gateway,
+            &sender,
+            tokio_stream::iter([Ok(link_printer_command())]),
+        )
+        .await
+        .unwrap();
+        assert!(received_success_result(&mut events));
+
+        let (reconnected_sender, _) = mpsc::channel(8);
+        handle_command_stream_with_gateway(
+            &config,
+            &gateway,
+            &reconnected_sender,
+            tokio_stream::iter([]),
+        )
+        .await
+        .unwrap();
+
+        let snapshots = gateway.refresh_printers().await.unwrap();
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(snapshots[0].serial, "SERIAL123");
+        assert_eq!(snapshots[0].state, "IDLE");
+    }
+
     #[test]
     fn backoff_doubles_and_caps() {
         let mut backoff = ReconnectBackoff::new();
@@ -387,5 +408,40 @@ mod tests {
             printers: "[]".to_owned(),
             artifact_root: ".".into(),
         }
+    }
+
+    fn get_version_report(model: &str) -> serde_json::Value {
+        json!({
+            "info": {
+                "command": "get_version",
+                "module": [{"name": "ota", "product_name": model}]
+            }
+        })
+    }
+
+    fn link_printer_command() -> HubCommand {
+        HubCommand {
+            command_id: uuid::Uuid::new_v4().to_string(),
+            command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
+                host: "192.0.2.10".to_owned(),
+                serial_number: "SERIAL123".to_owned(),
+                access_code: "12345678".to_owned(),
+                name: "office".to_owned(),
+                model: "X1 Carbon".to_owned(),
+            })),
+        }
+    }
+
+    fn received_success_result(events: &mut mpsc::Receiver<AgentEvent>) -> bool {
+        let mut received_success = false;
+        while let Ok(event) = events.try_recv() {
+            if matches!(
+                event.event,
+                Some(agent_event::Event::CommandResult(result)) if result.success
+            ) {
+                received_success = true;
+            }
+        }
+        received_success
     }
 }

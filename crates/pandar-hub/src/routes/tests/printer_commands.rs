@@ -117,6 +117,8 @@ async fn discover_printers_defaults_timeout_audits_and_wakes_agent() {
             last_heartbeat_at: pandar_core::created_at_now(),
             wake_sender,
             close_sender,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
 
@@ -232,6 +234,8 @@ async fn diagnose_printer_enqueues_redacted_payload_audits_and_wakes_agent() {
             last_heartbeat_at: pandar_core::created_at_now(),
             wake_sender,
             close_sender,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
 
@@ -291,6 +295,8 @@ async fn refresh_printers_wakes_agent_on_sibling_instance() {
             last_heartbeat_at: pandar_core::created_at_now(),
             wake_sender,
             close_sender,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
 
@@ -341,6 +347,8 @@ async fn discover_printers_wakes_agent_on_sibling_instance() {
             last_heartbeat_at: pandar_core::created_at_now(),
             wake_sender,
             close_sender,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
 
@@ -384,6 +392,8 @@ async fn diagnose_printer_wakes_agent_on_sibling_instance() {
             last_heartbeat_at: pandar_core::created_at_now(),
             wake_sender,
             close_sender,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
 
@@ -476,6 +486,8 @@ async fn printer_control_enqueues_audits_and_wakes_owning_agent() {
             last_heartbeat_at: pandar_core::created_at_now(),
             wake_sender,
             close_sender,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
 
@@ -588,6 +600,8 @@ async fn printer_control_wakes_owning_agent_not_sibling() {
             last_heartbeat_at: pandar_core::created_at_now(),
             wake_sender: owner_wake_sender,
             close_sender: owner_close_sender,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
     sibling
@@ -602,6 +616,8 @@ async fn printer_control_wakes_owning_agent_not_sibling() {
             last_heartbeat_at: pandar_core::created_at_now(),
             wake_sender: other_wake_sender,
             close_sender: other_close_sender,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
 

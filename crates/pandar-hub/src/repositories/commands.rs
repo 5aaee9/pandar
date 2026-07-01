@@ -52,6 +52,36 @@ pub struct DiagnosePrinterPayload {
     pub serial_number: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LinkPrinterPayload {
+    pub host: String,
+    pub serial_number: String,
+    pub access_code: String,
+    pub name: Option<String>,
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RedactedLinkPrinterPayload {
+    pub host: String,
+    pub serial_number: String,
+    pub access_code: String,
+    pub name: Option<String>,
+    pub model: Option<String>,
+}
+
+impl LinkPrinterPayload {
+    pub fn redacted(&self) -> RedactedLinkPrinterPayload {
+        RedactedLinkPrinterPayload {
+            host: self.host.clone(),
+            serial_number: self.serial_number.clone(),
+            access_code: "[redacted]".to_owned(),
+            name: self.name.clone(),
+            model: self.model.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CommandRepository {
     database: Database,
@@ -134,6 +164,23 @@ impl CommandRepository {
             tenant_id,
             printer_id,
             operation,
+            actor,
+        )
+        .await
+    }
+
+    pub async fn create_link_printer_sent_with_audit(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        payload: LinkPrinterPayload,
+        actor: AuditActor,
+    ) -> RepositoryResult<CommandRecord> {
+        audit::create_link_printer_sent_with_audit(
+            &self.database,
+            tenant_id,
+            agent_id,
+            payload,
             actor,
         )
         .await
@@ -278,6 +325,21 @@ impl CommandRepository {
             result_json,
             action: "fail",
         })
+        .await
+    }
+
+    pub async fn fail_stale_unowned_link_printer_commands(
+        &self,
+        now: &str,
+        timeout: std::time::Duration,
+        owned_command_ids: &[CommandId],
+    ) -> RepositoryResult<u64> {
+        transitions::fail_stale_unowned_link_printer_commands(
+            &self.database,
+            now,
+            timeout,
+            owned_command_ids,
+        )
         .await
     }
 

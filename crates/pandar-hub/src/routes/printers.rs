@@ -1,16 +1,25 @@
 use axum::{
-    Json, body::Bytes, extract::Path, extract::State, extract::rejection::JsonRejection,
-    http::HeaderMap,
+    Json,
+    body::Bytes,
+    extract::Path,
+    extract::State,
+    extract::rejection::JsonRejection,
+    http::{HeaderMap, StatusCode},
 };
-use pandar_core::{AgentId, CommandId, CommandRecord, Printer};
+use pandar_core::{AgentId, CommandId, CommandRecord, Printer, TenantId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::{collections::HashMap, future::Future};
 
 use crate::{
     AppState,
-    repositories::{DiagnosePrinterPayload, DiscoverPrintersPayload, MaterialSnapshot, UserRole},
+    protocol::agent::v1::{HubCommand, LinkPrinter, hub_command},
+    repositories::{
+        DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload, MaterialSnapshot,
+        RepositoryResult, UserRole,
+    },
     routes::{ApiError, auth, printer_operations::PrinterOperationRequest},
+    sessions::LiveDispatchError,
 };
 
 const DEFAULT_DISCOVERY_TIMEOUT_SECONDS: u32 = 5;
@@ -68,6 +77,16 @@ pub(super) struct DiscoverPrintersRequest {
 #[serde(deny_unknown_fields)]
 pub(super) struct DiagnosePrinterRequest {
     serial_number: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct LinkPrinterRequest {
+    host: String,
+    serial_number: String,
+    access_code: String,
+    name: Option<String>,
+    model: Option<String>,
 }
 
 pub(super) async fn list_printers(
@@ -208,6 +227,84 @@ pub(super) async fn diagnose_printer(
     Ok(Json(CommandResponse::from(command)))
 }
 
+pub(super) async fn link_printer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((tenant_id, agent_id)): Path<(String, String)>,
+    payload: Result<Json<LinkPrinterRequest>, JsonRejection>,
+) -> Result<Json<CommandResponse>, ApiError> {
+    let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    let auth =
+        auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let agent_id = parse_agent_id(&agent_id)?;
+    let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
+    let payload = payload.into_payload()?;
+
+    let Some(agent) = state.agents().get(agent_id).await? else {
+        return Err(ApiError::not_found("agent_not_found"));
+    };
+    if agent.tenant_id != tenant_id {
+        return Err(ApiError::not_found("agent_not_found"));
+    }
+
+    let Some(token) = state.sessions().current_token(tenant_id, agent_id).await else {
+        return Err(ApiError::new(StatusCode::CONFLICT, "agent_not_connected"));
+    };
+
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            payload.clone(),
+            auth::audit_actor(&auth),
+        )
+        .await?;
+    let hub_command = link_printer_hub_command(command.id, &payload);
+
+    match state
+        .sessions()
+        .try_dispatch_live_command(tenant_id, agent_id, token, command.id, hub_command)
+        .await
+    {
+        Ok(()) => Ok(Json(CommandResponse::from(command))),
+        Err(LiveDispatchError::NotCurrent) => {
+            let failed = fail_link_printer_dispatch_after_commit(
+                command.id,
+                tenant_id,
+                agent_id,
+                &payload,
+                "agent connection closed before printer link completed".to_owned(),
+                |command_id, tenant_id, agent_id, error| async move {
+                    state
+                        .commands()
+                        .mark_failed(command_id, tenant_id, agent_id, error)
+                        .await
+                },
+            )
+            .await?;
+            Ok(Json(CommandResponse::from(failed)))
+        }
+        Err(LiveDispatchError::ChannelClosed | LiveDispatchError::ChannelFull) => {
+            let failed = fail_link_printer_dispatch_after_commit(
+                command.id,
+                tenant_id,
+                agent_id,
+                &payload,
+                "agent command channel unavailable before printer link completed".to_owned(),
+                |command_id, tenant_id, agent_id, error| async move {
+                    state
+                        .commands()
+                        .mark_failed(command_id, tenant_id, agent_id, error)
+                        .await
+                },
+            )
+            .await?;
+            Ok(Json(CommandResponse::from(failed)))
+        }
+    }
+}
+
 pub(super) async fn printer_control(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -264,6 +361,73 @@ fn parse_command_id(value: &str) -> Result<CommandId, ApiError> {
 fn parse_printer_id(value: &str) -> Result<&str, ApiError> {
     uuid::Uuid::parse_str(value).map_err(|_| ApiError::bad_request("invalid_printer_id"))?;
     Ok(value)
+}
+
+impl LinkPrinterRequest {
+    fn into_payload(self) -> Result<LinkPrinterPayload, ApiError> {
+        Ok(LinkPrinterPayload {
+            host: trim_required(self.host)?,
+            serial_number: trim_required(self.serial_number)?,
+            access_code: trim_required(self.access_code)?,
+            name: trim_optional(self.name),
+            model: trim_optional(self.model),
+        })
+    }
+}
+
+fn trim_required(value: String) -> Result<String, ApiError> {
+    let value = value.trim().to_owned();
+    if value.is_empty() {
+        return Err(ApiError::bad_request("bad_request"));
+    }
+    Ok(value)
+}
+
+fn trim_optional(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+fn link_printer_hub_command(command_id: CommandId, payload: &LinkPrinterPayload) -> HubCommand {
+    HubCommand {
+        command_id: command_id.to_string(),
+        command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
+            host: payload.host.clone(),
+            serial_number: payload.serial_number.clone(),
+            access_code: payload.access_code.clone(),
+            name: payload.name.clone().unwrap_or_default(),
+            model: payload.model.clone().unwrap_or_default(),
+        })),
+    }
+}
+
+async fn fail_link_printer_dispatch_after_commit<F, Fut>(
+    command_id: CommandId,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    payload: &LinkPrinterPayload,
+    error: String,
+    mark_failed: F,
+) -> Result<CommandRecord, ApiError>
+where
+    F: FnOnce(CommandId, TenantId, AgentId, String) -> Fut,
+    Fut: Future<Output = RepositoryResult<CommandRecord>>,
+{
+    mark_failed(command_id, tenant_id, agent_id, error)
+        .await
+        .map_err(|err| {
+            let error = crate::redaction::redact_link_printer_secret(
+                &format!("{err:#}"),
+                &payload.access_code,
+            );
+            tracing::error!(
+                command_id = %command_id,
+                error = %error,
+                "failed to mark live printer link dispatch failed after command commit"
+            );
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
+        })
 }
 
 impl PrinterResponse {
@@ -332,6 +496,110 @@ impl From<CommandRecord> for CommandResponse {
             result_json: command.result_json,
             created_at: command.created_at,
             updated_at: command.updated_at,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        io::{self, Write},
+        sync::{Arc, Mutex},
+    };
+    use tracing_subscriber::fmt::MakeWriter;
+
+    #[tokio::test]
+    async fn link_printer_dispatch_failure_helper_redacts_access_code_in_logs() {
+        let logs = CapturedLogs::new();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(logs.writer())
+            .with_ansi(false)
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+        let access_code = "SECRET-LINK-CODE";
+        let payload = LinkPrinterPayload {
+            host: "192.0.2.10".to_owned(),
+            serial_number: "SERIAL123".to_owned(),
+            access_code: access_code.to_owned(),
+            name: None,
+            model: None,
+        };
+
+        let err = fail_link_printer_dispatch_after_commit(
+            CommandId::new(),
+            TenantId::new(),
+            AgentId::new(),
+            &payload,
+            "agent connection closed before printer link completed".to_owned(),
+            |_command_id, _tenant_id, _agent_id, _error| async move {
+                Err(crate::repositories::RepositoryError::Database(
+                    anyhow::anyhow!("failed while handling access_code=SECRET-LINK-CODE"),
+                ))
+            },
+        )
+        .await
+        .unwrap_err();
+        drop(_guard);
+
+        assert_eq!(err.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(err.code, "internal_server_error");
+        assert!(!logs.to_string().contains(access_code));
+    }
+
+    #[derive(Clone)]
+    struct CapturedLogs {
+        output: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl CapturedLogs {
+        fn new() -> Self {
+            Self {
+                output: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+
+        fn writer(&self) -> TestLogWriter {
+            TestLogWriter {
+                output: self.output.clone(),
+            }
+        }
+    }
+
+    impl std::fmt::Display for CapturedLogs {
+        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            let output = self.output.lock().unwrap().clone();
+            formatter.write_str(&String::from_utf8_lossy(&output))
+        }
+    }
+
+    #[derive(Clone)]
+    struct TestLogWriter {
+        output: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl<'writer> MakeWriter<'writer> for TestLogWriter {
+        type Writer = TestLogBuffer;
+
+        fn make_writer(&'writer self) -> Self::Writer {
+            TestLogBuffer {
+                output: self.output.clone(),
+            }
+        }
+    }
+
+    struct TestLogBuffer {
+        output: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl Write for TestLogBuffer {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.output.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
         }
     }
 }

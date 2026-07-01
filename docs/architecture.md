@@ -192,6 +192,8 @@ Phase 2 adds the reverse gRPC control plane:
 
 The session registry is intentionally in-memory and only represents currently connected agents. The command ledger is durable and remains the source of truth for queued, sent, acknowledged, succeeded, and failed commands across hub restarts.
 
+Runtime printer linking is the exception to durable command replay: the Hub stores only a redacted `link_printer` command record and sends the Bambu access code directly to the currently connected local agent stream. If the local stream is unavailable, the request fails with `agent_not_connected`; in-flight live-only commands are failed by session/stale cleanup instead of replayed after restart.
+
 Hub replicas use an explicit control-plane split:
 
 - SQLite deployments run as a lightweight single Hub process with the in-process control plane and no broker.

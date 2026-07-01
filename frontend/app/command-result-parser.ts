@@ -3,6 +3,7 @@ import type {
   CommandResultData,
   DiagnosticResultData,
   DiscoveryResultData,
+  PrinterLinkResultData,
 } from "./dashboard-types";
 
 type JsonRecord = Record<string, unknown>;
@@ -49,6 +50,10 @@ export function parseCommandResult(
           ),
         compatibility: parseCompatibility(parsed.compatibility),
       };
+    }
+    const printerLink = parsePrinterLink(parsed);
+    if (printerLink) {
+      return printerLink;
     }
   } catch {
     return null;
@@ -110,6 +115,29 @@ function parseCompatibility(
     ftps_tls_1_2_cap: optionalBoolean(value.ftps_tls_1_2_cap),
     ftps_clear_data_fallback: optionalBoolean(value.ftps_clear_data_fallback),
     features: parseFeatureMap(value.features),
+  };
+}
+
+function parsePrinterLink(
+  value: unknown,
+): PrinterLinkResultData | null {
+  if (
+    !isRecord(value) ||
+    value.type !== "printer_link" ||
+    typeof value.serial_number !== "string" ||
+    typeof value.host !== "string" ||
+    typeof value.status !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    type: "printer_link",
+    serial_number: value.serial_number,
+    host: value.host,
+    name: optionalString(value.name),
+    model: optionalString(value.model),
+    status: value.status,
   };
 }
 
