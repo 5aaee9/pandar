@@ -17,7 +17,9 @@ use events::event;
 
 use crate::{
     AgentConfig,
-    machine::{BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot},
+    machine::{
+        BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot, discovery::DiscoveredPrinter,
+    },
     protocol::agent::v1::{
         AgentEvent, CommandAck, CommandResult, LinkPrinter, PrintProjectFile, PrinterSnapshot,
         agent_event, hub_command,
@@ -256,36 +258,18 @@ where
     }
 
     let host = command.host.trim().to_owned();
-    let endpoint = match gateway
-        .discover_printers(3)
-        .await
-        .with_context(|| format!("discover Bambu printer at {host}"))
-        .and_then(|result| {
-            let printer = result
-                .printers
-                .into_iter()
-                .find(|printer| printer.host.trim() == host.as_str())
-                .ok_or_else(|| anyhow!("could not discover printer at {host}"))?;
-            let serial = non_blank_string(printer.serial_number.unwrap_or_default())
-                .ok_or_else(|| anyhow!("printer serial could not be discovered for {host}"))?;
-            Ok(BambuPrinterEndpoint {
-                host: host.clone(),
-                serial,
-                access_code: access_code.clone(),
-                name: non_blank_string(command.name),
-                model: printer.model.and_then(non_blank_string),
-            })
-        }) {
-        Ok(endpoint) => endpoint,
-        Err(err) => {
-            let error = redact_link_error(gateway, &format!("{err:#}"), &access_code_for_error);
-            sender
-                .send(failure_event(config, command_id, error))
-                .await
-                .context("queue link-printer discovery failure")?;
-            return Ok(());
-        }
-    };
+    let endpoint =
+        match discover_link_printer_endpoint(gateway, &host, &access_code, &command.name).await {
+            Ok(endpoint) => endpoint,
+            Err(err) => {
+                let error = redact_link_error(gateway, &format!("{err:#}"), &access_code_for_error);
+                sender
+                    .send(failure_event(config, command_id, error))
+                    .await
+                    .context("queue link-printer discovery failure")?;
+                return Ok(());
+            }
+        };
 
     match gateway.link_printer(endpoint.clone(), config, sender).await {
         Ok(snapshot) => {
@@ -322,6 +306,55 @@ where
     }
 
     Ok(())
+}
+
+async fn discover_link_printer_endpoint<G>(
+    gateway: &G,
+    host: &str,
+    access_code: &str,
+    name: &str,
+) -> anyhow::Result<BambuPrinterEndpoint>
+where
+    G: BambuMachineGateway,
+{
+    let discovery = gateway
+        .discover_printers(3)
+        .await
+        .with_context(|| format!("discover Bambu printer at {host}"))?;
+    if let Some(printer) = discovery
+        .printers
+        .into_iter()
+        .find(|printer| printer.host.trim() == host)
+    {
+        return endpoint_from_discovered_printer(host, access_code, name, printer);
+    }
+
+    let Some(printer) = gateway
+        .discover_printer_at_host(host, 3)
+        .await
+        .with_context(|| format!("discover Bambu printer directly at {host}"))?
+    else {
+        return Err(anyhow!("could not discover printer at {host}"));
+    };
+
+    endpoint_from_discovered_printer(host, access_code, name, printer)
+}
+
+fn endpoint_from_discovered_printer(
+    host: &str,
+    access_code: &str,
+    name: &str,
+    printer: DiscoveredPrinter,
+) -> anyhow::Result<BambuPrinterEndpoint> {
+    let serial = non_blank_string(printer.serial_number.unwrap_or_default())
+        .ok_or_else(|| anyhow!("printer serial could not be discovered for {host}"))?;
+    Ok(BambuPrinterEndpoint {
+        host: host.to_owned(),
+        serial,
+        access_code: access_code.to_owned(),
+        name: non_blank_string(name.to_owned()),
+        model: printer.model.and_then(non_blank_string),
+    })
 }
 
 fn non_blank_string(value: String) -> Option<String> {

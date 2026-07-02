@@ -8,7 +8,9 @@ use anyhow::Context;
 use serde::Serialize;
 use tokio::{net::UdpSocket, time::Instant};
 
-const SSDP_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(239, 255, 255, 250)), 2021);
+const SSDP_PORT: u16 = 2021;
+const SSDP_ADDR: SocketAddr =
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(239, 255, 255, 250)), SSDP_PORT);
 const SSDP_ST: &str = "urn:bambulab-com:device:3dprinter:1";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -73,6 +75,51 @@ pub async fn discover_printers(timeout_seconds: u32) -> anyhow::Result<PrinterDi
     }
 
     Ok(PrinterDiscoveryResult::new(deduplicate_printers(printers)))
+}
+
+pub async fn discover_printer_at_host(
+    host: &str,
+    timeout_seconds: u32,
+) -> anyhow::Result<Option<DiscoveredPrinter>> {
+    let addr = SocketAddr::new(
+        host.parse()
+            .with_context(|| format!("parse Bambu SSDP host {host}"))?,
+        SSDP_PORT,
+    );
+    discover_printer_at_addr(addr, timeout_seconds).await
+}
+
+async fn discover_printer_at_addr(
+    addr: SocketAddr,
+    timeout_seconds: u32,
+) -> anyhow::Result<Option<DiscoveredPrinter>> {
+    let timeout_seconds = timeout_seconds.clamp(1, 15);
+    let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))
+        .await
+        .context("bind direct SSDP discovery UDP socket")?;
+    let request = format!(
+        "M-SEARCH * HTTP/1.1\r\nHOST: {SSDP_ADDR}\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\nST: {SSDP_ST}\r\n\r\n"
+    );
+    socket
+        .send_to(request.as_bytes(), addr)
+        .await
+        .with_context(|| format!("send Bambu SSDP discovery request to {addr}"))?;
+
+    let deadline = Instant::now() + Duration::from_secs(timeout_seconds.into());
+    let mut buf = [0u8; 4096];
+    while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+        match tokio::time::timeout(remaining, socket.recv_from(&mut buf)).await {
+            Ok(Ok((len, source))) => {
+                if let Some(printer) = parse_ssdp_response(&buf[..len], source) {
+                    return Ok(Some(printer));
+                }
+            }
+            Ok(Err(err)) => return Err(err).context("receive direct Bambu SSDP response"),
+            Err(_) => break,
+        }
+    }
+
+    Ok(None)
 }
 
 pub fn parse_ssdp_response(bytes: &[u8], source: SocketAddr) -> Option<DiscoveredPrinter> {
@@ -218,5 +265,25 @@ mod tests {
             model: None,
             source: "ssdp",
         }
+    }
+
+    #[tokio::test]
+    async fn direct_host_discovery_parses_unicast_response() {
+        let server = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let addr = server.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            let mut buf = [0u8; 4096];
+            let (_len, peer) = server.recv_from(&mut buf).await.unwrap();
+            let response = b"HTTP/1.1 200 OK\r\nUSN: SERIAL123\r\nDevName.bambu.com: Office X1C\r\nDevModel.bambu.com: X1 Carbon\r\nST: urn:bambulab-com:device:3dprinter:1\r\n\r\n";
+            server.send_to(response, peer).await.unwrap();
+        });
+
+        let printer = discover_printer_at_addr(addr, 1).await.unwrap().unwrap();
+
+        assert_eq!(printer.serial_number.as_deref(), Some("SERIAL123"));
+        assert_eq!(printer.host, Ipv4Addr::LOCALHOST.to_string());
+        assert_eq!(printer.name.as_deref(), Some("Office X1C"));
+        assert_eq!(printer.model.as_deref(), Some("X1 Carbon"));
+        server_task.await.unwrap();
     }
 }

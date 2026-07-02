@@ -505,6 +505,52 @@ async fn link_printer_fails_when_discovery_does_not_find_host() {
 }
 
 #[tokio::test]
+async fn link_printer_uses_direct_host_discovery_when_multicast_misses_host() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = LinkGateway::discovery_result_with_direct_host(
+        Vec::new(),
+        Some(discovered_printer(
+            "192.0.2.10",
+            Some("SERIAL123"),
+            Some("X1 Carbon"),
+        )),
+    );
+    let (sender, mut receiver) = mpsc::channel(3);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        link_printer_command(command_id.clone(), "SECRET-LINK-CODE"),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_snapshot(
+        receiver.recv().await.unwrap(),
+        "SERIAL123",
+        "Office X1C",
+        "X1 Carbon",
+        "READY",
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert_eq!(result.command_id, command_id);
+            assert!(result.success);
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(gateway.linked_endpoints().await.len(), 1);
+    assert!(receiver.recv().await.is_none());
+}
+
+#[tokio::test]
 async fn link_printer_fails_when_discovered_printer_has_no_serial() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
@@ -648,6 +694,7 @@ fn link_printer_failure_log_redacts_access_code() {
 #[derive(Debug, Clone)]
 struct LinkGateway {
     discovery: Arc<Mutex<anyhow::Result<PrinterDiscoveryResult>>>,
+    direct_host_discovery: Arc<Mutex<anyhow::Result<Option<DiscoveredPrinter>>>>,
     result: Arc<Mutex<anyhow::Result<MachineSnapshot>>>,
     linked_endpoints: Arc<Mutex<Vec<BambuPrinterEndpoint>>>,
     access_code: Option<String>,
@@ -659,6 +706,7 @@ impl LinkGateway {
             discovery: Arc::new(Mutex::new(Ok(PrinterDiscoveryResult::new(vec![
                 discovered_printer("192.0.2.10", Some("SERIAL123"), Some("X1 Carbon")),
             ])))),
+            direct_host_discovery: Arc::new(Mutex::new(Ok(None))),
             result: Arc::new(Mutex::new(Ok(snapshot))),
             linked_endpoints: Arc::new(Mutex::new(Vec::new())),
             access_code: None,
@@ -668,6 +716,25 @@ impl LinkGateway {
     fn discovery_result(printers: Vec<DiscoveredPrinter>) -> Self {
         Self {
             discovery: Arc::new(Mutex::new(Ok(PrinterDiscoveryResult::new(printers)))),
+            direct_host_discovery: Arc::new(Mutex::new(Ok(None))),
+            result: Arc::new(Mutex::new(Ok(snapshot(
+                "SERIAL123",
+                "Office X1C",
+                Some("X1 Carbon"),
+                "READY",
+            )))),
+            linked_endpoints: Arc::new(Mutex::new(Vec::new())),
+            access_code: None,
+        }
+    }
+
+    fn discovery_result_with_direct_host(
+        printers: Vec<DiscoveredPrinter>,
+        direct_host: Option<DiscoveredPrinter>,
+    ) -> Self {
+        Self {
+            discovery: Arc::new(Mutex::new(Ok(PrinterDiscoveryResult::new(printers)))),
+            direct_host_discovery: Arc::new(Mutex::new(Ok(direct_host))),
             result: Arc::new(Mutex::new(Ok(snapshot(
                 "SERIAL123",
                 "Office X1C",
@@ -684,6 +751,7 @@ impl LinkGateway {
             discovery: Arc::new(Mutex::new(Ok(PrinterDiscoveryResult::new(vec![
                 discovered_printer("192.0.2.10", Some("SERIAL123"), Some("X1 Carbon")),
             ])))),
+            direct_host_discovery: Arc::new(Mutex::new(Ok(None))),
             result: Arc::new(Mutex::new(
                 Err(anyhow::anyhow!("bad access code {access_code}"))
                     .context("validate runtime printer SERIAL123"),
@@ -739,6 +807,16 @@ impl BambuMachineGateway for LinkGateway {
     ) -> anyhow::Result<PrinterDiscoveryResult> {
         let mut discovery = self.discovery.lock().await;
         std::mem::replace(&mut *discovery, Ok(PrinterDiscoveryResult::new(Vec::new())))
+    }
+
+    async fn discover_printer_at_host(
+        &self,
+        host: &str,
+        _timeout_seconds: u32,
+    ) -> anyhow::Result<Option<DiscoveredPrinter>> {
+        assert_eq!(host, "192.0.2.10");
+        let mut direct_host_discovery = self.direct_host_discovery.lock().await;
+        std::mem::replace(&mut *direct_host_discovery, Ok(None))
     }
 
     async fn diagnose_printer(

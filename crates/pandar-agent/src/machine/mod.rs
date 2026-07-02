@@ -14,7 +14,7 @@ use anyhow::{Context, bail};
 use async_trait::async_trait;
 use compatibility::flow_calibration_supported;
 use diagnostics::{DiagnosticCheck, DiagnosticStatus, PrinterDiagnosticResult};
-use discovery::PrinterDiscoveryResult;
+use discovery::{DiscoveredPrinter, PrinterDiscoveryResult};
 use file_transfer::{MachineFileTransfer, TransferModeCache, run_with_transfer_mode};
 use ftps::FtpsMachineFileTransfer;
 use mqtt::{
@@ -53,6 +53,13 @@ pub trait BambuMachineGateway: Send + Sync {
         &self,
         timeout_seconds: u32,
     ) -> anyhow::Result<PrinterDiscoveryResult>;
+    async fn discover_printer_at_host(
+        &self,
+        host: &str,
+        timeout_seconds: u32,
+    ) -> anyhow::Result<Option<DiscoveredPrinter>> {
+        discovery::discover_printer_at_host(host, timeout_seconds).await
+    }
     async fn diagnose_printer(
         &self,
         serial_number: &str,
