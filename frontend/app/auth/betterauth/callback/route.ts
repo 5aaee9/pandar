@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
-import { betterAuthCallbackRedirect } from "../callback-redirect";
+import {
+  betterAuthCallbackRedirect,
+  dashboardCallbackRedirectUrl,
+} from "../callback-redirect";
 import {
   authCookieOptions,
   isAllowedDashboardJwt,
@@ -19,7 +22,7 @@ export function GET(request: Request) {
   }
 
   const response = NextResponse.redirect(
-    new URL(result.target, request.url),
+    dashboardCallbackRedirectUrl(result.target, request.url),
     result.status,
   );
   response.cookies.set(

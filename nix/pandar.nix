@@ -475,6 +475,9 @@
         ${pkgs.nodejs_24}/bin/node \
           --experimental-strip-types \
           scripts/auth-redirect.smoke.mjs
+        ${pkgs.nodejs_24}/bin/node \
+          --experimental-strip-types \
+          scripts/auth/betterauth/callback.smoke.mjs
         touch "$out"
       '';
 

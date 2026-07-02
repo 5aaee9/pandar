@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-import { betterAuthCallbackRedirect } from "../../../app/auth/betterauth/callback-redirect.ts";
+import {
+  betterAuthCallbackRedirect,
+  dashboardCallbackRedirectUrl,
+} from "../../../app/auth/betterauth/callback-redirect.ts";
 
 const validToken = "header.payload.signature";
 const acceptsOnlyValidToken = (token) => token === validToken;
@@ -12,6 +15,24 @@ assert.deepEqual(
     acceptsOnlyValidToken,
   ),
   { ok: true, token: validToken, target: "/", status: 303 },
+);
+
+assert.equal(
+  dashboardCallbackRedirectUrl(
+    "/",
+    `https://0.0.0.0:3000/auth/betterauth/callback?token=${validToken}`,
+    "https://pandar.example",
+  ).toString(),
+  "https://pandar.example/",
+);
+
+assert.equal(
+  dashboardCallbackRedirectUrl(
+    "/",
+    `https://0.0.0.0:3000/auth/betterauth/callback?token=${validToken}`,
+    "",
+  ).toString(),
+  "https://0.0.0.0:3000/",
 );
 
 assert.deepEqual(
@@ -57,8 +78,9 @@ assert.match(
 );
 assert.match(
   routeSource,
-  /NextResponse\.redirect\([\s\S]*new URL\(result\.target, request\.url\),[\s\S]*result\.status,[\s\S]*\)/,
+  /NextResponse\.redirect\([\s\S]*dashboardCallbackRedirectUrl\(result\.target, request\.url\),[\s\S]*result\.status,[\s\S]*\)/,
 );
+assert.doesNotMatch(routeSource, /new URL\(result\.target, request\.url\)/);
 assert.match(
   routeSource,
   /response\.cookies\.set\(\s*readAuthCookieConfig\(\)\.name,\s*result\.token,\s*authCookieOptions\(\)/s,

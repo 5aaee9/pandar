@@ -113,6 +113,7 @@
 - Completed a React Doctor hardening pass across `pandar-web` and `pandar-auth`: exported server actions now require request-cookie auth before side effects, the dashboard sign-out cookie clear moved to a POST-only route, locale mutation moved from a server action to an explicit route handler, stale-effect/state and accessibility findings were removed, unused frontend surfaces were deleted or moved out of the app tree, and `npx react-doctor@latest --verbose` now reports 100/100 for both frontend projects.
 - Added Task 1 agent printer-linking primitives: protocol `LinkPrinter`, redacted Hub `link_printer` command payloads, audited sent-row creation, stale unowned cleanup, durable replay rejection, and Hub-side command error redaction groundwork.
 - Added runtime printer linking from the dashboard Agents page: operators can submit host/IP, serial, access code, and optional name/model to a locally connected agent; Hub stores only redacted command/audit data including rejected acknowledgements, the agent validates and links the printer in memory, and runtime-linked printers survive reverse-stream reconnects but are documented as non-persistent across agent restarts unless also configured in `PANDAR_PRINTERS`.
+- Fixed the Better Auth dashboard callback redirect to resolve the final post-login `/` target against `APP_BASE_URL`, preventing internal/bind hosts such as `0.0.0.0:3000` from leaking into the browser after token handoff.
 
 ## Completed: Phase 30 Better Auth Provider Compatibility
 

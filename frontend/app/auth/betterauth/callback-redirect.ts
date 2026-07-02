@@ -13,3 +13,12 @@ export function betterAuthCallbackRedirect(
 
   return { ok: true, token, target: "/", status: 303 };
 }
+
+export function dashboardCallbackRedirectUrl(
+  target: string,
+  requestUrl: string,
+  appBaseUrl = process.env.APP_BASE_URL,
+): URL {
+  const publicBaseUrl = appBaseUrl?.trim();
+  return new URL(target, publicBaseUrl || requestUrl);
+}
