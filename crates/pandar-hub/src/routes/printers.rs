@@ -9,7 +9,7 @@ use axum::{
 use pandar_core::{AgentId, CommandId, CommandRecord, Printer, TenantId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, future::Future};
+use std::{collections::HashMap, future::Future, net::Ipv4Addr};
 
 use crate::{
     AppState,
@@ -82,11 +82,11 @@ pub(super) struct DiagnosePrinterRequest {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct LinkPrinterRequest {
+    #[serde(rename = "type")]
+    printer_type: String,
     host: String,
-    serial_number: String,
     access_code: String,
     name: Option<String>,
-    model: Option<String>,
 }
 
 pub(super) async fn list_printers(
@@ -365,12 +365,20 @@ fn parse_printer_id(value: &str) -> Result<&str, ApiError> {
 
 impl LinkPrinterRequest {
     fn into_payload(self) -> Result<LinkPrinterPayload, ApiError> {
+        let printer_type = trim_required(self.printer_type)?;
+        if printer_type != "BambuLab" {
+            return Err(ApiError::bad_request("bad_request"));
+        }
+
+        let host = trim_required(self.host)?;
+        host.parse::<Ipv4Addr>()
+            .map_err(|_| ApiError::bad_request("bad_request"))?;
+
         Ok(LinkPrinterPayload {
-            host: trim_required(self.host)?,
-            serial_number: trim_required(self.serial_number)?,
+            printer_type,
+            host,
             access_code: trim_required(self.access_code)?,
             name: trim_optional(self.name),
-            model: trim_optional(self.model),
         })
     }
 }
@@ -394,10 +402,9 @@ fn link_printer_hub_command(command_id: CommandId, payload: &LinkPrinterPayload)
         command_id: command_id.to_string(),
         command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
             host: payload.host.clone(),
-            serial_number: payload.serial_number.clone(),
             access_code: payload.access_code.clone(),
             name: payload.name.clone().unwrap_or_default(),
-            model: payload.model.clone().unwrap_or_default(),
+            printer_type: payload.printer_type.clone(),
         })),
     }
 }
@@ -519,11 +526,10 @@ mod tests {
         let _guard = tracing::subscriber::set_default(subscriber);
         let access_code = "SECRET-LINK-CODE";
         let payload = LinkPrinterPayload {
+            printer_type: "BambuLab".to_owned(),
             host: "192.0.2.10".to_owned(),
-            serial_number: "SERIAL123".to_owned(),
             access_code: access_code.to_owned(),
             name: None,
-            model: None,
         };
 
         let err = fail_link_printer_dispatch_after_commit(

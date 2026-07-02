@@ -330,7 +330,12 @@ async fn postgres_link_printer_command_behavior_when_configured() {
     let payload: Value = serde_json::from_str(&old_owned.payload_json).unwrap();
     assert_eq!(old_owned.kind, "link_printer");
     assert_eq!(old_owned.status, CommandStatus::Sent);
+    assert_eq!(payload["printer_type"], "BambuLab");
+    assert_eq!(payload["host"], "192.0.2.10");
     assert_eq!(payload["access_code"], "[redacted]");
+    assert_eq!(payload["name"], "Office X1C");
+    assert!(payload.get("serial_number").is_none());
+    assert!(payload.get("model").is_none());
     assert!(!old_owned.payload_json.contains("SECRET-OWNED"));
     let event = audit
         .list_for_tenant(tenant.id)
@@ -339,6 +344,12 @@ async fn postgres_link_printer_command_behavior_when_configured() {
         .into_iter()
         .find(|event| event.action == "agent.link_printer")
         .expect("link printer audit event");
+    let metadata: Value = serde_json::from_str(&event.metadata_json).unwrap();
+    assert_eq!(metadata["printer_type"], "BambuLab");
+    assert_eq!(metadata["host"], "192.0.2.10");
+    assert_eq!(metadata["name"], "Office X1C");
+    assert!(metadata.get("serial_number").is_none());
+    assert!(metadata.get("model").is_none());
     assert!(!event.metadata_json.contains("SECRET-OWNED"));
 
     set_command_updated_at(&database, old_owned.id, "2026-07-01T00:00:00Z").await;
@@ -392,11 +403,10 @@ async fn set_command_updated_at(
 
 fn link_payload(serial: &str) -> LinkPrinterPayload {
     LinkPrinterPayload {
+        printer_type: "BambuLab".to_owned(),
         host: "192.0.2.10".to_owned(),
-        serial_number: serial.to_owned(),
         access_code: format!("SECRET-{serial}"),
-        name: None,
-        model: None,
+        name: Some("Office X1C".to_owned()),
     }
 }
 

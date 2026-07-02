@@ -218,11 +218,10 @@ async fn command_create_link_printer_sent_persists_redacted_payload_and_audit() 
             tenant.id,
             agent.id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: access_code.to_owned(),
                 name: Some("Office X1C".to_owned()),
-                model: Some("X1 Carbon".to_owned()),
             },
             test_audit_actor(),
         )
@@ -234,11 +233,12 @@ async fn command_create_link_printer_sent_persists_redacted_payload_and_audit() 
     assert_eq!(command.printer_id, None);
     assert!(!command.payload_json.contains(access_code));
     let payload: serde_json::Value = serde_json::from_str(&command.payload_json).unwrap();
+    assert_eq!(payload["printer_type"], "BambuLab");
     assert_eq!(payload["host"], "192.0.2.10");
-    assert_eq!(payload["serial_number"], "SERIAL123");
     assert_eq!(payload["access_code"], "[redacted]");
     assert_eq!(payload["name"], "Office X1C");
-    assert_eq!(payload["model"], "X1 Carbon");
+    assert!(payload.get("serial_number").is_none());
+    assert!(payload.get("model").is_none());
 
     let events = audit.list_for_tenant(tenant.id).await.unwrap();
     let event = events
@@ -252,8 +252,11 @@ async fn command_create_link_printer_sent_persists_redacted_payload_and_audit() 
     );
     assert!(!event.metadata_json.contains(access_code));
     let metadata: serde_json::Value = serde_json::from_str(&event.metadata_json).unwrap();
+    assert_eq!(metadata["printer_type"], "BambuLab");
     assert_eq!(metadata["host"], "192.0.2.10");
-    assert_eq!(metadata["serial_number"], "SERIAL123");
+    assert_eq!(metadata["name"], "Office X1C");
+    assert!(metadata.get("serial_number").is_none());
+    assert!(metadata.get("model").is_none());
 }
 
 #[tokio::test]
@@ -470,11 +473,10 @@ async fn set_command_updated_at(
 
 fn link_payload(serial: &str) -> LinkPrinterPayload {
     LinkPrinterPayload {
+        printer_type: "BambuLab".to_owned(),
         host: "192.0.2.10".to_owned(),
-        serial_number: serial.to_owned(),
         access_code: format!("SECRET-{serial}"),
-        name: None,
-        model: None,
+        name: Some("Office X1C".to_owned()),
     }
 }
 

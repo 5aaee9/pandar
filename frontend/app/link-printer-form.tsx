@@ -51,19 +51,21 @@ export function LinkPrinterForm({
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs font-medium text-slate-500">{t('type')}</span>
+            <select
+              className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
+              defaultValue="BambuLab"
+              name="type"
+              required
+            >
+              <option value="BambuLab">{t('typeBambuLab')}</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
             <span className="text-xs font-medium text-slate-500">{t('host')}</span>
             <input
               className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950"
               name="host"
-              required
-              type="text"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs font-medium text-slate-500">{t('serialNumber')}</span>
-            <input
-              className="h-9 rounded-md border border-slate-300 px-2 font-mono text-sm text-slate-950"
-              name="serial_number"
               required
               type="text"
             />
@@ -83,14 +85,6 @@ export function LinkPrinterForm({
             <input
               className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950"
               name="name"
-              type="text"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs font-medium text-slate-500">{t('model')}</span>
-            <input
-              className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950"
-              name="model"
               type="text"
             />
           </label>

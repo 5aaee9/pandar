@@ -262,11 +262,10 @@ async fn link_printer_command(
             tenant_id,
             agent_id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: serial.to_owned(),
                 access_code: format!("SECRET-{serial}"),
                 name: None,
-                model: None,
             },
             test_audit_actor(),
         )
@@ -280,10 +279,9 @@ fn link_hub_command(command_id: CommandId, serial: &str) -> HubCommand {
         command_id: command_id.to_string(),
         command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
             host: "192.0.2.10".to_owned(),
-            serial_number: serial.to_owned(),
             access_code: format!("SECRET-{serial}"),
             name: String::new(),
-            model: String::new(),
+            printer_type: "BambuLab".to_owned(),
         })),
     }
 }

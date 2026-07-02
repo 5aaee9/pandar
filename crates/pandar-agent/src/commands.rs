@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use tokio::sync::mpsc;
 
 mod artifacts;
@@ -235,18 +235,57 @@ async fn emit_link_printer_events<G>(
 where
     G: BambuMachineGateway,
 {
-    let endpoint = BambuPrinterEndpoint {
-        host: command.host,
-        serial: command.serial_number,
-        access_code: command.access_code,
-        name: non_blank_string(command.name),
-        model: non_blank_string(command.model),
-    };
-
     sender
         .send(ack_event(config, command_id))
         .await
         .context("queue link-printer command ack")?;
+
+    let access_code = command.access_code;
+    let access_code_for_error = access_code.clone();
+    let printer_type = command.printer_type.trim().to_owned();
+    if printer_type != "BambuLab" {
+        sender
+            .send(failure_event(
+                config,
+                command_id,
+                format!("unsupported printer type {printer_type}"),
+            ))
+            .await
+            .context("queue link-printer unsupported type failure")?;
+        return Ok(());
+    }
+
+    let host = command.host.trim().to_owned();
+    let endpoint = match gateway
+        .discover_printers(3)
+        .await
+        .with_context(|| format!("discover Bambu printer at {host}"))
+        .and_then(|result| {
+            let printer = result
+                .printers
+                .into_iter()
+                .find(|printer| printer.host.trim() == host.as_str())
+                .ok_or_else(|| anyhow!("could not discover printer at {host}"))?;
+            let serial = non_blank_string(printer.serial_number.unwrap_or_default())
+                .ok_or_else(|| anyhow!("printer serial could not be discovered for {host}"))?;
+            Ok(BambuPrinterEndpoint {
+                host: host.clone(),
+                serial,
+                access_code: access_code.clone(),
+                name: non_blank_string(command.name),
+                model: printer.model.and_then(non_blank_string),
+            })
+        }) {
+        Ok(endpoint) => endpoint,
+        Err(err) => {
+            let error = redact_link_error(gateway, &format!("{err:#}"), &access_code_for_error);
+            sender
+                .send(failure_event(config, command_id, error))
+                .await
+                .context("queue link-printer discovery failure")?;
+            return Ok(());
+        }
+    };
 
     match gateway.link_printer(endpoint.clone(), config, sender).await {
         Ok(snapshot) => {

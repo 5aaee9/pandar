@@ -400,7 +400,7 @@ fn grpc_hub_command_from_record_rejects_persisted_link_printer_replay() {
         kind: "link_printer".to_string(),
         status: "sent".to_string(),
         payload_json:
-            r#"{"host":"192.0.2.10","serial_number":"SERIAL123","access_code":"[redacted]"}"#
+            r#"{"printer_type":"BambuLab","host":"192.0.2.10","access_code":"[redacted]"}"#
                 .to_string(),
         result_json: None,
         error: None,
@@ -429,11 +429,10 @@ async fn grpc_link_printer_failed_result_redacts_access_code() {
             tenant_id,
             agent_id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: access_code.to_owned(),
                 name: None,
-                model: None,
             },
             test_audit_actor(),
         )
@@ -476,11 +475,10 @@ async fn grpc_link_printer_result_json_redacts_access_code() {
             tenant_id,
             agent_id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: access_code.to_owned(),
                 name: None,
-                model: None,
             },
             test_audit_actor(),
         )
@@ -523,11 +521,10 @@ async fn grpc_link_printer_numeric_result_json_redacts_digit_access_code() {
             tenant_id,
             agent_id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: access_code.to_owned(),
                 name: None,
-                model: None,
             },
             test_audit_actor(),
         )
@@ -573,11 +570,10 @@ async fn grpc_link_printer_result_json_redacts_access_code_object_key() {
             tenant_id,
             agent_id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: access_code.to_owned(),
                 name: None,
-                model: None,
             },
             test_audit_actor(),
         )
@@ -628,11 +624,10 @@ async fn grpc_late_link_printer_result_logs_without_access_code() {
             tenant_id,
             agent_id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: access_code.to_owned(),
                 name: None,
-                model: None,
             },
             test_audit_actor(),
         )
@@ -688,11 +683,10 @@ async fn grpc_late_link_printer_result_stream_keeps_session_and_pending_redacted
             tenant_id,
             agent_id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: access_code.to_owned(),
                 name: None,
-                model: None,
             },
             test_audit_actor(),
         )
@@ -772,11 +766,10 @@ async fn grpc_link_printer_stream_result_redacts_standalone_access_code() {
             tenant_id,
             agent_id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: access_code.to_owned(),
                 name: None,
-                model: None,
             },
             test_audit_actor(),
         )
@@ -841,11 +834,10 @@ async fn grpc_link_printer_rejected_ack_redacts_pending_secret_from_error() {
             tenant_id,
             agent_id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: access_code.to_owned(),
                 name: None,
-                model: None,
             },
             test_audit_actor(),
         )
@@ -896,11 +888,10 @@ async fn grpc_link_printer_result_without_pending_secret_redacts_untrusted_strin
             tenant_id,
             agent_id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: access_code.to_owned(),
                 name: None,
-                model: None,
             },
             test_audit_actor(),
         )
@@ -948,11 +939,10 @@ async fn grpc_link_printer_result_without_pending_secret_redacts_numeric_values(
             tenant_id,
             agent_id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: access_code.to_owned(),
                 name: None,
-                model: None,
             },
             test_audit_actor(),
         )
@@ -999,11 +989,10 @@ async fn grpc_link_printer_result_without_pending_secret_redacts_numeric_object_
             tenant_id,
             agent_id,
             LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: access_code.to_owned(),
                 name: None,
-                model: None,
             },
             test_audit_actor(),
         )
@@ -1099,10 +1088,9 @@ fn link_printer_hub_command(command_id: CommandId, access_code: &str) -> HubComm
         command_id: command_id.to_string(),
         command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
             host: "192.0.2.10".to_owned(),
-            serial_number: "SERIAL123".to_owned(),
             access_code: access_code.to_owned(),
             name: String::new(),
-            model: String::new(),
+            printer_type: "BambuLab".to_owned(),
         })),
     }
 }

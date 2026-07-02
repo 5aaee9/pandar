@@ -725,10 +725,9 @@ mod tests {
                     command_id: command_id.to_string(),
                     command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
                         host: "192.0.2.10".to_owned(),
-                        serial_number: "SERIAL123".to_owned(),
                         access_code: "SECRET-LINK-CODE".to_owned(),
                         name: String::new(),
-                        model: String::new(),
+                        printer_type: "BambuLab".to_owned(),
                     })),
                 },
             )

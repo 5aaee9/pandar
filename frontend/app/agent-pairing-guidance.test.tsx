@@ -225,9 +225,12 @@ describe("Agents view pairing guidance", () => {
     expect(pairingHeading.compareDocumentPosition(linkHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(linkHeading.compareDocumentPosition(linkedAgentsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByLabelText("Agent")).toHaveValue("agent-online");
-    expect(screen.getByLabelText("Host or IP address")).toHaveAttribute("name", "host");
-    expect(screen.getByLabelText("Serial number")).toHaveAttribute("name", "serial_number");
-    expect(screen.getByLabelText("Access code")).toHaveAttribute("type", "password");
+    expect(screen.getByLabelText("Type")).toHaveValue("BambuLab");
+    expect(screen.getByLabelText("Printer IPv4 address")).toHaveAttribute("name", "host");
+    expect(screen.getByLabelText("Access code")).toHaveAttribute("name", "access_code");
+    expect(screen.getByLabelText("Name")).toHaveAttribute("name", "name");
+    expect(screen.queryByLabelText("Serial number")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Model")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Link printer" })).toHaveAttribute("type", "submit");
   });
 
@@ -236,7 +239,7 @@ describe("Agents view pairing guidance", () => {
 
     expect(screen.getByRole("heading", { name: "Link printer to agent" })).toBeVisible();
     expect(screen.getByText("Select a tenant to link a printer."));
-    expect(screen.getByText("Choose a tenant from the header before submitting printer credentials."));
+    expect(screen.getByText("Choose a tenant from the header before submitting printer connection details."));
     expect(screen.queryByLabelText("Access code")).not.toBeInTheDocument();
   });
 

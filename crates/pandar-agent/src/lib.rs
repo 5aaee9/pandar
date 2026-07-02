@@ -222,8 +222,8 @@ mod tests {
 
     use super::*;
     use crate::machine::{
-        BambuMachineGateway, file_transfer::FakeMachineFileTransfer, mqtt::FakeMqttTransport,
-        runtime::test_support::TestRuntimeBambuMachineGateway,
+        BambuMachineGateway, discovery::DiscoveredPrinter, file_transfer::FakeMachineFileTransfer,
+        mqtt::FakeMqttTransport, runtime::test_support::TestRuntimeBambuMachineGateway,
     };
     use crate::protocol::agent::v1::{HubCommand, LinkPrinter, hub_command};
 
@@ -330,6 +330,15 @@ mod tests {
                 json!({"print": {"state": "IDLE"}}),
             ]))
             .await;
+        gateway
+            .set_discovered_printers(vec![DiscoveredPrinter {
+                serial_number: Some("SERIAL123".to_owned()),
+                host: "192.0.2.10".to_owned(),
+                name: Some("office".to_owned()),
+                model: Some("X1 Carbon".to_owned()),
+                source: "ssdp",
+            }])
+            .await;
         let config = test_config();
         let (sender, mut events) = mpsc::channel(8);
 
@@ -424,10 +433,9 @@ mod tests {
             command_id: uuid::Uuid::new_v4().to_string(),
             command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
                 host: "192.0.2.10".to_owned(),
-                serial_number: "SERIAL123".to_owned(),
                 access_code: "12345678".to_owned(),
                 name: "office".to_owned(),
-                model: "X1 Carbon".to_owned(),
+                printer_type: "BambuLab".to_owned(),
             })),
         }
     }

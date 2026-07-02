@@ -475,11 +475,10 @@ mod tests {
 
     fn link_payload(serial: &str) -> LinkPrinterPayload {
         LinkPrinterPayload {
+            printer_type: "BambuLab".to_owned(),
             host: "192.0.2.10".to_owned(),
-            serial_number: serial.to_owned(),
             access_code: format!("SECRET-{serial}"),
             name: None,
-            model: None,
         }
     }
 

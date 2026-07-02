@@ -54,30 +54,27 @@ pub struct DiagnosePrinterPayload {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LinkPrinterPayload {
+    pub printer_type: String,
     pub host: String,
-    pub serial_number: String,
     pub access_code: String,
     pub name: Option<String>,
-    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RedactedLinkPrinterPayload {
+    pub printer_type: String,
     pub host: String,
-    pub serial_number: String,
     pub access_code: String,
     pub name: Option<String>,
-    pub model: Option<String>,
 }
 
 impl LinkPrinterPayload {
     pub fn redacted(&self) -> RedactedLinkPrinterPayload {
         RedactedLinkPrinterPayload {
+            printer_type: self.printer_type.clone(),
             host: self.host.clone(),
-            serial_number: self.serial_number.clone(),
             access_code: "[redacted]".to_owned(),
             name: self.name.clone(),
-            model: self.model.clone(),
         }
     }
 }

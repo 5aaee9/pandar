@@ -212,13 +212,14 @@ pub(crate) mod test_support {
     use super::*;
     use crate::machine::{
         diagnostics::PrinterDiagnosticResult,
-        discovery::PrinterDiscoveryResult,
+        discovery::{DiscoveredPrinter, PrinterDiscoveryResult},
         file_transfer::{MachineFileTransfer, TransferModeCache},
         mqtt::BambuMqttTransport,
     };
 
     pub(crate) struct TestRuntimeBambuMachineGateway<T, F> {
         inner: tokio::sync::Mutex<ConfiguredBambuMachineGateway<T, F>>,
+        discovered_printers: tokio::sync::Mutex<Vec<DiscoveredPrinter>>,
         report_tasks: tokio::sync::Mutex<HashMap<String, JoinHandle<()>>>,
         command_transports: tokio::sync::Mutex<VecDeque<anyhow::Result<T>>>,
         report_preparation_errors: tokio::sync::Mutex<VecDeque<anyhow::Error>>,
@@ -242,12 +243,23 @@ pub(crate) mod test_support {
                 .iter()
                 .map(|(endpoint, _, _)| endpoint.access_code.clone())
                 .collect();
+            let discovered_printers = printers
+                .iter()
+                .map(|(endpoint, _, _)| DiscoveredPrinter {
+                    serial_number: Some(endpoint.serial.clone()),
+                    host: endpoint.host.clone(),
+                    name: endpoint.name.clone(),
+                    model: endpoint.model.clone(),
+                    source: "ssdp",
+                })
+                .collect();
             Self {
                 inner: tokio::sync::Mutex::new(ConfiguredBambuMachineGateway::with_file_transfer(
                     printers,
                     report_timeout,
                     TransferModeCache::default(),
                 )),
+                discovered_printers: tokio::sync::Mutex::new(discovered_printers),
                 report_tasks: tokio::sync::Mutex::new(HashMap::new()),
                 command_transports: tokio::sync::Mutex::new(VecDeque::new()),
                 report_preparation_errors: tokio::sync::Mutex::new(VecDeque::new()),
@@ -256,6 +268,10 @@ pub(crate) mod test_support {
                 transfer,
                 report_timeout,
             }
+        }
+
+        pub(crate) async fn set_discovered_printers(&self, printers: Vec<DiscoveredPrinter>) {
+            *self.discovered_printers.lock().await = printers;
         }
 
         pub(crate) async fn push_command_transport(&self, transport: T) {
@@ -326,7 +342,9 @@ pub(crate) mod test_support {
             &self,
             _timeout_seconds: u32,
         ) -> anyhow::Result<PrinterDiscoveryResult> {
-            Ok(PrinterDiscoveryResult::new(Vec::new()))
+            Ok(PrinterDiscoveryResult::new(
+                self.discovered_printers.lock().await.clone(),
+            ))
         }
 
         async fn diagnose_printer(

@@ -163,10 +163,9 @@ pub async fn create_link_printer_sent_with_audit(
         "agent",
         Some(agent_id.to_string()),
         serde_json::json!({
+            "printer_type": payload.printer_type,
             "host": payload.host,
-            "serial_number": payload.serial_number,
             "name": payload.name,
-            "model": payload.model,
         }),
     );
     let id = CommandId::new();

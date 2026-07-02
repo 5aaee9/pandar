@@ -142,11 +142,10 @@ export async function linkPrinter(formData: FormData) {
   const response = await postJson(
     `/api/v1/tenants/${tenantId}/agents/${agentId}/link-printer`,
     {
+      type: stringField(formData, "type"),
       host: stringField(formData, "host"),
-      serial_number: stringField(formData, "serial_number"),
       access_code: stringField(formData, "access_code"),
       name: nullableField(formData, "name"),
-      model: nullableField(formData, "model"),
     },
   );
   if (!response.ok) {

@@ -95,10 +95,13 @@ message RefreshPrinters {}
 
 message LinkPrinter {
   string host = 1;
-  string serial_number = 2;
+  reserved 2;
+  reserved "serial_number";
   string access_code = 3;
   string name = 4;
-  string model = 5;
+  reserved 5;
+  reserved "model";
+  string printer_type = 6;
 }
 
 message DiscoverPrinters {

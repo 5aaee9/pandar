@@ -15,8 +15,9 @@ use super::*;
 use crate::{
     machine::{
         BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot, NoopMachineGateway,
-        PrinterOperation as MachinePrinterOperation, diagnostics::PrinterDiagnosticResult,
-        discovery::PrinterDiscoveryResult,
+        PrinterOperation as MachinePrinterOperation,
+        diagnostics::PrinterDiagnosticResult,
+        discovery::{DiscoveredPrinter, PrinterDiscoveryResult},
     },
     protocol::agent::v1::{
         Axis, AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
@@ -220,10 +221,9 @@ fn link_printer_command(command_id: String, access_code: &str) -> HubCommand {
         command_id,
         command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
             host: "192.0.2.10".to_owned(),
-            serial_number: "SERIAL123".to_owned(),
             access_code: access_code.to_owned(),
             name: "Office X1C".to_owned(),
-            model: "X1 Carbon".to_owned(),
+            printer_type: "BambuLab".to_owned(),
         })),
     }
 }
@@ -460,11 +460,116 @@ async fn link_printer_emits_ack_snapshot_and_success_without_access_code() {
             assert_eq!(json["type"], "printer_link");
             assert_eq!(json["serial_number"], "SERIAL123");
             assert_eq!(json["host"], "192.0.2.10");
+            assert_eq!(json["name"], "Office X1C");
+            assert_eq!(json["model"], "X1 Carbon");
             assert_eq!(json["status"], "READY");
         }
         other => panic!("expected command result, got {other:?}"),
     }
+    assert_eq!(gateway.linked_endpoints().await.len(), 1);
     assert!(receiver.recv().await.is_none());
+}
+
+#[tokio::test]
+async fn link_printer_fails_when_discovery_does_not_find_host() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = LinkGateway::discovery_result(vec![discovered_printer(
+        "192.0.2.11",
+        Some("OTHER"),
+        Some("A1 Mini"),
+    )]);
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        link_printer_command(command_id.clone(), "SECRET-LINK-CODE"),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_failure_contains(
+        receiver.recv().await.unwrap(),
+        &command_id,
+        "could not discover printer at 192.0.2.10",
+    );
+    assert!(receiver.recv().await.is_none());
+    assert!(gateway.linked_endpoints().await.is_empty());
+}
+
+#[tokio::test]
+async fn link_printer_fails_when_discovered_printer_has_no_serial() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = LinkGateway::discovery_result(vec![discovered_printer(
+        "192.0.2.10",
+        None,
+        Some("X1 Carbon"),
+    )]);
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        link_printer_command(command_id.clone(), "SECRET-LINK-CODE"),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_failure_contains(
+        receiver.recv().await.unwrap(),
+        &command_id,
+        "printer serial could not be discovered for 192.0.2.10",
+    );
+    assert!(receiver.recv().await.is_none());
+    assert!(gateway.linked_endpoints().await.is_empty());
+}
+
+#[tokio::test]
+async fn link_printer_rejects_unsupported_type_without_discovery() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = LinkGateway::discovery_result(vec![discovered_printer(
+        "192.0.2.10",
+        Some("SERIAL123"),
+        Some("X1 Carbon"),
+    )]);
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        link_printer_command_with_type(command_id.clone(), "SECRET-LINK-CODE", "Other"),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_failure_contains(
+        receiver.recv().await.unwrap(),
+        &command_id,
+        "unsupported printer type Other",
+    );
+    assert!(receiver.recv().await.is_none());
+    assert!(gateway.linked_endpoints().await.is_empty());
 }
 
 #[tokio::test]
@@ -542,26 +647,80 @@ fn link_printer_failure_log_redacts_access_code() {
 
 #[derive(Debug, Clone)]
 struct LinkGateway {
+    discovery: Arc<Mutex<anyhow::Result<PrinterDiscoveryResult>>>,
     result: Arc<Mutex<anyhow::Result<MachineSnapshot>>>,
+    linked_endpoints: Arc<Mutex<Vec<BambuPrinterEndpoint>>>,
     access_code: Option<String>,
 }
 
 impl LinkGateway {
     fn success(snapshot: MachineSnapshot) -> Self {
         Self {
+            discovery: Arc::new(Mutex::new(Ok(PrinterDiscoveryResult::new(vec![
+                discovered_printer("192.0.2.10", Some("SERIAL123"), Some("X1 Carbon")),
+            ])))),
             result: Arc::new(Mutex::new(Ok(snapshot))),
+            linked_endpoints: Arc::new(Mutex::new(Vec::new())),
+            access_code: None,
+        }
+    }
+
+    fn discovery_result(printers: Vec<DiscoveredPrinter>) -> Self {
+        Self {
+            discovery: Arc::new(Mutex::new(Ok(PrinterDiscoveryResult::new(printers)))),
+            result: Arc::new(Mutex::new(Ok(snapshot(
+                "SERIAL123",
+                "Office X1C",
+                Some("X1 Carbon"),
+                "READY",
+            )))),
+            linked_endpoints: Arc::new(Mutex::new(Vec::new())),
             access_code: None,
         }
     }
 
     fn failure(access_code: &str) -> Self {
         Self {
+            discovery: Arc::new(Mutex::new(Ok(PrinterDiscoveryResult::new(vec![
+                discovered_printer("192.0.2.10", Some("SERIAL123"), Some("X1 Carbon")),
+            ])))),
             result: Arc::new(Mutex::new(
                 Err(anyhow::anyhow!("bad access code {access_code}"))
                     .context("validate runtime printer SERIAL123"),
             )),
+            linked_endpoints: Arc::new(Mutex::new(Vec::new())),
             access_code: Some(access_code.to_owned()),
         }
+    }
+
+    async fn linked_endpoints(&self) -> Vec<BambuPrinterEndpoint> {
+        self.linked_endpoints.lock().await.clone()
+    }
+}
+
+fn discovered_printer(host: &str, serial: Option<&str>, model: Option<&str>) -> DiscoveredPrinter {
+    DiscoveredPrinter {
+        serial_number: serial.map(str::to_owned),
+        host: host.to_owned(),
+        name: Some("Discovered Office X1C".to_owned()),
+        model: model.map(str::to_owned),
+        source: "ssdp",
+    }
+}
+
+fn link_printer_command_with_type(
+    command_id: String,
+    access_code: &str,
+    printer_type: &str,
+) -> HubCommand {
+    HubCommand {
+        command_id,
+        command: Some(hub_command::Command::LinkPrinter(LinkPrinter {
+            host: "192.0.2.10".to_owned(),
+            access_code: access_code.to_owned(),
+            name: "Office X1C".to_owned(),
+            printer_type: printer_type.to_owned(),
+        })),
     }
 }
 
@@ -578,7 +737,8 @@ impl BambuMachineGateway for LinkGateway {
         &self,
         _timeout_seconds: u32,
     ) -> anyhow::Result<PrinterDiscoveryResult> {
-        unreachable!("link printer tests do not discover printers")
+        let mut discovery = self.discovery.lock().await;
+        std::mem::replace(&mut *discovery, Ok(PrinterDiscoveryResult::new(Vec::new())))
     }
 
     async fn diagnose_printer(
@@ -621,8 +781,10 @@ impl BambuMachineGateway for LinkGateway {
     ) -> anyhow::Result<MachineSnapshot> {
         assert_eq!(endpoint.host, "192.0.2.10");
         assert_eq!(endpoint.serial, "SERIAL123");
+        assert_eq!(endpoint.access_code, "SECRET-LINK-CODE");
         assert_eq!(endpoint.name.as_deref(), Some("Office X1C"));
         assert_eq!(endpoint.model.as_deref(), Some("X1 Carbon"));
+        self.linked_endpoints.lock().await.push(endpoint);
         let mut result = self.result.lock().await;
         std::mem::replace(
             &mut *result,

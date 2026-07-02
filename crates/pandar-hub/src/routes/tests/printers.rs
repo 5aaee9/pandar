@@ -344,16 +344,26 @@ async fn link_printer_direct_sends_secret_but_persists_only_redacted_payload() {
     let sent = command_receiver.recv().await.unwrap().unwrap();
     match sent.command.unwrap() {
         hub_command::Command::LinkPrinter(command) => {
-            assert_eq!(command.access_code, access_code);
+            assert_eq!(command.printer_type, "BambuLab");
             assert_eq!(command.host, "192.0.2.10");
-            assert_eq!(command.serial_number, "SERIAL123");
+            assert_eq!(command.access_code, access_code);
+            assert_eq!(command.name, "Office X1C");
         }
         other => panic!("expected link printer command, got {other:?}"),
     }
+
+    let payload: serde_json::Value =
+        serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["printer_type"], "BambuLab");
+    assert_eq!(payload["host"], "192.0.2.10");
+    assert_eq!(payload["access_code"], "[redacted]");
+    assert_eq!(payload["name"], "Office X1C");
+    assert!(payload.get("serial_number").is_none());
+    assert!(payload.get("model").is_none());
 }
 
 #[tokio::test]
-async fn link_printer_maps_absent_or_blank_optional_name_model_to_empty_proto_strings() {
+async fn link_printer_maps_absent_or_blank_optional_name_to_empty_proto_string() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
@@ -363,18 +373,8 @@ async fn link_printer_maps_absent_or_blank_optional_name_model_to_empty_proto_st
     register_route_test_session(&state, tenant_id, agent_id, command_sender).await;
 
     for body in [
-        json!({
-            "host": "192.0.2.10",
-            "serial_number": "SERIAL123",
-            "access_code": "SECRET-LINK-CODE"
-        }),
-        json!({
-            "host": "192.0.2.11",
-            "serial_number": "SERIAL456",
-            "access_code": "SECRET-LINK-CODE",
-            "name": "   ",
-            "model": "   "
-        }),
+        json!({ "type": "BambuLab", "host": "192.0.2.10", "access_code": "SECRET-LINK-CODE" }),
+        json!({ "type": "BambuLab", "host": "192.0.2.11", "access_code": "SECRET-LINK-CODE", "name": "   " }),
     ] {
         let (status, response) = request_as(
             app.clone(),
@@ -390,7 +390,6 @@ async fn link_printer_maps_absent_or_blank_optional_name_model_to_empty_proto_st
         match sent.command.unwrap() {
             hub_command::Command::LinkPrinter(command) => {
                 assert_eq!(command.name, "");
-                assert_eq!(command.model, "");
             }
             other => panic!("expected link printer command, got {other:?}"),
         }
@@ -458,9 +457,8 @@ async fn link_printer_rejects_blank_required_fields() {
     let agent_id = agent["id"].as_str().unwrap();
 
     for body in [
-        json!({ "host": "", "serial_number": "SERIAL123", "access_code": "SECRET-LINK-CODE" }),
-        json!({ "host": "192.0.2.10", "serial_number": "", "access_code": "SECRET-LINK-CODE" }),
-        json!({ "host": "192.0.2.10", "serial_number": "SERIAL123", "access_code": "" }),
+        json!({ "type": "BambuLab", "host": "", "access_code": "SECRET-LINK-CODE" }),
+        json!({ "type": "BambuLab", "host": "192.0.2.10", "access_code": "" }),
     ] {
         let (status, body) = request_as(
             app.clone(),
@@ -478,6 +476,35 @@ async fn link_printer_rejects_blank_required_fields() {
 }
 
 #[tokio::test]
+async fn link_printer_rejects_invalid_type_host_and_legacy_metadata_fields() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = tenant["id"].as_str().unwrap();
+    let agent_id = agent["id"].as_str().unwrap();
+
+    for request in [
+        json!({ "type": "", "host": "192.0.2.10", "access_code": "SECRET-LINK-CODE" }),
+        json!({ "type": "Other", "host": "192.0.2.10", "access_code": "SECRET-LINK-CODE" }),
+        json!({ "type": "BambuLab", "host": "printer.local", "access_code": "SECRET-LINK-CODE" }),
+        json!({ "type": "BambuLab", "host": "192.0.2.10", "access_code": "SECRET-LINK-CODE", "serial_number": "SERIAL123" }),
+        json!({ "type": "BambuLab", "host": "192.0.2.10", "access_code": "SECRET-LINK-CODE", "model": "X1 Carbon" }),
+    ] {
+        let (status, body) = request_as(
+            app.clone(),
+            Method::POST,
+            &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer"),
+            Some(request),
+            &token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body["error"], "bad_request");
+    }
+    assert_eq!(state.commands().count().await.unwrap(), 0);
+}
+
+#[tokio::test]
 async fn link_printer_rejects_unknown_fields() {
     let state = state().await;
     let app = router(state.clone());
@@ -490,8 +517,8 @@ async fn link_printer_rejects_unknown_fields() {
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer"),
         Some(json!({
+            "type": "BambuLab",
             "host": "192.0.2.10",
-            "serial_number": "SERIAL123",
             "access_code": "SECRET-LINK-CODE",
             "unexpected": true
         })),
@@ -506,11 +533,10 @@ async fn link_printer_rejects_unknown_fields() {
 
 fn link_printer_body(access_code: &str) -> serde_json::Value {
     json!({
+        "type": "BambuLab",
         "host": "192.0.2.10",
-        "serial_number": "SERIAL123",
         "access_code": access_code,
-        "name": "Office X1C",
-        "model": "X1 Carbon"
+        "name": "Office X1C"
     })
 }
 
