@@ -8,8 +8,10 @@ use crate::protocol::agent::v1::{AgentHeartbeat, CommandAck, agent_event, hub_co
 
 mod commands;
 mod lifecycle;
+mod log_capture;
 mod print_jobs;
 mod print_reports;
+mod printer_materials;
 mod printer_snapshots;
 
 const TEST_AGENT_CREDENTIAL: &str = "pandar_ac_test";
@@ -363,6 +365,12 @@ pub(super) async fn tenant_agent(state: &AppState) -> (TenantId, AgentId) {
     let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
     let agent = paired_agent(state, tenant.id, "agent").await;
     (tenant.id, agent.id)
+}
+
+pub(super) async fn start_control_plane(state: AppState) -> tokio::task::JoinHandle<()> {
+    let (handle, ready) = crate::runtime::spawn_control_plane_ready(state);
+    ready.await.unwrap().unwrap();
+    handle
 }
 
 async fn paired_agent(state: &AppState, tenant_id: TenantId, name: &str) -> pandar_core::Agent {

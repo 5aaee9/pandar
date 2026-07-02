@@ -1,7 +1,11 @@
 use tonic::Code;
 
 use super::*;
-use crate::protocol::agent::v1::PrinterSnapshot;
+use crate::{
+    printer_events::PrinterEvent,
+    protocol::agent::v1::PrinterSnapshot,
+    repositories::{MaterialPatchInput, test_helpers::insert_printer_fixture},
+};
 
 #[tokio::test]
 async fn grpc_printer_snapshot_persists_printer_state() {
@@ -91,6 +95,44 @@ async fn stale_replaced_stream_snapshot_does_not_mutate_printer_state() {
     );
 }
 
+#[tokio::test]
+async fn printer_snapshot_event_includes_latest_materials() {
+    let state = fixture_state().await;
+    let _control_plane = start_control_plane(state.clone()).await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
+        .await
+        .unwrap();
+    state
+        .materials()
+        .upsert_from_patch(MaterialPatchInput {
+            tenant_id,
+            agent_id,
+            printer_id: printer_id.clone(),
+            serial_number: format!("serial-{printer_id}"),
+            printer_materials_json: valid_material_patch("2026-07-02T00:00:00Z"),
+        })
+        .await
+        .unwrap();
+    let mut receiver = state.printer_events().subscribe(tenant_id).await;
+
+    handle_snapshot(
+        &state,
+        tenant_id,
+        agent_id,
+        snapshot(&format!("serial-{printer_id}"), "Printer", "A1", "IDLE"),
+    )
+    .await
+    .unwrap();
+
+    let event = receiver.recv().await.unwrap();
+    let PrinterEvent::PrinterSnapshot { printer } = event else {
+        panic!("expected printer snapshot")
+    };
+    assert_eq!(printer.id, printer_id);
+    assert_eq!(printer.materials.unwrap().ams_units[0]["unit_id"], "0");
+}
+
 pub(super) fn snapshot(serial: &str, name: &str, model: &str, state: &str) -> PrinterSnapshot {
     PrinterSnapshot {
         serial: serial.to_string(),
@@ -111,4 +153,14 @@ pub(super) fn snapshot_event(
         event_id: "event".to_string(),
         event: Some(agent_event::Event::PrinterSnapshot(snapshot)),
     }
+}
+
+pub(super) fn valid_material_patch(observed_at: &str) -> String {
+    serde_json::json!({
+        "type": "printer_material_patch",
+        "observed_at": observed_at,
+        "ams_units": [{"unit_id": "0", "trays": [{"tray_id": "0", "type": "PLA"}]}],
+        "external_spools": []
+    })
+    .to_string()
 }

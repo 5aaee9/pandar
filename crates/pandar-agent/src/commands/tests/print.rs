@@ -10,8 +10,8 @@ use crate::{
         handle_command_with_reader, success_event,
     },
     machine::{
-        BambuMachineGateway, MachineSnapshot, diagnostics::PrinterDiagnosticResult,
-        discovery::PrinterDiscoveryResult,
+        BambuMachineGateway, MaterialRefreshResult, PrinterRefreshResult,
+        diagnostics::PrinterDiagnosticResult, discovery::PrinterDiscoveryResult,
     },
     protocol::agent::v1::{AgentEvent, HubCommand, PrintProjectFile, agent_event, hub_command},
 };
@@ -383,8 +383,16 @@ impl BambuMachineGateway for FakePrintGateway {
         })
     }
 
-    async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
+    async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
         Ok(Vec::new())
+    }
+
+    async fn refresh_printer_materials(
+        &self,
+        serial_number: &str,
+        _printer_id: Option<&str>,
+    ) -> anyhow::Result<MaterialRefreshResult> {
+        anyhow::bail!("no configured Bambu printer matches serial {serial_number}")
     }
 
     async fn validate_printer(&self, serial_number: &str) -> anyhow::Result<()> {

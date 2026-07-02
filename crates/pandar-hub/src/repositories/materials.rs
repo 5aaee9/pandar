@@ -15,7 +15,7 @@ mod merge;
 mod patch;
 
 use merge::merge_snapshot;
-use patch::{is_older, parse_array_json, parse_object_json, parse_patch};
+use patch::{is_older, parse_array_json, parse_object_json, parse_patch_result, sanitize_message};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MaterialPatchInput {
@@ -38,6 +38,15 @@ pub struct MaterialSnapshot {
     pub active_tray: Option<Value>,
     pub observed_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MaterialPatchOutcome {
+    Empty,
+    Invalid { error: String },
+    Older,
+    Unchanged(MaterialSnapshot),
+    Changed(MaterialSnapshot),
 }
 
 impl MaterialSnapshot {
@@ -97,20 +106,46 @@ impl MaterialRepository {
         &self,
         input: MaterialPatchInput,
     ) -> RepositoryResult<Option<MaterialSnapshot>> {
+        match self.upsert_from_patch_outcome(input).await? {
+            MaterialPatchOutcome::Changed(snapshot) | MaterialPatchOutcome::Unchanged(snapshot) => {
+                Ok(Some(snapshot))
+            }
+            MaterialPatchOutcome::Invalid { error } => {
+                tracing::warn!(error = %sanitize_message(&error), "ignored material patch");
+                Ok(None)
+            }
+            MaterialPatchOutcome::Empty | MaterialPatchOutcome::Older => Ok(None),
+        }
+    }
+
+    pub async fn upsert_from_patch_outcome(
+        &self,
+        input: MaterialPatchInput,
+    ) -> RepositoryResult<MaterialPatchOutcome> {
         let connection = self.database.sea_orm_connection();
-        upsert_from_patch_in_connection(&connection, input).await
+        upsert_from_patch_outcome_in_connection(&connection, input).await
     }
 }
 
-pub(crate) async fn upsert_from_patch_in_connection<C>(
+pub(crate) async fn upsert_from_patch_outcome_in_connection<C>(
     connection: &C,
     input: MaterialPatchInput,
-) -> RepositoryResult<Option<MaterialSnapshot>>
+) -> RepositoryResult<MaterialPatchOutcome>
 where
     C: sea_orm::ConnectionTrait,
 {
-    let Some(patch) = parse_patch(&input.printer_materials_json) else {
-        return Ok(None);
+    if input.printer_materials_json.trim().is_empty() {
+        return Ok(MaterialPatchOutcome::Empty);
+    }
+    let patch = match parse_patch_result(&input.printer_materials_json)
+        .context("invalid material patch JSON")
+    {
+        Ok(patch) => patch,
+        Err(err) => {
+            return Ok(MaterialPatchOutcome::Invalid {
+                error: format!("{err:#}"),
+            });
+        }
     };
 
     let Some(printer) = printers::Entity::find_by_id(&input.printer_id)
@@ -133,10 +168,20 @@ where
     if let Some(current) = &current
         && is_older(&patch.observed_at, &current.observed_at)?
     {
-        return Ok(None);
+        return Ok(MaterialPatchOutcome::Older);
     }
 
+    let current_snapshot = current.clone().map(snapshot_from_model).transpose()?;
     let merged = merge_snapshot(current.as_ref(), &patch)?;
+    if let Some(snapshot) = current_snapshot
+        && snapshot.observed_at == patch.observed_at
+        && snapshot.ams_units == merged.ams_units
+        && snapshot.external_spools == merged.external_spools
+        && snapshot.active_tray == merged.active_tray
+    {
+        return Ok(MaterialPatchOutcome::Unchanged(snapshot));
+    }
+
     let now = pandar_core::created_at_now();
     let id = current
         .as_ref()
@@ -180,7 +225,7 @@ where
             .await
             .context("failed to insert material snapshot")?
     };
-    snapshot_from_model(model).map(Some)
+    snapshot_from_model(model).map(MaterialPatchOutcome::Changed)
 }
 
 fn snapshot_from_model(

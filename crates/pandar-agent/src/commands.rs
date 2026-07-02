@@ -18,7 +18,8 @@ use events::event;
 use crate::{
     AgentConfig,
     machine::{
-        BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot, discovery::DiscoveredPrinter,
+        BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult,
+        discovery::DiscoveredPrinter,
     },
     protocol::agent::v1::{
         AgentEvent, CommandAck, CommandResult, LinkPrinter, PrintProjectFile, PrinterSnapshot,
@@ -73,6 +74,16 @@ where
     match command.command {
         Some(hub_command::Command::RefreshPrinters(_)) => {
             emit_refresh_printers_events(config, gateway, sender, &command.command_id).await
+        }
+        Some(hub_command::Command::RefreshPrinterMaterials(refresh)) => {
+            emit_refresh_printer_materials_events(
+                config,
+                gateway,
+                sender,
+                &command.command_id,
+                refresh,
+            )
+            .await
         }
         Some(hub_command::Command::PrintProjectFile(print)) => {
             emit_print_project_file_events_with_reader(
@@ -188,6 +199,13 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
     )
 }
 
+fn printer_materials_snapshot_event(
+    config: &AgentConfig,
+    materials: MaterialRefreshResult,
+) -> AgentEvent {
+    crate::machine::mqtt::printer_materials_snapshot_event(config, materials)
+}
+
 async fn emit_refresh_printers_events<G>(
     config: &AgentConfig,
     gateway: &G,
@@ -203,12 +221,18 @@ where
         .context("queue refresh-printers command ack")?;
 
     match gateway.refresh_printers().await {
-        Ok(snapshots) => {
-            for snapshot in snapshots {
+        Ok(results) => {
+            for result in results {
                 sender
-                    .send(printer_snapshot_event(config, snapshot))
+                    .send(printer_snapshot_event(config, result.snapshot))
                     .await
                     .context("queue printer snapshot event")?;
+                if let Some(materials) = result.materials {
+                    sender
+                        .send(printer_materials_snapshot_event(config, materials))
+                        .await
+                        .context("queue printer materials snapshot event")?;
+                }
             }
             sender
                 .send(success_event(config, command_id))
@@ -221,6 +245,47 @@ where
                 .send(failure_event(config, command_id, error))
                 .await
                 .context("queue refresh-printers command failure")?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn emit_refresh_printer_materials_events<G>(
+    config: &AgentConfig,
+    gateway: &G,
+    sender: &mpsc::Sender<AgentEvent>,
+    command_id: &str,
+    command: crate::protocol::agent::v1::RefreshPrinterMaterials,
+) -> anyhow::Result<()>
+where
+    G: BambuMachineGateway,
+{
+    sender
+        .send(ack_event(config, command_id))
+        .await
+        .context("queue refresh-printer-materials command ack")?;
+
+    match gateway
+        .refresh_printer_materials(&command.serial_number, Some(&command.printer_id))
+        .await
+    {
+        Ok(materials) => {
+            sender
+                .send(printer_materials_snapshot_event(config, materials))
+                .await
+                .context("queue printer materials snapshot event")?;
+            sender
+                .send(success_event(config, command_id))
+                .await
+                .context("queue refresh-printer-materials command success")?;
+        }
+        Err(err) => {
+            let error = gateway.redact_error(&format!("{err:#}"));
+            sender
+                .send(failure_event(config, command_id, error))
+                .await
+                .context("queue refresh-printer-materials command failure")?;
         }
     }
 

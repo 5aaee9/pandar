@@ -87,6 +87,7 @@ describe("action status toast helpers", () => {
 
   it("classifies status tone deterministically", () => {
     expect(actionStatusTone("refresh_queued")).toBe("success");
+    expect(actionStatusTone("materials_refresh_queued")).toBe("success");
     expect(actionStatusTone("agent_deleted")).toBe("success");
     expect(actionStatusTone("refresh_partial")).toBe("warning");
     expect(actionStatusTone("http_500")).toBe("error");

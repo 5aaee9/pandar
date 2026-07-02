@@ -75,6 +75,22 @@ export async function refreshPrinters(formData: FormData) {
   );
 }
 
+export async function refreshPrinterMaterials(formData: FormData) {
+  await requireAuth();
+  const tenantId = stringField(formData, "tenant_id");
+  const printerId = stringField(formData, "printer_id");
+  const response = await postJson(
+    `/api/v1/tenants/${tenantId}/printers/${printerId}/materials:refresh`,
+    {},
+  );
+  redirect(
+    statusUrl(
+      tenantId,
+      response.ok ? "materials_refresh_queued" : await errorCode(response),
+    ),
+  );
+}
+
 export async function refreshAllAgents(formData: FormData) {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");

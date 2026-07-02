@@ -12,6 +12,7 @@ use crate::{
     },
     grpc::outbound::spawn_outbound_pump,
     grpc::print_reports::handle_print_report,
+    grpc::printer_materials::handle_materials_snapshot,
     grpc::printer_snapshots::handle_snapshot,
     protocol::agent::v1::{
         AgentEvent, AgentHello, CommandResult, HubCommand, agent_control_server::AgentControl,
@@ -24,6 +25,7 @@ use crate::{
 pub mod commands;
 mod outbound;
 pub mod print_reports;
+pub mod printer_materials;
 pub mod printer_snapshots;
 #[cfg(test)]
 mod tests;
@@ -364,6 +366,18 @@ async fn handle_event(
                 .sessions()
                 .while_current(agent_id, token, || {
                     handle_print_report(state, tenant_id, agent_id, report)
+                })
+                .await
+            {
+                Some(result) => result,
+                None => Ok(()),
+            }
+        }
+        Some(agent_event::Event::PrinterMaterialsSnapshot(snapshot)) => {
+            match state
+                .sessions()
+                .while_current(agent_id, token, || {
+                    handle_materials_snapshot(state, tenant_id, agent_id, snapshot)
                 })
                 .await
             {

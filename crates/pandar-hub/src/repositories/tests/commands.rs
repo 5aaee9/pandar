@@ -4,6 +4,7 @@ use serde_json::Value;
 use super::*;
 use crate::repositories::{
     AuditActor, LinkPrinterPayload, PrintProjectFilePayload, PrinterOperationKind,
+    RefreshPrinterMaterialsPayload,
 };
 
 #[tokio::test]
@@ -203,6 +204,50 @@ async fn command_enqueue_printer_operation_derives_agent_persists_payload_and_au
     assert_eq!(metadata["serial_number"], format!("serial-{printer_id}"));
     assert_eq!(metadata["action"], "set_print_speed");
     assert_eq!(metadata["speed_mode"], 3);
+}
+
+#[tokio::test]
+async fn command_enqueue_refresh_printer_materials_derives_agent_persists_payload_and_audits() {
+    let (database, tenants, agents, _, commands, _) = repositories().await;
+    let audit = AuditEventRepository::new(database.clone());
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id =
+        crate::repositories::test_helpers::insert_printer_fixture(&database, tenant.id, agent.id)
+            .await
+            .unwrap();
+
+    let command = commands
+        .enqueue_refresh_printer_materials_with_audit(tenant.id, &printer_id, test_audit_actor())
+        .await
+        .unwrap();
+    let payload: RefreshPrinterMaterialsPayload =
+        serde_json::from_str(&command.payload_json).unwrap();
+
+    assert_eq!(command.kind, "refresh_printer_materials");
+    assert_eq!(command.status, CommandStatus::Queued);
+    assert_eq!(command.agent_id, agent.id);
+    assert_eq!(command.printer_id.as_deref(), Some(printer_id.as_str()));
+    assert_eq!(payload.printer_id, printer_id);
+    assert_eq!(
+        payload.serial_number,
+        format!("serial-{}", payload.printer_id)
+    );
+
+    let events = audit.list_for_tenant(tenant.id).await.unwrap();
+    let event = events
+        .iter()
+        .find(|event| event.action == "printer.refresh_materials")
+        .expect("refresh materials audit event");
+    assert_eq!(event.target_type, "printer");
+    assert_eq!(
+        event.target_id.as_deref(),
+        Some(payload.printer_id.as_str())
+    );
+    let metadata: Value = serde_json::from_str(&event.metadata_json).unwrap();
+    assert_eq!(metadata["agent_id"], agent.id.to_string());
+    assert_eq!(metadata["printer_id"], payload.printer_id);
+    assert_eq!(metadata["serial_number"], payload.serial_number);
 }
 
 #[tokio::test]

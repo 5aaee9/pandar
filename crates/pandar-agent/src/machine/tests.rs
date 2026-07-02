@@ -49,11 +49,17 @@ fn get_version_report(model: &str) -> serde_json::Value {
     })
 }
 
+fn runtime_state_report(state: &str) -> serde_json::Value {
+    json!({
+        "print": {
+            "state": state,
+            "ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA"}]}]}
+        }
+    })
+}
+
 fn runtime_reports(model: &str, state: &str) -> [serde_json::Value; 2] {
-    [
-        get_version_report(model),
-        json!({"print": {"state": state}}),
-    ]
+    [get_version_report(model), runtime_state_report(state)]
 }
 
 fn runtime_transport(
@@ -107,7 +113,13 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
         Duration::from_secs(1),
     );
 
-    let snapshots = gateway.refresh_printers().await.unwrap();
+    let snapshots = gateway
+        .refresh_printers()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|result| result.snapshot)
+        .collect::<Vec<_>>();
 
     assert_eq!(
         snapshots,
@@ -520,7 +532,13 @@ mod runtime {
         assert_eq!(snapshot.state, "READY");
         assert_eq!(gateway.report_task_count("SERIAL1").await, 1);
         assert_eq!(
-            gateway.refresh_printers().await.unwrap(),
+            gateway
+                .refresh_printers()
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|result| result.snapshot)
+                .collect::<Vec<_>>(),
             vec![MachineSnapshot {
                 serial: "SERIAL1".to_string(),
                 name: "office".to_string(),
@@ -564,7 +582,13 @@ mod runtime {
 
         assert_eq!(gateway.report_task_count("SERIAL1").await, 1);
         assert_eq!(
-            gateway.refresh_printers().await.unwrap(),
+            gateway
+                .refresh_printers()
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|result| result.snapshot)
+                .collect::<Vec<_>>(),
             vec![MachineSnapshot {
                 serial: "SERIAL1".to_string(),
                 name: "new office".to_string(),
@@ -612,7 +636,13 @@ mod runtime {
         assert!(format!("{err:#}").contains("validate runtime printer SERIAL1"));
         assert_eq!(gateway.report_task_count("SERIAL1").await, 1);
         assert_eq!(
-            gateway.refresh_printers().await.unwrap(),
+            gateway
+                .refresh_printers()
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|result| result.snapshot)
+                .collect::<Vec<_>>(),
             vec![MachineSnapshot {
                 serial: "SERIAL1".to_string(),
                 name: "old office".to_string(),
@@ -748,7 +778,13 @@ mod runtime {
         assert!(format!("{err:#}").contains("prepare report transport failed"));
         assert_eq!(gateway.report_task_count("SERIAL1").await, 1);
         assert_eq!(
-            gateway.refresh_printers().await.unwrap(),
+            gateway
+                .refresh_printers()
+                .await
+                .unwrap()
+                .into_iter()
+                .map(|result| result.snapshot)
+                .collect::<Vec<_>>(),
             vec![MachineSnapshot {
                 serial: "SERIAL1".to_string(),
                 name: "old office".to_string(),
@@ -778,7 +814,7 @@ mod runtime {
                     release: Notify::new(),
                     reports: Mutex::new(vec![
                         get_version_report("X1 Carbon"),
-                        json!({"print": {"state": "READY"}}),
+                        runtime_state_report("READY"),
                     ]),
                     pause_first_report: true,
                 }),
@@ -792,7 +828,7 @@ mod runtime {
                     release: Notify::new(),
                     reports: Mutex::new(vec![
                         get_version_report(model),
-                        json!({"print": {"state": state}}),
+                        runtime_state_report(state),
                     ]),
                     pause_first_report: false,
                 }),

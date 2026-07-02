@@ -17,6 +17,7 @@ message AgentEvent {
     CommandAck command_ack = 13;
     CommandResult command_result = 14;
     PrintJobReport print_job_report = 15;
+    PrinterMaterialsSnapshot printer_materials_snapshot = 16;
   }
 }
 
@@ -35,6 +36,12 @@ message PrinterSnapshot {
   string name = 2;
   string state = 3;
   string model = 4;
+}
+
+message PrinterMaterialsSnapshot {
+  string serial = 1;
+  string printer_id = 2;
+  string printer_materials_json = 3;
 }
 
 message CommandAck {
@@ -88,10 +95,16 @@ message HubCommand {
     DiagnosePrinter diagnose_printer = 13;
     PrinterOperation printer_operation = 14;
     LinkPrinter link_printer = 15;
+    RefreshPrinterMaterials refresh_printer_materials = 16;
   }
 }
 
 message RefreshPrinters {}
+
+message RefreshPrinterMaterials {
+  string printer_id = 1;
+  string serial_number = 2;
+}
 
 message LinkPrinter {
   string host = 1;

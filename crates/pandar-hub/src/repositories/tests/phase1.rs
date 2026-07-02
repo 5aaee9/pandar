@@ -111,6 +111,16 @@ fn phase_14_material_migrations_are_backend_equivalent() {
 }
 
 #[test]
+fn refresh_printer_materials_requires_no_new_migration_files() {
+    let sqlite = include_str!("../../../migrations/sqlite/20260623010000_phase_14_materials.sql");
+    let postgres =
+        include_str!("../../../migrations/postgres/20260623010000_phase_14_materials.sql");
+
+    assert!(sqlite.contains("printer_material_snapshots"));
+    assert!(postgres.contains("printer_material_snapshots"));
+}
+
+#[test]
 fn phase_28_slicer_metadata_migrations_are_backend_equivalent() {
     let sqlite =
         include_str!("../../../migrations/sqlite/20260624010000_phase_28_slicer_metadata.sql");

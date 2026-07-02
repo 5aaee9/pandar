@@ -31,4 +31,5 @@ tonic-prost-build.workspace = true
 
 [dev-dependencies]
 clap.workspace = true
+tracing-core.workspace = true
 uuid.workspace = true

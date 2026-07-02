@@ -237,6 +237,85 @@ async fn refresh_printers_returns_command_record() {
 }
 
 #[tokio::test]
+async fn refresh_printer_materials_enqueues_for_owning_agent_and_wakes_it() {
+    let state = state().await;
+    let _control_plane = start_control_plane(state.clone()).await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
+        .await
+        .unwrap();
+    let mut wake_receiver =
+        register_route_test_session_with_wake(&state, tenant_id, agent_id).await;
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/materials:refresh"),
+        None,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["kind"], "refresh_printer_materials");
+    assert_eq!(body["agent_id"], agent_id.to_string());
+    assert_eq!(body["printer_id"], printer_id);
+    let payload: serde_json::Value =
+        serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["printer_id"], printer_id);
+    assert_eq!(payload["serial_number"], format!("serial-{printer_id}"));
+    tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
+        .await
+        .expect("agent should be woken")
+        .expect("wake channel should stay open");
+
+    let audit = state
+        .audit_events()
+        .list_for_tenant(tenant_id)
+        .await
+        .unwrap();
+    assert!(
+        audit
+            .iter()
+            .any(|event| event.action == "printer.refresh_materials")
+    );
+}
+
+#[tokio::test]
+async fn refresh_printer_materials_rejects_invalid_and_missing_printers() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, _agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = tenant["id"].as_str().unwrap();
+
+    let (status, body) = request_as(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/not-a-uuid/materials:refresh"),
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["error"], "invalid_printer_id");
+
+    let missing = uuid::Uuid::new_v4();
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{missing}/materials:refresh"),
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"], "printer_not_found");
+}
+
+#[tokio::test]
 async fn link_printer_requires_operator_role() {
     let state = state().await;
     let app = router(state.clone());
@@ -562,6 +641,31 @@ async fn register_route_test_session(
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
         })
         .await;
+}
+
+async fn register_route_test_session_with_wake(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+) -> mpsc::Receiver<()> {
+    let (wake_sender, wake_receiver) = mpsc::channel(1);
+    state
+        .sessions()
+        .register(crate::sessions::AgentSession {
+            token: crate::sessions::SessionToken::new(),
+            tenant_id,
+            agent_id,
+            name: "shop-agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: pandar_core::created_at_now(),
+            last_heartbeat_at: pandar_core::created_at_now(),
+            wake_sender,
+            close_sender: mpsc::channel(1).0,
+            command_sender: mpsc::channel(1).0,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
+        })
+        .await;
+    wake_receiver
 }
 
 #[derive(Clone)]

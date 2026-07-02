@@ -6,12 +6,13 @@ use crate::{
     protocol::agent::v1::{
         Axis, AxisMovement, CommandResult, DiagnosePrinter, DiscoverPrinters, HomeOperation,
         HubCommand, MoveAxesOperation, PauseOperation, PrintProjectFile, PrinterOperation,
-        RefreshPrinters, ResumeOperation, SetHotendTemperatureOperation, SetPrintSpeedOperation,
-        StopOperation, hub_command, printer_operation,
+        RefreshPrinterMaterials, RefreshPrinters, ResumeOperation, SetHotendTemperatureOperation,
+        SetPrintSpeedOperation, StopOperation, hub_command, printer_operation,
     },
     repositories::{
         DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, PrinterAxis,
-        PrinterAxisMovement, PrinterOperationKind, PrinterOperationPayload, RepositoryError,
+        PrinterAxisMovement, PrinterOperationKind, PrinterOperationPayload,
+        RefreshPrinterMaterialsPayload, RepositoryError,
     },
 };
 
@@ -224,6 +225,21 @@ pub fn hub_command_from_record_with_options(
                     Status::internal("invalid diagnose printer command payload")
                 })?;
             hub_command::Command::DiagnosePrinter(DiagnosePrinter {
+                serial_number: payload.serial_number,
+            })
+        }
+        "refresh_printer_materials" => {
+            let payload: RefreshPrinterMaterialsPayload =
+                serde_json::from_str(&command.payload_json).map_err(|err| {
+                    tracing::error!(
+                        command_id = %command.id,
+                        error = %format!("{err:#}"),
+                        "failed to deserialize refresh printer materials command payload"
+                    );
+                    Status::internal("invalid refresh printer materials command payload")
+                })?;
+            hub_command::Command::RefreshPrinterMaterials(RefreshPrinterMaterials {
+                printer_id: payload.printer_id,
                 serial_number: payload.serial_number,
             })
         }

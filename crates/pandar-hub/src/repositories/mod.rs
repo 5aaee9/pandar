@@ -23,13 +23,15 @@ pub use auth::{
 pub use commands::{
     CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload,
     PrintProjectFilePayload, PrinterAxis, PrinterAxisMovement, PrinterOperationKind,
-    PrinterOperationPayload,
+    PrinterOperationPayload, RefreshPrinterMaterialsPayload,
 };
 pub use jobs::{
     AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, CreatePrintJob, DuplicatePrintJob,
     JobRepository, JobWithArtifact, PrintReportDiagnostic,
 };
-pub use materials::{MaterialPatchInput, MaterialRepository, MaterialSnapshot};
+pub use materials::{
+    MaterialPatchInput, MaterialPatchOutcome, MaterialRepository, MaterialSnapshot,
+};
 pub use printer_event_tickets::{
     IssuedPrinterEventTicket, PrinterEventTicketConsumeResult, PrinterEventTicketRepository,
 };

@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Added Agent-backed AMS refresh: printer refresh now opportunistically refreshes AMS/external-spool snapshots from Bambu MQTT `pushall`, operators can queue per-printer AMS refreshes from the printer inventory, Agent material-only updates sync to Hub over gRPC, and Hub publishes material-aware printer updates to the browser event stream.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.
 - Created the initial Rust workspace with `pandar-core`, `pandar-hub`, `pandar-agent`, and `pandar-app`.
 - Added a repository-backed Axum hub with health, summary, tenant create/list, and tenant-scoped agent create/list endpoints.

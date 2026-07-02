@@ -1,8 +1,4 @@
-use std::{
-    io::{self, Write},
-    sync::{Arc, Mutex as StdMutex},
-    time::Duration,
-};
+use std::time::Duration;
 
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -68,18 +64,11 @@ fn lan_mqtt_accepts_full_pushall_reports() {
 
 #[test]
 fn mqtt_report_error_log_preserves_error_chain() {
-    let _capture_guard = crate::TRACING_CAPTURE_LOCK.lock().unwrap();
-    let logs = CapturedLogs::default();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(logs.clone())
-        .with_ansi(false)
-        .without_time()
-        .finish();
     let err = anyhow!("payload size limit exceeded: 262600")
         .context("MQTT serialization/deserialization error")
         .context("poll rumqttc event loop");
 
-    tracing::subscriber::with_default(subscriber, || warn_mqtt_report_receive_failed(&err));
+    let (logs, ()) = crate::test_tracing::capture_logs(|| warn_mqtt_report_receive_failed(&err));
 
     let captured = logs.contents();
     assert!(captured.contains("MQTT report receive failed"));
@@ -409,12 +398,12 @@ async fn refresh_subscribes_publishes_and_maps_report() {
         json!({"print": {"gcode_state": "RUNNING"}}),
     ]);
 
-    let snapshot = refresh_printer(&transport, &endpoint, Duration::from_secs(1))
+    let refreshed = refresh_printer(&transport, &endpoint, Duration::from_secs(1))
         .await
         .unwrap();
 
     assert_eq!(
-        snapshot,
+        refreshed.snapshot,
         MachineSnapshot {
             serial: "01S00EXAMPLE".to_string(),
             name: "garage-a1".to_string(),
@@ -436,6 +425,52 @@ async fn refresh_subscribes_publishes_and_maps_report() {
 }
 
 #[tokio::test]
+async fn refresh_printer_returns_material_patch_when_pushall_report_has_ams() {
+    let transport = FakeMqttTransport::with_reports([
+        get_version_report("A1 Mini"),
+        json!({"print": {"gcode_state": "IDLE", "ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA", "tray_color": "FF0000"}]}], "tray_now": "0"}}}),
+    ]);
+
+    let refreshed = refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.snapshot.serial, "01S00EXAMPLE");
+    let materials = refreshed.materials.unwrap();
+    let patch: serde_json::Value = serde_json::from_str(&materials.printer_materials_json).unwrap();
+    assert_eq!(patch["type"], "printer_material_patch");
+    assert_eq!(patch["ams_units"][0]["trays"][0]["type"], "PLA");
+}
+
+#[tokio::test]
+async fn refresh_printer_keeps_first_snapshot_and_continues_until_ams_patch() {
+    let transport = FakeMqttTransport::with_reports([
+        get_version_report("A1 Mini"),
+        json!({"print": {"gcode_state": "IDLE"}}),
+        json!({"print": {"gcode_state": "IDLE", "ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA"}]}]}}}),
+    ]);
+
+    let refreshed = refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
+        .await
+        .unwrap();
+
+    assert_eq!(refreshed.snapshot.state, "IDLE");
+    assert!(refreshed.materials.is_some());
+}
+
+#[tokio::test]
+async fn material_refresh_uses_total_deadline_for_infinite_non_ams_reports() {
+    let transport = FakeMqttTransport::with_infinite_unrelated_reports();
+
+    let err = refresh_printer_materials(&transport, &endpoint(), None, Duration::from_millis(10))
+        .await
+        .unwrap_err();
+
+    let error = format!("{err:#}");
+    assert!(error.contains("no AMS material report received before timeout"));
+}
+
+#[tokio::test]
 async fn refresh_ignores_unrelated_reports_before_get_version() {
     let transport = FakeMqttTransport::with_reports([
         json!({"print": {"gcode_state": "STALE"}}),
@@ -444,12 +479,12 @@ async fn refresh_ignores_unrelated_reports_before_get_version() {
         json!({"print": {"state": "READY"}}),
     ]);
 
-    let snapshot = refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
+    let refreshed = refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
         .await
         .unwrap();
 
-    assert_eq!(snapshot.model.as_deref(), Some("X1 Carbon"));
-    assert_eq!(snapshot.state, "READY");
+    assert_eq!(refreshed.snapshot.model.as_deref(), Some("X1 Carbon"));
+    assert_eq!(refreshed.snapshot.state, "READY");
     assert_eq!(
         transport.published_commands().await,
         [
@@ -526,16 +561,9 @@ async fn refresh_get_version_publish_failure_fails_before_pushall() {
 
 #[test]
 fn refresh_discovery_failure_log_includes_serial_and_error_chain() {
-    let _capture_guard = crate::TRACING_CAPTURE_LOCK.lock().unwrap();
-    let logs = CapturedLogs::default();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(logs.clone())
-        .with_ansi(false)
-        .without_time()
-        .finish();
     let transport = FakeMqttTransport::with_publish_failure(BambuMqttCommand::GetVersion.payload());
 
-    tracing::subscriber::with_default(subscriber, || {
+    let (logs, ()) = crate::test_tracing::capture_logs(|| {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -760,38 +788,58 @@ async fn forward_print_reports_uses_transport_without_live_socket() {
     );
 }
 
-#[derive(Clone, Default)]
-struct CapturedLogs {
-    buffer: Arc<StdMutex<Vec<u8>>>,
+#[tokio::test]
+async fn forward_print_reports_emits_material_snapshot_for_unsolicited_ams_report() {
+    let config = AgentConfig {
+        hub_grpc_url: "http://hub.internal:50051".to_owned(),
+        hub_api_url: None,
+        agent_name: "garage".to_owned(),
+        agent_id: "agent-id".to_owned(),
+        tenant_id: "tenant-id".to_owned(),
+        agent_credential: "pandar_ac_test".to_owned(),
+        agent_version: "9.8.7".to_owned(),
+        printers: "[]".to_owned(),
+        artifact_root: ".".into(),
+    };
+    let transport = FakeMqttTransport::with_reports([json!({
+        "print": {"gcode_state": "IDLE", "ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA"}]}]}}
+    })]);
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    let task = tokio::spawn(async move {
+        forward_print_reports(
+            &config,
+            &transport,
+            &endpoint(),
+            Duration::from_millis(50),
+            &sender,
+        )
+        .await
+        .unwrap();
+    });
+
+    let first = receiver.recv().await.unwrap();
+    assert!(matches!(
+        first.event,
+        Some(agent_event::Event::PrintJobReport(_))
+    ));
+    let second = receiver.recv().await.unwrap();
+    assert_material_snapshot(second, "01S00EXAMPLE", None);
+    task.abort();
 }
 
-impl CapturedLogs {
-    fn contents(&self) -> String {
-        String::from_utf8(self.buffer.lock().unwrap().clone()).unwrap()
-    }
-}
-
-impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for CapturedLogs {
-    type Writer = CapturedLogWriter;
-
-    fn make_writer(&'a self) -> Self::Writer {
-        CapturedLogWriter {
-            buffer: Arc::clone(&self.buffer),
+fn assert_material_snapshot(event: AgentEvent, serial: &str, printer_id: Option<&str>) {
+    assert_eq!(event.agent_id, "agent-id");
+    assert_eq!(event.tenant_id, "tenant-id");
+    match event.event.unwrap() {
+        agent_event::Event::PrinterMaterialsSnapshot(snapshot) => {
+            assert_eq!(snapshot.serial, serial);
+            assert_eq!(snapshot.printer_id, printer_id.unwrap_or_default());
+            let patch: serde_json::Value =
+                serde_json::from_str(&snapshot.printer_materials_json).unwrap();
+            assert_eq!(patch["type"], "printer_material_patch");
+            assert_eq!(patch["ams_units"][0]["trays"][0]["type"], "PLA");
         }
-    }
-}
-
-struct CapturedLogWriter {
-    buffer: Arc<StdMutex<Vec<u8>>>,
-}
-
-impl Write for CapturedLogWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.buffer.lock().unwrap().extend_from_slice(buf);
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+        other => panic!("expected printer materials snapshot, got {other:?}"),
     }
 }

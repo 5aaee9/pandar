@@ -6,17 +6,17 @@ use axum::{
     extract::rejection::JsonRejection,
     http::{HeaderMap, StatusCode},
 };
-use pandar_core::{AgentId, CommandId, CommandRecord, Printer, TenantId};
+use pandar_core::{AgentId, CommandId, CommandRecord, TenantId};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::{collections::HashMap, future::Future, net::Ipv4Addr};
 
 use crate::{
     AppState,
+    printer_events::{PrinterEventPrinter, printer_event_printer},
     protocol::agent::v1::{HubCommand, LinkPrinter, hub_command},
     repositories::{
-        DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload, MaterialSnapshot,
-        RepositoryResult, UserRole,
+        DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload, RepositoryResult,
+        UserRole,
     },
     routes::{ApiError, auth, printer_operations::PrinterOperationRequest},
     sessions::LiveDispatchError,
@@ -26,28 +26,7 @@ const DEFAULT_DISCOVERY_TIMEOUT_SECONDS: u32 = 5;
 const MIN_DISCOVERY_TIMEOUT_SECONDS: u32 = 1;
 const MAX_DISCOVERY_TIMEOUT_SECONDS: u32 = 15;
 
-#[derive(Debug, Serialize)]
-pub(super) struct PrinterResponse {
-    id: String,
-    tenant_id: String,
-    agent_id: String,
-    serial_number: String,
-    name: String,
-    model: Option<String>,
-    status: String,
-    last_seen_at: String,
-    created_at: String,
-    materials: Option<PrinterMaterialsResponse>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(super) struct PrinterMaterialsResponse {
-    ams_units: Value,
-    external_spools: Value,
-    active_tray: Option<Value>,
-    observed_at: String,
-}
-
+pub(super) type PrinterResponse = PrinterEventPrinter;
 #[derive(Debug, Serialize)]
 pub(super) struct PrinterListResponse {
     pub(in crate::routes) printers: Vec<PrinterResponse>,
@@ -101,12 +80,7 @@ pub(super) async fn list_printers(
         .list_for_tenant(tenant_id)
         .await?
         .into_iter()
-        .map(|snapshot| {
-            (
-                snapshot.printer_id.clone(),
-                PrinterMaterialsResponse::from(snapshot),
-            )
-        })
+        .map(|snapshot| (snapshot.printer_id.clone(), snapshot))
         .collect::<HashMap<_, _>>();
     let printers = state
         .printers()
@@ -115,7 +89,7 @@ pub(super) async fn list_printers(
         .into_iter()
         .map(|printer| {
             let materials = materials.get(&printer.id).cloned();
-            PrinterResponse::from_parts(printer, materials)
+            printer_event_printer(printer, materials)
         })
         .collect();
 
@@ -140,10 +114,9 @@ pub(super) async fn get_printer(
     let materials = state
         .materials()
         .latest_for_printer(tenant_id, printer_id)
-        .await?
-        .map(PrinterMaterialsResponse::from);
+        .await?;
 
-    Ok(Json(PrinterResponse::from_parts(printer, materials)))
+    Ok(Json(printer_event_printer(printer, materials)))
 }
 
 pub(super) async fn refresh_printers(
@@ -160,6 +133,28 @@ pub(super) async fn refresh_printers(
         .enqueue_refresh_printers_with_audit(tenant_id, agent_id, auth::audit_actor(&auth))
         .await?;
     state.wake_agent(tenant_id, agent_id).await;
+
+    Ok(Json(CommandResponse::from(command)))
+}
+
+pub(super) async fn refresh_printer_materials(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((tenant_id, printer_id)): Path<(String, String)>,
+) -> Result<Json<CommandResponse>, ApiError> {
+    let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    let auth =
+        auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
+    let printer_id = parse_printer_id(&printer_id)?;
+    let command = state
+        .commands()
+        .enqueue_refresh_printer_materials_with_audit(
+            tenant_id,
+            printer_id,
+            auth::audit_actor(&auth),
+        )
+        .await?;
+    state.wake_agent(tenant_id, command.agent_id).await;
 
     Ok(Json(CommandResponse::from(command)))
 }
@@ -435,58 +430,6 @@ where
             );
             ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
         })
-}
-
-impl PrinterResponse {
-    pub(in crate::routes) fn from_parts(
-        printer: Printer,
-        materials: Option<PrinterMaterialsResponse>,
-    ) -> Self {
-        Self {
-            id: printer.id,
-            tenant_id: printer.tenant_id.to_string(),
-            agent_id: printer.agent_id.to_string(),
-            serial_number: printer.serial_number,
-            name: printer.name,
-            model: printer.model,
-            status: printer.status,
-            last_seen_at: printer.last_seen_at,
-            created_at: printer.created_at,
-            materials,
-        }
-    }
-}
-
-impl From<MaterialSnapshot> for PrinterMaterialsResponse {
-    fn from(snapshot: MaterialSnapshot) -> Self {
-        Self {
-            ams_units: scrub_material_json(snapshot.ams_units),
-            external_spools: scrub_material_json(snapshot.external_spools),
-            active_tray: snapshot.active_tray.map(scrub_material_json),
-            observed_at: snapshot.observed_at,
-        }
-    }
-}
-
-fn scrub_material_json(value: Value) -> Value {
-    match value {
-        Value::Array(values) => Value::Array(values.into_iter().map(scrub_material_json).collect()),
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .filter_map(|(key, value)| {
-                    (!credential_key(&key)).then(|| (key, scrub_material_json(value)))
-                })
-                .collect(),
-        ),
-        value => value,
-    }
-}
-
-fn credential_key(key: &str) -> bool {
-    let key = key.to_ascii_lowercase();
-    ["access_code", "password", "passwd", "token", "auth"]
-        .iter()
-        .any(|needle| key.contains(needle))
 }
 
 impl From<CommandRecord> for CommandResponse {

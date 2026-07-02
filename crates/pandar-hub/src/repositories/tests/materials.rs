@@ -1,12 +1,73 @@
 use serde_json::json;
 
 use super::*;
-use crate::repositories::{MaterialPatchInput, test_helpers::insert_printer_fixture};
+use crate::repositories::{
+    MaterialPatchInput, MaterialPatchOutcome, test_helpers::insert_printer_fixture,
+};
 
 mod fixtures;
 mod log_capture;
 
 use fixtures::*;
+
+#[tokio::test]
+async fn material_repository_reports_changed_unchanged_empty_invalid_and_older_outcomes() {
+    let (materials, tenant, agent, printer_id) = fixture().await;
+
+    let input = |body: serde_json::Value| MaterialPatchInput {
+        tenant_id: tenant.id,
+        agent_id: agent.id,
+        printer_id: printer_id.clone(),
+        serial_number: "serial".to_owned(),
+        printer_materials_json: body.to_string(),
+    };
+
+    assert!(matches!(
+        materials
+            .upsert_from_patch_outcome(MaterialPatchInput {
+                tenant_id: tenant.id,
+                agent_id: agent.id,
+                printer_id: printer_id.clone(),
+                serial_number: "serial".to_owned(),
+                printer_materials_json: String::new(),
+            })
+            .await
+            .unwrap(),
+        MaterialPatchOutcome::Empty
+    ));
+    assert!(matches!(
+        materials
+            .upsert_from_patch_outcome(input(json!({"type":"wrong"})))
+            .await
+            .unwrap(),
+        MaterialPatchOutcome::Invalid { .. }
+    ));
+
+    let patch = |observed_at: &str| {
+        json!({
+            "type": "printer_material_patch",
+            "observed_at": observed_at,
+            "ams_units": [{"unit_id": "0", "trays": [{"tray_id": "0", "type": "PLA"}]}],
+            "external_spools": []
+        })
+    };
+
+    let changed = materials
+        .upsert_from_patch_outcome(input(patch("2026-07-02T00:00:00Z")))
+        .await
+        .unwrap();
+    assert!(matches!(changed, MaterialPatchOutcome::Changed(_)));
+    let unchanged = materials
+        .upsert_from_patch_outcome(input(patch("2026-07-02T00:00:00Z")))
+        .await
+        .unwrap();
+    assert!(matches!(unchanged, MaterialPatchOutcome::Unchanged(_)));
+    let older = materials
+        .upsert_from_patch_outcome(input(patch("2026-07-01T00:00:00Z")))
+        .await
+        .unwrap();
+    assert!(matches!(older, MaterialPatchOutcome::Older));
+}
 
 #[tokio::test]
 async fn material_snapshots_are_scoped_to_tenant_and_printer() {

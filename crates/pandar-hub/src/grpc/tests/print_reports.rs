@@ -3,6 +3,7 @@ use tonic::Code;
 
 use super::*;
 use crate::{
+    printer_events::PrinterEvent,
     protocol::agent::v1::{MachineDiagnostic, PrintJobReport},
     repositories::{CreatePrintJob, test_helpers::insert_printer_fixture},
 };
@@ -114,6 +115,96 @@ async fn grpc_print_job_report_drops_out_of_range_metrics() {
     assert_eq!(job.print.remaining_time_minutes, None);
     assert_eq!(job.print.current_layer, None);
     assert_eq!(job.print.total_layers, None);
+}
+
+#[tokio::test]
+async fn material_only_print_report_publishes_material_aware_printer_event() {
+    let state = fixture_state().await;
+    let _control_plane = start_control_plane(state.clone()).await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    handle_snapshot(
+        &state,
+        tenant_id,
+        agent_id,
+        crate::grpc::tests::printer_snapshots::snapshot("serial", "Printer", "A1", "IDLE"),
+    )
+    .await
+    .unwrap();
+    let printer_id = state
+        .printers()
+        .list_for_tenant(tenant_id)
+        .await
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap()
+        .id;
+    let mut receiver = state.printer_events().subscribe(tenant_id).await;
+
+    handle_print_report(
+        &state,
+        tenant_id,
+        agent_id,
+        PrintJobReport {
+            serial: "serial".to_owned(),
+            observed_at: "2026-07-02T00:00:00Z".to_owned(),
+            printer_materials_json: crate::grpc::tests::printer_snapshots::valid_material_patch(
+                "2026-07-02T00:00:00Z",
+            ),
+            ..report("serial".to_owned(), String::new(), String::new())
+        },
+    )
+    .await
+    .unwrap();
+
+    let event = receiver.recv().await.unwrap();
+    let PrinterEvent::PrinterSnapshot { printer } = event else {
+        panic!("expected printer snapshot")
+    };
+    assert_eq!(printer.id, printer_id);
+    assert!(printer.materials.is_some());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn invalid_print_report_material_patch_is_logged_and_dropped() {
+    let logs = super::log_capture::CapturedLogs::new();
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(logs.writer())
+        .with_ansi(false)
+        .finish();
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    handle_snapshot(
+        &state,
+        tenant_id,
+        agent_id,
+        crate::grpc::tests::printer_snapshots::snapshot("serial", "Printer", "A1", "IDLE"),
+    )
+    .await
+    .unwrap();
+
+    let _guard = tracing::subscriber::set_default(subscriber);
+    handle_print_report(
+        &state,
+        tenant_id,
+        agent_id,
+        PrintJobReport {
+            serial: "serial".to_owned(),
+            observed_at: "2026-07-02T00:00:00Z".to_owned(),
+            printer_materials_json:
+                r#"{"type":"printer_material_patch","observed_at":"bad","password":"secret"}"#
+                    .to_owned(),
+            ..report("serial".to_owned(), String::new(), String::new())
+        },
+    )
+    .await
+    .unwrap();
+    drop(_guard);
+
+    let captured = logs.to_string();
+    assert!(captured.contains("ignored print report material patch"));
+    assert!(captured.contains("invalid material patch JSON"));
+    assert!(!captured.contains("secret"));
 }
 
 async fn create_print_job(

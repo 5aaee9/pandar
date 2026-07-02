@@ -2,10 +2,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use pandar_core::{Printer, TenantId};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tokio::sync::{Mutex, broadcast};
 
 use crate::{
     metrics::{MetricsState, SubscriptionGuard},
+    repositories::MaterialSnapshot,
     routes::jobs::JobResponse,
 };
 
@@ -13,9 +15,81 @@ use crate::{
 #[serde(tag = "type")]
 pub enum PrinterEvent {
     #[serde(rename = "printer_snapshot")]
-    PrinterSnapshot { printer: Printer },
+    PrinterSnapshot { printer: Box<PrinterEventPrinter> },
     #[serde(rename = "job_progress")]
     JobProgress { job: Box<JobResponse> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrinterEventPrinter {
+    pub id: String,
+    pub tenant_id: String,
+    pub agent_id: String,
+    pub serial_number: String,
+    pub name: String,
+    pub model: Option<String>,
+    pub status: String,
+    pub last_seen_at: String,
+    pub created_at: String,
+    pub materials: Option<PrinterEventMaterials>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrinterEventMaterials {
+    pub ams_units: Value,
+    pub external_spools: Value,
+    pub active_tray: Option<Value>,
+    pub observed_at: String,
+}
+
+pub fn printer_event_printer(
+    printer: Printer,
+    materials: Option<MaterialSnapshot>,
+) -> PrinterEventPrinter {
+    PrinterEventPrinter {
+        id: printer.id,
+        tenant_id: printer.tenant_id.to_string(),
+        agent_id: printer.agent_id.to_string(),
+        serial_number: printer.serial_number,
+        name: printer.name,
+        model: printer.model,
+        status: printer.status,
+        last_seen_at: printer.last_seen_at,
+        created_at: printer.created_at,
+        materials: materials.map(PrinterEventMaterials::from),
+    }
+}
+
+impl From<MaterialSnapshot> for PrinterEventMaterials {
+    fn from(snapshot: MaterialSnapshot) -> Self {
+        Self {
+            ams_units: scrub_material_json(snapshot.ams_units),
+            external_spools: scrub_material_json(snapshot.external_spools),
+            active_tray: snapshot.active_tray.map(scrub_material_json),
+            observed_at: snapshot.observed_at,
+        }
+    }
+}
+
+fn scrub_material_json(value: Value) -> Value {
+    match value {
+        Value::Array(values) => Value::Array(values.into_iter().map(scrub_material_json).collect()),
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .filter_map(|(key, value)| {
+                    (!credential_key(&key)).then(|| (key, scrub_material_json(value)))
+                })
+                .collect(),
+        ),
+        value => value,
+    }
+}
+
+fn credential_key(key: &str) -> bool {
+    let key = key.to_ascii_lowercase();
+    ["access_code", "password", "passwd", "token", "auth"]
+        .iter()
+        .any(|needle| key.contains(needle))
 }
 
 #[derive(Debug, Clone)]

@@ -53,6 +53,12 @@ pub struct DiagnosePrinterPayload {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RefreshPrinterMaterialsPayload {
+    pub printer_id: String,
+    pub serial_number: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LinkPrinterPayload {
     pub printer_type: String,
     pub host: String,
@@ -161,6 +167,21 @@ impl CommandRepository {
             tenant_id,
             printer_id,
             operation,
+            actor,
+        )
+        .await
+    }
+
+    pub async fn enqueue_refresh_printer_materials_with_audit(
+        &self,
+        tenant_id: TenantId,
+        printer_id: &str,
+        actor: AuditActor,
+    ) -> RepositoryResult<CommandRecord> {
+        audit::enqueue_refresh_printer_materials_with_audit(
+            &self.database,
+            tenant_id,
+            printer_id,
             actor,
         )
         .await

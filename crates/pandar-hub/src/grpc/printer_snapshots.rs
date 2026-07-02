@@ -3,7 +3,7 @@ use tonic::Status;
 
 use crate::{
     AppState,
-    printer_events::PrinterEvent,
+    printer_events::{PrinterEvent, printer_event_printer},
     protocol::agent::v1::PrinterSnapshot,
     repositories::{PrinterSnapshotUpsert, RepositoryError},
 };
@@ -35,8 +35,18 @@ pub async fn handle_snapshot(
         )
         .await
         .map_err(repository_status)?;
+    let materials = state
+        .materials()
+        .latest_for_printer(tenant_id, &printer.id)
+        .await
+        .map_err(repository_status)?;
     state
-        .publish_printer_event(tenant_id, PrinterEvent::PrinterSnapshot { printer })
+        .publish_printer_event(
+            tenant_id,
+            PrinterEvent::PrinterSnapshot {
+                printer: Box::new(printer_event_printer(printer, materials)),
+            },
+        )
         .await;
 
     Ok(())

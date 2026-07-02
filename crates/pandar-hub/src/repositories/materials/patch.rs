@@ -18,20 +18,6 @@ pub(super) enum Presence {
     Value(Value),
 }
 
-pub(super) fn parse_patch(raw: &str) -> Option<ParsedPatch> {
-    if raw.trim().is_empty() {
-        return None;
-    }
-
-    match parse_patch_result(raw).context("invalid material patch JSON") {
-        Ok(patch) => Some(patch),
-        Err(err) => {
-            tracing::warn!(error = %sanitize_message(&format!("{err:#}")), "ignored material patch");
-            None
-        }
-    }
-}
-
 pub(super) fn is_older(observed_at: &str, persisted_at: &str) -> anyhow::Result<bool> {
     Ok(
         parse_time(observed_at).context("failed to parse patch observed_at")?
@@ -57,7 +43,7 @@ pub(super) fn parse_object_json(raw: &str, context: &str) -> anyhow::Result<Valu
     }
 }
 
-fn parse_patch_result(raw: &str) -> anyhow::Result<ParsedPatch> {
+pub(super) fn parse_patch_result(raw: &str) -> anyhow::Result<ParsedPatch> {
     let value: Value = serde_json::from_str(raw).context("failed to parse material patch JSON")?;
     let object = value
         .as_object()
@@ -133,7 +119,7 @@ fn is_sensitive(value: &str) -> bool {
         .any(|needle| value.contains(needle))
 }
 
-fn sanitize_message(message: &str) -> String {
+pub(super) fn sanitize_message(message: &str) -> String {
     ["access_code", "password", "passwd", "token", "auth"]
         .into_iter()
         .fold(message.to_string(), |message, needle| {

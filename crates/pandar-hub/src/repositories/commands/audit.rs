@@ -9,7 +9,7 @@ use crate::{
         audit::{insert_audit_event_tx, record_audit_event},
         commands::{
             DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload,
-            PrinterOperationKind, PrinterOperationPayload,
+            PrinterOperationKind, PrinterOperationPayload, RefreshPrinterMaterialsPayload,
             inserts::{self, InsertCommand},
             operation_audit_metadata, ownership,
             rows::command_from_model,
@@ -145,6 +145,55 @@ pub async fn enqueue_printer_operation_with_audit(
         .ok_or(RepositoryError::MissingCommand)
 }
 
+pub async fn enqueue_refresh_printer_materials_with_audit(
+    database: &Database,
+    tenant_id: TenantId,
+    printer_id: &str,
+    actor: AuditActor,
+) -> RepositoryResult<CommandRecord> {
+    let printer = ownership::printer_for_tenant(database, tenant_id, printer_id).await?;
+    ownership::verify_agent_owner(database, tenant_id, printer.agent_id).await?;
+
+    let payload = RefreshPrinterMaterialsPayload {
+        printer_id: printer.id.clone(),
+        serial_number: printer.serial_number.clone(),
+    };
+    let payload_json = serde_json::to_string(&payload)
+        .context("failed to serialize refresh printer materials command payload")?;
+    let id = CommandId::new();
+    let now = pandar_core::created_at_now();
+    let connection = database.sea_orm_connection();
+    let tx = connection
+        .begin()
+        .await
+        .context("failed to begin refresh printer materials command audit transaction")?;
+    inserts::insert(
+        &tx,
+        InsertCommand {
+            id,
+            tenant_id,
+            agent_id: printer.agent_id,
+            printer_id: Some(&printer.id),
+            kind: "refresh_printer_materials",
+            payload_json: &payload_json,
+            created_at: &now,
+        },
+    )
+    .await?;
+    insert_audit_event_tx(
+        &tx,
+        &refresh_printer_materials_audit_event(tenant_id, &printer, actor),
+    )
+    .await?;
+    tx.commit()
+        .await
+        .context("failed to commit refresh printer materials command audit transaction")?;
+
+    get_command(database, id)
+        .await?
+        .ok_or(RepositoryError::MissingCommand)
+}
+
 pub async fn create_link_printer_sent_with_audit(
     database: &Database,
     tenant_id: TenantId,
@@ -267,6 +316,25 @@ fn printer_operation_audit_event(
             printer.serial_number.clone(),
             operation,
         ),
+    )
+}
+
+fn refresh_printer_materials_audit_event(
+    tenant_id: TenantId,
+    printer: &ownership::CommandPrinter,
+    actor: AuditActor,
+) -> crate::repositories::AuditEvent {
+    record_audit_event(
+        tenant_id,
+        actor,
+        "printer.refresh_materials",
+        "printer",
+        Some(printer.id.clone()),
+        serde_json::json!({
+            "agent_id": printer.agent_id.to_string(),
+            "printer_id": printer.id.clone(),
+            "serial_number": printer.serial_number.clone(),
+        }),
     )
 }
 

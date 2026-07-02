@@ -2,27 +2,29 @@ mod artifacts;
 mod diagnostics;
 mod print;
 
-use std::{
-    io::{self, Write},
-    sync::{Arc, Mutex as StdMutex},
-};
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use async_trait::async_trait;
+use serde_json::json;
 use tokio::{sync::Mutex, sync::mpsc};
 
 use super::*;
 use crate::{
     machine::{
-        BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot, NoopMachineGateway,
-        PrinterOperation as MachinePrinterOperation,
+        BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult,
+        NoopMachineGateway, PrinterOperation as MachinePrinterOperation, PrinterRefreshResult,
         diagnostics::PrinterDiagnosticResult,
         discovery::{DiscoveredPrinter, PrinterDiscoveryResult},
+        file_transfer::FakeMachineFileTransfer,
+        mqtt::FakeMqttTransport,
+        runtime::test_support::TestRuntimeBambuMachineGateway,
     },
     protocol::agent::v1::{
         Axis, AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
         LinkPrinter, MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
-        RefreshPrinters, SetHotendTemperatureOperation, SetPrintSpeedOperation, printer_operation,
+        RefreshPrinterMaterials, RefreshPrinters, SetHotendTemperatureOperation,
+        SetPrintSpeedOperation, printer_operation,
     },
 };
 
@@ -209,11 +211,311 @@ async fn refresh_printers_gateway_failure_emits_ack_and_failed_result_with_conte
     }
 }
 
+#[tokio::test]
+async fn refresh_printer_materials_command_emits_material_snapshot_and_success() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = FakeGateway::ok_with_materials([refresh_result(
+        snapshot("SERIAL123", "garage", Some("A1 Mini"), "READY"),
+        material_result("SERIAL123", Some("printer-1")),
+    )]);
+    let (sender, mut events) = mpsc::channel(8);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        refresh_materials_command(command_id.clone(), "printer-1", "SERIAL123"),
+    )
+    .await
+    .unwrap();
+
+    assert!(matches!(
+        events.recv().await.unwrap().event,
+        Some(agent_event::Event::CommandAck(_))
+    ));
+    assert!(matches!(
+        events.recv().await.unwrap().event,
+        Some(agent_event::Event::PrinterMaterialsSnapshot(_))
+    ));
+    assert!(
+        matches!(events.recv().await.unwrap().event, Some(agent_event::Event::CommandResult(result)) if result.success)
+    );
+}
+
+#[tokio::test]
+async fn refresh_printers_emits_snapshot_then_material_snapshot_then_success() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = FakeGateway::ok_with_materials([refresh_result(
+        snapshot("SERIAL1", "garage", Some("A1 Mini"), "READY"),
+        material_result("SERIAL1", None),
+    )]);
+    let (sender, mut receiver) = mpsc::channel(4);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        refresh_command(command_id.clone()),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_snapshot(
+        receiver.recv().await.unwrap(),
+        "SERIAL1",
+        "garage",
+        "A1 Mini",
+        "READY",
+    );
+    assert_material_snapshot(receiver.recv().await.unwrap(), "SERIAL1", None);
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        success_event(&config, &command_id)
+    );
+    assert!(receiver.recv().await.is_none());
+}
+
+#[tokio::test]
+async fn refresh_printers_succeeds_with_snapshot_only_when_materials_absent() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = FakeGateway::ok_with_materials([PrinterRefreshResult {
+        snapshot: snapshot("SERIAL1", "garage", Some("A1 Mini"), "READY"),
+        materials: None,
+    }]);
+    let (sender, mut receiver) = mpsc::channel(3);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        refresh_command(command_id.clone()),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_snapshot(
+        receiver.recv().await.unwrap(),
+        "SERIAL1",
+        "garage",
+        "A1 Mini",
+        "READY",
+    );
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        success_event(&config, &command_id)
+    );
+    assert!(receiver.recv().await.is_none());
+}
+
+#[tokio::test]
+async fn refresh_printer_materials_missing_serial_and_timeout_fail_with_redacted_errors() {
+    let config = test_config();
+    let gateway = FakeGateway::material_fail_with_access_code(
+        "ACCESS-CODE-SECRET",
+        anyhow::anyhow!("no configured Bambu printer matches serial SERIAL404"),
+    );
+    let (sender, mut receiver) = mpsc::channel(2);
+    let command_id = uuid::Uuid::new_v4().to_string();
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        refresh_materials_command(command_id.clone(), "printer-1", "SERIAL404"),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    let failure = receiver.recv().await.unwrap();
+    assert_failure_contains(
+        failure,
+        &command_id,
+        "no configured Bambu printer matches serial SERIAL404",
+    );
+    assert!(!format!("{:?}", receiver).contains("ACCESS-CODE-SECRET"));
+}
+
+#[tokio::test]
+async fn refresh_printer_materials_command_timeout_emits_ack_then_failure_without_material_snapshot()
+ {
+    let config = test_config();
+    let gateway = FakeGateway::material_fail_with_access_code(
+        "ACCESS-CODE-SECRET",
+        anyhow::anyhow!("timed out waiting for MQTT report")
+            .context("no AMS material report received before timeout"),
+    );
+    let (sender, mut receiver) = mpsc::channel(3);
+    let command_id = uuid::Uuid::new_v4().to_string();
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        refresh_materials_command(command_id.clone(), "printer-1", "SERIAL1"),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    let failure = receiver.recv().await.unwrap();
+    assert_failure_contains(
+        failure,
+        &command_id,
+        "no AMS material report received before timeout",
+    );
+    assert!(receiver.recv().await.is_none());
+}
+
+#[tokio::test]
+async fn refresh_printer_materials_command_works_for_runtime_linked_printer() {
+    let config = test_config();
+    let gateway = TestRuntimeBambuMachineGateway::new(
+        Vec::new(),
+        FakeMachineFileTransfer::default(),
+        Duration::from_millis(50),
+    );
+    gateway
+        .push_command_transport(FakeMqttTransport::with_reports([
+            get_version_report("A1 Mini"),
+            json!({"print": {"gcode_state": "READY", "ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA"}]}]}}}),
+        ]))
+        .await;
+    gateway
+        .set_discovered_printers(vec![DiscoveredPrinter {
+            serial_number: Some("SERIAL123".to_owned()),
+            host: "192.0.2.10".to_owned(),
+            name: Some("garage".to_owned()),
+            model: Some("A1 Mini".to_owned()),
+            source: "ssdp",
+        }])
+        .await;
+    let (sender, mut events) = mpsc::channel(8);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        link_printer_command(uuid::Uuid::new_v4().to_string(), "ACCESS-CODE-SECRET"),
+    )
+    .await
+    .unwrap();
+    drain_until_success(&mut events).await;
+
+    let command_id = uuid::Uuid::new_v4().to_string();
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        refresh_materials_command(command_id.clone(), "printer-1", "SERIAL123"),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        events.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_material_snapshot(events.recv().await.unwrap(), "SERIAL123", Some("printer-1"));
+}
+
+#[tokio::test]
+async fn refresh_printer_materials_command_unknown_runtime_serial_fails_redacted() {
+    let config = test_config();
+    let gateway = TestRuntimeBambuMachineGateway::new(
+        Vec::<(
+            BambuPrinterEndpoint,
+            FakeMqttTransport,
+            FakeMachineFileTransfer,
+        )>::new(),
+        FakeMachineFileTransfer::default(),
+        Duration::from_millis(50),
+    );
+    let (sender, mut events) = mpsc::channel(4);
+    let command_id = uuid::Uuid::new_v4().to_string();
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        refresh_materials_command(command_id.clone(), "printer-1", "UNKNOWN"),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        events.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    let failure = events.recv().await.unwrap();
+    assert_failure_contains(
+        failure,
+        &command_id,
+        "no configured Bambu printer matches serial UNKNOWN",
+    );
+}
+
 fn refresh_command(command_id: String) -> HubCommand {
     HubCommand {
         command_id,
         command: Some(hub_command::Command::RefreshPrinters(RefreshPrinters {})),
     }
+}
+
+fn refresh_materials_command(
+    command_id: String,
+    printer_id: &str,
+    serial_number: &str,
+) -> HubCommand {
+    HubCommand {
+        command_id,
+        command: Some(hub_command::Command::RefreshPrinterMaterials(
+            RefreshPrinterMaterials {
+                printer_id: printer_id.to_owned(),
+                serial_number: serial_number.to_owned(),
+            },
+        )),
+    }
+}
+
+fn get_version_report(model: &str) -> serde_json::Value {
+    json!({
+        "info": {
+            "command": "get_version",
+            "module": [{"name": "ota", "product_name": model}]
+        }
+    })
+}
+
+async fn drain_until_success(receiver: &mut mpsc::Receiver<AgentEvent>) {
+    while let Some(event) = receiver.recv().await {
+        if matches!(event.event, Some(agent_event::Event::CommandResult(result)) if result.success)
+        {
+            return;
+        }
+    }
+    panic!("expected success event");
 }
 
 fn link_printer_command(command_id: String, access_code: &str) -> HubCommand {
@@ -283,6 +585,46 @@ fn assert_snapshot(event: AgentEvent, serial: &str, name: &str, model: &str, sta
     }
 }
 
+fn assert_material_snapshot(event: AgentEvent, serial: &str, printer_id: Option<&str>) {
+    assert_eq!(event.agent_id, "agent-id");
+    assert_eq!(event.tenant_id, "tenant-id");
+    match event.event.unwrap() {
+        agent_event::Event::PrinterMaterialsSnapshot(snapshot) => {
+            assert_eq!(snapshot.serial, serial);
+            assert_eq!(snapshot.printer_id, printer_id.unwrap_or_default());
+            let patch: serde_json::Value =
+                serde_json::from_str(&snapshot.printer_materials_json).unwrap();
+            assert_eq!(patch["type"], "printer_material_patch");
+            assert_eq!(patch["ams_units"][0]["trays"][0]["type"], "PLA");
+        }
+        other => panic!("expected printer materials snapshot, got {other:?}"),
+    }
+}
+
+fn refresh_result(
+    snapshot: MachineSnapshot,
+    materials: MaterialRefreshResult,
+) -> PrinterRefreshResult {
+    PrinterRefreshResult {
+        snapshot,
+        materials: Some(materials),
+    }
+}
+
+fn material_result(serial: &str, printer_id: Option<&str>) -> MaterialRefreshResult {
+    MaterialRefreshResult {
+        serial: serial.to_owned(),
+        printer_id: printer_id.map(str::to_owned),
+        printer_materials_json: json!({
+            "type": "printer_material_patch",
+            "observed_at": "2026-07-02T00:00:00Z",
+            "ams_units": [{"unit_id": "0", "trays": [{"tray_id": "0", "type": "PLA"}]}],
+            "external_spools": []
+        })
+        .to_string(),
+    }
+}
+
 pub(super) fn assert_failure_contains(event: AgentEvent, command_id: &str, needle: &str) {
     match event.event.unwrap() {
         agent_event::Event::CommandResult(result) => {
@@ -296,14 +638,37 @@ pub(super) fn assert_failure_contains(event: AgentEvent, command_id: &str, needl
 
 #[derive(Debug, Clone)]
 pub(super) struct FakeGateway {
-    result: Arc<Mutex<anyhow::Result<Vec<MachineSnapshot>>>>,
+    result: Arc<Mutex<anyhow::Result<Vec<PrinterRefreshResult>>>>,
+    material_result: Arc<Mutex<anyhow::Result<MaterialRefreshResult>>>,
     access_code: Option<String>,
 }
 
 impl FakeGateway {
     pub(super) fn ok(snapshots: impl IntoIterator<Item = MachineSnapshot>) -> Self {
         Self {
-            result: Arc::new(Mutex::new(Ok(snapshots.into_iter().collect()))),
+            result: Arc::new(Mutex::new(Ok(snapshots
+                .into_iter()
+                .map(|snapshot| PrinterRefreshResult {
+                    snapshot,
+                    materials: None,
+                })
+                .collect()))),
+            material_result: Arc::new(Mutex::new(Err(anyhow::anyhow!(
+                "unexpected material refresh"
+            )))),
+            access_code: None,
+        }
+    }
+
+    fn ok_with_materials(results: impl IntoIterator<Item = PrinterRefreshResult>) -> Self {
+        let results = results.into_iter().collect::<Vec<_>>();
+        let material_result = results
+            .iter()
+            .find_map(|result| result.materials.clone())
+            .ok_or_else(|| anyhow::anyhow!("unexpected material refresh"));
+        Self {
+            result: Arc::new(Mutex::new(Ok(results))),
+            material_result: Arc::new(Mutex::new(material_result)),
             access_code: None,
         }
     }
@@ -313,6 +678,9 @@ impl FakeGateway {
             result: Arc::new(Mutex::new(
                 Err(anyhow::anyhow!("transport unavailable")).context("refresh failed"),
             )),
+            material_result: Arc::new(Mutex::new(Err(anyhow::anyhow!(
+                "unexpected material refresh"
+            )))),
             access_code: None,
         }
     }
@@ -322,6 +690,17 @@ impl FakeGateway {
             result: Arc::new(Mutex::new(
                 Err(anyhow::anyhow!("bad access code {access_code}")).context("refresh failed"),
             )),
+            material_result: Arc::new(Mutex::new(Err(anyhow::anyhow!(
+                "unexpected material refresh"
+            )))),
+            access_code: Some(access_code.to_owned()),
+        }
+    }
+
+    fn material_fail_with_access_code(access_code: &str, error: anyhow::Error) -> Self {
+        Self {
+            result: Arc::new(Mutex::new(Ok(Vec::new()))),
+            material_result: Arc::new(Mutex::new(Err(error))),
             access_code: Some(access_code.to_owned()),
         }
     }
@@ -358,9 +737,21 @@ impl BambuMachineGateway for FakeGateway {
         })
     }
 
-    async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
+    async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
         let mut result = self.result.lock().await;
         std::mem::replace(&mut *result, Ok(Vec::new()))
+    }
+
+    async fn refresh_printer_materials(
+        &self,
+        _serial_number: &str,
+        _printer_id: Option<&str>,
+    ) -> anyhow::Result<MaterialRefreshResult> {
+        let mut result = self.material_result.lock().await;
+        std::mem::replace(
+            &mut *result,
+            Err(anyhow::anyhow!("unexpected material refresh")),
+        )
     }
 
     async fn validate_printer(&self, _serial_number: &str) -> anyhow::Result<()> {
@@ -655,20 +1046,13 @@ async fn link_printer_failure_redacts_access_code_from_result_error() {
 
 #[test]
 fn link_printer_failure_log_redacts_access_code() {
-    let _capture_guard = crate::TRACING_CAPTURE_LOCK.lock().unwrap();
-    let logs = CapturedLogs::default();
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(logs.clone())
-        .with_ansi(false)
-        .without_time()
-        .finish();
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
     let access_code = "SECRET-LINK-CODE";
     let gateway = LinkGateway::failure(access_code);
     let (sender, _receiver) = mpsc::channel(2);
 
-    tracing::subscriber::with_default(subscriber, || {
+    let (logs, ()) = crate::test_tracing::capture_logs(|| {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
@@ -826,8 +1210,16 @@ impl BambuMachineGateway for LinkGateway {
         unreachable!("link printer tests do not diagnose printers")
     }
 
-    async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
+    async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
         unreachable!("link printer tests do not refresh printers")
+    }
+
+    async fn refresh_printer_materials(
+        &self,
+        _serial_number: &str,
+        _printer_id: Option<&str>,
+    ) -> anyhow::Result<MaterialRefreshResult> {
+        unreachable!("link printer tests do not refresh printer materials")
     }
 
     async fn validate_printer(&self, _serial_number: &str) -> anyhow::Result<()> {
@@ -1512,8 +1904,16 @@ impl BambuMachineGateway for OperationGateway {
         unreachable!("printer operation tests do not diagnose printers")
     }
 
-    async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
+    async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
         unreachable!("printer operation tests do not refresh printers")
+    }
+
+    async fn refresh_printer_materials(
+        &self,
+        _serial_number: &str,
+        _printer_id: Option<&str>,
+    ) -> anyhow::Result<MaterialRefreshResult> {
+        unreachable!("printer operation tests do not refresh printer materials")
     }
 
     async fn validate_printer(&self, _serial_number: &str) -> anyhow::Result<()> {
@@ -1545,41 +1945,5 @@ impl BambuMachineGateway for OperationGateway {
             Some(error) => Err(anyhow::anyhow!(error.clone())),
             None => Ok(()),
         }
-    }
-}
-
-#[derive(Clone, Default)]
-struct CapturedLogs {
-    buffer: Arc<StdMutex<Vec<u8>>>,
-}
-
-impl CapturedLogs {
-    fn contents(&self) -> String {
-        String::from_utf8(self.buffer.lock().unwrap().clone()).unwrap()
-    }
-}
-
-impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for CapturedLogs {
-    type Writer = CapturedLogWriter;
-
-    fn make_writer(&'a self) -> Self::Writer {
-        CapturedLogWriter {
-            buffer: Arc::clone(&self.buffer),
-        }
-    }
-}
-
-struct CapturedLogWriter {
-    buffer: Arc<StdMutex<Vec<u8>>>,
-}
-
-impl Write for CapturedLogWriter {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.buffer.lock().unwrap().extend_from_slice(buf);
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
     }
 }

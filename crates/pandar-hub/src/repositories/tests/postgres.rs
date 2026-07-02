@@ -3,7 +3,8 @@ use serde_json::json;
 
 use super::*;
 use crate::repositories::{
-    ApplyPrintReport, AuditActor, CreatePrintJob, ExternalIdentityProfile, UserRole,
+    ApplyPrintReport, AuditActor, CreatePrintJob, ExternalIdentityProfile, MaterialPatchInput,
+    MaterialPatchOutcome, UserRole,
     test_helpers::{insert_command_fixture, insert_printer_fixture},
 };
 
@@ -29,6 +30,73 @@ pub(super) async fn clear_postgres(database: &Database) {
         .execute(pool)
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn postgres_material_patch_outcomes_match_sqlite_when_configured() {
+    let Some(database) = postgres_database().await else {
+        return;
+    };
+    let tenants = TenantRepository::new(database.clone());
+    let agents = AgentRepository::new(database.clone());
+    let materials = MaterialRepository::new(database.clone());
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)
+        .await
+        .unwrap();
+
+    let changed = materials
+        .upsert_from_patch_outcome(valid_material_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            "2026-07-02T00:00:00Z",
+        ))
+        .await
+        .unwrap();
+    assert!(matches!(changed, MaterialPatchOutcome::Changed(_)));
+    let unchanged = materials
+        .upsert_from_patch_outcome(valid_material_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            "2026-07-02T00:00:00Z",
+        ))
+        .await
+        .unwrap();
+    assert!(matches!(unchanged, MaterialPatchOutcome::Unchanged(_)));
+    let older = materials
+        .upsert_from_patch_outcome(valid_material_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            "2026-07-01T00:00:00Z",
+        ))
+        .await
+        .unwrap();
+    assert!(matches!(older, MaterialPatchOutcome::Older));
+}
+
+fn valid_material_input(
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    printer_id: &str,
+    observed_at: &str,
+) -> MaterialPatchInput {
+    MaterialPatchInput {
+        tenant_id,
+        agent_id,
+        printer_id: printer_id.to_owned(),
+        serial_number: format!("serial-{printer_id}"),
+        printer_materials_json: json!({
+            "type": "printer_material_patch",
+            "observed_at": observed_at,
+            "ams_units": [{"unit_id": "0", "trays": [{"tray_id": "0", "type": "PLA"}]}],
+            "external_spools": []
+        })
+        .to_string(),
+    }
 }
 
 #[tokio::test]

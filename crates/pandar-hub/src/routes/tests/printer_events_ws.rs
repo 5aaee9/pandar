@@ -650,7 +650,9 @@ async fn printer_events_websocket_receives_event_from_sibling_instance() {
     state
         .publish_printer_event(
             tenant.id,
-            crate::printer_events::PrinterEvent::PrinterSnapshot { printer },
+            crate::printer_events::PrinterEvent::PrinterSnapshot {
+                printer: Box::new(crate::printer_events::printer_event_printer(printer, None)),
+            },
         )
         .await;
 
@@ -709,7 +711,9 @@ async fn printer_events_websocket_receives_one_event_from_publishing_instance() 
     state
         .publish_printer_event(
             tenant.id,
-            crate::printer_events::PrinterEvent::PrinterSnapshot { printer },
+            crate::printer_events::PrinterEvent::PrinterSnapshot {
+                printer: Box::new(crate::printer_events::printer_event_printer(printer, None)),
+            },
         )
         .await;
 
@@ -771,7 +775,9 @@ async fn printer_events_websocket_ignores_wrong_tenant_event_from_sibling_instan
     state
         .publish_printer_event(
             other.id,
-            crate::printer_events::PrinterEvent::PrinterSnapshot { printer },
+            crate::printer_events::PrinterEvent::PrinterSnapshot {
+                printer: Box::new(crate::printer_events::printer_event_printer(printer, None)),
+            },
         )
         .await;
 

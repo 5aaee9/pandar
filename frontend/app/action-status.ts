@@ -1,6 +1,7 @@
 const knownPositiveActionStatuses = new Set([
   'refresh_queued',
   'refresh_partial',
+  'materials_refresh_queued',
   'agent_deleted',
   'job_created',
   'tenant_created',

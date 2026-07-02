@@ -25,6 +25,7 @@
     "actionStatus": {
       "refresh_queued": "Refresh queued",
       "refresh_partial": "Some refreshes could not be queued — review the list",
+      "materials_refresh_queued": "AMS refresh queued",
       "agent_deleted": "Agent deleted",
       "job_created": "Print job queued",
       "tenant_created": "Tenant created",
@@ -258,6 +259,7 @@
     "noMatchesMessage": "No printers match your search or filter.",
     "unknownModel": "Unknown model",
     "managedBy": "Managed by",
+    "refreshAms": "Refresh AMS",
     "unknownAgent": "Unknown agent",
     "filterStatusAria": "Filter by status",
     "jobsTitle": "Print jobs",

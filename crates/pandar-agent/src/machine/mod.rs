@@ -19,7 +19,7 @@ use file_transfer::{MachineFileTransfer, TransferModeCache, run_with_transfer_mo
 use ftps::FtpsMachineFileTransfer;
 use mqtt::{
     BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, ProjectFileCommand,
-    PublishedMqttCommand, refresh_printer,
+    PublishedMqttCommand, refresh_printer, refresh_printer_materials,
 };
 use operations::dispatch_printer_operation;
 pub use operations::{PrinterAxis, PrinterOperation};
@@ -46,6 +46,19 @@ pub struct MachineSnapshot {
     pub state: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaterialRefreshResult {
+    pub serial: String,
+    pub printer_id: Option<String>,
+    pub printer_materials_json: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrinterRefreshResult {
+    pub snapshot: MachineSnapshot,
+    pub materials: Option<MaterialRefreshResult>,
+}
+
 #[async_trait]
 pub trait BambuMachineGateway: Send + Sync {
     fn redact_error(&self, message: &str) -> String;
@@ -64,7 +77,12 @@ pub trait BambuMachineGateway: Send + Sync {
         &self,
         serial_number: &str,
     ) -> anyhow::Result<PrinterDiagnosticResult>;
-    async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>>;
+    async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>>;
+    async fn refresh_printer_materials(
+        &self,
+        serial_number: &str,
+        printer_id: Option<&str>,
+    ) -> anyhow::Result<MaterialRefreshResult>;
     async fn validate_printer(&self, serial_number: &str) -> anyhow::Result<()>;
     async fn print_project_file(
         &self,
@@ -126,8 +144,16 @@ impl BambuMachineGateway for NoopMachineGateway {
         })
     }
 
-    async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
+    async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
         Ok(Vec::new())
+    }
+
+    async fn refresh_printer_materials(
+        &self,
+        serial_number: &str,
+        _printer_id: Option<&str>,
+    ) -> anyhow::Result<MaterialRefreshResult> {
+        bail!("no Bambu printer configured for serial {serial_number}")
     }
 
     async fn validate_printer(&self, serial_number: &str) -> anyhow::Result<()> {
@@ -210,12 +236,28 @@ where
         .await)
     }
 
-    async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
+    async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
         let mut snapshots = Vec::with_capacity(self.printers.len());
         for (endpoint, transport, _) in &self.printers {
             snapshots.push(refresh_printer(transport, endpoint, self.report_timeout).await?);
         }
         Ok(snapshots)
+    }
+
+    async fn refresh_printer_materials(
+        &self,
+        serial_number: &str,
+        printer_id: Option<&str>,
+    ) -> anyhow::Result<MaterialRefreshResult> {
+        let Some((endpoint, mqtt, _)) = self
+            .printers
+            .iter()
+            .find(|(endpoint, _, _)| endpoint.serial == serial_number)
+        else {
+            bail!("no configured Bambu printer matches serial {serial_number}");
+        };
+
+        refresh_printer_materials(mqtt, endpoint, printer_id, self.report_timeout).await
     }
 
     async fn validate_printer(&self, serial_number: &str) -> anyhow::Result<()> {

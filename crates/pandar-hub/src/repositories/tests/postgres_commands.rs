@@ -3,7 +3,9 @@ use serde_json::Value;
 
 use super::*;
 use crate::repositories::tests::postgres::postgres_database;
-use crate::repositories::{AuditActor, LinkPrinterPayload, PrinterOperationKind};
+use crate::repositories::{
+    AuditActor, LinkPrinterPayload, PrinterOperationKind, RefreshPrinterMaterialsPayload,
+};
 
 #[tokio::test]
 async fn postgres_command_repository_behavior_when_configured() {
@@ -290,6 +292,43 @@ async fn postgres_printer_operation_enqueue_behavior_when_configured() {
         .unwrap_err();
 
     assert!(matches!(err, RepositoryError::PrinterControlUnavailable));
+}
+
+#[tokio::test]
+async fn postgres_refresh_printer_materials_command_matches_sqlite_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    let tenants = TenantRepository::new(database.clone());
+    let agents = AgentRepository::new(database.clone());
+    let commands = CommandRepository::new(database.clone());
+    let tenant = tenants
+        .create("refresh-materials", "Refresh Materials Labs")
+        .await
+        .unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id =
+        crate::repositories::test_helpers::insert_printer_fixture(&database, tenant.id, agent.id)
+            .await
+            .unwrap();
+
+    let command = commands
+        .enqueue_refresh_printer_materials_with_audit(tenant.id, &printer_id, test_audit_actor())
+        .await
+        .unwrap();
+    let payload: RefreshPrinterMaterialsPayload =
+        serde_json::from_str(&command.payload_json).unwrap();
+
+    assert_eq!(command.kind, "refresh_printer_materials");
+    assert_eq!(command.agent_id, agent.id);
+    assert_eq!(command.printer_id.as_deref(), Some(printer_id.as_str()));
+    assert_eq!(payload.printer_id, printer_id);
+    assert_eq!(
+        payload.serial_number,
+        format!("serial-{}", payload.printer_id)
+    );
 }
 
 #[tokio::test]

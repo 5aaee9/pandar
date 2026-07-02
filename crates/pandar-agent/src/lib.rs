@@ -25,6 +25,114 @@ const DEFAULT_REPORT_TIMEOUT: Duration = Duration::from_secs(10);
 #[cfg(test)]
 pub(crate) static TRACING_CAPTURE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+#[cfg(test)]
+pub(crate) mod test_tracing {
+    use std::{
+        io::{self, Write},
+        sync::{Arc, Mutex, Once},
+    };
+
+    use tracing_subscriber::fmt::MakeWriter;
+
+    static INIT: Once = Once::new();
+    static ACTIVE_CAPTURE: Mutex<Option<Arc<Mutex<Vec<u8>>>>> = Mutex::new(None);
+
+    #[derive(Clone, Default)]
+    pub(crate) struct CapturedLogs {
+        buffer: Arc<Mutex<Vec<u8>>>,
+    }
+
+    impl CapturedLogs {
+        pub(crate) fn contents(&self) -> String {
+            let buffer = self
+                .buffer
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone();
+            String::from_utf8(buffer).unwrap()
+        }
+    }
+
+    pub(crate) fn capture_logs<T>(run: impl FnOnce() -> T) -> (CapturedLogs, T) {
+        let _capture_guard = crate::TRACING_CAPTURE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        init_subscriber();
+        let logs = CapturedLogs::default();
+        let _active = ActiveCapture::new(logs.buffer.clone());
+        let result = run();
+        (logs, result)
+    }
+
+    fn init_subscriber() {
+        INIT.call_once(|| {
+            let subscriber = tracing_subscriber::fmt()
+                .with_writer(CaptureWriter)
+                .with_max_level(tracing::Level::TRACE)
+                .with_ansi(false)
+                .without_time()
+                .finish();
+            let _ = tracing::subscriber::set_global_default(subscriber);
+            tracing_core::callsite::rebuild_interest_cache();
+        });
+    }
+
+    struct ActiveCapture;
+
+    impl ActiveCapture {
+        fn new(buffer: Arc<Mutex<Vec<u8>>>) -> Self {
+            *ACTIVE_CAPTURE
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(buffer);
+            tracing_core::callsite::rebuild_interest_cache();
+            Self
+        }
+    }
+
+    impl Drop for ActiveCapture {
+        fn drop(&mut self) {
+            *ACTIVE_CAPTURE
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+            tracing_core::callsite::rebuild_interest_cache();
+        }
+    }
+
+    #[derive(Clone)]
+    struct CaptureWriter;
+
+    impl<'writer> MakeWriter<'writer> for CaptureWriter {
+        type Writer = CaptureLogWriter;
+
+        fn make_writer(&'writer self) -> Self::Writer {
+            CaptureLogWriter
+        }
+    }
+
+    struct CaptureLogWriter;
+
+    impl Write for CaptureLogWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            let Some(buffer) = ACTIVE_CAPTURE
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone()
+            else {
+                return Ok(buf.len());
+            };
+            buffer
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+}
+
 #[derive(Debug, Clone, Parser, PartialEq, Eq)]
 #[command(
     name = "pandar-agent",
@@ -325,9 +433,9 @@ mod tests {
         gateway
             .push_command_transport(FakeMqttTransport::with_reports([
                 get_version_report("X1 Carbon"),
-                json!({"print": {"state": "READY"}}),
+                runtime_state_report("READY"),
                 get_version_report("X1 Carbon"),
-                json!({"print": {"state": "IDLE"}}),
+                runtime_state_report("IDLE"),
             ]))
             .await;
         gateway
@@ -364,8 +472,8 @@ mod tests {
 
         let snapshots = gateway.refresh_printers().await.unwrap();
         assert_eq!(snapshots.len(), 1);
-        assert_eq!(snapshots[0].serial, "SERIAL123");
-        assert_eq!(snapshots[0].state, "IDLE");
+        assert_eq!(snapshots[0].snapshot.serial, "SERIAL123");
+        assert_eq!(snapshots[0].snapshot.state, "IDLE");
     }
 
     #[test]
@@ -424,6 +532,15 @@ mod tests {
             "info": {
                 "command": "get_version",
                 "module": [{"name": "ota", "product_name": model}]
+            }
+        })
+    }
+
+    fn runtime_state_report(state: &str) -> serde_json::Value {
+        json!({
+            "print": {
+                "state": state,
+                "ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA"}]}]}
             }
         })
     }

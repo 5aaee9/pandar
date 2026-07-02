@@ -8,7 +8,7 @@ use crate::{
     AgentConfig,
     machine::{
         BambuMachineGateway, BambuPrinterEndpoint, ConfiguredBambuMachineGateway, MachineSnapshot,
-        PrinterOperation,
+        MaterialRefreshResult, PrinterOperation, PrinterRefreshResult,
         diagnostics::{redact_access_code, redact_known_access_codes},
         ftps::FtpsMachineFileTransfer,
         mqtt::{RumqttcBambuMqttTransport, forward_print_reports, refresh_printer},
@@ -144,8 +144,20 @@ impl BambuMachineGateway for RuntimeBambuMachineGateway {
             .await
     }
 
-    async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
+    async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
         self.inner.lock().await.refresh_printers().await
+    }
+
+    async fn refresh_printer_materials(
+        &self,
+        serial_number: &str,
+        printer_id: Option<&str>,
+    ) -> anyhow::Result<MaterialRefreshResult> {
+        self.inner
+            .lock()
+            .await
+            .refresh_printer_materials(serial_number, printer_id)
+            .await
     }
 
     async fn validate_printer(&self, serial_number: &str) -> anyhow::Result<()> {
@@ -193,7 +205,8 @@ impl BambuMachineGateway for RuntimeBambuMachineGateway {
         let mut inner = self.inner.lock().await;
         let snapshot = refresh_printer(&command_transport, &endpoint, self.report_timeout)
             .await
-            .with_context(|| format!("validate runtime printer {}", endpoint.serial))?;
+            .with_context(|| format!("validate runtime printer {}", endpoint.serial))?
+            .snapshot;
         inner.replace_printer(endpoint.clone(), command_transport, transfer);
         self.record_access_code(&endpoint);
         self.replace_report_task_with_transport(endpoint, report_transport, sender)
@@ -358,8 +371,20 @@ pub(crate) mod test_support {
                 .await
         }
 
-        async fn refresh_printers(&self) -> anyhow::Result<Vec<MachineSnapshot>> {
+        async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
             self.inner.lock().await.refresh_printers().await
+        }
+
+        async fn refresh_printer_materials(
+            &self,
+            serial_number: &str,
+            printer_id: Option<&str>,
+        ) -> anyhow::Result<MaterialRefreshResult> {
+            self.inner
+                .lock()
+                .await
+                .refresh_printer_materials(serial_number, printer_id)
+                .await
         }
 
         async fn validate_printer(&self, serial_number: &str) -> anyhow::Result<()> {
@@ -405,7 +430,8 @@ pub(crate) mod test_support {
             let mut inner = self.inner.lock().await;
             let snapshot = refresh_printer(&command_transport, &endpoint, self.report_timeout)
                 .await
-                .with_context(|| format!("validate runtime printer {}", endpoint.serial))?;
+                .with_context(|| format!("validate runtime printer {}", endpoint.serial))?
+                .snapshot;
             self.prepare_report_forwarding().await?;
             inner.replace_printer(endpoint.clone(), command_transport, self.transfer.clone());
             self.pause_before_report_task_replacement().await;

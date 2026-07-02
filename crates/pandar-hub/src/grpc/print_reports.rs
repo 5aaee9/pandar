@@ -6,9 +6,9 @@ use crate::{
     AppState,
     grpc::commands::repository_status,
     metrics::PrintReportMetric,
-    printer_events::PrinterEvent,
+    printer_events::{PrinterEvent, printer_event_printer},
     protocol::agent::v1::PrintJobReport,
-    repositories::{ApplyPrintReport, PrintReportDiagnostic},
+    repositories::{ApplyPrintReport, MaterialPatchOutcome, PrintReportDiagnostic},
     routes::jobs::JobResponse,
 };
 
@@ -27,6 +27,8 @@ pub async fn handle_print_report(
             return Err(err);
         }
     };
+    let report_serial = input.serial.clone();
+    let has_material_patch = !input.printer_materials_json.trim().is_empty();
     let applied = match state.jobs().apply_print_report(input).await {
         Ok(applied) => {
             state
@@ -52,6 +54,57 @@ pub async fn handle_print_report(
                 },
             )
             .await;
+    }
+    match applied.material_outcome {
+        MaterialPatchOutcome::Changed(materials) => {
+            let Some(printer) = state
+                .printers()
+                .get_for_tenant(tenant_id, &materials.printer_id)
+                .await
+                .map_err(repository_status)?
+            else {
+                return Ok(());
+            };
+            state
+                .publish_printer_event(
+                    tenant_id,
+                    PrinterEvent::PrinterSnapshot {
+                        printer: Box::new(printer_event_printer(printer, Some(materials))),
+                    },
+                )
+                .await;
+        }
+        MaterialPatchOutcome::Invalid { error } => {
+            tracing::warn!(
+                %tenant_id,
+                %agent_id,
+                serial = %report_serial,
+                reason = "invalid_patch",
+                error = %crate::redaction::redact_secrets(&error),
+                "ignored print report material patch"
+            );
+        }
+        MaterialPatchOutcome::Older if has_material_patch => {
+            tracing::info!(
+                %tenant_id,
+                %agent_id,
+                serial = %report_serial,
+                reason = "older_patch",
+                "ignored print report material patch"
+            );
+        }
+        MaterialPatchOutcome::Unchanged(_) if has_material_patch => {
+            tracing::info!(
+                %tenant_id,
+                %agent_id,
+                serial = %report_serial,
+                reason = "unchanged_patch",
+                "ignored print report material patch"
+            );
+        }
+        MaterialPatchOutcome::Empty
+        | MaterialPatchOutcome::Older
+        | MaterialPatchOutcome::Unchanged(_) => {}
     }
     Ok(())
 }

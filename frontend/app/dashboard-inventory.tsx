@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { FormattedDate } from '../components/formatted-date'
+import { refreshPrinterMaterials } from './actions'
 import { OFFLINE_PRINTER_STATUSES } from './dashboard-attention'
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
 import { formatBytes } from './dashboard-format'
@@ -109,6 +110,16 @@ export function PrinterInventory({
                     <div>
                       <div className="text-slate-800">{material.summary}</div>
                       <div className="text-xs text-slate-600">{material.detail}</div>
+                      <form action={refreshPrinterMaterials} className="mt-2">
+                        <input name="tenant_id" type="hidden" value={printer.tenant_id} />
+                        <input name="printer_id" type="hidden" value={printer.id} />
+                        <button
+                          className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-700 focus:ring-offset-1"
+                          type="submit"
+                        >
+                          {t('refreshAms')}
+                        </button>
+                      </form>
                     </div>
                     <div className="min-w-0 text-xs text-slate-600">
                       {t('managedBy')} <span className="font-medium text-slate-800">{agent?.name ?? t('unknownAgent')}</span>

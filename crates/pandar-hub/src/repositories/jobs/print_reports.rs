@@ -4,7 +4,7 @@ use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Transactio
 
 use crate::{
     db::Database,
-    repositories::{JobWithArtifact, RepositoryError, RepositoryResult},
+    repositories::{JobWithArtifact, MaterialPatchOutcome, RepositoryError, RepositoryResult},
 };
 
 mod correlation;
@@ -49,6 +49,7 @@ pub struct PrintReportDiagnostic {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppliedPrintReport {
     pub job: Option<JobWithArtifact>,
+    pub material_outcome: MaterialPatchOutcome,
     pub changed: bool,
     pub inserted_job_events: bool,
     pub inserted_printer_events: bool,
@@ -80,12 +81,13 @@ where
     let Some(printer) = printer_for_serial(transaction, &input).await? else {
         return Ok(AppliedPrintReport {
             job: None,
+            material_outcome: MaterialPatchOutcome::Empty,
             changed: false,
             inserted_job_events: false,
             inserted_printer_events: false,
         });
     };
-    crate::repositories::materials::upsert_from_patch_in_connection(
+    let material_outcome = crate::repositories::materials::upsert_from_patch_outcome_in_connection(
         transaction,
         crate::repositories::MaterialPatchInput {
             tenant_id: input.tenant_id,
@@ -101,6 +103,7 @@ where
         let inserted = insert_printer_events(transaction, &input, &printer).await?;
         return Ok(AppliedPrintReport {
             job: None,
+            material_outcome,
             changed: false,
             inserted_job_events: false,
             inserted_printer_events: inserted,
@@ -144,6 +147,7 @@ where
     };
     Ok(AppliedPrintReport {
         job,
+        material_outcome,
         changed: changed && wrote,
         inserted_job_events,
         inserted_printer_events: false,

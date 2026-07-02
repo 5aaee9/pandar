@@ -25,6 +25,7 @@
     "actionStatus": {
       "refresh_queued": "刷新已入队",
       "refresh_partial": "部分刷新未能入队——请检查列表",
+      "materials_refresh_queued": "AMS 刷新已入队",
       "agent_deleted": "Agent 已删除",
       "job_created": "打印任务已入队",
       "tenant_created": "租户已创建",
@@ -255,6 +256,7 @@
     "noMatchesMessage": "没有打印机匹配您的搜索或筛选。",
     "unknownModel": "未知型号",
     "managedBy": "管理者",
+    "refreshAms": "刷新 AMS",
     "unknownAgent": "未知 Agent",
     "filterStatusAria": "按状态筛选",
     "jobsTitle": "打印任务",

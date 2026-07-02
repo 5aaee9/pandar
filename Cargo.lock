@@ -2738,6 +2738,7 @@ dependencies = [
  "tonic-prost",
  "tonic-prost-build",
  "tracing",
+ "tracing-core",
  "tracing-subscriber",
  "uuid",
 ]

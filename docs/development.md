@@ -68,6 +68,7 @@ Printer inventory and live events:
 - `GET /api/v1/tenants/{tenant_id}/printers` lists the latest printers reported for a tenant.
 - `GET /api/v1/tenants/{tenant_id}/printers/{printer_id}` returns one tenant-scoped printer.
 - `POST /api/v1/tenants/{tenant_id}/agents/{agent_id}/refresh-printers` queues a `refresh_printers` command for a live agent through the command ledger.
+- `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/materials:refresh` queues an Agent command to refresh the printer's current AMS/external-spool material snapshot. The Agent synchronizes material patches to Hub over gRPC; browser live updates continue through the tenant printer event stream.
 - `GET /api/v1/tenants/{tenant_id}/printer-events` upgrades to a tenant-scoped WebSocket for future `printer_snapshot` and `job_progress` events. It does not replay historical state; clients should load initial state over HTTP and treat WebSocket delivery as best-effort live updates.
 
 Tenant-scoped print dispatch:

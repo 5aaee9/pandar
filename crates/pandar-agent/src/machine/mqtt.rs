@@ -19,8 +19,13 @@ use tokio::sync::{Mutex, mpsc};
 
 use crate::{
     AgentConfig,
-    machine::{BambuPrinterEndpoint, MachineSnapshot, materials::normalize_material_patch},
-    protocol::agent::v1::{AgentEvent, MachineDiagnostic, PrintJobReport, agent_event},
+    machine::{
+        BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult, PrinterRefreshResult,
+        materials::normalize_material_patch,
+    },
+    protocol::agent::v1::{
+        AgentEvent, MachineDiagnostic, PrintJobReport, PrinterMaterialsSnapshot, agent_event,
+    },
 };
 
 pub const BAMBU_MQTT_PORT: u16 = 8883;
@@ -212,7 +217,7 @@ pub async fn refresh_printer<T>(
     transport: &T,
     endpoint: &BambuPrinterEndpoint,
     report_timeout: Duration,
-) -> anyhow::Result<MachineSnapshot>
+) -> anyhow::Result<PrinterRefreshResult>
 where
     T: BambuMqttTransport + ?Sized,
 {
@@ -239,16 +244,116 @@ where
             })
             .await
             .with_context(|| format!("publish pushall to request topic {}", topics.request))?;
+        let material_deadline = tokio::time::Instant::now() + report_timeout;
         let report = transport
             .next_report(report_timeout)
             .await
             .context("wait for MQTT report")?;
         let mut snapshot = snapshot_from_report(endpoint, &report);
         snapshot.model = Some(discovered_model);
-        Ok::<MachineSnapshot, anyhow::Error>(snapshot)
+        let observed_at = created_at_now();
+        let materials = match normalize_material_patch(&report, &observed_at) {
+            Some(patch) => Some(MaterialRefreshResult {
+                serial: endpoint.serial.clone(),
+                printer_id: None,
+                printer_materials_json: serde_json::to_string(&patch)
+                    .context("encode printer materials patch")?,
+            }),
+            None => scan_materials_after_snapshot(transport, endpoint, material_deadline).await?,
+        };
+        Ok::<PrinterRefreshResult, anyhow::Error>(PrinterRefreshResult {
+            snapshot,
+            materials,
+        })
     }
     .await
     .with_context(|| format!("refresh printer {}", endpoint.serial))
+}
+
+async fn scan_materials_after_snapshot<T>(
+    transport: &T,
+    endpoint: &BambuPrinterEndpoint,
+    deadline: tokio::time::Instant,
+) -> anyhow::Result<Option<MaterialRefreshResult>>
+where
+    T: BambuMqttTransport + ?Sized,
+{
+    loop {
+        let now = tokio::time::Instant::now();
+        if now >= deadline {
+            return Ok(None);
+        }
+        let remaining = deadline.saturating_duration_since(now);
+        let report = match transport.next_report(remaining).await {
+            Ok(report) => report,
+            Err(err) => {
+                tracing::warn!(
+                    serial = %endpoint.serial,
+                    error = %format!("{err:#}"),
+                    "printer material refresh after snapshot ended without AMS report"
+                );
+                return Ok(None);
+            }
+        };
+        let observed_at = created_at_now();
+        if let Some(patch) = normalize_material_patch(&report, &observed_at) {
+            return Ok(Some(MaterialRefreshResult {
+                serial: endpoint.serial.clone(),
+                printer_id: None,
+                printer_materials_json: serde_json::to_string(&patch)
+                    .context("encode printer materials patch")?,
+            }));
+        }
+    }
+}
+
+pub async fn refresh_printer_materials<T>(
+    transport: &T,
+    endpoint: &BambuPrinterEndpoint,
+    printer_id: Option<&str>,
+    report_timeout: Duration,
+) -> anyhow::Result<MaterialRefreshResult>
+where
+    T: BambuMqttTransport + ?Sized,
+{
+    let topics = BambuMqttTopics::for_serial(&endpoint.serial);
+    transport
+        .subscribe(&topics.report)
+        .await
+        .with_context(|| format!("subscribe to report topic {}", topics.report))?;
+    transport
+        .publish(PublishedMqttCommand {
+            topic: topics.request.clone(),
+            payload: BambuMqttCommand::RequestPushAll.payload(),
+            qos: BAMBU_MQTT_QOS,
+        })
+        .await
+        .with_context(|| format!("publish pushall to request topic {}", topics.request))?;
+
+    let deadline = tokio::time::Instant::now() + report_timeout;
+    loop {
+        let now = tokio::time::Instant::now();
+        if now >= deadline {
+            bail!("no AMS material report received before timeout");
+        }
+        let remaining = deadline.saturating_duration_since(now);
+        let report = match transport.next_report(remaining).await {
+            Ok(report) => report,
+            Err(err) if tokio::time::Instant::now() >= deadline => {
+                return Err(err).context("no AMS material report received before timeout");
+            }
+            Err(err) => return Err(err),
+        };
+        let observed_at = created_at_now();
+        if let Some(patch) = normalize_material_patch(&report, &observed_at) {
+            return Ok(MaterialRefreshResult {
+                serial: endpoint.serial.clone(),
+                printer_id: printer_id.map(str::to_owned),
+                printer_materials_json: serde_json::to_string(&patch)
+                    .context("encode printer materials patch")?,
+            });
+        }
+    }
 }
 
 async fn discover_printer_model<T>(
@@ -571,6 +676,24 @@ pub fn print_job_report_event(config: &AgentConfig, progress: PrintReportProgres
     }
 }
 
+pub fn printer_materials_snapshot_event(
+    config: &AgentConfig,
+    materials: MaterialRefreshResult,
+) -> AgentEvent {
+    AgentEvent {
+        agent_id: config.agent_id.clone(),
+        tenant_id: config.tenant_id.clone(),
+        event_id: format!("printer-materials-{}", materials.serial),
+        event: Some(agent_event::Event::PrinterMaterialsSnapshot(
+            PrinterMaterialsSnapshot {
+                serial: materials.serial,
+                printer_id: materials.printer_id.unwrap_or_default(),
+                printer_materials_json: materials.printer_materials_json,
+            },
+        )),
+    }
+}
+
 pub async fn forward_print_reports<T>(
     config: &AgentConfig,
     transport: &T,
@@ -595,10 +718,24 @@ where
         match transport.next_report(report_timeout).await {
             Ok(report) => {
                 let progress = print_report_from_report(endpoint, &report);
+                let materials =
+                    (!progress.printer_materials_json.is_empty()).then(|| MaterialRefreshResult {
+                        serial: progress.serial.clone(),
+                        printer_id: None,
+                        printer_materials_json: progress.printer_materials_json.clone(),
+                    });
                 if sender
                     .send(print_job_report_event(config, progress))
                     .await
                     .is_err()
+                {
+                    break;
+                }
+                if let Some(materials) = materials
+                    && sender
+                        .send(printer_materials_snapshot_event(config, materials))
+                        .await
+                        .is_err()
                 {
                     break;
                 }
@@ -722,6 +859,7 @@ struct FakeMqttTransportState {
     timeout: bool,
     fail_publish_payload: Option<Value>,
     infinite_unrelated_reports: bool,
+    last_material_report: Option<Value>,
 }
 
 #[cfg(test)]
@@ -788,6 +926,12 @@ impl BambuMqttTransport for FakeMqttTransport {
         if state.fail_publish_payload.as_ref() == Some(&command.payload) {
             bail!("fake publish failure");
         }
+        if command.payload == BambuMqttCommand::RequestPushAll.payload()
+            && state.reports.is_empty()
+            && let Some(report) = state.last_material_report.clone()
+        {
+            state.reports.push_back(report);
+        }
         state.published_commands.push(command);
         Ok(())
     }
@@ -799,6 +943,9 @@ impl BambuMqttTransport for FakeMqttTransport {
                 bail!("timed out waiting for MQTT report");
             }
             if let Some(report) = state.reports.pop_front() {
+                if normalize_material_patch(&report, "2026-07-02T00:00:00Z").is_some() {
+                    state.last_material_report = Some(report.clone());
+                }
                 return Ok(report);
             }
             if !state.infinite_unrelated_reports {
