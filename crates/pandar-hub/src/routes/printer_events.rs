@@ -35,7 +35,9 @@ pub(super) async fn printer_events(
     request: Request<axum::body::Body>,
 ) -> Result<Response, ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
-    if headers.contains_key(AUTHORIZATION) {
+    if state.no_auth_enabled() {
+        state.metrics().record_ticket(TicketMetric::Consumed);
+    } else if headers.contains_key(AUTHORIZATION) {
         auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
     } else if let Some(ticket) = query.ticket {
         match state
@@ -84,7 +86,9 @@ pub(super) async fn create_printer_event_ticket(
     headers: HeaderMap,
 ) -> Result<Json<PrinterEventTicketResponse>, ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
-    auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
+    if !state.no_auth_enabled() {
+        auth::authorize_tenant(&state, &headers, tenant_id, UserRole::Viewer).await?;
+    }
     state.printers().list_for_tenant(tenant_id).await?;
     let ticket = generate_secret("pandar_ws");
     let issued = state

@@ -88,6 +88,27 @@ async fn printer_events_websocket_accepts_linked_viewer_jwt() {
 }
 
 #[tokio::test]
+async fn printer_events_websocket_accepts_no_auth_without_ticket() {
+    let state = state().await.with_no_auth_for_tests(true);
+    let app = router(state.clone());
+    let tenant = state
+        .tenants()
+        .create("no-auth-ws", "No Auth WS")
+        .await
+        .unwrap();
+    let http_addr = serve_http(app).await;
+
+    let (ws, _) = tokio_tungstenite::connect_async(format!(
+        "ws://{http_addr}/api/v1/tenants/{}/printer-events",
+        tenant.id
+    ))
+    .await
+    .unwrap();
+
+    drop(ws);
+}
+
+#[tokio::test]
 async fn printer_events_ticket_requires_linked_viewer() {
     let state = state().await;
     let app = router(external_auth_state(state.clone()));

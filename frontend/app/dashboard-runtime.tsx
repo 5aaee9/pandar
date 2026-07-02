@@ -132,6 +132,20 @@ async function requestPrinterEventTicket(tenantId: string) {
   return (await response.json()) as PrinterEventTicket
 }
 
+function printerEventConnectionUrl(apiUrl: string, tenantId: string, ticket: string | null) {
+  if (ticket === null) {
+    const base = new URL(apiUrl)
+    const basePath = base.pathname.replace(/\/$/, '')
+    const url = new URL(
+      `${basePath}/api/v1/tenants/${encodeURIComponent(tenantId)}/printer-events`,
+      base,
+    )
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    return url.toString()
+  }
+  return printerEventWebSocketUrl(apiUrl, tenantId, ticket)
+}
+
 export function DashboardRuntime({
   apiUrl,
   tenants,
@@ -180,16 +194,8 @@ export function DashboardRuntime({
       dispatchRuntime({ type: 'notification', value: notification })
     }
 
-    if (!selectedTenant || auth.source === 'none') {
-      dispatchRuntime({ type: 'live-state', value: selectedTenant ? 'unavailable' : 'idle' })
-      if (selectedTenant) {
-        addNotification({
-          key: `live:${selectedTenant.id}:auth-unavailable`,
-          titleKey: { namespace: 'runtime.notification', key: 'liveTitle' },
-          detailKey: { namespace: 'runtime.notification', key: 'liveUnavailable' },
-          timestamp: new Date().toISOString(),
-        })
-      }
+    if (!selectedTenant) {
+      dispatchRuntime({ type: 'live-state', value: 'idle' })
       return
     }
 
@@ -224,8 +230,9 @@ export function DashboardRuntime({
     const connect = async () => {
       dispatchRuntime({ type: 'live-state', value: 'connecting' })
       try {
-        const { ticket } = await requestPrinterEventTicket(selectedTenant.id)
-        socket = new WebSocket(printerEventWebSocketUrl(apiUrl, selectedTenant.id, ticket))
+        const ticket =
+          auth.source === 'none' ? null : (await requestPrinterEventTicket(selectedTenant.id)).ticket
+        socket = new WebSocket(printerEventConnectionUrl(apiUrl, selectedTenant.id, ticket))
         socket.onopen = () => {
           failures = 0
           outage += 1
