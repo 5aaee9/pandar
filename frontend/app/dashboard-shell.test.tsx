@@ -1,10 +1,12 @@
 import { NextIntlClientProvider } from "next-intl";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
+import { AppSidebar } from "../components/app-sidebar";
+import { SidebarProvider } from "../components/ui/sidebar";
 import { DashboardShellHeader } from "./dashboard-shell-header";
+import { DashboardViewContent } from "./dashboard-view-content";
 import {
   DASHBOARD_VIEWS,
   dashboardRootRedirectTarget,
@@ -13,9 +15,8 @@ import {
   dashboardViewTitleKey,
   logoutHref,
   type DashboardQuery,
-  type DashboardView,
 } from "./dashboard-shell";
-import type { Tenant } from "./dashboard-types";
+import type { AuthMetadata, Tenant } from "./dashboard-types";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -39,26 +40,6 @@ function renderWithMessages(children: React.ReactNode) {
   );
 }
 
-function stubLocationAssign(assign: (url: string) => void) {
-  const originalWindow = window;
-  const location = {
-    ...originalWindow.location,
-    assign,
-  };
-
-  vi.stubGlobal(
-    "window",
-    new Proxy(originalWindow, {
-      get(target, prop, receiver) {
-        if (prop === "location") {
-          return location;
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    }),
-  );
-}
-
 const tenants: Tenant[] = [
   {
     id: "t1",
@@ -73,6 +54,14 @@ const tenants: Tenant[] = [
     created_at: "2026-06-30T00:00:00Z",
   },
 ];
+
+const auth: AuthMetadata = {
+  source: "none",
+  cookieName: "pandar_auth",
+  provider: "none",
+  signInUrl: null,
+  signOutUrl: null,
+};
 
 describe("dashboard shell helpers", () => {
   it("defines the route-backed dashboard views", () => {
@@ -138,33 +127,85 @@ describe("dashboard shell helpers", () => {
 });
 
 describe("DashboardShellHeader", () => {
+  it("does not render tenant or language selectors in the top bar", () => {
+    renderWithMessages(<DashboardShellHeader view="agents" />);
+
+    expect(screen.getByRole("heading", { name: "Agents" })).toBeVisible();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "EN" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "中文" })).not.toBeInTheDocument();
+  });
+});
+
+describe("AppSidebar", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
-  it("preserves the agents command context when switching tenants", async () => {
-    const user = userEvent.setup();
-    const assign = vi.fn<(url: string) => void>();
-    stubLocationAssign(assign);
+  it("preserves the agents command context when switching tenants from the sidebar", () => {
     const query: DashboardQuery = {
       tenant: "t1",
       command: "cmd1",
       status: "done",
     };
-    const view: DashboardView = "agents";
 
     renderWithMessages(
-      <DashboardShellHeader
-        query={query}
-        selectedTenant={tenants[0]}
-        tenants={tenants}
-        view={view}
+      <SidebarProvider>
+        <AppSidebar
+          activeView="agents"
+          auth={auth}
+          query={query}
+          selectedTenant={tenants[0]}
+          tenants={tenants}
+        />
+      </SidebarProvider>,
+    );
+
+    expect(screen.getByRole("link", { name: "Tenant Two" })).toHaveAttribute(
+      "href",
+      dashboardTenantHref("agents", "t2", query),
+    );
+  });
+});
+
+describe("SettingsView", () => {
+  it("renders the language selector in settings", () => {
+    renderWithMessages(
+      <DashboardViewContent
+        view="settings"
+        auth={auth}
+        selectedTenant={null}
+        health={{
+          printersTotal: 0,
+          printersOnline: 0,
+          agentsTotal: 0,
+          agentsConnected: 0,
+          jobsActive: 0,
+          jobsFailed: 0,
+        }}
+        attentionItems={[]}
+        topSeverity={null}
+        liveState="idle"
+        lastEventAt={null}
+        fleetEmpty={true}
+        printers={[]}
+        agents={[]}
+        jobs={[]}
+        selectedCommand={null}
+        commandData={null}
+        notifications={[]}
+        users={[]}
+        userIdentities={[]}
+        tenantTokens={[]}
+        joinLinks={[]}
+        auditEvents={[]}
+        adminUnavailable={false}
       />,
     );
 
-    await user.selectOptions(screen.getByRole("combobox"), "t2");
-
-    expect(assign).toHaveBeenCalledWith(dashboardTenantHref(view, "t2", query));
+    expect(screen.getByRole("heading", { name: "Language" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "EN" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "中文" })).toBeVisible();
   });
 });

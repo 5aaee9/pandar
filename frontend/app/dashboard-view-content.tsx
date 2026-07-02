@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 
+import { LanguageSwitcher } from '../components/language-switcher'
 import { AgentPairingGuidance } from './agent-pairing-guidance'
 import { DiagnosticsSection, LinkedAgentsSection } from './diagnostics-panel'
 import { DispatchForm } from './dispatch-form'
@@ -164,6 +165,7 @@ function SettingsView({
 }: DashboardViewContentProps) {
   return (
     <>
+      <LanguageSettingsPanel />
       <TenantSettings auth={auth} selectedTenant={selectedTenant} agents={agents} printers={printers} />
       <SettingsAdminSection
         selectedTenant={selectedTenant}
@@ -180,6 +182,21 @@ function SettingsView({
         selectedTenant={selectedTenant}
       />
     </>
+  )
+}
+
+function LanguageSettingsPanel() {
+  const t = useTranslations('dashboardShell')
+  return (
+    <section className="rounded-md border border-slate-300 bg-white px-4 py-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-slate-950">{t('languageTitle')}</h2>
+          <p className="mt-0.5 text-sm text-slate-600">{t('languageDescription')}</p>
+        </div>
+        <LanguageSwitcher />
+      </div>
+    </section>
   )
 }
 

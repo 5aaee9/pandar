@@ -248,7 +248,7 @@
     "printersSubtitleNone": "No tenant selected",
     "printersMeta": "{count} reported",
     "noTenantTitle": "No tenants",
-    "noTenantMessage": "Ask your administrator to create a tenant and assign you to it, then select it in the header. Printers appear here once an agent reports them.",
+    "noTenantMessage": "Ask your administrator to create a tenant and assign you to it, then select it in the sidebar. Printers appear here once an agent reports them.",
     "noPrintersTitle": "No printers reported",
     "noPrintersMessage": "Connect an agent and run a printer refresh to populate this inventory.",
     "searchName": "Search name or serial",
@@ -426,7 +426,7 @@
     "restrictedTitle": "Pairing requires admin access",
     "restrictedDetail": "Use a tenant admin account or scoped registration token before creating this pairing.",
     "noTenantTitle": "Tenant required",
-    "noTenantDetail": "Choose a tenant from the header to enable pairing creation."
+    "noTenantDetail": "Choose a tenant from the sidebar to enable pairing creation."
   },
   "linkPrinter": {
     "title": "Link printer to agent",
@@ -434,7 +434,7 @@
     "subtitleNone": "No tenant selected.",
     "meta": "{count} agents",
     "noTenantTitle": "Select a tenant to link a printer.",
-    "noTenantMessage": "Choose a tenant from the header before submitting printer connection details.",
+    "noTenantMessage": "Choose a tenant from the sidebar before submitting printer connection details.",
     "noAgentsTitle": "No agents available for printer linking.",
     "noAgentsMessage": "Pair an agent before linking a printer.",
     "agent": "Agent",
@@ -586,6 +586,8 @@
     "settings": "Settings",
     "logout": "Logout",
     "account": "Account",
+    "languageTitle": "Language",
+    "languageDescription": "Choose the dashboard display language.",
     "logoutTitle": "Session",
     "logoutDescription": "Sign out through the configured identity provider.",
     "logoutUnavailable": "Logout is unavailable because no external sign-out URL is configured."

@@ -245,7 +245,7 @@
     "printersSubtitleNone": "未选择租户",
     "printersMeta": "已上报 {count} 台",
     "noTenantTitle": "无租户",
-    "noTenantMessage": "请联系管理员创建租户并将您加入，然后在页头中选择。Agent 上报打印机后会显示在此处。",
+    "noTenantMessage": "请联系管理员创建租户并将您加入，然后在侧边栏中选择。Agent 上报打印机后会显示在此处。",
     "noPrintersTitle": "暂无打印机上报",
     "noPrintersMessage": "请连接 Agent 并执行打印机刷新以填充清单。",
     "searchName": "搜索名称或序列号",
@@ -423,7 +423,7 @@
     "restrictedTitle": "配对需要管理员权限",
     "restrictedDetail": "请使用租户管理员账号或具备注册范围的令牌后再创建此配对。",
     "noTenantTitle": "需要选择租户",
-    "noTenantDetail": "请从页头选择租户以启用配对创建。"
+    "noTenantDetail": "请从侧边栏选择租户以启用配对创建。"
   },
   "linkPrinter": {
     "title": "将打印机连接到 Agent",
@@ -431,7 +431,7 @@
     "subtitleNone": "未选择租户。",
     "meta": "{count} 个 Agent",
     "noTenantTitle": "选择租户后连接打印机。",
-    "noTenantMessage": "提交打印机连接信息前，请先从页头选择租户。",
+    "noTenantMessage": "提交打印机连接信息前，请先从侧边栏选择租户。",
     "noAgentsTitle": "没有可用于连接打印机的 Agent。",
     "noAgentsMessage": "连接打印机前请先配对 Agent。",
     "agent": "Agent",
@@ -583,6 +583,8 @@
     "settings": "设置",
     "logout": "退出登录",
     "account": "账号",
+    "languageTitle": "语言",
+    "languageDescription": "选择控制台显示语言。",
     "logoutTitle": "会话",
     "logoutDescription": "通过已配置的身份提供商退出登录。",
     "logoutUnavailable": "未配置外部退出登录 URL，因此无法退出登录。"

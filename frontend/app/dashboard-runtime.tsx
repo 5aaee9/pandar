@@ -366,12 +366,7 @@ export function DashboardRuntime({
         tenants={tenants}
       />
       <SidebarInset className="min-h-svh bg-slate-100 text-slate-950">
-        <DashboardShellHeader
-          query={dashboardQuery}
-          selectedTenant={selectedTenant}
-          tenants={tenants}
-          view={view}
-        />
+        <DashboardShellHeader view={view} />
         <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
           <ActionStatusToast status={actionStatus} />
 

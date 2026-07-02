@@ -144,7 +144,7 @@ describe("Agents view pairing guidance", () => {
       screen.getByText("Select a tenant before creating an agent pairing."),
     ).toBeVisible();
     expect(
-      screen.getByText("Choose a tenant from the header to enable pairing creation."),
+      screen.getByText("Choose a tenant from the sidebar to enable pairing creation."),
     ).toBeVisible();
     expect(screen.queryByLabelText("Agent name")).not.toBeInTheDocument();
   });
@@ -239,7 +239,7 @@ describe("Agents view pairing guidance", () => {
 
     expect(screen.getByRole("heading", { name: "Link printer to agent" })).toBeVisible();
     expect(screen.getByText("Select a tenant to link a printer."));
-    expect(screen.getByText("Choose a tenant from the header before submitting printer connection details."));
+    expect(screen.getByText("Choose a tenant from the sidebar before submitting printer connection details."));
     expect(screen.queryByLabelText("Access code")).not.toBeInTheDocument();
   });
 

@@ -1,15 +1,15 @@
 import { StrictMode } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
+import { AppSidebar } from "../components/app-sidebar";
+import { SidebarProvider } from "../components/ui/sidebar";
 import { actionStatusTone, formatActionStatus } from "./action-status";
 import { ActionStatusToast } from "./action-status-toast";
-import { DashboardShellHeader } from "./dashboard-shell-header";
 import type { DashboardQuery, DashboardView } from "./dashboard-shell";
-import type { Tenant } from "./dashboard-types";
+import type { AuthMetadata, Tenant } from "./dashboard-types";
 import { toast } from "sonner";
 
 vi.mock("next/navigation", () => ({
@@ -44,26 +44,6 @@ function renderWithMessages(children: React.ReactNode) {
 
 function setUrl(path: string) {
   window.history.pushState({}, "", path);
-}
-
-function stubLocationAssign(assign: (url: string) => void) {
-  const originalWindow = window;
-  const location = {
-    ...originalWindow.location,
-    assign,
-  };
-
-  vi.stubGlobal(
-    "window",
-    new Proxy(originalWindow, {
-      get(target, prop, receiver) {
-        if (prop === "location") {
-          return location;
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    }),
-  );
 }
 
 afterEach(() => {
@@ -145,7 +125,15 @@ const tenants: Tenant[] = [
   { id: "t2", slug: "tenant-two", display_name: "Tenant Two", created_at: "2026-06-30T00:00:00Z" },
 ];
 
-function DashboardHeaderWithActionStatus({ actionStatus }: { actionStatus: string }) {
+const auth: AuthMetadata = {
+  source: "none",
+  cookieName: "pandar_auth",
+  provider: "none",
+  signInUrl: null,
+  signOutUrl: null,
+};
+
+function DashboardSidebarWithActionStatus({ actionStatus }: { actionStatus: string }) {
   const query: DashboardQuery = {
     tenant: "t1",
     command: "cmd1",
@@ -154,23 +142,29 @@ function DashboardHeaderWithActionStatus({ actionStatus }: { actionStatus: strin
   return (
     <>
       <ActionStatusToast status={actionStatus} />
-      <DashboardShellHeader query={query} selectedTenant={tenants[0]} tenants={tenants} view={view} />
+      <SidebarProvider>
+        <AppSidebar
+          activeView={view}
+          auth={auth}
+          query={query}
+          selectedTenant={tenants[0]}
+          tenants={tenants}
+        />
+      </SidebarProvider>
     </>
   );
 }
 
 describe("action status navigation", () => {
   it("does not preserve action status when switching tenants", async () => {
-    const user = userEvent.setup();
-    const assign = vi.fn<(url: string) => void>();
-    stubLocationAssign(assign);
     setUrl("/agents?tenant=t1&command=cmd1&status=refresh_queued");
 
-    renderWithMessages(<DashboardHeaderWithActionStatus actionStatus="refresh_queued" />);
+    renderWithMessages(<DashboardSidebarWithActionStatus actionStatus="refresh_queued" />);
     await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
 
-    await user.selectOptions(screen.getByRole("combobox"), "t2");
-
-    expect(assign).toHaveBeenCalledWith("/agents?tenant=t2&command=cmd1");
+    expect(screen.getByRole("link", { name: "Tenant Two" })).toHaveAttribute(
+      "href",
+      "/agents?tenant=t2&command=cmd1",
+    );
   });
 });
