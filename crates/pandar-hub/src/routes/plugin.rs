@@ -255,6 +255,7 @@ fn user_id(principal: &AuthenticatedPrincipal) -> Option<String> {
         AuthenticatedPrincipal::TenantToken(authenticated) => {
             authenticated.token.created_by_user_id.clone()
         }
+        AuthenticatedPrincipal::NoAuth { .. } => None,
     }
 }
 

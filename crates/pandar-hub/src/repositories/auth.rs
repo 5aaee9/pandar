@@ -104,6 +104,7 @@ pub struct AuthenticatedUser {
 pub enum AuthenticatedPrincipal {
     User(AuthenticatedUser),
     TenantToken(AuthenticatedTenantToken),
+    NoAuth { tenant_id: TenantId },
 }
 
 #[derive(Debug, Clone)]

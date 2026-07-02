@@ -31,6 +31,7 @@ pub(super) async fn authorize_tenant(
                 return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
             }
         }
+        AuthenticatedPrincipal::NoAuth { .. } => {}
     }
     Ok(principal)
 }
@@ -43,19 +44,24 @@ pub(super) async fn authorize_tenant_admin_principal(
     authorize_principal_for_role(state, headers, tenant_id, UserRole::TenantAdmin).await
 }
 
-pub(super) async fn authorize_tenant_admin_user(
+pub(super) async fn authorize_tenant_admin_user_or_no_auth(
     state: &AppState,
     headers: &HeaderMap,
     tenant_id: TenantId,
-) -> Result<AuthenticatedUser, ApiError> {
+) -> Result<AuthenticatedPrincipal, ApiError> {
     let principal = authorize_principal(state, headers, tenant_id).await?;
-    let AuthenticatedPrincipal::User(authenticated) = principal else {
-        return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
-    };
-    if !authenticated.user.role.allows(UserRole::TenantAdmin) {
-        return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
+    match &principal {
+        AuthenticatedPrincipal::User(authenticated) => {
+            if !authenticated.user.role.allows(UserRole::TenantAdmin) {
+                return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
+            }
+        }
+        AuthenticatedPrincipal::TenantToken(_) => {
+            return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
+        }
+        AuthenticatedPrincipal::NoAuth { .. } => {}
     }
-    Ok(authenticated)
+    Ok(principal)
 }
 
 pub(super) async fn authorize_tenant_principal(
@@ -87,6 +93,7 @@ pub(super) async fn authorize_agent_registration(
                 return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
             }
         }
+        AuthenticatedPrincipal::NoAuth { .. } => {}
     }
     Ok(principal)
 }
@@ -108,6 +115,7 @@ pub(super) async fn authorize_plugin_login_ticket_creation(
                 return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
             }
         }
+        AuthenticatedPrincipal::NoAuth { .. } => {}
     }
     Ok(principal)
 }
@@ -212,6 +220,7 @@ async fn authorize_principal_for_role(
                 return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
             }
         }
+        AuthenticatedPrincipal::NoAuth { .. } => {}
     }
     Ok(principal)
 }
@@ -221,6 +230,10 @@ pub(super) async fn authorize_principal(
     headers: &HeaderMap,
     tenant_id: TenantId,
 ) -> Result<AuthenticatedPrincipal, ApiError> {
+    if state.no_auth_enabled() {
+        return Ok(AuthenticatedPrincipal::NoAuth { tenant_id });
+    }
+
     let Some(header) = headers.get(AUTHORIZATION) else {
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
@@ -283,6 +296,7 @@ pub(super) fn audit_actor(principal: &AuthenticatedPrincipal) -> AuditActor {
                 .map(|scope| scope.as_str())
                 .collect(),
         ),
+        AuthenticatedPrincipal::NoAuth { .. } => AuditActor::no_auth(),
     }
 }
 
@@ -305,6 +319,7 @@ fn principal_tenant_id(principal: &AuthenticatedPrincipal) -> TenantId {
     match principal {
         AuthenticatedPrincipal::User(authenticated) => authenticated.user.tenant_id,
         AuthenticatedPrincipal::TenantToken(authenticated) => authenticated.token.tenant_id,
+        AuthenticatedPrincipal::NoAuth { tenant_id } => *tenant_id,
     }
 }
 

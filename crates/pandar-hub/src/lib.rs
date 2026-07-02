@@ -50,6 +50,7 @@ pub struct AppState {
     printer_event_tickets: PrinterEventTicketRepository,
     artifact_storage: Arc<dyn ArtifactStorage>,
     external_auth: Option<JwtVerifier>,
+    no_auth: bool,
     tenant_self_create_allowed: bool,
     bootstrap_token: Option<String>,
     printer_events: PrinterEventHub,
@@ -126,10 +127,12 @@ impl AppState {
             .ok()
             .filter(|value| !value.trim().is_empty());
         let tenant_self_create_allowed = tenant_self_create_allowed_from_env()?;
+        let no_auth = no_auth_from_env()?;
 
         Ok(
             Self::from_database_with_control_plane(database, artifact_storage, control_plane)
                 .with_external_auth_option(external_auth)
+                .with_no_auth(no_auth)
                 .with_tenant_self_create_allowed(tenant_self_create_allowed)
                 .with_bootstrap_token_option(bootstrap_token),
         )
@@ -162,6 +165,7 @@ impl AppState {
             printer_event_tickets: PrinterEventTicketRepository::new(database),
             artifact_storage: artifact_storage.into_artifact_storage(),
             external_auth: None,
+            no_auth: false,
             tenant_self_create_allowed: true,
             bootstrap_token: None,
             printer_events: PrinterEventHub::with_metrics(metrics.clone()),
@@ -278,6 +282,20 @@ impl AppState {
 
     pub fn external_auth(&self) -> Option<&JwtVerifier> {
         self.external_auth.as_ref()
+    }
+
+    pub fn no_auth_enabled(&self) -> bool {
+        self.no_auth
+    }
+
+    fn with_no_auth(mut self, enabled: bool) -> Self {
+        self.no_auth = enabled;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_no_auth_for_tests(self, enabled: bool) -> Self {
+        self.with_no_auth(enabled)
     }
 
     pub fn tenant_self_create_allowed(&self) -> bool {
@@ -401,6 +419,7 @@ impl AppState {
             self.control_plane.clone(),
         )
         .with_external_auth_option(self.external_auth.clone())
+        .with_no_auth(self.no_auth)
         .with_bootstrap_token_option(self.bootstrap_token.clone())
     }
 
@@ -431,6 +450,20 @@ fn tenant_self_create_allowed_from_env() -> anyhow::Result<bool> {
         "true" => Ok(true),
         "false" => Ok(false),
         _ => anyhow::bail!("PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE must be true or false"),
+    }
+}
+
+fn no_auth_from_env() -> anyhow::Result<bool> {
+    let Some(value) = std::env::var("PANDAR_HUB_NO_AUTH")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    else {
+        return Ok(false);
+    };
+    match value.trim() {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => anyhow::bail!("PANDAR_HUB_NO_AUTH must be true or false"),
     }
 }
 

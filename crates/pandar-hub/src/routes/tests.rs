@@ -17,6 +17,7 @@ mod basic;
 mod bootstrap;
 mod jobs;
 mod multipart;
+mod no_auth;
 mod onboarding;
 mod plugin;
 mod plugin_multipart;

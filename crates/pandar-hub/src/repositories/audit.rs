@@ -78,6 +78,14 @@ impl AuditActor {
             })),
         }
     }
+
+    pub fn no_auth() -> Self {
+        Self {
+            actor_type: "no_auth".to_owned(),
+            user_id: None,
+            metadata: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

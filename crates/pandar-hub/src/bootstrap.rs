@@ -12,6 +12,10 @@ use crate::{
 };
 
 pub(crate) fn authorize_bootstrap(state: &AppState, headers: &HeaderMap) -> Result<(), ApiError> {
+    if state.no_auth_enabled() {
+        return Ok(());
+    }
+
     let Some(header) = headers.get(AUTHORIZATION) else {
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
@@ -49,6 +53,11 @@ pub async fn run_from_env() -> anyhow::Result<()> {
     let state = AppState::connect(database_url)
         .await
         .context("failed to initialize pandar-hub application state")?;
+    if state.no_auth_enabled() {
+        tracing::warn!(
+            "PANDAR_HUB_NO_AUTH=true; pandar-hub HTTP authentication and authorization are disabled"
+        );
+    }
     let listener = TcpListener::bind(&bind_addr)
         .await
         .with_context(|| format!("failed to bind pandar-hub to {bind_addr}"))?;

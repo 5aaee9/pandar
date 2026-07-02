@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
-    repositories::{AuditActor, JoinLink, UserRole},
+    repositories::{JoinLink, UserRole},
     routes::{ApiError, auth, parse_tenant_id},
 };
 
@@ -52,7 +52,7 @@ pub(super) async fn list_join_links(
     Path(tenant_id): Path<String>,
 ) -> Result<Json<JoinLinkListResponse>, ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
-    auth::authorize_tenant_admin_user(&state, &headers, tenant_id).await?;
+    auth::authorize_tenant_admin_user_or_no_auth(&state, &headers, tenant_id).await?;
     let join_links = state
         .auth()
         .list_join_links_for_tenant(tenant_id)
@@ -70,7 +70,8 @@ pub(super) async fn create_join_link(
     payload: Result<Json<CreateJoinLinkRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<JoinLinkWithPlaintextResponse>), ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
-    let authenticated = auth::authorize_tenant_admin_user(&state, &headers, tenant_id).await?;
+    let principal =
+        auth::authorize_tenant_admin_user_or_no_auth(&state, &headers, tenant_id).await?;
     let Json(payload) =
         payload.map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "bad_request"))?;
     let role = UserRole::parse(&payload.role)
@@ -97,7 +98,7 @@ pub(super) async fn create_join_link(
             payload.email_constraint.or(payload.email),
             expires_in_seconds,
             max_uses,
-            AuditActor::user(authenticated.user.id),
+            auth::audit_actor(&principal),
         )
         .await?;
     Ok((
@@ -115,14 +116,11 @@ pub(super) async fn revoke_join_link(
     Path((tenant_id, join_link_id)): Path<(String, String)>,
 ) -> Result<Json<JoinLinkResponse>, ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
-    let authenticated = auth::authorize_tenant_admin_user(&state, &headers, tenant_id).await?;
+    let principal =
+        auth::authorize_tenant_admin_user_or_no_auth(&state, &headers, tenant_id).await?;
     let join_link = state
         .auth()
-        .revoke_join_link_with_audit(
-            tenant_id,
-            &join_link_id,
-            AuditActor::user(authenticated.user.id),
-        )
+        .revoke_join_link_with_audit(tenant_id, &join_link_id, auth::audit_actor(&principal))
         .await?;
     Ok(Json(JoinLinkResponse::from(join_link)))
 }
