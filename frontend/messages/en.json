@@ -377,7 +377,7 @@
     "timeout": "Timeout",
     "discover": "Discover",
     "deleteAgent": "Delete {name}",
-    "deleteOnline": "{name} is online",
+    "deleteOnline": "{name} is online, cannot be deleted",
     "deleteTitle": "Delete agent",
     "deleteMessage": "Delete {name}? Its reported printers, commands, jobs, and machine events will be removed.",
     "deleteConfirm": "Delete agent",

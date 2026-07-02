@@ -1,8 +1,8 @@
 import { useTranslations } from 'next-intl'
 
 import { FormattedDate } from '../components/formatted-date'
+import { AgentDeleteForm } from './agent-delete-form'
 import { deleteAgent, diagnosePrinter, discoverPrinters } from './actions'
-import { ConfirmForm } from './confirm-dialog'
 import { DetailLine, EmptyState, HelpTip, StatusBadge, Tag } from './dashboard-ui'
 import type {
   Agent,
@@ -90,19 +90,18 @@ export function LinkedAgentsSection({
                     </form>
                   </td>
                   <td className="px-4 py-3">
-                    <ConfirmForm
+                    <AgentDeleteForm
                       action={deleteAgent}
-                      buttonClassName="h-9 rounded-md border border-red-300 px-3 text-sm font-medium text-red-700 disabled:border-slate-200 disabled:text-slate-400"
-                      buttonLabel={agent.status.toLowerCase() === 'online' ? t('deleteOnline', { name: agent.name }) : t('deleteAgent', { name: agent.name })}
+                      buttonLabel={t('deleteAgent', { name: agent.name })}
                       disabled={agent.status.toLowerCase() === 'online'}
+                      disabledMessage={agent.status.toLowerCase() === 'online' ? t('deleteOnline', { name: agent.name }) : undefined}
                       title={t('deleteTitle')}
                       message={t('deleteMessage', { name: agent.name })}
                       confirmLabel={t('deleteConfirm')}
-                      tone="danger"
                     >
                       <input name="tenant_id" type="hidden" value={selectedTenant.id} />
                       <input name="agent_id" type="hidden" value={agent.id} />
-                    </ConfirmForm>
+                    </AgentDeleteForm>
                   </td>
                 </tr>
               ))}

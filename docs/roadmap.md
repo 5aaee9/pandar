@@ -114,6 +114,7 @@
 - Added Task 1 agent printer-linking primitives: protocol `LinkPrinter`, redacted Hub `link_printer` command payloads, audited sent-row creation, stale unowned cleanup, durable replay rejection, and Hub-side command error redaction groundwork.
 - Added runtime printer linking from the dashboard Agents page: operators can submit host/IP, serial, access code, and optional name/model to a locally connected agent; Hub stores only redacted command/audit data including rejected acknowledgements, the agent validates and links the printer in memory, and runtime-linked printers survive reverse-stream reconnects but are documented as non-persistent across agent restarts unless also configured in `PANDAR_PRINTERS`.
 - Fixed the Better Auth dashboard callback redirect to resolve the final post-login `/` target against `APP_BASE_URL`, preventing internal/bind hosts such as `0.0.0.0:3000` from leaking into the browser after token handoff.
+- Updated the dashboard Agents delete control so online agents still show the standard Delete button in a disabled state, with HoverCard and Sonner feedback explaining that online agents cannot be deleted.
 
 ## Completed: Phase 30 Better Auth Provider Compatibility
 

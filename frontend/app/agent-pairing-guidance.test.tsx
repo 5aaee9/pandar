@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 
 import en from "../messages/en.json";
 import {
@@ -30,6 +32,14 @@ vi.mock("./actions", () => ({
   revokeTenantToken: vi.fn(),
   rotateTenantToken: vi.fn(),
   updateTenantUserRole: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    success: vi.fn(),
+    warning: vi.fn(),
+  },
 }));
 
 function renderWithMessages(children: ReactNode) {
@@ -153,7 +163,8 @@ describe("Agents view pairing guidance", () => {
     expect(screen.queryByLabelText("Agent name")).not.toBeInTheDocument();
   });
 
-  it("renders delete controls only for agents that are not online", () => {
+  it("keeps delete controls visible for online agents and explains why deletion is disabled", async () => {
+    const user = userEvent.setup();
     renderAgentsView({
       agents: [
         {
@@ -173,8 +184,30 @@ describe("Agents view pairing guidance", () => {
       ],
     });
 
-    expect(screen.getByRole("button", { name: "Delete Offline agent" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Online agent is online" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Delete Offline agent" }),
+    ).toBeEnabled();
+    const onlineDelete = screen.getByRole("button", {
+      name: "Delete Online agent",
+    });
+    expect(onlineDelete).toBeDisabled();
+    expect(onlineDelete).toHaveAccessibleDescription(
+      "Online agent is online, cannot be deleted",
+    );
+
+    const deleteHint = onlineDelete.parentElement;
+    expect(deleteHint).not.toBeNull();
+    await user.hover(deleteHint!);
+    expect(
+      await screen.findByText("Online agent is online, cannot be deleted", {
+        selector: '[data-slot="hover-card-content"]',
+      }),
+    ).toBeVisible();
+
+    await user.click(deleteHint!);
+    expect(toast.warning).toHaveBeenCalledWith(
+      "Online agent is online, cannot be deleted",
+    );
   });
 
   it("renders link-printer form between pairing guidance and linked agents", () => {
