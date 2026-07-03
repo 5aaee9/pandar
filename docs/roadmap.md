@@ -51,6 +51,7 @@
 - Kept Studio-style MQTT `sequence_id` generation inside Bambu Studio's `20000..30000` command range by wrapping after `29999` and recovering out-of-range counters back to `20000`.
 - Matched printer-operation MQTT reports back to their dispatched `sequence_id`, persisted the machine result/error JSON through Hub command results, broadcast command-result events over the printer WebSocket stream, and surfaced printer-control completion/failure with Sonner toasts in the dashboard.
 - Added printer-card temperature telemetry for nozzle, bed, and chamber readings from Bambu MQTT snapshots through Agent, Hub, HTTP/WebSocket payloads, and the Devices UI, with inline Stop/Pause controls beside the temperature row.
+- Aligned live temperature parsing with Bambu Studio's V2 device report format so X2D-style bit-packed extruder, bed, and chamber readings populate the Devices UI, and simplified nozzle cards to show current single- or dual-nozzle temperatures without target-temperature noise.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.
 - Created the initial Rust workspace with `pandar-core`, `pandar-hub`, `pandar-agent`, and `pandar-app`.
 - Added a repository-backed Axum hub with health, summary, tenant create/list, and tenant-scoped agent create/list endpoints.

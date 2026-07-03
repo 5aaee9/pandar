@@ -2,6 +2,7 @@ use std::{sync::atomic::AtomicU32, time::Duration};
 
 use serde_json::json;
 use tokio::sync::mpsc;
+use tokio::time::timeout;
 
 use super::*;
 use crate::machine::BambuPrinterEndpoint;
@@ -9,6 +10,8 @@ use crate::{
     AgentConfig,
     protocol::agent::v1::{PrintJobReport, agent_event},
 };
+
+mod snapshot;
 
 fn endpoint() -> BambuPrinterEndpoint {
     BambuPrinterEndpoint {
@@ -450,100 +453,6 @@ fn project_file_payload_rewrites_flat_external_mapping_values() {
     assert_eq!(payload["print"]["ams_mapping"], json!([-1, -1, 15]));
 }
 
-#[test]
-fn report_maps_to_snapshot_without_configured_model() {
-    let report = json!({"print": {"gcode_state": "RUNNING"}});
-
-    assert_eq!(
-        snapshot_from_report(&endpoint(), &report),
-        MachineSnapshot {
-            serial: "01S00EXAMPLE".to_string(),
-            name: "garage-a1".to_string(),
-            model: None,
-            state: "RUNNING".to_string(),
-            nozzle_temperatures: Vec::new(),
-            bed_temperature_celsius: None,
-            bed_target_temperature_celsius: None,
-            chamber_temperature_celsius: None,
-        }
-    );
-}
-
-#[test]
-fn report_maps_temperatures_to_snapshot() {
-    let report = json!({
-        "print": {
-            "gcode_state": "RUNNING",
-            "nozzle_temper": 41,
-            "nozzle_target_temper": 220,
-            "nozzle_temper2": 42,
-            "nozzle_target_temper2": 230,
-            "bed_temper": 60,
-            "bed_target_temper": 65,
-            "chamber_temper": 32
-        }
-    });
-
-    let snapshot = snapshot_from_report(&endpoint(), &report);
-
-    assert_eq!(snapshot.nozzle_temperatures.len(), 2);
-    assert_eq!(snapshot.nozzle_temperatures[0].label.as_deref(), Some("L"));
-    assert_eq!(
-        snapshot.nozzle_temperatures[0].current_celsius.as_deref(),
-        Some("41")
-    );
-    assert_eq!(
-        snapshot.nozzle_temperatures[0].target_celsius.as_deref(),
-        Some("220")
-    );
-    assert_eq!(snapshot.nozzle_temperatures[1].label.as_deref(), Some("R"));
-    assert_eq!(snapshot.bed_temperature_celsius.as_deref(), Some("60"));
-    assert_eq!(
-        snapshot.bed_target_temperature_celsius.as_deref(),
-        Some("65")
-    );
-    assert_eq!(snapshot.chamber_temperature_celsius.as_deref(), Some("32"));
-}
-
-#[test]
-fn report_state_falls_back_to_print_state() {
-    let report = json!({"print": {"state": "READY"}});
-
-    assert_eq!(snapshot_from_report(&endpoint(), &report).state, "READY");
-}
-
-#[test]
-fn report_state_falls_back_to_root_state() {
-    let report = json!({"state": "IDLE"});
-
-    assert_eq!(snapshot_from_report(&endpoint(), &report).state, "IDLE");
-}
-
-#[test]
-fn report_state_skips_non_string_candidates() {
-    let report = json!({"print": {"gcode_state": 123, "state": "READY"}});
-
-    assert_eq!(snapshot_from_report(&endpoint(), &report).state, "READY");
-}
-
-#[test]
-fn report_state_defaults_to_unknown() {
-    let report = json!({"print": {"gcode_state": 123}});
-
-    assert_eq!(snapshot_from_report(&endpoint(), &report).state, "unknown");
-}
-
-#[test]
-fn report_name_defaults_to_serial() {
-    let mut endpoint = endpoint();
-    endpoint.name = None;
-
-    assert_eq!(
-        snapshot_from_report(&endpoint, &json!({})).name,
-        "01S00EXAMPLE"
-    );
-}
-
 #[tokio::test]
 async fn refresh_subscribes_publishes_and_maps_report() {
     let mut endpoint = endpoint();
@@ -969,6 +878,69 @@ async fn forward_print_reports_uses_transport_without_live_socket() {
         transport.subscriptions().await,
         ["device/01S00EXAMPLE/report".to_string()]
     );
+}
+
+#[tokio::test]
+async fn forward_print_reports_emits_printer_snapshot_with_temperatures() {
+    let transport = FakeMqttTransport::with_reports([json!({
+        "print": {
+            "gcode_state": "RUNNING",
+            "nozzle_temper": 41,
+            "nozzle_target_temper": 220,
+            "bed_temper": 60,
+            "chamber_temper": 32
+        }
+    })]);
+    let (sender, mut receiver) = mpsc::channel(4);
+    let config = AgentConfig {
+        hub_grpc_url: "http://hub.internal:50051".to_owned(),
+        hub_api_url: None,
+        agent_name: "garage".to_owned(),
+        agent_id: "agent-id".to_owned(),
+        tenant_id: "tenant-id".to_owned(),
+        agent_credential: "pandar_ac_test".to_owned(),
+        agent_version: "9.8.7".to_owned(),
+        printers: "[]".to_owned(),
+        artifact_root: ".".into(),
+    };
+    let endpoint = endpoint();
+    let task = tokio::spawn({
+        let config = config.clone();
+        let transport = transport.clone();
+        let endpoint = endpoint.clone();
+        async move {
+            forward_print_reports(
+                &config,
+                &transport,
+                &endpoint,
+                Duration::from_millis(50),
+                &sender,
+            )
+            .await
+            .unwrap();
+        }
+    });
+
+    assert!(matches!(
+        receiver.recv().await.unwrap().event,
+        Some(agent_event::Event::PrintJobReport(_))
+    ));
+    let second = timeout(Duration::from_millis(50), receiver.recv())
+        .await
+        .expect("expected printer snapshot event")
+        .unwrap();
+    task.abort();
+
+    let Some(agent_event::Event::PrinterSnapshot(snapshot)) = second.event else {
+        panic!("expected printer snapshot event");
+    };
+    assert_eq!(snapshot.serial, "01S00EXAMPLE");
+    assert_eq!(snapshot.model, "A1 Mini");
+    assert_eq!(snapshot.state, "RUNNING");
+    assert_eq!(snapshot.nozzle_temperatures[0].current_celsius, "41");
+    assert_eq!(snapshot.nozzle_temperatures[0].target_celsius, "220");
+    assert_eq!(snapshot.bed_temperature_celsius, "60");
+    assert_eq!(snapshot.chamber_temperature_celsius, "32");
 }
 
 #[tokio::test]

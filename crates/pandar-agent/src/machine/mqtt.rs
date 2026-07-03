@@ -6,6 +6,8 @@ use std::{
     time::Duration,
 };
 
+mod snapshot;
+
 #[cfg(test)]
 use std::collections::VecDeque;
 
@@ -23,14 +25,17 @@ use rustls::{
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, mpsc};
 
+pub use snapshot::snapshot_from_report;
+
 use crate::{
     AgentConfig,
     machine::{
-        BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot, MaterialRefreshResult,
-        PrinterRefreshResult, materials::normalize_material_patch,
+        BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult, PrinterRefreshResult,
+        materials::normalize_material_patch,
     },
     protocol::agent::v1::{
-        AgentEvent, MachineDiagnostic, PrintJobReport, PrinterMaterialsSnapshot, agent_event,
+        AgentEvent, MachineDiagnostic, NozzleTemperature, PrintJobReport, PrinterMaterialsSnapshot,
+        PrinterSnapshot, agent_event,
     },
 };
 
@@ -673,110 +678,6 @@ fn qos_from_u8(qos: u8) -> anyhow::Result<QoS> {
     }
 }
 
-pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> MachineSnapshot {
-    let print = report.get("print").unwrap_or(&Value::Null);
-    let state = ["/print/gcode_state", "/print/state", "/state"]
-        .into_iter()
-        .find_map(|path| report.pointer(path).and_then(Value::as_str))
-        .unwrap_or("unknown");
-
-    MachineSnapshot {
-        serial: endpoint.serial.clone(),
-        name: endpoint
-            .name
-            .clone()
-            .unwrap_or_else(|| endpoint.serial.clone()),
-        model: None,
-        state: state.to_string(),
-        nozzle_temperatures: nozzle_temperatures_from_report(print),
-        bed_temperature_celsius: temperature_string(
-            print
-                .get("bed_temper")
-                .or_else(|| print.get("bed_temp"))
-                .or_else(|| print.get("bed_temperature")),
-        ),
-        bed_target_temperature_celsius: temperature_string(
-            print
-                .get("bed_target_temper")
-                .or_else(|| print.get("target_bed_temper"))
-                .or_else(|| print.get("bed_target_temperature")),
-        ),
-        chamber_temperature_celsius: temperature_string(
-            print
-                .get("chamber_temper")
-                .or_else(|| print.get("chamber_temp"))
-                .or_else(|| print.get("chamber_temperature")),
-        ),
-    }
-}
-
-fn nozzle_temperatures_from_report(print: &Value) -> Vec<MachineNozzleTemperature> {
-    let left = MachineNozzleTemperature {
-        label: None,
-        current_celsius: temperature_string(
-            print
-                .get("nozzle_temper")
-                .or_else(|| print.get("nozzle_temp"))
-                .or_else(|| print.get("nozzle_temperature")),
-        ),
-        target_celsius: temperature_string(
-            print
-                .get("nozzle_target_temper")
-                .or_else(|| print.get("target_nozzle_temper"))
-                .or_else(|| print.get("nozzle_target_temperature")),
-        ),
-    };
-    let right = MachineNozzleTemperature {
-        label: Some("R".to_owned()),
-        current_celsius: temperature_string(
-            print
-                .get("nozzle_temper2")
-                .or_else(|| print.get("right_nozzle_temper"))
-                .or_else(|| print.get("nozzle_temp2")),
-        ),
-        target_celsius: temperature_string(
-            print
-                .get("nozzle_target_temper2")
-                .or_else(|| print.get("right_nozzle_target_temper"))
-                .or_else(|| print.get("target_nozzle_temper2")),
-        ),
-    };
-
-    if right.current_celsius.is_some() || right.target_celsius.is_some() {
-        vec![
-            MachineNozzleTemperature {
-                label: Some("L".to_owned()),
-                ..left
-            },
-            right,
-        ]
-    } else if left.current_celsius.is_some() || left.target_celsius.is_some() {
-        vec![left]
-    } else {
-        Vec::new()
-    }
-}
-
-fn temperature_string(value: Option<&Value>) -> Option<String> {
-    match value? {
-        Value::Number(number) => number
-            .as_f64()
-            .filter(|value| value.is_finite() && *value >= 0.0)
-            .map(|value| {
-                if value.fract() == 0.0 {
-                    format!("{value:.0}")
-                } else {
-                    format!("{value:.1}")
-                }
-            }),
-        Value::String(value) => {
-            let trimmed = value.trim();
-            (!trimmed.is_empty() && trimmed != "-1").then(|| trimmed.to_owned())
-        }
-        _ => None,
-    }
-}
-
 pub fn print_report_from_report(
     endpoint: &BambuPrinterEndpoint,
     report: &Value,
@@ -876,6 +777,41 @@ pub fn printer_materials_snapshot_event(
     }
 }
 
+fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> AgentEvent {
+    AgentEvent {
+        agent_id: config.agent_id.clone(),
+        tenant_id: config.tenant_id.clone(),
+        event_id: format!("printer-snapshot-{}", snapshot.serial),
+        event: Some(agent_event::Event::PrinterSnapshot(PrinterSnapshot {
+            serial: snapshot.serial,
+            name: snapshot.name,
+            state: snapshot.state,
+            model: snapshot.model.unwrap_or_default(),
+            nozzle_temperatures: snapshot
+                .nozzle_temperatures
+                .into_iter()
+                .map(|temperature| NozzleTemperature {
+                    label: temperature.label.unwrap_or_default(),
+                    current_celsius: temperature.current_celsius.unwrap_or_default(),
+                    target_celsius: temperature.target_celsius.unwrap_or_default(),
+                })
+                .collect(),
+            bed_temperature_celsius: snapshot.bed_temperature_celsius.unwrap_or_default(),
+            bed_target_temperature_celsius: snapshot
+                .bed_target_temperature_celsius
+                .unwrap_or_default(),
+            chamber_temperature_celsius: snapshot.chamber_temperature_celsius.unwrap_or_default(),
+        })),
+    }
+}
+
+fn snapshot_has_temperature_telemetry(snapshot: &MachineSnapshot) -> bool {
+    !snapshot.nozzle_temperatures.is_empty()
+        || snapshot.bed_temperature_celsius.is_some()
+        || snapshot.bed_target_temperature_celsius.is_some()
+        || snapshot.chamber_temperature_celsius.is_some()
+}
+
 pub async fn forward_print_reports<T>(
     config: &AgentConfig,
     transport: &T,
@@ -900,6 +836,9 @@ where
         match transport.next_report(report_timeout).await {
             Ok(report) => {
                 let progress = print_report_from_report(endpoint, &report);
+                let snapshot = snapshot_from_report(endpoint, &report);
+                let snapshot_event = snapshot_has_temperature_telemetry(&snapshot)
+                    .then(|| printer_snapshot_event(config, snapshot));
                 let materials =
                     (!progress.printer_materials_json.is_empty()).then(|| MaterialRefreshResult {
                         serial: progress.serial.clone(),
@@ -910,6 +849,11 @@ where
                     .send(print_job_report_event(config, progress))
                     .await
                     .is_err()
+                {
+                    break;
+                }
+                if let Some(snapshot_event) = snapshot_event
+                    && sender.send(snapshot_event).await.is_err()
                 {
                     break;
                 }

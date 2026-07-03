@@ -200,7 +200,7 @@ describe("PrinterInventory", () => {
     const card = screen.getByRole("article", { name: "Office A1" });
     expect(card).toHaveTextContent("Nozzle");
     expect(card).toHaveTextContent("L / R");
-    expect(card).toHaveTextContent("41° / 220°");
+    expect(card).toHaveTextContent("41° / 42°");
     expect(card).toHaveTextContent("Bed");
     expect(card).toHaveTextContent("60°C");
     expect(card).toHaveTextContent("Chamber");
@@ -211,6 +211,23 @@ describe("PrinterInventory", () => {
     expect(stopForm?.querySelector('input[name="action"]')).toHaveValue("stop");
     expect(stopForm?.querySelector('input[name="printer_id"]')).toHaveValue("printer-1");
     expect(pauseForm?.querySelector('input[name="action"]')).toHaveValue("pause");
+  });
+
+  it("renders a single nozzle without a duplicate label or target temperature", () => {
+    const heatingPrinter: Printer = {
+      ...printer,
+      nozzle_temperatures: [{ label: null, current_celsius: "27", target_celsius: "0" }],
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+    );
+
+    const card = screen.getByRole("article", { name: "Office A1" });
+    expect(card).toHaveTextContent("Nozzle");
+    expect(card).toHaveTextContent("27°");
+    expect(card).not.toHaveTextContent("Nozzle Nozzle");
+    expect(card).not.toHaveTextContent("27° / 0°");
   });
 
   it("replaces the filament summary with AMS and external slot loading details", () => {

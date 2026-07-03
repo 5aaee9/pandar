@@ -131,20 +131,20 @@ function printerTemperatures(printer: Printer, t: ReturnType<typeof useTranslati
 }
 
 function nozzleTemperature(nozzles: NonNullable<Printer['nozzle_temperatures']>) {
-  const present = nozzles.filter((nozzle) => nozzle.current_celsius || nozzle.target_celsius)
+  const present = nozzles.filter((nozzle) => nozzle.current_celsius)
   if (present.length === 0) {
     return null
   }
   if (present.length === 1) {
     const nozzle = present[0]
     return {
-      label: nozzle.label ?? 'Nozzle',
-      value: temperaturePair(nozzle.current_celsius, nozzle.target_celsius),
+      label: null,
+      value: formatTemperatureValue(nozzle.current_celsius, false),
     }
   }
   return {
     label: present.map((nozzle, index) => nozzle.label ?? String(index + 1)).join(' / '),
-    value: temperaturePair(present[0].current_celsius, present[0].target_celsius),
+    value: present.map((nozzle) => formatTemperatureValue(nozzle.current_celsius, false)).join(' / '),
   }
 }
 
