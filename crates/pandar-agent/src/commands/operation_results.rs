@@ -15,6 +15,8 @@ pub(super) fn printer_operation_action(operation: &MachinePrinterOperation) -> &
         MachinePrinterOperation::Home { .. } => "home",
         MachinePrinterOperation::MoveAxes { .. } => "move_axes",
         MachinePrinterOperation::SetHotendTemperature { .. } => "set_hotend_temperature",
+        MachinePrinterOperation::SetBedTemperature { .. } => "set_bed_temperature",
+        MachinePrinterOperation::SetChamberTemperature { .. } => "set_chamber_temperature",
         MachinePrinterOperation::AmsRereadRfid { .. } => "ams_reread_rfid",
         MachinePrinterOperation::AmsLoadFilament { .. } => "ams_load_filament",
         MachinePrinterOperation::AmsUnloadFilament { .. } => "ams_unload_filament",
@@ -117,6 +119,20 @@ fn append_operation_fields(
             if let Some(value) = extruder_id {
                 result.insert("extruder_id".to_string(), json!(value));
             }
+        }
+        MachinePrinterOperation::SetBedTemperature {
+            temperature_celsius,
+            wait,
+        }
+        | MachinePrinterOperation::SetChamberTemperature {
+            temperature_celsius,
+            wait,
+        } => {
+            result.insert(
+                "temperature_celsius".to_string(),
+                json!(temperature_celsius),
+            );
+            result.insert("wait".to_string(), json!(wait));
         }
         MachinePrinterOperation::AmsRereadRfid { ams_id, slot_id } => {
             result.insert("ams_id".to_string(), json!(ams_id));

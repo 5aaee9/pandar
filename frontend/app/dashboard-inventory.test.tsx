@@ -321,6 +321,48 @@ describe("PrinterInventory", () => {
     expect(leftPreset.closest("form")?.querySelector('input[name="extruder_id"]')).toHaveValue("1");
   });
 
+  it("opens bed temperature controls with bed presets", async () => {
+    const user = userEvent.setup();
+    const heatingPrinter: Printer = {
+      ...printer,
+      bed_temperature_celsius: "24",
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Set bed temperature" }));
+
+    expect(screen.getByText("Set Bed Temperature")).toBeVisible();
+    const preset = screen.getByRole("button", { name: "75 C" });
+    const form = preset.closest("form");
+    expect(form?.querySelector('input[name="action"]')).toHaveValue("set_bed_temperature");
+    expect(form?.querySelector('input[name="temperature_celsius"]')).toHaveValue("75");
+    expect(screen.getByPlaceholderText("Custom")).toBeVisible();
+  });
+
+  it("opens chamber temperature controls with chamber presets", async () => {
+    const user = userEvent.setup();
+    const heatingPrinter: Printer = {
+      ...printer,
+      chamber_temperature_celsius: "25",
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Set chamber temperature" }));
+
+    expect(screen.getByText("Set Chamber Temperature")).toBeVisible();
+    const preset = screen.getByRole("button", { name: "45 C" });
+    const form = preset.closest("form");
+    expect(form?.querySelector('input[name="action"]')).toHaveValue("set_chamber_temperature");
+    expect(form?.querySelector('input[name="temperature_celsius"]')).toHaveValue("45");
+    expect(screen.getByPlaceholderText("Custom")).toBeVisible();
+  });
+
   it("hides zero bed target temperature", () => {
     const heatingPrinter: Printer = {
       ...printer,

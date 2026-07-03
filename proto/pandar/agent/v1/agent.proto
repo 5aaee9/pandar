@@ -150,6 +150,8 @@ message PrinterOperation {
     AmsLoadFilamentOperation ams_load_filament = 18;
     AmsUnloadFilamentOperation ams_unload_filament = 19;
     SelectExtruderOperation select_extruder = 20;
+    SetBedTemperatureOperation set_bed_temperature = 21;
+    SetChamberTemperatureOperation set_chamber_temperature = 22;
   }
 }
 
@@ -192,6 +194,16 @@ message SetHotendTemperatureOperation {
   uint32 temperature_celsius = 1;
   bool wait = 2;
   optional uint32 extruder_id = 3;
+}
+
+message SetBedTemperatureOperation {
+  uint32 temperature_celsius = 1;
+  bool wait = 2;
+}
+
+message SetChamberTemperatureOperation {
+  uint32 temperature_celsius = 1;
+  bool wait = 2;
 }
 
 message AmsRereadRfidOperation {

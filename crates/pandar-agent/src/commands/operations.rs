@@ -18,6 +18,8 @@ const MAX_MOVE_DELTA_MM: f64 = 50.0;
 const MIN_MOVE_FEEDRATE_MM_PER_MIN: u32 = 1;
 const MAX_MOVE_FEEDRATE_MM_PER_MIN: u32 = 12_000;
 const MAX_HOTEND_TEMPERATURE_CELSIUS: u32 = 300;
+const MAX_BED_TEMPERATURE_CELSIUS: u32 = 120;
+const MAX_CHAMBER_TEMPERATURE_CELSIUS: u32 = 70;
 
 pub(super) async fn emit_events<G>(
     config: &AgentConfig,
@@ -190,6 +192,24 @@ fn parse_printer_operation(
                 temperature_celsius: operation.temperature_celsius as u16,
                 wait: operation.wait,
                 extruder_id: operation.extruder_id,
+            })
+        }
+        Some(printer_operation::Operation::SetBedTemperature(operation)) => {
+            if operation.temperature_celsius > MAX_BED_TEMPERATURE_CELSIUS {
+                anyhow::bail!("invalid printer operation bed temperature; expected <= 120");
+            }
+            Ok(MachinePrinterOperation::SetBedTemperature {
+                temperature_celsius: operation.temperature_celsius as u16,
+                wait: operation.wait,
+            })
+        }
+        Some(printer_operation::Operation::SetChamberTemperature(operation)) => {
+            if operation.temperature_celsius > MAX_CHAMBER_TEMPERATURE_CELSIUS {
+                anyhow::bail!("invalid printer operation chamber temperature; expected <= 70");
+            }
+            Ok(MachinePrinterOperation::SetChamberTemperature {
+                temperature_celsius: operation.temperature_celsius as u16,
+                wait: operation.wait,
             })
         }
         Some(printer_operation::Operation::AmsRereadRfid(operation)) => {

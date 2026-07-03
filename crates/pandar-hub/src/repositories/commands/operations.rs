@@ -7,6 +7,8 @@ const MAX_MOVE_DELTA_MM: f64 = 50.0;
 const MIN_MOVE_FEEDRATE_MM_PER_MIN: u32 = 1;
 const MAX_MOVE_FEEDRATE_MM_PER_MIN: u32 = 12_000;
 const MAX_HOTEND_TEMPERATURE_CELSIUS: u16 = 300;
+const MAX_BED_TEMPERATURE_CELSIUS: u16 = 120;
+const MAX_CHAMBER_TEMPERATURE_CELSIUS: u16 = 70;
 const MAX_AMS_ID: u32 = 255;
 const MAX_AMS_SLOT_ID: u32 = 255;
 const MAX_EXTRUDER_ID: u32 = 1;
@@ -68,6 +70,14 @@ pub enum PrinterOperationKind {
         wait: bool,
         extruder_id: Option<u32>,
     },
+    SetBedTemperature {
+        temperature_celsius: u16,
+        wait: bool,
+    },
+    SetChamberTemperature {
+        temperature_celsius: u16,
+        wait: bool,
+    },
     AmsRereadRfid {
         ams_id: u32,
         slot_id: u32,
@@ -99,6 +109,8 @@ impl PrinterOperationKind {
             Self::Home { .. } => "home",
             Self::MoveAxes { .. } => "move_axes",
             Self::SetHotendTemperature { .. } => "set_hotend_temperature",
+            Self::SetBedTemperature { .. } => "set_bed_temperature",
+            Self::SetChamberTemperature { .. } => "set_chamber_temperature",
             Self::AmsRereadRfid { .. } => "ams_reread_rfid",
             Self::AmsLoadFilament { .. } => "ams_load_filament",
             Self::AmsUnloadFilament { .. } => "ams_unload_filament",
@@ -134,6 +146,20 @@ pub fn validate_printer_operation(operation: &PrinterOperationKind) -> Repositor
             Ok(())
         }
         PrinterOperationKind::SetHotendTemperature { .. } => {
+            Err(RepositoryError::InvalidPrinterControl)
+        }
+        PrinterOperationKind::SetBedTemperature {
+            temperature_celsius,
+            ..
+        } if *temperature_celsius <= MAX_BED_TEMPERATURE_CELSIUS => Ok(()),
+        PrinterOperationKind::SetBedTemperature { .. } => {
+            Err(RepositoryError::InvalidPrinterControl)
+        }
+        PrinterOperationKind::SetChamberTemperature {
+            temperature_celsius,
+            ..
+        } if *temperature_celsius <= MAX_CHAMBER_TEMPERATURE_CELSIUS => Ok(()),
+        PrinterOperationKind::SetChamberTemperature { .. } => {
             Err(RepositoryError::InvalidPrinterControl)
         }
         PrinterOperationKind::AmsRereadRfid { ams_id, slot_id }
@@ -213,6 +239,17 @@ pub fn operation_audit_metadata(
             metadata.insert("temperature_celsius".to_owned(), json!(temperature_celsius));
             metadata.insert("wait".to_owned(), json!(wait));
             metadata.insert("extruder_id".to_owned(), json!(extruder_id));
+        }
+        PrinterOperationKind::SetBedTemperature {
+            temperature_celsius,
+            wait,
+        }
+        | PrinterOperationKind::SetChamberTemperature {
+            temperature_celsius,
+            wait,
+        } => {
+            metadata.insert("temperature_celsius".to_owned(), json!(temperature_celsius));
+            metadata.insert("wait".to_owned(), json!(wait));
         }
         PrinterOperationKind::AmsRereadRfid { ams_id, slot_id } => {
             metadata.insert("ams_id".to_owned(), json!(ams_id));

@@ -31,6 +31,14 @@ pub enum PrinterOperation {
         wait: bool,
         extruder_id: Option<u32>,
     },
+    SetBedTemperature {
+        temperature_celsius: u16,
+        wait: bool,
+    },
+    SetChamberTemperature {
+        temperature_celsius: u16,
+        wait: bool,
+    },
     AmsRereadRfid {
         ams_id: u32,
         slot_id: u32,
@@ -153,6 +161,30 @@ fn mqtt_command_for_printer_operation(
                 )],
             })),
         },
+        PrinterOperation::SetBedTemperature {
+            temperature_celsius,
+            wait,
+        } => Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
+            lines: vec![format!(
+                "{} S{}",
+                if wait { "M190" } else { "M140" },
+                temperature_celsius
+            )],
+        })),
+        PrinterOperation::SetChamberTemperature {
+            temperature_celsius,
+            wait,
+        } => Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
+            lines: if wait {
+                vec![
+                    "M106 P2 S255".to_string(),
+                    format!("M191 S{}", temperature_celsius),
+                    "M106 P2 S0".to_string(),
+                ]
+            } else {
+                vec![format!("M141 S{}", temperature_celsius)]
+            },
+        })),
         PrinterOperation::AmsRereadRfid { ams_id, slot_id } => {
             Ok(BambuMqttCommand::AmsRereadRfid(AmsSlotCommand {
                 ams_id,

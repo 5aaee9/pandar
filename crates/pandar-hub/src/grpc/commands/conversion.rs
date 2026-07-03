@@ -7,8 +7,8 @@ use crate::{
         AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
         MoveAxesOperation, PauseOperation, PrintProjectFile, PrinterOperation,
         RefreshPrinterMaterials, RefreshPrinters, ResumeOperation, SelectExtruderOperation,
-        SetHotendTemperatureOperation, SetPrintSpeedOperation, StopOperation, hub_command,
-        printer_operation,
+        SetBedTemperatureOperation, SetChamberTemperatureOperation, SetHotendTemperatureOperation,
+        SetPrintSpeedOperation, StopOperation, hub_command, printer_operation,
     },
     repositories::{
         DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, PrinterAxis,
@@ -188,6 +188,20 @@ fn proto_printer_operation(operation: PrinterOperationKind) -> printer_operation
             temperature_celsius: temperature_celsius.into(),
             wait,
             extruder_id,
+        }),
+        PrinterOperationKind::SetBedTemperature {
+            temperature_celsius,
+            wait,
+        } => printer_operation::Operation::SetBedTemperature(SetBedTemperatureOperation {
+            temperature_celsius: temperature_celsius.into(),
+            wait,
+        }),
+        PrinterOperationKind::SetChamberTemperature {
+            temperature_celsius,
+            wait,
+        } => printer_operation::Operation::SetChamberTemperature(SetChamberTemperatureOperation {
+            temperature_celsius: temperature_celsius.into(),
+            wait,
         }),
         PrinterOperationKind::AmsRereadRfid { ams_id, slot_id } => {
             printer_operation::Operation::AmsRereadRfid(AmsRereadRfidOperation { ams_id, slot_id })

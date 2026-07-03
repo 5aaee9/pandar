@@ -25,7 +25,8 @@ use crate::{
         AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand, LinkPrinter,
         MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
         RefreshPrinterMaterials, RefreshPrinters, SelectExtruderOperation,
-        SetHotendTemperatureOperation, SetPrintSpeedOperation, printer_operation,
+        SetBedTemperatureOperation, SetChamberTemperatureOperation, SetHotendTemperatureOperation,
+        SetPrintSpeedOperation, printer_operation,
     },
 };
 
@@ -1941,6 +1942,92 @@ async fn printer_operation_targeted_hotend_dispatches_extruder_id() {
 }
 
 #[tokio::test]
+async fn printer_operation_bed_temperature_dispatches_typed_details() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        bed_temperature_operation_command(command_id.clone(), "SERIAL1", 75, false),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(result.success);
+            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(json["action"], "set_bed_temperature");
+            assert_eq!(json["temperature_celsius"], 75);
+            assert_eq!(json["wait"], false);
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.operations().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::SetBedTemperature {
+                temperature_celsius: 75,
+                wait: false,
+            }
+        )]
+    );
+}
+
+#[tokio::test]
+async fn printer_operation_chamber_temperature_dispatches_typed_details() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        chamber_temperature_operation_command(command_id.clone(), "SERIAL1", 45, false),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(result.success);
+            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(json["action"], "set_chamber_temperature");
+            assert_eq!(json["temperature_celsius"], 45);
+            assert_eq!(json["wait"], false);
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.operations().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::SetChamberTemperature {
+                temperature_celsius: 45,
+                wait: false,
+            }
+        )]
+    );
+}
+
+#[tokio::test]
 async fn printer_operation_missing_operation_rejects_ack_without_dispatch() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
@@ -2087,6 +2174,42 @@ fn hotend_operation_command_with_extruder(
                 temperature_celsius,
                 wait,
                 extruder_id,
+            },
+        )),
+    )
+}
+
+fn bed_temperature_operation_command(
+    command_id: String,
+    serial_number: &str,
+    temperature_celsius: u32,
+    wait: bool,
+) -> HubCommand {
+    printer_operation_command(
+        command_id,
+        serial_number,
+        Some(printer_operation::Operation::SetBedTemperature(
+            SetBedTemperatureOperation {
+                temperature_celsius,
+                wait,
+            },
+        )),
+    )
+}
+
+fn chamber_temperature_operation_command(
+    command_id: String,
+    serial_number: &str,
+    temperature_celsius: u32,
+    wait: bool,
+) -> HubCommand {
+    printer_operation_command(
+        command_id,
+        serial_number,
+        Some(printer_operation::Operation::SetChamberTemperature(
+            SetChamberTemperatureOperation {
+                temperature_celsius,
+                wait,
             },
         )),
     )

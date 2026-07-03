@@ -105,6 +105,32 @@ impl PrinterOperationRequest {
                     extruder_id: self.extruder_id,
                 })
             }
+            "set_bed_temperature"
+                if self.speed_mode.is_none()
+                    && self.axes.is_empty()
+                    && self.movements.is_empty()
+                    && self.feedrate_mm_per_min.is_none()
+                    && self.no_ams_fields()
+                    && self.temperature_celsius.is_some() =>
+            {
+                Ok(PrinterOperationKind::SetBedTemperature {
+                    temperature_celsius: self.temperature_celsius.expect("checked above"),
+                    wait: self.wait.unwrap_or(false),
+                })
+            }
+            "set_chamber_temperature"
+                if self.speed_mode.is_none()
+                    && self.axes.is_empty()
+                    && self.movements.is_empty()
+                    && self.feedrate_mm_per_min.is_none()
+                    && self.no_ams_fields()
+                    && self.temperature_celsius.is_some() =>
+            {
+                Ok(PrinterOperationKind::SetChamberTemperature {
+                    temperature_celsius: self.temperature_celsius.expect("checked above"),
+                    wait: self.wait.unwrap_or(false),
+                })
+            }
             "ams_reread_rfid"
                 if self.speed_mode.is_none()
                     && self.axes.is_empty()
