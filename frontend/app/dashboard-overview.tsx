@@ -56,6 +56,7 @@ export function FleetStatusStrip({
             label={tStat('printers')}
             value={fleetEmpty ? tStat('dash') : tStat('printersValue', { online: health.printersOnline, total: health.printersTotal })}
             note={health.printersTotal - health.printersOnline > 0 ? tStat('printersNote', { count: health.printersTotal - health.printersOnline }) : null}
+            separatorClassName={verdict.tone.separator}
             state={health.printersOnline < health.printersTotal ? 'warning' : 'success'}
           />
           <StatCell
