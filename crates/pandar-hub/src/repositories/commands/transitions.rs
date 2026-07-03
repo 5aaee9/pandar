@@ -3,7 +3,11 @@ use pandar_core::{AgentId, CommandId, CommandStatus, TenantId};
 use sea_orm::{ActiveValue::Set, ColumnTrait, Condition, EntityTrait, QueryFilter};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
-use crate::{db::Database, entities::commands, repositories::RepositoryResult};
+use crate::{
+    db::Database,
+    entities::commands,
+    repositories::{RepositoryError, RepositoryResult},
+};
 
 pub struct StatusTransition<'a> {
     pub command_id: CommandId,
@@ -13,6 +17,26 @@ pub struct StatusTransition<'a> {
     pub error: Option<String>,
     pub result_json: Option<String>,
     pub allowed_statuses: &'a [CommandStatus],
+}
+
+pub(super) struct CommandTransition<'a> {
+    pub(super) command_id: CommandId,
+    pub(super) tenant_id: TenantId,
+    pub(super) agent_id: AgentId,
+    pub(super) next_status: CommandStatus,
+    pub(super) error: Option<String>,
+    pub(super) allowed_statuses: &'a [CommandStatus],
+    pub(super) action: &'static str,
+}
+
+pub(super) struct TerminalCommandTransition {
+    pub(super) command_id: CommandId,
+    pub(super) tenant_id: TenantId,
+    pub(super) agent_id: AgentId,
+    pub(super) terminal_status: CommandStatus,
+    pub(super) error: Option<String>,
+    pub(super) result_json: Option<String>,
+    pub(super) action: &'static str,
 }
 
 pub async fn update_status_if_current(
@@ -93,4 +117,11 @@ pub async fn fail_stale_unowned_link_printer_commands(
         .context("failed to fail stale link printer commands")?;
 
     Ok(result.rows_affected)
+}
+
+pub(super) fn invalid_transition(status: CommandStatus, action: &'static str) -> RepositoryError {
+    RepositoryError::InvalidCommandTransition {
+        from: status.as_str().to_string(),
+        action,
+    }
 }

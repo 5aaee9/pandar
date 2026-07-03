@@ -1,16 +1,22 @@
 use anyhow::Context;
 use pandar_core::{AgentId, CommandId, CommandRecord, CommandStatus, TenantId};
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
-use serde::{Deserialize, Serialize};
 
 mod audit;
 mod enqueue;
 pub mod inserts;
 mod operations;
 mod ownership;
+mod query;
 pub(crate) mod rows;
 mod transitions;
+mod types;
 use rows::command_from_model;
+use transitions::{CommandTransition, TerminalCommandTransition, invalid_transition};
+pub use types::{
+    DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload, PrintProjectFilePayload,
+    RefreshPrinterMaterialsPayload,
+};
 
 pub use operations::{
     PrinterAxis, PrinterAxisMovement, PrinterOperationKind, PrinterOperationPayload,
@@ -22,68 +28,6 @@ use crate::{
     entities::commands,
     repositories::{AuditActor, RepositoryError, RepositoryResult},
 };
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PrintProjectFilePayload {
-    pub job_id: String,
-    pub artifact_id: String,
-    pub printer_id: String,
-    pub serial_number: String,
-    pub filename: String,
-    pub storage_path: String,
-    #[serde(default)]
-    pub artifact_download_path: String,
-    pub size_bytes: u64,
-    pub plate_id: u32,
-    pub use_ams: bool,
-    pub flow_cali: bool,
-    pub timelapse: bool,
-    pub ams_mapping_json: Option<String>,
-    pub ams_mapping2_json: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DiscoverPrintersPayload {
-    pub timeout_seconds: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DiagnosePrinterPayload {
-    pub serial_number: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RefreshPrinterMaterialsPayload {
-    pub printer_id: String,
-    pub serial_number: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LinkPrinterPayload {
-    pub printer_type: String,
-    pub host: String,
-    pub access_code: String,
-    pub name: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RedactedLinkPrinterPayload {
-    pub printer_type: String,
-    pub host: String,
-    pub access_code: String,
-    pub name: Option<String>,
-}
-
-impl LinkPrinterPayload {
-    pub fn redacted(&self) -> RedactedLinkPrinterPayload {
-        RedactedLinkPrinterPayload {
-            printer_type: self.printer_type.clone(),
-            host: self.host.clone(),
-            access_code: "[redacted]".to_owned(),
-            name: self.name.clone(),
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct CommandRepository {
@@ -431,72 +375,5 @@ impl CommandRepository {
         }
 
         Err(invalid_transition(command.status, transition.action))
-    }
-
-    pub(crate) async fn load_owned(
-        &self,
-        command_id: CommandId,
-        tenant_id: TenantId,
-        agent_id: AgentId,
-    ) -> RepositoryResult<CommandRecord> {
-        let command = self
-            .get(command_id)
-            .await?
-            .ok_or(RepositoryError::MissingCommand)?;
-        if command.tenant_id != tenant_id || command.agent_id != agent_id {
-            return Err(RepositoryError::CommandOwnershipMismatch);
-        }
-
-        Ok(command)
-    }
-
-    pub async fn get_for_tenant(
-        &self,
-        tenant_id: TenantId,
-        command_id: CommandId,
-    ) -> RepositoryResult<Option<CommandRecord>> {
-        commands::Entity::find_by_id(command_id.to_string())
-            .filter(commands::Column::TenantId.eq(tenant_id.to_string()))
-            .one(&self.database.sea_orm_connection())
-            .await
-            .context("failed to load tenant command")?
-            .map(command_from_model)
-            .transpose()
-    }
-
-    async fn get(&self, command_id: CommandId) -> RepositoryResult<Option<CommandRecord>> {
-        commands::Entity::find_by_id(command_id.to_string())
-            .one(&self.database.sea_orm_connection())
-            .await
-            .context("failed to load command")?
-            .map(command_from_model)
-            .transpose()
-    }
-}
-
-struct CommandTransition<'a> {
-    command_id: CommandId,
-    tenant_id: TenantId,
-    agent_id: AgentId,
-    next_status: CommandStatus,
-    error: Option<String>,
-    allowed_statuses: &'a [CommandStatus],
-    action: &'static str,
-}
-
-struct TerminalCommandTransition {
-    command_id: CommandId,
-    tenant_id: TenantId,
-    agent_id: AgentId,
-    terminal_status: CommandStatus,
-    error: Option<String>,
-    result_json: Option<String>,
-    action: &'static str,
-}
-
-fn invalid_transition(status: CommandStatus, action: &'static str) -> RepositoryError {
-    RepositoryError::InvalidCommandTransition {
-        from: status.as_str().to_string(),
-        action,
     }
 }

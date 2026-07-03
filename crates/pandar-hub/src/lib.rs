@@ -17,11 +17,10 @@ pub mod repositories;
 mod routes;
 pub mod runtime;
 pub mod sessions;
+#[cfg(test)]
+mod test_support;
 
 use std::{fmt, sync::Arc};
-
-#[cfg(test)]
-use anyhow::Context;
 
 use crate::{
     artifacts::{ArtifactStorage, ArtifactStorageConfig, IntoArtifactStorage, JobStorageAlias},
@@ -182,58 +181,9 @@ impl AppState {
         self
     }
 
-    #[cfg(test)]
-    pub fn with_external_auth(self, verifier: JwtVerifier) -> Self {
-        self.with_external_auth_option(Some(verifier))
-    }
-
     fn with_bootstrap_token_option(mut self, token: Option<String>) -> Self {
         self.bootstrap_token = token;
         self
-    }
-
-    #[cfg(test)]
-    pub fn with_bootstrap_token(self, token: impl Into<String>) -> Self {
-        self.with_bootstrap_token_option(Some(token.into()))
-    }
-
-    #[cfg(test)]
-    pub async fn sqlite_for_tests() -> anyhow::Result<Self> {
-        let temp_dir = tempfile::tempdir()
-            .context("failed to create temporary job spool directory")?
-            .keep();
-        let artifact_storage = artifacts::FilesystemArtifactStorage::new(
-            temp_dir,
-            artifacts::DEFAULT_MAX_ARTIFACT_BYTES,
-        )?;
-        Self::connect_with_config_values(
-            "sqlite::memory:",
-            artifact_storage,
-            None,
-            None,
-            None,
-            None,
-        )
-        .await
-        .context("failed to create SQLite test app state")
-    }
-
-    #[cfg(test)]
-    pub async fn file_sqlite_for_tests() -> anyhow::Result<Self> {
-        let spool_dir = tempfile::tempdir()
-            .context("failed to create temporary job spool directory")?
-            .keep();
-        let database_dir = tempfile::tempdir()
-            .context("failed to create temporary SQLite database directory")?
-            .keep();
-        let artifact_storage = artifacts::FilesystemArtifactStorage::new(
-            spool_dir,
-            artifacts::DEFAULT_MAX_ARTIFACT_BYTES,
-        )?;
-        let database_url = format!("sqlite://{}", database_dir.join("hub.sqlite").display());
-        Self::connect_with_config_values(database_url, artifact_storage, None, None, None, None)
-            .await
-            .context("failed to create file SQLite test app state")
     }
 
     pub fn tenants(&self) -> &TenantRepository {
@@ -293,11 +243,6 @@ impl AppState {
         self
     }
 
-    #[cfg(test)]
-    pub(crate) fn with_no_auth_for_tests(self, enabled: bool) -> Self {
-        self.with_no_auth(enabled)
-    }
-
     pub fn tenant_self_create_allowed(&self) -> bool {
         self.tenant_self_create_allowed
     }
@@ -305,11 +250,6 @@ impl AppState {
     fn with_tenant_self_create_allowed(mut self, allowed: bool) -> Self {
         self.tenant_self_create_allowed = allowed;
         self
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_tenant_self_create_for_tests(self, allowed: bool) -> Self {
-        self.with_tenant_self_create_allowed(allowed)
     }
 
     pub fn bootstrap_token(&self) -> Option<&str> {
@@ -409,33 +349,6 @@ impl AppState {
 
     pub(crate) fn database(&self) -> &Database {
         &self.database
-    }
-
-    #[cfg(test)]
-    pub(crate) fn sibling_for_tests(&self) -> Self {
-        Self::from_database_with_control_plane(
-            self.database.clone(),
-            self.artifact_storage.clone(),
-            self.control_plane.clone(),
-        )
-        .with_external_auth_option(self.external_auth.clone())
-        .with_no_auth(self.no_auth)
-        .with_bootstrap_token_option(self.bootstrap_token.clone())
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_control_plane_for_tests(
-        mut self,
-        control_plane: cluster::ControlPlane,
-    ) -> Self {
-        self.control_plane = control_plane;
-        self
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_database_backend_for_tests(mut self, backend: db::DatabaseBackend) -> Self {
-        self.database_backend_override = Some(backend);
-        self
     }
 }
 

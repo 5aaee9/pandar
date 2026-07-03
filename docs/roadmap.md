@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Split oversized production Rust modules across `pandar-agent`, `pandar-hub`, and `pandar-network-plugin` into focused sibling modules without using `include!`, moved inline tests out of runtime modules, and added a workspace production-module size guard.
 - Added `PANDAR_HUB_NO_AUTH=true` for local/trusted no-auth Hub HTTP/WebSocket operation, with startup warning logging, bootstrap and tenant API auth bypass, `no_auth` audit attribution for mutations, and docs that agent reverse gRPC credentials remain required.
 - Enabled dashboard live printer-event WebSocket updates in Hub no-auth mode without requiring browser event tickets.
 - Updated the frontend design tokens and design-system documentation to the neutral OKLCH light/dark palette, with white as the light root page background.
@@ -812,6 +813,7 @@ Exit criteria:
 
 ## Immediate Next
 
+- Continue splitting oversized dedicated Rust test suites into smaller topic files while preserving shared fixtures and helpers.
 - Provide Bambu Studio installations and matching plugin artifacts, then run Phase 23 real compatibility testing on Linux, Windows, and macOS.
 - Produce a tag/release artifact, then validate it while running Phase 23 so Phase 24 can use the same platform evidence.
 - Record real Bambu Studio plugin compatibility evidence for Phase 23.

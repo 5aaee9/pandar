@@ -5,15 +5,21 @@ pub mod file_transfer;
 pub mod ftps;
 pub mod materials;
 pub mod mqtt;
+mod noop;
 mod operations;
 pub mod runtime;
+mod types;
 
 use std::time::Duration;
 
+use crate::{
+    AgentConfig,
+    protocol::agent::v1::{AgentEvent, PrintProjectFile},
+};
 use anyhow::{Context, bail};
 use async_trait::async_trait;
 use compatibility::flow_calibration_supported;
-use diagnostics::{DiagnosticCheck, DiagnosticStatus, PrinterDiagnosticResult};
+use diagnostics::PrinterDiagnosticResult;
 use discovery::{DiscoveredPrinter, PrinterDiscoveryResult};
 use file_transfer::{MachineFileTransfer, TransferModeCache, run_with_transfer_mode};
 use ftps::FtpsMachineFileTransfer;
@@ -21,72 +27,13 @@ use mqtt::{
     BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, ProjectFileCommand,
     PublishedMqttCommand, refresh_printer, refresh_printer_materials,
 };
+pub use noop::NoopMachineGateway;
 use operations::dispatch_printer_operation;
 pub use operations::{PrinterAxis, PrinterOperation};
-use serde_json::Value;
-
-use crate::{
-    AgentConfig,
-    protocol::agent::v1::{AgentEvent, PrintProjectFile},
+pub use types::{
+    BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot, MaterialRefreshResult,
+    PrinterOperationDispatchResult, PrinterRefreshResult,
 };
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
-pub struct BambuPrinterEndpoint {
-    pub host: String,
-    pub serial: String,
-    pub access_code: String,
-    pub model: Option<String>,
-    pub name: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MachineSnapshot {
-    pub serial: String,
-    pub name: String,
-    pub model: Option<String>,
-    pub state: String,
-    pub nozzle_temperatures: Vec<MachineNozzleTemperature>,
-    pub bed_temperature_celsius: Option<String>,
-    pub bed_target_temperature_celsius: Option<String>,
-    pub chamber_temperature_celsius: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MachineNozzleTemperature {
-    pub label: Option<String>,
-    pub current_celsius: Option<String>,
-    pub target_celsius: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MaterialRefreshResult {
-    pub serial: String,
-    pub printer_id: Option<String>,
-    pub printer_materials_json: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PrinterRefreshResult {
-    pub snapshot: MachineSnapshot,
-    pub materials: Option<MaterialRefreshResult>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct PrinterOperationDispatchResult {
-    pub sequence_id: Option<String>,
-    pub mqtt_report: Option<Value>,
-    pub error: Option<String>,
-}
-
-impl PrinterOperationDispatchResult {
-    pub fn dispatched() -> Self {
-        Self {
-            sequence_id: None,
-            mqtt_report: None,
-            error: None,
-        }
-    }
-}
 
 #[async_trait]
 pub trait BambuMachineGateway: Send + Sync {
@@ -134,76 +81,6 @@ pub trait BambuMachineGateway: Send + Sync {
     ) -> anyhow::Result<MachineSnapshot> {
         let _ = (endpoint, config, sender);
         bail!("runtime printer linking is not supported by this gateway")
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct NoopMachineGateway;
-
-#[async_trait]
-impl BambuMachineGateway for NoopMachineGateway {
-    fn redact_error(&self, message: &str) -> String {
-        message.to_owned()
-    }
-
-    async fn discover_printers(
-        &self,
-        timeout_seconds: u32,
-    ) -> anyhow::Result<PrinterDiscoveryResult> {
-        discovery::discover_printers(timeout_seconds).await
-    }
-
-    async fn diagnose_printer(
-        &self,
-        serial_number: &str,
-    ) -> anyhow::Result<PrinterDiagnosticResult> {
-        Ok(PrinterDiagnosticResult {
-            result_type: "printer_diagnostic",
-            serial_number: serial_number.to_owned(),
-            host: None,
-            model: None,
-            overall: DiagnosticStatus::Problem,
-            checks: vec![DiagnosticCheck {
-                id: "configured_printer",
-                status: DiagnosticStatus::Problem,
-                message: "No configured printer matches the requested serial number.".to_owned(),
-                details: None,
-            }],
-            compatibility: None,
-        })
-    }
-
-    async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
-        Ok(Vec::new())
-    }
-
-    async fn refresh_printer_materials(
-        &self,
-        serial_number: &str,
-        _printer_id: Option<&str>,
-    ) -> anyhow::Result<MaterialRefreshResult> {
-        bail!("no Bambu printer configured for serial {serial_number}")
-    }
-
-    async fn validate_printer(&self, serial_number: &str) -> anyhow::Result<()> {
-        bail!("no Bambu printer configured for serial {serial_number}")
-    }
-
-    async fn print_project_file(
-        &self,
-        serial_number: &str,
-        _command: &PrintProjectFile,
-        _artifact: Vec<u8>,
-    ) -> anyhow::Result<()> {
-        bail!("no Bambu printer configured for serial {serial_number}")
-    }
-
-    async fn operate_printer(
-        &self,
-        serial_number: &str,
-        _operation: PrinterOperation,
-    ) -> anyhow::Result<PrinterOperationDispatchResult> {
-        bail!("no Bambu printer configured for serial {serial_number}")
     }
 }
 

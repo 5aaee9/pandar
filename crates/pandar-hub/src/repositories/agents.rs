@@ -6,6 +6,9 @@ use sea_orm::{
 };
 
 mod pairing;
+mod rows;
+
+use rows::{agent_credential_from_model, agent_from_model};
 
 pub use pairing::AGENT_CREDENTIAL_PREFIX;
 
@@ -386,33 +389,4 @@ where
         .context("failed to check tenant existence")
         .map(|tenant| tenant.is_some())
         .map_err(Into::into)
-}
-
-fn agent_from_model(model: agents::Model) -> RepositoryResult<Agent> {
-    let status = model
-        .status
-        .parse::<AgentStatus>()
-        .map_err(|_| RepositoryError::InvalidPersistedStatus(model.status.clone()))?;
-    Agent::from_parts(
-        AgentId::parse(&model.id).map_err(anyhow::Error::from)?,
-        TenantId::parse(&model.tenant_id).map_err(anyhow::Error::from)?,
-        model.name,
-        status,
-        model.created_at,
-    )
-    .map_err(anyhow::Error::from)
-    .context("failed to rehydrate agent")
-    .map_err(RepositoryError::from)
-}
-
-fn agent_credential_from_model(model: agents::Model) -> RepositoryResult<AgentCredentialRecord> {
-    let credential_hash = model.credential_hash.clone();
-    let credential_rotated_at = model.credential_rotated_at.clone();
-    let credential_revoked_at = model.credential_revoked_at.clone();
-    Ok(AgentCredentialRecord {
-        agent: agent_from_model(model)?,
-        credential_hash,
-        credential_rotated_at,
-        credential_revoked_at,
-    })
 }
