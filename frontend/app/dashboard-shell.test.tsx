@@ -199,7 +199,11 @@ describe("FleetStatusStrip", () => {
       "Agents 1/1 connected",
       "Active jobs 0 active",
     ]) {
-      expect(screen.getByRole("link", { name })).toHaveClass(
+      const link = screen.getByRole("link", { name });
+      expect(link).not.toHaveClass("sm:before:absolute");
+      expect(link).not.toHaveClass("sm:ml-2");
+      expect(link).toHaveClass("sm:ml-4");
+      expect(link.parentElement).toHaveClass(
         "sm:before:absolute",
         "sm:before:left-2",
         "sm:before:top-2",
@@ -209,12 +213,12 @@ describe("FleetStatusStrip", () => {
         "dark:sm:before:bg-emerald-900/60",
       );
     }
-    expect(screen.getByRole("link", { name: "Agents 1/1 connected" })).not.toHaveClass(
+    expect(screen.getByRole("link", { name: "Agents 1/1 connected" }).parentElement).not.toHaveClass(
       "sm:before:left-0",
       "sm:before:top-0",
       "sm:before:h-full",
     );
-    expect(screen.getByRole("link", { name: "Agents 1/1 connected" })).toHaveClass(
+    expect(screen.getByRole("link", { name: "Agents 1/1 connected" }).parentElement).toHaveClass(
       "sm:before:absolute",
       "sm:before:w-px",
     );

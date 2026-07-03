@@ -77,17 +77,21 @@ export function StatCell({
   state: Severity
 }) {
   return (
-    <a
-      href={href}
-      className={`relative block rounded-md px-3 py-1 transition-colors hover:bg-slate-100/70 dark:hover:bg-white/10 ${separatorClassName ? `sm:before:absolute sm:before:bottom-2 sm:before:left-2 sm:before:top-2 sm:before:w-px sm:before:content-[''] ${separatorClassName}` : ''}`}
+    <div
+      className={`relative ${separatorClassName ? `sm:before:absolute sm:before:bottom-2 sm:before:left-2 sm:before:top-2 sm:before:w-px sm:before:content-[''] ${separatorClassName}` : ''}`}
     >
-      <div className="flex items-center gap-1.5">
-        <StatusIcon severity={state} className="h-3.5 w-3.5" />
-        <span className="text-xs text-slate-600 dark:text-muted-foreground">{label}</span>
-      </div>
-      <div className="mt-0.5 font-medium text-slate-900 dark:text-foreground">{value}</div>
-      {note ? <div className="mt-0.5 text-xs text-slate-600 dark:text-muted-foreground">{note}</div> : null}
-    </a>
+      <a
+        href={href}
+        className={`block rounded-md px-3 py-1 transition-colors hover:bg-slate-100/70 dark:hover:bg-white/10 ${separatorClassName ? 'sm:ml-4' : ''}`}
+      >
+        <div className="flex items-center gap-1.5">
+          <StatusIcon severity={state} className="h-3.5 w-3.5" />
+          <span className="text-xs text-slate-600 dark:text-muted-foreground">{label}</span>
+        </div>
+        <div className="mt-0.5 font-medium text-slate-900 dark:text-foreground">{value}</div>
+        {note ? <div className="mt-0.5 text-xs text-slate-600 dark:text-muted-foreground">{note}</div> : null}
+      </a>
+    </div>
   )
 }
 

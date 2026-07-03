@@ -28,6 +28,8 @@
 - Linked the overview status strip Agents and Jobs stats to their dashboard pages while preserving the selected tenant.
 - Replaced overview status strip grid dividers with straight per-stat separator lines in light and dark themes.
 - Added the left status-strip separator and inset all stat separators by 8px.
+- Moved status-strip separators outside stat hover backgrounds while preserving the 8px gap.
+- Offset status-strip hover bubbles by 8px from the separator while preserving the separator's 8px left inset.
 - Moved dashboard language selection from the top bar into Settings and kept tenant selection in the sidebar Tenants list.
 - Added Agent-backed AMS refresh: printer refresh now opportunistically refreshes AMS/external-spool snapshots from Bambu MQTT `pushall`, operators can queue per-printer AMS refreshes from the printer inventory, Agent material-only updates sync to Hub over gRPC, and Hub publishes material-aware printer updates to the browser event stream.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.
