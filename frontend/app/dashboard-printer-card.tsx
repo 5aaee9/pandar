@@ -7,13 +7,22 @@ import {
   BotIcon,
   ClockIcon,
   MoreVerticalIcon,
+  PencilIcon,
   PrinterIcon,
   RotateCwIcon,
   TrashIcon,
 } from 'lucide-react'
 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { FormattedDate } from '../components/formatted-date'
-import { deletePrinter, refreshPrinterMaterials } from './actions'
+import { deletePrinter, refreshPrinterMaterials, updatePrinter } from './actions'
 import type { Printer } from './dashboard-types'
 import { PrinterMaterialsPanel } from './dashboard-printer-materials'
 import {
@@ -92,6 +101,7 @@ function PrinterActions({ printer }: { printer: Printer }) {
   const formRef = useRef<HTMLFormElement>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
 
   return (
     <div className="relative shrink-0">
@@ -110,6 +120,18 @@ function PrinterActions({ printer }: { printer: Printer }) {
           className="absolute right-0 z-20 mt-1 min-w-36 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
           role="menu"
         >
+          <button
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted"
+            onClick={() => {
+              setMenuOpen(false)
+              setEditOpen(true)
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <PencilIcon className="size-4" />
+            {t('editPrinter')}
+          </button>
           <form action={refreshPrinterMaterials}>
             <input name="tenant_id" type="hidden" value={printer.tenant_id} />
             <input name="printer_id" type="hidden" value={printer.id} />
@@ -154,6 +176,55 @@ function PrinterActions({ printer }: { printer: Printer }) {
         }}
         onCancel={() => setConfirmOpen(false)}
       />
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent closeLabel={t('closeDialog')}>
+          <DialogHeader>
+            <DialogTitle>{t('editPrinterTitle')}</DialogTitle>
+            <DialogDescription>{t('editPrinterDescription')}</DialogDescription>
+          </DialogHeader>
+          <form action={updatePrinter} className="grid gap-4">
+            <input name="tenant_id" type="hidden" value={printer.tenant_id} />
+            <input name="printer_id" type="hidden" value={printer.id} />
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs font-medium text-muted-foreground">{t('editPrinterName')}</span>
+              <input
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                defaultValue={printer.name}
+                name="name"
+                required
+                type="text"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs font-medium text-muted-foreground">{t('editPrinterHost')}</span>
+              <input
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                name="host"
+                required
+                type="text"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs font-medium text-muted-foreground">{t('editPrinterAccessCode')}</span>
+              <input
+                autoComplete="off"
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                name="access_code"
+                required
+                type="password"
+              />
+            </label>
+            <DialogFooter className="-mx-4 -mb-4 mt-2">
+              <button
+                className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+                type="submit"
+              >
+                {t('editPrinterSubmit')}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

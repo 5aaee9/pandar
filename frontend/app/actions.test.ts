@@ -11,6 +11,7 @@ import {
   reprintJob,
   retryDispatchJob,
   retryDispatchJobs,
+  updatePrinter,
 } from "./actions";
 
 const redirectMock = vi.hoisted(() =>
@@ -71,6 +72,46 @@ describe("linkPrinter", () => {
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     expect(body.serial_number).toBeUndefined();
     expect(body.model).toBeUndefined();
+  });
+});
+
+describe("updatePrinter", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ id: "command-1" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+  });
+
+  it("patches printer connection details and redirects to the command", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("printer_id", "printer-1");
+    formData.set("host", "192.0.2.11");
+    formData.set("access_code", "UPDATED-LINK-CODE");
+    formData.set("name", "Office A1 Updated");
+
+    await expect(updatePrinter(formData)).rejects.toThrow(
+      "NEXT_REDIRECT:/agents?tenant=tenant-1&command=command-1",
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/tenants/tenant-1/printers/printer-1",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({
+          host: "192.0.2.11",
+          access_code: "UPDATED-LINK-CODE",
+          name: "Office A1 Updated",
+        }),
+      }),
+    );
   });
 });
 

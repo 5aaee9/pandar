@@ -42,6 +42,21 @@ impl super::LinkPrinterRequest {
     }
 }
 
+impl super::UpdatePrinterRequest {
+    pub(super) fn into_payload(self) -> Result<LinkPrinterPayload, ApiError> {
+        let host = trim_required(self.host)?;
+        host.parse::<Ipv4Addr>()
+            .map_err(|_| ApiError::bad_request("bad_request"))?;
+
+        Ok(LinkPrinterPayload {
+            printer_type: "BambuLab".to_owned(),
+            host,
+            access_code: trim_required(self.access_code)?,
+            name: Some(trim_required(self.name)?),
+        })
+    }
+}
+
 pub(super) fn trim_required(value: String) -> Result<String, ApiError> {
     let value = value.trim().to_owned();
     if value.is_empty() {

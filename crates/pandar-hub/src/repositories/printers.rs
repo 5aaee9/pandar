@@ -1,8 +1,8 @@
 use anyhow::Context;
 use pandar_core::{AgentId, Printer, PrinterNozzleTemperature, PrinterParts, TenantId};
 use sea_orm::{
-    ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
-    TransactionTrait,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel,
+    PaginatorTrait, QueryFilter, QueryOrder, TransactionTrait,
 };
 
 use crate::{
@@ -124,6 +124,59 @@ impl PrinterRepository {
         tx.commit()
             .await
             .context("failed to commit printer delete audit transaction")?;
+
+        Ok(printer)
+    }
+
+    pub async fn update_name_with_audit(
+        &self,
+        tenant_id: TenantId,
+        printer_id: &str,
+        name: String,
+        actor: AuditActor,
+    ) -> RepositoryResult<Printer> {
+        let connection = self.database.sea_orm_connection();
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin printer update audit transaction")?;
+        let Some(model) = printers::Entity::find_by_id(printer_id)
+            .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
+            .one(&tx)
+            .await
+            .context("failed to get printer before update")?
+        else {
+            return Err(RepositoryError::MissingPrinter);
+        };
+
+        let previous_name = model.name.clone();
+        let mut active = model.into_active_model();
+        active.name = Set(name);
+        let model = active
+            .update(&tx)
+            .await
+            .context("failed to update printer name")?;
+        let printer = printer_from_model(model)?;
+        insert_audit_event_tx(
+            &tx,
+            &record_audit_event(
+                tenant_id,
+                actor,
+                "printer.update",
+                "printer",
+                Some(printer.id.clone()),
+                serde_json::json!({
+                    "previous_name": previous_name,
+                    "printer_name": printer.name.clone(),
+                    "serial_number": printer.serial_number.clone(),
+                    "agent_id": printer.agent_id.to_string(),
+                }),
+            ),
+        )
+        .await?;
+        tx.commit()
+            .await
+            .context("failed to commit printer update audit transaction")?;
 
         Ok(printer)
     }

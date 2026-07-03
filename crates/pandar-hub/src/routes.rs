@@ -148,7 +148,9 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/api/v1/tenants/{tenant_id}/printers/{printer_id}",
-            get(printers::get_printer).delete(printers::delete_printer),
+            get(printers::get_printer)
+                .patch(printers::update_printer)
+                .delete(printers::delete_printer),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs",

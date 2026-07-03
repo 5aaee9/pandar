@@ -106,6 +106,29 @@ export async function deletePrinter(formData: FormData) {
   redirect(statusUrl(tenantId, response.ok ? "printer_deleted" : await errorCode(response)));
 }
 
+export async function updatePrinter(formData: FormData) {
+  await requireAuth();
+  const tenantId = stringField(formData, "tenant_id");
+  const printerId = stringField(formData, "printer_id");
+  const response = await fetch(
+    `${apiUrl}/api/v1/tenants/${tenantId}/printers/${printerId}`,
+    {
+      method: "PATCH",
+      headers: await apiHeaders("application/json"),
+      body: JSON.stringify({
+        host: stringField(formData, "host"),
+        access_code: stringField(formData, "access_code"),
+        name: stringField(formData, "name"),
+      }),
+    },
+  );
+  if (!response.ok) {
+    redirect(statusUrl(tenantId, await errorCode(response)));
+  }
+  const command = (await response.json()) as { id: string };
+  redirect(commandUrl(tenantId, command.id));
+}
+
 export async function refreshAllAgents(formData: FormData) {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");

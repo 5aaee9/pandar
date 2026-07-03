@@ -23,12 +23,14 @@ use crate::{
 
 mod helpers;
 mod responses;
+mod update;
 
 use helpers::{
     fail_link_printer_dispatch_after_commit, link_printer_hub_command, parse_agent_id,
     parse_command_id, parse_printer_id,
 };
 use responses::{CommandResponse, PrinterListResponse, PrinterResponse};
+pub(super) use update::update_printer;
 
 const DEFAULT_DISCOVERY_TIMEOUT_SECONDS: u32 = 5;
 const MIN_DISCOVERY_TIMEOUT_SECONDS: u32 = 1;
@@ -53,6 +55,14 @@ pub(super) struct LinkPrinterRequest {
     host: String,
     access_code: String,
     name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct UpdatePrinterRequest {
+    host: String,
+    access_code: String,
+    name: String,
 }
 
 pub(super) async fn list_printers(

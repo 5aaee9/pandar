@@ -13,6 +13,7 @@ vi.mock("./actions", () => ({
   deletePrinter: vi.fn(),
   linkPrinter: vi.fn(),
   refreshPrinterMaterials: vi.fn(),
+  updatePrinter: vi.fn(),
 }));
 
 function renderWithMessages(children: React.ReactNode) {
@@ -144,6 +145,26 @@ describe("PrinterInventory", () => {
 
     expect(screen.getByRole("menu")).toBeVisible();
     expect(screen.getByRole("menuitem", { name: "Delete printer" })).toBeVisible();
+  });
+
+  it("opens an edit printer dialog from the printer actions menu", async () => {
+    const user = userEvent.setup();
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Details" }));
+    await user.click(screen.getByRole("menuitem", { name: "Edit printer" }));
+
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Edit printer" })).toBeVisible();
+    expect(screen.getByLabelText("Name")).toHaveValue("Office A1");
+    expect(screen.getByLabelText("Printer IPv4 address")).toHaveAttribute("name", "host");
+    expect(screen.getByLabelText("Access Code")).toHaveAttribute("name", "access_code");
+
+    const form = screen.getByRole("button", { name: "Save changes" }).closest("form");
+    expect(form?.querySelector('input[name="tenant_id"]')).toHaveValue("tenant-1");
+    expect(form?.querySelector('input[name="printer_id"]')).toHaveValue("printer-1");
   });
 
   it("opens the machine form from the empty printer state", async () => {

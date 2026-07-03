@@ -143,6 +143,58 @@ async fn viewer_cannot_delete_printer() {
 }
 
 #[tokio::test]
+async fn update_printer_sends_link_command_and_updates_name() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
+        .await
+        .unwrap();
+    let (command_sender, mut command_receiver) = tokio::sync::mpsc::channel(1);
+    register_route_test_session(&state, tenant_id, agent_id, command_sender).await;
+    let access_code = "UPDATED-LINK-CODE";
+
+    let (status, body) = request_as(
+        app,
+        Method::PATCH,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}"),
+        Some(json!({
+            "host": "192.0.2.11",
+            "access_code": access_code,
+            "name": "Office A1 Updated"
+        })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["kind"], "link_printer");
+    assert_eq!(body["status"], "sent");
+    assert!(!body.to_string().contains(access_code));
+
+    let sent = command_receiver.recv().await.unwrap().unwrap();
+    match sent.command.unwrap() {
+        hub_command::Command::LinkPrinter(command) => {
+            assert_eq!(command.printer_type, "BambuLab");
+            assert_eq!(command.host, "192.0.2.11");
+            assert_eq!(command.access_code, access_code);
+            assert_eq!(command.name, "Office A1 Updated");
+        }
+        other => panic!("expected link printer command, got {other:?}"),
+    }
+
+    let printer = state
+        .printers()
+        .get_for_tenant(tenant_id, &printer_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(printer.name, "Office A1 Updated");
+}
+
+#[tokio::test]
 async fn printer_routes_return_material_snapshots_without_credentials() {
     let state = state().await;
     let app = router(state.clone());
