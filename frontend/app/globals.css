@@ -14,16 +14,16 @@
 }
 
 html {
-  background: #f1f5f9;
+  background: var(--background);
 }
 
 ::selection {
-  background: #0e7490;
-  color: #ffffff;
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 
 :focus-visible {
-  outline: 2px solid #0e7490;
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
@@ -184,6 +184,46 @@ dialog.pandar-dialog[open] .pandar-dialog-card {
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer utilities {
+  .dark .bg-white {
+    background-color: var(--card);
+  }
+
+  .dark .bg-slate-50,
+  .dark .bg-slate-100,
+  .dark .hover\:bg-slate-50:hover,
+  .dark .hover\:bg-slate-100:hover,
+  .dark .focus\:bg-slate-100:focus {
+    background-color: var(--muted);
+  }
+
+  .dark .text-slate-950,
+  .dark .text-slate-900,
+  .dark .text-slate-800,
+  .dark .text-slate-700 {
+    color: var(--foreground);
+  }
+
+  .dark .text-slate-600,
+  .dark .text-slate-500 {
+    color: var(--muted-foreground);
+  }
+
+  .dark .border-slate-100,
+  .dark .border-slate-200,
+  .dark .border-slate-300 {
+    border-color: var(--border);
+  }
+
+  .dark .divide-slate-200 > :not(:last-child) {
+    border-color: var(--border);
+  }
+
+  .dark .file\:bg-slate-100::file-selector-button {
+    background-color: var(--muted);
+  }
 }
 
 @layer base {

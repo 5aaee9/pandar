@@ -33,7 +33,7 @@ export function JoinTokenForm({
         />
       </div>
       <Button
-        className="justify-center bg-cyan-700 text-white hover:bg-cyan-800"
+        className="justify-center"
         type="submit"
       >
         <LogIn className="size-4" />

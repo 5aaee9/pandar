@@ -33,14 +33,16 @@ export function LanguageSwitcher() {
   }
 
   return (
-    <div className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white p-0.5">
+    <div className="inline-flex items-center gap-1 rounded-md border border-border bg-background p-0.5">
       {locales.map((locale) => {
         const isActive = locale === active
         return (
           <button
             key={locale}
             className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
-              isActive ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'
+              isActive
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
             }`}
             disabled={pending}
             onClick={() => choose(locale)}

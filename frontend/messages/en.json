@@ -588,6 +588,11 @@
     "account": "Account",
     "languageTitle": "Language",
     "languageDescription": "Choose the dashboard display language.",
+    "themeTitle": "Theme",
+    "themeDescription": "Use your system theme or choose a fixed dashboard theme.",
+    "themeSystem": "System",
+    "themeLight": "Light",
+    "themeDark": "Dark",
     "logoutTitle": "Session",
     "logoutDescription": "Sign out through the configured identity provider.",
     "logoutUnavailable": "Logout is unavailable because no external sign-out URL is configured."

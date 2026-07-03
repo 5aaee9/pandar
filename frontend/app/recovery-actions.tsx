@@ -83,7 +83,7 @@ export function RecoveryActions({
                     {agents.map((agent) => (
                       <input key={agent.id} name="agent_id" type="hidden" value={agent.id} />
                     ))}
-                    <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800" type="submit">
+                    <button className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80" type="submit">
                       {t('refreshAllAgents')}
                     </button>
                   </form>
@@ -115,7 +115,7 @@ export function RecoveryActions({
                       : t('failedCount', { failed: failedJobIds.length })}
                   </span>
                   <button
-                    className="font-medium text-cyan-700 hover:underline"
+                    className="font-medium text-primary hover:underline"
                     onClick={toggleSelectAll}
                     type="button"
                   >
@@ -127,7 +127,7 @@ export function RecoveryActions({
                       {Array.from(selected).map((jobId) => (
                         <input key={jobId} name="job_id" type="hidden" value={jobId} />
                       ))}
-                      <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800" type="submit">
+                      <button className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80" type="submit">
                         {t('retrySelected', { count: selected.size })}
                       </button>
                     </form>
@@ -148,7 +148,7 @@ export function RecoveryActions({
                               checked={selected.has(job.id)}
                               onChange={() => toggleJob(job.id)}
                               type="checkbox"
-                              className="mt-1 h-4 w-4 accent-cyan-700"
+                              className="mt-1 h-4 w-4 accent-primary"
                             />
                           ) : null}
                           <div className="min-w-0">

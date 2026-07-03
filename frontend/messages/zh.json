@@ -585,6 +585,11 @@
     "account": "账号",
     "languageTitle": "语言",
     "languageDescription": "选择控制台显示语言。",
+    "themeTitle": "主题",
+    "themeDescription": "跟随系统主题，或为控制台选择固定主题。",
+    "themeSystem": "系统",
+    "themeLight": "浅色",
+    "themeDark": "深色",
     "logoutTitle": "会话",
     "logoutDescription": "通过已配置的身份提供商退出登录。",
     "logoutUnavailable": "未配置外部退出登录 URL，因此无法退出登录。"

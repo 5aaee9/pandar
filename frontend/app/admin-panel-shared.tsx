@@ -58,7 +58,7 @@ export function Select({ name, label, values }: { name: string; label: string; v
 }
 
 export function PrimaryButton({ label }: { label: string }) {
-  return <button className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800" type="submit">{label}</button>
+  return <button className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80" type="submit">{label}</button>
 }
 
 export function Subhead({ title, meta }: { title: string; meta: string }) {

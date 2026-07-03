@@ -128,7 +128,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
   const tAct = useTranslations('overview.action')
   if (!tenant) {
     return (
-      <a href={`#${item.sectionId}`} className="text-xs font-medium text-cyan-700 hover:underline">
+      <a href={`#${item.sectionId}`} className="text-xs font-medium text-primary hover:underline">
         {tAct('view')}
       </a>
     )
@@ -155,7 +155,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
         <input name="tenant_id" type="hidden" value={tenant.id} />
         <input name="job_id" type="hidden" value={item.mono} />
         <button
-          className={`h-8 rounded-md bg-cyan-700 px-2 text-xs font-medium text-white hover:bg-cyan-800`}
+          className={`h-8 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/80`}
           type="submit"
         >
           {tAct('reprint')}
@@ -170,7 +170,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
         <input name="tenant_id" type="hidden" value={tenant.id} />
         <input name="job_id" type="hidden" value={item.mono} />
         <button
-          className={`h-8 rounded-md bg-cyan-700 px-2 text-xs font-medium text-white hover:bg-cyan-800`}
+          className={`h-8 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/80`}
           type="submit"
         >
           {tAct('retryDispatch')}
@@ -180,7 +180,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
   }
 
   return (
-    <a href={`#${item.sectionId}`} className="text-xs font-medium text-cyan-700 hover:underline">
+    <a href={`#${item.sectionId}`} className="text-xs font-medium text-primary hover:underline">
       {tAct('view')}
     </a>
   )

@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl'
 
 import { LanguageSwitcher } from '../components/language-switcher'
+import { ThemeSwitcher } from '../components/theme-switcher'
 import { AgentPairingGuidance } from './agent-pairing-guidance'
 import { DiagnosticsSection, LinkedAgentsSection } from './diagnostics-panel'
 import { DispatchForm } from './dispatch-form'
@@ -166,6 +167,7 @@ function SettingsView({
   return (
     <>
       <LanguageSettingsPanel />
+      <ThemeSettingsPanel />
       <TenantSettings auth={auth} selectedTenant={selectedTenant} agents={agents} printers={printers} />
       <SettingsAdminSection
         selectedTenant={selectedTenant}
@@ -188,13 +190,28 @@ function SettingsView({
 function LanguageSettingsPanel() {
   const t = useTranslations('dashboardShell')
   return (
-    <section className="rounded-md border border-slate-300 bg-white px-4 py-3">
+    <section className="rounded-md border border-border bg-card px-4 py-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-slate-950">{t('languageTitle')}</h2>
-          <p className="mt-0.5 text-sm text-slate-600">{t('languageDescription')}</p>
+          <h2 className="text-base font-semibold text-card-foreground">{t('languageTitle')}</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">{t('languageDescription')}</p>
         </div>
         <LanguageSwitcher />
+      </div>
+    </section>
+  )
+}
+
+function ThemeSettingsPanel() {
+  const t = useTranslations('dashboardShell')
+  return (
+    <section className="rounded-md border border-border bg-card px-4 py-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-card-foreground">{t('themeTitle')}</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">{t('themeDescription')}</p>
+        </div>
+        <ThemeSwitcher />
       </div>
     </section>
   )

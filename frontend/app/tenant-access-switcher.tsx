@@ -58,7 +58,7 @@ export function TenantAccessSwitcher({
           >
             <span className="flex min-w-0 items-center gap-2">
               <Avatar size="sm">
-                <AvatarFallback className="bg-cyan-50 text-xs font-semibold text-cyan-800">
+                <AvatarFallback className="bg-accent text-xs font-semibold text-accent-foreground">
                   <Building2 className="size-3.5" />
                 </AvatarFallback>
               </Avatar>
@@ -126,7 +126,7 @@ export function TenantAccessSwitcher({
               >
                 {t("cancel")}
               </Button>
-              <Button className="bg-cyan-700 text-white hover:bg-cyan-800" type="submit">
+              <Button type="submit">
                 <PlusCircle className="size-4" />
                 {t("createSubmit")}
               </Button>

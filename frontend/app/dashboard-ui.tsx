@@ -23,7 +23,7 @@ export function StatusBadge({ value }: { value: string }) {
 
 const TAG_TONES = {
   neutral: 'border-slate-200 bg-slate-100 text-slate-700',
-  accent: 'border-cyan-200 bg-cyan-50 text-cyan-800',
+  accent: 'border-border bg-accent text-accent-foreground',
   success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
   warning: 'border-amber-200 bg-amber-50 text-amber-800',
 }

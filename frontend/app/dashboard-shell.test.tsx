@@ -208,4 +208,44 @@ describe("SettingsView", () => {
     expect(screen.getByRole("button", { name: "EN" })).toBeVisible();
     expect(screen.getByRole("button", { name: "中文" })).toBeVisible();
   });
+
+  it("renders the theme selector in settings", () => {
+    renderWithMessages(
+      <DashboardViewContent
+        view="settings"
+        auth={auth}
+        selectedTenant={null}
+        health={{
+          printersTotal: 0,
+          printersOnline: 0,
+          agentsTotal: 0,
+          agentsConnected: 0,
+          jobsActive: 0,
+          jobsFailed: 0,
+        }}
+        attentionItems={[]}
+        topSeverity={null}
+        liveState="idle"
+        lastEventAt={null}
+        fleetEmpty={true}
+        printers={[]}
+        agents={[]}
+        jobs={[]}
+        selectedCommand={null}
+        commandData={null}
+        notifications={[]}
+        users={[]}
+        userIdentities={[]}
+        tenantTokens={[]}
+        joinLinks={[]}
+        auditEvents={[]}
+        adminUnavailable={false}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Theme" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "System" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Light" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Dark" })).toBeVisible();
+  });
 });

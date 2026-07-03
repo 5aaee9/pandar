@@ -2,31 +2,85 @@
 
 :root {
   color-scheme: light;
-  --background: #f1f5f9;
-  --foreground: #020617;
-  --card: #ffffff;
-  --card-foreground: #020617;
-  --popover: #ffffff;
-  --popover-foreground: #020617;
-  --primary: #0e7490;
-  --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
-  --muted: #475569;
-  --muted-foreground: #475569;
-  --border: #cbd5e1;
-  --input: #cbd5e1;
-  --ring: #0e7490;
-  --hairline: #e2e8f0;
-  --panel: #ffffff;
-  --accent: #0e7490;
-  --accent-foreground: #ffffff;
-  --accent-hover: #155e75;
-  --destructive: #b91c1c;
-  --danger: #b91c1c;
-  --danger-bg: #fef2f2;
-  --danger-border: #fecaca;
-  --radius: 0.5rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+  --hairline: var(--border);
+  --panel: var(--card);
+  --accent-hover: oklch(0.922 0 0);
+  --danger: var(--destructive);
+  --danger-bg: oklch(0.97 0 0);
+  --danger-border: var(--border);
+  --radius: 0.625rem;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+  --hairline: var(--border);
+  --panel: var(--card);
+  --accent-hover: var(--secondary);
+  --danger: var(--destructive);
+  --danger-bg: var(--secondary);
+  --danger-border: var(--border);
 }
 
 @theme inline {
@@ -97,7 +151,7 @@ input {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
@@ -120,9 +174,9 @@ input {
 .auth-hero {
   min-height: 190px;
   background:
-    radial-gradient(circle at 24% 18%, rgb(20 184 166 / 0.38), transparent 28%),
-    radial-gradient(circle at 70% 36%, rgb(14 165 233 / 0.26), transparent 30%),
-    linear-gradient(135deg, #0f766e, #0f172a 68%);
+    radial-gradient(circle at 24% 18%, oklch(0.371 0 0 / 0.8), transparent 28%),
+    radial-gradient(circle at 70% 36%, oklch(0.269 0 0 / 0.8), transparent 30%),
+    linear-gradient(135deg, oklch(0.205 0 0), oklch(0.145 0 0) 68%);
   background-position: center;
   background-size: cover;
 }
@@ -148,7 +202,7 @@ input {
 
 .auth-panel p {
   margin: 0 0 22px;
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 14px;
   line-height: 1.5;
   text-wrap: pretty;
@@ -161,7 +215,7 @@ input {
 
 .auth-note {
   margin: -4px 0 0;
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 13px;
   line-height: 1.45;
   text-wrap: pretty;
@@ -173,7 +227,7 @@ input {
   margin: 0 0 18px;
   border: 1px solid var(--hairline);
   border-radius: 6px;
-  background: #f8fafc;
+  background: var(--secondary);
   padding: 10px 12px;
 }
 
@@ -184,7 +238,7 @@ input {
 }
 
 .auth-context dt {
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 12px;
   font-weight: 600;
 }
@@ -204,7 +258,7 @@ input {
 }
 
 .auth-field span {
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 12px;
   font-weight: 600;
 }
@@ -220,7 +274,7 @@ input {
 }
 
 .auth-field input:hover {
-  border-color: #94a3b8;
+  border-color: var(--ring);
 }
 
 .auth-actions {
@@ -233,8 +287,8 @@ input {
   min-height: 40px;
   border: 0;
   border-radius: 6px;
-  background: var(--accent);
-  color: var(--accent-foreground);
+  background: var(--primary);
+  color: var(--primary-foreground);
   cursor: pointer;
   font-weight: 700;
   line-height: 1.25;
@@ -242,11 +296,11 @@ input {
 }
 
 .auth-button:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: var(--foreground);
 }
 
 .auth-button:active:not(:disabled) {
-  background: #164e63;
+  background: var(--primary);
 }
 
 .auth-button:disabled {
@@ -259,7 +313,7 @@ input {
 }
 
 .auth-link {
-  color: var(--accent);
+  color: var(--primary);
   font-size: 14px;
   font-weight: 600;
   text-align: center;
@@ -267,7 +321,7 @@ input {
 }
 
 .auth-link:hover {
-  color: var(--accent-hover);
+  color: var(--foreground);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -294,9 +348,9 @@ input {
   gap: 10px;
   border: 1px solid var(--hairline);
   border-radius: 6px;
-  background: #f8fafc;
+  background: var(--secondary);
   padding: 12px;
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-size: 14px;
   line-height: 1.45;
 }
@@ -316,7 +370,7 @@ input {
   width: 16px;
   height: 16px;
   border: 2px solid var(--hairline);
-  border-top-color: var(--accent);
+  border-top-color: var(--primary);
   border-radius: 999px;
   animation: auth-spin 700ms linear infinite;
 }
@@ -344,8 +398,8 @@ input {
 }
 
 .auth-secondary-button:hover {
-  border-color: #94a3b8;
-  background: #f8fafc;
+  border-color: var(--ring);
+  background: var(--secondary);
 }
 
 .auth-secondary-button:disabled {

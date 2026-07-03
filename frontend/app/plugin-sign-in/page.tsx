@@ -105,7 +105,7 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
     (!requestedTenant && tenants.length === 1 ? tenants[0] : null);
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-5 text-slate-950 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-background px-4 py-5 text-slate-950 sm:px-6 lg:px-8">
       <section className="mx-auto max-w-2xl overflow-hidden rounded-md border border-slate-300 bg-white">
         <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -201,7 +201,7 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
                 </select>
               </label>
               <button
-                className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800"
+                className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
                 type="submit"
               >
                 {t("continue")}
@@ -254,7 +254,7 @@ function PluginEmptyState({
           <a
             className={
               index === 0
-                ? "inline-flex min-h-10 items-center rounded-md bg-cyan-700 px-3.5 py-2 text-sm font-medium text-white hover:bg-cyan-800"
+                ? "inline-flex min-h-10 items-center rounded-md bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/80"
                 : "inline-flex min-h-10 items-center rounded-md border border-slate-300 px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             }
             href={action.href}

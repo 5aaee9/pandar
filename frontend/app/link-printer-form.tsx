@@ -90,7 +90,7 @@ export function LinkPrinterForm({
           </label>
           <div className="lg:col-span-2">
             <button
-              className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800"
+              className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
               type="submit"
             >
               {t('submit')}

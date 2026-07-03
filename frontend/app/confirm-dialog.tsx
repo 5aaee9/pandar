@@ -51,8 +51,8 @@ export function ConfirmDialog({
             {cancelLabel ?? tCommon('cancel')}
           </button>
           <button
-            className={`h-9 rounded-md border border-transparent px-3 text-sm font-medium text-white ${
-              tone === 'danger' ? 'bg-red-600 hover:bg-red-700' : 'bg-cyan-700 hover:bg-cyan-800'
+            className={`h-9 rounded-md border border-transparent px-3 text-sm font-medium ${
+              tone === 'danger' ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-primary text-primary-foreground hover:bg-primary/80'
             }`}
             onClick={onConfirm}
             type="button"

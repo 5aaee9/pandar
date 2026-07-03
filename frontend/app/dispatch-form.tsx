@@ -269,7 +269,7 @@ export function DispatchForm({
           </div>
           <div className="lg:col-span-2">
             <button
-              className="h-9 rounded-md bg-cyan-700 px-3 text-sm font-medium text-white hover:bg-cyan-800 disabled:bg-slate-300 disabled:text-white"
+              className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:bg-slate-300 disabled:text-white"
               disabled={artifact.state !== 'ready' || submitting}
               type="submit"
             >

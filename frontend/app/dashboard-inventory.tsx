@@ -114,7 +114,7 @@ export function PrinterInventory({
                         <input name="tenant_id" type="hidden" value={printer.tenant_id} />
                         <input name="printer_id" type="hidden" value={printer.id} />
                         <button
-                          className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-700 focus:ring-offset-1"
+                          className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
                           type="submit"
                         >
                           {t('refreshAms')}

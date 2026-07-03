@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import './globals.css'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { ThemeProvider, ThemeScript } from '@/components/theme-provider'
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('meta')
@@ -19,10 +20,15 @@ export default async function RootLayout({
 }>) {
   const [locale, messages] = await Promise.all([getLocale(), getMessages()])
   return (
-    <html lang={locale} className="font-sans">
+    <html lang={locale} className="font-sans" suppressHydrationWarning>
+      <head>
+        <ThemeScript />
+      </head>
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <TooltipProvider>{children}</TooltipProvider>
+          <ThemeProvider>
+            <TooltipProvider>{children}</TooltipProvider>
+          </ThemeProvider>
           <Toaster />
         </NextIntlClientProvider>
       </body>
