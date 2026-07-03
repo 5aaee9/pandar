@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   controlPrinter,
+  deletePrinter,
   duplicateJob,
   linkPrinter,
   refreshAllAgents,
@@ -99,6 +100,83 @@ describe("refreshPrinterMaterials", () => {
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/tenants/tenant-1/printers/printer-1/materials:refresh",
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+});
+
+describe("controlPrinter AMS operations", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ id: "command-1" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+  });
+
+  it("posts AMS slot operation details to the printer controls API", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("printer_id", "printer-1");
+    formData.set("action", "ams_load_filament");
+    formData.set("ams_id", "0");
+    formData.set("slot_id", "1");
+    formData.set("global_tray_id", "1");
+    formData.set("extruder_id", "0");
+    formData.set("external_id", "");
+
+    await expect(controlPrinter(formData)).rejects.toThrow(
+      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_control_queued",
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/tenants/tenant-1/printers/printer-1/controls",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      action: "ams_load_filament",
+      ams_id: 0,
+      slot_id: 1,
+      global_tray_id: 1,
+      extruder_id: 0,
+    });
+    expect(body.speed_mode).toBeUndefined();
+    expect(body.external_id).toBeUndefined();
+  });
+});
+
+describe("deletePrinter", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ id: "printer-1" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+  });
+
+  it("deletes the printer through the API and redirects to devices", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("printer_id", "printer-1");
+
+    await expect(deletePrinter(formData)).rejects.toThrow(
+      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_deleted",
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/tenants/tenant-1/printers/printer-1",
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 });

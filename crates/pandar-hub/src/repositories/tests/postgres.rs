@@ -795,7 +795,7 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
             agent.id,
             PrinterSnapshotUpsert {
                 serial_number: "SN-001".to_string(),
-                name: "Garage A1".to_string(),
+                name: "Ignored Snapshot Name".to_string(),
                 model: Some("A1 Mini".to_string()),
                 status: "printing".to_string(),
                 observed_at: "2026-06-21T00:05:00Z".to_string(),
@@ -806,6 +806,7 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
 
     assert_eq!(updated.id, created.id);
     assert_eq!(updated.created_at, created.created_at);
+    assert_eq!(updated.name, "Garage A1");
     assert_eq!(updated.status, "printing");
     assert_eq!(updated.last_seen_at, "2026-06-21T00:05:00Z");
     assert_eq!(

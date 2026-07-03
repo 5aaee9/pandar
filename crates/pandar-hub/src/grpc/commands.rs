@@ -4,8 +4,9 @@ use tonic::Status;
 use crate::{
     AppState,
     protocol::agent::v1::{
-        Axis, AxisMovement, CommandResult, DiagnosePrinter, DiscoverPrinters, HomeOperation,
-        HubCommand, MoveAxesOperation, PauseOperation, PrintProjectFile, PrinterOperation,
+        AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation, Axis,
+        AxisMovement, CommandResult, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
+        MoveAxesOperation, PauseOperation, PrintProjectFile, PrinterOperation,
         RefreshPrinterMaterials, RefreshPrinters, ResumeOperation, SetHotendTemperatureOperation,
         SetPrintSpeedOperation, StopOperation, hub_command, printer_operation,
     },
@@ -345,6 +346,35 @@ fn proto_printer_operation(operation: PrinterOperationKind) -> printer_operation
         } => printer_operation::Operation::SetHotendTemperature(SetHotendTemperatureOperation {
             temperature_celsius: temperature_celsius.into(),
             wait,
+        }),
+        PrinterOperationKind::AmsRereadRfid { ams_id, slot_id } => {
+            printer_operation::Operation::AmsRereadRfid(AmsRereadRfidOperation { ams_id, slot_id })
+        }
+        PrinterOperationKind::AmsLoadFilament {
+            ams_id,
+            slot_id,
+            global_tray_id,
+            external_id,
+            extruder_id,
+        } => printer_operation::Operation::AmsLoadFilament(AmsLoadFilamentOperation {
+            ams_id,
+            slot_id,
+            global_tray_id: global_tray_id.unwrap_or_else(|| ams_id * 4 + slot_id),
+            external_id: external_id.unwrap_or_default(),
+            extruder_id,
+        }),
+        PrinterOperationKind::AmsUnloadFilament {
+            ams_id,
+            slot_id,
+            global_tray_id,
+            external_id,
+            extruder_id,
+        } => printer_operation::Operation::AmsUnloadFilament(AmsUnloadFilamentOperation {
+            ams_id,
+            slot_id,
+            global_tray_id: global_tray_id.unwrap_or_else(|| ams_id * 4 + slot_id),
+            external_id: external_id.unwrap_or_default(),
+            extruder_id,
         }),
     }
 }

@@ -2,7 +2,8 @@ use anyhow::Context;
 use tokio::sync::mpsc;
 
 use super::{
-    BambuMachineGateway, ack_event, failure_event, rejected_ack_event, success_event_with_result,
+    BambuMachineGateway, ack_event, failure_event, printer_materials_snapshot_event,
+    rejected_ack_event, success_event_with_result,
 };
 use crate::{
     AgentConfig,
@@ -63,6 +64,33 @@ where
             )
         }) {
         Ok(()) => {
+            if refresh_materials_after_operation(&operation) {
+                match gateway
+                    .refresh_printer_materials(&command.serial_number, None)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "refresh printer materials after {} for {}",
+                            printer_operation_action(&operation),
+                            command.serial_number
+                        )
+                    }) {
+                    Ok(materials) => {
+                        sender
+                            .send(printer_materials_snapshot_event(config, materials))
+                            .await
+                            .context("queue printer materials snapshot event")?;
+                    }
+                    Err(err) => {
+                        let error = gateway.redact_error(&format!("{err:#}"));
+                        sender
+                            .send(failure_event(config, command_id, error))
+                            .await
+                            .context("queue printer-operation command failure")?;
+                        return Ok(());
+                    }
+                }
+            }
             let result_json = printer_operation_result_json(&command.serial_number, &operation);
             sender
                 .send(success_event_with_result(config, command_id, result_json))
@@ -138,6 +166,32 @@ fn parse_printer_operation(
                 wait: operation.wait,
             })
         }
+        Some(printer_operation::Operation::AmsRereadRfid(operation)) => {
+            Ok(MachinePrinterOperation::AmsRereadRfid {
+                ams_id: operation.ams_id,
+                slot_id: operation.slot_id,
+            })
+        }
+        Some(printer_operation::Operation::AmsLoadFilament(operation)) => {
+            Ok(MachinePrinterOperation::AmsLoadFilament {
+                ams_id: operation.ams_id,
+                slot_id: operation.slot_id,
+                global_tray_id: Some(operation.global_tray_id),
+                external_id: (!operation.external_id.is_empty())
+                    .then(|| operation.external_id.clone()),
+                extruder_id: operation.extruder_id,
+            })
+        }
+        Some(printer_operation::Operation::AmsUnloadFilament(operation)) => {
+            Ok(MachinePrinterOperation::AmsUnloadFilament {
+                ams_id: operation.ams_id,
+                slot_id: operation.slot_id,
+                global_tray_id: Some(operation.global_tray_id),
+                external_id: (!operation.external_id.is_empty())
+                    .then(|| operation.external_id.clone()),
+                extruder_id: operation.extruder_id,
+            })
+        }
         None => anyhow::bail!("missing printer operation"),
     }
 }
@@ -182,7 +236,19 @@ fn printer_operation_action(operation: &MachinePrinterOperation) -> &'static str
         MachinePrinterOperation::Home { .. } => "home",
         MachinePrinterOperation::MoveAxes { .. } => "move_axes",
         MachinePrinterOperation::SetHotendTemperature { .. } => "set_hotend_temperature",
+        MachinePrinterOperation::AmsRereadRfid { .. } => "ams_reread_rfid",
+        MachinePrinterOperation::AmsLoadFilament { .. } => "ams_load_filament",
+        MachinePrinterOperation::AmsUnloadFilament { .. } => "ams_unload_filament",
     }
+}
+
+fn refresh_materials_after_operation(operation: &MachinePrinterOperation) -> bool {
+    matches!(
+        operation,
+        MachinePrinterOperation::AmsRereadRfid { .. }
+            | MachinePrinterOperation::AmsLoadFilament { .. }
+            | MachinePrinterOperation::AmsUnloadFilament { .. }
+    )
 }
 
 fn printer_operation_result_json(
@@ -245,6 +311,33 @@ fn printer_operation_result_json(
                 serde_json::json!(temperature_celsius),
             );
             result.insert("wait".to_string(), serde_json::json!(wait));
+        }
+        MachinePrinterOperation::AmsRereadRfid { ams_id, slot_id } => {
+            result.insert("ams_id".to_string(), serde_json::json!(ams_id));
+            result.insert("slot_id".to_string(), serde_json::json!(slot_id));
+        }
+        MachinePrinterOperation::AmsLoadFilament {
+            ams_id,
+            slot_id,
+            global_tray_id,
+            external_id,
+            extruder_id,
+        }
+        | MachinePrinterOperation::AmsUnloadFilament {
+            ams_id,
+            slot_id,
+            global_tray_id,
+            external_id,
+            extruder_id,
+        } => {
+            result.insert("ams_id".to_string(), serde_json::json!(ams_id));
+            result.insert("slot_id".to_string(), serde_json::json!(slot_id));
+            result.insert(
+                "global_tray_id".to_string(),
+                serde_json::json!(global_tray_id),
+            );
+            result.insert("external_id".to_string(), serde_json::json!(external_id));
+            result.insert("extruder_id".to_string(), serde_json::json!(extruder_id));
         }
         MachinePrinterOperation::Pause
         | MachinePrinterOperation::Resume

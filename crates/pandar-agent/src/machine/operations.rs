@@ -3,8 +3,8 @@ use anyhow::Context;
 use super::{
     BambuPrinterEndpoint,
     mqtt::{
-        BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, GcodeLineCommand,
-        PrintSpeed, PublishedMqttCommand,
+        AmsFilamentCommand, AmsSlotCommand, BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics,
+        BambuMqttTransport, GcodeLineCommand, PrintSpeed, PublishedMqttCommand,
     },
 };
 
@@ -26,6 +26,24 @@ pub enum PrinterOperation {
     SetHotendTemperature {
         temperature_celsius: u16,
         wait: bool,
+    },
+    AmsRereadRfid {
+        ams_id: u32,
+        slot_id: u32,
+    },
+    AmsLoadFilament {
+        ams_id: u32,
+        slot_id: u32,
+        global_tray_id: Option<u32>,
+        external_id: Option<String>,
+        extruder_id: Option<u32>,
+    },
+    AmsUnloadFilament {
+        ams_id: u32,
+        slot_id: u32,
+        global_tray_id: Option<u32>,
+        external_id: Option<String>,
+        extruder_id: Option<u32>,
     },
 }
 
@@ -89,6 +107,48 @@ fn mqtt_command_for_printer_operation(
                 temperature_celsius
             )],
         })),
+        PrinterOperation::AmsRereadRfid { ams_id, slot_id } => {
+            Ok(BambuMqttCommand::AmsRereadRfid(AmsSlotCommand {
+                ams_id,
+                slot_id,
+            }))
+        }
+        PrinterOperation::AmsLoadFilament {
+            ams_id,
+            slot_id,
+            global_tray_id,
+            external_id,
+            extruder_id,
+        } => Ok(BambuMqttCommand::AmsLoadFilament(AmsFilamentCommand {
+            ams_id: ams_command_ams_id(ams_id, external_id.as_deref()),
+            slot_id: ams_command_slot_id(slot_id, external_id.as_deref()),
+            target: global_tray_id.unwrap_or(slot_id),
+            extruder_id,
+        })),
+        PrinterOperation::AmsUnloadFilament {
+            ams_id,
+            slot_id,
+            global_tray_id,
+            external_id,
+            extruder_id,
+        } => Ok(BambuMqttCommand::AmsUnloadFilament(AmsFilamentCommand {
+            ams_id: ams_command_ams_id(ams_id, external_id.as_deref()),
+            slot_id: ams_command_slot_id(slot_id, external_id.as_deref()),
+            target: global_tray_id.unwrap_or(slot_id),
+            extruder_id,
+        })),
+    }
+}
+
+fn ams_command_ams_id(ams_id: u32, external_id: Option<&str>) -> u32 {
+    if external_id.is_some() { 255 } else { ams_id }
+}
+
+fn ams_command_slot_id(slot_id: u32, external_id: Option<&str>) -> u32 {
+    if matches!(external_id, Some("254")) {
+        254
+    } else {
+        slot_id
     }
 }
 

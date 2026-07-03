@@ -97,7 +97,7 @@ const enMaterial: Translator = (key, values) => {
     case "externalSpool":
       return "External spool";
     case "amsSlot":
-      return `AMS ${v.ams}:${v.tray}`;
+      return `AMS ${v.ams} - ${v.tray}`;
     case "noActiveTray":
       return "No active tray";
     case "amsSummary":
@@ -131,6 +131,30 @@ const enMaterial: Translator = (key, values) => {
   }
 };
 
+function formatAmsUnitLabel(value: string | number | null | undefined): string {
+  const parsed = parseSlotIndex(value);
+  if (parsed !== null && parsed >= 0 && parsed <= 25) {
+    return String.fromCharCode(65 + parsed);
+  }
+  return value?.toString() ?? "-";
+}
+
+function formatTrayLabel(value: string | number | null | undefined): string {
+  const parsed = parseSlotIndex(value);
+  if (parsed !== null && parsed >= 0) {
+    return (parsed + 1).toString();
+  }
+  return value?.toString() ?? "-";
+}
+
+function parseSlotIndex(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
 export function formatPrinterMaterials(
   printer: Printer,
   t: Translator = enMaterial,
@@ -152,8 +176,8 @@ export function formatPrinterMaterials(
     ? materials.active_tray.kind === "external"
       ? t("externalSpool")
       : t("amsSlot", {
-          ams: materials.active_tray.ams_id ?? "-",
-          tray: materials.active_tray.tray_id ?? "-",
+          ams: formatAmsUnitLabel(materials.active_tray.ams_id),
+          tray: formatTrayLabel(materials.active_tray.tray_id),
         })
     : t("noActiveTray");
   return {
@@ -177,8 +201,8 @@ export function formatJobMaterial(
           row.external_id !== null
             ? t("externalSlot", { tray: row.tray_id ?? "-" })
             : t("amsSlot", {
-                ams: row.ams_id ?? "-",
-                tray: row.tray_id ?? "-",
+                ams: formatAmsUnitLabel(row.ams_id),
+                tray: formatTrayLabel(row.tray_id),
               });
         return t("usageRow", {
           index: row.slot_index,

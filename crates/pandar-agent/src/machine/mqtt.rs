@@ -83,6 +83,20 @@ pub struct GcodeLineCommand {
     pub lines: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AmsSlotCommand {
+    pub ams_id: u32,
+    pub slot_id: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AmsFilamentCommand {
+    pub ams_id: u32,
+    pub slot_id: u32,
+    pub target: u32,
+    pub extruder_id: Option<u32>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrintReportProgress {
     pub serial: String,
@@ -119,6 +133,9 @@ pub enum BambuMqttCommand {
     StopPrint,
     SetPrintSpeed(PrintSpeed),
     GcodeLine(GcodeLineCommand),
+    AmsRereadRfid(AmsSlotCommand),
+    AmsLoadFilament(AmsFilamentCommand),
+    AmsUnloadFilament(AmsFilamentCommand),
     RawJson(Value),
     ProjectFile(ProjectFileCommand),
 }
@@ -136,6 +153,29 @@ impl BambuMqttCommand {
             }
             Self::GcodeLine(command) => {
                 json!({"print": {"command": "gcode_line", "param": command.lines.join("\n"), "sequence_id": "90001"}})
+            }
+            Self::AmsRereadRfid(command) => {
+                json!({"print": {"command": "ams_get_rfid", "sequence_id": "0", "ams_id": command.ams_id, "slot_id": command.slot_id}})
+            }
+            Self::AmsLoadFilament(command) => {
+                let mut print = serde_json::Map::from_iter([
+                    ("command".to_owned(), json!("ams_change_filament")),
+                    ("sequence_id".to_owned(), json!("0")),
+                    ("ams_id".to_owned(), json!(command.ams_id)),
+                    ("slot_id".to_owned(), json!(command.slot_id)),
+                    ("target".to_owned(), json!(command.target)),
+                    ("curr_temp".to_owned(), json!(-1)),
+                    ("tar_temp".to_owned(), json!(-1)),
+                ]);
+                if let Some(extruder_id) = command.extruder_id {
+                    print.insert("extruder_id".to_owned(), json!(extruder_id));
+                }
+                json!({ "print": print })
+            }
+            Self::AmsUnloadFilament(command) => {
+                let _ = command.slot_id;
+                let _ = command.target;
+                json!({"print": {"command": "ams_change_filament", "sequence_id": "0", "ams_id": command.ams_id, "slot_id": 255, "target": 255, "curr_temp": 210, "tar_temp": 210}})
             }
             Self::RawJson(payload) => payload.clone(),
             Self::ProjectFile(command) => project_file_payload(command),

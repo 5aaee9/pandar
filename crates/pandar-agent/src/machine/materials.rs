@@ -46,12 +46,16 @@ fn normalize_ams_units(units: &[Value], ams: &Value) -> Vec<Value> {
             let mut normalized = Map::new();
             normalized.insert("unit_id".to_owned(), Value::String(unit_id.clone()));
             normalized.insert("unit_kind".to_owned(), Value::String(unit_kind.to_owned()));
-            insert_number_field(&mut normalized, "humidity", unit.get("humidity"));
+            insert_number_field(&mut normalized, "humidity", unit.get("humidity_raw"));
+            insert_number_field(&mut normalized, "humidity_level", unit.get("humidity"));
             insert_number_field(
                 &mut normalized,
                 "temperature_celsius",
                 unit.get("temperature_celsius").or_else(|| unit.get("temp")),
             );
+            if let Some(toolhead) = unit.get("info").and_then(normalize_toolhead) {
+                normalized.insert("toolhead".to_owned(), Value::String(toolhead));
+            }
 
             if let Some(trays) = unit.get("tray").and_then(Value::as_array) {
                 let mut normalized_trays: Vec<Value> = trays
@@ -106,12 +110,28 @@ fn apply_material_fields(normalized: &mut Map<String, Value>, source: &Value) {
     insert_string_field(normalized, "tray_uuid", source.get("tray_uuid"));
     insert_string_field(normalized, "name", source.get("tray_sub_brands"));
     insert_string_field(normalized, "remaining_estimate", source.get("remain"));
+    insert_string_field(
+        normalized,
+        "k_value",
+        source.get("k").or_else(|| source.get("k_value")),
+    );
 
     if let Some(color) = source.get("tray_color").and_then(normalize_color) {
         normalized.insert("color".to_owned(), Value::String(color));
     }
     if let Some(multi_color) = source.get("cols").and_then(normalize_multi_color) {
         normalized.insert("multi_color".to_owned(), Value::Array(multi_color));
+    }
+    if let Some(toolhead) = source
+        .get("toolhead")
+        .and_then(|value| normalized_string(Some(value)))
+        .or_else(|| {
+            source
+                .get("extruder_id")
+                .and_then(normalize_extruder_toolhead)
+        })
+    {
+        normalized.insert("toolhead".to_owned(), Value::String(toolhead));
     }
 
     if !normalized.contains_key("setting_id")
@@ -147,7 +167,15 @@ fn insert_number_field(normalized: &mut Map<String, Value>, target: &str, value:
 fn normalized_number(value: &Value) -> Option<Value> {
     match value {
         Value::Number(_) => Some(value.clone()),
-        Value::String(raw) => raw.trim().parse::<i64>().ok().map(Value::from),
+        Value::String(raw) => {
+            let raw = raw.trim();
+            raw.parse::<i64>().ok().map(Value::from).or_else(|| {
+                raw.parse::<f64>()
+                    .ok()
+                    .and_then(serde_json::Number::from_f64)
+                    .map(Value::Number)
+            })
+        }
         _ => None,
     }
 }
@@ -304,6 +332,25 @@ fn normalize_multi_color(value: &Value) -> Option<Vec<Value>> {
         _ => return None,
     };
     (!colors.is_empty()).then_some(colors)
+}
+
+fn normalize_toolhead(value: &Value) -> Option<String> {
+    let raw = normalized_string(Some(value))?;
+    let parsed =
+        u64::from_str_radix(raw.trim_start_matches("0x").trim_start_matches("0X"), 16).ok()?;
+    match (parsed >> 8) & 0xF {
+        0 => Some("R".to_owned()),
+        1 => Some("L".to_owned()),
+        _ => None,
+    }
+}
+
+fn normalize_extruder_toolhead(value: &Value) -> Option<String> {
+    match parse_i64(value)? {
+        0 => Some("R".to_owned()),
+        1 => Some("L".to_owned()),
+        _ => None,
+    }
 }
 
 fn derive_setting_id(filament_id: &str) -> String {

@@ -68,6 +68,15 @@ fn post_json(base_url: &str, path: &str, body: &str) -> String {
     post_json_with_origin(base_url, path, body, None)
 }
 
+fn post_json_declared_length(base_url: &str, path: &str, declared_length: usize) -> String {
+    request(
+        base_url,
+        format!(
+            "POST {path} HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {declared_length}\r\nConnection: close\r\n\r\n"
+        ),
+    )
+}
+
 fn post_json_with_origin(base_url: &str, path: &str, body: &str, origin: Option<&str>) -> String {
     let origin = origin
         .map(|origin| format!("Origin: {origin}\r\n"))
@@ -157,7 +166,7 @@ fn local_webserver_serves_assets_rejects_bad_requests_and_switches_target_server
     assert!(traversal.starts_with("HTTP/1.1 400 Bad Request"));
     assert_eq!(response_body(&traversal), r#"{"error":"bad_request"}"#);
 
-    let large_body = post_json(base_url, "/config", &"x".repeat(9 * 1024));
+    let large_body = post_json_declared_length(base_url, "/config", 9 * 1024);
     assert!(large_body.starts_with("HTTP/1.1 400 Bad Request"));
     assert_eq!(response_body(&large_body), r#"{"error":"bad_request"}"#);
 

@@ -135,6 +135,9 @@ message PrinterOperation {
     HomeOperation home = 14;
     MoveAxesOperation move_axes = 15;
     SetHotendTemperatureOperation set_hotend_temperature = 16;
+    AmsRereadRfidOperation ams_reread_rfid = 17;
+    AmsLoadFilamentOperation ams_load_filament = 18;
+    AmsUnloadFilamentOperation ams_unload_filament = 19;
   }
 }
 
@@ -172,6 +175,27 @@ message MoveAxesOperation {
 message SetHotendTemperatureOperation {
   uint32 temperature_celsius = 1;
   bool wait = 2;
+}
+
+message AmsRereadRfidOperation {
+  uint32 ams_id = 1;
+  uint32 slot_id = 2;
+}
+
+message AmsLoadFilamentOperation {
+  uint32 ams_id = 1;
+  uint32 slot_id = 2;
+  uint32 global_tray_id = 3;
+  string external_id = 4;
+  optional uint32 extruder_id = 5;
+}
+
+message AmsUnloadFilamentOperation {
+  uint32 ams_id = 1;
+  uint32 slot_id = 2;
+  uint32 global_tray_id = 3;
+  string external_id = 4;
+  optional uint32 extruder_id = 5;
 }
 
 message PrintProjectFile {

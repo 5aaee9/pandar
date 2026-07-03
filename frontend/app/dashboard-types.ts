@@ -28,12 +28,21 @@ export type Printer = {
 export type PrinterMaterials = {
   ams_units: Array<{
     unit_id?: string;
+    humidity?: number | string | null;
+    humidity_level?: number | string | null;
+    temperature_celsius?: number | string | null;
+    toolhead?: string | null;
     trays?: Array<{
       tray_id?: string;
       type?: string | null;
       color?: string | null;
+      multi_color?: string[] | null;
       filament_id?: string | null;
       name?: string | null;
+      remaining_estimate?: string | number | null;
+      k_value?: string | number | null;
+      toolhead?: string | null;
+      global_tray_id?: number | null;
       exists?: boolean | null;
     }>;
   }>;
@@ -42,8 +51,13 @@ export type PrinterMaterials = {
     tray_id?: string;
     type?: string | null;
     color?: string | null;
+    multi_color?: string[] | null;
     filament_id?: string | null;
     name?: string | null;
+    remaining_estimate?: string | number | null;
+    k_value?: string | number | null;
+    toolhead?: string | null;
+    global_tray_id?: number | null;
     exists?: boolean | null;
   }>;
   active_tray: {

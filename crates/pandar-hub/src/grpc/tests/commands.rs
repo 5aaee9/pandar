@@ -225,6 +225,57 @@ async fn grpc_hub_command_from_record_maps_printer_operation() {
 }
 
 #[tokio::test]
+async fn grpc_hub_command_from_record_maps_ams_slot_operation() {
+    let tenant_id = TenantId::new();
+    let agent_id = AgentId::new();
+    let printer_id = "printer-1".to_string();
+    let payload = PrinterOperationPayload {
+        printer_id: printer_id.clone(),
+        serial_number: "SERIAL123".to_string(),
+        operation: PrinterOperationKind::AmsLoadFilament {
+            ams_id: 0,
+            slot_id: 1,
+            global_tray_id: Some(1),
+            external_id: None,
+            extruder_id: Some(0),
+        },
+    };
+    let command = CommandRecord::from_parts(CommandRecordParts {
+        id: CommandId::new(),
+        tenant_id,
+        agent_id,
+        printer_id: Some(printer_id),
+        kind: "printer_operation".to_string(),
+        status: "queued".to_string(),
+        payload_json: serde_json::to_string(&payload).unwrap(),
+        result_json: None,
+        error: None,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        updated_at: "2026-01-01T00:00:00Z".to_string(),
+    })
+    .unwrap();
+
+    let hub_command = hub_command_from_record(command).unwrap();
+
+    match hub_command.command {
+        Some(hub_command::Command::PrinterOperation(command)) => {
+            assert_eq!(command.serial_number, "SERIAL123");
+            match command.operation {
+                Some(printer_operation::Operation::AmsLoadFilament(operation)) => {
+                    assert_eq!(operation.ams_id, 0);
+                    assert_eq!(operation.slot_id, 1);
+                    assert_eq!(operation.global_tray_id, 1);
+                    assert_eq!(operation.external_id, "");
+                    assert_eq!(operation.extruder_id, Some(0));
+                }
+                other => panic!("expected AMS load operation, got {other:?}"),
+            }
+        }
+        other => panic!("expected printer operation command, got {other:?}"),
+    }
+}
+
+#[tokio::test]
 async fn converts_refresh_printer_materials_command_to_proto() {
     let tenant_id = TenantId::new();
     let agent_id = AgentId::new();

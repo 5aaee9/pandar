@@ -404,6 +404,127 @@ async fn configured_operate_printer_hotend_publishes_wait_gcode_line() {
 }
 
 #[tokio::test]
+async fn configured_operate_printer_ams_load_publishes_change_filament_command() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::AmsLoadFilament {
+                ams_id: 0,
+                slot_id: 1,
+                global_tray_id: Some(1),
+                external_id: None,
+                extruder_id: Some(0),
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        mqtt.published_commands().await,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: json!({"print": {
+                "command": "ams_change_filament",
+                "sequence_id": "0",
+                "ams_id": 0,
+                "slot_id": 1,
+                "target": 1,
+                "extruder_id": 0,
+                "curr_temp": -1,
+                "tar_temp": -1
+            }}),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_ams_reread_rfid_publishes_get_rfid_command() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::AmsRereadRfid {
+                ams_id: 0,
+                slot_id: 1,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        mqtt.published_commands().await,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: json!({"print": {
+                "command": "ams_get_rfid",
+                "sequence_id": "0",
+                "ams_id": 0,
+                "slot_id": 1
+            }}),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_ams_unload_publishes_change_filament_unload_command() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::AmsUnloadFilament {
+                ams_id: 0,
+                slot_id: 1,
+                global_tray_id: Some(1),
+                external_id: None,
+                extruder_id: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        mqtt.published_commands().await,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: json!({"print": {
+                "command": "ams_change_filament",
+                "sequence_id": "0",
+                "ams_id": 0,
+                "slot_id": 255,
+                "target": 255,
+                "curr_temp": 210,
+                "tar_temp": 210
+            }}),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
 async fn configured_operate_printer_unknown_serial_rejects_before_publish() {
     let mqtt = FakeMqttTransport::default();
     let transfer = FakeMachineFileTransfer::default();

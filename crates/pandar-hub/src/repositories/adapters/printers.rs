@@ -22,7 +22,6 @@ pub(crate) async fn upsert_snapshot(
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
-                     name = excluded.name,
                      model = excluded.model,
                      status = excluded.status,
                      last_seen_at = excluded.last_seen_at",
@@ -45,7 +44,6 @@ pub(crate) async fn upsert_snapshot(
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
-                     name = excluded.name,
                      model = excluded.model,
                      status = excluded.status,
                      last_seen_at = excluded.last_seen_at",

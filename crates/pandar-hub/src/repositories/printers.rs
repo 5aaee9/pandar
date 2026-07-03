@@ -1,11 +1,17 @@
 use anyhow::Context;
 use pandar_core::{AgentId, Printer, PrinterParts, TenantId};
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
+    TransactionTrait,
+};
 
 use crate::{
     db::Database,
     entities::{agents, printers, tenants},
-    repositories::{RepositoryError, RepositoryResult, adapters},
+    repositories::{
+        AuditActor, RepositoryError, RepositoryResult, adapters,
+        audit::{insert_audit_event_tx, record_audit_event},
+    },
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,6 +72,55 @@ impl PrinterRepository {
             .context("failed to get printer")?
             .map(printer_from_model)
             .transpose()
+    }
+
+    pub async fn delete_with_audit(
+        &self,
+        tenant_id: TenantId,
+        printer_id: &str,
+        actor: AuditActor,
+    ) -> RepositoryResult<Printer> {
+        let connection = self.database.sea_orm_connection();
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin printer delete audit transaction")?;
+        let Some(model) = printers::Entity::find_by_id(printer_id)
+            .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
+            .one(&tx)
+            .await
+            .context("failed to get printer before delete")?
+        else {
+            return Err(RepositoryError::MissingPrinter);
+        };
+
+        let printer = printer_from_model(model)?;
+        insert_audit_event_tx(
+            &tx,
+            &record_audit_event(
+                tenant_id,
+                actor,
+                "printer.delete",
+                "printer",
+                Some(printer.id.clone()),
+                serde_json::json!({
+                    "printer_name": printer.name.clone(),
+                    "serial_number": printer.serial_number.clone(),
+                    "agent_id": printer.agent_id.to_string(),
+                    "previous_status": printer.status.clone(),
+                }),
+            ),
+        )
+        .await?;
+        printers::Entity::delete_by_id(printer_id)
+            .exec(&tx)
+            .await
+            .context("failed to delete printer")?;
+        tx.commit()
+            .await
+            .context("failed to commit printer delete audit transaction")?;
+
+        Ok(printer)
     }
 
     pub async fn upsert_snapshot(

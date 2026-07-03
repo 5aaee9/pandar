@@ -105,8 +105,8 @@ pub fn normalize_model(model: &str) -> Option<String> {
         "N6" => "X2D",
         "A1MINI" | "A1M" | "A1MIN" | "BAMBULABA1MINI" => "A1_MINI",
         "A1" | "BAMBULABA1" => "A1",
-        "P2S" => "P2S",
-        "X2D" => "X2D",
+        "P2S" | "BAMBULABP2S" => "P2S",
+        "X2D" | "BAMBULABX2D" => "X2D",
         other => other,
     };
 
@@ -139,6 +139,8 @@ mod tests {
     fn normalizes_aliases_and_a1_mini_spellings() {
         assert_eq!(normalize_model("N7").as_deref(), Some("P2S"));
         assert_eq!(normalize_model("N6").as_deref(), Some("X2D"));
+        assert_eq!(normalize_model("Bambu Lab P2S").as_deref(), Some("P2S"));
+        assert_eq!(normalize_model("Bambu Lab X2D").as_deref(), Some("X2D"));
         assert_eq!(normalize_model("A1 Mini").as_deref(), Some("A1_MINI"));
         assert_eq!(
             normalize_model("bambu lab a1 mini").as_deref(),

@@ -66,6 +66,83 @@ async fn printer_detail_returns_tenant_printer() {
 }
 
 #[tokio::test]
+async fn tenant_admin_can_delete_printer() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
+        .await
+        .unwrap();
+
+    let (status, body) = request_as(
+        app.clone(),
+        Method::DELETE,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}"),
+        None,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["id"], printer_id);
+
+    let (status, body) = request_as(
+        app,
+        Method::GET,
+        &format!("/api/v1/tenants/{tenant_id}/printers"),
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({ "printers": [] }));
+
+    let events = state
+        .audit_events()
+        .list_for_tenant(tenant_id)
+        .await
+        .unwrap();
+    let event = events
+        .iter()
+        .find(|event| event.action == "printer.delete")
+        .expect("printer delete audit event");
+    assert_eq!(event.target_id.as_deref(), Some(printer_id.as_str()));
+}
+
+#[tokio::test]
+async fn viewer_cannot_delete_printer() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, _) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
+        .await
+        .unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant_id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "viewer-delete-printer",
+    )
+    .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::DELETE,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}"),
+        None,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "role_forbidden" }));
+}
+
+#[tokio::test]
 async fn printer_routes_return_material_snapshots_without_credentials() {
     let state = state().await;
     let app = router(state.clone());
@@ -159,6 +236,48 @@ async fn printer_routes_return_material_snapshots_without_credentials() {
     .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(detail["materials"], body["printers"][0]["materials"]);
+}
+
+#[tokio::test]
+async fn printer_control_enqueues_ams_slot_operation() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        state.database(),
+        tenant_id,
+        agent_id,
+        Some("Bambu Lab X2D"),
+    )
+    .await
+    .unwrap();
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls"),
+        Some(json!({
+            "action": "ams_load_filament",
+            "ams_id": 0,
+            "slot_id": 1,
+            "global_tray_id": 1,
+            "extruder_id": 0
+        })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["kind"], "printer_operation");
+    let payload: serde_json::Value =
+        serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["operation"]["type"], "ams_load_filament");
+    assert_eq!(payload["operation"]["ams_id"], 0);
+    assert_eq!(payload["operation"]["slot_id"], 1);
+    assert_eq!(payload["operation"]["global_tray_id"], 1);
+    assert_eq!(payload["operation"]["extruder_id"], 0);
 }
 
 #[tokio::test]

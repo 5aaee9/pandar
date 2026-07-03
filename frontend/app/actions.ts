@@ -92,6 +92,20 @@ export async function refreshPrinterMaterials(formData: FormData) {
   );
 }
 
+export async function deletePrinter(formData: FormData) {
+  await requireAuth();
+  const tenantId = stringField(formData, "tenant_id");
+  const printerId = stringField(formData, "printer_id");
+  const response = await fetch(
+    `${apiUrl}/api/v1/tenants/${tenantId}/printers/${printerId}`,
+    {
+      method: "DELETE",
+      headers: await apiHeaders("application/json"),
+    },
+  );
+  redirect(statusUrl(tenantId, response.ok ? "printer_deleted" : await errorCode(response)));
+}
+
 export async function refreshAllAgents(formData: FormData) {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
@@ -506,11 +520,21 @@ export async function controlPrinter(formData: FormData) {
   const printerId = stringField(formData, "printer_id");
   const action = stringField(formData, "action");
   const speedMode = nullableField(formData, "speed_mode");
+  const amsId = nullableField(formData, "ams_id");
+  const slotId = nullableField(formData, "slot_id");
+  const globalTrayId = nullableField(formData, "global_tray_id");
+  const externalId = nullableField(formData, "external_id");
+  const extruderId = nullableField(formData, "extruder_id");
   const response = await postJson(
     `/api/v1/tenants/${tenantId}/printers/${printerId}/controls`,
     {
       action,
       speed_mode: speedMode ? Number(speedMode) : undefined,
+      ams_id: amsId ? Number(amsId) : undefined,
+      slot_id: slotId ? Number(slotId) : undefined,
+      global_tray_id: globalTrayId ? Number(globalTrayId) : undefined,
+      external_id: externalId || undefined,
+      extruder_id: extruderId ? Number(extruderId) : undefined,
     },
   );
   redirect(

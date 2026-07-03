@@ -119,6 +119,26 @@ pub(super) async fn get_printer(
     Ok(Json(printer_event_printer(printer, materials)))
 }
 
+pub(super) async fn delete_printer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((tenant_id, printer_id)): Path<(String, String)>,
+) -> Result<Json<PrinterResponse>, ApiError> {
+    let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    let auth = auth::authorize_tenant_admin_principal(&state, &headers, tenant_id).await?;
+    let printer_id = parse_printer_id(&printer_id)?;
+    let materials = state
+        .materials()
+        .latest_for_printer(tenant_id, printer_id)
+        .await?;
+    let printer = state
+        .printers()
+        .delete_with_audit(tenant_id, printer_id, auth::audit_actor(&auth))
+        .await?;
+
+    Ok(Json(printer_event_printer(printer, materials)))
+}
+
 pub(super) async fn refresh_printers(
     State(state): State<AppState>,
     headers: HeaderMap,

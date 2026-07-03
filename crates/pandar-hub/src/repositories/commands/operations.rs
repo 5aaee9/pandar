@@ -7,6 +7,9 @@ const MAX_MOVE_DELTA_MM: f64 = 50.0;
 const MIN_MOVE_FEEDRATE_MM_PER_MIN: u32 = 1;
 const MAX_MOVE_FEEDRATE_MM_PER_MIN: u32 = 12_000;
 const MAX_HOTEND_TEMPERATURE_CELSIUS: u16 = 300;
+const MAX_AMS_ID: u32 = 255;
+const MAX_AMS_SLOT_ID: u32 = 255;
+const MAX_EXTRUDER_ID: u32 = 1;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PrinterOperationPayload {
@@ -61,6 +64,24 @@ pub enum PrinterOperationKind {
         temperature_celsius: u16,
         wait: bool,
     },
+    AmsRereadRfid {
+        ams_id: u32,
+        slot_id: u32,
+    },
+    AmsLoadFilament {
+        ams_id: u32,
+        slot_id: u32,
+        global_tray_id: Option<u32>,
+        external_id: Option<String>,
+        extruder_id: Option<u32>,
+    },
+    AmsUnloadFilament {
+        ams_id: u32,
+        slot_id: u32,
+        global_tray_id: Option<u32>,
+        external_id: Option<String>,
+        extruder_id: Option<u32>,
+    },
 }
 
 impl PrinterOperationKind {
@@ -73,6 +94,9 @@ impl PrinterOperationKind {
             Self::Home { .. } => "home",
             Self::MoveAxes { .. } => "move_axes",
             Self::SetHotendTemperature { .. } => "set_hotend_temperature",
+            Self::AmsRereadRfid { .. } => "ams_reread_rfid",
+            Self::AmsLoadFilament { .. } => "ams_load_filament",
+            Self::AmsUnloadFilament { .. } => "ams_unload_filament",
         }
     }
 }
@@ -96,6 +120,33 @@ pub fn validate_printer_operation(operation: &PrinterOperationKind) -> Repositor
             ..
         } if *temperature_celsius <= MAX_HOTEND_TEMPERATURE_CELSIUS => Ok(()),
         PrinterOperationKind::SetHotendTemperature { .. } => {
+            Err(RepositoryError::InvalidPrinterControl)
+        }
+        PrinterOperationKind::AmsRereadRfid { ams_id, slot_id }
+            if *ams_id <= MAX_AMS_ID && *slot_id <= MAX_AMS_SLOT_ID =>
+        {
+            Ok(())
+        }
+        PrinterOperationKind::AmsLoadFilament {
+            ams_id,
+            slot_id,
+            extruder_id,
+            ..
+        }
+        | PrinterOperationKind::AmsUnloadFilament {
+            ams_id,
+            slot_id,
+            extruder_id,
+            ..
+        } if *ams_id <= MAX_AMS_ID
+            && *slot_id <= MAX_AMS_SLOT_ID
+            && extruder_id.is_none_or(|value| value <= MAX_EXTRUDER_ID) =>
+        {
+            Ok(())
+        }
+        PrinterOperationKind::AmsRereadRfid { .. }
+        | PrinterOperationKind::AmsLoadFilament { .. }
+        | PrinterOperationKind::AmsUnloadFilament { .. } => {
             Err(RepositoryError::InvalidPrinterControl)
         }
     }
@@ -143,6 +194,30 @@ pub fn operation_audit_metadata(
         } => {
             metadata.insert("temperature_celsius".to_owned(), json!(temperature_celsius));
             metadata.insert("wait".to_owned(), json!(wait));
+        }
+        PrinterOperationKind::AmsRereadRfid { ams_id, slot_id } => {
+            metadata.insert("ams_id".to_owned(), json!(ams_id));
+            metadata.insert("slot_id".to_owned(), json!(slot_id));
+        }
+        PrinterOperationKind::AmsLoadFilament {
+            ams_id,
+            slot_id,
+            global_tray_id,
+            external_id,
+            extruder_id,
+        }
+        | PrinterOperationKind::AmsUnloadFilament {
+            ams_id,
+            slot_id,
+            global_tray_id,
+            external_id,
+            extruder_id,
+        } => {
+            metadata.insert("ams_id".to_owned(), json!(ams_id));
+            metadata.insert("slot_id".to_owned(), json!(slot_id));
+            metadata.insert("global_tray_id".to_owned(), json!(global_tray_id));
+            metadata.insert("external_id".to_owned(), json!(external_id));
+            metadata.insert("extruder_id".to_owned(), json!(extruder_id));
         }
         PrinterOperationKind::Pause | PrinterOperationKind::Resume | PrinterOperationKind::Stop => {
         }

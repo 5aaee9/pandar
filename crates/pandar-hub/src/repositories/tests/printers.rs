@@ -73,7 +73,7 @@ async fn printer_repository_upserts_and_lists_for_tenant() {
 
     assert_eq!(updated.id, created.id);
     assert_eq!(updated.created_at, created.created_at);
-    assert_eq!(updated.name, "Renamed Printer");
+    assert_eq!(updated.name, "First Printer");
     assert_eq!(updated.model.as_deref(), Some("X1 Carbon"));
     assert_eq!(updated.status, "printing");
     assert_eq!(updated.last_seen_at, "2026-06-21T01:00:00Z");

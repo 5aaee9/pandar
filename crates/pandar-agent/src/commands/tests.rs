@@ -21,8 +21,9 @@ use crate::{
         runtime::test_support::TestRuntimeBambuMachineGateway,
     },
     protocol::agent::v1::{
-        Axis, AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
-        LinkPrinter, MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
+        AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation, Axis,
+        AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand, LinkPrinter,
+        MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
         RefreshPrinterMaterials, RefreshPrinters, SetHotendTemperatureOperation,
         SetPrintSpeedOperation, printer_operation,
     },
@@ -1302,6 +1303,141 @@ async fn printer_operation_valid_emits_ack_and_success_with_result_json() {
 }
 
 #[tokio::test]
+async fn printer_operation_ams_reread_rfid_emits_material_snapshot_after_dispatch() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::with_materials(material_result("SERIAL1", None));
+    let (sender, mut receiver) = mpsc::channel(4);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_operation_command(
+            command_id.clone(),
+            "SERIAL1",
+            Some(printer_operation::Operation::AmsRereadRfid(
+                AmsRereadRfidOperation {
+                    ams_id: 1,
+                    slot_id: 2,
+                },
+            )),
+        ),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_material_snapshot(receiver.recv().await.unwrap(), "SERIAL1", None);
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert_eq!(result.command_id, command_id);
+            assert!(result.success);
+            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(json["action"], "ams_reread_rfid");
+            assert_eq!(json["ams_id"], 1);
+            assert_eq!(json["slot_id"], 2);
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert!(receiver.recv().await.is_none());
+    assert_eq!(
+        gateway.operations().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::AmsRereadRfid {
+                ams_id: 1,
+                slot_id: 2
+            }
+        )]
+    );
+}
+
+#[tokio::test]
+async fn printer_operation_ams_load_emits_material_snapshot_after_dispatch() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::with_materials(material_result("SERIAL1", None));
+    let (sender, mut receiver) = mpsc::channel(4);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_operation_command(
+            command_id.clone(),
+            "SERIAL1",
+            Some(printer_operation::Operation::AmsLoadFilament(
+                AmsLoadFilamentOperation {
+                    ams_id: 1,
+                    slot_id: 2,
+                    global_tray_id: 6,
+                    external_id: String::new(),
+                    extruder_id: Some(0),
+                },
+            )),
+        ),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_material_snapshot(receiver.recv().await.unwrap(), "SERIAL1", None);
+    assert!(
+        matches!(receiver.recv().await.unwrap().event, Some(agent_event::Event::CommandResult(result)) if result.success)
+    );
+    assert!(receiver.recv().await.is_none());
+}
+
+#[tokio::test]
+async fn printer_operation_ams_unload_emits_material_snapshot_after_dispatch() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::with_materials(material_result("SERIAL1", None));
+    let (sender, mut receiver) = mpsc::channel(4);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_operation_command(
+            command_id.clone(),
+            "SERIAL1",
+            Some(printer_operation::Operation::AmsUnloadFilament(
+                AmsUnloadFilamentOperation {
+                    ams_id: 1,
+                    slot_id: 2,
+                    global_tray_id: 6,
+                    external_id: String::new(),
+                    extruder_id: Some(0),
+                },
+            )),
+        ),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_material_snapshot(receiver.recv().await.unwrap(), "SERIAL1", None);
+    assert!(
+        matches!(receiver.recv().await.unwrap().event, Some(agent_event::Event::CommandResult(result)) if result.success)
+    );
+    assert!(receiver.recv().await.is_none());
+}
+
+#[tokio::test]
 async fn printer_operation_unknown_serial_rejects_ack_without_dispatch() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
@@ -1855,6 +1991,7 @@ struct OperationGateway {
     operations: Arc<Mutex<Vec<(String, MachinePrinterOperation)>>>,
     validate_error: Option<String>,
     dispatch_error: Option<String>,
+    material_result: Option<Arc<Mutex<anyhow::Result<MaterialRefreshResult>>>>,
     access_code: Option<String>,
 }
 
@@ -1872,6 +2009,13 @@ impl OperationGateway {
                 "fake publish failure with access code {access_code}"
             )),
             access_code: Some(access_code.to_string()),
+            ..Self::default()
+        }
+    }
+
+    fn with_materials(materials: MaterialRefreshResult) -> Self {
+        Self {
+            material_result: Some(Arc::new(Mutex::new(Ok(materials)))),
             ..Self::default()
         }
     }
@@ -1913,7 +2057,14 @@ impl BambuMachineGateway for OperationGateway {
         _serial_number: &str,
         _printer_id: Option<&str>,
     ) -> anyhow::Result<MaterialRefreshResult> {
-        unreachable!("printer operation tests do not refresh printer materials")
+        let Some(result) = &self.material_result else {
+            unreachable!("printer operation tests do not refresh printer materials")
+        };
+        let mut result = result.lock().await;
+        std::mem::replace(
+            &mut *result,
+            Err(anyhow::anyhow!("unexpected material refresh")),
+        )
     }
 
     async fn validate_printer(&self, _serial_number: &str) -> anyhow::Result<()> {

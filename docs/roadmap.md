@@ -32,8 +32,21 @@
 - Offset status-strip hover bubbles by 8px from the separator while preserving the separator's 8px left inset.
 - Delayed the status-strip desktop row, three-column stats, and separator lines to the large breakpoint so medium-width sidebars do not crush stat labels and values.
 - Allowed frontend server actions to run in local no-auth mode or with server-configured API tokens instead of requiring a browser auth cookie before submitting mutations such as Link printer.
+- Preserved the operator-provided printer name after runtime link by keeping subsequent agent snapshots from overwriting the stored printer display name for the same serial number.
+- Moved the printer card agent detail into the top summary status row beside the status badge, showing the agent icon and name without a separate information card.
+- Added a printer card actions dropdown with a confirmed Delete printer flow backed by the Hub printer delete API and audit event.
 - Moved dashboard language selection from the top bar into Settings and kept tenant selection in the sidebar Tenants list.
 - Added Agent-backed AMS refresh: printer refresh now opportunistically refreshes AMS/external-spool snapshots from Bambu MQTT `pushall`, operators can queue per-printer AMS refreshes from the printer inventory, Agent material-only updates sync to Hub over gRPC, and Hub publishes material-aware printer updates to the browser event stream.
+- Replaced printer-card filament counts with an AMS/external loading view that shows slot color, remaining estimate, K value, unit temperature/humidity, toolhead assignment, and hover actions for RFID reread, filament load, and filament unload through the Hub-to-Agent printer-operation path.
+- Fixed the AMS slot hover menu so moving from a filament slot into its dropdown crosses a hover bridge instead of closing on the spacer gap.
+- Rendered AMS remaining estimate `-1` as an unsupported material-sensor state, with a darker gray progress bar and `Unsupported` copy instead of `-1%`.
+- Accepted real Bambu-branded model names such as `Bambu Lab X2D` / `Bambu Lab P2S` in compatibility checks so AMS load/unload controls are not rejected before they reach the Agent.
+- Matched Bambu Studio's dual-nozzle AMS load behavior by carrying optional `extruder_id` from the printer-card load action through Hub persistence, gRPC, Agent operation parsing, and the final Bambu MQTT `ams_change_filament` payload.
+- Made AMS RFID reread produce a refreshed material snapshot after the Bambu `ams_get_rfid` command so the Devices UI receives updated slot data instead of only a command success result.
+- Made AMS load/unload operations refresh material snapshots after dispatch so the Devices UI receives updated slot state for the same class of async Bambu material operations.
+- Normalized Bambu AMS `humidity_raw` as the displayed humidity percentage and kept `humidity` as the raw 1-5 humidity level so X2D/AMS-HT sensors do not render level values as percentages.
+- Accepted decimal-string AMS `temp` sensor readings from Bambu MQTT so the existing Devices AMS header can show temperature beside humidity.
+- Humanized active AMS slot labels in printer status details so zero-based machine indexes such as `AMS 0:2` render as operator-facing labels like `AMS A - 3`.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.
 - Created the initial Rust workspace with `pandar-core`, `pandar-hub`, `pandar-agent`, and `pandar-app`.
 - Added a repository-backed Axum hub with health, summary, tenant create/list, and tenant-scoped agent create/list endpoints.

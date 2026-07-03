@@ -14,7 +14,9 @@ fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
                 "tray_now": 5,
                     "ams": [{
                         "id": "1",
-                        "humidity": 30,
+                        "info": "10001103",
+                        "humidity": 4,
+                        "humidity_raw": 30,
                         "temp": "28",
                         "tray": [{
                             "id": "0"
@@ -27,6 +29,7 @@ fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
                         "tray_sub_brands": "Basic",
                         "tag_uid": "tag-1",
                         "tray_uuid": "uuid-1",
+                            "k": "0.020",
                             "remain": 73,
                             "cols": ["#112233", "not-a-color", "445566"]
                         }, {
@@ -37,6 +40,7 @@ fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
                     }],
                 "vt_tray": {
                     "id": 254,
+                    "extruder_id": 0,
                     "tray_info_idx": "P123",
                     "tray_color": "11223344"
                 }
@@ -49,10 +53,13 @@ fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
     assert_eq!(patch["ams_units"][0]["replace_trays"], true);
     assert_eq!(patch["ams_units"][0]["unit_kind"], "ams");
     assert_eq!(patch["ams_units"][0]["humidity"], 30);
+    assert_eq!(patch["ams_units"][0]["humidity_level"], 4);
     assert_eq!(patch["ams_units"][0]["temperature_celsius"], 28);
+    assert_eq!(patch["ams_units"][0]["toolhead"], "L");
     assert_eq!(patch["ams_units"][0]["trays"][1]["global_tray_id"], 5);
     assert_eq!(patch["ams_units"][0]["trays"][1]["filament_id"], "GFL05_07");
     assert_eq!(patch["ams_units"][0]["trays"][1]["setting_id"], "GFSL05");
+    assert_eq!(patch["ams_units"][0]["trays"][1]["k_value"], "0.020");
     assert_eq!(patch["ams_units"][0]["trays"][1]["color"], "AABBCC");
     assert_eq!(
         patch["ams_units"][0]["trays"][1]["multi_color"],
@@ -67,11 +74,50 @@ fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
     assert_eq!(patch["external_spools"][0]["tray_id"], "0");
     assert_eq!(patch["external_spools"][0]["filament_id"], "P123");
     assert_eq!(patch["external_spools"][0]["color"], "11223344");
+    assert_eq!(patch["external_spools"][0]["toolhead"], "R");
     assert!(patch.get("replace_external_spools").is_none());
     assert_eq!(
         patch["active_tray"],
         json!({"kind": "ams", "global_tray_id": 5, "ams_id": "1", "tray_id": "1"})
     );
+}
+
+#[test]
+fn humidity_raw_is_normalized_as_percent_and_humidity_as_level() {
+    let patch = normalize(json!({
+        "print": {
+            "ams": {
+                "ams": [{
+                    "id": "0",
+                    "humidity": "4",
+                    "humidity_raw": "24",
+                    "tray": [{"id": "0"}]
+                }]
+            }
+        }
+    }))
+    .unwrap();
+
+    assert_eq!(patch["ams_units"][0]["humidity"], 24);
+    assert_eq!(patch["ams_units"][0]["humidity_level"], 4);
+}
+
+#[test]
+fn decimal_ams_temperature_is_normalized() {
+    let patch = normalize(json!({
+        "print": {
+            "ams": {
+                "ams": [{
+                    "id": "0",
+                    "temp": "24.0",
+                    "tray": [{"id": "0"}]
+                }]
+            }
+        }
+    }))
+    .unwrap();
+
+    assert_eq!(patch["ams_units"][0]["temperature_celsius"], 24.0);
 }
 
 #[test]
