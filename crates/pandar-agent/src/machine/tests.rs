@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::sync::{Mutex, Notify, mpsc};
 
 use super::*;
@@ -146,17 +146,20 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
         second.subscriptions().await,
         [format!("device/{}/report", second_endpoint.serial)]
     );
+    let published = first.published_commands().await;
+    let get_version_sequence_id = dynamic_section_sequence_id(&published[0].payload, "info");
+    let pushall_sequence_id = dynamic_section_sequence_id(&published[1].payload, "pushing");
     assert_eq!(
-        first.published_commands().await,
+        published,
         [
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"info": {"command": "get_version", "sequence_id": "90002"}}),
+                payload: json!({"info": {"command": "get_version", "sequence_id": get_version_sequence_id}}),
                 qos: BAMBU_MQTT_QOS,
             },
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"pushing": {"command": "pushall"}}),
+                payload: json!({"pushing": {"command": "pushall", "sequence_id": pushall_sequence_id, "version": 1, "push_target": 1}}),
                 qos: BAMBU_MQTT_QOS,
             },
         ]
@@ -194,14 +197,16 @@ async fn configured_print_project_file_uploads_and_publishes_project_file() {
         transfer.recorded_requests(),
         vec![(ProtectedData, FileTransferRequest::upload("plate.3mf", 3))]
     );
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
     assert_eq!(
-        mqtt.published_commands().await,
+        published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
             payload: json!({
                 "print": {
                     "command": "project_file",
-                    "sequence_id": "20000",
+                    "sequence_id": sequence_id,
                     "param": "Metadata/plate_1.gcode",
                     "url": "ftp://plate.3mf",
                     "file": "plate.3mf",
@@ -274,13 +279,38 @@ async fn configured_operate_printer_publishes_pause_to_request_topic() {
         .await
         .unwrap();
 
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
     assert_eq!(
-        mqtt.published_commands().await,
+        published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "pause", "sequence_id": "0"}}),
+            payload: json!({"print": {"command": "pause", "param": "", "sequence_id": sequence_id}}),
             qos: BAMBU_MQTT_QOS,
         }]
+    );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_returns_matching_mqtt_sequence_result() {
+    let mqtt = FakeMqttTransport::with_operation_reports();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    let result = gateway
+        .operate_printer("SERIAL1", PrinterOperation::Pause)
+        .await
+        .unwrap();
+
+    let sequence_id = dynamic_sequence_id(&mqtt.published_commands().await[0].payload);
+    assert_eq!(result.sequence_id.as_deref(), Some(sequence_id.as_str()));
+    assert_eq!(
+        result.mqtt_report.as_ref().unwrap()["print"]["result"],
+        "success"
     );
 }
 
@@ -299,11 +329,13 @@ async fn configured_operate_printer_print_speed_mode_4_publishes_to_request_topi
         .await
         .unwrap();
 
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
     assert_eq!(
-        mqtt.published_commands().await,
+        published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "print_speed", "param": "4", "sequence_id": "0"}}),
+            payload: json!({"print": {"command": "print_speed", "param": "4", "sequence_id": sequence_id}}),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -329,11 +361,13 @@ async fn configured_operate_printer_home_publishes_bare_g28_for_axis_specific_re
         .await
         .unwrap();
 
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
     assert_eq!(
-        mqtt.published_commands().await,
+        published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "gcode_line", "param": "G28", "sequence_id": "90001"}}),
+            payload: json!({"print": {"command": "gcode_line", "param": "G28", "sequence_id": sequence_id}}),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -362,11 +396,13 @@ async fn configured_operate_printer_move_axes_publishes_relative_gcode_line() {
         .await
         .unwrap();
 
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
     assert_eq!(
-        mqtt.published_commands().await,
+        published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "gcode_line", "param": "G91\nG0 X10 Z-0.5 F3000\nG90", "sequence_id": "90001"}}),
+            payload: json!({"print": {"command": "gcode_line", "param": "G91\nG0 X10 Z-0.5 F3000\nG90", "sequence_id": sequence_id}}),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -393,14 +429,27 @@ async fn configured_operate_printer_hotend_publishes_wait_gcode_line() {
         .await
         .unwrap();
 
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
     assert_eq!(
-        mqtt.published_commands().await,
+        published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "gcode_line", "param": "M109 S215", "sequence_id": "90001"}}),
+            payload: json!({"print": {"command": "gcode_line", "param": "M109 S215", "sequence_id": sequence_id}}),
             qos: BAMBU_MQTT_QOS,
         }]
     );
+}
+
+fn dynamic_sequence_id(payload: &Value) -> String {
+    dynamic_section_sequence_id(payload, "print")
+}
+
+fn dynamic_section_sequence_id(payload: &Value, section: &str) -> String {
+    let sequence_id = payload[section]["sequence_id"].as_str().unwrap();
+    assert_ne!(sequence_id, "0");
+    assert!((20000..30000).contains(&sequence_id.parse::<u32>().unwrap()));
+    sequence_id.to_string()
 }
 
 #[tokio::test]
@@ -427,13 +476,15 @@ async fn configured_operate_printer_ams_load_publishes_change_filament_command()
         .await
         .unwrap();
 
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
     assert_eq!(
-        mqtt.published_commands().await,
+        published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
             payload: json!({"print": {
                 "command": "ams_change_filament",
-                "sequence_id": "0",
+                "sequence_id": sequence_id,
                 "ams_id": 0,
                 "slot_id": 1,
                 "target": 1,
@@ -467,19 +518,57 @@ async fn configured_operate_printer_ams_reread_rfid_publishes_get_rfid_command()
         .await
         .unwrap();
 
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
     assert_eq!(
-        mqtt.published_commands().await,
+        published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
             payload: json!({"print": {
                 "command": "ams_get_rfid",
-                "sequence_id": "0",
+                "sequence_id": sequence_id,
                 "ams_id": 0,
                 "slot_id": 1
             }}),
             qos: BAMBU_MQTT_QOS,
         }]
     );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_ams_reread_rfid_increments_sequence_id() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    for _ in 0..2 {
+        gateway
+            .operate_printer(
+                "SERIAL1",
+                PrinterOperation::AmsRereadRfid {
+                    ams_id: 0,
+                    slot_id: 1,
+                },
+            )
+            .await
+            .unwrap();
+    }
+
+    let published = mqtt.published_commands().await;
+    let first = published[0].payload["print"]["sequence_id"]
+        .as_str()
+        .unwrap();
+    let second = published[1].payload["print"]["sequence_id"]
+        .as_str()
+        .unwrap();
+
+    assert_ne!(first, "0");
+    assert_ne!(second, "0");
+    assert_ne!(first, second);
 }
 
 #[tokio::test]
@@ -506,13 +595,15 @@ async fn configured_operate_printer_ams_unload_publishes_change_filament_unload_
         .await
         .unwrap();
 
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
     assert_eq!(
-        mqtt.published_commands().await,
+        published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
             payload: json!({"print": {
                 "command": "ams_change_filament",
-                "sequence_id": "0",
+                "sequence_id": sequence_id,
                 "ams_id": 0,
                 "slot_id": 255,
                 "target": 255,

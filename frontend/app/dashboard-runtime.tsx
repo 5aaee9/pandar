@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useReducer, useRef } from 'react'
 import { useTranslations } from 'next-intl'
+import { toast } from 'sonner'
 
 import { AppSidebar } from '../components/app-sidebar'
 import { SidebarInset, SidebarProvider } from '../components/ui/sidebar'
@@ -146,6 +147,25 @@ function printerEventConnectionUrl(apiUrl: string, tenantId: string, ticket: str
   return printerEventWebSocketUrl(apiUrl, tenantId, ticket)
 }
 
+function printerOperationResult(resultJson: string | null) {
+  if (!resultJson) {
+    return { sequenceId: null, error: null }
+  }
+  try {
+    const parsed = JSON.parse(resultJson) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { sequenceId: null, error: null }
+    }
+    const result = parsed as Record<string, unknown>
+    return {
+      sequenceId: typeof result.sequence_id === 'string' ? result.sequence_id : null,
+      error: typeof result.mqtt_error === 'string' ? result.mqtt_error : null,
+    }
+  } catch {
+    return { sequenceId: null, error: null }
+  }
+}
+
 export function DashboardRuntime({
   apiUrl,
   tenants,
@@ -184,6 +204,7 @@ export function DashboardRuntime({
   const jobsRef = useRef(jobs)
   printersRef.current = printers
   jobsRef.current = jobs
+  const tCommandResult = useTranslations('runtime.commandResult')
 
   useEffect(() => {
     const addNotification = (notification: RuntimeNotification) => {
@@ -246,10 +267,12 @@ export function DashboardRuntime({
             const previous = printersRef.current.find((printer) => printer.id === event.printer.id) ?? null
             notifyPrinter(previous, event.printer, observedAt)
             dispatchRuntime({ type: 'printer', value: event.printer })
-          } else {
+          } else if (event.type === 'job_progress') {
             const previous = jobsRef.current.find((job) => job.id === event.job.id) ?? null
             notifyJob(previous, event.job, observedAt)
             dispatchRuntime({ type: 'job', value: event.job })
+          } else {
+            notifyCommandResult(event.command)
           }
         }
         socket.onerror = () => {
@@ -332,6 +355,19 @@ export function DashboardRuntime({
       }
     }
 
+    const notifyCommandResult = (command: Command) => {
+      if (command.kind !== 'printer_operation') {
+        return
+      }
+      const result = printerOperationResult(command.result_json)
+      const options = result.sequenceId ? { description: `#${result.sequenceId}` } : undefined
+      if (command.status.toLowerCase() === 'failed') {
+        toast.error(command.error ?? result.error ?? tCommandResult('printerControlFailed'), options)
+      } else {
+        toast.success(tCommandResult('printerControlCompleted'), options)
+      }
+    }
+
     connect()
 
     return () => {
@@ -341,7 +377,7 @@ export function DashboardRuntime({
       }
       socket?.close()
     }
-  }, [apiUrl, auth.source, selectedTenant])
+  }, [apiUrl, auth.source, selectedTenant, tCommandResult])
 
   useEffect(() => {
     const update = () => dispatchRuntime({ type: 'tick', value: Date.now() })

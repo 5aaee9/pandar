@@ -43,6 +43,10 @@
       "printer_control_queued": "打印机控制已入队",
       "agent_not_connected": "Agent 未连接到当前 Hub 进程"
     },
+    "commandResult": {
+      "printerControlCompleted": "打印机控制已完成",
+      "printerControlFailed": "打印机控制失败"
+    },
     "notification": {
       "liveTitle": "实时连接",
       "liveUnavailable": "由于未配置服务端认证令牌，实时更新不可用。",

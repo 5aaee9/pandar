@@ -2,12 +2,15 @@ use anyhow::Context;
 use tokio::sync::mpsc;
 
 use super::{
-    BambuMachineGateway, ack_event, failure_event, printer_materials_snapshot_event,
-    rejected_ack_event, success_event_with_result,
+    BambuMachineGateway, ack_event, failure_event, failure_event_with_result,
+    printer_materials_snapshot_event, rejected_ack_event, success_event_with_result,
 };
 use crate::{
     AgentConfig,
-    machine::{PrinterAxis as MachinePrinterAxis, PrinterOperation as MachinePrinterOperation},
+    machine::{
+        PrinterAxis as MachinePrinterAxis, PrinterOperation as MachinePrinterOperation,
+        PrinterOperationDispatchResult,
+    },
     protocol::agent::v1::{
         AgentEvent, Axis, PrinterOperation as ProtoPrinterOperation, printer_operation,
     },
@@ -63,7 +66,7 @@ where
                 command.serial_number
             )
         }) {
-        Ok(()) => {
+        Ok(dispatch_result) => {
             if refresh_materials_after_operation(&operation) {
                 match gateway
                     .refresh_printer_materials(&command.serial_number, None)
@@ -91,11 +94,24 @@ where
                     }
                 }
             }
-            let result_json = printer_operation_result_json(&command.serial_number, &operation);
-            sender
-                .send(success_event_with_result(config, command_id, result_json))
-                .await
-                .context("queue printer-operation command success")?;
+            let result_json =
+                printer_operation_result_json(&command.serial_number, &operation, &dispatch_result);
+            if let Some(error) = dispatch_result.error {
+                sender
+                    .send(failure_event_with_result(
+                        config,
+                        command_id,
+                        error,
+                        result_json,
+                    ))
+                    .await
+                    .context("queue printer-operation command failure")?;
+            } else {
+                sender
+                    .send(success_event_with_result(config, command_id, result_json))
+                    .await
+                    .context("queue printer-operation command success")?;
+            }
         }
         Err(err) => {
             let error = gateway.redact_error(&format!("{err:#}"));
@@ -254,6 +270,7 @@ fn refresh_materials_after_operation(operation: &MachinePrinterOperation) -> boo
 fn printer_operation_result_json(
     serial_number: &str,
     operation: &MachinePrinterOperation,
+    dispatch_result: &PrinterOperationDispatchResult,
 ) -> String {
     let mut result = serde_json::Map::new();
     result.insert("type".to_string(), serde_json::json!("printer_operation"));
@@ -265,6 +282,29 @@ fn printer_operation_result_json(
         "serial_number".to_string(),
         serde_json::json!(serial_number),
     );
+    if let Some(sequence_id) = &dispatch_result.sequence_id {
+        result.insert("sequence_id".to_string(), serde_json::json!(sequence_id));
+    }
+    if let Some(error) = &dispatch_result.error {
+        result.insert("mqtt_error".to_string(), serde_json::json!(error));
+    }
+    if let Some(report) = &dispatch_result.mqtt_report {
+        if let Some(print) = report.get("print") {
+            if let Some(value) = print.get("result") {
+                result.insert("mqtt_result".to_string(), value.clone());
+            }
+            if let Some(value) = print.get("reason") {
+                result.insert("mqtt_reason".to_string(), value.clone());
+            }
+            if let Some(value) = print.get("err_code") {
+                result.insert("mqtt_err_code".to_string(), value.clone());
+            }
+            if let Some(value) = print.get("errno") {
+                result.insert("mqtt_errno".to_string(), value.clone());
+            }
+        }
+        result.insert("mqtt_report".to_string(), report.clone());
+    }
     match operation {
         MachinePrinterOperation::SetPrintSpeed(speed_mode) => {
             result.insert("speed_mode".to_string(), serde_json::json!(speed_mode));

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use pandar_core::{Printer, TenantId};
+use pandar_core::{CommandRecord, Printer, TenantId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::{Mutex, broadcast};
@@ -18,6 +18,8 @@ pub enum PrinterEvent {
     PrinterSnapshot { printer: Box<PrinterEventPrinter> },
     #[serde(rename = "job_progress")]
     JobProgress { job: Box<JobResponse> },
+    #[serde(rename = "command_result")]
+    CommandResult { command: Box<PrinterEventCommand> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -40,6 +42,21 @@ pub struct PrinterEventMaterials {
     pub external_spools: Value,
     pub active_tray: Option<Value>,
     pub observed_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrinterEventCommand {
+    pub id: String,
+    pub tenant_id: String,
+    pub agent_id: String,
+    pub printer_id: Option<String>,
+    pub kind: String,
+    pub status: String,
+    pub payload_json: String,
+    pub error: Option<String>,
+    pub result_json: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 pub fn printer_event_printer(
@@ -67,6 +84,24 @@ impl From<MaterialSnapshot> for PrinterEventMaterials {
             external_spools: scrub_material_json(snapshot.external_spools),
             active_tray: snapshot.active_tray.map(scrub_material_json),
             observed_at: snapshot.observed_at,
+        }
+    }
+}
+
+impl From<CommandRecord> for PrinterEventCommand {
+    fn from(command: CommandRecord) -> Self {
+        Self {
+            id: command.id.to_string(),
+            tenant_id: command.tenant_id.to_string(),
+            agent_id: command.agent_id.to_string(),
+            printer_id: command.printer_id,
+            kind: command.kind,
+            status: command.status.to_string(),
+            payload_json: command.payload_json,
+            error: command.error,
+            result_json: command.result_json,
+            created_at: command.created_at,
+            updated_at: command.updated_at,
         }
     }
 }

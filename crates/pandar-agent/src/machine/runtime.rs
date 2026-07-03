@@ -8,7 +8,8 @@ use crate::{
     AgentConfig,
     machine::{
         BambuMachineGateway, BambuPrinterEndpoint, ConfiguredBambuMachineGateway, MachineSnapshot,
-        MaterialRefreshResult, PrinterOperation, PrinterRefreshResult,
+        MaterialRefreshResult, PrinterOperation, PrinterOperationDispatchResult,
+        PrinterRefreshResult,
         diagnostics::{redact_access_code, redact_known_access_codes},
         ftps::FtpsMachineFileTransfer,
         mqtt::{RumqttcBambuMqttTransport, forward_print_reports, refresh_printer},
@@ -185,7 +186,7 @@ impl BambuMachineGateway for RuntimeBambuMachineGateway {
         &self,
         serial_number: &str,
         operation: PrinterOperation,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PrinterOperationDispatchResult> {
         self.inner
             .lock()
             .await
@@ -412,7 +413,7 @@ pub(crate) mod test_support {
             &self,
             serial_number: &str,
             operation: PrinterOperation,
-        ) -> anyhow::Result<()> {
+        ) -> anyhow::Result<PrinterOperationDispatchResult> {
             self.inner
                 .lock()
                 .await

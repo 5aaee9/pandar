@@ -10,3 +10,4 @@ target/
 /frontend/tsconfig.tsbuildinfo
 .impeccable/
 .local/
+.playwright-mcp/

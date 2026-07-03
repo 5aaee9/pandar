@@ -159,6 +159,15 @@ fn failure_event(config: &AgentConfig, command_id: &str, error: String) -> Agent
     result_event(config, command_id, false, error, String::new())
 }
 
+fn failure_event_with_result(
+    config: &AgentConfig,
+    command_id: &str,
+    error: String,
+    result_json: String,
+) -> AgentEvent {
+    result_event(config, command_id, false, error, result_json)
+}
+
 fn success_event_with_result(
     config: &AgentConfig,
     command_id: &str,

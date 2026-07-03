@@ -1,7 +1,8 @@
 use anyhow::Context;
+use serde_json::Value;
 
 use super::{
-    BambuPrinterEndpoint,
+    BambuPrinterEndpoint, PrinterOperationDispatchResult,
     mqtt::{
         AmsFilamentCommand, AmsSlotCommand, BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics,
         BambuMqttTransport, GcodeLineCommand, PrintSpeed, PublishedMqttCommand,
@@ -58,18 +59,48 @@ pub(super) async fn dispatch_printer_operation<T>(
     endpoint: &BambuPrinterEndpoint,
     mqtt: &T,
     operation: PrinterOperation,
-) -> anyhow::Result<()>
+) -> anyhow::Result<PrinterOperationDispatchResult>
 where
     T: BambuMqttTransport + Send + Sync,
 {
     let topics = BambuMqttTopics::for_serial(&endpoint.serial);
+    mqtt.subscribe(&topics.report)
+        .await
+        .with_context(|| format!("subscribe to report topic {}", topics.report))?;
+    let payload = mqtt_command_for_printer_operation(operation)?.payload();
+    let sequence_id = command_sequence_id(&payload);
     mqtt.publish(PublishedMqttCommand {
-        topic: topics.request,
-        payload: mqtt_command_for_printer_operation(operation)?.payload(),
+        topic: topics.request.clone(),
+        payload,
         qos: BAMBU_MQTT_QOS,
     })
     .await
-    .with_context(|| format!("publish printer operation to {}", endpoint.serial))
+    .with_context(|| format!("publish printer operation to {}", endpoint.serial))?;
+
+    let Some(sequence_id) = sequence_id else {
+        return Ok(PrinterOperationDispatchResult::dispatched());
+    };
+
+    match matching_sequence_report(mqtt, &sequence_id).await {
+        Ok(report) => Ok(PrinterOperationDispatchResult {
+            sequence_id: Some(sequence_id),
+            error: printer_operation_report_error(&report),
+            mqtt_report: Some(report),
+        }),
+        Err(err) => {
+            tracing::warn!(
+                serial = %endpoint.serial,
+                sequence_id = %sequence_id,
+                error = %format!("{err:#}"),
+                "printer operation result report unavailable"
+            );
+            Ok(PrinterOperationDispatchResult {
+                sequence_id: Some(sequence_id),
+                mqtt_report: None,
+                error: None,
+            })
+        }
+    }
 }
 
 fn mqtt_command_for_printer_operation(
@@ -150,6 +181,74 @@ fn ams_command_slot_id(slot_id: u32, external_id: Option<&str>) -> u32 {
     } else {
         slot_id
     }
+}
+
+async fn matching_sequence_report<T>(mqtt: &T, sequence_id: &str) -> anyhow::Result<Value>
+where
+    T: BambuMqttTransport + Send + Sync,
+{
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let report = mqtt
+                .next_report(std::time::Duration::from_secs(5))
+                .await
+                .context("wait for printer operation MQTT result")?;
+            if report_sequence_id(&report).as_deref() == Some(sequence_id) {
+                return Ok(report);
+            }
+        }
+    })
+    .await
+    .context("wait for matching printer operation MQTT result")?
+}
+
+fn command_sequence_id(payload: &Value) -> Option<String> {
+    ["print", "info", "pushing", "system", "camera"]
+        .into_iter()
+        .find_map(|section| payload.get(section).and_then(section_sequence_id))
+}
+
+fn report_sequence_id(report: &Value) -> Option<String> {
+    ["print", "info", "pushing", "system", "camera"]
+        .into_iter()
+        .find_map(|section| report.get(section).and_then(section_sequence_id))
+}
+
+fn section_sequence_id(value: &Value) -> Option<String> {
+    match value.get("sequence_id")? {
+        Value::String(value) => Some(value.clone()),
+        Value::Number(value) => Some(value.to_string()),
+        _ => None,
+    }
+}
+
+fn printer_operation_report_error(report: &Value) -> Option<String> {
+    let print = report.get("print")?;
+    if print.get("result").and_then(Value::as_str) == Some("fail") {
+        return Some(
+            report_error_message(print).unwrap_or_else(|| "printer reported failure".to_owned()),
+        );
+    }
+    for key in ["err_code", "errno"] {
+        if let Some(code) = print.get(key).and_then(Value::as_i64)
+            && code != 0
+        {
+            return Some(
+                report_error_message(print)
+                    .unwrap_or_else(|| format!("printer reported {key} {code}")),
+            );
+        }
+    }
+    None
+}
+
+fn report_error_message(value: &Value) -> Option<String> {
+    ["reason", "message", "msg", "error"]
+        .into_iter()
+        .find_map(|key| value.get(key).and_then(Value::as_str))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 fn move_axes_gcode_line(

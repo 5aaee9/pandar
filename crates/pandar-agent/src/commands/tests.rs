@@ -772,7 +772,7 @@ impl BambuMachineGateway for FakeGateway {
         &self,
         _serial_number: &str,
         _operation: MachinePrinterOperation,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<crate::machine::PrinterOperationDispatchResult> {
         unreachable!("refresh tests do not dispatch printer operation commands")
     }
 }
@@ -1240,7 +1240,7 @@ impl BambuMachineGateway for LinkGateway {
         &self,
         _serial_number: &str,
         _operation: MachinePrinterOperation,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<crate::machine::PrinterOperationDispatchResult> {
         unreachable!("link printer tests do not dispatch printer operation commands")
     }
 
@@ -2087,14 +2087,14 @@ impl BambuMachineGateway for OperationGateway {
         &self,
         serial_number: &str,
         operation: MachinePrinterOperation,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<crate::machine::PrinterOperationDispatchResult> {
         self.operations
             .lock()
             .await
             .push((serial_number.to_string(), operation));
         match &self.dispatch_error {
             Some(error) => Err(anyhow::anyhow!(error.clone())),
-            None => Ok(()),
+            None => Ok(crate::machine::PrinterOperationDispatchResult::dispatched()),
         }
     }
 }

@@ -477,6 +477,69 @@ async fn grpc_command_result_persists_result_json() {
     assert_eq!(persisted.result_json.as_deref(), Some(result_json));
 }
 
+#[tokio::test]
+async fn grpc_printer_operation_result_publishes_command_event() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        state.database(),
+        tenant_id,
+        agent_id,
+        Some("A1"),
+    )
+    .await
+    .unwrap();
+    let command = state
+        .commands()
+        .enqueue_printer_operation_with_audit(
+            tenant_id,
+            &printer_id,
+            PrinterOperationKind::SetPrintSpeed { speed_mode: 3 },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+    state
+        .commands()
+        .mark_sent(command.id, tenant_id, agent_id)
+        .await
+        .unwrap();
+    state
+        .commands()
+        .mark_acknowledged(command.id, tenant_id, agent_id)
+        .await
+        .unwrap();
+    let mut receiver = state.printer_events().subscribe(tenant_id).await;
+    let result_json = r#"{"type":"printer_operation","sequence_id":"20000"}"#;
+
+    handle_result(
+        &state,
+        tenant_id,
+        agent_id,
+        CommandResult {
+            command_id: command.id.to_string(),
+            success: true,
+            error: String::new(),
+            result_json: result_json.to_owned(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let event = receiver.recv().await.unwrap();
+    match event {
+        crate::printer_events::PrinterEvent::CommandResult {
+            command: event_command,
+        } => {
+            assert_eq!(event_command.id, command.id.to_string());
+            assert_eq!(event_command.kind, "printer_operation");
+            assert_eq!(event_command.status, "succeeded");
+            assert_eq!(event_command.result_json.as_deref(), Some(result_json));
+        }
+        other => panic!("expected command result event, got {other:?}"),
+    }
+}
+
 #[test]
 fn grpc_hub_command_from_record_rejects_persisted_link_printer_replay() {
     let command = CommandRecord::from_parts(CommandRecordParts {

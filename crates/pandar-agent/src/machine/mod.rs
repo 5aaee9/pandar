@@ -23,6 +23,7 @@ use mqtt::{
 };
 use operations::dispatch_printer_operation;
 pub use operations::{PrinterAxis, PrinterOperation};
+use serde_json::Value;
 
 use crate::{
     AgentConfig,
@@ -57,6 +58,23 @@ pub struct MaterialRefreshResult {
 pub struct PrinterRefreshResult {
     pub snapshot: MachineSnapshot,
     pub materials: Option<MaterialRefreshResult>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrinterOperationDispatchResult {
+    pub sequence_id: Option<String>,
+    pub mqtt_report: Option<Value>,
+    pub error: Option<String>,
+}
+
+impl PrinterOperationDispatchResult {
+    pub fn dispatched() -> Self {
+        Self {
+            sequence_id: None,
+            mqtt_report: None,
+            error: None,
+        }
+    }
 }
 
 #[async_trait]
@@ -94,7 +112,7 @@ pub trait BambuMachineGateway: Send + Sync {
         &self,
         serial_number: &str,
         _operation: PrinterOperation,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PrinterOperationDispatchResult> {
         bail!("no Bambu printer configured for serial {serial_number}")
     }
     async fn link_printer(
@@ -173,7 +191,7 @@ impl BambuMachineGateway for NoopMachineGateway {
         &self,
         serial_number: &str,
         _operation: PrinterOperation,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PrinterOperationDispatchResult> {
         bail!("no Bambu printer configured for serial {serial_number}")
     }
 }
@@ -301,7 +319,7 @@ where
         &self,
         serial_number: &str,
         operation: PrinterOperation,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PrinterOperationDispatchResult> {
         let Some((endpoint, mqtt, _)) = self
             .printers
             .iter()

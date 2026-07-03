@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::atomic::AtomicU32, time::Duration};
 
 use serde_json::json;
 use tokio::sync::mpsc;
@@ -38,6 +38,104 @@ fn request_command(payload: serde_json::Value) -> PublishedMqttCommand {
         payload,
         qos: BAMBU_MQTT_QOS,
     }
+}
+
+fn studio_sequence_id(payload: &serde_json::Value, section: &str) -> String {
+    let sequence_id = payload[section]["sequence_id"].as_str().unwrap();
+    let parsed = sequence_id.parse::<u32>().unwrap();
+    assert!((20000..30000).contains(&parsed));
+    sequence_id.to_string()
+}
+
+#[test]
+fn studio_command_payloads_use_incrementing_studio_sequence_ids() {
+    let commands = [
+        (BambuMqttCommand::GetVersion.payload(), "info"),
+        (BambuMqttCommand::RequestPushAll.payload(), "pushing"),
+        (BambuMqttCommand::PausePrint.payload(), "print"),
+        (BambuMqttCommand::ResumePrint.payload(), "print"),
+        (BambuMqttCommand::StopPrint.payload(), "print"),
+        (
+            BambuMqttCommand::SetPrintSpeed(PrintSpeed::new(4).unwrap()).payload(),
+            "print",
+        ),
+        (
+            BambuMqttCommand::GcodeLine(GcodeLineCommand {
+                lines: vec!["G28".to_string()],
+            })
+            .payload(),
+            "print",
+        ),
+        (
+            BambuMqttCommand::ProjectFile(ProjectFileCommand {
+                filename: "job.3mf".to_string(),
+                plate_id: 2,
+                task_id: "task-1".to_string(),
+                subtask_id: "subtask-1".to_string(),
+                use_ams: true,
+                flow_cali: true,
+                timelapse: false,
+                ams_mapping_json: None,
+                ams_mapping2_json: None,
+            })
+            .payload(),
+            "print",
+        ),
+        (
+            BambuMqttCommand::AmsRereadRfid(AmsSlotCommand {
+                ams_id: 0,
+                slot_id: 1,
+            })
+            .payload(),
+            "print",
+        ),
+        (
+            BambuMqttCommand::AmsLoadFilament(AmsFilamentCommand {
+                ams_id: 0,
+                slot_id: 1,
+                target: 1,
+                extruder_id: Some(0),
+            })
+            .payload(),
+            "print",
+        ),
+        (
+            BambuMqttCommand::AmsUnloadFilament(AmsFilamentCommand {
+                ams_id: 0,
+                slot_id: 1,
+                target: 1,
+                extruder_id: None,
+            })
+            .payload(),
+            "print",
+        ),
+    ];
+
+    let command_count = commands.len();
+    let mut sequence_ids = Vec::new();
+    for (payload, section) in commands {
+        sequence_ids.push(studio_sequence_id(&payload, section));
+    }
+    sequence_ids.sort();
+    sequence_ids.dedup();
+    assert_eq!(sequence_ids.len(), command_count);
+}
+
+#[test]
+fn studio_sequence_id_wraps_before_leaving_studio_range() {
+    let sequence = AtomicU32::new(29999);
+
+    let last = next_studio_sequence_id_from(&sequence);
+    let wrapped = next_studio_sequence_id_from(&sequence);
+    let continued = next_studio_sequence_id_from(&sequence);
+
+    assert_eq!(last, "29999");
+    assert_eq!(wrapped, "20000");
+    assert_eq!(continued, "20001");
+
+    let out_of_range = AtomicU32::new(30000);
+    assert_eq!(next_studio_sequence_id_from(&out_of_range), "20000");
+    assert_eq!(next_studio_sequence_id_from(&out_of_range), "20001");
 }
 
 #[test]
@@ -93,17 +191,26 @@ fn ftps_lan_tls_default_profile_config_constructs() {
 
 #[test]
 fn pushall_payload_matches_reference() {
+    let payload = BambuMqttCommand::RequestPushAll.payload();
+    let sequence_id = studio_sequence_id(&payload, "pushing");
     assert_eq!(
-        BambuMqttCommand::RequestPushAll.payload(),
-        json!({"pushing": {"command": "pushall"}})
+        payload,
+        json!({"pushing": {
+            "command": "pushall",
+            "sequence_id": sequence_id,
+            "version": 1,
+            "push_target": 1
+        }})
     );
 }
 
 #[test]
 fn get_version_payload_matches_reference() {
+    let payload = BambuMqttCommand::GetVersion.payload();
+    let sequence_id = studio_sequence_id(&payload, "info");
     assert_eq!(
-        BambuMqttCommand::GetVersion.payload(),
-        json!({"info": {"command": "get_version", "sequence_id": "90002"}})
+        payload,
+        json!({"info": {"command": "get_version", "sequence_id": sequence_id}})
     );
 }
 
@@ -129,25 +236,29 @@ fn get_version_report_rejects_missing_model() {
 
 #[test]
 fn basic_print_control_payloads_match_reference() {
+    let pause = BambuMqttCommand::PausePrint.payload();
+    let resume = BambuMqttCommand::ResumePrint.payload();
+    let stop = BambuMqttCommand::StopPrint.payload();
     assert_eq!(
-        BambuMqttCommand::PausePrint.payload(),
-        json!({"print": {"command": "pause", "sequence_id": "0"}})
+        pause,
+        json!({"print": {"command": "pause", "param": "", "sequence_id": studio_sequence_id(&pause, "print")}})
     );
     assert_eq!(
-        BambuMqttCommand::ResumePrint.payload(),
-        json!({"print": {"command": "resume", "sequence_id": "0"}})
+        resume,
+        json!({"print": {"command": "resume", "param": "", "sequence_id": studio_sequence_id(&resume, "print")}})
     );
     assert_eq!(
-        BambuMqttCommand::StopPrint.payload(),
-        json!({"print": {"command": "stop", "sequence_id": "0"}})
+        stop,
+        json!({"print": {"command": "stop", "param": "", "sequence_id": studio_sequence_id(&stop, "print")}})
     );
 }
 
 #[test]
 fn print_speed_is_limited_to_reference_modes() {
+    let payload = BambuMqttCommand::SetPrintSpeed(PrintSpeed::new(4).unwrap()).payload();
     assert_eq!(
-        BambuMqttCommand::SetPrintSpeed(PrintSpeed::new(4).unwrap()).payload(),
-        json!({"print": {"command": "print_speed", "param": "4", "sequence_id": "0"}})
+        payload,
+        json!({"print": {"command": "print_speed", "param": "4", "sequence_id": studio_sequence_id(&payload, "print")}})
     );
     assert!(PrintSpeed::new(0).is_err());
     assert!(PrintSpeed::new(5).is_err());
@@ -155,38 +266,41 @@ fn print_speed_is_limited_to_reference_modes() {
 
 #[test]
 fn gcode_line_payload_preserves_single_home_line() {
+    let payload = BambuMqttCommand::GcodeLine(GcodeLineCommand {
+        lines: vec!["G28".to_string()],
+    })
+    .payload();
     assert_eq!(
-        BambuMqttCommand::GcodeLine(GcodeLineCommand {
-            lines: vec!["G28".to_string()],
-        })
-        .payload(),
-        json!({"print": {"command": "gcode_line", "param": "G28", "sequence_id": "90001"}})
+        payload,
+        json!({"print": {"command": "gcode_line", "param": "G28", "sequence_id": studio_sequence_id(&payload, "print")}})
     );
 }
 
 #[test]
 fn gcode_line_payload_joins_relative_move_lines() {
+    let payload = BambuMqttCommand::GcodeLine(GcodeLineCommand {
+        lines: vec![
+            "G91".to_string(),
+            "G0 X10 Z-0.5 F3000".to_string(),
+            "G90".to_string(),
+        ],
+    })
+    .payload();
     assert_eq!(
-        BambuMqttCommand::GcodeLine(GcodeLineCommand {
-            lines: vec![
-                "G91".to_string(),
-                "G0 X10 Z-0.5 F3000".to_string(),
-                "G90".to_string(),
-            ],
-        })
-        .payload(),
-        json!({"print": {"command": "gcode_line", "param": "G91\nG0 X10 Z-0.5 F3000\nG90", "sequence_id": "90001"}})
+        payload,
+        json!({"print": {"command": "gcode_line", "param": "G91\nG0 X10 Z-0.5 F3000\nG90", "sequence_id": studio_sequence_id(&payload, "print")}})
     );
 }
 
 #[test]
 fn gcode_line_payload_preserves_hotend_temperature_line() {
+    let payload = BambuMqttCommand::GcodeLine(GcodeLineCommand {
+        lines: vec!["M104 S200".to_string()],
+    })
+    .payload();
     assert_eq!(
-        BambuMqttCommand::GcodeLine(GcodeLineCommand {
-            lines: vec!["M104 S200".to_string()],
-        })
-        .payload(),
-        json!({"print": {"command": "gcode_line", "param": "M104 S200", "sequence_id": "90001"}})
+        payload,
+        json!({"print": {"command": "gcode_line", "param": "M104 S200", "sequence_id": studio_sequence_id(&payload, "print")}})
     );
 }
 
@@ -214,12 +328,13 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
     })
     .payload();
 
+    let sequence_id = studio_sequence_id(&payload, "print");
     assert_eq!(
         payload,
         json!({
             "print": {
                 "command": "project_file",
-                "sequence_id": "20000",
+                "sequence_id": sequence_id,
                 "param": "Metadata/plate_2.gcode",
                 "url": "ftp://job.3mf",
                 "file": "job.3mf",
@@ -415,11 +530,21 @@ async fn refresh_subscribes_publishes_and_maps_report() {
         transport.subscriptions().await,
         ["device/01S00EXAMPLE/report".to_string()]
     );
+    let published = transport.published_commands().await;
+    let get_version_sequence_id = studio_sequence_id(&published[0].payload, "info");
+    let pushall_sequence_id = studio_sequence_id(&published[1].payload, "pushing");
     assert_eq!(
-        transport.published_commands().await,
+        published,
         [
-            request_command(json!({"info": {"command": "get_version", "sequence_id": "90002"}})),
-            request_command(json!({"pushing": {"command": "pushall"}})),
+            request_command(
+                json!({"info": {"command": "get_version", "sequence_id": get_version_sequence_id}})
+            ),
+            request_command(json!({"pushing": {
+                "command": "pushall",
+                "sequence_id": pushall_sequence_id,
+                "version": 1,
+                "push_target": 1
+            }})),
         ]
     );
 }
@@ -485,11 +610,21 @@ async fn refresh_ignores_unrelated_reports_before_get_version() {
 
     assert_eq!(refreshed.snapshot.model.as_deref(), Some("X1 Carbon"));
     assert_eq!(refreshed.snapshot.state, "READY");
+    let published = transport.published_commands().await;
+    let get_version_sequence_id = studio_sequence_id(&published[0].payload, "info");
+    let pushall_sequence_id = studio_sequence_id(&published[1].payload, "pushing");
     assert_eq!(
-        transport.published_commands().await,
+        published,
         [
-            request_command(json!({"info": {"command": "get_version", "sequence_id": "90002"}})),
-            request_command(json!({"pushing": {"command": "pushall"}})),
+            request_command(
+                json!({"info": {"command": "get_version", "sequence_id": get_version_sequence_id}})
+            ),
+            request_command(json!({"pushing": {
+                "command": "pushall",
+                "sequence_id": pushall_sequence_id,
+                "version": 1,
+                "push_target": 1
+            }})),
         ]
     );
 }
@@ -516,10 +651,12 @@ async fn refresh_fails_total_get_version_deadline_when_unrelated_reports_continu
         .unwrap_err();
 
     assert!(format!("{err:#}").contains("timed out waiting for MQTT get_version report"));
+    let published = transport.published_commands().await;
+    let sequence_id = studio_sequence_id(&published[0].payload, "info");
     assert_eq!(
-        transport.published_commands().await,
+        published,
         [request_command(
-            json!({"info": {"command": "get_version", "sequence_id": "90002"}})
+            json!({"info": {"command": "get_version", "sequence_id": sequence_id}})
         )]
     );
 }
@@ -538,10 +675,12 @@ async fn refresh_missing_model_fails_before_pushall() {
         .unwrap_err();
 
     assert!(format!("{err:#}").contains("missing ota product_name"));
+    let published = transport.published_commands().await;
+    let sequence_id = studio_sequence_id(&published[0].payload, "info");
     assert_eq!(
-        transport.published_commands().await,
+        published,
         [request_command(
-            json!({"info": {"command": "get_version", "sequence_id": "90002"}})
+            json!({"info": {"command": "get_version", "sequence_id": sequence_id}})
         )]
     );
 }

@@ -6,9 +6,18 @@ import en from "../messages/en.json";
 import { DashboardRuntime } from "./dashboard-runtime";
 import type { AuthMetadata, Tenant } from "./dashboard-types";
 import type { DashboardView } from "./dashboard-shell";
+import { toast } from "sonner";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 const tenant: Tenant = {
@@ -121,6 +130,57 @@ describe("DashboardRuntime live connection", () => {
     expect(screen.getByRole("link", { name: "Tenant Two" })).toHaveAttribute(
       "href",
       "/jobs?tenant=t2&status=refresh_queued",
+    );
+  });
+
+  it("shows a toast for printer operation command results", async () => {
+    let socket: { onmessage: ((message: { data: string }) => void) | null } | null = null;
+    vi.stubGlobal("fetch", vi.fn());
+    vi.stubGlobal(
+      "WebSocket",
+      class {
+        onopen: (() => void) | null = null;
+        onmessage: ((message: { data: string }) => void) | null = null;
+
+        constructor() {
+          socket = this;
+        }
+
+        close() {}
+      },
+    );
+
+    renderRuntime();
+
+    await waitFor(() => expect(socket).not.toBeNull());
+    socket?.onmessage?.({
+      data: JSON.stringify({
+        type: "command_result",
+        command: {
+          id: "cmd1",
+          tenant_id: "t1",
+          agent_id: "a1",
+          printer_id: "p1",
+          kind: "printer_operation",
+          status: "succeeded",
+          payload_json: "{}",
+          error: null,
+          result_json: JSON.stringify({
+            type: "printer_operation",
+            action: "ams_reread_rfid",
+            sequence_id: "20000",
+            mqtt_result: "success",
+          }),
+          created_at: "2026-07-03T00:00:00Z",
+          updated_at: "2026-07-03T00:00:01Z",
+        },
+      }),
+    });
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Printer control completed", {
+        description: "#20000",
+      }),
     );
   });
 });

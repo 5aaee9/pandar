@@ -128,7 +128,7 @@ pub async fn handle_result_and_job(
     command_id: CommandId,
     result: CommandResult,
     link_printer_access_code: Option<&str>,
-) -> Result<(), Status> {
+) -> Result<Option<CommandRecord>, Status> {
     let command = state
         .commands()
         .load_owned(command_id, tenant_id, agent_id)
@@ -144,8 +144,9 @@ pub async fn handle_result_and_job(
                 .mark_print_succeeded(command_id, tenant_id, agent_id)
                 .await
                 .map_err(repository_status)?;
+            Ok(None)
         } else {
-            state
+            let command = state
                 .commands()
                 .mark_succeeded_with_result(
                     command_id,
@@ -155,6 +156,7 @@ pub async fn handle_result_and_job(
                 )
                 .await
                 .map_err(repository_status)?;
+            Ok(Some(command))
         }
     } else {
         if command.kind == "print_project_file" {
@@ -163,8 +165,9 @@ pub async fn handle_result_and_job(
                 .mark_print_failed(command_id, tenant_id, agent_id, error)
                 .await
                 .map_err(repository_status)?;
+            Ok(None)
         } else {
-            state
+            let command = state
                 .commands()
                 .mark_failed_with_result(
                     command_id,
@@ -175,9 +178,9 @@ pub async fn handle_result_and_job(
                 )
                 .await
                 .map_err(repository_status)?;
+            Ok(Some(command))
         }
     }
-    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

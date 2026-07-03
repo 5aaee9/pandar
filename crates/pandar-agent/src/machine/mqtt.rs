@@ -1,4 +1,10 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    },
+    time::Duration,
+};
 
 #[cfg(test)]
 use std::collections::VecDeque;
@@ -32,6 +38,9 @@ pub const BAMBU_MQTT_PORT: u16 = 8883;
 pub const BAMBU_MQTT_USERNAME: &str = "bblp";
 pub const BAMBU_MQTT_QOS: u8 = 1;
 const BAMBU_MQTT_MAX_PACKET_SIZE: usize = 256 * 1024;
+const STUDIO_START_SEQUENCE_ID: u32 = 20000;
+const STUDIO_END_SEQUENCE_ID: u32 = 30000;
+static STUDIO_SEQUENCE_ID: AtomicU32 = AtomicU32::new(STUDIO_START_SEQUENCE_ID);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BambuMqttTopics {
@@ -143,50 +152,96 @@ pub enum BambuMqttCommand {
 impl BambuMqttCommand {
     pub fn payload(&self) -> Value {
         match self {
-            Self::GetVersion => json!({"info": {"command": "get_version", "sequence_id": "90002"}}),
-            Self::RequestPushAll => json!({"pushing": {"command": "pushall"}}),
-            Self::PausePrint => json!({"print": {"command": "pause", "sequence_id": "0"}}),
-            Self::ResumePrint => json!({"print": {"command": "resume", "sequence_id": "0"}}),
-            Self::StopPrint => json!({"print": {"command": "stop", "sequence_id": "0"}}),
+            Self::GetVersion => {
+                json!({"info": {"command": "get_version", "sequence_id": next_studio_sequence_id()}})
+            }
+            Self::RequestPushAll => json!({"pushing": {
+                "command": "pushall",
+                "sequence_id": next_studio_sequence_id(),
+                "version": 1,
+                "push_target": 1
+            }}),
+            Self::PausePrint => {
+                json!({"print": {"command": "pause", "param": "", "sequence_id": next_studio_sequence_id()}})
+            }
+            Self::ResumePrint => {
+                json!({"print": {"command": "resume", "param": "", "sequence_id": next_studio_sequence_id()}})
+            }
+            Self::StopPrint => {
+                json!({"print": {"command": "stop", "param": "", "sequence_id": next_studio_sequence_id()}})
+            }
             Self::SetPrintSpeed(speed) => {
-                json!({"print": {"command": "print_speed", "param": speed.as_u8().to_string(), "sequence_id": "0"}})
+                json!({"print": {"command": "print_speed", "param": speed.as_u8().to_string(), "sequence_id": next_studio_sequence_id()}})
             }
             Self::GcodeLine(command) => {
-                json!({"print": {"command": "gcode_line", "param": command.lines.join("\n"), "sequence_id": "90001"}})
+                json!({"print": {"command": "gcode_line", "param": command.lines.join("\n"), "sequence_id": next_studio_sequence_id()}})
             }
-            Self::AmsRereadRfid(command) => {
-                json!({"print": {"command": "ams_get_rfid", "sequence_id": "0", "ams_id": command.ams_id, "slot_id": command.slot_id}})
-            }
-            Self::AmsLoadFilament(command) => {
-                let mut print = serde_json::Map::from_iter([
-                    ("command".to_owned(), json!("ams_change_filament")),
-                    ("sequence_id".to_owned(), json!("0")),
-                    ("ams_id".to_owned(), json!(command.ams_id)),
-                    ("slot_id".to_owned(), json!(command.slot_id)),
-                    ("target".to_owned(), json!(command.target)),
-                    ("curr_temp".to_owned(), json!(-1)),
-                    ("tar_temp".to_owned(), json!(-1)),
-                ]);
-                if let Some(extruder_id) = command.extruder_id {
-                    print.insert("extruder_id".to_owned(), json!(extruder_id));
-                }
-                json!({ "print": print })
-            }
-            Self::AmsUnloadFilament(command) => {
-                let _ = command.slot_id;
-                let _ = command.target;
-                json!({"print": {"command": "ams_change_filament", "sequence_id": "0", "ams_id": command.ams_id, "slot_id": 255, "target": 255, "curr_temp": 210, "tar_temp": 210}})
-            }
+            Self::AmsRereadRfid(command) => ams_reread_rfid_payload(command),
+            Self::AmsLoadFilament(command) => ams_load_filament_payload(command),
+            Self::AmsUnloadFilament(command) => ams_unload_filament_payload(command),
             Self::RawJson(payload) => payload.clone(),
             Self::ProjectFile(command) => project_file_payload(command),
         }
     }
 }
 
+fn next_studio_sequence_id() -> String {
+    next_studio_sequence_id_from(&STUDIO_SEQUENCE_ID)
+}
+
+fn next_studio_sequence_id_from(sequence: &AtomicU32) -> String {
+    loop {
+        let current = sequence.load(Ordering::Relaxed);
+        let sequence_id = if (STUDIO_START_SEQUENCE_ID..STUDIO_END_SEQUENCE_ID).contains(&current) {
+            current
+        } else {
+            STUDIO_START_SEQUENCE_ID
+        };
+        let next = if sequence_id + 1 >= STUDIO_END_SEQUENCE_ID {
+            STUDIO_START_SEQUENCE_ID
+        } else {
+            sequence_id + 1
+        };
+
+        if sequence
+            .compare_exchange(current, next, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+        {
+            return sequence_id.to_string();
+        }
+    }
+}
+
+fn ams_reread_rfid_payload(command: &AmsSlotCommand) -> Value {
+    json!({"print": {"command": "ams_get_rfid", "sequence_id": next_studio_sequence_id(), "ams_id": command.ams_id, "slot_id": command.slot_id}})
+}
+
+fn ams_load_filament_payload(command: &AmsFilamentCommand) -> Value {
+    let mut print = serde_json::Map::from_iter([
+        ("command".to_owned(), json!("ams_change_filament")),
+        ("sequence_id".to_owned(), json!(next_studio_sequence_id())),
+        ("ams_id".to_owned(), json!(command.ams_id)),
+        ("slot_id".to_owned(), json!(command.slot_id)),
+        ("target".to_owned(), json!(command.target)),
+        ("curr_temp".to_owned(), json!(-1)),
+        ("tar_temp".to_owned(), json!(-1)),
+    ]);
+    if let Some(extruder_id) = command.extruder_id {
+        print.insert("extruder_id".to_owned(), json!(extruder_id));
+    }
+    json!({ "print": print })
+}
+
+fn ams_unload_filament_payload(command: &AmsFilamentCommand) -> Value {
+    let _ = command.slot_id;
+    let _ = command.target;
+    json!({"print": {"command": "ams_change_filament", "sequence_id": next_studio_sequence_id(), "ams_id": command.ams_id, "slot_id": 255, "target": 255, "curr_temp": 210, "tar_temp": 210}})
+}
+
 fn project_file_payload(command: &ProjectFileCommand) -> Value {
     let mut print = serde_json::Map::new();
     print.insert("command".to_owned(), json!("project_file"));
-    print.insert("sequence_id".to_owned(), json!("20000"));
+    print.insert("sequence_id".to_owned(), json!(next_studio_sequence_id()));
     print.insert(
         "param".to_owned(),
         json!(format!("Metadata/plate_{}.gcode", command.plate_id)),
@@ -900,6 +955,7 @@ struct FakeMqttTransportState {
     fail_publish_payload: Option<Value>,
     infinite_unrelated_reports: bool,
     last_material_report: Option<Value>,
+    echo_operation_reports: bool,
 }
 
 #[cfg(test)]
@@ -940,6 +996,15 @@ impl FakeMqttTransport {
         }
     }
 
+    pub fn with_operation_reports() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(FakeMqttTransportState {
+                echo_operation_reports: true,
+                ..Default::default()
+            })),
+        }
+    }
+
     pub async fn subscriptions(&self) -> Vec<String> {
         self.state.lock().await.subscriptions.clone()
     }
@@ -963,12 +1028,21 @@ impl BambuMqttTransport for FakeMqttTransport {
 
     async fn publish(&self, command: PublishedMqttCommand) -> anyhow::Result<()> {
         let mut state = self.state.lock().await;
-        if state.fail_publish_payload.as_ref() == Some(&command.payload) {
+        if state
+            .fail_publish_payload
+            .as_ref()
+            .is_some_and(|payload| published_payload_matches(payload, &command.payload))
+        {
             bail!("fake publish failure");
         }
-        if command.payload == BambuMqttCommand::RequestPushAll.payload()
+        if is_pushall_payload(&command.payload)
             && state.reports.is_empty()
             && let Some(report) = state.last_material_report.clone()
+        {
+            state.reports.push_back(report);
+        }
+        if state.echo_operation_reports
+            && let Some(report) = operation_report_for_payload(&command.payload)
         {
             state.reports.push_back(report);
         }
@@ -995,6 +1069,32 @@ impl BambuMqttTransport for FakeMqttTransport {
         tokio::time::sleep(Duration::from_millis(1)).await;
         Ok(json!({"print": {"gcode_state": "RUNNING"}}))
     }
+}
+
+#[cfg(test)]
+fn is_pushall_payload(payload: &Value) -> bool {
+    payload["pushing"]["command"].as_str() == Some("pushall")
+}
+
+#[cfg(test)]
+fn published_payload_matches(expected: &Value, actual: &Value) -> bool {
+    expected == actual
+        || ["info", "pushing", "print"].into_iter().any(|section| {
+            expected[section]["command"].as_str().is_some()
+                && expected[section]["command"].as_str() == actual[section]["command"].as_str()
+        })
+}
+
+#[cfg(test)]
+fn operation_report_for_payload(payload: &Value) -> Option<Value> {
+    let print = payload.get("print")?;
+    Some(json!({
+        "print": {
+            "command": print.get("command")?.clone(),
+            "sequence_id": print.get("sequence_id")?.clone(),
+            "result": "success"
+        }
+    }))
 }
 
 #[cfg(test)]

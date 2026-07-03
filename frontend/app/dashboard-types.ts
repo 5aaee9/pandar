@@ -343,6 +343,10 @@ export type PrinterEvent =
   | {
       type: "job_progress";
       job: Job;
+    }
+  | {
+      type: "command_result";
+      command: Command;
     };
 
 export type PrinterEventTicket = {

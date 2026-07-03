@@ -43,6 +43,10 @@
       "printer_control_queued": "Printer control queued",
       "agent_not_connected": "Agent is not connected to this Hub process"
     },
+    "commandResult": {
+      "printerControlCompleted": "Printer control completed",
+      "printerControlFailed": "Printer control failed"
+    },
     "notification": {
       "liveTitle": "Live connection",
       "liveUnavailable": "Live updates unavailable because no server-side auth token is configured.",

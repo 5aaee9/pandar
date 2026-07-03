@@ -14,6 +14,7 @@ use crate::{
     grpc::print_reports::handle_print_report,
     grpc::printer_materials::handle_materials_snapshot,
     grpc::printer_snapshots::handle_snapshot,
+    printer_events::{PrinterEvent, PrinterEventCommand},
     protocol::agent::v1::{
         AgentEvent, AgentHello, CommandResult, HubCommand, agent_control_server::AgentControl,
         agent_event,
@@ -429,7 +430,7 @@ async fn handle_result_for_command(
     result: CommandResult,
     link_printer_access_code: Option<&str>,
 ) -> Result<(), Status> {
-    handle_result_and_job(
+    let command = handle_result_and_job(
         state,
         tenant_id,
         agent_id,
@@ -437,7 +438,19 @@ async fn handle_result_for_command(
         result,
         link_printer_access_code,
     )
-    .await
+    .await?;
+    if let Some(command) = command {
+        state
+            .printer_events()
+            .publish_local(
+                tenant_id,
+                PrinterEvent::CommandResult {
+                    command: Box::new(PrinterEventCommand::from(command)),
+                },
+            )
+            .await;
+    }
+    Ok(())
 }
 
 async fn link_printer_command_is_terminal(
