@@ -48,7 +48,7 @@ export function FleetStatusStrip({
           </div>
         </div>
         <div
-          className={`grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:border-l sm:pl-5 ${verdict.tone.divider}`}
+          className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-0 sm:pl-5"
           aria-hidden={fleetEmpty}
         >
           <StatCell
@@ -63,6 +63,7 @@ export function FleetStatusStrip({
             label={tStat('agents')}
             value={fleetEmpty ? tStat('dash') : tStat('agentsValue', { connected: health.agentsConnected, total: health.agentsTotal })}
             note={health.agentsTotal - health.agentsConnected > 0 ? tStat('agentsNote', { count: health.agentsTotal - health.agentsConnected }) : null}
+            separatorClassName={verdict.tone.separator}
             state={health.agentsConnected < health.agentsTotal ? 'warning' : 'success'}
           />
           <StatCell
@@ -70,6 +71,7 @@ export function FleetStatusStrip({
             label={tStat('activeJobs')}
             value={fleetEmpty ? tStat('dash') : tStat('activeJobsValue', { count: health.jobsActive })}
             note={health.jobsFailed > 0 ? tStat('activeJobsNote', { count: health.jobsFailed }) : null}
+            separatorClassName={verdict.tone.separator}
             state={health.jobsFailed > 0 ? 'critical' : 'success'}
           />
         </div>

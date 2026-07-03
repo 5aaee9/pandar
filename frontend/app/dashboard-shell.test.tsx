@@ -190,9 +190,19 @@ describe("FleetStatusStrip", () => {
       "dark:border-emerald-900/60",
       "dark:bg-emerald-950/30",
     );
-    expect(screen.getByText("0/0 online").closest("a")?.parentElement).toHaveClass(
-      "dark:sm:divide-transparent",
-      "dark:sm:border-transparent",
+    expect(screen.getByText("0/0 online").closest("a")?.parentElement).not.toHaveClass(
+      "sm:divide-x",
+      "sm:border-l",
+    );
+    expect(screen.getByRole("link", { name: "Printers 0/0 online" })).not.toHaveClass(
+      "sm:before:absolute",
+    );
+    expect(screen.getByRole("link", { name: "Agents 1/1 connected" })).toHaveClass(
+      "sm:before:absolute",
+      "sm:before:left-0",
+      "sm:before:w-px",
+      "sm:before:bg-emerald-200",
+      "dark:sm:before:bg-emerald-900/60",
     );
     expect(screen.getByText("0/0 online")).toHaveClass("dark:text-foreground");
     expect(screen.getByText("Printers")).toHaveClass("dark:text-muted-foreground");
