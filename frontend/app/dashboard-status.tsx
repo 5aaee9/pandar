@@ -78,11 +78,11 @@ export function StatCell({
 }) {
   return (
     <div
-      className={`relative ${separatorClassName ? `sm:before:absolute sm:before:bottom-2 sm:before:left-2 sm:before:top-2 sm:before:w-px sm:before:content-[''] ${separatorClassName}` : ''}`}
+      className={`relative ${separatorClassName ? `lg:before:absolute lg:before:bottom-2 lg:before:left-2 lg:before:top-2 lg:before:w-px lg:before:content-[''] ${separatorClassName}` : ''}`}
     >
       <a
         href={href}
-        className={`block rounded-md px-3 py-1 transition-colors hover:bg-slate-100/70 dark:hover:bg-white/10 ${separatorClassName ? 'sm:ml-4' : ''}`}
+        className={`block rounded-md px-3 py-1 transition-colors hover:bg-slate-100/70 dark:hover:bg-white/10 ${separatorClassName ? 'lg:ml-4' : ''}`}
       >
         <div className="flex items-center gap-1.5">
           <StatusIcon severity={state} className="h-3.5 w-3.5" />

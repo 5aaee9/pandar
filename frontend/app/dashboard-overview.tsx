@@ -39,7 +39,7 @@ export function FleetStatusStrip({
       aria-label={tAria('ariaFleet')}
       className={`overflow-hidden rounded-lg border ${verdict.tone.border} ${verdict.tone.surface}`}
     >
-      <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-5">
+      <div className="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:gap-5">
         <div className="flex min-w-0 items-center gap-3">
           <StatusIcon severity={verdict.severity} className="h-6 w-6 shrink-0" />
           <div className="min-w-0">
@@ -48,7 +48,7 @@ export function FleetStatusStrip({
           </div>
         </div>
         <div
-          className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-0 sm:pl-5"
+          className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-0 lg:pl-5"
           aria-hidden={fleetEmpty}
         >
           <StatCell

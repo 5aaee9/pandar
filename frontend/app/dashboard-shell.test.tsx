@@ -190,6 +190,25 @@ describe("FleetStatusStrip", () => {
       "dark:border-emerald-900/60",
       "dark:bg-emerald-950/30",
     );
+    expect(screen.getByRole("region", { name: "Fleet status" }).firstElementChild).not.toHaveClass(
+      "sm:flex-row",
+      "sm:items-center",
+    );
+    expect(screen.getByRole("region", { name: "Fleet status" }).firstElementChild).toHaveClass(
+      "lg:flex-row",
+      "lg:items-center",
+    );
+    expect(screen.getByText("0/0 online").closest("[aria-hidden]")).not.toHaveClass(
+      "sm:grid-cols-3",
+      "sm:gap-0",
+      "sm:pl-5",
+    );
+    expect(screen.getByText("0/0 online").closest("[aria-hidden]")).toHaveClass(
+      "sm:grid-cols-2",
+      "lg:grid-cols-3",
+      "lg:gap-0",
+      "lg:pl-5",
+    );
     expect(screen.getByText("0/0 online").closest("a")?.parentElement).not.toHaveClass(
       "sm:divide-x",
       "sm:border-l",
@@ -200,27 +219,28 @@ describe("FleetStatusStrip", () => {
       "Active jobs 0 active",
     ]) {
       const link = screen.getByRole("link", { name });
-      expect(link).not.toHaveClass("sm:before:absolute");
+      expect(link).not.toHaveClass("sm:before:absolute", "sm:ml-4");
       expect(link).not.toHaveClass("sm:ml-2");
-      expect(link).toHaveClass("sm:ml-4");
+      expect(link).toHaveClass("lg:ml-4");
       expect(link.parentElement).toHaveClass(
-        "sm:before:absolute",
-        "sm:before:left-2",
-        "sm:before:top-2",
-        "sm:before:bottom-2",
-        "sm:before:w-px",
-        "sm:before:bg-emerald-200",
-        "dark:sm:before:bg-emerald-900/60",
+        "lg:before:absolute",
+        "lg:before:left-2",
+        "lg:before:top-2",
+        "lg:before:bottom-2",
+        "lg:before:w-px",
+        "lg:before:bg-emerald-200",
+        "dark:lg:before:bg-emerald-900/60",
       );
     }
     expect(screen.getByRole("link", { name: "Agents 1/1 connected" }).parentElement).not.toHaveClass(
+      "sm:before:absolute",
       "sm:before:left-0",
       "sm:before:top-0",
       "sm:before:h-full",
     );
     expect(screen.getByRole("link", { name: "Agents 1/1 connected" }).parentElement).toHaveClass(
-      "sm:before:absolute",
-      "sm:before:w-px",
+      "lg:before:absolute",
+      "lg:before:w-px",
     );
     expect(screen.getByText("0/0 online")).toHaveClass("dark:text-foreground");
     expect(screen.getByText("Printers")).toHaveClass("dark:text-muted-foreground");

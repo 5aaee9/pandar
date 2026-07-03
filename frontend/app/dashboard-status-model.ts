@@ -14,28 +14,28 @@ const TONES: Record<Severity, { border: string; surface: string; ink: string; su
     surface: 'bg-red-50 dark:bg-red-950/30',
     ink: 'text-red-900 dark:text-red-50',
     sub: 'text-red-800 dark:text-red-200/80',
-    separator: 'sm:before:bg-red-200 dark:sm:before:bg-red-900/60',
+    separator: 'lg:before:bg-red-200 dark:lg:before:bg-red-900/60',
   },
   warning: {
     border: 'border-amber-200 dark:border-amber-900/60',
     surface: 'bg-amber-50 dark:bg-amber-950/30',
     ink: 'text-amber-900 dark:text-amber-50',
     sub: 'text-amber-800 dark:text-amber-200/80',
-    separator: 'sm:before:bg-amber-200 dark:sm:before:bg-amber-900/60',
+    separator: 'lg:before:bg-amber-200 dark:lg:before:bg-amber-900/60',
   },
   success: {
     border: 'border-emerald-200 dark:border-emerald-900/60',
     surface: 'bg-emerald-50 dark:bg-emerald-950/30',
     ink: 'text-emerald-900 dark:text-emerald-50',
     sub: 'text-emerald-800 dark:text-emerald-200/80',
-    separator: 'sm:before:bg-emerald-200 dark:sm:before:bg-emerald-900/60',
+    separator: 'lg:before:bg-emerald-200 dark:lg:before:bg-emerald-900/60',
   },
   info: {
     border: 'border-slate-200 dark:border-border',
     surface: 'bg-white dark:bg-card',
     ink: 'text-slate-900 dark:text-foreground',
     sub: 'text-slate-600 dark:text-muted-foreground',
-    separator: 'sm:before:bg-slate-200 dark:sm:before:bg-border',
+    separator: 'lg:before:bg-slate-200 dark:lg:before:bg-border',
   },
 }
 
