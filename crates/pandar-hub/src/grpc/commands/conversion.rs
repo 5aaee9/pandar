@@ -183,9 +183,11 @@ fn proto_printer_operation(operation: PrinterOperationKind) -> printer_operation
         PrinterOperationKind::SetHotendTemperature {
             temperature_celsius,
             wait,
+            extruder_id,
         } => printer_operation::Operation::SetHotendTemperature(SetHotendTemperatureOperation {
             temperature_celsius: temperature_celsius.into(),
             wait,
+            extruder_id,
         }),
         PrinterOperationKind::AmsRereadRfid { ams_id, slot_id } => {
             printer_operation::Operation::AmsRereadRfid(AmsRereadRfidOperation { ams_id, slot_id })

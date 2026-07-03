@@ -66,6 +66,7 @@ pub enum PrinterOperationKind {
     SetHotendTemperature {
         temperature_celsius: u16,
         wait: bool,
+        extruder_id: Option<u32>,
     },
     AmsRereadRfid {
         ams_id: u32,
@@ -125,8 +126,13 @@ pub fn validate_printer_operation(operation: &PrinterOperationKind) -> Repositor
         } => validate_move_axes(movements, *feedrate_mm_per_min),
         PrinterOperationKind::SetHotendTemperature {
             temperature_celsius,
+            extruder_id,
             ..
-        } if *temperature_celsius <= MAX_HOTEND_TEMPERATURE_CELSIUS => Ok(()),
+        } if *temperature_celsius <= MAX_HOTEND_TEMPERATURE_CELSIUS
+            && extruder_id.is_none_or(|value| value <= MAX_EXTRUDER_ID) =>
+        {
+            Ok(())
+        }
         PrinterOperationKind::SetHotendTemperature { .. } => {
             Err(RepositoryError::InvalidPrinterControl)
         }
@@ -202,9 +208,11 @@ pub fn operation_audit_metadata(
         PrinterOperationKind::SetHotendTemperature {
             temperature_celsius,
             wait,
+            extruder_id,
         } => {
             metadata.insert("temperature_celsius".to_owned(), json!(temperature_celsius));
             metadata.insert("wait".to_owned(), json!(wait));
+            metadata.insert("extruder_id".to_owned(), json!(extruder_id));
         }
         PrinterOperationKind::AmsRereadRfid { ams_id, slot_id } => {
             metadata.insert("ams_id".to_owned(), json!(ams_id));

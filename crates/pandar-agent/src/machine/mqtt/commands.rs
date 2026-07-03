@@ -58,6 +58,12 @@ pub struct GcodeLineCommand {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetNozzleTemperatureCommand {
+    pub extruder_id: u32,
+    pub target_temp: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AmsSlotCommand {
     pub ams_id: u32,
     pub slot_id: u32,
@@ -107,6 +113,7 @@ pub enum BambuMqttCommand {
     StopPrint,
     SetPrintSpeed(PrintSpeed),
     SelectExtruder(u32),
+    SetNozzleTemperature(SetNozzleTemperatureCommand),
     GcodeLine(GcodeLineCommand),
     AmsRereadRfid(AmsSlotCommand),
     AmsLoadFilament(AmsFilamentCommand),
@@ -141,6 +148,9 @@ impl BambuMqttCommand {
             }
             Self::SelectExtruder(extruder_id) => {
                 json!({"print": {"command": "select_extruder", "extruder_index": extruder_id, "sequence_id": next_studio_sequence_id()}})
+            }
+            Self::SetNozzleTemperature(command) => {
+                json!({"print": {"command": "set_nozzle_temp", "extruder_index": command.extruder_id, "target_temp": command.target_temp, "sequence_id": next_studio_sequence_id()}})
             }
             Self::GcodeLine(command) => {
                 json!({"print": {"command": "gcode_line", "param": command.lines.join("\n"), "sequence_id": next_studio_sequence_id()}})

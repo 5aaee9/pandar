@@ -443,6 +443,7 @@ async fn command_enqueue_printer_operation_rejects_invalid_speed() {
         PrinterOperationKind::SetHotendTemperature {
             temperature_celsius: 301,
             wait: false,
+            extruder_id: None,
         },
     ] {
         let err = commands

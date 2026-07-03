@@ -5,6 +5,7 @@ mod config;
 mod diagnostics;
 mod events;
 mod link;
+mod operation_results;
 mod operations;
 mod print_project;
 mod refresh;

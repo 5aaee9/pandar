@@ -6,6 +6,7 @@ use super::{
     mqtt::{
         AmsFilamentCommand, AmsSlotCommand, BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics,
         BambuMqttTransport, GcodeLineCommand, PrintSpeed, PublishedMqttCommand,
+        SetNozzleTemperatureCommand,
     },
 };
 
@@ -28,6 +29,7 @@ pub enum PrinterOperation {
     SetHotendTemperature {
         temperature_celsius: u16,
         wait: bool,
+        extruder_id: Option<u32>,
     },
     AmsRereadRfid {
         ams_id: u32,
@@ -135,13 +137,22 @@ fn mqtt_command_for_printer_operation(
         PrinterOperation::SetHotendTemperature {
             temperature_celsius,
             wait,
-        } => Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
-            lines: vec![format!(
-                "{} S{}",
-                if wait { "M109" } else { "M104" },
-                temperature_celsius
-            )],
-        })),
+            extruder_id,
+        } => match extruder_id {
+            Some(extruder_id) => Ok(BambuMqttCommand::SetNozzleTemperature(
+                SetNozzleTemperatureCommand {
+                    extruder_id,
+                    target_temp: temperature_celsius,
+                },
+            )),
+            None => Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
+                lines: vec![format!(
+                    "{} S{}",
+                    if wait { "M109" } else { "M104" },
+                    temperature_celsius
+                )],
+            })),
+        },
         PrinterOperation::AmsRereadRfid { ams_id, slot_id } => {
             Ok(BambuMqttCommand::AmsRereadRfid(AmsSlotCommand {
                 ams_id,

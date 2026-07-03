@@ -96,12 +96,13 @@ impl PrinterOperationRequest {
                     && self.axes.is_empty()
                     && self.movements.is_empty()
                     && self.feedrate_mm_per_min.is_none()
-                    && self.no_ams_fields()
+                    && self.no_material_fields()
                     && self.temperature_celsius.is_some() =>
             {
                 Ok(PrinterOperationKind::SetHotendTemperature {
                     temperature_celsius: self.temperature_celsius.expect("checked above"),
                     wait: self.wait.unwrap_or(false),
+                    extruder_id: self.extruder_id,
                 })
             }
             "ams_reread_rfid"
@@ -173,10 +174,13 @@ impl PrinterOperationRequest {
     }
 
     fn no_ams_fields(&self) -> bool {
+        self.no_material_fields() && self.extruder_id.is_none()
+    }
+
+    fn no_material_fields(&self) -> bool {
         self.ams_id.is_none()
             && self.slot_id.is_none()
             && self.global_tray_id.is_none()
             && self.external_id.is_none()
-            && self.extruder_id.is_none()
     }
 }

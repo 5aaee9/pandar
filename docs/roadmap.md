@@ -57,6 +57,8 @@
 - Moved printer Stop/Pause actions into a dedicated Controls section below the status area instead of sharing the temperature telemetry row.
 - Kept printer Stop/Pause actions on a single row inside the Controls section.
 - Added a dual-nozzle switch affordance beside the chamber temperature card, with active nozzle highlighting driven by machine snapshot state and Bambu Studio-style `select_extruder` dispatch.
+- Added clickable nozzle-temperature controls in the Devices printer cards, with single-nozzle presets/custom input and dual-nozzle left/right controls that highlight the active nozzle.
+- Matched Bambu Studio's dual-nozzle temperature behavior by sending targeted hotend changes as MQTT `set_nozzle_temp` with `extruder_index`, while preserving legacy single-nozzle `M104`/`M109` dispatch.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.
 - Created the initial Rust workspace with `pandar-core`, `pandar-hub`, `pandar-agent`, and `pandar-app`.
 - Added a repository-backed Axum hub with health, summary, tenant create/list, and tenant-scoped agent create/list endpoints.

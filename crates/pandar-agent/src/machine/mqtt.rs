@@ -18,6 +18,7 @@ pub(crate) use commands::next_studio_sequence_id_from;
 pub use commands::{
     AmsFilamentCommand, AmsSlotCommand, BambuMqttCommand, BambuMqttTopics, GcodeLineCommand,
     MachineReportDiagnostic, PrintReportProgress, PrintSpeed, ProjectFileCommand,
+    SetNozzleTemperatureCommand,
 };
 #[cfg(test)]
 pub(crate) use fake::FakeMqttTransport;

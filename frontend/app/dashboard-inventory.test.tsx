@@ -267,6 +267,60 @@ describe("PrinterInventory", () => {
     expect(card).not.toHaveTextContent("27° / 0°");
   });
 
+  it("opens a single-nozzle temperature menu with preset controls", async () => {
+    const user = userEvent.setup();
+    const heatingPrinter: Printer = {
+      ...printer,
+      nozzle_temperatures: [{ label: null, current_celsius: "27", target_celsius: "0" }],
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Set nozzle temperature" }));
+
+    expect(screen.getByText("Set Nozzle Temperature")).toBeVisible();
+    const preset = screen.getByRole("button", { name: "220 C" });
+    const form = preset.closest("form");
+    expect(form?.querySelector('input[name="action"]')).toHaveValue("set_hotend_temperature");
+    expect(form?.querySelector('input[name="temperature_celsius"]')).toHaveValue("220");
+    expect(form?.querySelector('input[name="extruder_id"]')).toBeNull();
+    expect(screen.getByPlaceholderText("Custom")).toBeVisible();
+  });
+
+  it("opens dual-nozzle temperature controls with active nozzle highlighted", async () => {
+    const user = userEvent.setup();
+    const dualNozzlePrinter: Printer = {
+      ...printer,
+      nozzle_temperatures: [
+        { label: "L", current_celsius: "41", target_celsius: "220" },
+        { label: "R", current_celsius: "42", target_celsius: "0" },
+      ],
+      active_nozzle: "R",
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[dualNozzlePrinter]} agents={[agent]} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Set nozzle temperatures" }));
+
+    expect(screen.getByText("Set Nozzle Temperatures")).toBeVisible();
+    const rightPanel = screen.getByText("Right Temp").closest("div");
+    expect(rightPanel).toHaveClass("border-primary");
+
+    const rightOff = within(rightPanel!).getByRole("button", { name: "Off" });
+    const rightForm = rightOff.closest("form");
+    expect(rightForm?.querySelector('input[name="action"]')).toHaveValue("set_hotend_temperature");
+    expect(rightForm?.querySelector('input[name="temperature_celsius"]')).toHaveValue("0");
+    expect(rightForm?.querySelector('input[name="extruder_id"]')).toHaveValue("0");
+
+    const leftPanel = screen.getByText("Left Temp").closest("div");
+    const leftPreset = within(leftPanel!).getByRole("button", { name: "260 C" });
+    expect(leftPreset.closest("form")?.querySelector('input[name="extruder_id"]')).toHaveValue("1");
+  });
+
   it("hides zero bed target temperature", () => {
     const heatingPrinter: Printer = {
       ...printer,

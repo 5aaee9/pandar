@@ -149,6 +149,28 @@ describe("controlPrinter AMS operations", () => {
     expect(body.speed_mode).toBeUndefined();
     expect(body.external_id).toBeUndefined();
   });
+
+  it("posts hotend temperature details to the printer controls API", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("printer_id", "printer-1");
+    formData.set("action", "set_hotend_temperature");
+    formData.set("temperature_celsius", "220");
+    formData.set("extruder_id", "1");
+
+    await expect(controlPrinter(formData)).rejects.toThrow(
+      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_control_queued",
+    );
+
+    const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      action: "set_hotend_temperature",
+      temperature_celsius: 220,
+      extruder_id: 1,
+    });
+    expect(body.wait).toBeUndefined();
+  });
 });
 
 describe("deletePrinter", () => {

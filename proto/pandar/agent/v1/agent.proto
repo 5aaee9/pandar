@@ -191,6 +191,7 @@ message MoveAxesOperation {
 message SetHotendTemperatureOperation {
   uint32 temperature_celsius = 1;
   bool wait = 2;
+  optional uint32 extruder_id = 3;
 }
 
 message AmsRereadRfidOperation {

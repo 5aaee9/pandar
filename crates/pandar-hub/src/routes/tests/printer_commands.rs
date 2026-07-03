@@ -741,7 +741,8 @@ async fn printer_control_accepts_semantic_home_move_and_hotend_operations() {
             json!({
                 "action": "set_hotend_temperature",
                 "temperature_celsius": 215,
-                "wait": true
+                "wait": true,
+                "extruder_id": 1
             }),
             "set_hotend_temperature",
         ),
@@ -759,6 +760,9 @@ async fn printer_control_accepts_semantic_home_move_and_hotend_operations() {
         assert_eq!(body["kind"], "printer_operation");
         let payload: Value = serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
         assert_eq!(payload["operation"]["type"], expected_type);
+        if expected_type == "set_hotend_temperature" {
+            assert_eq!(payload["operation"]["extruder_id"], 1);
+        }
     }
 }
 

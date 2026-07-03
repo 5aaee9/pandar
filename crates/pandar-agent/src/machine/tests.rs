@@ -461,6 +461,7 @@ async fn configured_operate_printer_hotend_publishes_wait_gcode_line() {
             PrinterOperation::SetHotendTemperature {
                 temperature_celsius: 215,
                 wait: true,
+                extruder_id: None,
             },
         )
         .await
@@ -473,6 +474,45 @@ async fn configured_operate_printer_hotend_publishes_wait_gcode_line() {
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
             payload: json!({"print": {"command": "gcode_line", "param": "M109 S215", "sequence_id": sequence_id}}),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_targeted_hotend_publishes_reference_command() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::SetHotendTemperature {
+                temperature_celsius: 220,
+                wait: false,
+                extruder_id: Some(1),
+            },
+        )
+        .await
+        .unwrap();
+
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
+    assert_eq!(
+        published,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: json!({"print": {
+                "command": "set_nozzle_temp",
+                "extruder_index": 1,
+                "target_temp": 220,
+                "sequence_id": sequence_id
+            }}),
             qos: BAMBU_MQTT_QOS,
         }]
     );

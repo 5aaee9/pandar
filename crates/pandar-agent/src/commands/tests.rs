@@ -1879,6 +1879,7 @@ async fn printer_operation_hotend_dispatches_typed_details() {
             assert_eq!(json["action"], "set_hotend_temperature");
             assert_eq!(json["temperature_celsius"], 215);
             assert_eq!(json["wait"], true);
+            assert!(json.get("extruder_id").is_none());
         }
         other => panic!("expected command result, got {other:?}"),
     }
@@ -1889,6 +1890,51 @@ async fn printer_operation_hotend_dispatches_typed_details() {
             MachinePrinterOperation::SetHotendTemperature {
                 temperature_celsius: 215,
                 wait: true,
+                extruder_id: None,
+            }
+        )]
+    );
+}
+
+#[tokio::test]
+async fn printer_operation_targeted_hotend_dispatches_extruder_id() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        hotend_operation_command_with_extruder(command_id.clone(), "SERIAL1", 220, false, Some(1)),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(result.success);
+            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(json["action"], "set_hotend_temperature");
+            assert_eq!(json["temperature_celsius"], 220);
+            assert_eq!(json["extruder_id"], 1);
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.operations().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::SetHotendTemperature {
+                temperature_celsius: 220,
+                wait: false,
+                extruder_id: Some(1),
             }
         )]
     );
@@ -2017,6 +2063,22 @@ fn hotend_operation_command(
     temperature_celsius: u32,
     wait: bool,
 ) -> HubCommand {
+    hotend_operation_command_with_extruder(
+        command_id,
+        serial_number,
+        temperature_celsius,
+        wait,
+        None,
+    )
+}
+
+fn hotend_operation_command_with_extruder(
+    command_id: String,
+    serial_number: &str,
+    temperature_celsius: u32,
+    wait: bool,
+    extruder_id: Option<u32>,
+) -> HubCommand {
     printer_operation_command(
         command_id,
         serial_number,
@@ -2024,6 +2086,7 @@ fn hotend_operation_command(
             SetHotendTemperatureOperation {
                 temperature_celsius,
                 wait,
+                extruder_id,
             },
         )),
     )
