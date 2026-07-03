@@ -129,12 +129,20 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
                 name: "printer-SERIAL1".to_string(),
                 model: Some("P2S".to_string()),
                 state: "READY".to_string(),
+                nozzle_temperatures: Vec::new(),
+                bed_temperature_celsius: None,
+                bed_target_temperature_celsius: None,
+                chamber_temperature_celsius: None,
             },
             MachineSnapshot {
                 serial: "SERIAL2".to_string(),
                 name: "printer-SERIAL2".to_string(),
                 model: Some("X1 Carbon".to_string()),
                 state: "IDLE".to_string(),
+                nozzle_temperatures: Vec::new(),
+                bed_temperature_celsius: None,
+                bed_target_temperature_celsius: None,
+                chamber_temperature_celsius: None,
             },
         ]
     );
@@ -756,6 +764,10 @@ mod runtime {
                 name: "office".to_string(),
                 model: Some("X1 Carbon".to_string()),
                 state: "IDLE".to_string(),
+                nozzle_temperatures: Vec::new(),
+                bed_temperature_celsius: None,
+                bed_target_temperature_celsius: None,
+                chamber_temperature_celsius: None,
             }]
         );
     }
@@ -806,6 +818,10 @@ mod runtime {
                 name: "new office".to_string(),
                 model: Some("P2S".to_string()),
                 state: "PAUSED".to_string(),
+                nozzle_temperatures: Vec::new(),
+                bed_temperature_celsius: None,
+                bed_target_temperature_celsius: None,
+                chamber_temperature_celsius: None,
             }]
         );
     }
@@ -860,6 +876,10 @@ mod runtime {
                 name: "old office".to_string(),
                 model: Some("X1 Carbon".to_string()),
                 state: "IDLE".to_string(),
+                nozzle_temperatures: Vec::new(),
+                bed_temperature_celsius: None,
+                bed_target_temperature_celsius: None,
+                chamber_temperature_celsius: None,
             }]
         );
     }
@@ -1002,6 +1022,10 @@ mod runtime {
                 name: "old office".to_string(),
                 model: Some("X1 Carbon".to_string()),
                 state: "IDLE".to_string(),
+                nozzle_temperatures: Vec::new(),
+                bed_temperature_celsius: None,
+                bed_target_temperature_celsius: None,
+                chamber_temperature_celsius: None,
             }]
         );
     }

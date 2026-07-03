@@ -36,6 +36,16 @@ message PrinterSnapshot {
   string name = 2;
   string state = 3;
   string model = 4;
+  repeated NozzleTemperature nozzle_temperatures = 5;
+  string bed_temperature_celsius = 6;
+  string bed_target_temperature_celsius = 7;
+  string chamber_temperature_celsius = 8;
+}
+
+message NozzleTemperature {
+  string label = 1;
+  string current_celsius = 2;
+  string target_celsius = 3;
 }
 
 message PrinterMaterialsSnapshot {

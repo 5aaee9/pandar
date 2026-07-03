@@ -569,6 +569,10 @@ fn snapshot(serial: &str, name: &str, model: Option<&str>, state: &str) -> Machi
         name: name.to_owned(),
         model: model.map(str::to_owned),
         state: state.to_owned(),
+        nozzle_temperatures: Vec::new(),
+        bed_temperature_celsius: None,
+        bed_target_temperature_celsius: None,
+        chamber_temperature_celsius: None,
     }
 }
 

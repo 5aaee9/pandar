@@ -13,6 +13,10 @@ pub struct Model {
     pub status: String,
     pub last_seen_at: Option<String>,
     pub created_at: String,
+    pub nozzle_temperatures_json: String,
+    pub bed_temperature_celsius: Option<String>,
+    pub bed_target_temperature_celsius: Option<String>,
+    pub chamber_temperature_celsius: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

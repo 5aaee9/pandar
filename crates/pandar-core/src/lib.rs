@@ -16,7 +16,7 @@ pub use job::{
     Job, JobArtifact, JobArtifactParts, JobFilamentUsage, JobParts, JobPrintState, JobStatus,
     PrintStatus,
 };
-pub use printer::{Printer, PrinterParts};
+pub use printer::{Printer, PrinterNozzleTemperature, PrinterParts};
 pub use tenant::Tenant;
 
 #[derive(Debug, Error, PartialEq, Eq)]

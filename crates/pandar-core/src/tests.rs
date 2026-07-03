@@ -82,6 +82,10 @@ fn printer_from_parts_builds_valid_record() {
         status: "online".to_owned(),
         last_seen_at: "2026-06-20T00:00:00Z".to_owned(),
         created_at: "2026-06-19T00:00:00Z".to_owned(),
+        nozzle_temperatures: Vec::new(),
+        bed_temperature_celsius: None,
+        bed_target_temperature_celsius: None,
+        chamber_temperature_celsius: None,
     })
     .unwrap();
 
@@ -107,6 +111,10 @@ fn printer_from_parts_validates_required_fields() {
             status: status.to_owned(),
             last_seen_at: "2026-06-20T00:00:00Z".to_owned(),
             created_at: "2026-06-19T00:00:00Z".to_owned(),
+            nozzle_temperatures: Vec::new(),
+            bed_temperature_celsius: None,
+            bed_target_temperature_celsius: None,
+            chamber_temperature_celsius: None,
         })
     };
 
@@ -140,6 +148,10 @@ fn printer_from_parts_normalizes_blank_model() {
         status: "online".to_owned(),
         last_seen_at: "2026-06-20T00:00:00Z".to_owned(),
         created_at: "2026-06-19T00:00:00Z".to_owned(),
+        nozzle_temperatures: Vec::new(),
+        bed_temperature_celsius: None,
+        bed_target_temperature_celsius: None,
+        chamber_temperature_celsius: None,
     })
     .unwrap();
 

@@ -164,17 +164,53 @@ describe("PrinterInventory", () => {
     expect(screen.getByLabelText("Printer IPv4 address")).toBeVisible();
   });
 
-  it("renders a localized AMS refresh form with tenant and printer ids", () => {
+  it("renders AMS refresh inside the printer actions menu with tenant and printer ids", async () => {
+    const user = userEvent.setup();
     renderWithMessages(
       <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} />,
     );
 
-    const button = screen.getByRole("button", { name: "Refresh AMS" });
+    expect(screen.queryByRole("button", { name: "Refresh AMS" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Details" }));
+
+    const button = screen.getByRole("menuitem", { name: "Refresh AMS" });
     const form = button.closest("form");
 
     expect(form).not.toBeNull();
     expect(form?.querySelector('input[name="tenant_id"]')).toHaveValue("tenant-1");
     expect(form?.querySelector('input[name="printer_id"]')).toHaveValue("printer-1");
+  });
+
+  it("renders printer temperatures and inline stop pause controls in the status area", () => {
+    const heatingPrinter: Printer = {
+      ...printer,
+      nozzle_temperatures: [
+        { label: "L", current_celsius: "41", target_celsius: "220" },
+        { label: "R", current_celsius: "42", target_celsius: "230" },
+      ],
+      bed_temperature_celsius: "60",
+      chamber_temperature_celsius: "32",
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+    );
+
+    const card = screen.getByRole("article", { name: "Office A1" });
+    expect(card).toHaveTextContent("Nozzle");
+    expect(card).toHaveTextContent("L / R");
+    expect(card).toHaveTextContent("41° / 220°");
+    expect(card).toHaveTextContent("Bed");
+    expect(card).toHaveTextContent("60°C");
+    expect(card).toHaveTextContent("Chamber");
+    expect(card).toHaveTextContent("32°C");
+
+    const stopForm = screen.getByRole("button", { name: "Stop" }).closest("form");
+    const pauseForm = screen.getByRole("button", { name: "Pause" }).closest("form");
+    expect(stopForm?.querySelector('input[name="action"]')).toHaveValue("stop");
+    expect(stopForm?.querySelector('input[name="printer_id"]')).toHaveValue("printer-1");
+    expect(pauseForm?.querySelector('input[name="action"]')).toHaveValue("pause");
   });
 
   it("replaces the filament summary with AMS and external slot loading details", () => {

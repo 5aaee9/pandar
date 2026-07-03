@@ -1,5 +1,5 @@
 use anyhow::Context;
-use pandar_core::{AgentId, Printer, PrinterParts, TenantId};
+use pandar_core::{AgentId, Printer, PrinterNozzleTemperature, PrinterParts, TenantId};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder,
     TransactionTrait,
@@ -21,6 +21,10 @@ pub struct PrinterSnapshotUpsert {
     pub model: Option<String>,
     pub status: String,
     pub observed_at: String,
+    pub nozzle_temperatures: Vec<PrinterNozzleTemperature>,
+    pub bed_temperature_celsius: Option<String>,
+    pub bed_target_temperature_celsius: Option<String>,
+    pub chamber_temperature_celsius: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -208,6 +212,11 @@ fn printer_from_model(model: printers::Model) -> RepositoryResult<Printer> {
                 .last_seen_at
                 .context("failed to read printer last_seen_at")?,
             created_at: model.created_at,
+            nozzle_temperatures: serde_json::from_str(&model.nozzle_temperatures_json)
+                .context("failed to read printer nozzle temperatures")?,
+            bed_temperature_celsius: model.bed_temperature_celsius,
+            bed_target_temperature_celsius: model.bed_target_temperature_celsius,
+            chamber_temperature_celsius: model.chamber_temperature_celsius,
         })
         .map_err(anyhow::Error::from)
     })()

@@ -133,12 +133,60 @@ async fn printer_snapshot_event_includes_latest_materials() {
     assert_eq!(printer.materials.unwrap().ams_units[0]["unit_id"], "0");
 }
 
+#[tokio::test]
+async fn printer_snapshot_event_includes_temperatures() {
+    let state = fixture_state().await;
+    let _control_plane = start_control_plane(state.clone()).await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let mut receiver = state.printer_events().subscribe(tenant_id).await;
+    let mut snapshot = snapshot("SN-TEMP", "Printer", "X2D", "IDLE");
+    snapshot.nozzle_temperatures = vec![
+        crate::protocol::agent::v1::NozzleTemperature {
+            label: "L".to_owned(),
+            current_celsius: "41".to_owned(),
+            target_celsius: "220".to_owned(),
+        },
+        crate::protocol::agent::v1::NozzleTemperature {
+            label: "R".to_owned(),
+            current_celsius: "42".to_owned(),
+            target_celsius: "230".to_owned(),
+        },
+    ];
+    snapshot.bed_temperature_celsius = "60".to_owned();
+    snapshot.bed_target_temperature_celsius = "65".to_owned();
+    snapshot.chamber_temperature_celsius = "32".to_owned();
+
+    handle_snapshot(&state, tenant_id, agent_id, snapshot)
+        .await
+        .unwrap();
+
+    let event = receiver.recv().await.unwrap();
+    let PrinterEvent::PrinterSnapshot { printer } = event else {
+        panic!("expected printer snapshot")
+    };
+    assert_eq!(printer.nozzle_temperatures[0].label.as_deref(), Some("L"));
+    assert_eq!(
+        printer.nozzle_temperatures[0].target_celsius.as_deref(),
+        Some("220")
+    );
+    assert_eq!(printer.bed_temperature_celsius.as_deref(), Some("60"));
+    assert_eq!(
+        printer.bed_target_temperature_celsius.as_deref(),
+        Some("65")
+    );
+    assert_eq!(printer.chamber_temperature_celsius.as_deref(), Some("32"));
+}
+
 pub(super) fn snapshot(serial: &str, name: &str, model: &str, state: &str) -> PrinterSnapshot {
     PrinterSnapshot {
         serial: serial.to_string(),
         name: name.to_string(),
         model: model.to_string(),
         state: state.to_string(),
+        nozzle_temperatures: Vec::new(),
+        bed_temperature_celsius: String::new(),
+        bed_target_temperature_celsius: String::new(),
+        chamber_temperature_celsius: String::new(),
     }
 }
 

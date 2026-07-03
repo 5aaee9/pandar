@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use pandar_core::{CommandRecord, Printer, TenantId};
+use pandar_core::{CommandRecord, Printer, PrinterNozzleTemperature, TenantId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::{Mutex, broadcast};
@@ -33,6 +33,10 @@ pub struct PrinterEventPrinter {
     pub status: String,
     pub last_seen_at: String,
     pub created_at: String,
+    pub nozzle_temperatures: Vec<PrinterNozzleTemperature>,
+    pub bed_temperature_celsius: Option<String>,
+    pub bed_target_temperature_celsius: Option<String>,
+    pub chamber_temperature_celsius: Option<String>,
     pub materials: Option<PrinterEventMaterials>,
 }
 
@@ -73,6 +77,10 @@ pub fn printer_event_printer(
         status: printer.status,
         last_seen_at: printer.last_seen_at,
         created_at: printer.created_at,
+        nozzle_temperatures: printer.nozzle_temperatures,
+        bed_temperature_celsius: printer.bed_temperature_celsius,
+        bed_target_temperature_celsius: printer.bed_target_temperature_celsius,
+        chamber_temperature_celsius: printer.chamber_temperature_celsius,
         materials: materials.map(PrinterEventMaterials::from),
     }
 }

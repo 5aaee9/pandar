@@ -785,6 +785,10 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
                 model: Some("A1 Mini".to_string()),
                 status: "idle".to_string(),
                 observed_at: "2026-06-21T00:00:00Z".to_string(),
+                nozzle_temperatures: Vec::new(),
+                bed_temperature_celsius: None,
+                bed_target_temperature_celsius: None,
+                chamber_temperature_celsius: None,
             },
         )
         .await
@@ -799,6 +803,10 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
                 model: Some("A1 Mini".to_string()),
                 status: "printing".to_string(),
                 observed_at: "2026-06-21T00:05:00Z".to_string(),
+                nozzle_temperatures: Vec::new(),
+                bed_temperature_celsius: None,
+                bed_target_temperature_celsius: None,
+                chamber_temperature_celsius: None,
             },
         )
         .await

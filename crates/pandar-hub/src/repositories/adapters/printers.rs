@@ -17,14 +17,25 @@ pub(crate) async fn upsert_snapshot(
 ) -> RepositoryResult<()> {
     match database {
         Database::Sqlite(pool) => {
+            let nozzle_temperatures_json = serde_json::to_string(&snapshot.nozzle_temperatures)
+                .context("failed to serialize nozzle temperatures")?;
             sqlx::query(
-                "INSERT INTO printers (id, tenant_id, agent_id, serial_number, name, model, status, last_seen_at, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
+                "INSERT INTO printers (
+                     id, tenant_id, agent_id, serial_number, name, model, status,
+                     last_seen_at, created_at, nozzle_temperatures_json,
+                     bed_temperature_celsius, bed_target_temperature_celsius,
+                     chamber_temperature_celsius
+                 )
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9, ?10, ?11, ?12)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
                      model = excluded.model,
                      status = excluded.status,
-                     last_seen_at = excluded.last_seen_at",
+                     last_seen_at = excluded.last_seen_at,
+                     nozzle_temperatures_json = excluded.nozzle_temperatures_json,
+                     bed_temperature_celsius = excluded.bed_temperature_celsius,
+                     bed_target_temperature_celsius = excluded.bed_target_temperature_celsius,
+                     chamber_temperature_celsius = excluded.chamber_temperature_celsius",
             )
             .bind(printer_id)
             .bind(tenant_id.to_string())
@@ -34,19 +45,34 @@ pub(crate) async fn upsert_snapshot(
             .bind(&snapshot.model)
             .bind(&snapshot.status)
             .bind(&snapshot.observed_at)
+            .bind(&nozzle_temperatures_json)
+            .bind(&snapshot.bed_temperature_celsius)
+            .bind(&snapshot.bed_target_temperature_celsius)
+            .bind(&snapshot.chamber_temperature_celsius)
             .execute(pool)
             .await
             .context("failed to upsert SQLite printer snapshot")?;
         }
         Database::Postgres(pool) => {
+            let nozzle_temperatures_json = serde_json::to_string(&snapshot.nozzle_temperatures)
+                .context("failed to serialize nozzle temperatures")?;
             sqlx::query(
-                "INSERT INTO printers (id, tenant_id, agent_id, serial_number, name, model, status, last_seen_at, created_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+                "INSERT INTO printers (
+                     id, tenant_id, agent_id, serial_number, name, model, status,
+                     last_seen_at, created_at, nozzle_temperatures_json,
+                     bed_temperature_celsius, bed_target_temperature_celsius,
+                     chamber_temperature_celsius
+                 )
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
                      model = excluded.model,
                      status = excluded.status,
-                     last_seen_at = excluded.last_seen_at",
+                     last_seen_at = excluded.last_seen_at,
+                     nozzle_temperatures_json = excluded.nozzle_temperatures_json,
+                     bed_temperature_celsius = excluded.bed_temperature_celsius,
+                     bed_target_temperature_celsius = excluded.bed_target_temperature_celsius,
+                     chamber_temperature_celsius = excluded.chamber_temperature_celsius",
             )
             .bind(printer_id)
             .bind(tenant_id.to_string())
@@ -56,6 +82,10 @@ pub(crate) async fn upsert_snapshot(
             .bind(&snapshot.model)
             .bind(&snapshot.status)
             .bind(&snapshot.observed_at)
+            .bind(&nozzle_temperatures_json)
+            .bind(&snapshot.bed_temperature_celsius)
+            .bind(&snapshot.bed_target_temperature_celsius)
+            .bind(&snapshot.chamber_temperature_celsius)
             .execute(pool)
             .await
             .context("failed to upsert PostgreSQL printer snapshot")?;

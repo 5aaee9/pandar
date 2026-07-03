@@ -22,6 +22,14 @@ export type Printer = {
   status: string;
   last_seen_at: string;
   created_at: string;
+  nozzle_temperatures?: Array<{
+    label?: string | null;
+    current_celsius?: string | null;
+    target_celsius?: string | null;
+  }>;
+  bed_temperature_celsius?: string | null;
+  bed_target_temperature_celsius?: string | null;
+  chamber_temperature_celsius?: string | null;
   materials: PrinterMaterials | null;
 };
 

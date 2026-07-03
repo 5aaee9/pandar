@@ -45,6 +45,17 @@ pub struct MachineSnapshot {
     pub name: String,
     pub model: Option<String>,
     pub state: String,
+    pub nozzle_temperatures: Vec<MachineNozzleTemperature>,
+    pub bed_temperature_celsius: Option<String>,
+    pub bed_target_temperature_celsius: Option<String>,
+    pub chamber_temperature_celsius: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MachineNozzleTemperature {
+    pub label: Option<String>,
+    pub current_celsius: Option<String>,
+    pub target_celsius: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

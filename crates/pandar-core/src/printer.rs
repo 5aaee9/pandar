@@ -13,6 +13,10 @@ pub struct Printer {
     pub status: String,
     pub last_seen_at: String,
     pub created_at: String,
+    pub nozzle_temperatures: Vec<PrinterNozzleTemperature>,
+    pub bed_temperature_celsius: Option<String>,
+    pub bed_target_temperature_celsius: Option<String>,
+    pub chamber_temperature_celsius: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,6 +30,17 @@ pub struct PrinterParts {
     pub status: String,
     pub last_seen_at: String,
     pub created_at: String,
+    pub nozzle_temperatures: Vec<PrinterNozzleTemperature>,
+    pub bed_temperature_celsius: Option<String>,
+    pub bed_target_temperature_celsius: Option<String>,
+    pub chamber_temperature_celsius: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrinterNozzleTemperature {
+    pub label: Option<String>,
+    pub current_celsius: Option<String>,
+    pub target_celsius: Option<String>,
 }
 
 impl Printer {
@@ -45,6 +60,10 @@ impl Printer {
             status: parts.status,
             last_seen_at: parts.last_seen_at,
             created_at: parts.created_at,
+            nozzle_temperatures: parts.nozzle_temperatures,
+            bed_temperature_celsius: parts.bed_temperature_celsius,
+            bed_target_temperature_celsius: parts.bed_target_temperature_celsius,
+            chamber_temperature_celsius: parts.chamber_temperature_celsius,
         })
     }
 }

@@ -26,8 +26,8 @@ use tokio::sync::{Mutex, mpsc};
 use crate::{
     AgentConfig,
     machine::{
-        BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult, PrinterRefreshResult,
-        materials::normalize_material_patch,
+        BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot, MaterialRefreshResult,
+        PrinterRefreshResult, materials::normalize_material_patch,
     },
     protocol::agent::v1::{
         AgentEvent, MachineDiagnostic, PrintJobReport, PrinterMaterialsSnapshot, agent_event,
@@ -674,6 +674,7 @@ fn qos_from_u8(qos: u8) -> anyhow::Result<QoS> {
 }
 
 pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> MachineSnapshot {
+    let print = report.get("print").unwrap_or(&Value::Null);
     let state = ["/print/gcode_state", "/print/state", "/state"]
         .into_iter()
         .find_map(|path| report.pointer(path).and_then(Value::as_str))
@@ -687,6 +688,92 @@ pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> 
             .unwrap_or_else(|| endpoint.serial.clone()),
         model: None,
         state: state.to_string(),
+        nozzle_temperatures: nozzle_temperatures_from_report(print),
+        bed_temperature_celsius: temperature_string(
+            print
+                .get("bed_temper")
+                .or_else(|| print.get("bed_temp"))
+                .or_else(|| print.get("bed_temperature")),
+        ),
+        bed_target_temperature_celsius: temperature_string(
+            print
+                .get("bed_target_temper")
+                .or_else(|| print.get("target_bed_temper"))
+                .or_else(|| print.get("bed_target_temperature")),
+        ),
+        chamber_temperature_celsius: temperature_string(
+            print
+                .get("chamber_temper")
+                .or_else(|| print.get("chamber_temp"))
+                .or_else(|| print.get("chamber_temperature")),
+        ),
+    }
+}
+
+fn nozzle_temperatures_from_report(print: &Value) -> Vec<MachineNozzleTemperature> {
+    let left = MachineNozzleTemperature {
+        label: None,
+        current_celsius: temperature_string(
+            print
+                .get("nozzle_temper")
+                .or_else(|| print.get("nozzle_temp"))
+                .or_else(|| print.get("nozzle_temperature")),
+        ),
+        target_celsius: temperature_string(
+            print
+                .get("nozzle_target_temper")
+                .or_else(|| print.get("target_nozzle_temper"))
+                .or_else(|| print.get("nozzle_target_temperature")),
+        ),
+    };
+    let right = MachineNozzleTemperature {
+        label: Some("R".to_owned()),
+        current_celsius: temperature_string(
+            print
+                .get("nozzle_temper2")
+                .or_else(|| print.get("right_nozzle_temper"))
+                .or_else(|| print.get("nozzle_temp2")),
+        ),
+        target_celsius: temperature_string(
+            print
+                .get("nozzle_target_temper2")
+                .or_else(|| print.get("right_nozzle_target_temper"))
+                .or_else(|| print.get("target_nozzle_temper2")),
+        ),
+    };
+
+    if right.current_celsius.is_some() || right.target_celsius.is_some() {
+        vec![
+            MachineNozzleTemperature {
+                label: Some("L".to_owned()),
+                ..left
+            },
+            right,
+        ]
+    } else if left.current_celsius.is_some() || left.target_celsius.is_some() {
+        vec![left]
+    } else {
+        Vec::new()
+    }
+}
+
+fn temperature_string(value: Option<&Value>) -> Option<String> {
+    match value? {
+        Value::Number(number) => number
+            .as_f64()
+            .filter(|value| value.is_finite() && *value >= 0.0)
+            .map(|value| {
+                if value.fract() == 0.0 {
+                    format!("{value:.0}")
+                } else {
+                    format!("{value:.1}")
+                }
+            }),
+        Value::String(value) => {
+            let trimmed = value.trim();
+            (!trimmed.is_empty() && trimmed != "-1").then(|| trimmed.to_owned())
+        }
+        _ => None,
     }
 }
 

@@ -31,6 +31,20 @@ pub async fn handle_snapshot(
                 model,
                 status,
                 observed_at,
+                nozzle_temperatures: snapshot
+                    .nozzle_temperatures
+                    .into_iter()
+                    .map(|temperature| pandar_core::PrinterNozzleTemperature {
+                        label: trim_optional(temperature.label),
+                        current_celsius: trim_optional(temperature.current_celsius),
+                        target_celsius: trim_optional(temperature.target_celsius),
+                    })
+                    .collect(),
+                bed_temperature_celsius: trim_optional(snapshot.bed_temperature_celsius),
+                bed_target_temperature_celsius: trim_optional(
+                    snapshot.bed_target_temperature_celsius,
+                ),
+                chamber_temperature_celsius: trim_optional(snapshot.chamber_temperature_celsius),
             },
         )
         .await

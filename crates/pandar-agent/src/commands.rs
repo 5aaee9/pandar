@@ -204,6 +204,22 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
             name: snapshot.name,
             state: snapshot.state,
             model: snapshot.model.unwrap_or_default(),
+            nozzle_temperatures: snapshot
+                .nozzle_temperatures
+                .into_iter()
+                .map(
+                    |temperature| crate::protocol::agent::v1::NozzleTemperature {
+                        label: temperature.label.unwrap_or_default(),
+                        current_celsius: temperature.current_celsius.unwrap_or_default(),
+                        target_celsius: temperature.target_celsius.unwrap_or_default(),
+                    },
+                )
+                .collect(),
+            bed_temperature_celsius: snapshot.bed_temperature_celsius.unwrap_or_default(),
+            bed_target_temperature_celsius: snapshot
+                .bed_target_temperature_celsius
+                .unwrap_or_default(),
+            chamber_temperature_celsius: snapshot.chamber_temperature_celsius.unwrap_or_default(),
         }),
     )
 }
