@@ -16,7 +16,10 @@ import { FormattedDate } from '../components/formatted-date'
 import { deletePrinter, refreshPrinterMaterials } from './actions'
 import type { Printer } from './dashboard-types'
 import { PrinterMaterialsPanel } from './dashboard-printer-materials'
-import { PrinterTemperatureControls } from './dashboard-printer-temperature-controls'
+import {
+  PrinterControlsPanel,
+  PrinterTemperatureControls,
+} from './dashboard-printer-temperature-controls'
 import { StatusBadge } from './dashboard-ui'
 import { ConfirmDialog } from './confirm-dialog'
 export function PrinterCard({
@@ -76,6 +79,8 @@ export function PrinterCard({
       </div>
 
       <PrinterTemperatureControls printer={printer} />
+
+      <PrinterControlsPanel printer={printer} />
 
       <PrinterMaterialsPanel printer={printer} />
     </article>

@@ -15,6 +15,7 @@ fn report_maps_to_snapshot_uses_configured_model() {
             model: Some("A1 Mini".to_string()),
             state: "RUNNING".to_string(),
             nozzle_temperatures: Vec::new(),
+            active_nozzle: None,
             bed_temperature_celsius: None,
             bed_target_temperature_celsius: None,
             chamber_temperature_celsius: None,
@@ -83,7 +84,7 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
                     }
                 },
                 "extruder": {
-                    "state": 2,
+                    "state": 0x0012,
                     "info": [
                         {"id": 0, "info": 8, "temp": (220 << 16) | 27},
                         {"id": 1, "info": 8, "temp": (215 << 16) | 22}
@@ -110,12 +111,55 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
         snapshot.nozzle_temperatures[1].current_celsius.as_deref(),
         Some("27")
     );
+    assert_eq!(snapshot.active_nozzle.as_deref(), Some("L"));
     assert_eq!(snapshot.bed_temperature_celsius.as_deref(), Some("60"));
     assert_eq!(
         snapshot.bed_target_temperature_celsius.as_deref(),
         Some("65")
     );
     assert_eq!(snapshot.chamber_temperature_celsius.as_deref(), Some("32"));
+}
+
+#[test]
+fn report_maps_bambu_studio_v2_active_right_nozzle_to_snapshot() {
+    let report = json!({
+        "print": {
+            "device": {
+                "extruder": {
+                    "state": 0x0002,
+                    "info": [
+                        {"id": 0, "temp": 27},
+                        {"id": 1, "temp": 22}
+                    ]
+                }
+            }
+        }
+    });
+
+    let snapshot = snapshot_from_report(&endpoint(), &report);
+
+    assert_eq!(snapshot.active_nozzle.as_deref(), Some("R"));
+}
+
+#[test]
+fn report_ignores_bambu_studio_v2_target_nozzle_for_active_snapshot() {
+    let report = json!({
+        "print": {
+            "device": {
+                "extruder": {
+                    "state": 0x0102,
+                    "info": [
+                        {"id": 0, "temp": 27},
+                        {"id": 1, "temp": 22}
+                    ]
+                }
+            }
+        }
+    });
+
+    let snapshot = snapshot_from_report(&endpoint(), &report);
+
+    assert_eq!(snapshot.active_nozzle.as_deref(), Some("R"));
 }
 
 #[test]

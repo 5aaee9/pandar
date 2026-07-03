@@ -24,8 +24,8 @@ use crate::{
         AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation, Axis,
         AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand, LinkPrinter,
         MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
-        RefreshPrinterMaterials, RefreshPrinters, SetHotendTemperatureOperation,
-        SetPrintSpeedOperation, printer_operation,
+        RefreshPrinterMaterials, RefreshPrinters, SelectExtruderOperation,
+        SetHotendTemperatureOperation, SetPrintSpeedOperation, printer_operation,
     },
 };
 
@@ -570,6 +570,7 @@ fn snapshot(serial: &str, name: &str, model: Option<&str>, state: &str) -> Machi
         model: model.map(str::to_owned),
         state: state.to_owned(),
         nozzle_temperatures: Vec::new(),
+        active_nozzle: None,
         bed_temperature_celsius: None,
         bed_target_temperature_celsius: None,
         chamber_temperature_celsius: None,
@@ -1762,6 +1763,46 @@ async fn printer_operation_does_not_reject_missing_local_model() {
 }
 
 #[tokio::test]
+async fn printer_operation_select_extruder_dispatches_typed_details() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        select_extruder_operation_command(command_id.clone(), "SERIAL1", 1),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(result.success);
+            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(json["type"], "printer_operation");
+            assert_eq!(json["action"], "select_extruder");
+            assert_eq!(json["extruder_id"], 1);
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.operations().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::SelectExtruder(1)
+        )]
+    );
+}
+
+#[tokio::test]
 async fn printer_operation_move_axes_dispatches_typed_details() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
@@ -1910,6 +1951,20 @@ fn set_print_speed_operation_command(
         serial_number,
         Some(printer_operation::Operation::SetPrintSpeed(
             SetPrintSpeedOperation { speed_mode },
+        )),
+    )
+}
+
+fn select_extruder_operation_command(
+    command_id: String,
+    serial_number: &str,
+    extruder_id: u32,
+) -> HubCommand {
+    printer_operation_command(
+        command_id,
+        serial_number,
+        Some(printer_operation::Operation::SelectExtruder(
+            SelectExtruderOperation { extruder_id },
         )),
     )
 }

@@ -16,6 +16,7 @@ pub struct MachineSnapshot {
     pub model: Option<String>,
     pub state: String,
     pub nozzle_temperatures: Vec<MachineNozzleTemperature>,
+    pub active_nozzle: Option<String>,
     pub bed_temperature_celsius: Option<String>,
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,

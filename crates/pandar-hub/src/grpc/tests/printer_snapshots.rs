@@ -155,6 +155,7 @@ async fn printer_snapshot_event_includes_temperatures() {
     snapshot.bed_temperature_celsius = "60".to_owned();
     snapshot.bed_target_temperature_celsius = "65".to_owned();
     snapshot.chamber_temperature_celsius = "32".to_owned();
+    snapshot.active_nozzle = "R".to_owned();
 
     handle_snapshot(&state, tenant_id, agent_id, snapshot)
         .await
@@ -175,6 +176,7 @@ async fn printer_snapshot_event_includes_temperatures() {
         Some("65")
     );
     assert_eq!(printer.chamber_temperature_celsius.as_deref(), Some("32"));
+    assert_eq!(printer.active_nozzle.as_deref(), Some("R"));
 }
 
 pub(super) fn snapshot(serial: &str, name: &str, model: &str, state: &str) -> PrinterSnapshot {
@@ -184,6 +186,7 @@ pub(super) fn snapshot(serial: &str, name: &str, model: &str, state: &str) -> Pr
         model: model.to_string(),
         state: state.to_string(),
         nozzle_temperatures: Vec::new(),
+        active_nozzle: String::new(),
         bed_temperature_celsius: String::new(),
         bed_target_temperature_celsius: String::new(),
         chamber_temperature_celsius: String::new(),

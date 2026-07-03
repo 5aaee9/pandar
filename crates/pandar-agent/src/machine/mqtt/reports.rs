@@ -145,6 +145,7 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
                 .bed_target_temperature_celsius
                 .unwrap_or_default(),
             chamber_temperature_celsius: snapshot.chamber_temperature_celsius.unwrap_or_default(),
+            active_nozzle: snapshot.active_nozzle.unwrap_or_default(),
         })),
     }
 }

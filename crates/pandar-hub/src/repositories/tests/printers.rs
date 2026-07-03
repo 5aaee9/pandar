@@ -18,6 +18,7 @@ fn snapshot(
         status: status.to_string(),
         observed_at: observed_at.to_string(),
         nozzle_temperatures: Vec::new(),
+        active_nozzle: None,
         bed_temperature_celsius: None,
         bed_target_temperature_celsius: None,
         chamber_temperature_celsius: None,

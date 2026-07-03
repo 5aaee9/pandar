@@ -52,6 +52,23 @@ impl PrinterOperationRequest {
                     speed_mode: self.speed_mode.expect("checked above"),
                 })
             }
+            "select_extruder"
+                if self.speed_mode.is_none()
+                    && self.axes.is_empty()
+                    && self.movements.is_empty()
+                    && self.feedrate_mm_per_min.is_none()
+                    && self.temperature_celsius.is_none()
+                    && self.wait.is_none()
+                    && self.ams_id.is_none()
+                    && self.slot_id.is_none()
+                    && self.global_tray_id.is_none()
+                    && self.external_id.is_none()
+                    && self.extruder_id.is_some() =>
+            {
+                Ok(PrinterOperationKind::SelectExtruder {
+                    extruder_id: self.extruder_id.expect("checked above"),
+                })
+            }
             "home"
                 if self.speed_mode.is_none()
                     && self.movements.is_empty()

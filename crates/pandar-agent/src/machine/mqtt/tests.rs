@@ -268,6 +268,15 @@ fn print_speed_is_limited_to_reference_modes() {
 }
 
 #[test]
+fn select_extruder_payload_matches_bambu_studio_reference() {
+    let payload = BambuMqttCommand::SelectExtruder(1).payload();
+    assert_eq!(
+        payload,
+        json!({"print": {"command": "select_extruder", "extruder_index": 1, "sequence_id": studio_sequence_id(&payload, "print")}})
+    );
+}
+
+#[test]
 fn gcode_line_payload_preserves_single_home_line() {
     let payload = BambuMqttCommand::GcodeLine(GcodeLineCommand {
         lines: vec!["G28".to_string()],
@@ -474,6 +483,7 @@ async fn refresh_subscribes_publishes_and_maps_report() {
             model: Some("P2S".to_string()),
             state: "RUNNING".to_string(),
             nozzle_temperatures: Vec::new(),
+            active_nozzle: None,
             bed_temperature_celsius: None,
             bed_target_temperature_celsius: None,
             chamber_temperature_celsius: None,

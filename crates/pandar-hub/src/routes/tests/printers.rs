@@ -281,6 +281,42 @@ async fn printer_control_enqueues_ams_slot_operation() {
 }
 
 #[tokio::test]
+async fn printer_control_enqueues_select_extruder_operation() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        state.database(),
+        tenant_id,
+        agent_id,
+        Some("Bambu Lab X2D"),
+    )
+    .await
+    .unwrap();
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls"),
+        Some(json!({
+            "action": "select_extruder",
+            "extruder_id": 1
+        })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["kind"], "printer_operation");
+    let payload: serde_json::Value =
+        serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["operation"]["type"], "select_extruder");
+    assert_eq!(payload["operation"]["extruder_id"], 1);
+}
+
+#[tokio::test]
 async fn missing_printer_detail_returns_not_found() {
     let state = state().await;
     let app = router(state.clone());

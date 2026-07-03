@@ -1,5 +1,5 @@
 import { NextIntlClientProvider } from "next-intl";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -182,13 +182,14 @@ describe("PrinterInventory", () => {
     expect(form?.querySelector('input[name="printer_id"]')).toHaveValue("printer-1");
   });
 
-  it("renders printer temperatures and inline stop pause controls in the status area", () => {
+  it("renders printer temperatures and controls in separate sections", () => {
     const heatingPrinter: Printer = {
       ...printer,
       nozzle_temperatures: [
         { label: "L", current_celsius: "41", target_celsius: "220" },
         { label: "R", current_celsius: "42", target_celsius: "230" },
       ],
+      active_nozzle: "R",
       bed_temperature_celsius: "60",
       chamber_temperature_celsius: "32",
     };
@@ -205,12 +206,48 @@ describe("PrinterInventory", () => {
     expect(card).toHaveTextContent("60°C");
     expect(card).toHaveTextContent("Chamber");
     expect(card).toHaveTextContent("32°C");
+    expect(card).toHaveTextContent("Controls");
+
+    const cardText = card.textContent ?? "";
+    expect(cardText.indexOf("Controls")).toBeGreaterThan(cardText.indexOf("Status"));
+    expect(cardText.indexOf("Controls")).toBeLessThan(cardText.indexOf("Filaments"));
+
+    const controls = screen.getByRole("group", { name: "Controls" });
+    expect(controls).toHaveClass("grid-cols-2");
+    expect(controls).not.toHaveClass("sm:grid-cols-1");
 
     const stopForm = screen.getByRole("button", { name: "Stop" }).closest("form");
     const pauseForm = screen.getByRole("button", { name: "Pause" }).closest("form");
     expect(stopForm?.querySelector('input[name="action"]')).toHaveValue("stop");
     expect(stopForm?.querySelector('input[name="printer_id"]')).toHaveValue("printer-1");
     expect(pauseForm?.querySelector('input[name="action"]')).toHaveValue("pause");
+  });
+
+  it("shows active nozzle switch control for dual-nozzle printers", () => {
+    const dualNozzlePrinter: Printer = {
+      ...printerWithMaterials,
+      nozzle_temperatures: [
+        { label: "L", current_celsius: "41", target_celsius: "220" },
+        { label: "R", current_celsius: "42", target_celsius: "230" },
+      ],
+      active_nozzle: "R",
+      bed_temperature_celsius: "60",
+      chamber_temperature_celsius: "32",
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[dualNozzlePrinter]} agents={[agent]} />,
+    );
+
+    const switchButton = screen.getByRole("button", { name: "Switch nozzle L R Nozzle" });
+    const switchForm = switchButton.closest("form");
+    expect(switchForm).toHaveClass("sm:col-start-4");
+    expect(switchForm?.querySelector('input[name="action"]')).toHaveValue("select_extruder");
+    expect(switchForm?.querySelector('input[name="printer_id"]')).toHaveValue("printer-1");
+    expect(switchForm?.querySelector('input[name="extruder_id"]')).toHaveValue("1");
+    expect(switchButton).toHaveTextContent("L");
+    expect(switchButton).toHaveTextContent("R");
+    expect(within(switchButton).getByText("R")).toHaveClass("text-primary");
   });
 
   it("renders a single nozzle without a duplicate label or target temperature", () => {
@@ -228,6 +265,23 @@ describe("PrinterInventory", () => {
     expect(card).toHaveTextContent("27°");
     expect(card).not.toHaveTextContent("Nozzle Nozzle");
     expect(card).not.toHaveTextContent("27° / 0°");
+  });
+
+  it("hides zero bed target temperature", () => {
+    const heatingPrinter: Printer = {
+      ...printer,
+      bed_temperature_celsius: "26",
+      bed_target_temperature_celsius: "0",
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+    );
+
+    const card = screen.getByRole("article", { name: "Office A1" });
+    expect(card).toHaveTextContent("Bed");
+    expect(card).toHaveTextContent("26°C");
+    expect(card).not.toHaveTextContent("26° / 0°");
   });
 
   it("replaces the filament summary with AMS and external slot loading details", () => {

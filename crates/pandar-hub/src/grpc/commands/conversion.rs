@@ -6,8 +6,9 @@ use crate::{
         AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation, Axis,
         AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
         MoveAxesOperation, PauseOperation, PrintProjectFile, PrinterOperation,
-        RefreshPrinterMaterials, RefreshPrinters, ResumeOperation, SetHotendTemperatureOperation,
-        SetPrintSpeedOperation, StopOperation, hub_command, printer_operation,
+        RefreshPrinterMaterials, RefreshPrinters, ResumeOperation, SelectExtruderOperation,
+        SetHotendTemperatureOperation, SetPrintSpeedOperation, StopOperation, hub_command,
+        printer_operation,
     },
     repositories::{
         DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, PrinterAxis,
@@ -165,6 +166,9 @@ fn proto_printer_operation(operation: PrinterOperationKind) -> printer_operation
             printer_operation::Operation::SetPrintSpeed(SetPrintSpeedOperation {
                 speed_mode: speed_mode.into(),
             })
+        }
+        PrinterOperationKind::SelectExtruder { extruder_id } => {
+            printer_operation::Operation::SelectExtruder(SelectExtruderOperation { extruder_id })
         }
         PrinterOperationKind::Home { axes } => printer_operation::Operation::Home(HomeOperation {
             axes: axes.into_iter().map(proto_axis).collect(),

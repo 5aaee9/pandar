@@ -130,6 +130,7 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
                 model: Some("P2S".to_string()),
                 state: "READY".to_string(),
                 nozzle_temperatures: Vec::new(),
+                active_nozzle: None,
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
@@ -140,6 +141,7 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
                 model: Some("X1 Carbon".to_string()),
                 state: "IDLE".to_string(),
                 nozzle_temperatures: Vec::new(),
+                active_nozzle: None,
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
@@ -294,6 +296,33 @@ async fn configured_operate_printer_publishes_pause_to_request_topic() {
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
             payload: json!({"print": {"command": "pause", "param": "", "sequence_id": sequence_id}}),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_select_extruder_publishes_reference_command() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer("SERIAL1", PrinterOperation::SelectExtruder(1))
+        .await
+        .unwrap();
+
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
+    assert_eq!(
+        published,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: json!({"print": {"command": "select_extruder", "extruder_index": 1, "sequence_id": sequence_id}}),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -765,6 +794,7 @@ mod runtime {
                 model: Some("X1 Carbon".to_string()),
                 state: "IDLE".to_string(),
                 nozzle_temperatures: Vec::new(),
+                active_nozzle: None,
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
@@ -819,6 +849,7 @@ mod runtime {
                 model: Some("P2S".to_string()),
                 state: "PAUSED".to_string(),
                 nozzle_temperatures: Vec::new(),
+                active_nozzle: None,
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
@@ -877,6 +908,7 @@ mod runtime {
                 model: Some("X1 Carbon".to_string()),
                 state: "IDLE".to_string(),
                 nozzle_temperatures: Vec::new(),
+                active_nozzle: None,
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
@@ -1023,6 +1055,7 @@ mod runtime {
                 model: Some("X1 Carbon".to_string()),
                 state: "IDLE".to_string(),
                 nozzle_temperatures: Vec::new(),
+                active_nozzle: None,
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,

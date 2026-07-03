@@ -22,6 +22,7 @@ pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> 
         model: endpoint.model.clone(),
         state: state.to_string(),
         nozzle_temperatures: nozzle_temperatures_from_report(print),
+        active_nozzle: active_nozzle_from_report(print),
         bed_temperature_celsius: temperature_string(
             print
                 .get("bed_temper")
@@ -44,6 +45,20 @@ pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> 
         )
         .or(packed_chamber_temperature),
     }
+}
+
+fn active_nozzle_from_report(print: &Value) -> Option<String> {
+    let state = print.pointer("/device/extruder/state")?.as_u64()?;
+    let total = state & 0xf;
+    if total <= 1 {
+        return None;
+    }
+
+    Some(if ((state >> 4) & 0xf) == 1 {
+        "L".to_owned()
+    } else {
+        "R".to_owned()
+    })
 }
 
 fn nozzle_temperatures_from_report(print: &Value) -> Vec<MachineNozzleTemperature> {

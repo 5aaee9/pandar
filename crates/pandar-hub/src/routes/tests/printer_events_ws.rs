@@ -935,6 +935,7 @@ fn snapshot_event(tenant_id: TenantId, agent_id: AgentId) -> AgentEvent {
             model: "X1C".to_string(),
             state: "idle".to_string(),
             nozzle_temperatures: Vec::new(),
+            active_nozzle: String::new(),
             bed_temperature_celsius: String::new(),
             bed_target_temperature_celsius: String::new(),
             chamber_temperature_celsius: String::new(),

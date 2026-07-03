@@ -40,6 +40,7 @@ pub async fn handle_snapshot(
                         target_celsius: trim_optional(temperature.target_celsius),
                     })
                     .collect(),
+                active_nozzle: trim_optional(snapshot.active_nozzle),
                 bed_temperature_celsius: trim_optional(snapshot.bed_temperature_celsius),
                 bed_target_temperature_celsius: trim_optional(
                     snapshot.bed_target_temperature_celsius,

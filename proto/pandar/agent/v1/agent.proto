@@ -40,6 +40,7 @@ message PrinterSnapshot {
   string bed_temperature_celsius = 6;
   string bed_target_temperature_celsius = 7;
   string chamber_temperature_celsius = 8;
+  string active_nozzle = 9;
 }
 
 message NozzleTemperature {
@@ -148,6 +149,7 @@ message PrinterOperation {
     AmsRereadRfidOperation ams_reread_rfid = 17;
     AmsLoadFilamentOperation ams_load_filament = 18;
     AmsUnloadFilamentOperation ams_unload_filament = 19;
+    SelectExtruderOperation select_extruder = 20;
   }
 }
 
@@ -159,6 +161,10 @@ message StopOperation {}
 
 message SetPrintSpeedOperation {
   uint32 speed_mode = 1;
+}
+
+message SelectExtruderOperation {
+  uint32 extruder_id = 1;
 }
 
 enum Axis {

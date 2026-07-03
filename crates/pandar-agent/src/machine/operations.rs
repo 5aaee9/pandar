@@ -15,6 +15,7 @@ pub enum PrinterOperation {
     Resume,
     Stop,
     SetPrintSpeed(u8),
+    SelectExtruder(u32),
     Home {
         axes: Vec<PrinterAxis>,
     },
@@ -112,6 +113,9 @@ fn mqtt_command_for_printer_operation(
         PrinterOperation::Stop => Ok(BambuMqttCommand::StopPrint),
         PrinterOperation::SetPrintSpeed(mode) => {
             Ok(BambuMqttCommand::SetPrintSpeed(PrintSpeed::new(mode)?))
+        }
+        PrinterOperation::SelectExtruder(extruder_id) => {
+            Ok(BambuMqttCommand::SelectExtruder(extruder_id))
         }
         PrinterOperation::Home { .. } => Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
             lines: vec!["G28".to_string()],

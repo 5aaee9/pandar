@@ -106,6 +106,7 @@ pub enum BambuMqttCommand {
     ResumePrint,
     StopPrint,
     SetPrintSpeed(PrintSpeed),
+    SelectExtruder(u32),
     GcodeLine(GcodeLineCommand),
     AmsRereadRfid(AmsSlotCommand),
     AmsLoadFilament(AmsFilamentCommand),
@@ -137,6 +138,9 @@ impl BambuMqttCommand {
             }
             Self::SetPrintSpeed(speed) => {
                 json!({"print": {"command": "print_speed", "param": speed.as_u8().to_string(), "sequence_id": next_studio_sequence_id()}})
+            }
+            Self::SelectExtruder(extruder_id) => {
+                json!({"print": {"command": "select_extruder", "extruder_index": extruder_id, "sequence_id": next_studio_sequence_id()}})
             }
             Self::GcodeLine(command) => {
                 json!({"print": {"command": "gcode_line", "param": command.lines.join("\n"), "sequence_id": next_studio_sequence_id()}})

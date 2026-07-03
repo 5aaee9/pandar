@@ -140,6 +140,14 @@ fn parse_printer_operation(
                 _ => anyhow::bail!("invalid printer operation speed_mode; expected 1..=4"),
             }
         }
+        Some(printer_operation::Operation::SelectExtruder(operation)) => {
+            match operation.extruder_id {
+                0..=1 => Ok(MachinePrinterOperation::SelectExtruder(
+                    operation.extruder_id,
+                )),
+                _ => anyhow::bail!("invalid printer operation extruder_id; expected 0..=1"),
+            }
+        }
         Some(printer_operation::Operation::Home(operation)) => {
             let axes = operation
                 .axes
@@ -249,6 +257,7 @@ fn printer_operation_action(operation: &MachinePrinterOperation) -> &'static str
         MachinePrinterOperation::Resume => "resume",
         MachinePrinterOperation::Stop => "stop",
         MachinePrinterOperation::SetPrintSpeed(_) => "set_print_speed",
+        MachinePrinterOperation::SelectExtruder(_) => "select_extruder",
         MachinePrinterOperation::Home { .. } => "home",
         MachinePrinterOperation::MoveAxes { .. } => "move_axes",
         MachinePrinterOperation::SetHotendTemperature { .. } => "set_hotend_temperature",
@@ -308,6 +317,9 @@ fn printer_operation_result_json(
     match operation {
         MachinePrinterOperation::SetPrintSpeed(speed_mode) => {
             result.insert("speed_mode".to_string(), serde_json::json!(speed_mode));
+        }
+        MachinePrinterOperation::SelectExtruder(extruder_id) => {
+            result.insert("extruder_id".to_string(), serde_json::json!(extruder_id));
         }
         MachinePrinterOperation::Home { axes } => {
             result.insert(

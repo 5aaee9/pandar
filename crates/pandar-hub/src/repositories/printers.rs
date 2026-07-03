@@ -22,6 +22,7 @@ pub struct PrinterSnapshotUpsert {
     pub status: String,
     pub observed_at: String,
     pub nozzle_temperatures: Vec<PrinterNozzleTemperature>,
+    pub active_nozzle: Option<String>,
     pub bed_temperature_celsius: Option<String>,
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
@@ -214,6 +215,7 @@ fn printer_from_model(model: printers::Model) -> RepositoryResult<Printer> {
             created_at: model.created_at,
             nozzle_temperatures: serde_json::from_str(&model.nozzle_temperatures_json)
                 .context("failed to read printer nozzle temperatures")?,
+            active_nozzle: model.active_nozzle,
             bed_temperature_celsius: model.bed_temperature_celsius,
             bed_target_temperature_celsius: model.bed_target_temperature_celsius,
             chamber_temperature_celsius: model.chamber_temperature_celsius,

@@ -51,6 +51,9 @@ pub enum PrinterOperationKind {
     SetPrintSpeed {
         speed_mode: u8,
     },
+    SelectExtruder {
+        extruder_id: u32,
+    },
     Home {
         #[serde(default)]
         axes: Vec<PrinterAxis>,
@@ -91,6 +94,7 @@ impl PrinterOperationKind {
             Self::Resume => "resume",
             Self::Stop => "stop",
             Self::SetPrintSpeed { .. } => "set_print_speed",
+            Self::SelectExtruder { .. } => "select_extruder",
             Self::Home { .. } => "home",
             Self::MoveAxes { .. } => "move_axes",
             Self::SetHotendTemperature { .. } => "set_hotend_temperature",
@@ -110,6 +114,10 @@ pub fn validate_printer_operation(operation: &PrinterOperationKind) -> Repositor
             Ok(())
         }
         PrinterOperationKind::SetPrintSpeed { .. } => Err(RepositoryError::InvalidPrinterControl),
+        PrinterOperationKind::SelectExtruder { extruder_id } if *extruder_id <= MAX_EXTRUDER_ID => {
+            Ok(())
+        }
+        PrinterOperationKind::SelectExtruder { .. } => Err(RepositoryError::InvalidPrinterControl),
         PrinterOperationKind::Home { .. } => Ok(()),
         PrinterOperationKind::MoveAxes {
             movements,
@@ -166,6 +174,9 @@ pub fn operation_audit_metadata(
     match operation {
         PrinterOperationKind::SetPrintSpeed { speed_mode } => {
             metadata.insert("speed_mode".to_owned(), json!(speed_mode));
+        }
+        PrinterOperationKind::SelectExtruder { extruder_id } => {
+            metadata.insert("extruder_id".to_owned(), json!(extruder_id));
         }
         PrinterOperationKind::Home { axes } => {
             metadata.insert("axes".to_owned(), json!(axis_names(axes)));

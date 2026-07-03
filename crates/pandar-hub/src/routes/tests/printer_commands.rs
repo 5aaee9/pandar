@@ -670,6 +670,8 @@ async fn printer_control_rejects_invalid_action_and_speed_payloads() {
         json!({ "action": "set_print_speed" }),
         json!({ "action": "set_print_speed", "speed_mode": 0 }),
         json!({ "action": "set_print_speed", "speed_mode": 5 }),
+        json!({ "action": "select_extruder" }),
+        json!({ "action": "select_extruder", "extruder_id": 2 }),
         json!({ "action": "pause", "speed_mode": 2 }),
         json!({ "action": "pause", "raw_command": "M400" }),
         json!({ "action": "move_axes", "movements": [] }),

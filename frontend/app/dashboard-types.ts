@@ -27,6 +27,7 @@ export type Printer = {
     current_celsius?: string | null;
     target_celsius?: string | null;
   }>;
+  active_nozzle?: string | null;
   bed_temperature_celsius?: string | null;
   bed_target_temperature_celsius?: string | null;
   chamber_temperature_celsius?: string | null;
