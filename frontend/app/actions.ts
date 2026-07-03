@@ -68,7 +68,8 @@ export async function refreshPrinters(formData: FormData) {
     {},
   );
   redirect(
-    statusUrl(
+    statusUrlForForm(
+      formData,
       tenantId,
       response.ok ? "refresh_queued" : await errorCode(response),
     ),
@@ -106,7 +107,13 @@ export async function refreshAllAgents(formData: FormData) {
     ),
   );
   const allOk = responses.every((response) => response.ok);
-  redirect(statusUrl(tenantId, allOk ? "refresh_queued" : "refresh_partial"));
+  redirect(
+    statusUrlForForm(
+      formData,
+      tenantId,
+      allOk ? "refresh_queued" : "refresh_partial",
+    ),
+  );
 }
 
 export async function deleteAgent(formData: FormData) {
@@ -417,7 +424,8 @@ export async function retryDispatchJob(formData: FormData) {
     },
   );
   redirect(
-    statusUrl(
+    statusUrlForForm(
+      formData,
       tenantId,
       response.ok ? "retry_queued" : await errorCode(response),
     ),
@@ -438,7 +446,13 @@ export async function retryDispatchJobs(formData: FormData) {
     ),
   );
   const allOk = responses.every((response) => response.ok);
-  redirect(statusUrl(tenantId, allOk ? "retry_queued" : "retry_partial"));
+  redirect(
+    statusUrlForForm(
+      formData,
+      tenantId,
+      allOk ? "retry_queued" : "retry_partial",
+    ),
+  );
 }
 
 export async function reprintJob(formData: FormData) {
@@ -452,7 +466,8 @@ export async function reprintJob(formData: FormData) {
     },
   );
   redirect(
-    statusUrl(
+    statusUrlForForm(
+      formData,
       tenantId,
       response.ok ? "reprint_queued" : await errorCode(response),
     ),
@@ -477,7 +492,8 @@ export async function duplicateJob(formData: FormData) {
     },
   );
   redirect(
-    statusUrl(
+    statusUrlForForm(
+      formData,
       tenantId,
       response.ok ? "duplicate_queued" : await errorCode(response),
     ),
@@ -498,7 +514,8 @@ export async function controlPrinter(formData: FormData) {
     },
   );
   redirect(
-    statusUrl(
+    statusUrlForForm(
+      formData,
       tenantId,
       response.ok ? "printer_control_queued" : await errorCode(response),
     ),
@@ -564,8 +581,13 @@ async function errorCode(response: Response) {
   }
 }
 
-function statusUrl(tenantId: string, status: string) {
-  return `/devices?tenant=${encodeURIComponent(tenantId)}&status=${encodeURIComponent(status)}`;
+function statusUrlForForm(formData: FormData, tenantId: string, status: string) {
+  return statusUrl(tenantId, status, stringField(formData, "return_to"));
+}
+
+function statusUrl(tenantId: string, status: string, returnTo?: string) {
+  const view = returnTo === "jobs" ? "jobs" : "devices";
+  return `/${view}?tenant=${encodeURIComponent(tenantId)}&status=${encodeURIComponent(status)}`;
 }
 
 function agentsStatusUrl(tenantId: string, status: string) {

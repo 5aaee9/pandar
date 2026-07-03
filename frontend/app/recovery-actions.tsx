@@ -80,6 +80,7 @@ export function RecoveryActions({
                 {agents.length > 1 ? (
                   <form action={refreshAllAgents}>
                     <input name="tenant_id" type="hidden" value={selectedTenant.id} />
+                    <input name="return_to" type="hidden" value="jobs" />
                     {agents.map((agent) => (
                       <input key={agent.id} name="agent_id" type="hidden" value={agent.id} />
                     ))}
@@ -91,6 +92,7 @@ export function RecoveryActions({
                 {agents.map((agent) => (
                   <form key={agent.id} action={refreshPrinters}>
                     <input name="tenant_id" type="hidden" value={selectedTenant.id} />
+                    <input name="return_to" type="hidden" value="jobs" />
                     <input name="agent_id" type="hidden" value={agent.id} />
                     <button className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-800" type="submit">
                       {t('refreshAgent', { name: agent.name })}
@@ -124,6 +126,7 @@ export function RecoveryActions({
                   {selected.size > 0 ? (
                     <form action={retryDispatchJobs}>
                       <input name="tenant_id" type="hidden" value={selectedTenant.id} />
+                      <input name="return_to" type="hidden" value="jobs" />
                       {Array.from(selected).map((jobId) => (
                         <input key={jobId} name="job_id" type="hidden" value={jobId} />
                       ))}
@@ -207,11 +210,13 @@ function LiveControlPanel({ tenantId, printer }: { tenantId: string; printer: Pr
         tone="danger"
       >
         <input name="tenant_id" type="hidden" value={tenantId} />
+        <input name="return_to" type="hidden" value="jobs" />
         <input name="printer_id" type="hidden" value={printer.id} />
         <input name="action" type="hidden" value="stop" />
       </ConfirmForm>
       <form action={controlPrinter} className="flex gap-2">
         <input name="tenant_id" type="hidden" value={tenantId} />
+        <input name="return_to" type="hidden" value="jobs" />
         <input name="printer_id" type="hidden" value={printer.id} />
         <input name="action" type="hidden" value="set_print_speed" />
         <select name="speed_mode" className="h-8 w-24 rounded-md border border-slate-300 bg-white px-2 text-xs">
@@ -240,6 +245,7 @@ function PrinterControlForm({
   return (
     <form action={controlPrinter}>
       <input name="tenant_id" type="hidden" value={tenantId} />
+      <input name="return_to" type="hidden" value="jobs" />
       <input name="printer_id" type="hidden" value={printerId} />
       <input name="action" type="hidden" value={action} />
       <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">{label}</button>
@@ -268,6 +274,7 @@ function ReasonForm({ action, tenantId, jobId, label, placeholder }: { action: (
   return (
     <form action={action} className="flex gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
+      <input name="return_to" type="hidden" value="jobs" />
       <input name="job_id" type="hidden" value={jobId} />
       <input
         aria-label={label}
@@ -285,6 +292,7 @@ function DuplicateForm({ tenantId, jobId, printers }: { tenantId: string; jobId:
   return (
     <form action={duplicateJob} className="flex flex-wrap gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
+      <input name="return_to" type="hidden" value="jobs" />
       <input name="job_id" type="hidden" value={jobId} />
       <select
         aria-label={t('samePrinter')}

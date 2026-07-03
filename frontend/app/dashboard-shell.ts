@@ -1,5 +1,6 @@
 export const DASHBOARD_VIEWS = [
   "devices",
+  "jobs",
   "agents",
   "users",
   "settings",

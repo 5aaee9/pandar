@@ -67,6 +67,7 @@ describe("dashboard shell helpers", () => {
   it("defines the route-backed dashboard views", () => {
     expect(DASHBOARD_VIEWS).toEqual([
       "devices",
+      "jobs",
       "agents",
       "users",
       "settings",
@@ -100,6 +101,13 @@ describe("dashboard shell helpers", () => {
         status: "done",
       }),
     ).toBe("/agents?tenant=t1");
+    expect(
+      dashboardSidebarHref("jobs", {
+        tenant: "t1",
+        command: "cmd1",
+        status: "done",
+      }),
+    ).toBe("/jobs?tenant=t1");
     expect(dashboardSidebarHref("users", {})).toBe("/users");
 
     expect(
@@ -116,6 +124,13 @@ describe("dashboard shell helpers", () => {
         status: "done",
       }),
     ).toBe("/devices?tenant=t2&status=done");
+    expect(
+      dashboardTenantHref("jobs", "t2", {
+        tenant: "t1",
+        command: "cmd1",
+        status: "done",
+      }),
+    ).toBe("/jobs?tenant=t2&status=done");
   });
 
   it("returns a logout href only when a provider sign-out URL exists", () => {
@@ -165,6 +180,25 @@ describe("AppSidebar", () => {
     expect(screen.getByRole("link", { name: "Tenant Two" })).toHaveAttribute(
       "href",
       dashboardTenantHref("agents", "t2", query),
+    );
+  });
+
+  it("renders a jobs navigation link", () => {
+    renderWithMessages(
+      <SidebarProvider>
+        <AppSidebar
+          activeView="jobs"
+          auth={auth}
+          query={{ tenant: "t1", command: "cmd1", status: "done" }}
+          selectedTenant={tenants[0]}
+          tenants={tenants}
+        />
+      </SidebarProvider>,
+    );
+
+    expect(screen.getByRole("link", { name: "Jobs" })).toHaveAttribute(
+      "href",
+      "/jobs?tenant=t1",
     );
   });
 });
@@ -247,5 +281,56 @@ describe("SettingsView", () => {
     expect(screen.getByRole("button", { name: "System" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Light" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Dark" })).toBeVisible();
+  });
+});
+
+describe("DashboardViewContent", () => {
+  const baseProps = {
+    auth,
+    selectedTenant: tenants[0],
+    health: {
+      printersTotal: 0,
+      printersOnline: 0,
+      agentsTotal: 1,
+      agentsConnected: 1,
+      jobsActive: 0,
+      jobsFailed: 0,
+    },
+    attentionItems: [],
+    topSeverity: null,
+    liveState: "idle" as const,
+    lastEventAt: null,
+    fleetEmpty: false,
+    printers: [],
+    agents: [],
+    jobs: [],
+    selectedCommand: null,
+    commandData: null,
+    notifications: [],
+    users: [],
+    userIdentities: [],
+    tenantTokens: [],
+    joinLinks: [],
+    auditEvents: [],
+    adminUnavailable: false,
+  };
+
+  it("keeps devices focused on overview and printer inventory", () => {
+    renderWithMessages(<DashboardViewContent {...baseProps} view="devices" />);
+
+    expect(screen.getByText("All systems nominal")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Printer inventory" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Print jobs" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Dispatch print job" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Recovery actions" })).not.toBeInTheDocument();
+  });
+
+  it("renders job history, dispatch, and recovery on jobs", () => {
+    renderWithMessages(<DashboardViewContent {...baseProps} view="jobs" />);
+
+    expect(screen.getByRole("heading", { name: "Print jobs" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Dispatch print job" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Recovery actions" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Printer inventory" })).not.toBeInTheDocument();
   });
 });

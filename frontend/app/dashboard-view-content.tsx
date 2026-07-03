@@ -67,6 +67,9 @@ export function DashboardViewContent(props: DashboardViewContentProps) {
   if (props.view === 'devices') {
     return <DevicesView {...props} />
   }
+  if (props.view === 'jobs') {
+    return <JobsView {...props} />
+  }
   if (props.view === 'agents') {
     return <AgentsView {...props} />
   }
@@ -86,7 +89,6 @@ function DevicesView({
   selectedTenant,
   printers,
   agents,
-  jobs,
 }: DashboardViewContentProps) {
   return (
     <>
@@ -100,6 +102,18 @@ function DevicesView({
       />
       <NeedsAttention items={attentionItems} selectedTenant={selectedTenant} />
       <PrinterInventory selectedTenant={selectedTenant} printers={printers} agents={agents} />
+    </>
+  )
+}
+
+function JobsView({
+  selectedTenant,
+  printers,
+  agents,
+  jobs,
+}: DashboardViewContentProps) {
+  return (
+    <>
       <JobHistory selectedTenant={selectedTenant} jobs={jobs} printers={printers} agents={agents} />
       <DispatchForm selectedTenant={selectedTenant} printers={printers} />
       <RecoveryActions selectedTenant={selectedTenant} agents={agents} printers={printers} jobs={jobs} />

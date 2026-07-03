@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl"
 import {
   BotIcon,
   Building2Icon,
+  ClipboardListIcon,
   LogOutIcon,
   MonitorIcon,
   SettingsIcon,
@@ -44,6 +45,7 @@ const navItems: Array<{
   icon: React.ComponentType<{ className?: string }>
 }> = [
   { view: "devices", icon: MonitorIcon },
+  { view: "jobs", icon: ClipboardListIcon },
   { view: "agents", icon: BotIcon },
   { view: "users", icon: UsersIcon },
   { view: "settings", icon: SettingsIcon },

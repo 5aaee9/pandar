@@ -29,9 +29,11 @@ const backendErrorCodes = [
 export function DispatchForm({
   selectedTenant,
   printers,
+  onRedirect = (url) => window.location.assign(url),
 }: {
   selectedTenant: DispatchTenant | null
   printers: DispatchPrinter[]
+  onRedirect?: (url: string) => void
 }) {
   const t = useTranslations('dispatch')
   const format = useFormatter()
@@ -139,8 +141,8 @@ export function DispatchForm({
         body: formData,
       })
       const status = response.ok ? 'job_created' : await errorCode(response)
-      window.location.assign(
-        `/devices?tenant=${encodeURIComponent(selectedTenant.id)}&status=${encodeURIComponent(status)}`,
+      onRedirect(
+        `/jobs?tenant=${encodeURIComponent(selectedTenant.id)}&status=${encodeURIComponent(status)}`,
       )
     } finally {
       setSubmitting(false)

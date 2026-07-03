@@ -581,6 +581,7 @@
     "noTenant": "No tenant",
     "hub": "Hub",
     "devices": "Devices",
+    "jobs": "Jobs",
     "agents": "Agents",
     "users": "Users",
     "settings": "Settings",

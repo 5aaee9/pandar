@@ -1,10 +1,11 @@
 import { NextIntlClientProvider } from "next-intl";
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
 import { DashboardRuntime } from "./dashboard-runtime";
 import type { AuthMetadata, Tenant } from "./dashboard-types";
+import type { DashboardView } from "./dashboard-shell";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -17,6 +18,13 @@ const tenant: Tenant = {
   created_at: "2026-06-30T00:00:00Z",
 };
 
+const otherTenant: Tenant = {
+  id: "t2",
+  slug: "tenant-two",
+  display_name: "Tenant Two",
+  created_at: "2026-06-30T00:00:00Z",
+};
+
 const noAuth: AuthMetadata = {
   source: "none",
   cookieName: "pandar_auth",
@@ -25,14 +33,22 @@ const noAuth: AuthMetadata = {
   signOutUrl: null,
 };
 
-function renderRuntime(auth: AuthMetadata = noAuth) {
+function renderRuntime(
+  auth: AuthMetadata = noAuth,
+  options: {
+    view?: DashboardView;
+    actionStatus?: string;
+    selectedCommandId?: string;
+    tenants?: Tenant[];
+  } = {},
+) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
       <DashboardRuntime
         apiUrl="http://localhost:8080"
-        view="devices"
+        view={options.view ?? "devices"}
         summary={null}
-        tenants={[tenant]}
+        tenants={options.tenants ?? [tenant]}
         selectedTenant={tenant}
         initialPrinters={[]}
         agents={[]}
@@ -43,7 +59,9 @@ function renderRuntime(auth: AuthMetadata = noAuth) {
         joinLinks={[]}
         auditEvents={[]}
         adminUnavailable={false}
+        actionStatus={options.actionStatus}
         selectedCommand={null}
+        selectedCommandId={options.selectedCommandId}
         commandData={null}
         errors={[]}
         auth={auth}
@@ -82,5 +100,27 @@ describe("DashboardRuntime live connection", () => {
       ]);
     });
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("preserves action status when switching tenants from jobs", () => {
+    vi.stubGlobal("fetch", vi.fn());
+    vi.stubGlobal(
+      "WebSocket",
+      class {
+        close() {}
+      },
+    );
+
+    renderRuntime(noAuth, {
+      view: "jobs",
+      actionStatus: "refresh_queued",
+      selectedCommandId: "cmd1",
+      tenants: [tenant, otherTenant],
+    });
+
+    expect(screen.getByRole("link", { name: "Tenant Two" })).toHaveAttribute(
+      "href",
+      "/jobs?tenant=t2&status=refresh_queued",
+    );
   });
 });

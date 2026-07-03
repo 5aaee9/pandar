@@ -361,6 +361,7 @@ export function DashboardRuntime({
   const dashboardQuery: DashboardQuery = {
     tenant: selectedTenant?.id,
     command: view === 'agents' ? selectedCommandId : undefined,
+    status: view === 'jobs' ? actionStatus : undefined,
   }
 
   return (
