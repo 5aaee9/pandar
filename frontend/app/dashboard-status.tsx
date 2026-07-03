@@ -75,13 +75,13 @@ export function StatCell({
   state: Severity
 }) {
   return (
-    <a href={href} className="block rounded-md px-3 py-1 transition-colors hover:bg-slate-100/70">
+    <a href={href} className="block rounded-md px-3 py-1 transition-colors hover:bg-slate-100/70 dark:hover:bg-white/10">
       <div className="flex items-center gap-1.5">
         <StatusIcon severity={state} className="h-3.5 w-3.5" />
-        <span className="text-xs text-slate-600">{label}</span>
+        <span className="text-xs text-slate-600 dark:text-muted-foreground">{label}</span>
       </div>
-      <div className="mt-0.5 font-medium text-slate-900">{value}</div>
-      {note ? <div className="mt-0.5 text-xs text-slate-600">{note}</div> : null}
+      <div className="mt-0.5 font-medium text-slate-900 dark:text-foreground">{value}</div>
+      {note ? <div className="mt-0.5 text-xs text-slate-600 dark:text-muted-foreground">{note}</div> : null}
     </a>
   )
 }

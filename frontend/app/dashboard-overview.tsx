@@ -9,6 +9,7 @@ import {
 } from './dashboard-status'
 import { computeVerdict } from './dashboard-status-model'
 import type { LiveState } from './dashboard-runtime-helpers'
+import { dashboardSidebarHref } from './dashboard-shell'
 
 export function FleetStatusStrip({
   health,
@@ -17,6 +18,7 @@ export function FleetStatusStrip({
   liveState,
   lastEventAt,
   fleetEmpty,
+  tenantId,
 }: {
   health: Health
   attentionCount: number
@@ -24,11 +26,13 @@ export function FleetStatusStrip({
   liveState: LiveState
   lastEventAt: string | null
   fleetEmpty: boolean
+  tenantId?: string
 }) {
   const t = useTranslations('overview.verdict')
   const tStat = useTranslations('overview.stat')
   const tAria = useTranslations('overview')
   const verdict = computeVerdict({ attentionCount, topSeverity, liveState, fleetEmpty }, t)
+  const dashboardQuery = { tenant: tenantId }
 
   return (
     <section
@@ -44,7 +48,7 @@ export function FleetStatusStrip({
           </div>
         </div>
         <div
-          className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:divide-slate-200 sm:border-l sm:border-slate-200 sm:pl-5"
+          className={`grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-0 sm:divide-x sm:border-l sm:pl-5 ${verdict.tone.divider}`}
           aria-hidden={fleetEmpty}
         >
           <StatCell
@@ -55,14 +59,14 @@ export function FleetStatusStrip({
             state={health.printersOnline < health.printersTotal ? 'warning' : 'success'}
           />
           <StatCell
-            href="#printers"
+            href={dashboardSidebarHref('agents', dashboardQuery)}
             label={tStat('agents')}
             value={fleetEmpty ? tStat('dash') : tStat('agentsValue', { connected: health.agentsConnected, total: health.agentsTotal })}
             note={health.agentsTotal - health.agentsConnected > 0 ? tStat('agentsNote', { count: health.agentsTotal - health.agentsConnected }) : null}
             state={health.agentsConnected < health.agentsTotal ? 'warning' : 'success'}
           />
           <StatCell
-            href="#jobs"
+            href={dashboardSidebarHref('jobs', dashboardQuery)}
             label={tStat('activeJobs')}
             value={fleetEmpty ? tStat('dash') : tStat('activeJobsValue', { count: health.jobsActive })}
             note={health.jobsFailed > 0 ? tStat('activeJobsNote', { count: health.jobsFailed }) : null}

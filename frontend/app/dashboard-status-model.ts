@@ -8,18 +8,42 @@ export const PILL_TONES: Record<Severity, string> = {
   info: 'border-slate-200 bg-slate-100 text-slate-700',
 }
 
-const TONES: Record<Severity, { border: string; surface: string; ink: string; sub: string }> = {
-  critical: { border: 'border-red-200', surface: 'bg-red-50', ink: 'text-red-900', sub: 'text-red-800' },
-  warning: { border: 'border-amber-200', surface: 'bg-amber-50', ink: 'text-amber-900', sub: 'text-amber-800' },
-  success: { border: 'border-emerald-200', surface: 'bg-emerald-50', ink: 'text-emerald-900', sub: 'text-emerald-800' },
-  info: { border: 'border-slate-200', surface: 'bg-white', ink: 'text-slate-900', sub: 'text-slate-600' },
+const TONES: Record<Severity, { border: string; surface: string; ink: string; sub: string; divider: string }> = {
+  critical: {
+    border: 'border-red-200 dark:border-red-900/60',
+    surface: 'bg-red-50 dark:bg-red-950/30',
+    ink: 'text-red-900 dark:text-red-50',
+    sub: 'text-red-800 dark:text-red-200/80',
+    divider: 'sm:divide-red-200 sm:border-red-200 dark:sm:divide-transparent dark:sm:border-transparent',
+  },
+  warning: {
+    border: 'border-amber-200 dark:border-amber-900/60',
+    surface: 'bg-amber-50 dark:bg-amber-950/30',
+    ink: 'text-amber-900 dark:text-amber-50',
+    sub: 'text-amber-800 dark:text-amber-200/80',
+    divider: 'sm:divide-amber-200 sm:border-amber-200 dark:sm:divide-transparent dark:sm:border-transparent',
+  },
+  success: {
+    border: 'border-emerald-200 dark:border-emerald-900/60',
+    surface: 'bg-emerald-50 dark:bg-emerald-950/30',
+    ink: 'text-emerald-900 dark:text-emerald-50',
+    sub: 'text-emerald-800 dark:text-emerald-200/80',
+    divider: 'sm:divide-emerald-200 sm:border-emerald-200 dark:sm:divide-transparent dark:sm:border-transparent',
+  },
+  info: {
+    border: 'border-slate-200 dark:border-border',
+    surface: 'bg-white dark:bg-card',
+    ink: 'text-slate-900 dark:text-foreground',
+    sub: 'text-slate-600 dark:text-muted-foreground',
+    divider: 'sm:divide-slate-200 sm:border-slate-200 dark:sm:divide-transparent dark:sm:border-transparent',
+  },
 }
 
 type Verdict = {
   title: string
   detail: string
   severity: Severity
-  tone: { border: string; surface: string; ink: string; sub: string }
+  tone: { border: string; surface: string; ink: string; sub: string; divider: string }
 }
 
 const enVerdict: Translator = (key, values) => {

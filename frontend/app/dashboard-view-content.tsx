@@ -99,6 +99,7 @@ function DevicesView({
         liveState={liveState}
         lastEventAt={lastEventAt}
         fleetEmpty={fleetEmpty}
+        tenantId={selectedTenant?.id}
       />
       <NeedsAttention items={attentionItems} selectedTenant={selectedTenant} />
       <PrinterInventory selectedTenant={selectedTenant} printers={printers} agents={agents} />

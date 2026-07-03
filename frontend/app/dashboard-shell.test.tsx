@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import { AppSidebar } from "../components/app-sidebar";
 import { SidebarProvider } from "../components/ui/sidebar";
+import { FleetStatusStrip } from "./dashboard-overview";
 import { DashboardShellHeader } from "./dashboard-shell-header";
 import { DashboardViewContent } from "./dashboard-view-content";
 import {
@@ -149,6 +150,52 @@ describe("DashboardShellHeader", () => {
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "EN" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "中文" })).not.toBeInTheDocument();
+  });
+
+  it("uses theme colors so the top bar remains readable in dark mode", () => {
+    renderWithMessages(<DashboardShellHeader view="devices" />);
+
+    expect(screen.getByRole("banner")).toHaveClass(
+      "border-border",
+      "bg-background/95",
+    );
+    expect(screen.getByText("Pandar")).toHaveClass("text-muted-foreground");
+    expect(screen.getByRole("heading", { name: "Devices" })).toHaveClass(
+      "text-foreground",
+    );
+  });
+});
+
+describe("FleetStatusStrip", () => {
+  it("uses dark mode contrast classes for the status strip and stat values", () => {
+    renderWithMessages(
+      <FleetStatusStrip
+        health={{
+          printersTotal: 0,
+          printersOnline: 0,
+          agentsTotal: 1,
+          agentsConnected: 1,
+          jobsActive: 0,
+          jobsFailed: 0,
+        }}
+        attentionCount={0}
+        topSeverity={null}
+        liveState="idle"
+        lastEventAt={null}
+        fleetEmpty={false}
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "Fleet status" })).toHaveClass(
+      "dark:border-emerald-900/60",
+      "dark:bg-emerald-950/30",
+    );
+    expect(screen.getByText("0/0 online").closest("a")?.parentElement).toHaveClass(
+      "dark:sm:divide-transparent",
+      "dark:sm:border-transparent",
+    );
+    expect(screen.getByText("0/0 online")).toHaveClass("dark:text-foreground");
+    expect(screen.getByText("Printers")).toHaveClass("dark:text-muted-foreground");
   });
 });
 
@@ -323,6 +370,19 @@ describe("DashboardViewContent", () => {
     expect(screen.queryByRole("heading", { name: "Print jobs" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Dispatch print job" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Recovery actions" })).not.toBeInTheDocument();
+  });
+
+  it("links overview agent and job stats to their dashboard pages", () => {
+    renderWithMessages(<DashboardViewContent {...baseProps} view="devices" />);
+
+    expect(screen.getByRole("link", { name: "Agents 1/1 connected" })).toHaveAttribute(
+      "href",
+      "/agents?tenant=t1",
+    );
+    expect(screen.getByRole("link", { name: "Active jobs 0 active" })).toHaveAttribute(
+      "href",
+      "/jobs?tenant=t1",
+    );
   });
 
   it("renders job history, dispatch, and recovery on jobs", () => {
