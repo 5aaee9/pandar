@@ -30,12 +30,16 @@ export async function apiHeaders(contentType?: string) {
 }
 
 export async function requireAuth() {
-  const cookieStore = await cookies();
-  if (!cookieStore.get(authCookieName)?.value) {
-    const signInUrl = authProviderConfig().signInUrl;
-    if (signInUrl) {
-      redirect(signInUrl);
-    }
+  const auth = await authSource();
+  if (auth.source !== "none") {
+    return;
+  }
+
+  const provider = authProviderConfig();
+  if (provider.signInUrl) {
+    redirect(provider.signInUrl);
+  }
+  if (provider.provider !== "none") {
     throw new Error("Authentication required");
   }
 }
