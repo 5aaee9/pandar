@@ -20,6 +20,7 @@
 - Enabled dashboard live printer-event WebSocket updates in Hub no-auth mode without requiring browser event tickets.
 - Updated the frontend design tokens and design-system documentation to the neutral OKLCH light/dark palette, with white as the light root page background.
 - Added frontend light/dark theme selection with a system default that follows `prefers-color-scheme`.
+- Fixed the frontend sans-serif font token so English pages render with the intended non-serif UI font stack.
 - Moved dashboard language selection from the top bar into Settings and kept tenant selection in the sidebar Tenants list.
 - Added Agent-backed AMS refresh: printer refresh now opportunistically refreshes AMS/external-spool snapshots from Bambu MQTT `pushall`, operators can queue per-printer AMS refreshes from the printer inventory, Agent material-only updates sync to Hub over gRPC, and Hub publishes material-aware printer updates to the browser event stream.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.
