@@ -259,6 +259,8 @@
     "noMatchesMessage": "No printers match your search or filter.",
     "unknownModel": "Unknown model",
     "managedBy": "Managed by",
+    "statusLabel": "Status",
+    "filamentsLabel": "Filaments",
     "refreshAms": "Refresh AMS",
     "unknownAgent": "Unknown agent",
     "filterStatusAria": "Filter by status",

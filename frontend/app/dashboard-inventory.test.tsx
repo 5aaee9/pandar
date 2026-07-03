@@ -1,5 +1,6 @@
 import { NextIntlClientProvider } from "next-intl";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
@@ -8,6 +9,7 @@ import { PrinterInventory } from "./dashboard-inventory";
 import type { Agent, Printer, Tenant } from "./dashboard-types";
 
 vi.mock("./actions", () => ({
+  linkPrinter: vi.fn(),
   refreshPrinterMaterials: vi.fn(),
 }));
 
@@ -48,6 +50,46 @@ const printer: Printer = {
 };
 
 describe("PrinterInventory", () => {
+  it("renders inventory content without the tenant subtitle or reported count", () => {
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Printer inventory" })).toBeVisible();
+    expect(screen.queryByText("Acme Labs (acme)")).not.toBeInTheDocument();
+    expect(screen.queryByText("1 reported")).not.toBeInTheDocument();
+  });
+
+  it("renders printers as individual machine cards", () => {
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} />,
+    );
+
+    const card = screen.getByRole("article", { name: "Office A1" });
+    expect(card).toBeVisible();
+    expect(card).toHaveTextContent("A1");
+    expect(card).toHaveTextContent("SERIAL123");
+    expect(card).toHaveTextContent("Shop Agent");
+  });
+
+  it("opens the machine form from the empty printer state", async () => {
+    const user = userEvent.setup();
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[]} agents={[agent]} />,
+    );
+
+    expect(screen.getByText("No printers reported")).toBeVisible();
+
+    const trigger = screen.getByRole("button", { name: "Link printer" });
+    expect(trigger).toHaveAttribute("data-slot", "dialog-trigger");
+
+    await user.click(trigger);
+
+    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Link printer to agent" })).toBeVisible();
+    expect(screen.getByLabelText("Printer IPv4 address")).toBeVisible();
+  });
+
   it("renders a localized AMS refresh form with tenant and printer ids", () => {
     renderWithMessages(
       <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} />,

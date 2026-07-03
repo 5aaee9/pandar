@@ -256,6 +256,8 @@
     "noMatchesMessage": "没有打印机匹配您的搜索或筛选。",
     "unknownModel": "未知型号",
     "managedBy": "管理者",
+    "statusLabel": "状态",
+    "filamentsLabel": "耗材",
     "refreshAms": "刷新 AMS",
     "unknownAgent": "未知 Agent",
     "filterStatusAria": "按状态筛选",
