@@ -10,6 +10,7 @@ pub(super) fn printer_operation_action(operation: &MachinePrinterOperation) -> &
         MachinePrinterOperation::Pause => "pause",
         MachinePrinterOperation::Resume => "resume",
         MachinePrinterOperation::Stop => "stop",
+        MachinePrinterOperation::ToggleLight => "toggle_light",
         MachinePrinterOperation::SetPrintSpeed(_) => "set_print_speed",
         MachinePrinterOperation::SelectExtruder(_) => "select_extruder",
         MachinePrinterOperation::Home { .. } => "home",
@@ -42,17 +43,17 @@ pub(super) fn printer_operation_result_json(
         result.insert("mqtt_error".to_string(), json!(error));
     }
     if let Some(report) = &dispatch_result.mqtt_report {
-        if let Some(print) = report.get("print") {
-            if let Some(value) = print.get("result") {
+        if let Some(section) = report.get("print").or_else(|| report.get("system")) {
+            if let Some(value) = section.get("result") {
                 result.insert("mqtt_result".to_string(), value.clone());
             }
-            if let Some(value) = print.get("reason") {
+            if let Some(value) = section.get("reason") {
                 result.insert("mqtt_reason".to_string(), value.clone());
             }
-            if let Some(value) = print.get("err_code") {
+            if let Some(value) = section.get("err_code") {
                 result.insert("mqtt_err_code".to_string(), value.clone());
             }
-            if let Some(value) = print.get("errno") {
+            if let Some(value) = section.get("errno") {
                 result.insert("mqtt_errno".to_string(), value.clone());
             }
         }
@@ -160,6 +161,7 @@ fn append_operation_fields(
         }
         MachinePrinterOperation::Pause
         | MachinePrinterOperation::Resume
-        | MachinePrinterOperation::Stop => {}
+        | MachinePrinterOperation::Stop
+        | MachinePrinterOperation::ToggleLight => {}
     }
 }

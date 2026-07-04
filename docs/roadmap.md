@@ -22,6 +22,7 @@
 - Enabled dashboard live printer-event WebSocket updates in Hub no-auth mode without requiring browser event tickets.
 - Updated the frontend design tokens and design-system documentation to the neutral OKLCH light/dark palette, with white as the light root page background.
 - Added frontend light/dark theme selection with a system default that follows `prefers-color-scheme`.
+- Moved the frontend theme bootstrap script out of the client theme provider so Next.js no longer warns about rendering `<script>` tags from React client components.
 - Fixed the frontend sans-serif font token so English pages render with the intended non-serif UI font stack.
 - Split job history, print dispatch, and recovery actions into a dedicated Jobs dashboard page while keeping Devices focused on overview, attention, and printer inventory.
 - Reworked the Devices printer inventory into an unframed section with shadcn Empty states, larger desktop empty-state spacing, a dialog-based machine form for linking printers, and per-printer machine cards.
@@ -778,9 +779,9 @@ Exit criteria:
 
 Goal: make customer-facing printer actions device-neutral so non-Bambu agents can translate the same semantic operation contract later.
 
-- Completed `PrinterOperation` protobuf dispatch for pause, resume, stop, speed, home, relative axis movement, and hotend temperature.
+- Completed `PrinterOperation` protobuf dispatch for pause, resume, stop, chamber-light toggle, speed, home, relative axis movement, and hotend temperature.
 - Completed Hub persistence and audit of semantic `printer_operation` payloads; Hub validates ownership, compatibility, ranges, axes, and unknown fields without constructing Bambu MQTT JSON or G-code.
-- Completed Bambu agent translation for semantic operations, including bare `G28` for every home request, relative move `gcode_line`, and `M104`/`M109` hotend commands.
+- Completed Bambu agent translation for semantic operations, including bare `G28` for every home request, relative move `gcode_line`, chamber-light `ledctrl`, and `M104`/`M109` hotend commands.
 - Completed network plugin parsing of supported control G-code into semantic Hub operation requests; unsupported or ambiguous G-code returns stable plugin errors before network dispatch.
 - Real-printer probes for Phase 29 home/move/hotend are not recorded in this workspace.
 

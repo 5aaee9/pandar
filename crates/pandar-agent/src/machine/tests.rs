@@ -329,6 +329,59 @@ async fn configured_operate_printer_select_extruder_publishes_reference_command(
 }
 
 #[tokio::test]
+async fn configured_operate_printer_toggle_light_reads_state_and_publishes_opposite() {
+    let mqtt = FakeMqttTransport::with_reports([json!({
+        "print": {
+            "lights_report": [{"node": "chamber_light", "mode": "on"}]
+        }
+    })]);
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer("SERIAL1", PrinterOperation::ToggleLight)
+        .await
+        .unwrap();
+
+    let published = mqtt.published_commands().await;
+    let pushall_sequence_id = dynamic_section_sequence_id(&published[0].payload, "pushing");
+    let light_sequence_id = dynamic_section_sequence_id(&published[1].payload, "system");
+    assert_eq!(
+        published,
+        vec![
+            PublishedMqttCommand {
+                topic: "device/SERIAL1/request".to_string(),
+                payload: json!({"pushing": {
+                    "command": "pushall",
+                    "sequence_id": pushall_sequence_id,
+                    "version": 1,
+                    "push_target": 1
+                }}),
+                qos: BAMBU_MQTT_QOS,
+            },
+            PublishedMqttCommand {
+                topic: "device/SERIAL1/request".to_string(),
+                payload: json!({"system": {
+                    "command": "ledctrl",
+                    "led_node": "chamber_light",
+                    "led_mode": "off",
+                    "led_on_time": 500,
+                    "led_off_time": 500,
+                    "loop_times": 0,
+                    "interval_time": 0,
+                    "sequence_id": light_sequence_id
+                }}),
+                qos: BAMBU_MQTT_QOS,
+            },
+        ]
+    );
+}
+
+#[tokio::test]
 async fn configured_operate_printer_returns_matching_mqtt_sequence_result() {
     let mqtt = FakeMqttTransport::with_operation_reports();
     let transfer = FakeMachineFileTransfer::default();

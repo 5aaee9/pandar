@@ -15,6 +15,7 @@ pub enum PrinterOperation {
     Pause,
     Resume,
     Stop,
+    ToggleLight,
     SetPrintSpeed(u8),
     SelectExtruder(u32),
     Home {
@@ -78,7 +79,10 @@ where
     mqtt.subscribe(&topics.report)
         .await
         .with_context(|| format!("subscribe to report topic {}", topics.report))?;
-    let payload = mqtt_command_for_printer_operation(operation)?.payload();
+    let payload = match operation {
+        PrinterOperation::ToggleLight => toggle_light_payload(mqtt, &topics).await?,
+        operation => mqtt_command_for_printer_operation(operation)?.payload(),
+    };
     let sequence_id = command_sequence_id(&payload);
     mqtt.publish(PublishedMqttCommand {
         topic: topics.request.clone(),
@@ -121,6 +125,9 @@ fn mqtt_command_for_printer_operation(
         PrinterOperation::Pause => Ok(BambuMqttCommand::PausePrint),
         PrinterOperation::Resume => Ok(BambuMqttCommand::ResumePrint),
         PrinterOperation::Stop => Ok(BambuMqttCommand::StopPrint),
+        PrinterOperation::ToggleLight => {
+            unreachable!("toggle_light is handled before payload mapping")
+        }
         PrinterOperation::SetPrintSpeed(mode) => {
             Ok(BambuMqttCommand::SetPrintSpeed(PrintSpeed::new(mode)?))
         }
@@ -230,6 +237,49 @@ fn ams_command_slot_id(slot_id: u32, external_id: Option<&str>) -> u32 {
     }
 }
 
+async fn toggle_light_payload<T>(mqtt: &T, topics: &BambuMqttTopics) -> anyhow::Result<Value>
+where
+    T: BambuMqttTransport + Send + Sync,
+{
+    mqtt.publish(PublishedMqttCommand {
+        topic: topics.request.clone(),
+        payload: BambuMqttCommand::RequestPushAll.payload(),
+        qos: BAMBU_MQTT_QOS,
+    })
+    .await
+    .context("request current light report before toggling chamber light")?;
+
+    let current = latest_chamber_light_state(mqtt).await?;
+    Ok(BambuMqttCommand::SetChamberLight(!current).payload())
+}
+
+async fn latest_chamber_light_state<T>(mqtt: &T) -> anyhow::Result<bool>
+where
+    T: BambuMqttTransport + Send + Sync,
+{
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let report = mqtt
+                .next_report(std::time::Duration::from_secs(5))
+                .await
+                .context("wait for chamber light status report")?;
+            if let Some(state) = chamber_light_state(&report) {
+                return Ok(state);
+            }
+        }
+    })
+    .await
+    .context("wait for chamber light status report")?
+}
+
+fn chamber_light_state(report: &Value) -> Option<bool> {
+    let lights = report.pointer("/print/lights_report")?.as_array()?;
+    lights.iter().find_map(|light| {
+        (light.get("node").and_then(Value::as_str) == Some("chamber_light"))
+            .then(|| light.get("mode").and_then(Value::as_str) == Some("on"))
+    })
+}
+
 async fn matching_sequence_report<T>(mqtt: &T, sequence_id: &str) -> anyhow::Result<Value>
 where
     T: BambuMqttTransport + Send + Sync,
@@ -270,18 +320,18 @@ fn section_sequence_id(value: &Value) -> Option<String> {
 }
 
 fn printer_operation_report_error(report: &Value) -> Option<String> {
-    let print = report.get("print")?;
-    if print.get("result").and_then(Value::as_str) == Some("fail") {
+    let section = report.get("print").or_else(|| report.get("system"))?;
+    if section.get("result").and_then(Value::as_str) == Some("fail") {
         return Some(
-            report_error_message(print).unwrap_or_else(|| "printer reported failure".to_owned()),
+            report_error_message(section).unwrap_or_else(|| "printer reported failure".to_owned()),
         );
     }
     for key in ["err_code", "errno"] {
-        if let Some(code) = print.get(key).and_then(Value::as_i64)
+        if let Some(code) = section.get(key).and_then(Value::as_i64)
             && code != 0
         {
             return Some(
-                report_error_message(print)
+                report_error_message(section)
                     .unwrap_or_else(|| format!("printer reported {key} {code}")),
             );
         }

@@ -16,9 +16,9 @@ vi.mock("./actions", () => ({
   updatePrinter: vi.fn(),
 }));
 
-function renderWithMessages(children: React.ReactNode) {
+function renderWithMessages(children: React.ReactNode, locale = "en") {
   return render(
-    <NextIntlClientProvider locale="en" messages={en}>
+    <NextIntlClientProvider locale={locale} messages={locale === "zh" ? zh : en}>
       {children}
     </NextIntlClientProvider>,
   );
@@ -234,14 +234,30 @@ describe("PrinterInventory", () => {
     expect(cardText.indexOf("Controls")).toBeLessThan(cardText.indexOf("Filaments"));
 
     const controls = screen.getByRole("group", { name: "Controls" });
-    expect(controls).toHaveClass("grid-cols-2");
+    expect(controls).toHaveClass("grid-cols-3");
     expect(controls).not.toHaveClass("sm:grid-cols-1");
 
     const stopForm = screen.getByRole("button", { name: "Stop" }).closest("form");
     const pauseForm = screen.getByRole("button", { name: "Pause" }).closest("form");
+    const lightForm = screen.getByRole("button", { name: "Light" }).closest("form");
     expect(stopForm?.querySelector('input[name="action"]')).toHaveValue("stop");
     expect(stopForm?.querySelector('input[name="printer_id"]')).toHaveValue("printer-1");
     expect(pauseForm?.querySelector('input[name="action"]')).toHaveValue("pause");
+    expect(lightForm?.querySelector('input[name="action"]')).toHaveValue("toggle_light");
+  });
+
+  it("localizes the light control label in Chinese", () => {
+    const heatingPrinter: Printer = {
+      ...printer,
+      nozzle_temperatures: [{ label: null, current_celsius: "27", target_celsius: "0" }],
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+      "zh",
+    );
+
+    expect(screen.getByRole("button", { name: "灯光" })).toBeVisible();
   });
 
   it("shows active nozzle switch control for dual-nozzle printers", () => {

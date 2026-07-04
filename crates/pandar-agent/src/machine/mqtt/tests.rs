@@ -58,6 +58,7 @@ fn studio_command_payloads_use_incrementing_studio_sequence_ids() {
         (BambuMqttCommand::PausePrint.payload(), "print"),
         (BambuMqttCommand::ResumePrint.payload(), "print"),
         (BambuMqttCommand::StopPrint.payload(), "print"),
+        (BambuMqttCommand::SetChamberLight(true).payload(), "system"),
         (
             BambuMqttCommand::SetPrintSpeed(PrintSpeed::new(4).unwrap()).payload(),
             "print",
@@ -254,6 +255,27 @@ fn basic_print_control_payloads_match_reference() {
         stop,
         json!({"print": {"command": "stop", "param": "", "sequence_id": studio_sequence_id(&stop, "print")}})
     );
+}
+
+#[test]
+fn chamber_light_payload_matches_bambuddy_reference() {
+    let on = BambuMqttCommand::SetChamberLight(true).payload();
+    assert_eq!(
+        on,
+        json!({"system": {
+            "command": "ledctrl",
+            "led_node": "chamber_light",
+            "led_mode": "on",
+            "led_on_time": 500,
+            "led_off_time": 500,
+            "loop_times": 0,
+            "interval_time": 0,
+            "sequence_id": studio_sequence_id(&on, "system")
+        }})
+    );
+
+    let off = BambuMqttCommand::SetChamberLight(false).payload();
+    assert_eq!(off["system"]["led_mode"], "off");
 }
 
 #[test]

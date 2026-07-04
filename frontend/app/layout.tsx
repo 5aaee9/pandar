@@ -6,7 +6,8 @@ import type { ReactNode } from 'react'
 import './globals.css'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { ThemeProvider, ThemeScript } from '@/components/theme-provider'
+import { ThemeProvider } from '@/components/theme-provider'
+import { ThemeScript } from '@/components/theme-script'
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations('meta')

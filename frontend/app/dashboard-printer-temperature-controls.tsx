@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
-import { PauseIcon, SquareIcon, ThermometerIcon } from 'lucide-react'
+import { LightbulbIcon, PauseIcon, SquareIcon, ThermometerIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,6 +21,17 @@ import {
   NozzleTemperatureCard,
   presentNozzles,
 } from './dashboard-printer-nozzle-temperature-controls'
+
+type TemperatureControl = {
+  title: string
+  subtitle: string | null
+  value: string
+  tone: string
+  action: string
+  ariaLabel: string
+  popoverTitle: string
+  presets: readonly number[]
+}
 
 export function PrinterTemperatureControls({ printer }: { printer: Printer }) {
   const t = useTranslations('inventory')
@@ -59,7 +70,7 @@ export function PrinterControlsPanel({ printer }: { printer: Printer }) {
   return (
     <div className="mt-4 space-y-2">
       <div className="text-xs font-medium text-muted-foreground">{t('controlsLabel')}</div>
-      <div aria-label={t('controlsLabel')} className="grid grid-cols-2 gap-2" role="group">
+      <div aria-label={t('controlsLabel')} className="grid grid-cols-3 gap-2" role="group">
         <PrinterInlineControl
           action="stop"
           enabled={controlsEnabled.stop}
@@ -75,6 +86,14 @@ export function PrinterControlsPanel({ printer }: { printer: Printer }) {
           label={t('pausePrint')}
           printer={printer}
           tone="warning"
+        />
+        <PrinterInlineControl
+          action="toggle_light"
+          enabled={controlsEnabled.light}
+          icon={<LightbulbIcon />}
+          label={t('lightControl')}
+          printer={printer}
+          tone="neutral"
         />
       </div>
     </div>
@@ -201,12 +220,16 @@ function PrinterInlineControl({
   label: string
   icon: ReactNode
   enabled: boolean
-  tone: 'danger' | 'warning'
+  tone: 'danger' | 'warning' | 'neutral'
 }) {
-  const toneClass =
-    tone === 'danger'
-      ? 'enabled:bg-red-500/15 enabled:text-red-700 enabled:hover:bg-red-500/25 dark:enabled:text-red-300'
-      : 'enabled:bg-yellow-500/20 enabled:text-yellow-800 enabled:hover:bg-yellow-500/30 dark:enabled:text-yellow-200'
+  const toneClass = {
+    danger:
+      'enabled:bg-red-500/15 enabled:text-red-700 enabled:hover:bg-red-500/25 dark:enabled:text-red-300',
+    warning:
+      'enabled:bg-yellow-500/20 enabled:text-yellow-800 enabled:hover:bg-yellow-500/30 dark:enabled:text-yellow-200',
+    neutral:
+      'enabled:bg-primary/10 enabled:text-primary enabled:hover:bg-primary/15 dark:enabled:bg-primary/20',
+  }[tone]
 
   return (
     <form action={controlPrinter}>
@@ -230,47 +253,37 @@ function printerControlEnabled(status: string) {
   return {
     stop: ['running', 'printing', 'paused', 'pause'].includes(normalized),
     pause: ['running', 'printing'].includes(normalized),
+    light: true,
   }
 }
 
 function printerTemperatures(printer: Printer, t: ReturnType<typeof useTranslations>) {
-  return [
-    printer.bed_temperature_celsius
-      ? {
-          title: t('bedTemperature'),
-          subtitle: null,
-          value: temperaturePair(printer.bed_temperature_celsius, printer.bed_target_temperature_celsius),
-          tone: 'text-blue-500',
-          action: 'set_bed_temperature',
-          ariaLabel: t('setBedTemperature'),
-          popoverTitle: t('setBedTemperatureTitle'),
-          presets: [0, 55, 75, 90],
-        }
-      : null,
-    printer.chamber_temperature_celsius
-      ? {
-          title: t('chamberTemperature'),
-          subtitle: null,
-          value: formatTemperatureValue(printer.chamber_temperature_celsius),
-          tone: 'text-emerald-500',
-          action: 'set_chamber_temperature',
-          ariaLabel: t('setChamberTemperature'),
-          popoverTitle: t('setChamberTemperatureTitle'),
-          presets: [0, 35, 45, 60],
-        }
-      : null,
-  ].filter(
-    (value): value is {
-      title: string
-      subtitle: string | null
-      value: string
-      tone: string
-      action: string
-      ariaLabel: string
-      popoverTitle: string
-      presets: readonly number[]
-    } => value !== null,
-  )
+  const temperatures: TemperatureControl[] = []
+  if (printer.bed_temperature_celsius) {
+    temperatures.push({
+      title: t('bedTemperature'),
+      subtitle: null,
+      value: temperaturePair(printer.bed_temperature_celsius, printer.bed_target_temperature_celsius),
+      tone: 'text-blue-500',
+      action: 'set_bed_temperature',
+      ariaLabel: t('setBedTemperature'),
+      popoverTitle: t('setBedTemperatureTitle'),
+      presets: [0, 55, 75, 90],
+    })
+  }
+  if (printer.chamber_temperature_celsius) {
+    temperatures.push({
+      title: t('chamberTemperature'),
+      subtitle: null,
+      value: formatTemperatureValue(printer.chamber_temperature_celsius),
+      tone: 'text-emerald-500',
+      action: 'set_chamber_temperature',
+      ariaLabel: t('setChamberTemperature'),
+      popoverTitle: t('setChamberTemperatureTitle'),
+      presets: [0, 35, 45, 60],
+    })
+  }
+  return temperatures
 }
 
 function temperaturePair(current?: string | null, target?: string | null) {

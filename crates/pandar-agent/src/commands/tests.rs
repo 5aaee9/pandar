@@ -26,7 +26,7 @@ use crate::{
         MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
         RefreshPrinterMaterials, RefreshPrinters, SelectExtruderOperation,
         SetBedTemperatureOperation, SetChamberTemperatureOperation, SetHotendTemperatureOperation,
-        SetPrintSpeedOperation, printer_operation,
+        SetPrintSpeedOperation, ToggleLightOperation, printer_operation,
     },
 };
 
@@ -2024,6 +2024,47 @@ async fn printer_operation_chamber_temperature_dispatches_typed_details() {
                 wait: false,
             }
         )]
+    );
+}
+
+#[tokio::test]
+async fn printer_operation_toggle_light_dispatches_typed_action() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_operation_command(
+            command_id.clone(),
+            "SERIAL1",
+            Some(printer_operation::Operation::ToggleLight(
+                ToggleLightOperation {},
+            )),
+        ),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(result.success);
+            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(json["action"], "toggle_light");
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.operations().await,
+        vec![("SERIAL1".to_string(), MachinePrinterOperation::ToggleLight)]
     );
 }
 

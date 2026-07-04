@@ -284,6 +284,7 @@
         "setChamberTemperatureTitle": "Set Chamber Temperature",
         "stopPrint": "Stop",
       "pausePrint": "Pause",
+      "lightControl": "Light",
       "controlsLabel": "Controls",
       "filamentsLabel": "Filaments",
     "noMaterialReport": "No AMS report yet",

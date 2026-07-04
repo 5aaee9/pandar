@@ -152,6 +152,7 @@ message PrinterOperation {
     SelectExtruderOperation select_extruder = 20;
     SetBedTemperatureOperation set_bed_temperature = 21;
     SetChamberTemperatureOperation set_chamber_temperature = 22;
+    ToggleLightOperation toggle_light = 23;
   }
 }
 
@@ -160,6 +161,8 @@ message PauseOperation {}
 message ResumeOperation {}
 
 message StopOperation {}
+
+message ToggleLightOperation {}
 
 message SetPrintSpeedOperation {
   uint32 speed_mode = 1;

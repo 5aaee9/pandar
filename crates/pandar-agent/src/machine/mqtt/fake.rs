@@ -151,19 +151,30 @@ fn is_pushall_payload(payload: &Value) -> bool {
 #[cfg(test)]
 fn published_payload_matches(expected: &Value, actual: &Value) -> bool {
     expected == actual
-        || ["info", "pushing", "print"].into_iter().any(|section| {
-            expected[section]["command"].as_str().is_some()
-                && expected[section]["command"].as_str() == actual[section]["command"].as_str()
-        })
+        || ["info", "pushing", "print", "system"]
+            .into_iter()
+            .any(|section| {
+                expected[section]["command"].as_str().is_some()
+                    && expected[section]["command"].as_str() == actual[section]["command"].as_str()
+            })
 }
 
 #[cfg(test)]
 fn operation_report_for_payload(payload: &Value) -> Option<Value> {
-    let print = payload.get("print")?;
+    if let Some(print) = payload.get("print") {
+        return Some(json!({
+            "print": {
+                "command": print.get("command")?.clone(),
+                "sequence_id": print.get("sequence_id")?.clone(),
+                "result": "success"
+            }
+        }));
+    }
+    let system = payload.get("system")?;
     Some(json!({
-        "print": {
-            "command": print.get("command")?.clone(),
-            "sequence_id": print.get("sequence_id")?.clone(),
+        "system": {
+            "command": system.get("command")?.clone(),
+            "sequence_id": system.get("sequence_id")?.clone(),
             "result": "success"
         }
     }))

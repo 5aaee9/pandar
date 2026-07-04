@@ -39,6 +39,7 @@ impl PrinterOperationRequest {
             "pause" if self.no_operation_fields() => Ok(PrinterOperationKind::Pause),
             "resume" if self.no_operation_fields() => Ok(PrinterOperationKind::Resume),
             "stop" if self.no_operation_fields() => Ok(PrinterOperationKind::Stop),
+            "toggle_light" if self.no_operation_fields() => Ok(PrinterOperationKind::ToggleLight),
             "set_print_speed"
                 if self.speed_mode.is_some()
                     && self.axes.is_empty()

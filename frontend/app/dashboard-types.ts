@@ -74,6 +74,7 @@ export type PrinterMaterials = {
     ams_id?: string | null;
     tray_id?: string | null;
     global_tray_id?: number | null;
+    external_id?: string | null;
   } | null;
   observed_at: string;
 };

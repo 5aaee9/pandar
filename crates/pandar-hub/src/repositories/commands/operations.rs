@@ -50,6 +50,7 @@ pub enum PrinterOperationKind {
     Pause,
     Resume,
     Stop,
+    ToggleLight,
     SetPrintSpeed {
         speed_mode: u8,
     },
@@ -104,6 +105,7 @@ impl PrinterOperationKind {
             Self::Pause => "pause",
             Self::Resume => "resume",
             Self::Stop => "stop",
+            Self::ToggleLight => "toggle_light",
             Self::SetPrintSpeed { .. } => "set_print_speed",
             Self::SelectExtruder { .. } => "select_extruder",
             Self::Home { .. } => "home",
@@ -120,9 +122,10 @@ impl PrinterOperationKind {
 
 pub fn validate_printer_operation(operation: &PrinterOperationKind) -> RepositoryResult<()> {
     match operation {
-        PrinterOperationKind::Pause | PrinterOperationKind::Resume | PrinterOperationKind::Stop => {
-            Ok(())
-        }
+        PrinterOperationKind::Pause
+        | PrinterOperationKind::Resume
+        | PrinterOperationKind::Stop
+        | PrinterOperationKind::ToggleLight => Ok(()),
         PrinterOperationKind::SetPrintSpeed { speed_mode } if (1..=4).contains(speed_mode) => {
             Ok(())
         }
@@ -277,6 +280,7 @@ pub fn operation_audit_metadata(
         }
         PrinterOperationKind::Pause | PrinterOperationKind::Resume | PrinterOperationKind::Stop => {
         }
+        PrinterOperationKind::ToggleLight => {}
     }
 
     Value::Object(metadata)

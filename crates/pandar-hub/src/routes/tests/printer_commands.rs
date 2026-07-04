@@ -760,6 +760,7 @@ async fn printer_control_accepts_semantic_home_move_and_hotend_operations() {
             }),
             "set_chamber_temperature",
         ),
+        (json!({ "action": "toggle_light" }), "toggle_light"),
     ] {
         let (status, body) = request_as(
             app.clone(),

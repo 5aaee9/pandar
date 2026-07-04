@@ -111,6 +111,7 @@ pub enum BambuMqttCommand {
     PausePrint,
     ResumePrint,
     StopPrint,
+    SetChamberLight(bool),
     SetPrintSpeed(PrintSpeed),
     SelectExtruder(u32),
     SetNozzleTemperature(SetNozzleTemperatureCommand),
@@ -143,6 +144,7 @@ impl BambuMqttCommand {
             Self::StopPrint => {
                 json!({"print": {"command": "stop", "param": "", "sequence_id": next_studio_sequence_id()}})
             }
+            Self::SetChamberLight(on) => chamber_light_payload(*on),
             Self::SetPrintSpeed(speed) => {
                 json!({"print": {"command": "print_speed", "param": speed.as_u8().to_string(), "sequence_id": next_studio_sequence_id()}})
             }
@@ -193,6 +195,19 @@ pub(crate) fn next_studio_sequence_id_from(sequence: &AtomicU32) -> String {
 
 fn ams_reread_rfid_payload(command: &AmsSlotCommand) -> Value {
     json!({"print": {"command": "ams_get_rfid", "sequence_id": next_studio_sequence_id(), "ams_id": command.ams_id, "slot_id": command.slot_id}})
+}
+
+fn chamber_light_payload(on: bool) -> Value {
+    json!({"system": {
+        "command": "ledctrl",
+        "led_node": "chamber_light",
+        "led_mode": if on { "on" } else { "off" },
+        "led_on_time": 500,
+        "led_off_time": 500,
+        "loop_times": 0,
+        "interval_time": 0,
+        "sequence_id": next_studio_sequence_id()
+    }})
 }
 
 fn ams_load_filament_payload(command: &AmsFilamentCommand) -> Value {
