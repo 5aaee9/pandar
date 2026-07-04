@@ -550,6 +550,7 @@ export async function controlPrinter(formData: FormData) {
   const extruderId = nullableField(formData, "extruder_id");
   const temperatureCelsius = nullableField(formData, "temperature_celsius");
   const wait = nullableField(formData, "wait");
+  const lightOn = nullableField(formData, "light_on");
   const response = await postJson(
     `/api/v1/tenants/${tenantId}/printers/${printerId}/controls`,
     {
@@ -562,6 +563,7 @@ export async function controlPrinter(formData: FormData) {
       global_tray_id: globalTrayId ? Number(globalTrayId) : undefined,
       external_id: externalId || undefined,
       extruder_id: extruderId ? Number(extruderId) : undefined,
+      light_on: lightOn ? lightOn === "true" || lightOn === "on" : undefined,
     },
   );
   redirect(

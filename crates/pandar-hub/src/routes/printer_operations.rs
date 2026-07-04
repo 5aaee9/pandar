@@ -31,6 +31,8 @@ pub(super) struct PrinterOperationRequest {
     external_id: Option<String>,
     #[serde(default)]
     extruder_id: Option<u32>,
+    #[serde(default)]
+    light_on: Option<bool>,
 }
 
 impl PrinterOperationRequest {
@@ -40,6 +42,21 @@ impl PrinterOperationRequest {
             "resume" if self.no_operation_fields() => Ok(PrinterOperationKind::Resume),
             "stop" if self.no_operation_fields() => Ok(PrinterOperationKind::Stop),
             "toggle_light" if self.no_operation_fields() => Ok(PrinterOperationKind::ToggleLight),
+            "set_chamber_light"
+                if self.speed_mode.is_none()
+                    && self.axes.is_empty()
+                    && self.movements.is_empty()
+                    && self.feedrate_mm_per_min.is_none()
+                    && self.temperature_celsius.is_none()
+                    && self.wait.is_none()
+                    && self.no_material_fields()
+                    && self.extruder_id.is_none()
+                    && self.light_on.is_some() =>
+            {
+                Ok(PrinterOperationKind::SetChamberLight {
+                    on: self.light_on.expect("checked above"),
+                })
+            }
             "set_print_speed"
                 if self.speed_mode.is_some()
                     && self.axes.is_empty()
@@ -198,10 +215,11 @@ impl PrinterOperationRequest {
             && self.temperature_celsius.is_none()
             && self.wait.is_none()
             && self.no_ams_fields()
+            && self.light_on.is_none()
     }
 
     fn no_ams_fields(&self) -> bool {
-        self.no_material_fields() && self.extruder_id.is_none()
+        self.no_material_fields() && self.extruder_id.is_none() && self.light_on.is_none()
     }
 
     fn no_material_fields(&self) -> bool {

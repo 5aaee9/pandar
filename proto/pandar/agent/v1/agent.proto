@@ -41,6 +41,7 @@ message PrinterSnapshot {
   string bed_target_temperature_celsius = 7;
   string chamber_temperature_celsius = 8;
   string active_nozzle = 9;
+  optional bool chamber_light_on = 10;
 }
 
 message NozzleTemperature {
@@ -153,6 +154,7 @@ message PrinterOperation {
     SetBedTemperatureOperation set_bed_temperature = 21;
     SetChamberTemperatureOperation set_chamber_temperature = 22;
     ToggleLightOperation toggle_light = 23;
+    SetChamberLightOperation set_chamber_light = 24;
   }
 }
 
@@ -163,6 +165,10 @@ message ResumeOperation {}
 message StopOperation {}
 
 message ToggleLightOperation {}
+
+message SetChamberLightOperation {
+  bool on = 1;
+}
 
 message SetPrintSpeedOperation {
   uint32 speed_mode = 1;

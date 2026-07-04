@@ -134,6 +134,7 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_light_on: None,
             },
             MachineSnapshot {
                 serial: "SERIAL2".to_string(),
@@ -145,6 +146,7 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_light_on: None,
             },
         ]
     );
@@ -329,7 +331,7 @@ async fn configured_operate_printer_select_extruder_publishes_reference_command(
 }
 
 #[tokio::test]
-async fn configured_operate_printer_toggle_light_reads_state_and_publishes_opposite() {
+async fn configured_operate_printer_toggle_light_sends_bambu_studio_light_nodes() {
     let mqtt = FakeMqttTransport::with_reports([json!({
         "print": {
             "lights_report": [{"node": "chamber_light", "mode": "on"}]
@@ -350,6 +352,7 @@ async fn configured_operate_printer_toggle_light_reads_state_and_publishes_oppos
     let published = mqtt.published_commands().await;
     let pushall_sequence_id = dynamic_section_sequence_id(&published[0].payload, "pushing");
     let light_sequence_id = dynamic_section_sequence_id(&published[1].payload, "system");
+    let light2_sequence_id = dynamic_section_sequence_id(&published[2].payload, "system");
     assert_eq!(
         published,
         vec![
@@ -371,14 +374,204 @@ async fn configured_operate_printer_toggle_light_reads_state_and_publishes_oppos
                     "led_mode": "off",
                     "led_on_time": 500,
                     "led_off_time": 500,
-                    "loop_times": 0,
-                    "interval_time": 0,
+                    "loop_times": 1,
+                    "interval_time": 1000,
                     "sequence_id": light_sequence_id
+                }}),
+                qos: BAMBU_MQTT_QOS,
+            },
+            PublishedMqttCommand {
+                topic: "device/SERIAL1/request".to_string(),
+                payload: json!({"system": {
+                    "command": "ledctrl",
+                    "led_node": "chamber_light2",
+                    "led_mode": "off",
+                    "led_on_time": 500,
+                    "led_off_time": 500,
+                    "loop_times": 1,
+                    "interval_time": 1000,
+                    "sequence_id": light2_sequence_id
                 }}),
                 qos: BAMBU_MQTT_QOS,
             },
         ]
     );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_toggle_light_matches_bambu_studio_light_nodes() {
+    let mqtt = FakeMqttTransport::with_reports([json!({
+        "print": {
+            "lights_report": [
+                {"node": "chamber_light", "mode": "off"},
+                {"node": "chamber_light2", "mode": "off"}
+            ]
+        }
+    })]);
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer("SERIAL1", PrinterOperation::ToggleLight)
+        .await
+        .unwrap();
+
+    let published = mqtt.published_commands().await;
+    let pushall_sequence_id = dynamic_section_sequence_id(&published[0].payload, "pushing");
+    let light_sequence_id = dynamic_section_sequence_id(&published[1].payload, "system");
+    let light2_sequence_id = dynamic_section_sequence_id(&published[2].payload, "system");
+    assert_eq!(
+        published,
+        vec![
+            PublishedMqttCommand {
+                topic: "device/SERIAL1/request".to_string(),
+                payload: json!({"pushing": {
+                    "command": "pushall",
+                    "sequence_id": pushall_sequence_id,
+                    "version": 1,
+                    "push_target": 1
+                }}),
+                qos: BAMBU_MQTT_QOS,
+            },
+            PublishedMqttCommand {
+                topic: "device/SERIAL1/request".to_string(),
+                payload: json!({"system": {
+                    "command": "ledctrl",
+                    "led_node": "chamber_light",
+                    "led_mode": "on",
+                    "led_on_time": 500,
+                    "led_off_time": 500,
+                    "loop_times": 1,
+                    "interval_time": 1000,
+                    "sequence_id": light_sequence_id
+                }}),
+                qos: BAMBU_MQTT_QOS,
+            },
+            PublishedMqttCommand {
+                topic: "device/SERIAL1/request".to_string(),
+                payload: json!({"system": {
+                    "command": "ledctrl",
+                    "led_node": "chamber_light2",
+                    "led_mode": "on",
+                    "led_on_time": 500,
+                    "led_off_time": 500,
+                    "loop_times": 1,
+                    "interval_time": 1000,
+                    "sequence_id": light2_sequence_id
+                }}),
+                qos: BAMBU_MQTT_QOS,
+            },
+        ]
+    );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_set_chamber_light_uses_requested_state() {
+    let mqtt = FakeMqttTransport::with_reports([json!({
+        "print": {
+            "lights_report": [{"node": "chamber_light", "mode": "on"}]
+        }
+    })]);
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer("SERIAL1", PrinterOperation::SetChamberLight(true))
+        .await
+        .unwrap();
+
+    let published = mqtt.published_commands().await;
+    let pushall_sequence_id = dynamic_section_sequence_id(&published[0].payload, "pushing");
+    let light_sequence_id = dynamic_section_sequence_id(&published[1].payload, "system");
+    let light2_sequence_id = dynamic_section_sequence_id(&published[2].payload, "system");
+    assert_eq!(
+        published,
+        vec![
+            PublishedMqttCommand {
+                topic: "device/SERIAL1/request".to_string(),
+                payload: json!({"pushing": {
+                    "command": "pushall",
+                    "sequence_id": pushall_sequence_id,
+                    "version": 1,
+                    "push_target": 1
+                }}),
+                qos: BAMBU_MQTT_QOS,
+            },
+            PublishedMqttCommand {
+                topic: "device/SERIAL1/request".to_string(),
+                payload: json!({"system": {
+                    "command": "ledctrl",
+                    "led_node": "chamber_light",
+                    "led_mode": "on",
+                    "led_on_time": 500,
+                    "led_off_time": 500,
+                    "loop_times": 1,
+                    "interval_time": 1000,
+                    "sequence_id": light_sequence_id
+                }}),
+                qos: BAMBU_MQTT_QOS,
+            },
+            PublishedMqttCommand {
+                topic: "device/SERIAL1/request".to_string(),
+                payload: json!({"system": {
+                    "command": "ledctrl",
+                    "led_node": "chamber_light2",
+                    "led_mode": "on",
+                    "led_on_time": 500,
+                    "led_off_time": 500,
+                    "loop_times": 1,
+                    "interval_time": 1000,
+                    "sequence_id": light2_sequence_id
+                }}),
+                qos: BAMBU_MQTT_QOS,
+            },
+        ]
+    );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_light_returns_primary_success_when_light2_fails() {
+    let mqtt = FakeMqttTransport::with_reports_and_operation_reports_failed_led_node(
+        [json!({
+            "print": {
+                "lights_report": [{"node": "chamber_light", "mode": "off"}]
+            }
+        })],
+        "chamber_light2",
+    );
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    let result = gateway
+        .operate_printer("SERIAL1", PrinterOperation::SetChamberLight(true))
+        .await
+        .unwrap();
+
+    let published = mqtt.published_commands().await;
+    let primary_sequence_id = dynamic_section_sequence_id(&published[1].payload, "system");
+    let light2_sequence_id = dynamic_section_sequence_id(&published[2].payload, "system");
+    assert_ne!(primary_sequence_id, light2_sequence_id);
+    assert_eq!(
+        result.sequence_id.as_deref(),
+        Some(primary_sequence_id.as_str())
+    );
+    assert_eq!(
+        result.mqtt_report.as_ref().unwrap()["system"]["result"],
+        "success"
+    );
+    assert_eq!(result.error, None);
 }
 
 #[tokio::test]
@@ -957,6 +1150,7 @@ mod runtime {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_light_on: None,
             }]
         );
     }
@@ -1012,6 +1206,7 @@ mod runtime {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_light_on: None,
             }]
         );
     }
@@ -1071,6 +1266,7 @@ mod runtime {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_light_on: None,
             }]
         );
     }
@@ -1218,6 +1414,7 @@ mod runtime {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_light_on: None,
             }]
         );
     }

@@ -51,6 +51,9 @@ pub enum PrinterOperationKind {
     Resume,
     Stop,
     ToggleLight,
+    SetChamberLight {
+        on: bool,
+    },
     SetPrintSpeed {
         speed_mode: u8,
     },
@@ -106,6 +109,7 @@ impl PrinterOperationKind {
             Self::Resume => "resume",
             Self::Stop => "stop",
             Self::ToggleLight => "toggle_light",
+            Self::SetChamberLight { .. } => "set_chamber_light",
             Self::SetPrintSpeed { .. } => "set_print_speed",
             Self::SelectExtruder { .. } => "select_extruder",
             Self::Home { .. } => "home",
@@ -125,7 +129,8 @@ pub fn validate_printer_operation(operation: &PrinterOperationKind) -> Repositor
         PrinterOperationKind::Pause
         | PrinterOperationKind::Resume
         | PrinterOperationKind::Stop
-        | PrinterOperationKind::ToggleLight => Ok(()),
+        | PrinterOperationKind::ToggleLight
+        | PrinterOperationKind::SetChamberLight { .. } => Ok(()),
         PrinterOperationKind::SetPrintSpeed { speed_mode } if (1..=4).contains(speed_mode) => {
             Ok(())
         }
@@ -257,6 +262,9 @@ pub fn operation_audit_metadata(
         PrinterOperationKind::AmsRereadRfid { ams_id, slot_id } => {
             metadata.insert("ams_id".to_owned(), json!(ams_id));
             metadata.insert("slot_id".to_owned(), json!(slot_id));
+        }
+        PrinterOperationKind::SetChamberLight { on } => {
+            metadata.insert("light_on".to_owned(), json!(on));
         }
         PrinterOperationKind::AmsLoadFilament {
             ams_id,

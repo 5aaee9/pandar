@@ -939,6 +939,7 @@ fn snapshot_event(tenant_id: TenantId, agent_id: AgentId) -> AgentEvent {
             bed_temperature_celsius: String::new(),
             bed_target_temperature_celsius: String::new(),
             chamber_temperature_celsius: String::new(),
+            chamber_light_on: None,
         })),
     }
 }

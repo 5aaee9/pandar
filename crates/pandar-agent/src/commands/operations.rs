@@ -135,6 +135,9 @@ fn parse_printer_operation(
         Some(printer_operation::Operation::ToggleLight(_)) => {
             Ok(MachinePrinterOperation::ToggleLight)
         }
+        Some(printer_operation::Operation::SetChamberLight(operation)) => {
+            Ok(MachinePrinterOperation::SetChamberLight(operation.on))
+        }
         Some(printer_operation::Operation::SetPrintSpeed(operation)) => {
             match operation.speed_mode {
                 1..=4 => Ok(MachinePrinterOperation::SetPrintSpeed(

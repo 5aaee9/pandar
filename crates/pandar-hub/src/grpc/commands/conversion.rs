@@ -7,9 +7,9 @@ use crate::{
         AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
         MoveAxesOperation, PauseOperation, PrintProjectFile, PrinterOperation,
         RefreshPrinterMaterials, RefreshPrinters, ResumeOperation, SelectExtruderOperation,
-        SetBedTemperatureOperation, SetChamberTemperatureOperation, SetHotendTemperatureOperation,
-        SetPrintSpeedOperation, StopOperation, ToggleLightOperation, hub_command,
-        printer_operation,
+        SetBedTemperatureOperation, SetChamberLightOperation, SetChamberTemperatureOperation,
+        SetHotendTemperatureOperation, SetPrintSpeedOperation, StopOperation, ToggleLightOperation,
+        hub_command, printer_operation,
     },
     repositories::{
         DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, PrinterAxis,
@@ -165,6 +165,9 @@ fn proto_printer_operation(operation: PrinterOperationKind) -> printer_operation
         PrinterOperationKind::Stop => printer_operation::Operation::Stop(StopOperation {}),
         PrinterOperationKind::ToggleLight => {
             printer_operation::Operation::ToggleLight(ToggleLightOperation {})
+        }
+        PrinterOperationKind::SetChamberLight { on } => {
+            printer_operation::Operation::SetChamberLight(SetChamberLightOperation { on })
         }
         PrinterOperationKind::SetPrintSpeed { speed_mode } => {
             printer_operation::Operation::SetPrintSpeed(SetPrintSpeedOperation {

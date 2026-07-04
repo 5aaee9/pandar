@@ -144,7 +144,7 @@ impl BambuMqttCommand {
             Self::StopPrint => {
                 json!({"print": {"command": "stop", "param": "", "sequence_id": next_studio_sequence_id()}})
             }
-            Self::SetChamberLight(on) => chamber_light_payload(*on),
+            Self::SetChamberLight(on) => chamber_light_payload("chamber_light", *on),
             Self::SetPrintSpeed(speed) => {
                 json!({"print": {"command": "print_speed", "param": speed.as_u8().to_string(), "sequence_id": next_studio_sequence_id()}})
             }
@@ -197,15 +197,25 @@ fn ams_reread_rfid_payload(command: &AmsSlotCommand) -> Value {
     json!({"print": {"command": "ams_get_rfid", "sequence_id": next_studio_sequence_id(), "ams_id": command.ams_id, "slot_id": command.slot_id}})
 }
 
-fn chamber_light_payload(on: bool) -> Value {
+pub(crate) fn chamber_light_payloads_for_nodes<'a>(
+    nodes: impl IntoIterator<Item = &'a str>,
+    on: bool,
+) -> Vec<Value> {
+    nodes
+        .into_iter()
+        .map(|node| chamber_light_payload(node, on))
+        .collect()
+}
+
+fn chamber_light_payload(node: &str, on: bool) -> Value {
     json!({"system": {
         "command": "ledctrl",
-        "led_node": "chamber_light",
+        "led_node": node,
         "led_mode": if on { "on" } else { "off" },
         "led_on_time": 500,
         "led_off_time": 500,
-        "loop_times": 0,
-        "interval_time": 0,
+        "loop_times": 1,
+        "interval_time": 1000,
         "sequence_id": next_studio_sequence_id()
     }})
 }

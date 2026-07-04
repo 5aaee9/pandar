@@ -243,7 +243,24 @@ describe("PrinterInventory", () => {
     expect(stopForm?.querySelector('input[name="action"]')).toHaveValue("stop");
     expect(stopForm?.querySelector('input[name="printer_id"]')).toHaveValue("printer-1");
     expect(pauseForm?.querySelector('input[name="action"]')).toHaveValue("pause");
-    expect(lightForm?.querySelector('input[name="action"]')).toHaveValue("toggle_light");
+    expect(lightForm?.querySelector('input[name="action"]')).toHaveValue("set_chamber_light");
+    expect(lightForm?.querySelector('input[name="light_on"]')).toHaveValue("true");
+  });
+
+  it("sends explicit light-off controls when chamber light is on", () => {
+    const heatingPrinter: Printer = {
+      ...printer,
+      nozzle_temperatures: [{ label: null, current_celsius: "27", target_celsius: "0" }],
+      chamber_light_on: true,
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+    );
+
+    const lightForm = screen.getByRole("button", { name: "Light" }).closest("form");
+    expect(lightForm?.querySelector('input[name="action"]')).toHaveValue("set_chamber_light");
+    expect(lightForm?.querySelector('input[name="light_on"]')).toHaveValue("false");
   });
 
   it("localizes the light control label in Chinese", () => {

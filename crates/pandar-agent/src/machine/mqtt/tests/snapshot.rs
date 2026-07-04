@@ -19,7 +19,22 @@ fn report_maps_to_snapshot_uses_configured_model() {
             bed_temperature_celsius: None,
             bed_target_temperature_celsius: None,
             chamber_temperature_celsius: None,
+            chamber_light_on: None,
         }
+    );
+}
+
+#[test]
+fn report_maps_chamber_light_state_to_snapshot() {
+    let report = json!({
+        "print": {
+            "lights_report": [{"node": "chamber_light", "mode": "on"}]
+        }
+    });
+
+    assert_eq!(
+        snapshot_from_report(&endpoint(), &report).chamber_light_on,
+        Some(true)
     );
 }
 

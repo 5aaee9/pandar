@@ -28,6 +28,7 @@ struct FakeMqttTransportState {
     infinite_unrelated_reports: bool,
     last_material_report: Option<Value>,
     echo_operation_reports: bool,
+    failed_led_node: Option<String>,
 }
 
 #[cfg(test)]
@@ -77,6 +78,20 @@ impl FakeMqttTransport {
         }
     }
 
+    pub fn with_reports_and_operation_reports_failed_led_node(
+        reports: impl IntoIterator<Item = Value>,
+        led_node: &str,
+    ) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(FakeMqttTransportState {
+                reports: reports.into_iter().collect(),
+                echo_operation_reports: true,
+                failed_led_node: Some(led_node.to_owned()),
+                ..Default::default()
+            })),
+        }
+    }
+
     pub async fn subscriptions(&self) -> Vec<String> {
         self.state.lock().await.subscriptions.clone()
     }
@@ -114,7 +129,8 @@ impl BambuMqttTransport for FakeMqttTransport {
             state.reports.push_back(report);
         }
         if state.echo_operation_reports
-            && let Some(report) = operation_report_for_payload(&command.payload)
+            && let Some(report) =
+                operation_report_for_payload(&command.payload, state.failed_led_node.as_deref())
         {
             state.reports.push_back(report);
         }
@@ -160,7 +176,7 @@ fn published_payload_matches(expected: &Value, actual: &Value) -> bool {
 }
 
 #[cfg(test)]
-fn operation_report_for_payload(payload: &Value) -> Option<Value> {
+fn operation_report_for_payload(payload: &Value, failed_led_node: Option<&str>) -> Option<Value> {
     if let Some(print) = payload.get("print") {
         return Some(json!({
             "print": {
@@ -171,6 +187,18 @@ fn operation_report_for_payload(payload: &Value) -> Option<Value> {
         }));
     }
     let system = payload.get("system")?;
+    if let Some(led_node) = system.get("led_node").and_then(Value::as_str)
+        && Some(led_node) == failed_led_node
+    {
+        return Some(json!({
+            "system": {
+                "command": system.get("command")?.clone(),
+                "sequence_id": system.get("sequence_id")?.clone(),
+                "result": "fail",
+                "reason": format!("did not find the valid led: {led_node}")
+            }
+        }));
+    }
     Some(json!({
         "system": {
             "command": system.get("command")?.clone(),

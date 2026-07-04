@@ -26,6 +26,7 @@ pub struct PrinterSnapshotUpsert {
     pub bed_temperature_celsius: Option<String>,
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
+    pub chamber_light_on: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -272,6 +273,7 @@ fn printer_from_model(model: printers::Model) -> RepositoryResult<Printer> {
             bed_temperature_celsius: model.bed_temperature_celsius,
             bed_target_temperature_celsius: model.bed_target_temperature_celsius,
             chamber_temperature_celsius: model.chamber_temperature_celsius,
+            chamber_light_on: model.chamber_light_on,
         })
         .map_err(anyhow::Error::from)
     })()

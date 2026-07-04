@@ -790,6 +790,7 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_light_on: None,
             },
         )
         .await
@@ -809,6 +810,7 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_light_on: None,
             },
         )
         .await

@@ -258,7 +258,7 @@ fn basic_print_control_payloads_match_reference() {
 }
 
 #[test]
-fn chamber_light_payload_matches_bambuddy_reference() {
+fn chamber_light_payload_matches_bambu_studio_reference() {
     let on = BambuMqttCommand::SetChamberLight(true).payload();
     assert_eq!(
         on,
@@ -268,8 +268,8 @@ fn chamber_light_payload_matches_bambuddy_reference() {
             "led_mode": "on",
             "led_on_time": 500,
             "led_off_time": 500,
-            "loop_times": 0,
-            "interval_time": 0,
+            "loop_times": 1,
+            "interval_time": 1000,
             "sequence_id": studio_sequence_id(&on, "system")
         }})
     );
@@ -509,6 +509,7 @@ async fn refresh_subscribes_publishes_and_maps_report() {
             bed_temperature_celsius: None,
             bed_target_temperature_celsius: None,
             chamber_temperature_celsius: None,
+            chamber_light_on: None,
         }
     );
     assert_eq!(

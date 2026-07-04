@@ -11,6 +11,7 @@ pub(super) fn printer_operation_action(operation: &MachinePrinterOperation) -> &
         MachinePrinterOperation::Resume => "resume",
         MachinePrinterOperation::Stop => "stop",
         MachinePrinterOperation::ToggleLight => "toggle_light",
+        MachinePrinterOperation::SetChamberLight(_) => "set_chamber_light",
         MachinePrinterOperation::SetPrintSpeed(_) => "set_print_speed",
         MachinePrinterOperation::SelectExtruder(_) => "select_extruder",
         MachinePrinterOperation::Home { .. } => "home",
@@ -134,6 +135,9 @@ fn append_operation_fields(
                 json!(temperature_celsius),
             );
             result.insert("wait".to_string(), json!(wait));
+        }
+        MachinePrinterOperation::SetChamberLight(on) => {
+            result.insert("light_on".to_string(), json!(on));
         }
         MachinePrinterOperation::AmsRereadRfid { ams_id, slot_id } => {
             result.insert("ams_id".to_string(), json!(ams_id));

@@ -87,6 +87,7 @@ fn printer_from_parts_builds_valid_record() {
         bed_temperature_celsius: None,
         bed_target_temperature_celsius: None,
         chamber_temperature_celsius: None,
+        chamber_light_on: None,
     })
     .unwrap();
 
@@ -117,6 +118,7 @@ fn printer_from_parts_validates_required_fields() {
             bed_temperature_celsius: None,
             bed_target_temperature_celsius: None,
             chamber_temperature_celsius: None,
+            chamber_light_on: None,
         })
     };
 
@@ -155,6 +157,7 @@ fn printer_from_parts_normalizes_blank_model() {
         bed_temperature_celsius: None,
         bed_target_temperature_celsius: None,
         chamber_temperature_celsius: None,
+        chamber_light_on: None,
     })
     .unwrap();
 

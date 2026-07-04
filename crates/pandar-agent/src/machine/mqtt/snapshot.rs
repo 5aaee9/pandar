@@ -44,7 +44,17 @@ pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> 
                 .or_else(|| print.get("chamber_temperature")),
         )
         .or(packed_chamber_temperature),
+        chamber_light_on: chamber_light_on_from_report(print),
     }
+}
+
+fn chamber_light_on_from_report(print: &Value) -> Option<bool> {
+    let lights = print.get("lights_report")?.as_array()?;
+    lights
+        .iter()
+        .find(|light| light.get("node").and_then(Value::as_str) == Some("chamber_light"))
+        .and_then(|light| light.get("mode").and_then(Value::as_str))
+        .map(|mode| mode == "on")
 }
 
 fn active_nozzle_from_report(print: &Value) -> Option<String> {

@@ -1,6 +1,8 @@
 use anyhow::Context;
 use serde_json::Value;
 
+mod light;
+
 use super::{
     BambuPrinterEndpoint, PrinterOperationDispatchResult,
     mqtt::{
@@ -16,6 +18,7 @@ pub enum PrinterOperation {
     Resume,
     Stop,
     ToggleLight,
+    SetChamberLight(bool),
     SetPrintSpeed(u8),
     SelectExtruder(u32),
     Home {
@@ -79,30 +82,42 @@ where
     mqtt.subscribe(&topics.report)
         .await
         .with_context(|| format!("subscribe to report topic {}", topics.report))?;
-    let payload = match operation {
-        PrinterOperation::ToggleLight => toggle_light_payload(mqtt, &topics).await?,
-        operation => mqtt_command_for_printer_operation(operation)?.payload(),
+    let payloads = match operation {
+        PrinterOperation::ToggleLight => light::chamber_light_payloads(mqtt, &topics, None).await?,
+        PrinterOperation::SetChamberLight(on) => {
+            light::chamber_light_payloads(mqtt, &topics, Some(on)).await?
+        }
+        operation => vec![mqtt_command_for_printer_operation(operation)?.payload()],
     };
-    let sequence_id = command_sequence_id(&payload);
-    mqtt.publish(PublishedMqttCommand {
-        topic: topics.request.clone(),
-        payload,
-        qos: BAMBU_MQTT_QOS,
-    })
-    .await
-    .with_context(|| format!("publish printer operation to {}", endpoint.serial))?;
+    let sequence_ids = payloads
+        .iter()
+        .filter_map(command_sequence_id)
+        .collect::<Vec<_>>();
+    for payload in payloads {
+        mqtt.publish(PublishedMqttCommand {
+            topic: topics.request.clone(),
+            payload,
+            qos: BAMBU_MQTT_QOS,
+        })
+        .await
+        .with_context(|| format!("publish printer operation to {}", endpoint.serial))?;
+    }
 
-    let Some(sequence_id) = sequence_id else {
+    if sequence_ids.is_empty() {
         return Ok(PrinterOperationDispatchResult::dispatched());
-    };
+    }
 
-    match matching_sequence_report(mqtt, &sequence_id).await {
-        Ok(report) => Ok(PrinterOperationDispatchResult {
+    match matching_sequence_report(mqtt, &sequence_ids).await {
+        Ok((sequence_id, report)) => Ok(PrinterOperationDispatchResult {
             sequence_id: Some(sequence_id),
             error: printer_operation_report_error(&report),
             mqtt_report: Some(report),
         }),
         Err(err) => {
+            let sequence_id = sequence_ids
+                .last()
+                .expect("sequence ids are not empty")
+                .clone();
             tracing::warn!(
                 serial = %endpoint.serial,
                 sequence_id = %sequence_id,
@@ -127,6 +142,9 @@ fn mqtt_command_for_printer_operation(
         PrinterOperation::Stop => Ok(BambuMqttCommand::StopPrint),
         PrinterOperation::ToggleLight => {
             unreachable!("toggle_light is handled before payload mapping")
+        }
+        PrinterOperation::SetChamberLight(_) => {
+            unreachable!("set_chamber_light is handled before payload mapping")
         }
         PrinterOperation::SetPrintSpeed(mode) => {
             Ok(BambuMqttCommand::SetPrintSpeed(PrintSpeed::new(mode)?))
@@ -237,61 +255,32 @@ fn ams_command_slot_id(slot_id: u32, external_id: Option<&str>) -> u32 {
     }
 }
 
-async fn toggle_light_payload<T>(mqtt: &T, topics: &BambuMqttTopics) -> anyhow::Result<Value>
-where
-    T: BambuMqttTransport + Send + Sync,
-{
-    mqtt.publish(PublishedMqttCommand {
-        topic: topics.request.clone(),
-        payload: BambuMqttCommand::RequestPushAll.payload(),
-        qos: BAMBU_MQTT_QOS,
-    })
-    .await
-    .context("request current light report before toggling chamber light")?;
-
-    let current = latest_chamber_light_state(mqtt).await?;
-    Ok(BambuMqttCommand::SetChamberLight(!current).payload())
-}
-
-async fn latest_chamber_light_state<T>(mqtt: &T) -> anyhow::Result<bool>
+async fn matching_sequence_report<T>(
+    mqtt: &T,
+    sequence_ids: &[String],
+) -> anyhow::Result<(String, Value)>
 where
     T: BambuMqttTransport + Send + Sync,
 {
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        loop {
-            let report = mqtt
-                .next_report(std::time::Duration::from_secs(5))
-                .await
-                .context("wait for chamber light status report")?;
-            if let Some(state) = chamber_light_state(&report) {
-                return Ok(state);
-            }
-        }
-    })
-    .await
-    .context("wait for chamber light status report")?
-}
-
-fn chamber_light_state(report: &Value) -> Option<bool> {
-    let lights = report.pointer("/print/lights_report")?.as_array()?;
-    lights.iter().find_map(|light| {
-        (light.get("node").and_then(Value::as_str) == Some("chamber_light"))
-            .then(|| light.get("mode").and_then(Value::as_str) == Some("on"))
-    })
-}
-
-async fn matching_sequence_report<T>(mqtt: &T, sequence_id: &str) -> anyhow::Result<Value>
-where
-    T: BambuMqttTransport + Send + Sync,
-{
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        let mut failures = Vec::new();
         loop {
             let report = mqtt
                 .next_report(std::time::Duration::from_secs(5))
                 .await
                 .context("wait for printer operation MQTT result")?;
-            if report_sequence_id(&report).as_deref() == Some(sequence_id) {
-                return Ok(report);
+            let Some(sequence_id) = report_sequence_id(&report) else {
+                continue;
+            };
+            if !sequence_ids.contains(&sequence_id) {
+                continue;
+            }
+            if printer_operation_report_error(&report).is_none() {
+                return Ok((sequence_id, report));
+            }
+            failures.push((sequence_id, report));
+            if failures.len() == sequence_ids.len() {
+                return Ok(failures.remove(0));
             }
         }
     })

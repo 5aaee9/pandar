@@ -760,6 +760,13 @@ async fn printer_control_accepts_semantic_home_move_and_hotend_operations() {
             }),
             "set_chamber_temperature",
         ),
+        (
+            json!({
+                "action": "set_chamber_light",
+                "light_on": true
+            }),
+            "set_chamber_light",
+        ),
         (json!({ "action": "toggle_light" }), "toggle_light"),
     ] {
         let (status, body) = request_as(
@@ -777,6 +784,9 @@ async fn printer_control_accepts_semantic_home_move_and_hotend_operations() {
         assert_eq!(payload["operation"]["type"], expected_type);
         if expected_type == "set_hotend_temperature" {
             assert_eq!(payload["operation"]["extruder_id"], 1);
+        }
+        if expected_type == "set_chamber_light" {
+            assert_eq!(payload["operation"]["on"], true);
         }
     }
 }

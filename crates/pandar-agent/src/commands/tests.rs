@@ -25,8 +25,9 @@ use crate::{
         AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand, LinkPrinter,
         MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
         RefreshPrinterMaterials, RefreshPrinters, SelectExtruderOperation,
-        SetBedTemperatureOperation, SetChamberTemperatureOperation, SetHotendTemperatureOperation,
-        SetPrintSpeedOperation, ToggleLightOperation, printer_operation,
+        SetBedTemperatureOperation, SetChamberLightOperation, SetChamberTemperatureOperation,
+        SetHotendTemperatureOperation, SetPrintSpeedOperation, ToggleLightOperation,
+        printer_operation,
     },
 };
 
@@ -575,6 +576,7 @@ fn snapshot(serial: &str, name: &str, model: Option<&str>, state: &str) -> Machi
         bed_temperature_celsius: None,
         bed_target_temperature_celsius: None,
         chamber_temperature_celsius: None,
+        chamber_light_on: None,
     }
 }
 
@@ -2065,6 +2067,51 @@ async fn printer_operation_toggle_light_dispatches_typed_action() {
     assert_eq!(
         gateway.operations().await,
         vec![("SERIAL1".to_string(), MachinePrinterOperation::ToggleLight)]
+    );
+}
+
+#[tokio::test]
+async fn printer_operation_set_chamber_light_dispatches_requested_state() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_operation_command(
+            command_id.clone(),
+            "SERIAL1",
+            Some(printer_operation::Operation::SetChamberLight(
+                SetChamberLightOperation { on: true },
+            )),
+        ),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(result.success);
+            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(json["action"], "set_chamber_light");
+            assert_eq!(json["light_on"], true);
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.operations().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::SetChamberLight(true)
+        )]
     );
 }
 

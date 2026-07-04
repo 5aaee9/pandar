@@ -18,6 +18,7 @@ pub struct Printer {
     pub bed_temperature_celsius: Option<String>,
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
+    pub chamber_light_on: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +37,7 @@ pub struct PrinterParts {
     pub bed_temperature_celsius: Option<String>,
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
+    pub chamber_light_on: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +69,7 @@ impl Printer {
             bed_temperature_celsius: parts.bed_temperature_celsius,
             bed_target_temperature_celsius: parts.bed_target_temperature_celsius,
             chamber_temperature_celsius: parts.chamber_temperature_celsius,
+            chamber_light_on: parts.chamber_light_on,
         })
     }
 }

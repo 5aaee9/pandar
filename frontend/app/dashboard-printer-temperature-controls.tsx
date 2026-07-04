@@ -88,10 +88,11 @@ export function PrinterControlsPanel({ printer }: { printer: Printer }) {
           tone="warning"
         />
         <PrinterInlineControl
-          action="toggle_light"
+          action="set_chamber_light"
           enabled={controlsEnabled.light}
           icon={<LightbulbIcon />}
           label={t('lightControl')}
+          lightOn={printer.chamber_light_on === true ? false : true}
           printer={printer}
           tone="neutral"
         />
@@ -213,6 +214,7 @@ function PrinterInlineControl({
   label,
   icon,
   enabled,
+  lightOn,
   tone,
 }: {
   printer: Printer
@@ -220,6 +222,7 @@ function PrinterInlineControl({
   label: string
   icon: ReactNode
   enabled: boolean
+  lightOn?: boolean
   tone: 'danger' | 'warning' | 'neutral'
 }) {
   const toneClass = {
@@ -236,6 +239,7 @@ function PrinterInlineControl({
       <input name="tenant_id" type="hidden" value={printer.tenant_id} />
       <input name="printer_id" type="hidden" value={printer.id} />
       <input name="action" type="hidden" value={action} />
+      {lightOn !== undefined ? <input name="light_on" type="hidden" value={String(lightOn)} /> : null}
       <button
         className={`inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition disabled:bg-muted/60 disabled:text-muted-foreground ${toneClass} [&_svg]:size-4`}
         disabled={!enabled}
