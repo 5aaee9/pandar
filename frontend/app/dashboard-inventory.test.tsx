@@ -262,7 +262,10 @@ describe("PrinterInventory", () => {
 
     const switchButton = screen.getByRole("button", { name: "Switch nozzle L R Nozzle" });
     const switchForm = switchButton.closest("form");
-    expect(switchForm).toHaveClass("sm:col-start-4");
+    const temperatureGrid = switchForm?.parentElement;
+    expect(temperatureGrid).toHaveClass("grid-cols-2");
+    expect(temperatureGrid).toHaveClass("lg:grid-cols-[1fr_1fr_1fr_5rem]");
+    expect(switchForm).toHaveClass("lg:col-start-4");
     expect(switchForm).toHaveClass("h-full");
     expect(switchButton).toHaveClass("h-full");
     expect(switchForm?.querySelector('input[name="action"]')).toHaveValue("select_extruder");

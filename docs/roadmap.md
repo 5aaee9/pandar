@@ -58,6 +58,7 @@
 - Kept printer Stop/Pause actions on a single row inside the Controls section.
 - Added a dual-nozzle switch affordance beside the chamber temperature card, with active nozzle highlighting driven by machine snapshot state and Bambu Studio-style `select_extruder` dispatch.
 - Aligned the dual-nozzle switch affordance height with the adjacent nozzle, bed, and chamber temperature cards.
+- Kept the printer temperature/status controls in a two-row layout at medium viewport widths so the cards do not collapse before the wider desktop breakpoint.
 - Added clickable nozzle-temperature controls in the Devices printer cards, with single-nozzle presets/custom input and dual-nozzle left/right controls that highlight the active nozzle.
 - Matched Bambu Studio's dual-nozzle temperature behavior by sending targeted hotend changes as MQTT `set_nozzle_temp` with `extruder_index`, while preserving legacy single-nozzle `M104`/`M109` dispatch.
 - Added clickable bed and chamber temperature controls in the Devices printer cards, using Bambu Studio-style `M140`/`M190` and `M141`/`M191` temperature dispatch through Hub and Agent.
