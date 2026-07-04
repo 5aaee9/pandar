@@ -4,6 +4,7 @@ package pandar.agent.v1;
 
 service AgentControl {
   rpc ReverseConnect(stream AgentEvent) returns (stream HubCommand);
+  rpc ReverseCamera(stream AgentCameraEvent) returns (stream HubCameraCommand);
 }
 
 message AgentEvent {
@@ -156,6 +157,53 @@ message PrinterOperation {
     ToggleLightOperation toggle_light = 23;
     SetChamberLightOperation set_chamber_light = 24;
   }
+}
+
+message AgentCameraEvent {
+  string agent_id = 1;
+  string tenant_id = 2;
+  string event_id = 3;
+  oneof event {
+    AgentCameraHello hello = 10;
+    AgentCameraChunk chunk = 11;
+    AgentCameraClosed closed = 12;
+  }
+}
+
+message AgentCameraHello {
+  string credential = 1;
+}
+
+message AgentCameraChunk {
+  string stream_id = 1;
+  bytes data = 2;
+}
+
+message AgentCameraClosed {
+  string stream_id = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message HubCameraCommand {
+  string stream_id = 1;
+  oneof command {
+    OpenCameraStream open = 10;
+    CloseCameraStream close = 11;
+  }
+}
+
+message OpenCameraStream {
+  string serial_number = 1;
+  CameraStreamMode mode = 2;
+}
+
+message CloseCameraStream {}
+
+enum CameraStreamMode {
+  CAMERA_STREAM_MODE_UNSPECIFIED = 0;
+  CAMERA_STREAM_MODE_MJPEG = 1;
+  CAMERA_STREAM_MODE_FRAGMENTED_MP4 = 2;
 }
 
 message PauseOperation {}

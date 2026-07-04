@@ -1,5 +1,6 @@
 pub mod artifacts;
 mod bootstrap;
+pub mod camera_sessions;
 pub mod cleanup;
 pub mod cluster;
 pub mod db;
@@ -24,6 +25,7 @@ use std::{fmt, sync::Arc};
 
 use crate::{
     artifacts::{ArtifactStorage, ArtifactStorageConfig, IntoArtifactStorage, JobStorageAlias},
+    camera_sessions::CameraSessionRegistry,
     db::{Database, DatabaseConfig},
     identity::{ExternalAuthConfig, JwtVerifier},
     metrics::{ControlPlaneMetric, MetricsState},
@@ -54,6 +56,7 @@ pub struct AppState {
     bootstrap_token: Option<String>,
     printer_events: PrinterEventHub,
     sessions: SessionRegistry,
+    camera_sessions: CameraSessionRegistry,
     metrics: MetricsState,
     control_plane: cluster::ControlPlane,
     #[cfg(test)]
@@ -169,6 +172,7 @@ impl AppState {
             bootstrap_token: None,
             printer_events: PrinterEventHub::with_metrics(metrics.clone()),
             sessions: SessionRegistry::new(),
+            camera_sessions: CameraSessionRegistry::new(),
             metrics,
             control_plane,
             #[cfg(test)]
@@ -262,6 +266,10 @@ impl AppState {
 
     pub fn sessions(&self) -> &SessionRegistry {
         &self.sessions
+    }
+
+    pub fn camera_sessions(&self) -> &CameraSessionRegistry {
+        &self.camera_sessions
     }
 
     pub fn metrics(&self) -> &MetricsState {

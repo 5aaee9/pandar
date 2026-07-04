@@ -165,6 +165,10 @@ pub fn router(state: AppState) -> Router {
             post(printers::printer_control),
         )
         .route(
+            "/api/v1/tenants/{tenant_id}/printers/{printer_id}/camera.mp4",
+            get(printers::printer_camera_stream),
+        )
+        .route(
             "/api/v1/tenants/{tenant_id}/printers/{printer_id}/materials:refresh",
             post(printers::refresh_printer_materials),
         )

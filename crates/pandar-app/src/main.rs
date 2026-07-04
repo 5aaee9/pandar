@@ -4,6 +4,9 @@ use pandar_hub::{
     cleanup::{CleanupMode, CleanupOptions, cleanup_database},
     db::{Database, DatabaseConfig},
 };
+use std::path::PathBuf;
+
+mod network_plugin;
 
 #[derive(Debug, Parser)]
 #[command(name = "pandar", about = "Pandar operator CLI")]
@@ -26,6 +29,13 @@ enum Command {
         dry_run: bool,
         #[arg(long)]
         execute: bool,
+    },
+    #[command(about = "Install a specified file as the Bambu Studio network plugin")]
+    InstallNetworkPlugin {
+        #[arg(long)]
+        plugin_file: PathBuf,
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
     },
 }
 
@@ -64,6 +74,24 @@ async fn main() -> anyhow::Result<()> {
             )
             .await?;
             println!("{}", serde_json::to_string(&summary_json(&summary, mode))?);
+        }
+        Command::InstallNetworkPlugin {
+            plugin_file,
+            data_dir,
+        } => {
+            let summary = network_plugin::install_network_plugin(
+                network_plugin::InstallNetworkPluginOptions {
+                    plugin_file,
+                    data_dir,
+                },
+            )?;
+            println!(
+                "{}",
+                serde_json::to_string(&serde_json::json!({
+                    "plugin_path": summary.plugin_path,
+                    "config_path": summary.config_path,
+                }))?
+            );
         }
     }
 
@@ -129,5 +157,33 @@ mod tests {
         let cli = Cli::parse_from(["pandar", "hub"]);
 
         assert!(matches!(cli.command, Command::Hub));
+    }
+
+    #[test]
+    fn parses_install_network_plugin_subcommand() {
+        let cli = Cli::parse_from([
+            "pandar",
+            "install-network-plugin",
+            "--plugin-file",
+            "target/release/pandar_network_plugin.dll",
+            "--data-dir",
+            "C:/Users/test/AppData/Roaming/BambuStudio",
+        ]);
+
+        let Command::InstallNetworkPlugin {
+            plugin_file,
+            data_dir,
+        } = cli.command
+        else {
+            panic!("expected install-network-plugin subcommand");
+        };
+        assert_eq!(
+            plugin_file,
+            PathBuf::from("target/release/pandar_network_plugin.dll")
+        );
+        assert_eq!(
+            data_dir,
+            Some(PathBuf::from("C:/Users/test/AppData/Roaming/BambuStudio"))
+        );
     }
 }

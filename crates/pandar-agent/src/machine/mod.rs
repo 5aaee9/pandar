@@ -1,3 +1,4 @@
+pub mod camera;
 pub mod compatibility;
 pub mod diagnostics;
 pub mod discovery;
@@ -71,6 +72,9 @@ pub trait BambuMachineGateway: Send + Sync {
         serial_number: &str,
         _operation: PrinterOperation,
     ) -> anyhow::Result<PrinterOperationDispatchResult> {
+        bail!("no Bambu printer configured for serial {serial_number}")
+    }
+    async fn camera_endpoint(&self, serial_number: &str) -> anyhow::Result<BambuPrinterEndpoint> {
         bail!("no Bambu printer configured for serial {serial_number}")
     }
     async fn link_printer(
@@ -217,6 +221,17 @@ where
         };
 
         dispatch_printer_operation(endpoint, mqtt, operation).await
+    }
+
+    async fn camera_endpoint(&self, serial_number: &str) -> anyhow::Result<BambuPrinterEndpoint> {
+        let Some((endpoint, _, _)) = self
+            .printers
+            .iter()
+            .find(|(endpoint, _, _)| endpoint.serial == serial_number)
+        else {
+            bail!("no configured Bambu printer matches serial {serial_number}");
+        };
+        Ok(endpoint.clone())
     }
 }
 

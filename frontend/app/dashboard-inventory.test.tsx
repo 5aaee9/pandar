@@ -234,17 +234,42 @@ describe("PrinterInventory", () => {
     expect(cardText.indexOf("Controls")).toBeLessThan(cardText.indexOf("Filaments"));
 
     const controls = screen.getByRole("group", { name: "Controls" });
-    expect(controls).toHaveClass("grid-cols-3");
+    expect(controls).toHaveClass("grid-cols-2");
     expect(controls).not.toHaveClass("sm:grid-cols-1");
 
     const stopForm = screen.getByRole("button", { name: "Stop" }).closest("form");
     const pauseForm = screen.getByRole("button", { name: "Pause" }).closest("form");
     const lightForm = screen.getByRole("button", { name: "Light" }).closest("form");
+    expect(screen.getByRole("button", { name: "View camera" })).toBeVisible();
     expect(stopForm?.querySelector('input[name="action"]')).toHaveValue("stop");
     expect(stopForm?.querySelector('input[name="printer_id"]')).toHaveValue("printer-1");
     expect(pauseForm?.querySelector('input[name="action"]')).toHaveValue("pause");
     expect(lightForm?.querySelector('input[name="action"]')).toHaveValue("set_chamber_light");
     expect(lightForm?.querySelector('input[name="light_on"]')).toHaveValue("true");
+  });
+
+  it("opens camera video using the MP4 stream route with custom controls", async () => {
+    const user = userEvent.setup();
+    const heatingPrinter: Printer = {
+      ...printer,
+      nozzle_temperatures: [{ label: null, current_celsius: "27", target_celsius: "0" }],
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "View camera" }));
+
+    const video = document.querySelector("video");
+    expect(video).not.toBeNull();
+    expect(video?.getAttribute("aria-label")).toBe("Camera");
+    expect(video).toHaveAttribute(
+      "src",
+      "/api/tenants/tenant-1/printers/printer-1/camera.mp4",
+    );
+    expect(video).not.toHaveAttribute("controls");
+    expect(screen.getByRole("button", { name: "Full screen" })).toBeVisible();
   });
 
   it("sends explicit light-off controls when chamber light is on", () => {

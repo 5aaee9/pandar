@@ -2752,6 +2752,7 @@ dependencies = [
  "pandar-agent",
  "pandar-hub",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",

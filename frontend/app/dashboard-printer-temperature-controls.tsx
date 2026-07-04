@@ -1,10 +1,25 @@
 'use client'
 
 import type { ReactNode } from 'react'
+import { useRef } from 'react'
 import { useTranslations } from 'next-intl'
-import { LightbulbIcon, PauseIcon, SquareIcon, ThermometerIcon } from 'lucide-react'
+import {
+  LightbulbIcon,
+  MaximizeIcon,
+  PauseIcon,
+  SquareIcon,
+  ThermometerIcon,
+  VideoIcon,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
   Popover,
@@ -70,7 +85,7 @@ export function PrinterControlsPanel({ printer }: { printer: Printer }) {
   return (
     <div className="mt-4 space-y-2">
       <div className="text-xs font-medium text-muted-foreground">{t('controlsLabel')}</div>
-      <div aria-label={t('controlsLabel')} className="grid grid-cols-3 gap-2" role="group">
+      <div aria-label={t('controlsLabel')} className="grid grid-cols-2 gap-2" role="group">
         <PrinterInlineControl
           action="stop"
           enabled={controlsEnabled.stop}
@@ -96,8 +111,50 @@ export function PrinterControlsPanel({ printer }: { printer: Printer }) {
           printer={printer}
           tone="neutral"
         />
+        <CameraDialogControl printer={printer} />
       </div>
     </div>
+  )
+}
+
+function CameraDialogControl({ printer }: { printer: Printer }) {
+  const t = useTranslations('inventory')
+  const frameRef = useRef<HTMLDivElement>(null)
+
+  return (
+    <Dialog>
+      <DialogTrigger
+        className="inline-flex min-h-8 items-center justify-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        type="button"
+      >
+        <VideoIcon className="size-4" />
+        {t('viewCamera')}
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-3xl" closeLabel={t('closeCamera')}>
+        <DialogHeader>
+          <DialogTitle>{t('cameraTitle')}</DialogTitle>
+        </DialogHeader>
+        <div ref={frameRef} className="relative overflow-hidden rounded-md bg-black">
+          <video
+            aria-label={t('cameraTitle')}
+            autoPlay
+            className="aspect-video w-full bg-black object-contain"
+            muted
+            playsInline
+            src={`/api/tenants/${printer.tenant_id}/printers/${printer.id}/camera.mp4`}
+          />
+          <button
+            aria-label={t('cameraFullscreen')}
+            className="absolute right-3 top-3 inline-flex size-8 items-center justify-center rounded-md bg-black/70 text-white transition hover:bg-black/90 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            onClick={() => void frameRef.current?.requestFullscreen()}
+            title={t('cameraFullscreen')}
+            type="button"
+          >
+            <MaximizeIcon className="size-4" />
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

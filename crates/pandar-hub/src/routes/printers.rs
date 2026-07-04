@@ -21,6 +21,7 @@ use crate::{
     sessions::LiveDispatchError,
 };
 
+mod camera;
 mod helpers;
 mod responses;
 mod update;
@@ -35,6 +36,7 @@ pub(super) use update::update_printer;
 const DEFAULT_DISCOVERY_TIMEOUT_SECONDS: u32 = 5;
 const MIN_DISCOVERY_TIMEOUT_SECONDS: u32 = 1;
 const MAX_DISCOVERY_TIMEOUT_SECONDS: u32 = 15;
+pub(super) use camera::printer_camera_stream;
 
 #[derive(Debug, Deserialize)]
 pub(super) struct DiscoverPrintersRequest {

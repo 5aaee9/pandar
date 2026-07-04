@@ -120,6 +120,24 @@ async fn request_with_token(
     (status, body)
 }
 
+async fn raw_request_as(
+    app: Router,
+    method: Method,
+    uri: &str,
+    token: &str,
+) -> axum::response::Response {
+    app.oneshot(
+        Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap()
+}
+
 async fn create_tenant_for_test(app: Router) -> (StatusCode, Value) {
     request_as(
         app,

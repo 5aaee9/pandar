@@ -24,6 +24,7 @@
 - Added frontend light/dark theme selection with a system default that follows `prefers-color-scheme`.
 - Moved the frontend theme bootstrap script out of the client theme provider so Next.js no longer warns about rendering `<script>` tags from React client components.
 - Fixed the frontend sans-serif font token so English pages render with the intended non-serif UI font stack.
+- Added a `pandar install-network-plugin --plugin-file <path>` operator command that installs a specified file as the Bambu Studio network plugin and patches `BambuStudio.conf` following the open-bamboo-networking manual-installation flow.
 - Split job history, print dispatch, and recovery actions into a dedicated Jobs dashboard page while keeping Devices focused on overview, attention, and printer inventory.
 - Reworked the Devices printer inventory into an unframed section with shadcn Empty states, larger desktop empty-state spacing, a dialog-based machine form for linking printers, and per-printer machine cards.
 - Allowed the frontend dev server to serve Next.js dev resources from `127.0.0.1` so local browser interactions work on both loopback hostnames.
@@ -66,6 +67,8 @@
 - Added clickable bed and chamber temperature controls in the Devices printer cards, using Bambu Studio-style `M140`/`M190` and `M141`/`M191` temperature dispatch through Hub and Agent.
 - Added a printer-card Edit printer dialog for updating display name, LAN IP, and access code through the existing redacted Hub-to-Agent printer-link command path.
 - Completed the printer Controls light toggle by matching Bambu Studio's chamber light behavior: Agent sends both `chamber_light` and `chamber_light2` commands and treats the primary light success as the operation result when secondary light reports an unsupported-node failure.
+- Added an Agent-mediated camera tunnel for RTSP-capable Bambu models: Hub exposes tenant/printer-scoped fragmented MP4 streaming through a dedicated reverse camera gRPC stream, Agent pulls the printer RTSPS feed directly through ffmpeg, and the Devices Controls panel opens a native video View camera dialog without exposing LAN credentials to the browser.
+- Replaced the camera dialog's native video controls with a live-stream display and a single custom fullscreen button so the browser does not show a misleading seek/progress bar for the fragmented MP4 stream.
 - Normalized top-level Bambu `vt_tray` / `vir_slot` material reports into external spool snapshots so the Devices Filaments panel can show external materials.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.
 - Created the initial Rust workspace with `pandar-core`, `pandar-hub`, `pandar-agent`, and `pandar-app`.
@@ -812,6 +815,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Added Bambu Studio sign-in route aliases so Studio's localized `/en/sign-in` WebView entry reaches the plugin sign-in page instead of a Next.js 404.
 - Polished auth recovery UI after Impeccable critique: plugin sign-in failures now keep actions and developer details in separate stable rows, passkey setup previews the browser/device confirmation prompt, auth buttons have explicit spacing, and sign-out shows visible progress or retry controls before returning to the dashboard.
 - Completed the follow-up auth hardening pass from the 34/40 Impeccable critique: plugin failure states now include an explicit action-required status marker, the standalone auth issuer resolves English/Chinese copy from the same locale cookie/headers as the dashboard, auth trusted origins include the issuer base URL by default, sign-out inspects Better Auth client errors before redirecting, and Studio plugin sign-in skips redundant tenant selection when exactly one tenant is available.
+- Added local camera tunneling from Agent to Hub and changed the dashboard camera viewer to use a native video element backed by fragmented MP4 instead of multipart image rendering.
 
 Exit criteria:
 

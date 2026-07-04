@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 use tonic::Status;
 use tracing_subscriber::fmt::MakeWriter;
 
-use crate::protocol::agent::v1::{HubCommand, hub_command};
+use crate::protocol::agent::v1::{CameraStreamMode, HubCommand, hub_camera_command, hub_command};
 
 #[tokio::test]
 async fn printer_list_returns_tenant_printers() {
@@ -63,6 +63,56 @@ async fn printer_detail_returns_tenant_printer() {
     assert_eq!(body["id"], printer_id);
     assert_eq!(body["tenant_id"], tenant_id.to_string());
     assert_eq!(body["materials"], serde_json::Value::Null);
+}
+
+#[tokio::test]
+async fn printer_camera_stream_opens_agent_camera_tunnel() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
+        .await
+        .unwrap();
+    let printer = state
+        .printers()
+        .get_for_tenant(tenant_id, &printer_id)
+        .await
+        .unwrap()
+        .unwrap();
+    let (command_sender, mut command_receiver) = tokio::sync::mpsc::channel(1);
+    state
+        .camera_sessions()
+        .register(tenant_id, agent_id, command_sender)
+        .await;
+
+    let response = raw_request_as(
+        app,
+        Method::GET,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/camera.mp4"),
+        &token,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap(),
+        "video/mp4"
+    );
+    let command = command_receiver.recv().await.unwrap().unwrap();
+    match command.command.unwrap() {
+        hub_camera_command::Command::Open(open) => {
+            assert_eq!(open.serial_number, printer.serial_number);
+            assert_eq!(open.mode, CameraStreamMode::FragmentedMp4 as i32);
+        }
+        other => panic!("expected open camera stream command, got {other:?}"),
+    }
 }
 
 #[tokio::test]

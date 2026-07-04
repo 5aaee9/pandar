@@ -8,10 +8,12 @@ use tokio::{
 use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
 use tonic::{Request, Status};
 
+mod camera_control;
 pub mod commands;
 pub mod machine;
 pub mod protocol;
 
+use camera_control::{camera_hello_event, handle_camera_command_stream_with_gateway};
 use commands::{handle_command_with_gateway, parse_printer_config};
 use machine::{BambuMachineGateway, BambuPrinterEndpoint, runtime::RuntimeBambuMachineGateway};
 use protocol::agent::v1::{
@@ -228,16 +230,33 @@ async fn run_once(
     let mut client = AgentControlClient::connect(config.hub_grpc_url.clone())
         .await
         .with_context(|| format!("connect to hub gRPC at {}", config.hub_grpc_url))?;
+    let mut camera_client = AgentControlClient::connect(config.hub_grpc_url.clone())
+        .await
+        .with_context(|| {
+            format!(
+                "connect camera stream to hub gRPC at {}",
+                config.hub_grpc_url
+            )
+        })?;
     let (sender, receiver) = mpsc::channel(16);
+    let (camera_sender, camera_receiver) = mpsc::channel(16);
     sender
         .send(hello_event(&config))
         .await
         .context("queue agent hello event")?;
+    camera_sender
+        .send(camera_hello_event(&config))
+        .await
+        .context("queue agent camera hello event")?;
 
     let response = client
         .reverse_connect(Request::new(ReceiverStream::new(receiver)))
         .await
         .context("open reverse agent control stream")?;
+    let camera_response = camera_client
+        .reverse_camera(Request::new(ReceiverStream::new(camera_receiver)))
+        .await
+        .context("open reverse agent camera stream")?;
 
     let heartbeat_sender = sender.clone();
     let heartbeat_config = config.clone();
@@ -256,7 +275,18 @@ async fn run_once(
 
     gateway.start_initial_report_forwarders(&sender).await;
 
-    handle_command_stream_with_gateway(&config, gateway, &sender, response.into_inner()).await
+    tokio::select! {
+        result = handle_command_stream_with_gateway(&config, gateway, &sender, response.into_inner()) => result,
+        result = handle_camera_command_stream_with_gateway(
+            &config,
+            gateway,
+            &camera_sender,
+            camera_response.into_inner(),
+        ) => {
+            result?;
+            Ok(RunOutcome::ConnectedThenEnded)
+        }
+    }
 }
 
 async fn handle_command_stream_with_gateway<G, S>(

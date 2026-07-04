@@ -194,6 +194,10 @@ impl BambuMachineGateway for RuntimeBambuMachineGateway {
             .await
     }
 
+    async fn camera_endpoint(&self, serial_number: &str) -> anyhow::Result<BambuPrinterEndpoint> {
+        self.inner.lock().await.camera_endpoint(serial_number).await
+    }
+
     async fn link_printer(
         &self,
         endpoint: BambuPrinterEndpoint,

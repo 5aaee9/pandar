@@ -20,7 +20,8 @@ use crate::{
     grpc::commands::repository_status,
     grpc::outbound::spawn_outbound_pump,
     protocol::agent::v1::{
-        AgentEvent, AgentHello, HubCommand, agent_control_server::AgentControl, agent_event,
+        AgentCameraEvent, AgentCameraHello, AgentEvent, AgentHello, HubCameraCommand, HubCommand,
+        agent_camera_event, agent_control_server::AgentControl, agent_event,
     },
     repositories::hash_secret,
     sessions::{AgentSession, SessionToken, empty_pending_live_commands},
@@ -129,19 +130,91 @@ impl AgentControlService {
         );
         Ok(Box::pin(ReceiverStream::new(command_receiver)))
     }
+
+    async fn connect_camera_stream<S>(&self, mut inbound: S) -> Result<CameraResponseStream, Status>
+    where
+        S: Stream<Item = Result<AgentCameraEvent, Status>> + Send + Unpin + 'static,
+    {
+        let first = inbound
+            .next()
+            .await
+            .transpose()
+            .map_err(|err| {
+                tracing::error!(error = ?err, "failed to read agent camera hello");
+                Status::internal("failed to read agent camera stream")
+            })?
+            .ok_or_else(|| Status::failed_precondition("first event must be AgentCameraHello"))?;
+
+        let (tenant_id, agent_id, hello) = parse_camera_hello(first)?;
+        let agent = self
+            .state
+            .agents()
+            .get_credential_record(agent_id)
+            .await
+            .map_err(repository_status)?;
+        let Some(agent) = agent else {
+            return Err(Status::not_found("agent not found"));
+        };
+        if agent.agent.tenant_id != tenant_id {
+            return Err(Status::permission_denied(
+                "agent belongs to a different tenant",
+            ));
+        }
+        if agent.credential_hash.as_deref() != Some(hash_secret(&hello.credential).as_str())
+            || agent.credential_revoked_at.is_some()
+        {
+            return Err(Status::unauthenticated("invalid agent credential"));
+        }
+
+        let (command_sender, command_receiver) = mpsc::channel(16);
+        let token = self
+            .state
+            .camera_sessions()
+            .register(tenant_id, agent_id, command_sender)
+            .await;
+        let state = self.state.clone();
+        tokio::spawn(async move {
+            while let Some(event) = inbound.next().await {
+                match event {
+                    Ok(event) => handle_camera_event(&state, event).await,
+                    Err(err) => {
+                        tracing::warn!(error = ?err, "agent camera stream ended with error");
+                        break;
+                    }
+                }
+            }
+            state
+                .camera_sessions()
+                .unregister_if_current(agent_id, token)
+                .await;
+        });
+
+        Ok(Box::pin(ReceiverStream::new(command_receiver)))
+    }
 }
 
 type ResponseStream = Pin<Box<dyn Stream<Item = Result<HubCommand, Status>> + Send>>;
+type CameraResponseStream = Pin<Box<dyn Stream<Item = Result<HubCameraCommand, Status>> + Send>>;
 
 #[tonic::async_trait]
 impl AgentControl for AgentControlService {
     type ReverseConnectStream = ResponseStream;
+    type ReverseCameraStream = CameraResponseStream;
 
     async fn reverse_connect(
         &self,
         request: Request<tonic::Streaming<AgentEvent>>,
     ) -> Result<Response<Self::ReverseConnectStream>, Status> {
         self.connect_stream(request.into_inner())
+            .await
+            .map(Response::new)
+    }
+
+    async fn reverse_camera(
+        &self,
+        request: Request<tonic::Streaming<AgentCameraEvent>>,
+    ) -> Result<Response<Self::ReverseCameraStream>, Status> {
+        self.connect_camera_stream(request.into_inner())
             .await
             .map(Response::new)
     }
@@ -159,6 +232,40 @@ fn parse_hello(event: AgentEvent) -> Result<(TenantId, AgentId, AgentHello), Sta
     };
 
     Ok((tenant_id, agent_id, hello))
+}
+
+fn parse_camera_hello(
+    event: AgentCameraEvent,
+) -> Result<(TenantId, AgentId, AgentCameraHello), Status> {
+    let tenant_id = TenantId::parse(&event.tenant_id)
+        .map_err(|_| Status::invalid_argument("tenant_id must be a UUID"))?;
+    let agent_id = AgentId::parse(&event.agent_id)
+        .map_err(|_| Status::invalid_argument("agent_id must be a UUID"))?;
+    let Some(agent_camera_event::Event::Hello(hello)) = event.event else {
+        return Err(Status::failed_precondition(
+            "first event must be AgentCameraHello",
+        ));
+    };
+
+    Ok((tenant_id, agent_id, hello))
+}
+
+async fn handle_camera_event(state: &AppState, event: AgentCameraEvent) {
+    match event.event {
+        Some(agent_camera_event::Event::Chunk(chunk)) => {
+            state
+                .camera_sessions()
+                .push_chunk(&chunk.stream_id, axum::body::Bytes::from(chunk.data))
+                .await;
+        }
+        Some(agent_camera_event::Event::Closed(closed)) => {
+            state
+                .camera_sessions()
+                .close_stream(&closed.stream_id, closed.success, closed.error)
+                .await;
+        }
+        Some(agent_camera_event::Event::Hello(_)) | None => {}
+    }
 }
 
 fn validate_rfc3339(value: &str) -> Result<(), Status> {
