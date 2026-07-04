@@ -17,7 +17,7 @@ pub fn normalize_material_patch(report: &Value, observed_at: &str) -> Option<Val
         }
     }
 
-    if let Some(external) = normalize_external_spools(ams) {
+    if let Some(external) = normalize_external_spools(print, ams) {
         patch.insert("external_spools".to_owned(), Value::Array(external.spools));
         if external.replace {
             patch.insert("replace_external_spools".to_owned(), Value::Bool(true));
@@ -237,11 +237,13 @@ fn empty_tray_clear(unit_id: &str, slot: u64) -> Value {
     })
 }
 
-fn normalize_external_spools(ams: &Value) -> Option<ExternalSpoolsPatch> {
-    if let Some(vir_slot) = ams.get("vir_slot") {
+fn normalize_external_spools(print: &Value, ams: &Value) -> Option<ExternalSpoolsPatch> {
+    if let Some(vir_slot) = print.get("vir_slot").or_else(|| ams.get("vir_slot")) {
         return normalize_external_source(vir_slot, true);
     }
-    ams.get("vt_tray")
+    print
+        .get("vt_tray")
+        .or_else(|| ams.get("vt_tray"))
         .and_then(|vt_tray| normalize_external_source(vt_tray, false))
 }
 

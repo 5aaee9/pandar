@@ -289,6 +289,37 @@ fn replace_external_spools_rules_follow_source_shape() {
 }
 
 #[test]
+fn top_level_vt_tray_normalizes_external_spool() {
+    let patch = normalize(json!({
+        "print": {
+            "vt_tray": [{
+                "id": 254,
+                "extruder_id": 1,
+                "tray_info_idx": "GFG00",
+                "tray_type": "PETG",
+                "tray_color": "00FF00FF",
+                "tray_sub_brands": "PETG HF",
+                "remain": "64"
+            }],
+            "ams": {
+                "ams": [{"id": 0, "tray": [{"id": 0}]}]
+            }
+        }
+    }))
+    .unwrap();
+
+    assert_eq!(patch["external_spools"][0]["external_id"], "254");
+    assert_eq!(patch["external_spools"][0]["exists"], true);
+    assert_eq!(patch["external_spools"][0]["tray_id"], "0");
+    assert_eq!(patch["external_spools"][0]["filament_id"], "GFG00");
+    assert_eq!(patch["external_spools"][0]["type"], "PETG");
+    assert_eq!(patch["external_spools"][0]["name"], "PETG HF");
+    assert_eq!(patch["external_spools"][0]["color"], "00FF00FF");
+    assert_eq!(patch["external_spools"][0]["remaining_estimate"], "64");
+    assert_eq!(patch["external_spools"][0]["toolhead"], "L");
+}
+
+#[test]
 fn vir_slot_takes_precedence_and_single_255_maps_to_external_254() {
     let patch = normalize(json!({
         "print": {"ams": {
