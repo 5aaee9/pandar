@@ -2,6 +2,7 @@ use std::{ffi::c_void, path::PathBuf, slice};
 
 mod gcode;
 mod http;
+pub mod installer;
 mod local_webserver;
 
 use serde_json::{Value, json};

@@ -2751,8 +2751,8 @@ dependencies = [
  "clap",
  "pandar-agent",
  "pandar-hub",
+ "pandar-network-plugin",
  "serde_json",
- "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2815,6 +2815,7 @@ dependencies = [
 name = "pandar-network-plugin"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "cc",
  "futures-util",
  "http-body 1.0.1",

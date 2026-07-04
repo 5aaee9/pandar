@@ -24,7 +24,7 @@
 - Added frontend light/dark theme selection with a system default that follows `prefers-color-scheme`.
 - Moved the frontend theme bootstrap script out of the client theme provider so Next.js no longer warns about rendering `<script>` tags from React client components.
 - Fixed the frontend sans-serif font token so English pages render with the intended non-serif UI font stack.
-- Added a `pandar install-network-plugin --plugin-file <path>` operator command that installs a specified file as the Bambu Studio network plugin and patches `BambuStudio.conf` following the open-bamboo-networking manual-installation flow.
+- Added a `pandar install-network-plugin --plugin-file <path>` operator command backed by the `pandar-network-plugin` crate; it installs a specified file as the Bambu Studio network plugin and patches `BambuStudio.conf` following the open-bamboo-networking manual-installation flow.
 - Split job history, print dispatch, and recovery actions into a dedicated Jobs dashboard page while keeping Devices focused on overview, attention, and printer inventory.
 - Reworked the Devices printer inventory into an unframed section with shadcn Empty states, larger desktop empty-state spacing, a dialog-based machine form for linking printers, and per-printer machine cards.
 - Allowed the frontend dev server to serve Next.js dev resources from `127.0.0.1` so local browser interactions work on both loopback hostnames.

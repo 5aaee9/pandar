@@ -4,9 +4,8 @@ use pandar_hub::{
     cleanup::{CleanupMode, CleanupOptions, cleanup_database},
     db::{Database, DatabaseConfig},
 };
+use pandar_network_plugin::installer::{InstallNetworkPluginOptions, install_network_plugin};
 use std::path::PathBuf;
-
-mod network_plugin;
 
 #[derive(Debug, Parser)]
 #[command(name = "pandar", about = "Pandar operator CLI")]
@@ -79,12 +78,10 @@ async fn main() -> anyhow::Result<()> {
             plugin_file,
             data_dir,
         } => {
-            let summary = network_plugin::install_network_plugin(
-                network_plugin::InstallNetworkPluginOptions {
-                    plugin_file,
-                    data_dir,
-                },
-            )?;
+            let summary = install_network_plugin(InstallNetworkPluginOptions {
+                plugin_file,
+                data_dir,
+            })?;
             println!(
                 "{}",
                 serde_json::to_string(&serde_json::json!({

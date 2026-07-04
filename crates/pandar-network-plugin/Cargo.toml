@@ -12,6 +12,7 @@ crate-type = ["cdylib", "rlib"]
 cc = "1.2.47"
 
 [dependencies]
+anyhow.workspace = true
 futures-util.workspace = true
 http-body.workspace = true
 http-body-util.workspace = true
