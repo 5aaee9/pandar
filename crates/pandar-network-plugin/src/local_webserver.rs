@@ -12,6 +12,10 @@ use uuid::Uuid;
 
 use crate::{PluginHttpResult, result, stable_error_body};
 
+mod routes;
+
+use routes::LocalRoute;
+
 #[derive(RustEmbed)]
 #[folder = "../../frontend/plugin-local/dist/"]
 struct PluginLocalAssets;
@@ -211,23 +215,21 @@ fn route_local_request(
         .split('?')
         .next()
         .unwrap_or(request.path.as_str());
-    if path.split('/').any(|segment| segment == "..") {
-        return local_json_response(400, stable_error_body("bad_request"));
-    }
-    match (request.method.as_str(), path) {
-        ("GET", "/sign-in") => local_asset_response("index.html"),
-        ("GET", "/assets/app.js") => local_asset_response("assets/app.js"),
-        ("GET", "/assets/styles.css") => local_asset_response("assets/styles.css"),
-        ("GET", "/config") => {
+    match routes::classify(request.method.as_str(), path) {
+        LocalRoute::SignIn => local_asset_response("index.html"),
+        LocalRoute::AppJs => local_asset_response("assets/app.js"),
+        LocalRoute::StylesCss => local_asset_response("assets/styles.css"),
+        LocalRoute::GetConfig => {
             let config = config.lock().expect("local webserver config").clone();
             local_json_response(200, http_config_body(base_url, &config))
         }
-        ("POST", "/config") => update_config(request, config, base_url),
-        ("GET", "/callback") => local_html_response(
+        LocalRoute::PostConfig => update_config(request, config, base_url),
+        LocalRoute::Callback => local_html_response(
             200,
             "<!doctype html><html><body><main>Sign-in request received. Return to Studio.</main></body></html>",
         ),
-        _ => local_json_response(404, stable_error_body("not_found")),
+        LocalRoute::BadRequest => local_json_response(400, stable_error_body("bad_request")),
+        LocalRoute::NotFound => local_json_response(404, stable_error_body("not_found")),
     }
 }
 

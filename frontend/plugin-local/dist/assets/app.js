@@ -23,10 +23,47 @@ const updateContinueLink = () => {
         continueLink.href = "#";
         return;
     }
-    const signInUrl = new URL("/plugin-sign-in", savedWebUrl);
-    signInUrl.searchParams.set("redirect_url", callbackUrl);
-    continueLink.href = signInUrl.toString();
+    continueLink.href = buildSignInUrl(callbackUrl);
 };
+const buildSignInUrl = (redirectUrl) => {
+    const url = new URL("/plugin-sign-in", savedWebUrl);
+    url.searchParams.set("redirect_url", redirectUrl);
+    return url.toString();
+};
+const requestStudioCallbackUrl = () => new Promise((resolve) => {
+    const studioWindow = window;
+    if (typeof studioWindow.wx?.postMessage !== "function") {
+        resolve(null);
+        return;
+    }
+    const sequenceId = `pandar-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const timeout = window.setTimeout(() => {
+        window.removeEventListener("message", handleMessage);
+        resolve(null);
+    }, 2000);
+    function handleMessage(event) {
+        let data;
+        try {
+            data =
+                typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+        }
+        catch {
+            return;
+        }
+        if (data?.command === "get_localhost_url" &&
+            data.sequence_id === sequenceId &&
+            data.response?.base_url) {
+            window.clearTimeout(timeout);
+            window.removeEventListener("message", handleMessage);
+            resolve(`${data.response.base_url}/callback`);
+        }
+    }
+    window.addEventListener("message", handleMessage);
+    studioWindow.wx.postMessage(JSON.stringify({
+        command: "get_localhost_url",
+        sequence_id: sequenceId,
+    }));
+});
 const markDirty = () => {
     isDirty = true;
     renderNotices();
@@ -95,11 +132,15 @@ form.addEventListener("submit", async (event) => {
         submitButton.disabled = false;
     }
 });
-continueLink.addEventListener("click", (event) => {
+continueLink.addEventListener("click", async (event) => {
     if (isDirty || !savedWebUrl || !callbackUrl) {
         event.preventDefault();
         setStatus("Switch Target server before continuing.", true);
+        return;
     }
+    event.preventDefault();
+    const studioCallbackUrl = await requestStudioCallbackUrl();
+    window.location.href = buildSignInUrl(studioCallbackUrl ?? callbackUrl);
 });
 webUrlInput.addEventListener("input", markDirty);
 hubUrlInput.addEventListener("input", markDirty);

@@ -236,3 +236,49 @@ fn local_webserver_serves_assets_rejects_bad_requests_and_switches_target_server
     assert!(callback.starts_with("HTTP/1.1 200 OK"));
     assert!(!callback.contains("secret-ticket"));
 }
+
+#[test]
+fn localized_sign_in_routes_serve_root_relative_assets_and_reject_invalid_paths() {
+    let start = start_local(
+        "http://localhost:3000/",
+        "http://localhost:8080/",
+        false,
+        false,
+    );
+    let base_url = start["base_url"].as_str().unwrap();
+
+    for path in ["/en/sign-in", "/en_GB/sign-in", "/zh-CN/sign-in"] {
+        let response = get(base_url, path);
+        assert!(
+            response.starts_with("HTTP/1.1 200 OK"),
+            "{path} returned {response}"
+        );
+        assert!(response_body(&response).contains(r#"href="/assets/styles.css""#));
+        assert!(response_body(&response).contains(r#"src="/assets/app.js""#));
+    }
+
+    for path in [
+        "/1/sign-in",
+        "/english/sign-in",
+        "/en/sign-in/extra",
+        "/en/assets/app.js",
+        "/en/config",
+        "/-/sign-in",
+        "/中文/sign-in",
+    ] {
+        let response = get(base_url, path);
+        assert!(
+            response.starts_with("HTTP/1.1 404 Not Found"),
+            "{path} returned {response}"
+        );
+        assert_eq!(response_body(&response), r#"{"error":"not_found"}"#);
+    }
+
+    let traversal = get(base_url, "/zh/../sign-in");
+    assert!(traversal.starts_with("HTTP/1.1 400 Bad Request"));
+    assert_eq!(response_body(&traversal), r#"{"error":"bad_request"}"#);
+
+    let post_sign_in = post_json(base_url, "/en/sign-in", "");
+    assert!(post_sign_in.starts_with("HTTP/1.1 404 Not Found"));
+    assert_eq!(response_body(&post_sign_in), r#"{"error":"not_found"}"#);
+}

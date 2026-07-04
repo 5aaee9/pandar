@@ -8,6 +8,20 @@ type Config = {
   configNonce: string;
 };
 
+type StudioWindow = Window & {
+  wx?: {
+    postMessage?: (message: string) => void;
+  };
+};
+
+type StudioLocalhostMessage = {
+  command?: string;
+  response?: {
+    base_url?: string;
+  };
+  sequence_id?: string;
+};
+
 const form = document.querySelector<HTMLFormElement>("#target-form")!;
 const webUrlInput = document.querySelector<HTMLInputElement>("#web-url")!;
 const hubUrlInput = document.querySelector<HTMLInputElement>("#hub-url")!;
@@ -43,10 +57,57 @@ const updateContinueLink = () => {
     return;
   }
 
-  const signInUrl = new URL("/plugin-sign-in", savedWebUrl);
-  signInUrl.searchParams.set("redirect_url", callbackUrl);
-  continueLink.href = signInUrl.toString();
+  continueLink.href = buildSignInUrl(callbackUrl);
 };
+
+const buildSignInUrl = (redirectUrl: string) => {
+  const url = new URL("/plugin-sign-in", savedWebUrl);
+  url.searchParams.set("redirect_url", redirectUrl);
+  return url.toString();
+};
+
+const requestStudioCallbackUrl = () =>
+  new Promise<string | null>((resolve) => {
+    const studioWindow = window as StudioWindow;
+    if (typeof studioWindow.wx?.postMessage !== "function") {
+      resolve(null);
+      return;
+    }
+
+    const sequenceId = `pandar-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener("message", handleMessage);
+      resolve(null);
+    }, 2000);
+
+    function handleMessage(event: MessageEvent) {
+      let data: StudioLocalhostMessage;
+      try {
+        data =
+          typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+      } catch {
+        return;
+      }
+
+      if (
+        data?.command === "get_localhost_url" &&
+        data.sequence_id === sequenceId &&
+        data.response?.base_url
+      ) {
+        window.clearTimeout(timeout);
+        window.removeEventListener("message", handleMessage);
+        resolve(`${data.response.base_url}/callback`);
+      }
+    }
+
+    window.addEventListener("message", handleMessage);
+    studioWindow.wx.postMessage(
+      JSON.stringify({
+        command: "get_localhost_url",
+        sequence_id: sequenceId,
+      }),
+    );
+  });
 
 const markDirty = () => {
   isDirty = true;
@@ -131,11 +192,16 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-continueLink.addEventListener("click", (event) => {
+continueLink.addEventListener("click", async (event) => {
   if (isDirty || !savedWebUrl || !callbackUrl) {
     event.preventDefault();
     setStatus("Switch Target server before continuing.", true);
+    return;
   }
+
+  event.preventDefault();
+  const studioCallbackUrl = await requestStudioCallbackUrl();
+  window.location.href = buildSignInUrl(studioCallbackUrl ?? callbackUrl);
 });
 
 webUrlInput.addEventListener("input", markDirty);
