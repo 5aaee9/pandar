@@ -62,14 +62,14 @@ export function NozzleSwitchControl({ printer }: { printer: Printer }) {
   const activeNozzle = activeNozzleLabel(printer)
   const targetNozzle = activeNozzle === 'L' ? 'R' : 'L'
   return (
-    <form action={controlPrinter} className="sm:col-start-4">
+    <form action={controlPrinter} className="h-full sm:col-start-4">
       <input name="tenant_id" type="hidden" value={printer.tenant_id} />
       <input name="printer_id" type="hidden" value={printer.id} />
       <input name="action" type="hidden" value="select_extruder" />
       <input name="extruder_id" type="hidden" value={extruderIdForNozzle(targetNozzle)} />
       <button
         aria-label={`${t('switchNozzle')} ${nozzles.map((nozzle) => nozzle.label).join(' ')} ${t('nozzleTemperature')}`}
-        className="flex min-h-16 w-full flex-col items-center justify-center rounded-md bg-muted/50 px-3 py-2 text-center transition hover:bg-muted"
+        className="flex h-full min-h-16 w-full flex-col items-center justify-center rounded-md bg-muted/50 px-3 py-2 text-center transition hover:bg-muted"
         type="submit"
       >
         <ArrowLeftRightIcon className="size-4 text-yellow-500" />
