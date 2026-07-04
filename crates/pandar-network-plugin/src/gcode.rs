@@ -1,5 +1,13 @@
 use serde_json::{Value, json};
 
+const MAX_EXTRUDER_ID: u64 = 1;
+const MAX_HOTEND_TEMPERATURE_CELSIUS: u64 = 300;
+const MAX_BED_TEMPERATURE_CELSIUS: u64 = 120;
+const MAX_CHAMBER_TEMPERATURE_CELSIUS: u64 = 70;
+const MAX_AMS_ID: u64 = 255;
+const MAX_AMS_SLOT_ID: u64 = 255;
+const MAX_U32: u64 = u32::MAX as u64;
+
 pub(super) fn operation_json_from_gcode(message: &str) -> Option<Value> {
     let commands = gcode_commands(message);
     match commands.as_slice() {
@@ -12,31 +20,24 @@ pub(super) fn operation_json_from_gcode(message: &str) -> Option<Value> {
 }
 
 pub(super) fn valid_operation_json(operation: &Value) -> bool {
-    let Some(action) = operation.get("action").and_then(Value::as_str) else {
+    let Some(object) = operation.as_object() else {
+        return false;
+    };
+    let Some(action) = object.get("action").and_then(Value::as_str) else {
         return false;
     };
 
     match action {
-        "pause" | "resume" | "stop" => operation
-            .as_object()
-            .is_some_and(|object| object.len() == 1),
-        "set_print_speed" => {
-            operation
-                .get("speed_mode")
-                .and_then(Value::as_u64)
-                .is_some_and(|speed| (1..=4).contains(&speed))
-                && operation
-                    .as_object()
-                    .is_some_and(|object| object.len() == 2)
+        "pause" | "resume" | "stop" => object.len() == 1,
+        "set_print_speed" => valid_u64_field(operation, "speed_mode", 1, 4) && object.len() == 2,
+        "select_extruder" => {
+            valid_u64_field(operation, "extruder_id", 0, MAX_EXTRUDER_ID) && object.len() == 2
         }
         "home" => {
-            operation
-                .get("axes")
-                .and_then(Value::as_array)
-                .is_some_and(|axes| axes.iter().all(valid_axis_value))
-                && operation
-                    .as_object()
-                    .is_some_and(|object| object.len() == 2)
+            operation.get("axes").is_none_or(|axes| {
+                axes.as_array()
+                    .is_some_and(|axes| axes.iter().all(valid_axis_value))
+            }) && object.len() == 1 + usize::from(object.contains_key("axes"))
         }
         "move_axes" => {
             let Some(movements) = operation.get("movements").and_then(Value::as_array) else {
@@ -47,32 +48,71 @@ pub(super) fn valid_operation_json(operation: &Value) -> bool {
                 && operation
                     .get("feedrate_mm_per_min")
                     .is_none_or(valid_feedrate_value)
-                && operation.as_object().is_some_and(|object| {
-                    object.len()
-                        == if operation.get("feedrate_mm_per_min").is_some() {
-                            3
-                        } else {
-                            2
-                        }
-                })
+                && object.len() == 2 + usize::from(object.contains_key("feedrate_mm_per_min"))
         }
         "set_hotend_temperature" => {
-            operation
-                .get("temperature_celsius")
-                .and_then(Value::as_u64)
-                .is_some_and(|temperature| temperature <= 300)
-                && operation.get("wait").is_none_or(Value::is_boolean)
-                && operation.as_object().is_some_and(|object| {
-                    object.len()
-                        == if operation.get("wait").is_some() {
-                            3
-                        } else {
-                            2
-                        }
-                })
+            valid_u64_field(
+                operation,
+                "temperature_celsius",
+                0,
+                MAX_HOTEND_TEMPERATURE_CELSIUS,
+            ) && operation.get("wait").is_none_or(Value::is_boolean)
+                && valid_optional_u64_field(operation, "extruder_id", 0, MAX_EXTRUDER_ID)
+                && object.len()
+                    == 2 + usize::from(object.contains_key("wait"))
+                        + usize::from(object.contains_key("extruder_id"))
+        }
+        "set_bed_temperature" => {
+            valid_u64_field(
+                operation,
+                "temperature_celsius",
+                0,
+                MAX_BED_TEMPERATURE_CELSIUS,
+            ) && operation.get("wait").is_none_or(Value::is_boolean)
+                && object.len() == 2 + usize::from(object.contains_key("wait"))
+        }
+        "set_chamber_temperature" => {
+            valid_u64_field(
+                operation,
+                "temperature_celsius",
+                0,
+                MAX_CHAMBER_TEMPERATURE_CELSIUS,
+            ) && operation.get("wait").is_none_or(Value::is_boolean)
+                && object.len() == 2 + usize::from(object.contains_key("wait"))
+        }
+        "ams_reread_rfid" => {
+            valid_u64_field(operation, "ams_id", 0, MAX_AMS_ID)
+                && valid_u64_field(operation, "slot_id", 0, MAX_AMS_SLOT_ID)
+                && object.len() == 3
+        }
+        "ams_load_filament" | "ams_unload_filament" => {
+            valid_u64_field(operation, "ams_id", 0, MAX_AMS_ID)
+                && valid_u64_field(operation, "slot_id", 0, MAX_AMS_SLOT_ID)
+                && valid_optional_u64_field(operation, "global_tray_id", 0, MAX_U32)
+                && operation.get("external_id").is_none_or(Value::is_string)
+                && valid_optional_u64_field(operation, "extruder_id", 0, MAX_EXTRUDER_ID)
+                && object.len()
+                    == 3 + usize::from(object.contains_key("global_tray_id"))
+                        + usize::from(object.contains_key("external_id"))
+                        + usize::from(object.contains_key("extruder_id"))
         }
         _ => false,
     }
+}
+
+fn valid_u64_field(operation: &Value, field: &str, min: u64, max: u64) -> bool {
+    operation
+        .get(field)
+        .and_then(Value::as_u64)
+        .is_some_and(|value| (min..=max).contains(&value))
+}
+
+fn valid_optional_u64_field(operation: &Value, field: &str, min: u64, max: u64) -> bool {
+    operation.get(field).is_none_or(|value| {
+        value
+            .as_u64()
+            .is_some_and(|value| (min..=max).contains(&value))
+    })
 }
 
 fn valid_axis_value(axis: &Value) -> bool {
@@ -115,6 +155,10 @@ fn parse_single_command_operation(command: &str) -> Option<Value> {
         "G28" => parse_home_operation(command),
         "M104" => parse_hotend_operation(command, false),
         "M109" => parse_hotend_operation(command, true),
+        "M140" => parse_temperature_operation(command, "set_bed_temperature", false, false),
+        "M190" => parse_temperature_operation(command, "set_bed_temperature", true, false),
+        "M141" => parse_temperature_operation(command, "set_chamber_temperature", false, false),
+        "M191" => parse_temperature_operation(command, "set_chamber_temperature", true, false),
         _ => None,
     }
 }
@@ -134,22 +178,41 @@ fn parse_home_operation(command: &str) -> Option<Value> {
 }
 
 fn parse_hotend_operation(command: &str, wait: bool) -> Option<Value> {
+    parse_temperature_operation(command, "set_hotend_temperature", wait, true)
+}
+
+fn parse_temperature_operation(
+    command: &str,
+    action: &str,
+    wait: bool,
+    allow_extruder: bool,
+) -> Option<Value> {
     let mut celsius = None;
+    let mut extruder_id = None;
     for token in command.split_whitespace().skip(1) {
         let mut chars = token.chars();
         let parameter = chars.next()?.to_ascii_uppercase();
         let value = parse_gcode_number(chars.as_str())?;
         match parameter {
             'S' if celsius.is_none() => celsius = Some(value),
+            'T' if allow_extruder && extruder_id.is_none() => extruder_id = Some(value),
             _ => return None,
         }
     }
     let celsius = parse_integer_gcode_value(celsius?)?;
-    Some(json!({
-        "action": "set_hotend_temperature",
-        "temperature_celsius": celsius,
-        "wait": wait,
-    }))
+    let mut body = serde_json::Map::from_iter([
+        ("action".to_string(), json!(action)),
+        ("temperature_celsius".to_string(), json!(celsius)),
+        ("wait".to_string(), json!(wait)),
+    ]);
+    if let Some(value) = extruder_id {
+        body.insert(
+            "extruder_id".to_string(),
+            json!(parse_integer_gcode_value(value)?),
+        );
+    }
+    let operation = Value::Object(body);
+    valid_operation_json(&operation).then_some(operation)
 }
 
 fn parse_move_axes_operation(command: &str) -> Option<Value> {
@@ -215,6 +278,14 @@ fn command_code(command: &str) -> Option<&str> {
                 Some("M104")
             } else if code.eq_ignore_ascii_case("M109") {
                 Some("M109")
+            } else if code.eq_ignore_ascii_case("M140") {
+                Some("M140")
+            } else if code.eq_ignore_ascii_case("M190") {
+                Some("M190")
+            } else if code.eq_ignore_ascii_case("M141") {
+                Some("M141")
+            } else if code.eq_ignore_ascii_case("M191") {
+                Some("M191")
             } else {
                 None
             }

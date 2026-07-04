@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Updated the Bambu Studio network plugin operation bridge for the latest Agent printer operations: direct semantic operation submissions now accept select-extruder, targeted hotend, bed/chamber temperature, and AMS RFID/load/unload payloads, while G-code translation covers targeted hotend and bed/chamber temperature commands.
 - Split oversized production Rust modules across `pandar-agent`, `pandar-hub`, and `pandar-network-plugin` into focused sibling modules without using `include!`, moved inline tests out of runtime modules, and added a workspace production-module size guard.
 - Added `PANDAR_HUB_NO_AUTH=true` for local/trusted no-auth Hub HTTP/WebSocket operation, with startup warning logging, bootstrap and tenant API auth bypass, `no_auth` audit attribution for mutations, and docs that agent reverse gRPC credentials remain required.
 - Enabled dashboard live printer-event WebSocket updates in Hub no-auth mode without requiring browser event tickets.

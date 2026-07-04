@@ -452,6 +452,67 @@ fn gcode_parser_maps_hotend_temperature_to_semantic_json() {
 }
 
 #[test]
+fn gcode_parser_maps_targeted_hotend_temperature_to_semantic_json() {
+    let result = operation_json(b"M104 S210 T1");
+
+    assert_eq!(result.status, 0);
+    assert_eq!(result.http_code, 200);
+    assert_json_body_eq(
+        result,
+        serde_json::json!({
+            "action": "set_hotend_temperature",
+            "temperature_celsius": 210,
+            "wait": false,
+            "extruder_id": 1,
+        }),
+    );
+}
+
+#[test]
+fn gcode_parser_maps_bed_and_chamber_temperature_to_semantic_json() {
+    for (message, expected) in [
+        (
+            b"M140 S60".as_slice(),
+            serde_json::json!({
+                "action": "set_bed_temperature",
+                "temperature_celsius": 60,
+                "wait": false,
+            }),
+        ),
+        (
+            b"M190 S65".as_slice(),
+            serde_json::json!({
+                "action": "set_bed_temperature",
+                "temperature_celsius": 65,
+                "wait": true,
+            }),
+        ),
+        (
+            b"M141 S45".as_slice(),
+            serde_json::json!({
+                "action": "set_chamber_temperature",
+                "temperature_celsius": 45,
+                "wait": false,
+            }),
+        ),
+        (
+            b"M191 S50".as_slice(),
+            serde_json::json!({
+                "action": "set_chamber_temperature",
+                "temperature_celsius": 50,
+                "wait": true,
+            }),
+        ),
+    ] {
+        let result = operation_json(message);
+
+        assert_eq!(result.status, 0);
+        assert_eq!(result.http_code, 200);
+        assert_json_body_eq(result, expected);
+    }
+}
+
+#[test]
 fn gcode_parser_rejects_unsupported_or_ambiguous_commands() {
     for message in [
         b"G0 X10".as_slice(),
@@ -503,6 +564,34 @@ fn submit_printer_operation_posts_semantic_body_to_plugin_endpoint() {
 }
 
 #[test]
+fn submit_printer_operation_accepts_latest_agent_operation_bodies() {
+    for operation in [
+        serde_json::json!({"action":"select_extruder","extruder_id":1}),
+        serde_json::json!({"action":"set_hotend_temperature","temperature_celsius":210,"wait":false,"extruder_id":1}),
+        serde_json::json!({"action":"set_bed_temperature","temperature_celsius":65,"wait":true}),
+        serde_json::json!({"action":"set_chamber_temperature","temperature_celsius":50,"wait":false}),
+        serde_json::json!({"action":"ams_reread_rfid","ams_id":1,"slot_id":2}),
+        serde_json::json!({"action":"ams_load_filament","ams_id":1,"slot_id":2,"global_tray_id":6,"external_id":"slot-2","extruder_id":0}),
+        serde_json::json!({"action":"ams_unload_filament","ams_id":1,"slot_id":2}),
+    ] {
+        let hub_url = one_shot_server(
+            "POST",
+            "/api/v1/plugin/printers/printer/operations",
+            Some("pandar_plugin_test_token"),
+            "HTTP/1.1 202 Accepted",
+            r#"{"command_id":"cmd","status":"queued"}"#,
+            None,
+        );
+        let operation_body = operation.to_string();
+        let result = submit_printer_operation(hub_url.as_bytes(), TOKEN, operation_body.as_bytes());
+
+        assert_eq!(result.status, 0);
+        assert_eq!(result.http_code, 202);
+        assert_eq!(body(result), r#"{"command_id":"cmd","status":"queued"}"#);
+    }
+}
+
+#[test]
 fn submit_printer_operation_rejects_invalid_json_before_network() {
     let result = submit_printer_operation(b"http://127.0.0.1:9", TOKEN, b"not-json");
 
@@ -518,6 +607,28 @@ fn submit_printer_operation_rejects_unknown_action_before_network() {
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 400);
     assert_eq!(body(result), r#"{"error":"invalid_printer_operation"}"#);
+}
+
+#[test]
+fn submit_printer_operation_rejects_invalid_latest_agent_operation_values_before_network() {
+    for operation in [
+        br#"{"action":"select_extruder","extruder_id":2}"#.as_slice(),
+        br#"{"action":"set_hotend_temperature","temperature_celsius":301}"#.as_slice(),
+        br#"{"action":"set_hotend_temperature","temperature_celsius":210,"extruder_id":2}"#
+            .as_slice(),
+        br#"{"action":"set_bed_temperature","temperature_celsius":121}"#.as_slice(),
+        br#"{"action":"set_chamber_temperature","temperature_celsius":71}"#.as_slice(),
+        br#"{"action":"ams_reread_rfid","ams_id":256,"slot_id":1}"#.as_slice(),
+        br#"{"action":"ams_load_filament","ams_id":1,"slot_id":256}"#.as_slice(),
+        br#"{"action":"ams_unload_filament","ams_id":1,"slot_id":2,"extruder_id":2}"#.as_slice(),
+        br#"{"action":"set_bed_temperature","temperature_celsius":60,"ams_id":1}"#.as_slice(),
+    ] {
+        let result = submit_printer_operation(b"http://127.0.0.1:9", TOKEN, operation);
+
+        assert_ne!(result.status, 0);
+        assert_eq!(result.http_code, 400);
+        assert_eq!(body(result), r#"{"error":"invalid_printer_operation"}"#);
+    }
 }
 
 #[test]
