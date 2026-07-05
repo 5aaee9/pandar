@@ -8,6 +8,14 @@ target/
 /frontend/out/
 /frontend/next-env.d.ts
 /frontend/tsconfig.tsbuildinfo
+/mobile/android/local.properties
+/mobile/android/.gradle/
+/mobile/android/build/
+/mobile/android/app/build/
+/mobile/android/captures/
+/mobile/android/.idea/
+/mobile/android/*.iml
+/mobile/android/.kotlin/
 /pandar.db
 /pandar.db-shm
 /pandar.db-wal
@@ -16,3 +24,5 @@ target/
 .impeccable/
 .local/
 .playwright-mcp/
+.pi-subagents/
+.pi/remote-pi/config.json

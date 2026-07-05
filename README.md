@@ -27,6 +27,7 @@ pandar-agent -(MQTT + machine file transfer)-> Bambu machines
 - `crates/pandar-network-plugin` - Bambu Studio network plugin ABI replacement scaffold that connects Studio sign-in to `pandar-hub`.
 - `crates/pandar-app` - operator CLI.
 - `frontend` - Next.js frontend.
+- `mobile/android` - Jetpack Compose + Material 3 Android app (see `docs/android.md`).
 - `proto` - gRPC contracts.
 - `reference` - protocol and behavior references.
 

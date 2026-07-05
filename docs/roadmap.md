@@ -851,3 +851,10 @@ Exit criteria:
 - Produce or select a tagged GitHub Release archive, then record live release artifact install evidence for Phase 24 target families that are still unverified.
 - Run Phase 27 pause/resume/stop/print-speed and Phase 29 home/move/hotend hardware probes only after a safe printer state and agent-local LAN credentials are available.
 - Keep virtual-printer/proxy behavior deferred until plugin compatibility, scaled artifact storage, and operator recovery workflows are stable.
+
+## Completed: Android App
+
+- Added a Jetpack Compose + Material 3 Android app under `mobile/android/` (package `zip.iptables.pandar.android`) that monitors printers/jobs and controls Bambu machines via the pandar-hub HTTP/WebSocket API.
+- Implemented OIDC sign-in (Authorization Code + PKCE) via AppAuth-Android; the obtained access-token JWT is sent as `Authorization: Bearer` and verified by the hub against its JWKS, mirroring the web frontend. No-auth hubs are supported by leaving OIDC unconfigured.
+- Added a printers dashboard, per-printer detail (pause/resume/stop, chamber light, set hotend/bed/chamber temperature, AMS load/unload/reread RFID), and a jobs screen with retry-dispatch and reprint, all updated live over the tenant `printer-events` WebSocket.
+- Authored JVM unit tests covering status→severity mapping, hub DTO JSON shapes, the WebSocket event decoder, strict control-request body shapes (including a no-polymorphic-discriminator guard), and settings mapping. Build and instrumented tests run in Android Studio (see `docs/android.md`); no Rust crate or Next.js frontend code was modified.
