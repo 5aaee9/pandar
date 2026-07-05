@@ -1,5 +1,7 @@
 use serde_json::{Value, json};
 
+mod studio_json;
+
 const MAX_EXTRUDER_ID: u64 = 1;
 const MAX_HOTEND_TEMPERATURE_CELSIUS: u64 = 300;
 const MAX_BED_TEMPERATURE_CELSIUS: u64 = 120;
@@ -10,7 +12,7 @@ const MAX_U32: u64 = u32::MAX as u64;
 
 pub(super) fn operation_json_from_gcode(message: &str) -> Option<Value> {
     if let Ok(value) = serde_json::from_str::<Value>(message)
-        && let Some(operation) = parse_studio_json_operation(&value)
+        && let Some(operation) = studio_json::parse_studio_json_operation(&value)
     {
         return Some(operation);
     }
@@ -107,29 +109,6 @@ pub(super) fn valid_operation_json(operation: &Value) -> bool {
         }
         _ => false,
     }
-}
-
-fn parse_studio_json_operation(value: &Value) -> Option<Value> {
-    let system = value.get("system")?;
-    let command = system.get("command")?.as_str()?;
-    match command {
-        "ledctrl" => parse_studio_ledctrl_operation(system),
-        _ => None,
-    }
-}
-
-fn parse_studio_ledctrl_operation(system: &Value) -> Option<Value> {
-    let node = system.get("led_node")?.as_str()?;
-    if !matches!(node, "chamber_light" | "chamber_light2") {
-        return None;
-    }
-
-    let light_on = match system.get("led_mode")?.as_str()? {
-        "on" => true,
-        "off" => false,
-        _ => return None,
-    };
-    Some(json!({ "action": "set_chamber_light", "light_on": light_on }))
 }
 
 fn valid_u64_field(operation: &Value, field: &str, min: u64, max: u64) -> bool {

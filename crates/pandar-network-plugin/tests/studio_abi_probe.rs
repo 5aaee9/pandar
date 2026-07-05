@@ -16,6 +16,7 @@ use support::{
 
 const MOCK_HUB_TIMEOUT: Duration = Duration::from_secs(5);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+const PRINTERS_RESPONSE: &str = r##"{"devices":[{"dev_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","dev_model_name":"N6","nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220"},{"label":"R","current_celsius":"27","target_celsius":"215"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true,"materials":{"ams_units":[{"unit_id":"0","humidity":25,"humidity_level":3,"temperature_celsius":28.5,"toolhead":"R","trays":[{"tray_id":"0","global_tray_id":0,"type":"PLA","filament_id":"GFL99","color":"00FF00","remaining_estimate":"72"}]}],"external_spools":[{"external_id":"254","tray_id":"0","type":"PETG","filament_id":"GFG00","color":"11223344","toolhead":"L"}],"active_tray":{"kind":"ams","ams_id":"0","tray_id":"0","global_tray_id":0},"observed_at":"2026-06-20T00:01:00Z"}}]}"##;
 
 fn target_dir() -> PathBuf {
     let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -234,16 +235,8 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         "HTTP/1.1 200 OK",
                         r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
                     ),
-                    3 => write_response(
-                        &mut stream,
-                        "HTTP/1.1 200 OK",
-                        r#"{"devices":[{"dev_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","dev_model_name":"N6","nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220"},{"label":"R","current_celsius":"27","target_celsius":"215"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true}]}"#,
-                    ),
-                    4 => write_response(
-                        &mut stream,
-                        "HTTP/1.1 200 OK",
-                        r#"{"devices":[{"dev_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","dev_model_name":"N6","nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220"},{"label":"R","current_celsius":"27","target_celsius":"215"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true}]}"#,
-                    ),
+                    3 => write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE),
+                    4 => write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE),
                     5 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"tasks":[]}"#),
                     6 => {
                         let body = request_body(&request);

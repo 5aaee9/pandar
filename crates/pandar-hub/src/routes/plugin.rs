@@ -12,10 +12,11 @@ use crate::{
     repositories::{AuditActor, AuthenticatedPrincipal, RepositoryError, TenantTokenScope},
     routes::{ApiError, auth, printer_operations::PrinterOperationRequest},
 };
-use pandar_core::PrinterNozzleTemperature;
 
 mod responses;
+mod studio_devices;
 pub(crate) use responses::redact_artifact_error;
+use studio_devices::{PluginPrinterListResponse, plugin_printer_devices};
 
 #[derive(Debug, Deserialize)]
 pub(super) struct CreateLoginTicketRequest {
@@ -47,33 +48,6 @@ pub(super) struct PluginProfileResponse {
     user_name: String,
     tenant_id: String,
     tenant_name: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct PluginPrinterListResponse {
-    devices: Vec<PluginPrinterResponse>,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct PluginPrinterResponse {
-    dev_id: String,
-    dev_name: String,
-    name: String,
-    dev_ip: Option<String>,
-    dev_access_code: Option<String>,
-    dev_model_name: Option<String>,
-    model: Option<String>,
-    dev_online: bool,
-    online: bool,
-    task_status: String,
-    state: String,
-    pandar_printer_id: String,
-    nozzle_temperatures: Vec<PrinterNozzleTemperature>,
-    active_nozzle: Option<String>,
-    bed_temperature_celsius: Option<String>,
-    bed_target_temperature_celsius: Option<String>,
-    chamber_temperature_celsius: Option<String>,
-    chamber_light_on: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -229,57 +203,9 @@ pub(super) async fn list_printers(
     headers: HeaderMap,
 ) -> Result<Json<PluginPrinterListResponse>, ApiError> {
     let authenticated = auth::authorize_plugin_studio(&state, &headers).await?;
-    let tenant_id = authenticated.token.tenant_id;
-    let devices = state
-        .printers()
-        .list_for_tenant(tenant_id)
-        .await?
-        .into_iter()
-        .map(|printer| {
-            let online = studio_online_from_status(&printer.status);
-            let studio_model_name = printer.model.as_deref().map(studio_model_id);
-            PluginPrinterResponse {
-                dev_id: printer.serial_number.clone(),
-                dev_name: printer.name.clone(),
-                name: printer.name,
-                dev_ip: printer.host,
-                dev_access_code: printer.access_code,
-                dev_model_name: studio_model_name,
-                model: printer.model,
-                dev_online: online,
-                online,
-                task_status: printer.status.clone(),
-                state: printer.status,
-                nozzle_temperatures: printer.nozzle_temperatures,
-                active_nozzle: printer.active_nozzle,
-                bed_temperature_celsius: printer.bed_temperature_celsius,
-                bed_target_temperature_celsius: printer.bed_target_temperature_celsius,
-                chamber_temperature_celsius: printer.chamber_temperature_celsius,
-                chamber_light_on: printer.chamber_light_on,
-                pandar_printer_id: printer.id,
-            }
-        })
-        .collect();
-
-    Ok(Json(PluginPrinterListResponse { devices }))
-}
-
-fn studio_online_from_status(status: &str) -> bool {
-    let normalized = status.trim().to_ascii_lowercase();
-    !matches!(normalized.as_str(), "offline" | "unknown")
-}
-
-fn studio_model_id(model: &str) -> String {
-    let compact = model
-        .chars()
-        .filter(|value| value.is_ascii_alphanumeric())
-        .flat_map(char::to_uppercase)
-        .collect::<String>();
-    match compact.as_str() {
-        "N6" | "X2D" | "BAMBULABX2D" => "N6".to_string(),
-        "N7" | "P2S" | "BAMBULABP2S" => "N7".to_string(),
-        _ => model.to_string(),
-    }
+    Ok(Json(PluginPrinterListResponse {
+        devices: plugin_printer_devices(&state, authenticated.token.tenant_id).await?,
+    }))
 }
 
 pub(super) async fn list_jobs(

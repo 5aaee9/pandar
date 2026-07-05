@@ -337,7 +337,24 @@ std::string field_from_json(const std::string& json, const char* key) {
     return out;
 }
 
+std::string scalar_from_json(const std::string& json, const char* key) {
+    if (auto value = field_from_json(json, key); !value.empty()) return value;
+
+    const std::string needle = std::string("\"") + key + "\"";
+    const auto key_pos = json.find(needle);
+    if (key_pos == std::string::npos) return {};
+    const auto colon = json.find(':', key_pos + needle.size());
+    if (colon == std::string::npos) return {};
+    auto start = json.find_first_not_of(" \t\r\n", colon + 1);
+    if (start == std::string::npos || json[start] == '{' || json[start] == '[' || json[start] == 'n') return {};
+    auto end = json.find_first_of(",}\r\n\t ", start);
+    if (end == std::string::npos) end = json.size();
+    return json.substr(start, end - start);
+}
+
 std::vector<std::string> objects_from_array(const std::string& json, const char* key);
+std::string object_from_json(const std::string& json, const char* key);
+std::string studio_materials_payload(const std::string& printer);
 
 bool bool_field_from_json(const std::string& json, const char* key) {
     const std::string needle = std::string("\"") + key + "\"";
@@ -399,6 +416,8 @@ std::uint32_t studio_active_extruder_id(const std::vector<std::string>& nozzles,
     return studio_extruder_id(first_label, 0, nozzles.size());
 }
 
+#include "studio_materials.hpp"
+
 std::string studio_extruder_device_json(const std::vector<std::string>& nozzles, const std::string& active_nozzle) {
     const auto total = nozzles.empty() ? std::size_t{1} : nozzles.size();
     const auto active_id = studio_active_extruder_id(nozzles, active_nozzle);
@@ -444,7 +463,8 @@ std::string printer_telemetry_from_json(const std::string& printer) {
         R"(,"lights_report":[{"node":"chamber_light","mode":)" + escape_json(light_mode) + R"(}])" +
         R"(,"device":{"type":1,"bed_temp":)" + packed_temperature_json(bed_current, bed_target) +
         R"(,"ctc":{"state":1,"info":{"temp":)" + packed_temperature_json(chamber_current, {}) +
-        R"(}},"extruder":)" + studio_extruder_device_json(nozzles, active_nozzle) + "}";
+        R"(}},"extruder":)" + studio_extruder_device_json(nozzles, active_nozzle) + "}" +
+        studio_materials_payload(printer);
 }
 
 std::string studio_dev_id(std::string dev_id) {
@@ -638,7 +658,7 @@ std::string printer_push_status_report(const Agent* agent, const std::string& de
     const auto ip = studio_ip_integer(host);
     return std::string(R"({"print":{"command":"push_status","msg":0,"gcode_state":"IDLE","mc_percent":0,"mc_remaining_time":0,"cfg":"","fun":"","aux":"","stat":"",)")
         + printer_telemetry_for(agent, dev_id) +
-        R"(,"wifi_signal":"100%","sdcard":true,"ams":{"ams":[]},"ipcam":{"ipcam_dev":"1","liveview":{"local":"rtsps","remote":"none"},"rtsp_url":)" +
+        R"(,"wifi_signal":"100%","sdcard":true,"ipcam":{"ipcam_dev":"1","liveview":{"local":"rtsps","remote":"none"},"rtsp_url":)" +
         escape_json(rtsp_url) + R"(},"net":{"info":[{"ip":)" + std::to_string(ip) + R"(}]}}})";
 }
 

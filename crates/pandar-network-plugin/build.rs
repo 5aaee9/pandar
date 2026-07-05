@@ -67,6 +67,7 @@ fn main() {
     }
     println!("cargo:rustc-link-arg-cdylib={}", shim_object.display());
     println!("cargo:rerun-if-changed=src/shim.cpp");
+    println!("cargo:rerun-if-changed=src/studio_materials.hpp");
 }
 
 fn expected_abi_symbols(manifest_dir: &str) -> Vec<String> {

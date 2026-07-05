@@ -275,6 +275,45 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
         )
         .await
         .unwrap();
+    state
+        .materials()
+        .upsert_from_patch(crate::repositories::MaterialPatchInput {
+            tenant_id: tenant.id,
+            agent_id: agent.id,
+            printer_id: printer.id.clone(),
+            serial_number: "studio-printer-1".to_string(),
+            printer_materials_json: json!({
+                "type": "printer_material_patch",
+                "observed_at": "2026-06-20T00:01:00Z",
+                "ams_units": [{
+                    "unit_id": "0",
+                    "humidity": 25,
+                    "humidity_level": 3,
+                    "temperature_celsius": 28.5,
+                    "toolhead": "R",
+                    "trays": [{
+                        "tray_id": "0",
+                        "global_tray_id": 0,
+                        "type": "PLA",
+                        "filament_id": "GFL99",
+                        "color": "00FF00",
+                        "remaining_estimate": "72"
+                    }]
+                }],
+                "external_spools": [{
+                    "external_id": "254",
+                    "tray_id": "0",
+                    "type": "PETG",
+                    "filament_id": "GFG00",
+                    "color": "11223344",
+                    "toolhead": "L"
+                }],
+                "active_tray": {"kind": "ams", "ams_id": "0", "tray_id": "0", "global_tray_id": 0}
+            })
+            .to_string(),
+        })
+        .await
+        .unwrap();
 
     let (status, body) =
         request_as(app, Method::GET, "/api/v1/plugin/printers", None, &token).await;
@@ -315,6 +354,18 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
     assert_eq!(body["devices"][0]["bed_target_temperature_celsius"], "65");
     assert_eq!(body["devices"][0]["chamber_temperature_celsius"], "32");
     assert_eq!(body["devices"][0]["chamber_light_on"], true);
+    assert_eq!(
+        body["devices"][0]["materials"]["ams_units"][0]["unit_id"],
+        "0"
+    );
+    assert_eq!(
+        body["devices"][0]["materials"]["external_spools"][0]["external_id"],
+        "254"
+    );
+    assert_eq!(
+        body["devices"][0]["materials"]["active_tray"]["global_tray_id"],
+        0
+    );
 }
 
 #[tokio::test]
