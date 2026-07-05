@@ -14,6 +14,8 @@ pub(crate) use error::{ApiError, parse_tenant_id};
 use crate::AppState;
 
 mod admin;
+mod agent_auth;
+mod agent_printers;
 mod agents;
 mod artifacts;
 mod audit_events;
@@ -129,6 +131,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/v1/agents/{agent_id}/artifacts/{artifact_id}",
             get(artifacts::download_agent_artifact),
+        )
+        .route(
+            "/api/v1/agents/{agent_id}/printers",
+            get(agent_printers::list_agent_printers),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/audit-events",

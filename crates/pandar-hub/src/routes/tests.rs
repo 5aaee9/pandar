@@ -11,6 +11,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+mod agent_printers;
 mod agents;
 mod artifacts;
 mod basic;

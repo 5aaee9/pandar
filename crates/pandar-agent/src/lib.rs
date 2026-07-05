@@ -12,14 +12,16 @@ mod camera_control;
 pub mod commands;
 pub mod machine;
 pub mod protocol;
+mod startup;
 
 use camera_control::{camera_hello_event, handle_camera_command_stream_with_gateway};
-use commands::{handle_command_with_gateway, parse_printer_config};
-use machine::{BambuMachineGateway, BambuPrinterEndpoint, runtime::RuntimeBambuMachineGateway};
+use commands::handle_command_with_gateway;
+use machine::{BambuMachineGateway, runtime::RuntimeBambuMachineGateway};
 use protocol::agent::v1::{
     AgentEvent, AgentHeartbeat, AgentHello, HubCommand, agent_control_client::AgentControlClient,
     agent_event,
 };
+use startup::startup_printers;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
 const DEFAULT_REPORT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -199,7 +201,7 @@ pub fn heartbeat_event(config: &AgentConfig) -> AgentEvent {
 }
 
 pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
-    let printers = startup_printers(&config)?;
+    let printers = startup_printers(&config).await?;
     let gateway = RuntimeBambuMachineGateway::new(config.clone(), printers, DEFAULT_REPORT_TIMEOUT);
     let mut backoff = ReconnectBackoff::new();
     loop {
@@ -217,10 +219,6 @@ pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
         );
         sleep(delay).await;
     }
-}
-
-fn startup_printers(config: &AgentConfig) -> anyhow::Result<Vec<BambuPrinterEndpoint>> {
-    parse_printer_config(&config.printers)
 }
 
 async fn run_once(

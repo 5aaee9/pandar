@@ -7,11 +7,7 @@ use axum::{
 use futures_util::stream;
 use tokio::io::AsyncReadExt;
 
-use crate::{
-    AppState,
-    repositories::{AgentArtifactAccess, hash_secret},
-    routes::ApiError,
-};
+use crate::{AppState, repositories::AgentArtifactAccess, routes::ApiError};
 
 pub(in crate::routes) async fn download_agent_artifact(
     State(state): State<AppState>,
@@ -20,7 +16,7 @@ pub(in crate::routes) async fn download_agent_artifact(
 ) -> Result<Response, ApiError> {
     let agent_id = pandar_core::AgentId::parse(&agent_id)
         .map_err(|_| ApiError::new(StatusCode::BAD_REQUEST, "invalid_agent_id"))?;
-    let authorized = authorize_agent(&state, &headers, agent_id).await?;
+    let authorized = crate::routes::agent_auth::authorize_agent(&state, &headers, agent_id).await?;
     let artifact = match state
         .jobs()
         .artifact_access_for_agent(authorized.tenant_id, agent_id, &artifact_id)
@@ -66,51 +62,4 @@ pub(in crate::routes) async fn download_agent_artifact(
         .header(header::CONTENT_TYPE, artifact.content_type)
         .body(Body::from_stream(body))
         .map_err(|_| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_error"))
-}
-
-struct AuthorizedAgent {
-    tenant_id: pandar_core::TenantId,
-}
-
-async fn authorize_agent(
-    state: &AppState,
-    headers: &HeaderMap,
-    agent_id: pandar_core::AgentId,
-) -> Result<AuthorizedAgent, ApiError> {
-    let credential = bearer_token(headers)?;
-    let credential_hash = hash_secret(credential);
-    let records = state
-        .agents()
-        .credential_records_by_hash(&credential_hash)
-        .await?;
-    let [actual] = records.as_slice() else {
-        return Err(unauthorized());
-    };
-    if actual.credential_revoked_at.is_some() {
-        return Err(unauthorized());
-    }
-    if actual.agent.id != agent_id {
-        return Err(ApiError::new(StatusCode::FORBIDDEN, "forbidden"));
-    }
-
-    Ok(AuthorizedAgent {
-        tenant_id: actual.agent.tenant_id,
-    })
-}
-
-fn bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
-    let Some(raw) = headers.get(header::AUTHORIZATION) else {
-        return Err(unauthorized());
-    };
-    let Ok(value) = raw.to_str() else {
-        return Err(unauthorized());
-    };
-    value
-        .strip_prefix("Bearer ")
-        .filter(|credential| !credential.is_empty())
-        .ok_or_else(unauthorized)
-}
-
-fn unauthorized() -> ApiError {
-    ApiError::new(StatusCode::UNAUTHORIZED, "unauthorized")
 }
