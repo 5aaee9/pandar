@@ -11,7 +11,10 @@ fn main() {
     let mut shim_build = cc::Build::new();
     shim_build.cpp(true).cargo_metadata(false);
     if target_env == "msvc" {
-        shim_build.flag_if_supported("/std:c++17");
+        shim_build
+            .flag_if_supported("/std:c++17")
+            .flag_if_supported("/MD")
+            .define("_ITERATOR_DEBUG_LEVEL", "0");
     } else {
         shim_build
             .flag_if_supported("-std=c++17")
@@ -63,10 +66,6 @@ fn main() {
         println!("cargo:rustc-link-arg-cdylib=-lc++");
     }
     println!("cargo:rustc-link-arg-cdylib={}", shim_object.display());
-    if target_os == "windows" {
-        println!("cargo:rustc-link-arg-cdylib=-lc++");
-        println!("cargo:rustc-link-arg-cdylib=-lc++abi");
-    }
     println!("cargo:rerun-if-changed=src/shim.cpp");
 }
 

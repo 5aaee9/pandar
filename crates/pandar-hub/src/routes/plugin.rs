@@ -237,13 +237,14 @@ pub(super) async fn list_printers(
         .into_iter()
         .map(|printer| {
             let online = studio_online_from_status(&printer.status);
+            let studio_model_name = printer.model.as_deref().map(studio_model_id);
             PluginPrinterResponse {
-                dev_id: printer.id.clone(),
+                dev_id: printer.serial_number.clone(),
                 dev_name: printer.name.clone(),
                 name: printer.name,
                 dev_ip: printer.host,
                 dev_access_code: printer.access_code,
-                dev_model_name: printer.model.clone(),
+                dev_model_name: studio_model_name,
                 model: printer.model,
                 dev_online: online,
                 online,
@@ -266,6 +267,19 @@ pub(super) async fn list_printers(
 fn studio_online_from_status(status: &str) -> bool {
     let normalized = status.trim().to_ascii_lowercase();
     !matches!(normalized.as_str(), "offline" | "unknown")
+}
+
+fn studio_model_id(model: &str) -> String {
+    let compact = model
+        .chars()
+        .filter(|value| value.is_ascii_alphanumeric())
+        .flat_map(char::to_uppercase)
+        .collect::<String>();
+    match compact.as_str() {
+        "N6" | "X2D" | "BAMBULABX2D" => "N6".to_string(),
+        "N7" | "P2S" | "BAMBULABP2S" => "N7".to_string(),
+        _ => model.to_string(),
+    }
 }
 
 pub(super) async fn list_jobs(

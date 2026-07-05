@@ -28,6 +28,7 @@ using WasCancelledFn = std::function<bool()>;
 using OnWaitFn = std::function<bool(int, std::string)>;
 using OnPrinterConnectedFn = std::function<void(std::string)>;
 using OnLocalConnectedFn = std::function<void(int, std::string, std::string)>;
+using OnServerConnectedFn = std::function<void(int, int)>;
 using OnMessageFn = std::function<void(std::string, std::string)>;
 
 struct PrintParams {
@@ -312,6 +313,7 @@ struct ProbeResult {
     bool direct_connect_callback = false;
     bool local_connect_callback = false;
     bool message_callback = false;
+    bool version_callback = false;
     int selected_machine_messages = 0;
     int subscribe_messages = 0;
     int heartbeat_messages = 0;
@@ -367,6 +369,7 @@ void print_json(const ProbeResult& result) {
         << ",\"direct_connect_callback\":" << (result.direct_connect_callback ? "true" : "false")
         << ",\"local_connect_callback\":" << (result.local_connect_callback ? "true" : "false")
         << ",\"message_callback\":" << (result.message_callback ? "true" : "false")
+        << ",\"version_callback\":" << (result.version_callback ? "true" : "false")
         << ",\"selected_machine_messages\":" << result.selected_machine_messages
         << ",\"subscribe_messages\":" << result.subscribe_messages
         << ",\"heartbeat_messages\":" << result.heartbeat_messages
@@ -427,13 +430,17 @@ int main(int argc, char** argv) {
     using start_print_fn = int (*)(void*, BBL::PrintParams, BBL::OnUpdateStatusFn, BBL::WasCancelledFn, BBL::OnWaitFn);
     using start_sdcard_fn = int (*)(void*, BBL::PrintParams, BBL::OnUpdateStatusFn, BBL::WasCancelledFn, BBL::OnWaitFn);
     using connect_printer_fn = int (*)(void*, std::string, std::string, std::string, std::string, bool);
+    using send_cloud_fn = int (*)(void*, std::string, std::string, int, int);
     using send_printer_fn = int (*)(void*, std::string, std::string, int, int);
     using selected_machine_fn = int (*)(void*, std::string);
     using start_subscribe_fn = int (*)(void*, std::string);
     using add_subscribe_fn = int (*)(void*, std::vector<std::string>);
     using set_printer_connected_fn = int (*)(void*, BBL::OnPrinterConnectedFn);
+    using set_server_connected_fn = int (*)(void*, BBL::OnServerConnectedFn);
     using set_local_connect_fn = int (*)(void*, BBL::OnLocalConnectedFn);
     using set_message_fn = int (*)(void*, BBL::OnMessageFn);
+    using connect_server_fn = int (*)(void*);
+    using update_cert_fn = int (*)(void*);
     using camera_url_fn = int (*)(void*, std::string, std::function<void(std::string)>);
     using logout_fn = int (*)(void*, bool);
 
@@ -449,17 +456,22 @@ int main(int argc, char** argv) {
     auto build_login_cmd = lib.sym<string_agent_fn>("bambu_network_build_login_cmd");
     auto build_login_info = lib.sym<string_agent_fn>("bambu_network_build_login_info");
     auto get_print_info = lib.sym<print_info_fn>("bambu_network_get_user_print_info");
+    auto get_selected_machine = lib.sym<string_agent_fn>("bambu_network_get_user_selected_machine");
     auto get_tasks = lib.sym<tasks_fn>("bambu_network_get_user_tasks");
     auto start_print = lib.sym<start_print_fn>("bambu_network_start_print");
     auto start_sdcard_print = lib.sym<start_sdcard_fn>("bambu_network_start_send_gcode_to_sdcard");
     auto connect_printer = lib.sym<connect_printer_fn>("bambu_network_connect_printer");
+    auto send_cloud = lib.sym<send_cloud_fn>("bambu_network_send_message");
     auto send_printer = lib.sym<send_printer_fn>("bambu_network_send_message_to_printer");
     auto set_selected_machine = lib.sym<selected_machine_fn>("bambu_network_set_user_selected_machine");
     auto start_subscribe = lib.sym<start_subscribe_fn>("bambu_network_start_subscribe");
     auto add_subscribe = lib.sym<add_subscribe_fn>("bambu_network_add_subscribe");
     auto set_printer_connected = lib.sym<set_printer_connected_fn>("bambu_network_set_on_printer_connected_fn");
+    auto set_server_connected = lib.sym<set_server_connected_fn>("bambu_network_set_on_server_connected_fn");
     auto set_local_connect = lib.sym<set_local_connect_fn>("bambu_network_set_on_local_connect_fn");
     auto set_message = lib.sym<set_message_fn>("bambu_network_set_on_message_fn");
+    auto connect_server = lib.sym<connect_server_fn>("bambu_network_connect_server");
+    auto update_cert = lib.sym<update_cert_fn>("bambu_network_update_cert");
     auto get_camera_url = lib.sym<camera_url_fn>("bambu_network_get_camera_url");
     auto user_logout = lib.sym<logout_fn>("bambu_network_user_logout");
     auto build_logout_cmd = lib.sym<string_agent_fn>("bambu_network_build_logout_cmd");
@@ -567,6 +579,8 @@ int main(int argc, char** argv) {
         std::cerr << "invalid_auth_token\n";
     } else if (out.printer_rc != 0 || http_code != 200) {
         fail(agent, destroy_agent, "printer listing failed");
+    } else if (get_selected_machine(agent) != "printer-1") {
+        fail(agent, destroy_agent, "printer listing did not seed Studio selected machine");
     }
 
     if (!failure_mode) {
@@ -644,13 +658,35 @@ int main(int argc, char** argv) {
     }) != 0) {
         fail(agent, destroy_agent, "printer connected callback registration failed");
     }
-    if (set_local_connect(agent, [&out](int status, std::string dev_id, std::string) {
-        out.local_connect_callback = status == 0 && dev_id == "printer-1";
+    bool server_connected_callback = false;
+    if (set_server_connected(agent, [&server_connected_callback](int status, int reason) {
+        server_connected_callback = status == 0 && reason == 0;
+    }) != 0) {
+        fail(agent, destroy_agent, "server connected callback registration failed");
+    }
+    if (connect_server(agent) != 0 || !server_connected_callback) {
+        fail(agent, destroy_agent, "server connect did not report Studio connection success");
+    }
+    if (update_cert(agent) != 0) {
+        fail(agent, destroy_agent, "certificate update should be a no-op success");
+    }
+    if (set_local_connect(agent, [&out](int status, std::string dev_id, std::string body) {
+        out.local_connect_callback = status == 0 && dev_id == "printer-1" && contains(body, R"("dev_type":"N6")");
     }) != 0) {
         fail(agent, destroy_agent, "local connect callback registration failed");
     }
     std::atomic<int> message_count{0};
-    if (set_message(agent, [&out, &message_count](std::string dev_id, std::string body) {
+    if (set_message(agent, [&out, &message_count, agent, destroy_agent](std::string dev_id, std::string body) {
+        if (dev_id == "printer-1" && contains(body, R"("command":"get_version")")) {
+            if (!contains(body, R"("sequence_id":"20001")") ||
+                !contains(body, R"("module")") ||
+                !contains(body, R"("name":"ota")") ||
+                !contains(body, R"("product_name":"N6")")) {
+                fail(agent, destroy_agent, "Studio get_version response did not include version modules");
+            }
+            out.version_callback = true;
+            return;
+        }
         if (dev_id != "printer-1" || !contains(body, R"("command":"push_status")")) return;
         if (!contains(body, R"("ipcam")") || !contains(body, R"("local":"rtsps")")) return;
         if (!contains(body, R"("nozzle_temper":28)") ||
@@ -660,11 +696,19 @@ int main(int argc, char** argv) {
             !contains(body, R"("bed_temper":60)") ||
             !contains(body, R"("bed_target_temper":65)") ||
             !contains(body, R"("chamber_temper":32)") ||
+            !contains(body, R"("printer_type":"N6")") ||
+            !contains(body, R"("support_chamber":true)") ||
+            !contains(body, R"("support_chamber_temp_display":true)") ||
+            !contains(body, R"("cfg":"")") ||
+            !contains(body, R"("fun":"")") ||
+            !contains(body, R"("aux":"")") ||
+            !contains(body, R"("stat":"")") ||
             !contains(body, R"("device")") ||
+            !contains(body, R"("type":1)") ||
             !contains(body, R"("extruder")") ||
             !contains(body, R"("state":18)") ||
-            !contains(body, R"({"id":1,"info":8,"temp":14417948)") ||
-            !contains(body, R"({"id":0,"info":8,"temp":14090267)") ||
+            !contains(body, R"({"id":1,"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0})") ||
+            !contains(body, R"({"id":0,"info":8,"temp":14090267,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0})") ||
             !contains(body, R"("lights_report":[{"node":"chamber_light","mode":"on"}])")) {
             fail(agent, destroy_agent, "Studio push status did not include plugin printer telemetry");
         }
@@ -675,6 +719,27 @@ int main(int argc, char** argv) {
     }
 
     int before_messages = message_count.load();
+    if (send_cloud(agent, "printer-1", R"({"pushing":{"command":"pushall","sequence_id":"20000","version":1,"push_target":1}})", 0, 0) != 0) {
+        fail(agent, destroy_agent, "cloud pushall request failed");
+    }
+    if (message_count.load() == before_messages) {
+        fail(agent, destroy_agent, "cloud pushall request did not emit Studio push status");
+    }
+    if (send_cloud(agent, "printer-1", R"({"info":{"command":"get_version","sequence_id":"20001"}})", 0, 0) != 0) {
+        fail(agent, destroy_agent, "cloud get_version request failed");
+    }
+    if (!out.version_callback) {
+        fail(agent, destroy_agent, "cloud get_version request did not emit Studio version info");
+    }
+    before_messages = message_count.load();
+    if (start_subscribe(agent, "app") != 0) {
+        fail(agent, destroy_agent, "cloud printer module subscription failed");
+    }
+    out.subscribe_messages = message_count.load() - before_messages;
+    if (out.subscribe_messages == 0) {
+        fail(agent, destroy_agent, "module subscription did not emit Studio push status for listed printers");
+    }
+    before_messages = message_count.load();
     if (set_selected_machine(agent, "printer-1") != 0) {
         fail(agent, destroy_agent, "selected cloud printer failed");
     }
@@ -683,11 +748,12 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "selected cloud printer did not emit Studio push status");
     }
     before_messages = message_count.load();
-    if (start_subscribe(agent, "printer-1") != 0 || add_subscribe(agent, {"printer-1"}) != 0) {
+    if (add_subscribe(agent, {"printer-1"}) != 0) {
         fail(agent, destroy_agent, "cloud printer subscription failed");
     }
-    out.subscribe_messages = message_count.load() - before_messages;
-    if (out.subscribe_messages == 0) {
+    const auto add_subscribe_messages = message_count.load() - before_messages;
+    out.subscribe_messages += add_subscribe_messages;
+    if (add_subscribe_messages == 0) {
         fail(agent, destroy_agent, "cloud printer subscription did not emit Studio push status");
     }
     before_messages = message_count.load();

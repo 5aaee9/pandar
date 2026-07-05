@@ -237,12 +237,12 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                     3 => write_response(
                         &mut stream,
                         "HTTP/1.1 200 OK",
-                        r#"{"devices":[{"dev_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220"},{"label":"R","current_celsius":"27","target_celsius":"215"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true}]}"#,
+                        r#"{"devices":[{"dev_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","dev_model_name":"N6","nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220"},{"label":"R","current_celsius":"27","target_celsius":"215"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true}]}"#,
                     ),
                     4 => write_response(
                         &mut stream,
                         "HTTP/1.1 200 OK",
-                        r#"{"devices":[{"dev_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220"},{"label":"R","current_celsius":"27","target_celsius":"215"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true}]}"#,
+                        r#"{"devices":[{"dev_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","dev_model_name":"N6","nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220"},{"label":"R","current_celsius":"27","target_celsius":"215"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true}]}"#,
                     ),
                     5 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"tasks":[]}"#),
                     6 => {

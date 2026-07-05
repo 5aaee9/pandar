@@ -282,12 +282,12 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
     assert_eq!(status, StatusCode::OK);
     assert!(body.get("printers").is_none());
     assert_eq!(body["devices"].as_array().unwrap().len(), 1);
-    assert_eq!(body["devices"][0]["dev_id"], printer.id);
+    assert_eq!(body["devices"][0]["dev_id"], "studio-printer-1");
     assert_eq!(body["devices"][0]["dev_name"], "Studio Printer");
     assert_eq!(body["devices"][0]["name"], "Studio Printer");
     assert_eq!(body["devices"][0]["dev_ip"], "192.0.2.10");
     assert_eq!(body["devices"][0]["dev_access_code"], "studio-access-code");
-    assert_eq!(body["devices"][0]["dev_model_name"], "Bambu Lab X2D");
+    assert_eq!(body["devices"][0]["dev_model_name"], "N6");
     assert_eq!(body["devices"][0]["model"], "Bambu Lab X2D");
     assert_eq!(body["devices"][0]["dev_online"], true);
     assert_eq!(body["devices"][0]["online"], true);
