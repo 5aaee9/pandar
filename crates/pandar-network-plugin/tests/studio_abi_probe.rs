@@ -42,13 +42,22 @@ fn find_cxx() -> Option<String> {
     {
         return Some(cxx);
     }
-    ["c++", "g++", "clang++"]
-        .into_iter()
+    let candidates: &[&str] = if cfg!(target_os = "windows") {
+        &["c++", "g++", "clang++", "cl"]
+    } else {
+        &["c++", "g++", "clang++"]
+    };
+    candidates
+        .iter()
+        .copied()
         .find(|candidate| {
-            Command::new(candidate)
-                .arg("--version")
-                .output()
-                .is_ok_and(|output| output.status.success())
+            let mut command = Command::new(candidate);
+            if candidate.eq_ignore_ascii_case("cl") || candidate.eq_ignore_ascii_case("cl.exe") {
+                command.arg("/?");
+            } else {
+                command.arg("--version");
+            }
+            command.output().is_ok_and(|output| output.status.success())
         })
         .map(str::to_owned)
 }
@@ -71,19 +80,38 @@ fn compile_probe(mode_arg: &str) -> Option<PathBuf> {
             format!("studio_abi_probe_{}_{mode_arg}", std::process::id())
         });
     fs::create_dir_all(output.parent().unwrap()).unwrap();
+    let object = output.with_extension("obj");
 
+    let uses_msvc = cfg!(target_os = "windows")
+        && PathBuf::from(&cxx)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                name.eq_ignore_ascii_case("cl.exe") || name.eq_ignore_ascii_case("cl")
+            });
     let mut command = Command::new(cxx);
     let fixture =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/studio_abi_probe.cpp");
-    command
-        .arg("-std=c++17")
-        .arg(fixture)
-        .arg("-o")
-        .arg(&output);
-    if cfg!(target_os = "linux") {
-        command.arg("-ldl");
-    } else if cfg!(target_os = "windows") {
-        command.arg("-lws2_32");
+    if uses_msvc {
+        command
+            .arg("/nologo")
+            .arg("/std:c++17")
+            .arg("/EHsc")
+            .arg(&fixture)
+            .arg(format!("/Fe{}", output.display()))
+            .arg(format!("/Fo{}", object.display()))
+            .arg("ws2_32.lib");
+    } else {
+        command
+            .arg("-std=c++17")
+            .arg(fixture)
+            .arg("-o")
+            .arg(&output);
+        if cfg!(target_os = "linux") {
+            command.arg("-ldl");
+        } else if cfg!(target_os = "windows") {
+            command.arg("-lws2_32");
+        }
     }
 
     let result = command.output().unwrap();
@@ -130,7 +158,10 @@ fn accept_with_timeout(listener: &TcpListener) -> TcpStream {
     let deadline = Instant::now() + MOCK_HUB_TIMEOUT;
     loop {
         match listener.accept() {
-            Ok((stream, _)) => return stream,
+            Ok((stream, _)) => {
+                stream.set_nonblocking(false).unwrap();
+                return stream;
+            }
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                 assert!(
                     Instant::now() < deadline,
@@ -172,8 +203,10 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
     let handle = thread::spawn(move || match mode {
         MockMode::Success => {
             let expected = [
+                ("POST", "/api/v1/plugin/no-auth-session", false),
                 ("POST", "/api/v1/plugin/login-tickets/exchange", false),
                 ("POST", "/api/v1/plugin/login-tickets/exchange", false),
+                ("GET", "/api/v1/plugin/printers", true),
                 ("GET", "/api/v1/plugin/printers", true),
                 ("GET", "/api/v1/plugin/jobs", true),
                 ("POST", "/api/v1/plugin/prints", true),
@@ -188,8 +221,8 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                 match index {
                     0 => write_response(
                         &mut stream,
-                        "HTTP/1.1 200 OK",
-                        r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
+                        "HTTP/1.1 403 Forbidden",
+                        r#"{"error":"no_auth_required"}"#,
                     ),
                     1 => write_response(
                         &mut stream,
@@ -199,10 +232,20 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                     2 => write_response(
                         &mut stream,
                         "HTTP/1.1 200 OK",
+                        r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
+                    ),
+                    3 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
                         r#"{"devices":[{"dev_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678"}]}"#,
                     ),
-                    3 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"tasks":[]}"#),
-                    4 => {
+                    4 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        r#"{"devices":[{"dev_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678"}]}"#,
+                    ),
+                    5 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"tasks":[]}"#),
+                    6 => {
                         let body = request_body(&request);
                         assert_multipart_print_request(&request);
                         assert!(
@@ -216,7 +259,7 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         assert_multipart_file_part(&request, "probe.3mf", &artifact);
                         write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"job_id":"job-1"}"#);
                     }
-                    5 => {
+                    7 => {
                         assert_eq!(
                             serde_json::from_str::<serde_json::Value>(request_body(&request))
                                 .unwrap(),
@@ -238,6 +281,7 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
         }
         MockMode::Failure => {
             let expected = [
+                ("POST", "/api/v1/plugin/no-auth-session", false),
                 ("POST", "/api/v1/plugin/login-tickets/exchange", false),
                 ("GET", "/api/v1/plugin/printers", true),
                 ("POST", "/api/v1/plugin/prints", true),
@@ -251,15 +295,20 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                 match index {
                     0 => write_response(
                         &mut stream,
-                        "HTTP/1.1 401 Unauthorized",
-                        r#"{"error":"raw-ticket-message","ticket":"secret"}"#,
+                        "HTTP/1.1 403 Forbidden",
+                        r#"{"error":"no_auth_required"}"#,
                     ),
                     1 => write_response(
                         &mut stream,
                         "HTTP/1.1 401 Unauthorized",
-                        r#"{"error":"raw-auth-message","token":"secret"}"#,
+                        r#"{"error":"raw-ticket-message","ticket":"secret"}"#,
                     ),
                     2 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 401 Unauthorized",
+                        r#"{"error":"raw-auth-message","token":"secret"}"#,
+                    ),
+                    3 => write_response(
                         &mut stream,
                         "HTTP/1.1 403 Forbidden",
                         r#"{"error":"raw-forbidden-message","path":"/tmp/secret.3mf"}"#,
@@ -378,6 +427,7 @@ fn probe_exercises_studio_abi_success_path() {
     assert_json_field(&stdout, "printer_rc", "0");
     assert_json_field(&stdout, "tasks_rc", "0");
     assert_json_field(&stdout, "print_rc", "0");
+    assert_json_field(&stdout, "restored_login", "true");
     assert_json_field(&stdout, "ft_abi_version", "1");
     assert_json_field(&stdout, "ft_start_connect_rc", "0");
     assert_json_field(&stdout, "ft_sync_rc", "-3");

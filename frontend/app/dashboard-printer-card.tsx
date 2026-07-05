@@ -200,7 +200,6 @@ function PrinterActions({ printer }: { printer: Printer }) {
               <input
                 className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
                 name="host"
-                required
                 type="text"
               />
             </label>
@@ -210,7 +209,6 @@ function PrinterActions({ printer }: { printer: Printer }) {
                 autoComplete="off"
                 className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
                 name="access_code"
-                required
                 type="password"
               />
             </label>

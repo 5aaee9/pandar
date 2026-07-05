@@ -112,6 +112,10 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/plugin/login-tickets/exchange",
             post(plugin::exchange_login_ticket),
         )
+        .route(
+            "/api/v1/plugin/no-auth-session",
+            post(plugin::create_no_auth_session),
+        )
         .route("/api/v1/plugin/printers", get(plugin::list_printers))
         .route("/api/v1/plugin/jobs", get(plugin::list_jobs))
         .route(

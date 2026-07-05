@@ -321,6 +321,7 @@ struct ProbeResult {
     int ft_cancel_rc = 0;
     std::string update_body;
     std::string sdcard_update_body;
+    bool restored_login = false;
 };
 
 [[noreturn]] void fail(void* agent, int (*destroy_agent)(void*), const std::string& message) {
@@ -374,6 +375,7 @@ void print_json(const ProbeResult& result) {
         << ",\"ft_cancel_rc\":" << result.ft_cancel_rc
         << ",\"update_body\":" << escape_json(result.update_body)
         << ",\"sdcard_update_body\":" << escape_json(result.sdcard_update_body)
+        << ",\"restored_login\":" << (result.restored_login ? "true" : "false")
         << "}\n";
 }
 
@@ -411,6 +413,7 @@ int main(int argc, char** argv) {
     using destroy_agent_fn = int (*)(void*);
     using string_agent_fn = std::string (*)(void*);
     using start_fn = int (*)(void*);
+    using set_config_dir_fn = int (*)(void*, std::string);
     using token_fn = int (*)(void*, std::string, unsigned int*, std::string*);
     using change_user_fn = int (*)(void*, std::string);
     using is_user_login_fn = bool (*)(void*);
@@ -432,6 +435,7 @@ int main(int argc, char** argv) {
     auto create_agent = lib.sym<create_agent_fn>("bambu_network_create_agent");
     auto destroy_agent = lib.sym<destroy_agent_fn>("bambu_network_destroy_agent");
     auto start = lib.sym<start_fn>("bambu_network_start");
+    auto set_config_dir = lib.sym<set_config_dir_fn>("bambu_network_set_config_dir");
     auto get_host = lib.sym<string_agent_fn>("bambu_network_get_bambulab_host");
     auto get_token = lib.sym<token_fn>("bambu_network_get_my_token");
     auto get_profile = lib.sym<token_fn>("bambu_network_get_my_profile");
@@ -471,6 +475,14 @@ int main(int argc, char** argv) {
     ProbeResult out;
     void* agent = create_agent("probe-log");
     if (!agent) fail(agent, destroy_agent, "agent creation failed");
+    const std::string config_dir = std::string("probe-config-") + std::to_string(static_cast<long long>(
+#if defined(_WIN32)
+        GetCurrentProcessId()
+#else
+        getpid()
+#endif
+    ));
+    if (set_config_dir(agent, config_dir) != 0) fail(agent, destroy_agent, "set config dir failed");
 
     if (start(agent) != 0) fail(agent, destroy_agent, "agent start failed");
     out.host = get_host(agent);
@@ -550,6 +562,27 @@ int main(int argc, char** argv) {
         std::cerr << "invalid_auth_token\n";
     } else if (out.printer_rc != 0 || http_code != 200) {
         fail(agent, destroy_agent, "printer listing failed");
+    }
+
+    if (!failure_mode) {
+        void* restored_agent = create_agent("probe-log-restored");
+        if (!restored_agent) fail(agent, destroy_agent, "restored agent creation failed");
+        if (set_config_dir(restored_agent, config_dir) != 0) {
+            destroy_agent(restored_agent);
+            fail(agent, destroy_agent, "restored set config dir failed");
+        }
+        out.restored_login = is_user_login(restored_agent);
+        if (!out.restored_login || !contains(build_login_cmd(restored_agent), "probe-token")) {
+            destroy_agent(restored_agent);
+            fail(agent, destroy_agent, "restored agent did not reuse persisted login");
+        }
+        unsigned int restored_http_code = 0;
+        std::string restored_body;
+        if (get_print_info(restored_agent, &restored_http_code, &restored_body) != 0 || restored_http_code != 200) {
+            destroy_agent(restored_agent);
+            fail(agent, destroy_agent, "restored agent could not fetch printer list");
+        }
+        destroy_agent(restored_agent);
     }
 
     BBL::TaskQueryParams query;
@@ -657,7 +690,7 @@ int main(int argc, char** argv) {
     }) != 0) {
         fail(agent, destroy_agent, "camera URL lookup failed");
     }
-    if (!contains(out.camera_url, "bambu:///rtsps___bblp:12345678@192.0.2.10/streaming/live/1?proto=rtsps")) {
+    if (!failure_mode && !contains(out.camera_url, "bambu:///rtsps___bblp:12345678@192.0.2.10/streaming/live/1?proto=rtsps")) {
         fail(agent, destroy_agent, "camera URL did not use Studio RTSPS camera URL");
     }
 

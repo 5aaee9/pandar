@@ -16,6 +16,8 @@
 
 ## Completed
 
+- Added a Bambu Studio plugin no-auth session path for trusted local Hub development and persisted the plugin token/profile under the Studio config directory so Studio restarts restore Pandar login state without repeating sign-in.
+- Allowed Edit printer to update Hub-local printer metadata without requiring a live Agent session, while blank LAN IP/access-code fields preserve existing connection details.
 - Fixed the Bambu Studio plugin printer list response so Studio receives top-level `devices` with its native `dev_name` / `dev_online` / `dev_model_name` / `task_status` fields instead of Pandar's tenant API `printers` shape, and allowed trusted local no-auth plugin sign-in to create the Studio plugin token.
 - Fixed Bambu Studio localized plugin login URLs by serving `/<locale>/sign-in` from the local plugin webserver, making embedded plugin assets root-relative, and bridging Continue sign-in to Studio's localhost ticket callback.
 - Updated the Bambu Studio network plugin operation bridge for the latest Agent printer operations: direct semantic operation submissions now accept select-extruder, targeted hotend, bed/chamber temperature, and AMS RFID/load/unload payloads, while G-code translation covers targeted hotend and bed/chamber temperature commands.
@@ -73,6 +75,7 @@
 - Added an Agent-mediated camera tunnel for RTSP-capable Bambu models: Hub exposes tenant/printer-scoped fragmented MP4 streaming through a dedicated reverse camera gRPC stream, Agent pulls the printer RTSPS feed directly through ffmpeg, and the Devices Controls panel opens a native video View camera dialog without exposing LAN credentials to the browser.
 - Replaced the camera dialog's native video controls with a live-stream display and a single custom fullscreen button so the browser does not show a misleading seek/progress bar for the fragmented MP4 stream.
 - Exposed printer LAN IP/access-code metadata to the Bambu Studio plugin device list and status/camera ABI path so Studio receives the correct `X2D` device name plus LAN RTSPS camera URL; verified the installed plugin loads without being overwritten, lists the printer shape, queues a chamber-light operation, and reads a frame from the printer RTSPS camera.
+- Added a Windows-only Bambu Studio development hook DLL that can proxy `swscale-8.dll` from a copied Studio directory and force new Studio logs onto Bambu's local fallback log key for decryptable development logs.
 - Normalized top-level Bambu `vt_tray` / `vir_slot` material reports into external spool snapshots so the Devices Filaments panel can show external materials.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.
 - Created the initial Rust workspace with `pandar-core`, `pandar-hub`, `pandar-agent`, and `pandar-app`.

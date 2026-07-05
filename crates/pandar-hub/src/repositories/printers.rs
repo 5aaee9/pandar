@@ -131,11 +131,13 @@ impl PrinterRepository {
         Ok(printer)
     }
 
-    pub async fn update_name_with_audit(
+    pub async fn update_details_with_audit(
         &self,
         tenant_id: TenantId,
         printer_id: &str,
         name: String,
+        host: String,
+        access_code: String,
         actor: AuditActor,
     ) -> RepositoryResult<Printer> {
         let connection = self.database.sea_orm_connection();
@@ -153,12 +155,15 @@ impl PrinterRepository {
         };
 
         let previous_name = model.name.clone();
+        let previous_host = model.host.clone();
         let mut active = model.into_active_model();
         active.name = Set(name);
+        active.host = Set(Some(host));
+        active.access_code = Set(Some(access_code));
         let model = active
             .update(&tx)
             .await
-            .context("failed to update printer name")?;
+            .context("failed to update printer details")?;
         let printer = printer_from_model(model)?;
         insert_audit_event_tx(
             &tx,
@@ -170,7 +175,9 @@ impl PrinterRepository {
                 Some(printer.id.clone()),
                 serde_json::json!({
                     "previous_name": previous_name,
+                    "previous_host": previous_host,
                     "printer_name": printer.name.clone(),
+                    "printer_host": printer.host.clone(),
                     "serial_number": printer.serial_number.clone(),
                     "agent_id": printer.agent_id.to_string(),
                 }),

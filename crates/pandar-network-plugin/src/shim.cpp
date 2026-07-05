@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <memory>
@@ -166,6 +168,7 @@ struct PluginHttpResult {
 };
 
 PluginHttpResult pandar_plugin_exchange_ticket(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
+PluginHttpResult pandar_plugin_create_no_auth_session(const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_get_printers(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_get_jobs(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_submit_print(
@@ -241,6 +244,18 @@ void clear_login_state(Agent* agent) {
     agent->avatar.clear();
     agent->profile_json.clear();
     agent->connected = false;
+}
+
+std::filesystem::path persisted_login_path(const Agent* agent) {
+    if (!agent || agent->config_dir.empty()) return {};
+    return std::filesystem::path(agent->config_dir) / "pandar-plugin-login.json";
+}
+
+void clear_persisted_login(Agent* agent) {
+    const auto path = persisted_login_path(agent);
+    if (path.empty()) return;
+    std::error_code ignored;
+    std::filesystem::remove(path, ignored);
 }
 
 std::pair<std::string, bool> env_or_default(const char* primary, const char* secondary, std::string fallback) {
@@ -475,6 +490,49 @@ void apply_profile_json(Agent* agent, const std::string& json) {
     if (const auto v = field_from_json(json, "tenant_name"); !v.empty() && agent->user_name.empty()) agent->user_name = v;
 }
 
+void persist_login_state(Agent* agent) {
+    const auto path = persisted_login_path(agent);
+    if (path.empty() || !agent || agent->token.empty() || agent->profile_json.empty()) return;
+    std::error_code error;
+    std::filesystem::create_directories(path.parent_path(), error);
+    if (error) return;
+
+    auto temp_path = path;
+    temp_path += ".tmp";
+    std::ofstream file(temp_path, std::ios::binary | std::ios::trunc);
+    if (!file) return;
+    file << "{"
+         << "\"hub_url\":" << escape_json(agent->hub_url) << ","
+         << "\"token\":" << escape_json(agent->token) << ","
+         << "\"profile\":" << agent->profile_json
+         << "}";
+    file.close();
+    if (!file) {
+        std::filesystem::remove(temp_path, error);
+        return;
+    }
+    std::filesystem::rename(temp_path, path, error);
+    if (error) {
+        std::filesystem::remove(path, error);
+        std::filesystem::rename(temp_path, path, error);
+    }
+}
+
+void load_persisted_login(Agent* agent) {
+    const auto path = persisted_login_path(agent);
+    if (path.empty() || !agent || !agent->token.empty()) return;
+    std::ifstream file(path, std::ios::binary);
+    if (!file) return;
+    std::string body((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    if (field_from_json(body, "hub_url") != agent->hub_url) return;
+    const auto token = field_from_json(body, "token");
+    const auto profile = object_from_json(body, "profile");
+    if (token.empty() || profile.empty()) return;
+    agent->token = token;
+    apply_profile_json(agent, profile);
+    if (agent->token.empty()) agent->token = token;
+}
+
 std::string studio_token_body(const Agent* agent) {
     const auto token = agent ? agent->token : std::string{};
     return std::string("{") +
@@ -516,6 +574,13 @@ PluginHttpResult rust_exchange_ticket(const Agent* agent, const std::string& tic
     );
 }
 
+PluginHttpResult rust_create_no_auth_session(const Agent* agent) {
+    return pandar_plugin_create_no_auth_session(
+        reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
+        agent->hub_url.size()
+    );
+}
+
 PluginHttpResult rust_start_local_webserver(const Agent* agent) {
     return pandar_plugin_start_local_webserver(
         reinterpret_cast<const uint8_t*>(agent->frontend_url.data()),
@@ -533,6 +598,7 @@ void refresh_local_webserver_config(Agent* agent) {
     if (result.status != 0) return;
     if (const auto hub_url = field_from_json(body, "hub_url"); !hub_url.empty()) {
         if (hub_url != agent->hub_url) {
+            clear_persisted_login(agent);
             clear_login_state(agent);
         }
         agent->hub_url = hub_url;
@@ -600,6 +666,22 @@ PluginHttpResult rust_submit_printer_operation(const Agent* agent, const std::st
         reinterpret_cast<const uint8_t*>(operation_json.data()),
         operation_json.size()
     );
+}
+
+void apply_login_response_body(Agent* agent, const std::string& body) {
+    agent->token = field_from_json(body, "token");
+    agent->profile_json = object_from_json(body, "profile");
+    apply_profile_json(agent, agent->profile_json);
+}
+
+void try_no_auth_session(Agent* agent) {
+    if (!agent || !agent->token.empty()) return;
+    refresh_local_webserver_config(agent);
+    auto result = rust_create_no_auth_session(agent);
+    std::string body = body_from_result(result);
+    if (result.status != 0) return;
+    apply_login_response_body(agent, body);
+    persist_login_state(agent);
 }
 
 std::string login_envelope(const Agent* agent, bool logout) {
@@ -736,6 +818,7 @@ PANDAR_ABI int bambu_network_set_config_dir(void* agent, std::string config_dir)
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     a->config_dir = std::move(config_dir);
+    load_persisted_login(a);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
@@ -763,6 +846,7 @@ PANDAR_ABI int bambu_network_start(void* agent) {
         return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
     }
     a->last_error.clear();
+    try_no_auth_session(a);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
@@ -911,10 +995,12 @@ PANDAR_ABI int bambu_network_change_user(void* agent, std::string user_info) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     if (user_info.empty() || user_info == "{}") {
+        clear_persisted_login(a);
         clear_login_state(a);
         return BBL::BAMBU_NETWORK_SUCCESS;
     }
     apply_profile_json(a, user_info);
+    persist_login_state(a);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
@@ -927,6 +1013,7 @@ PANDAR_ABI bool bambu_network_is_user_login(void* agent) {
 PANDAR_ABI int bambu_network_user_logout(void* agent, bool) {
     auto* a = as_agent(agent);
     if (a) {
+        clear_persisted_login(a);
         clear_login_state(a);
     }
     return BBL::BAMBU_NETWORK_SUCCESS;
@@ -966,9 +1053,8 @@ PANDAR_ABI int bambu_network_get_my_token(void* agent, std::string ticket, unsig
         a->last_error = body;
         return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
     }
-    a->token = field_from_json(body, "token");
-    a->profile_json = object_from_json(body, "profile");
-    apply_profile_json(a, a->profile_json);
+    apply_login_response_body(a, body);
+    persist_login_state(a);
     a->last_error.clear();
     success_body(http_code, http_body, studio_token_body(a));
     return BBL::BAMBU_NETWORK_SUCCESS;

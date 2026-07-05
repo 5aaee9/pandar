@@ -160,7 +160,9 @@ describe("PrinterInventory", () => {
     expect(screen.getByRole("heading", { name: "Edit printer" })).toBeVisible();
     expect(screen.getByLabelText("Name")).toHaveValue("Office A1");
     expect(screen.getByLabelText("Printer IPv4 address")).toHaveAttribute("name", "host");
+    expect(screen.getByLabelText("Printer IPv4 address")).not.toBeRequired();
     expect(screen.getByLabelText("Access Code")).toHaveAttribute("name", "access_code");
+    expect(screen.getByLabelText("Access Code")).not.toBeRequired();
 
     const form = screen.getByRole("button", { name: "Save changes" }).closest("form");
     expect(form?.querySelector('input[name="tenant_id"]')).toHaveValue("tenant-1");

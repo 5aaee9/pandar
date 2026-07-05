@@ -2,6 +2,7 @@ use pandar_core::{AgentId, TenantId};
 
 use super::*;
 use crate::db::DatabaseConfig;
+use crate::repositories::AuditActor;
 use crate::repositories::test_helpers::insert_printer_fixture;
 
 fn snapshot(
@@ -103,6 +104,40 @@ async fn printer_repository_get_returns_none_for_unknown_printer() {
             .await
             .unwrap(),
         None
+    );
+}
+
+#[tokio::test]
+async fn printer_repository_updates_connection_details() {
+    let (database, tenants, agents, printers, _, _) = repositories().await;
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)
+        .await
+        .unwrap();
+
+    let updated = printers
+        .update_details_with_audit(
+            tenant.id,
+            &printer_id,
+            "Office A1".to_string(),
+            "192.0.2.12".to_string(),
+            "updated-access-code".to_string(),
+            AuditActor::no_auth(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(updated.name, "Office A1");
+    assert_eq!(updated.host.as_deref(), Some("192.0.2.12"));
+    assert_eq!(updated.access_code.as_deref(), Some("updated-access-code"));
+    assert_eq!(
+        printers
+            .get_for_tenant(tenant.id, &printer_id)
+            .await
+            .unwrap()
+            .unwrap(),
+        updated
     );
 }
 

@@ -193,7 +193,7 @@ async fn viewer_cannot_delete_printer() {
 }
 
 #[tokio::test]
-async fn update_printer_sends_link_command_and_updates_name() {
+async fn update_printer_updates_details_without_agent_session() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
@@ -202,8 +202,6 @@ async fn update_printer_sends_link_command_and_updates_name() {
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
-    let (command_sender, mut command_receiver) = tokio::sync::mpsc::channel(1);
-    register_route_test_session(&state, tenant_id, agent_id, command_sender).await;
     let access_code = "UPDATED-LINK-CODE";
 
     let (status, body) = request_as(
@@ -220,20 +218,8 @@ async fn update_printer_sends_link_command_and_updates_name() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "link_printer");
-    assert_eq!(body["status"], "sent");
+    assert_eq!(body["name"], "Office A1 Updated");
     assert!(!body.to_string().contains(access_code));
-
-    let sent = command_receiver.recv().await.unwrap().unwrap();
-    match sent.command.unwrap() {
-        hub_command::Command::LinkPrinter(command) => {
-            assert_eq!(command.printer_type, "BambuLab");
-            assert_eq!(command.host, "192.0.2.11");
-            assert_eq!(command.access_code, access_code);
-            assert_eq!(command.name, "Office A1 Updated");
-        }
-        other => panic!("expected link printer command, got {other:?}"),
-    }
 
     let printer = state
         .printers()
@@ -242,6 +228,53 @@ async fn update_printer_sends_link_command_and_updates_name() {
         .unwrap()
         .unwrap();
     assert_eq!(printer.name, "Office A1 Updated");
+    assert_eq!(printer.host.as_deref(), Some("192.0.2.11"));
+    assert_eq!(printer.access_code.as_deref(), Some(access_code));
+}
+
+#[tokio::test]
+async fn update_printer_keeps_existing_connection_when_fields_are_blank_without_agent_session() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
+        .await
+        .unwrap();
+    seed_printer_connection(
+        state.database(),
+        &printer_id,
+        "192.0.2.10",
+        "EXISTING-LINK-CODE",
+    )
+    .await;
+
+    let (status, body) = request_as(
+        app,
+        Method::PATCH,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}"),
+        Some(json!({
+            "host": " ",
+            "access_code": "",
+            "name": "Office A1 Updated"
+        })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["name"], "Office A1 Updated");
+    assert!(!body.to_string().contains("EXISTING-LINK-CODE"));
+    let printer = state
+        .printers()
+        .get_for_tenant(tenant_id, &printer_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(printer.name, "Office A1 Updated");
+    assert_eq!(printer.host.as_deref(), Some("192.0.2.10"));
+    assert_eq!(printer.access_code.as_deref(), Some("EXISTING-LINK-CODE"));
 }
 
 #[tokio::test]
@@ -874,6 +907,34 @@ fn link_printer_body(access_code: &str) -> serde_json::Value {
         "access_code": access_code,
         "name": "Office X1C"
     })
+}
+
+async fn seed_printer_connection(
+    database: &crate::db::Database,
+    printer_id: &str,
+    host: &str,
+    access_code: &str,
+) {
+    match database {
+        crate::db::Database::Sqlite(pool) => {
+            sqlx::query("UPDATE printers SET host = ?1, access_code = ?2 WHERE id = ?3")
+                .bind(host)
+                .bind(access_code)
+                .bind(printer_id)
+                .execute(pool)
+                .await
+                .unwrap();
+        }
+        crate::db::Database::Postgres(pool) => {
+            sqlx::query("UPDATE printers SET host = $1, access_code = $2 WHERE id = $3")
+                .bind(host)
+                .bind(access_code)
+                .bind(printer_id)
+                .execute(pool)
+                .await
+                .unwrap();
+        }
+    }
 }
 
 async fn register_route_test_session(

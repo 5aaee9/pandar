@@ -28,6 +28,7 @@
       "materials_refresh_queued": "AMS 刷新已入队",
       "agent_deleted": "Agent 已删除",
       "printer_deleted": "打印机已删除",
+      "printer_updated": "打印机已更新",
       "job_created": "打印任务已入队",
       "tenant_created": "租户已创建",
       "tenant_token_revoked": "租户 API 令牌已撤销",

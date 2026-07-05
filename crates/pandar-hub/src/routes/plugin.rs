@@ -9,9 +9,12 @@ use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     AppState,
-    repositories::{AuthenticatedPrincipal, JobWithArtifact, RepositoryError},
+    repositories::{AuditActor, AuthenticatedPrincipal, RepositoryError, TenantTokenScope},
     routes::{ApiError, auth, printer_operations::PrinterOperationRequest},
 };
+
+mod responses;
+pub(crate) use responses::redact_artifact_error;
 
 #[derive(Debug, Deserialize)]
 pub(super) struct CreateLoginTicketRequest {
@@ -165,6 +168,55 @@ pub(super) async fn exchange_login_ticket(
     }))
 }
 
+pub(super) async fn create_no_auth_session(
+    State(state): State<AppState>,
+) -> Result<Json<ExchangeLoginTicketResponse>, ApiError> {
+    if !state.no_auth_enabled() {
+        return Err(ApiError::new(StatusCode::FORBIDDEN, "no_auth_required"));
+    }
+    let tenant = state
+        .tenants()
+        .list()
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| ApiError::not_found("tenant_not_found"))?;
+    let token = state
+        .auth()
+        .create_tenant_token_with_audit(
+            tenant.id,
+            "Local Bambu Studio Plugin",
+            vec![TenantTokenScope::PluginStudio],
+            Some(plugin_session_expires_at()?),
+            AuditActor::no_auth(),
+        )
+        .await?;
+    let profile = PluginProfileResponse {
+        user_id: token.token.id.clone(),
+        user_name: token.token.name.clone(),
+        tenant_id: token.token.tenant_id.to_string(),
+        tenant_name: tenant.display_name,
+    };
+
+    Ok(Json(ExchangeLoginTicketResponse {
+        token: token.plaintext_token,
+        expires_at: token
+            .token
+            .expires_at
+            .expect("plugin token must have expiry"),
+        profile,
+    }))
+}
+
+fn plugin_session_expires_at() -> Result<String, ApiError> {
+    (OffsetDateTime::now_utc() + Duration::days(365))
+        .format(&Rfc3339)
+        .map_err(|err| {
+            tracing::error!(error = %format!("{err:#}"), "failed to format plugin session expiry");
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
+        })
+}
+
 pub(super) async fn list_printers(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -297,87 +349,11 @@ fn plugin_operation_error(err: RepositoryError) -> ApiError {
     }
 }
 
-pub(super) fn redact_artifact_error(message: &str) -> String {
-    message
-        .lines()
-        .map(|line| {
-            if line.contains("artifact directory ")
-                || line.contains("artifact file ")
-                || line.contains("artifact storage path ")
-            {
-                line.split_once("artifact")
-                    .map(|(prefix, suffix)| {
-                        format!("{prefix}artifact{}", redact_artifact_path(suffix))
-                    })
-                    .unwrap_or_else(|| line.to_owned())
-            } else {
-                line.to_owned()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-fn redact_artifact_path(suffix: &str) -> String {
-    for marker in [" directory ", " file ", " storage path "] {
-        if let Some((prefix, _)) = suffix.split_once(marker) {
-            return format!("{prefix}{marker}[redacted]");
-        }
-    }
-    suffix.to_owned()
-}
-
 fn plugin_login_ticket_expires_at() -> Result<String, ApiError> {
     (OffsetDateTime::now_utc() + Duration::minutes(5))
         .format(&Rfc3339)
         .map_err(|err| {
             tracing::error!(error = %format!("{err:#}"), "failed to format plugin login ticket expiry");
             ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
-        })
-}
-
-impl TryFrom<JobWithArtifact> for PluginJobResponse {
-    type Error = RepositoryError;
-
-    fn try_from(value: JobWithArtifact) -> Result<Self, Self::Error> {
-        Ok(Self {
-            task_id: value.job.id.to_string(),
-            dev_id: value.job.printer_id,
-            name: value.artifact.filename,
-            status: value.job.status.to_string(),
-            progress_percent: value.job.print.progress_percent,
-            artifact_metadata: artifact_metadata(value.artifact.metadata_json)?,
-            created_at: value.job.created_at,
-            updated_at: value.job.updated_at,
-            pandar_job_id: value.job.id.to_string(),
-        })
-    }
-}
-
-impl TryFrom<JobWithArtifact> for PluginPrintResponse {
-    type Error = RepositoryError;
-
-    fn try_from(value: JobWithArtifact) -> Result<Self, Self::Error> {
-        Ok(Self {
-            task_id: value.job.id.to_string(),
-            command_id: value.job.command_id.to_string(),
-            status: value.job.status.to_string(),
-            message: None,
-            artifact_metadata: artifact_metadata(value.artifact.metadata_json)?,
-            pandar_job_id: value.job.id.to_string(),
-        })
-    }
-}
-
-fn artifact_metadata(
-    metadata_json: Option<String>,
-) -> Result<Option<serde_json::Value>, RepositoryError> {
-    metadata_json
-        .map(|value| serde_json::from_str(&value))
-        .transpose()
-        .map_err(|err| {
-            RepositoryError::Database(
-                anyhow::Error::new(err).context("invalid persisted artifact metadata"),
-            )
         })
 }

@@ -28,6 +28,7 @@
       "materials_refresh_queued": "AMS refresh queued",
       "agent_deleted": "Agent deleted",
       "printer_deleted": "Printer deleted",
+      "printer_updated": "Printer updated",
       "job_created": "Print job queued",
       "tenant_created": "Tenant created",
       "tenant_token_revoked": "Tenant token revoked",

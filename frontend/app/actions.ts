@@ -125,8 +125,7 @@ export async function updatePrinter(formData: FormData) {
   if (!response.ok) {
     redirect(statusUrl(tenantId, await errorCode(response)));
   }
-  const command = (await response.json()) as { id: string };
-  redirect(commandUrl(tenantId, command.id));
+  redirect(statusUrl(tenantId, "printer_updated"));
 }
 
 export async function refreshAllAgents(formData: FormData) {

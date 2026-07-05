@@ -81,7 +81,7 @@ describe("updatePrinter", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        new Response(JSON.stringify({ id: "command-1" }), {
+        new Response(JSON.stringify({ id: "printer-1" }), {
           status: 200,
           headers: { "content-type": "application/json" },
         }),
@@ -89,7 +89,7 @@ describe("updatePrinter", () => {
     );
   });
 
-  it("patches printer connection details and redirects to the command", async () => {
+  it("patches printer connection details and redirects to devices", async () => {
     const formData = new FormData();
     formData.set("tenant_id", "tenant-1");
     formData.set("printer_id", "printer-1");
@@ -98,7 +98,7 @@ describe("updatePrinter", () => {
     formData.set("name", "Office A1 Updated");
 
     await expect(updatePrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/agents?tenant=tenant-1&command=command-1",
+      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_updated",
     );
 
     expect(fetch).toHaveBeenCalledWith(

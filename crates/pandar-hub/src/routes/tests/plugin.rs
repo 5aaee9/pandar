@@ -158,6 +158,40 @@ async fn plugin_login_ticket_exchange_is_unauthenticated_one_use_and_rejects_exp
 }
 
 #[tokio::test]
+async fn plugin_no_auth_session_is_only_available_in_no_auth_mode() {
+    let no_auth_state = state().await.with_no_auth_for_tests(true);
+    let app = router(no_auth_state.clone());
+    let tenant = no_auth_state
+        .tenants()
+        .create("plugin-no-auth", "Plugin No Auth")
+        .await
+        .unwrap();
+
+    let (status, session) = request(
+        app.clone(),
+        Method::POST,
+        "/api/v1/plugin/no-auth-session",
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let token = session["token"].as_str().unwrap();
+    assert!(token.starts_with("pandar_tenant_"));
+    assert_eq!(session["profile"]["tenant_id"], tenant.id.to_string());
+    assert_eq!(session["profile"]["tenant_name"], "Plugin No Auth");
+
+    let (status, body) = request_as(app, Method::GET, "/api/v1/plugin/printers", None, token).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, json!({ "devices": [] }));
+
+    let app = router(state().await);
+    let (status, body) = request(app, Method::POST, "/api/v1/plugin/no-auth-session", None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "no_auth_required" }));
+}
+
+#[tokio::test]
 async fn plugin_routes_only_accept_plugin_studio_tokens() {
     let state = state().await;
     let app = router(state.clone());

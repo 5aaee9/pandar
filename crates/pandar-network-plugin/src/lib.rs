@@ -83,6 +83,22 @@ pub extern "C" fn pandar_plugin_exchange_ticket(
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn pandar_plugin_create_no_auth_session(
+    hub_url_ptr: *const u8,
+    hub_url_len: usize,
+) -> PluginHttpResult {
+    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
+        return invalid_input("invalid_hub_url");
+    };
+    post_json(
+        &format!("{hub_url}/api/v1/plugin/no-auth-session"),
+        None,
+        json!({}),
+        RequestKind::TicketExchange,
+    )
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_get_printers(
     hub_url_ptr: *const u8,
     hub_url_len: usize,

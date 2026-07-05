@@ -5,6 +5,11 @@ use pandar_hub::{
     db::{Database, DatabaseConfig},
 };
 use pandar_network_plugin::installer::{InstallNetworkPluginOptions, install_network_plugin};
+use pandar_studio_dev_hook::decrypt::decrypt_bambu_studio_local_key_log;
+use pandar_studio_dev_hook::installer::{
+    InstallStudioDevHookOptions, UninstallStudioDevHookOptions, install_studio_dev_hook,
+    uninstall_studio_dev_hook,
+};
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -35,6 +40,25 @@ enum Command {
         plugin_file: PathBuf,
         #[arg(long)]
         data_dir: Option<PathBuf>,
+    },
+    #[command(about = "Install the Bambu Studio development log-key hook")]
+    InstallStudioDevHook {
+        #[arg(long)]
+        hook_file: PathBuf,
+        #[arg(long)]
+        studio_dir: Option<PathBuf>,
+    },
+    #[command(about = "Uninstall the Bambu Studio development log-key hook")]
+    UninstallStudioDevHook {
+        #[arg(long)]
+        studio_dir: Option<PathBuf>,
+    },
+    #[command(about = "Decrypt a Bambu Studio log written with the development local-key hook")]
+    DecryptBambuStudioLog {
+        #[arg(long)]
+        log_file: PathBuf,
+        #[arg(long)]
+        output_file: PathBuf,
     },
 }
 
@@ -90,9 +114,46 @@ async fn main() -> anyhow::Result<()> {
                 }))?
             );
         }
+        Command::InstallStudioDevHook {
+            hook_file,
+            studio_dir,
+        } => {
+            let summary = install_studio_dev_hook(InstallStudioDevHookOptions {
+                hook_file,
+                studio_dir,
+            })?;
+            println!("{}", serde_json::to_string(&studio_hook_json(&summary))?);
+        }
+        Command::UninstallStudioDevHook { studio_dir } => {
+            let summary = uninstall_studio_dev_hook(UninstallStudioDevHookOptions { studio_dir })?;
+            println!("{}", serde_json::to_string(&studio_hook_json(&summary))?);
+        }
+        Command::DecryptBambuStudioLog {
+            log_file,
+            output_file,
+        } => {
+            decrypt_bambu_studio_local_key_log(&log_file, &output_file)?;
+            println!(
+                "{}",
+                serde_json::to_string(&serde_json::json!({
+                    "log_file": log_file,
+                    "output_file": output_file,
+                }))?
+            );
+        }
     }
 
     Ok(())
+}
+
+fn studio_hook_json(
+    summary: &pandar_studio_dev_hook::installer::StudioDevHookSummary,
+) -> serde_json::Value {
+    serde_json::json!({
+        "studio_dir": summary.studio_dir,
+        "proxy_path": summary.proxy_path,
+        "original_path": summary.original_path,
+    })
 }
 
 fn summary_json(
@@ -182,5 +243,73 @@ mod tests {
             data_dir,
             Some(PathBuf::from("C:/Users/test/AppData/Roaming/BambuStudio"))
         );
+    }
+
+    #[test]
+    fn parses_install_studio_dev_hook_subcommand() {
+        let cli = Cli::parse_from([
+            "pandar",
+            "install-studio-dev-hook",
+            "--hook-file",
+            "target/debug/pandar_studio_dev_hook.dll",
+            "--studio-dir",
+            "C:/Program Files/Bambu Studio",
+        ]);
+
+        let Command::InstallStudioDevHook {
+            hook_file,
+            studio_dir,
+        } = cli.command
+        else {
+            panic!("expected install-studio-dev-hook subcommand");
+        };
+        assert_eq!(
+            hook_file,
+            PathBuf::from("target/debug/pandar_studio_dev_hook.dll")
+        );
+        assert_eq!(
+            studio_dir,
+            Some(PathBuf::from("C:/Program Files/Bambu Studio"))
+        );
+    }
+
+    #[test]
+    fn parses_uninstall_studio_dev_hook_subcommand() {
+        let cli = Cli::parse_from([
+            "pandar",
+            "uninstall-studio-dev-hook",
+            "--studio-dir",
+            "C:/Program Files/Bambu Studio",
+        ]);
+
+        let Command::UninstallStudioDevHook { studio_dir } = cli.command else {
+            panic!("expected uninstall-studio-dev-hook subcommand");
+        };
+        assert_eq!(
+            studio_dir,
+            Some(PathBuf::from("C:/Program Files/Bambu Studio"))
+        );
+    }
+
+    #[test]
+    fn parses_decrypt_bambu_studio_log_subcommand() {
+        let cli = Cli::parse_from([
+            "pandar",
+            "decrypt-bambu-studio-log",
+            "--log-file",
+            "studio_enc_cn.log.0",
+            "--output-file",
+            "studio.log",
+        ]);
+
+        let Command::DecryptBambuStudioLog {
+            log_file,
+            output_file,
+        } = cli.command
+        else {
+            panic!("expected decrypt-bambu-studio-log subcommand");
+        };
+        assert_eq!(log_file, PathBuf::from("studio_enc_cn.log.0"));
+        assert_eq!(output_file, PathBuf::from("studio.log"));
     }
 }
