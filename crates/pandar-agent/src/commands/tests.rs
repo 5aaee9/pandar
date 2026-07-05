@@ -568,6 +568,8 @@ pub(super) fn test_config() -> AgentConfig {
 fn snapshot(serial: &str, name: &str, model: Option<&str>, state: &str) -> MachineSnapshot {
     MachineSnapshot {
         serial: serial.to_owned(),
+        host: Some("192.0.2.10".to_owned()),
+        access_code: Some("12345678".to_owned()),
         name: name.to_owned(),
         model: model.map(str::to_owned),
         state: state.to_owned(),

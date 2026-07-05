@@ -180,7 +180,7 @@ async fn plugin_routes_only_accept_plugin_studio_tokens() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "printers": [] }));
+    assert_eq!(body, json!({ "devices": [] }));
 
     for denied in [&all, &empty, &mixed] {
         let (status, body) = request_as(
@@ -194,6 +194,61 @@ async fn plugin_routes_only_accept_plugin_studio_tokens() {
         assert_eq!(status, StatusCode::FORBIDDEN);
         assert_eq!(body, json!({ "error": "role_forbidden" }));
     }
+}
+
+#[tokio::test]
+async fn plugin_printer_list_returns_studio_devices_shape() {
+    let state = state().await;
+    let app = router(state.clone());
+    let tenant = state
+        .tenants()
+        .create("plugin-device-list", "Plugin Device List")
+        .await
+        .unwrap();
+    let token = plugin_studio_tenant_token(&state, &tenant.id.to_string(), "devices").await;
+    let agent = state.agents().create(tenant.id, "agent").await.unwrap();
+    let printer = state
+        .printers()
+        .upsert_snapshot(
+            tenant.id,
+            agent.id,
+            crate::repositories::PrinterSnapshotUpsert {
+                serial_number: "studio-printer-1".to_string(),
+                host: Some("192.0.2.10".to_string()),
+                access_code: Some("studio-access-code".to_string()),
+                name: "Studio Printer".to_string(),
+                model: Some("Bambu Lab X2D".to_string()),
+                status: "IDLE".to_string(),
+                observed_at: "2026-06-20T00:00:00Z".to_string(),
+                nozzle_temperatures: Vec::new(),
+                active_nozzle: None,
+                bed_temperature_celsius: None,
+                bed_target_temperature_celsius: None,
+                chamber_temperature_celsius: None,
+                chamber_light_on: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let (status, body) =
+        request_as(app, Method::GET, "/api/v1/plugin/printers", None, &token).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.get("printers").is_none());
+    assert_eq!(body["devices"].as_array().unwrap().len(), 1);
+    assert_eq!(body["devices"][0]["dev_id"], printer.id);
+    assert_eq!(body["devices"][0]["dev_name"], "Studio Printer");
+    assert_eq!(body["devices"][0]["name"], "Studio Printer");
+    assert_eq!(body["devices"][0]["dev_ip"], "192.0.2.10");
+    assert_eq!(body["devices"][0]["dev_access_code"], "studio-access-code");
+    assert_eq!(body["devices"][0]["dev_model_name"], "Bambu Lab X2D");
+    assert_eq!(body["devices"][0]["model"], "Bambu Lab X2D");
+    assert_eq!(body["devices"][0]["dev_online"], true);
+    assert_eq!(body["devices"][0]["online"], true);
+    assert_eq!(body["devices"][0]["task_status"], "IDLE");
+    assert_eq!(body["devices"][0]["state"], "IDLE");
+    assert_eq!(body["devices"][0]["pandar_printer_id"], printer.id);
 }
 
 #[tokio::test]

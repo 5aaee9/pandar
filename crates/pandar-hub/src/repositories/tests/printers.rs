@@ -13,6 +13,8 @@ fn snapshot(
 ) -> PrinterSnapshotUpsert {
     PrinterSnapshotUpsert {
         serial_number: serial_number.to_string(),
+        host: Some("192.0.2.10".to_string()),
+        access_code: Some("test-access-code".to_string()),
         name: name.to_string(),
         model: model.map(str::to_string),
         status: status.to_string(),

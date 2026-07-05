@@ -47,15 +47,21 @@ pub(super) struct PluginProfileResponse {
 
 #[derive(Debug, Serialize)]
 pub(super) struct PluginPrinterListResponse {
-    printers: Vec<PluginPrinterResponse>,
+    devices: Vec<PluginPrinterResponse>,
 }
 
 #[derive(Debug, Serialize)]
 pub(super) struct PluginPrinterResponse {
     dev_id: String,
+    dev_name: String,
     name: String,
+    dev_ip: Option<String>,
+    dev_access_code: Option<String>,
+    dev_model_name: Option<String>,
     model: Option<String>,
+    dev_online: bool,
     online: bool,
+    task_status: String,
     state: String,
     pandar_printer_id: String,
 }
@@ -165,22 +171,36 @@ pub(super) async fn list_printers(
 ) -> Result<Json<PluginPrinterListResponse>, ApiError> {
     let authenticated = auth::authorize_plugin_studio(&state, &headers).await?;
     let tenant_id = authenticated.token.tenant_id;
-    let printers = state
+    let devices = state
         .printers()
         .list_for_tenant(tenant_id)
         .await?
         .into_iter()
-        .map(|printer| PluginPrinterResponse {
-            dev_id: printer.id.clone(),
-            name: printer.name,
-            model: printer.model,
-            online: printer.status == "online",
-            state: printer.status,
-            pandar_printer_id: printer.id,
+        .map(|printer| {
+            let online = studio_online_from_status(&printer.status);
+            PluginPrinterResponse {
+                dev_id: printer.id.clone(),
+                dev_name: printer.name.clone(),
+                name: printer.name,
+                dev_ip: printer.host,
+                dev_access_code: printer.access_code,
+                dev_model_name: printer.model.clone(),
+                model: printer.model,
+                dev_online: online,
+                online,
+                task_status: printer.status.clone(),
+                state: printer.status,
+                pandar_printer_id: printer.id,
+            }
         })
         .collect();
 
-    Ok(Json(PluginPrinterListResponse { printers }))
+    Ok(Json(PluginPrinterListResponse { devices }))
+}
+
+fn studio_online_from_status(status: &str) -> bool {
+    let normalized = status.trim().to_ascii_lowercase();
+    !matches!(normalized.as_str(), "offline" | "unknown")
 }
 
 pub(super) async fn list_jobs(

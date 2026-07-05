@@ -15,6 +15,8 @@ pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> 
 
     MachineSnapshot {
         serial: endpoint.serial.clone(),
+        host: Some(endpoint.host.clone()),
+        access_code: Some(endpoint.access_code.clone()),
         name: endpoint
             .name
             .clone()

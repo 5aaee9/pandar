@@ -781,6 +781,8 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
             agent.id,
             PrinterSnapshotUpsert {
                 serial_number: "SN-001".to_string(),
+                host: Some("192.0.2.10".to_string()),
+                access_code: Some("12345678".to_string()),
                 name: "Garage A1".to_string(),
                 model: Some("A1 Mini".to_string()),
                 status: "idle".to_string(),
@@ -801,6 +803,8 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
             agent.id,
             PrinterSnapshotUpsert {
                 serial_number: "SN-001".to_string(),
+                host: Some("192.0.2.10".to_string()),
+                access_code: Some("12345678".to_string()),
                 name: "Ignored Snapshot Name".to_string(),
                 model: Some("A1 Mini".to_string()),
                 status: "printing".to_string(),

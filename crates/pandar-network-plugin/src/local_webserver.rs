@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::{PluginHttpResult, result, stable_error_body};
 
+mod callback;
 mod routes;
 
 use routes::LocalRoute;
@@ -224,10 +225,7 @@ fn route_local_request(
             local_json_response(200, http_config_body(base_url, &config))
         }
         LocalRoute::PostConfig => update_config(request, config, base_url),
-        LocalRoute::Callback => local_html_response(
-            200,
-            "<!doctype html><html><body><main>Sign-in request received. Return to Studio.</main></body></html>",
-        ),
+        LocalRoute::Callback => local_html_response(200, &callback::body(&request.path)),
         LocalRoute::BadRequest => local_json_response(400, stable_error_body("bad_request")),
         LocalRoute::NotFound => local_json_response(404, stable_error_body("not_found")),
     }

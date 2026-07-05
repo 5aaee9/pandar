@@ -23,6 +23,9 @@ namespace BBL {
 using OnUpdateStatusFn = std::function<void(int, int, std::string)>;
 using WasCancelledFn = std::function<bool()>;
 using OnWaitFn = std::function<bool(int, std::string)>;
+using OnPrinterConnectedFn = std::function<void(std::string)>;
+using OnLocalConnectedFn = std::function<void(int, std::string, std::string)>;
+using OnMessageFn = std::function<void(std::string, std::string)>;
 
 struct PrintParams {
     std::string dev_id;
@@ -303,6 +306,13 @@ struct ProbeResult {
     int print_rc = 0;
     int direct_connect_rc = 0;
     int direct_message_rc = 0;
+    bool direct_connect_callback = false;
+    bool local_connect_callback = false;
+    bool message_callback = false;
+    int selected_machine_messages = 0;
+    int subscribe_messages = 0;
+    int connect_messages = 0;
+    std::string camera_url;
     int ft_abi_version = 0;
     int ft_start_connect_rc = 0;
     int ft_sync_rc = 0;
@@ -349,6 +359,13 @@ void print_json(const ProbeResult& result) {
         << ",\"print_rc\":" << result.print_rc
         << ",\"direct_connect_rc\":" << result.direct_connect_rc
         << ",\"direct_message_rc\":" << result.direct_message_rc
+        << ",\"direct_connect_callback\":" << (result.direct_connect_callback ? "true" : "false")
+        << ",\"local_connect_callback\":" << (result.local_connect_callback ? "true" : "false")
+        << ",\"message_callback\":" << (result.message_callback ? "true" : "false")
+        << ",\"selected_machine_messages\":" << result.selected_machine_messages
+        << ",\"subscribe_messages\":" << result.subscribe_messages
+        << ",\"connect_messages\":" << result.connect_messages
+        << ",\"camera_url\":" << escape_json(result.camera_url)
         << ",\"ft_abi_version\":" << result.ft_abi_version
         << ",\"ft_start_connect_rc\":" << result.ft_start_connect_rc
         << ",\"ft_sync_rc\":" << result.ft_sync_rc
@@ -393,6 +410,7 @@ int main(int argc, char** argv) {
     using create_agent_fn = void* (*)(std::string);
     using destroy_agent_fn = int (*)(void*);
     using string_agent_fn = std::string (*)(void*);
+    using start_fn = int (*)(void*);
     using token_fn = int (*)(void*, std::string, unsigned int*, std::string*);
     using change_user_fn = int (*)(void*, std::string);
     using is_user_login_fn = bool (*)(void*);
@@ -402,10 +420,18 @@ int main(int argc, char** argv) {
     using start_sdcard_fn = int (*)(void*, BBL::PrintParams, BBL::OnUpdateStatusFn, BBL::WasCancelledFn, BBL::OnWaitFn);
     using connect_printer_fn = int (*)(void*, std::string, std::string, std::string, std::string, bool);
     using send_printer_fn = int (*)(void*, std::string, std::string, int, int);
+    using selected_machine_fn = int (*)(void*, std::string);
+    using start_subscribe_fn = int (*)(void*, std::string);
+    using add_subscribe_fn = int (*)(void*, std::vector<std::string>);
+    using set_printer_connected_fn = int (*)(void*, BBL::OnPrinterConnectedFn);
+    using set_local_connect_fn = int (*)(void*, BBL::OnLocalConnectedFn);
+    using set_message_fn = int (*)(void*, BBL::OnMessageFn);
+    using camera_url_fn = int (*)(void*, std::string, std::function<void(std::string)>);
     using logout_fn = int (*)(void*, bool);
 
     auto create_agent = lib.sym<create_agent_fn>("bambu_network_create_agent");
     auto destroy_agent = lib.sym<destroy_agent_fn>("bambu_network_destroy_agent");
+    auto start = lib.sym<start_fn>("bambu_network_start");
     auto get_host = lib.sym<string_agent_fn>("bambu_network_get_bambulab_host");
     auto get_token = lib.sym<token_fn>("bambu_network_get_my_token");
     auto get_profile = lib.sym<token_fn>("bambu_network_get_my_profile");
@@ -419,6 +445,13 @@ int main(int argc, char** argv) {
     auto start_sdcard_print = lib.sym<start_sdcard_fn>("bambu_network_start_send_gcode_to_sdcard");
     auto connect_printer = lib.sym<connect_printer_fn>("bambu_network_connect_printer");
     auto send_printer = lib.sym<send_printer_fn>("bambu_network_send_message_to_printer");
+    auto set_selected_machine = lib.sym<selected_machine_fn>("bambu_network_set_user_selected_machine");
+    auto start_subscribe = lib.sym<start_subscribe_fn>("bambu_network_start_subscribe");
+    auto add_subscribe = lib.sym<add_subscribe_fn>("bambu_network_add_subscribe");
+    auto set_printer_connected = lib.sym<set_printer_connected_fn>("bambu_network_set_on_printer_connected_fn");
+    auto set_local_connect = lib.sym<set_local_connect_fn>("bambu_network_set_on_local_connect_fn");
+    auto set_message = lib.sym<set_message_fn>("bambu_network_set_on_message_fn");
+    auto get_camera_url = lib.sym<camera_url_fn>("bambu_network_get_camera_url");
     auto user_logout = lib.sym<logout_fn>("bambu_network_user_logout");
     auto build_logout_cmd = lib.sym<string_agent_fn>("bambu_network_build_logout_cmd");
 
@@ -439,6 +472,7 @@ int main(int argc, char** argv) {
     void* agent = create_agent("probe-log");
     if (!agent) fail(agent, destroy_agent, "agent creation failed");
 
+    if (start(agent) != 0) fail(agent, destroy_agent, "agent start failed");
     out.host = get_host(agent);
     if (!contains(out.host, "http://127.0.0.1:")) {
         fail(agent, destroy_agent, "frontend host did not use local webserver");
@@ -463,10 +497,13 @@ int main(int argc, char** argv) {
         if (change_user(agent, synthetic_profile) != 0) fail(agent, destroy_agent, "change_user failed in failure mode");
     } else {
         if (token_rc != 0 || http_code != 200) fail(agent, destroy_agent, "ticket exchange failed");
+        if (!contains(http_body, "accessToken") || !contains(http_body, "probe-token")) {
+            fail(agent, destroy_agent, "ticket exchange did not return Studio token fields");
+        }
         std::string profile_body;
         int profile_rc = get_profile(agent, "probe-token", &http_code, &profile_body);
         if (profile_rc != 0 || http_code != 200) fail(agent, destroy_agent, "profile retrieval failed");
-        if (!contains(profile_body, "probe-user") || !contains(profile_body, "Probe User")) {
+        if (!contains(profile_body, "uidStr") || !contains(profile_body, "probe-user") || !contains(profile_body, "Probe User")) {
             fail(agent, destroy_agent, "profile retrieval did not return stored profile content");
         }
         if (change_user(agent, profile_body) != 0) fail(agent, destroy_agent, "change_user failed");
@@ -564,10 +601,48 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "SD-card print did not return stable unsupported callback");
     }
 
+    if (set_printer_connected(agent, [&out](std::string dev_id) {
+        out.direct_connect_callback = dev_id == "printer-1";
+    }) != 0) {
+        fail(agent, destroy_agent, "printer connected callback registration failed");
+    }
+    if (set_local_connect(agent, [&out](int status, std::string dev_id, std::string) {
+        out.local_connect_callback = status == 0 && dev_id == "printer-1";
+    }) != 0) {
+        fail(agent, destroy_agent, "local connect callback registration failed");
+    }
+    int message_count = 0;
+    if (set_message(agent, [&out, &message_count](std::string dev_id, std::string body) {
+        if (dev_id != "printer-1" || !contains(body, R"("command":"push_status")")) return;
+        if (!contains(body, R"("ipcam")") || !contains(body, R"("local":"rtsps")")) return;
+        out.message_callback = true;
+        message_count++;
+    }) != 0) {
+        fail(agent, destroy_agent, "message callback registration failed");
+    }
+
+    int before_messages = message_count;
+    if (set_selected_machine(agent, "printer-1") != 0) {
+        fail(agent, destroy_agent, "selected cloud printer failed");
+    }
+    out.selected_machine_messages = message_count - before_messages;
+    if (out.selected_machine_messages == 0) {
+        fail(agent, destroy_agent, "selected cloud printer did not emit Studio push status");
+    }
+    before_messages = message_count;
+    if (start_subscribe(agent, "printer-1") != 0 || add_subscribe(agent, {"printer-1"}) != 0) {
+        fail(agent, destroy_agent, "cloud printer subscription failed");
+    }
+    out.subscribe_messages = message_count - before_messages;
+    if (out.subscribe_messages == 0) {
+        fail(agent, destroy_agent, "cloud printer subscription did not emit Studio push status");
+    }
+    before_messages = message_count;
     out.direct_connect_rc = connect_printer(agent, "printer-1", "127.0.0.1", "user", "pass", false);
+    out.connect_messages = message_count - before_messages;
     out.direct_message_rc = send_printer(agent, "printer-1", "G28 X", 0, 0);
-    if (out.direct_connect_rc == 0) {
-        fail(agent, destroy_agent, "direct printer connect unexpectedly succeeded");
+    if (out.direct_connect_rc != 0 || !out.direct_connect_callback || !out.local_connect_callback || !out.message_callback || out.connect_messages == 0) {
+        fail(agent, destroy_agent, "direct printer connect did not report Studio connection success");
     }
     if (failure_mode) {
         if (out.direct_message_rc == 0) {
@@ -575,6 +650,15 @@ int main(int argc, char** argv) {
         }
     } else if (out.direct_message_rc != 0) {
         fail(agent, destroy_agent, "direct printer message did not submit operation");
+    }
+
+    if (get_camera_url(agent, "printer-1|devver|\"tutk\"", [&out](std::string url) {
+        out.camera_url = std::move(url);
+    }) != 0) {
+        fail(agent, destroy_agent, "camera URL lookup failed");
+    }
+    if (!contains(out.camera_url, "bambu:///rtsps___bblp:12345678@192.0.2.10/streaming/live/1?proto=rtsps")) {
+        fail(agent, destroy_agent, "camera URL did not use Studio RTSPS camera URL");
     }
 
     out.ft_abi_version = ft_abi_version();

@@ -88,6 +88,8 @@ pub(crate) fn printer_snapshot_event(
         "printer-snapshot",
         agent_event::Event::PrinterSnapshot(PrinterSnapshot {
             serial: snapshot.serial,
+            host: snapshot.host.unwrap_or_default(),
+            access_code: snapshot.access_code.unwrap_or_default(),
             name: snapshot.name,
             state: snapshot.state,
             model: snapshot.model.unwrap_or_default(),

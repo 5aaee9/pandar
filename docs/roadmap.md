@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Fixed the Bambu Studio plugin printer list response so Studio receives top-level `devices` with its native `dev_name` / `dev_online` / `dev_model_name` / `task_status` fields instead of Pandar's tenant API `printers` shape, and allowed trusted local no-auth plugin sign-in to create the Studio plugin token.
 - Fixed Bambu Studio localized plugin login URLs by serving `/<locale>/sign-in` from the local plugin webserver, making embedded plugin assets root-relative, and bridging Continue sign-in to Studio's localhost ticket callback.
 - Updated the Bambu Studio network plugin operation bridge for the latest Agent printer operations: direct semantic operation submissions now accept select-extruder, targeted hotend, bed/chamber temperature, and AMS RFID/load/unload payloads, while G-code translation covers targeted hotend and bed/chamber temperature commands.
 - Split oversized production Rust modules across `pandar-agent`, `pandar-hub`, and `pandar-network-plugin` into focused sibling modules without using `include!`, moved inline tests out of runtime modules, and added a workspace production-module size guard.
@@ -26,6 +27,7 @@
 - Moved the frontend theme bootstrap script out of the client theme provider so Next.js no longer warns about rendering `<script>` tags from React client components.
 - Fixed the frontend sans-serif font token so English pages render with the intended non-serif UI font stack.
 - Added a `pandar install-network-plugin --plugin-file <path>` operator command backed by the `pandar-network-plugin` crate; it installs a specified file as the Bambu Studio network plugin and patches `BambuStudio.conf` following the open-bamboo-networking manual-installation flow.
+- Fixed Bambu Studio networking plugin startup/login compatibility by starting the plugin local sign-in server during `bambu_network_start`, returning Bambu Studio-compatible token/profile ABI payloads, preserving installed plugin loading through Studio startup, and adding ABI probe coverage for the Studio startup/login shape.
 - Split job history, print dispatch, and recovery actions into a dedicated Jobs dashboard page while keeping Devices focused on overview, attention, and printer inventory.
 - Reworked the Devices printer inventory into an unframed section with shadcn Empty states, larger desktop empty-state spacing, a dialog-based machine form for linking printers, and per-printer machine cards.
 - Allowed the frontend dev server to serve Next.js dev resources from `127.0.0.1` so local browser interactions work on both loopback hostnames.
@@ -70,6 +72,7 @@
 - Completed the printer Controls light toggle by matching Bambu Studio's chamber light behavior: Agent sends both `chamber_light` and `chamber_light2` commands and treats the primary light success as the operation result when secondary light reports an unsupported-node failure.
 - Added an Agent-mediated camera tunnel for RTSP-capable Bambu models: Hub exposes tenant/printer-scoped fragmented MP4 streaming through a dedicated reverse camera gRPC stream, Agent pulls the printer RTSPS feed directly through ffmpeg, and the Devices Controls panel opens a native video View camera dialog without exposing LAN credentials to the browser.
 - Replaced the camera dialog's native video controls with a live-stream display and a single custom fullscreen button so the browser does not show a misleading seek/progress bar for the fragmented MP4 stream.
+- Exposed printer LAN IP/access-code metadata to the Bambu Studio plugin device list and status/camera ABI path so Studio receives the correct `X2D` device name plus LAN RTSPS camera URL; verified the installed plugin loads without being overwritten, lists the printer shape, queues a chamber-light operation, and reads a frame from the printer RTSPS camera.
 - Normalized top-level Bambu `vt_tray` / `vir_slot` material reports into external spool snapshots so the Devices Filaments panel can show external materials.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.
 - Created the initial Rust workspace with `pandar-core`, `pandar-hub`, `pandar-agent`, and `pandar-app`.

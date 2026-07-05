@@ -235,6 +235,14 @@ fn local_webserver_serves_assets_rejects_bad_requests_and_switches_target_server
     let callback = get(base_url, "/callback?ticket=secret-ticket");
     assert!(callback.starts_with("HTTP/1.1 200 OK"));
     assert!(!callback.contains("secret-ticket"));
+
+    let studio_callback = get(
+        base_url,
+        "/callback?ticket=secret-ticket&redirect_url=http%3A%2F%2F127.0.0.1%3A55545%2Fcallback",
+    );
+    assert!(studio_callback.starts_with("HTTP/1.1 200 OK"));
+    assert!(studio_callback.contains("user_ticket_login"));
+    assert!(studio_callback.contains("secret-ticket"));
 }
 
 #[test]

@@ -21,14 +21,16 @@ pub(crate) async fn upsert_snapshot(
                 .context("failed to serialize nozzle temperatures")?;
             sqlx::query(
                 "INSERT INTO printers (
-                     id, tenant_id, agent_id, serial_number, name, model, status,
+                     id, tenant_id, agent_id, serial_number, host, access_code, name, model, status,
                      last_seen_at, created_at, nozzle_temperatures_json,
                      active_nozzle, bed_temperature_celsius, bed_target_temperature_celsius,
                      chamber_temperature_celsius, chamber_light_on
                  )
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
+                     host = excluded.host,
+                     access_code = excluded.access_code,
                      model = excluded.model,
                      status = excluded.status,
                      last_seen_at = excluded.last_seen_at,
@@ -43,6 +45,8 @@ pub(crate) async fn upsert_snapshot(
             .bind(tenant_id.to_string())
             .bind(agent_id.to_string())
             .bind(&snapshot.serial_number)
+            .bind(&snapshot.host)
+            .bind(&snapshot.access_code)
             .bind(&snapshot.name)
             .bind(&snapshot.model)
             .bind(&snapshot.status)
@@ -62,14 +66,16 @@ pub(crate) async fn upsert_snapshot(
                 .context("failed to serialize nozzle temperatures")?;
             sqlx::query(
                 "INSERT INTO printers (
-                     id, tenant_id, agent_id, serial_number, name, model, status,
+                     id, tenant_id, agent_id, serial_number, host, access_code, name, model, status,
                      last_seen_at, created_at, nozzle_temperatures_json,
                      active_nozzle, bed_temperature_celsius, bed_target_temperature_celsius,
                      chamber_temperature_celsius, chamber_light_on
                  )
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10, $11, $12, $13, $14)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11, $12, $13, $14, $15, $16)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
+                     host = excluded.host,
+                     access_code = excluded.access_code,
                      model = excluded.model,
                      status = excluded.status,
                      last_seen_at = excluded.last_seen_at,
@@ -84,6 +90,8 @@ pub(crate) async fn upsert_snapshot(
             .bind(tenant_id.to_string())
             .bind(agent_id.to_string())
             .bind(&snapshot.serial_number)
+            .bind(&snapshot.host)
+            .bind(&snapshot.access_code)
             .bind(&snapshot.name)
             .bind(&snapshot.model)
             .bind(&snapshot.status)

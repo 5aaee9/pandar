@@ -931,6 +931,8 @@ fn snapshot_event(tenant_id: TenantId, agent_id: AgentId) -> AgentEvent {
         event_id: "event".to_string(),
         event: Some(agent_event::Event::PrinterSnapshot(PrinterSnapshot {
             serial: "SN-001".to_string(),
+            host: "192.0.2.10".to_string(),
+            access_code: "12345678".to_string(),
             name: "X1 Carbon".to_string(),
             model: "X1C".to_string(),
             state: "idle".to_string(),

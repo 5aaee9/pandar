@@ -11,6 +11,8 @@ fn report_maps_to_snapshot_uses_configured_model() {
         snapshot_from_report(&endpoint(), &report),
         MachineSnapshot {
             serial: "01S00EXAMPLE".to_string(),
+            host: Some("192.0.2.10".to_string()),
+            access_code: Some("12345678".to_string()),
             name: "garage-a1".to_string(),
             model: Some("A1 Mini".to_string()),
             state: "RUNNING".to_string(),

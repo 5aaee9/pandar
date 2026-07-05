@@ -27,6 +27,8 @@ pub async fn handle_snapshot(
             agent_id,
             PrinterSnapshotUpsert {
                 serial_number,
+                host: trim_optional(snapshot.host),
+                access_code: trim_optional(snapshot.access_code),
                 name,
                 model,
                 status,

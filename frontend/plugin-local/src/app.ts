@@ -156,6 +156,11 @@ const loadConfig = async () => {
   }
 
   applyConfig((await response.json()) as Config);
+  const studioCallbackUrl = await requestStudioCallbackUrl();
+  if (studioCallbackUrl) {
+    callbackUrl = studioCallbackUrl;
+    updateContinueLink();
+  }
 };
 
 form.addEventListener("submit", async (event) => {

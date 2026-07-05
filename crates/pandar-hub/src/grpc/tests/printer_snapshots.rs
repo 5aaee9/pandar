@@ -184,6 +184,8 @@ async fn printer_snapshot_event_includes_temperatures() {
 pub(super) fn snapshot(serial: &str, name: &str, model: &str, state: &str) -> PrinterSnapshot {
     PrinterSnapshot {
         serial: serial.to_string(),
+        host: "192.0.2.10".to_string(),
+        access_code: "12345678".to_string(),
         name: name.to_string(),
         model: model.to_string(),
         state: state.to_string(),

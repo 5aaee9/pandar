@@ -43,6 +43,8 @@ message PrinterSnapshot {
   string chamber_temperature_celsius = 8;
   string active_nozzle = 9;
   optional bool chamber_light_on = 10;
+  string host = 11;
+  string access_code = 12;
 }
 
 message NozzleTemperature {

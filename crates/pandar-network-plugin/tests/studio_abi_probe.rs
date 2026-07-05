@@ -199,7 +199,7 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                     2 => write_response(
                         &mut stream,
                         "HTTP/1.1 200 OK",
-                        r#"{"devices":[{"dev_id":"printer-1","name":"Probe Printer"}]}"#,
+                        r#"{"devices":[{"dev_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678"}]}"#,
                     ),
                     3 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"tasks":[]}"#),
                     4 => {

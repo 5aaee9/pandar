@@ -12,6 +12,8 @@ pub struct BambuPrinterEndpoint {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MachineSnapshot {
     pub serial: String,
+    pub host: Option<String>,
+    pub access_code: Option<String>,
     pub name: String,
     pub model: Option<String>,
     pub state: String,

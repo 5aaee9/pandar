@@ -103,6 +103,11 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
   const selectedTenant =
     tenants.find((tenant) => tenant.id === requestedTenant) ??
     (!requestedTenant && tenants.length === 1 ? tenants[0] : null);
+  const localNoAuthMode =
+    auth.source === "none" &&
+    provider.provider === "none" &&
+    !readiness.externalAuthEnabled &&
+    !tenantResult.error;
 
   return (
     <main className="min-h-screen bg-background px-4 py-5 text-slate-950 sm:px-6 lg:px-8">
@@ -130,7 +135,7 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
               { href: "/", label: t("returnDashboard") },
             ]}
           />
-        ) : !readiness.externalAuthEnabled ? (
+        ) : !readiness.externalAuthEnabled && !localNoAuthMode ? (
           <PluginEmptyState
             title={t("externalUnavailableTitle")}
             message={t("externalConfigMessage")}
@@ -140,7 +145,7 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
               { href: "/", label: t("returnDashboard") },
             ]}
           />
-        ) : auth.source === "none" ? (
+        ) : auth.source === "none" && !localNoAuthMode ? (
           <PluginEmptyState
             title={t("authUnavailableTitle")}
             message={t("authMessage")}

@@ -128,6 +128,8 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
         event_id: format!("printer-snapshot-{}", snapshot.serial),
         event: Some(agent_event::Event::PrinterSnapshot(PrinterSnapshot {
             serial: snapshot.serial,
+            host: snapshot.host.unwrap_or_default(),
+            access_code: snapshot.access_code.unwrap_or_default(),
             name: snapshot.name,
             state: snapshot.state,
             model: snapshot.model.unwrap_or_default(),

@@ -17,6 +17,8 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrinterSnapshotUpsert {
     pub serial_number: String,
+    pub host: Option<String>,
+    pub access_code: Option<String>,
     pub name: String,
     pub model: Option<String>,
     pub status: String,
@@ -260,6 +262,8 @@ fn printer_from_model(model: printers::Model) -> RepositoryResult<Printer> {
             tenant_id: TenantId::parse(&model.tenant_id).map_err(anyhow::Error::from)?,
             agent_id: AgentId::parse(&model.agent_id).map_err(anyhow::Error::from)?,
             serial_number: model.serial_number,
+            host: model.host,
+            access_code: model.access_code,
             name: model.name,
             model: model.model,
             status: model.status,

@@ -102,6 +102,11 @@ const loadConfig = async () => {
         throw new Error(`GET /config failed with ${response.status}`);
     }
     applyConfig((await response.json()));
+    const studioCallbackUrl = await requestStudioCallbackUrl();
+    if (studioCallbackUrl) {
+        callbackUrl = studioCallbackUrl;
+        updateContinueLink();
+    }
 };
 form.addEventListener("submit", async (event) => {
     event.preventDefault();

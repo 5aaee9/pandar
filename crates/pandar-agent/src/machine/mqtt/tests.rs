@@ -501,6 +501,8 @@ async fn refresh_subscribes_publishes_and_maps_report() {
         refreshed.snapshot,
         MachineSnapshot {
             serial: "01S00EXAMPLE".to_string(),
+            host: Some("192.0.2.10".to_string()),
+            access_code: Some("12345678".to_string()),
             name: "garage-a1".to_string(),
             model: Some("P2S".to_string()),
             state: "RUNNING".to_string(),

@@ -7,6 +7,7 @@ use crate::machine::BambuPrinterEndpoint;
 
 const BAMBU_RTSP_PORT: u16 = 322;
 const CAMERA_BOUNDARY: &[u8] = b"--frame\r\n";
+const FFMPEG_PATH_VAR: &str = "PANDAR_FFMPEG_PATH";
 
 pub async fn stream_camera_mjpeg(
     endpoint: BambuPrinterEndpoint,
@@ -20,8 +21,8 @@ pub async fn stream_camera_mjpeg(
     }
 
     let camera_url = build_camera_url(&endpoint.host, &endpoint.access_code);
-    let mut process = ffmpeg_mjpeg_command(&camera_url)
-        .spawn()
+    let mut process = spawn_ffmpeg_command(ffmpeg_mjpeg_command(&camera_url))
+        .await
         .context("spawn ffmpeg for Bambu camera stream")?;
     let mut stdout = process
         .stdout
@@ -69,8 +70,8 @@ pub async fn stream_camera_fragmented_mp4(
     }
 
     let camera_url = build_camera_url(&endpoint.host, &endpoint.access_code);
-    let mut process = ffmpeg_fragmented_mp4_command(&camera_url)
-        .spawn()
+    let mut process = spawn_ffmpeg_command(ffmpeg_fragmented_mp4_command(&camera_url))
+        .await
         .context("spawn ffmpeg for Bambu camera stream")?;
     let mut stdout = process
         .stdout
@@ -122,7 +123,7 @@ pub fn build_camera_url(host: &str, access_code: &str) -> String {
 }
 
 fn ffmpeg_mjpeg_command(camera_url: &str) -> Command {
-    let mut command = Command::new("ffmpeg");
+    let mut command = Command::new(ffmpeg_executable());
     command
         .arg("-rtsp_transport")
         .arg("tcp")
@@ -155,7 +156,7 @@ fn ffmpeg_mjpeg_command(camera_url: &str) -> Command {
 }
 
 fn ffmpeg_fragmented_mp4_command(camera_url: &str) -> Command {
-    let mut command = Command::new("ffmpeg");
+    let mut command = Command::new(ffmpeg_executable());
     command
         .arg("-rtsp_transport")
         .arg("tcp")
@@ -197,6 +198,28 @@ fn ffmpeg_fragmented_mp4_command(camera_url: &str) -> Command {
         .stderr(Stdio::null())
         .kill_on_drop(true);
     command
+}
+
+fn ffmpeg_executable() -> String {
+    ffmpeg_executable_from_env(std::env::var(FFMPEG_PATH_VAR).ok())
+}
+
+fn ffmpeg_executable_from_env(value: Option<String>) -> String {
+    value
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "ffmpeg".to_owned())
+}
+
+async fn spawn_ffmpeg_command(mut command: Command) -> anyhow::Result<tokio::process::Child> {
+    let program = command
+        .as_std()
+        .get_program()
+        .to_string_lossy()
+        .into_owned();
+    command
+        .spawn()
+        .with_context(|| format!("spawn ffmpeg executable {program}"))
 }
 
 fn take_jpeg_frame(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
@@ -267,5 +290,32 @@ mod tests {
                 args == ["-movflags", "frag_keyframe+empty_moov+default_base_moof"]
             })
         );
+    }
+
+    #[test]
+    fn ffmpeg_executable_defaults_to_path_lookup() {
+        assert_eq!(ffmpeg_executable_from_env(None), "ffmpeg");
+        assert_eq!(ffmpeg_executable_from_env(Some("  ".to_owned())), "ffmpeg");
+    }
+
+    #[test]
+    fn ffmpeg_executable_accepts_explicit_path() {
+        assert_eq!(
+            ffmpeg_executable_from_env(Some(" C:\\tools\\ffmpeg.exe ".to_owned())),
+            "C:\\tools\\ffmpeg.exe"
+        );
+    }
+
+    #[tokio::test]
+    async fn ffmpeg_spawn_error_preserves_executable_context() {
+        let mut command = Command::new("C:\\definitely-missing-pandar-ffmpeg\\ffmpeg.exe");
+        command.stdout(Stdio::piped()).stderr(Stdio::null());
+
+        let err = spawn_ffmpeg_command(command).await.unwrap_err();
+        let formatted = format!("{err:#}");
+
+        assert!(formatted.contains("spawn ffmpeg executable"));
+        assert!(formatted.contains("definitely-missing-pandar-ffmpeg"));
+        assert!(formatted.contains("os error") || formatted.contains("The system cannot find"));
     }
 }

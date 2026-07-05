@@ -8,6 +8,8 @@ pub struct Model {
     pub tenant_id: String,
     pub agent_id: String,
     pub serial_number: String,
+    pub host: Option<String>,
+    pub access_code: Option<String>,
     pub name: String,
     pub model: Option<String>,
     pub status: String,

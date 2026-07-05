@@ -8,6 +8,9 @@ target/
 /frontend/out/
 /frontend/next-env.d.ts
 /frontend/tsconfig.tsbuildinfo
+/pandar.db
+/pandar.db-shm
+/pandar.db-wal
 .impeccable/
 .local/
 .playwright-mcp/
