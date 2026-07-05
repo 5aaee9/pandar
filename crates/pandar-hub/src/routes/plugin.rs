@@ -12,6 +12,7 @@ use crate::{
     repositories::{AuditActor, AuthenticatedPrincipal, RepositoryError, TenantTokenScope},
     routes::{ApiError, auth, printer_operations::PrinterOperationRequest},
 };
+use pandar_core::PrinterNozzleTemperature;
 
 mod responses;
 pub(crate) use responses::redact_artifact_error;
@@ -67,6 +68,12 @@ pub(super) struct PluginPrinterResponse {
     task_status: String,
     state: String,
     pandar_printer_id: String,
+    nozzle_temperatures: Vec<PrinterNozzleTemperature>,
+    active_nozzle: Option<String>,
+    bed_temperature_celsius: Option<String>,
+    bed_target_temperature_celsius: Option<String>,
+    chamber_temperature_celsius: Option<String>,
+    chamber_light_on: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -242,6 +249,12 @@ pub(super) async fn list_printers(
                 online,
                 task_status: printer.status.clone(),
                 state: printer.status,
+                nozzle_temperatures: printer.nozzle_temperatures,
+                active_nozzle: printer.active_nozzle,
+                bed_temperature_celsius: printer.bed_temperature_celsius,
+                bed_target_temperature_celsius: printer.bed_target_temperature_celsius,
+                chamber_temperature_celsius: printer.chamber_temperature_celsius,
+                chamber_light_on: printer.chamber_light_on,
                 pandar_printer_id: printer.id,
             }
         })

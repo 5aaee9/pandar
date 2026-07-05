@@ -254,12 +254,23 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
                 model: Some("Bambu Lab X2D".to_string()),
                 status: "IDLE".to_string(),
                 observed_at: "2026-06-20T00:00:00Z".to_string(),
-                nozzle_temperatures: Vec::new(),
-                active_nozzle: None,
-                bed_temperature_celsius: None,
-                bed_target_temperature_celsius: None,
-                chamber_temperature_celsius: None,
-                chamber_light_on: None,
+                nozzle_temperatures: vec![
+                    pandar_core::PrinterNozzleTemperature {
+                        label: Some("L".to_string()),
+                        current_celsius: Some("28".to_string()),
+                        target_celsius: Some("220".to_string()),
+                    },
+                    pandar_core::PrinterNozzleTemperature {
+                        label: Some("R".to_string()),
+                        current_celsius: Some("27".to_string()),
+                        target_celsius: Some("215".to_string()),
+                    },
+                ],
+                active_nozzle: Some("L".to_string()),
+                bed_temperature_celsius: Some("60".to_string()),
+                bed_target_temperature_celsius: Some("65".to_string()),
+                chamber_temperature_celsius: Some("32".to_string()),
+                chamber_light_on: Some(true),
             },
         )
         .await
@@ -283,6 +294,27 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
     assert_eq!(body["devices"][0]["task_status"], "IDLE");
     assert_eq!(body["devices"][0]["state"], "IDLE");
     assert_eq!(body["devices"][0]["pandar_printer_id"], printer.id);
+    assert_eq!(
+        body["devices"][0]["nozzle_temperatures"][0]["current_celsius"],
+        "28"
+    );
+    assert_eq!(
+        body["devices"][0]["nozzle_temperatures"][0]["target_celsius"],
+        "220"
+    );
+    assert_eq!(
+        body["devices"][0]["nozzle_temperatures"][1]["current_celsius"],
+        "27"
+    );
+    assert_eq!(
+        body["devices"][0]["nozzle_temperatures"][1]["target_celsius"],
+        "215"
+    );
+    assert_eq!(body["devices"][0]["active_nozzle"], "L");
+    assert_eq!(body["devices"][0]["bed_temperature_celsius"], "60");
+    assert_eq!(body["devices"][0]["bed_target_temperature_celsius"], "65");
+    assert_eq!(body["devices"][0]["chamber_temperature_celsius"], "32");
+    assert_eq!(body["devices"][0]["chamber_light_on"], true);
 }
 
 #[tokio::test]

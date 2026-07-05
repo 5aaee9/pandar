@@ -11,6 +11,8 @@ target/
 /pandar.db
 /pandar.db-shm
 /pandar.db-wal
+/logs/
+/.logs/
 .impeccable/
 .local/
 .playwright-mcp/

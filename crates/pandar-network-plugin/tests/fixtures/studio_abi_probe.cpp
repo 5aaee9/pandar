@@ -1,10 +1,13 @@
 #include <cstdint>
 #include <cstdlib>
+#include <atomic>
+#include <chrono>
 #include <functional>
 #include <iostream>
 #include <map>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #if defined(_WIN32)
@@ -311,6 +314,7 @@ struct ProbeResult {
     bool message_callback = false;
     int selected_machine_messages = 0;
     int subscribe_messages = 0;
+    int heartbeat_messages = 0;
     int connect_messages = 0;
     std::string camera_url;
     int ft_abi_version = 0;
@@ -365,6 +369,7 @@ void print_json(const ProbeResult& result) {
         << ",\"message_callback\":" << (result.message_callback ? "true" : "false")
         << ",\"selected_machine_messages\":" << result.selected_machine_messages
         << ",\"subscribe_messages\":" << result.subscribe_messages
+        << ",\"heartbeat_messages\":" << result.heartbeat_messages
         << ",\"connect_messages\":" << result.connect_messages
         << ",\"camera_url\":" << escape_json(result.camera_url)
         << ",\"ft_abi_version\":" << result.ft_abi_version
@@ -644,35 +649,59 @@ int main(int argc, char** argv) {
     }) != 0) {
         fail(agent, destroy_agent, "local connect callback registration failed");
     }
-    int message_count = 0;
+    std::atomic<int> message_count{0};
     if (set_message(agent, [&out, &message_count](std::string dev_id, std::string body) {
         if (dev_id != "printer-1" || !contains(body, R"("command":"push_status")")) return;
         if (!contains(body, R"("ipcam")") || !contains(body, R"("local":"rtsps")")) return;
+        if (!contains(body, R"("nozzle_temper":28)") ||
+            !contains(body, R"("nozzle_target_temper":220)") ||
+            !contains(body, R"("nozzle_temper2":27)") ||
+            !contains(body, R"("nozzle_target_temper2":215)") ||
+            !contains(body, R"("bed_temper":60)") ||
+            !contains(body, R"("bed_target_temper":65)") ||
+            !contains(body, R"("chamber_temper":32)") ||
+            !contains(body, R"("device")") ||
+            !contains(body, R"("extruder")") ||
+            !contains(body, R"("state":18)") ||
+            !contains(body, R"({"id":1,"info":8,"temp":14417948)") ||
+            !contains(body, R"({"id":0,"info":8,"temp":14090267)") ||
+            !contains(body, R"("lights_report":[{"node":"chamber_light","mode":"on"}])")) {
+            fail(agent, destroy_agent, "Studio push status did not include plugin printer telemetry");
+        }
         out.message_callback = true;
-        message_count++;
+        ++message_count;
     }) != 0) {
         fail(agent, destroy_agent, "message callback registration failed");
     }
 
-    int before_messages = message_count;
+    int before_messages = message_count.load();
     if (set_selected_machine(agent, "printer-1") != 0) {
         fail(agent, destroy_agent, "selected cloud printer failed");
     }
-    out.selected_machine_messages = message_count - before_messages;
+    out.selected_machine_messages = message_count.load() - before_messages;
     if (out.selected_machine_messages == 0) {
         fail(agent, destroy_agent, "selected cloud printer did not emit Studio push status");
     }
-    before_messages = message_count;
+    before_messages = message_count.load();
     if (start_subscribe(agent, "printer-1") != 0 || add_subscribe(agent, {"printer-1"}) != 0) {
         fail(agent, destroy_agent, "cloud printer subscription failed");
     }
-    out.subscribe_messages = message_count - before_messages;
+    out.subscribe_messages = message_count.load() - before_messages;
     if (out.subscribe_messages == 0) {
         fail(agent, destroy_agent, "cloud printer subscription did not emit Studio push status");
     }
-    before_messages = message_count;
+    before_messages = message_count.load();
+    const auto heartbeat_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (message_count.load() == before_messages && std::chrono::steady_clock::now() < heartbeat_deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    out.heartbeat_messages = message_count.load() - before_messages;
+    if (out.heartbeat_messages == 0) {
+        fail(agent, destroy_agent, "cloud printer subscription did not keep Studio push status alive");
+    }
+    before_messages = message_count.load();
     out.direct_connect_rc = connect_printer(agent, "printer-1", "127.0.0.1", "user", "pass", false);
-    out.connect_messages = message_count - before_messages;
+    out.connect_messages = message_count.load() - before_messages;
     out.direct_message_rc = send_printer(agent, "printer-1", "G28 X", 0, 0);
     if (out.direct_connect_rc != 0 || !out.direct_connect_callback || !out.local_connect_callback || !out.message_callback || out.connect_messages == 0) {
         fail(agent, destroy_agent, "direct printer connect did not report Studio connection success");

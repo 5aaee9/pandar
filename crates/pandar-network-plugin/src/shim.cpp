@@ -1,4 +1,5 @@
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
@@ -9,8 +10,10 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -219,11 +222,16 @@ struct Agent {
     std::string hub_url = "http://localhost:8080";
     std::string frontend_url = "http://localhost:3000";
     std::string last_error;
+    mutable std::mutex status_mutex;
     std::map<std::string, std::pair<std::string, std::string>> printer_connections;
+    std::map<std::string, std::string> printer_telemetry;
+    std::set<std::string> subscribed_devices;
     BBL::OnPrinterConnectedFn on_printer_connected;
     BBL::OnLocalConnectedFn on_local_connect;
     BBL::OnMessageFn on_message;
     BBL::OnMessageFn on_local_message;
+    std::thread status_thread;
+    std::atomic<bool> status_thread_stop = false;
     bool connected = false;
     bool hub_configured = false;
     bool frontend_configured = false;
@@ -307,6 +315,113 @@ std::string field_from_json(const std::string& json, const char* key) {
     return out;
 }
 
+std::vector<std::string> objects_from_array(const std::string& json, const char* key);
+
+bool bool_field_from_json(const std::string& json, const char* key) {
+    const std::string needle = std::string("\"") + key + "\"";
+    const auto key_pos = json.find(needle);
+    if (key_pos == std::string::npos) return false;
+    const auto colon = json.find(':', key_pos + needle.size());
+    if (colon == std::string::npos) return false;
+    auto value = json.find_first_not_of(" \t\r\n", colon + 1);
+    return value != std::string::npos && json.compare(value, 4, "true") == 0;
+}
+
+std::string json_number_or_zero(std::string value) {
+    if (value.empty()) return "0";
+    bool seen_digit = false;
+    bool seen_dot = false;
+    std::string out;
+    for (char c : value) {
+        if (c >= '0' && c <= '9') {
+            seen_digit = true;
+            out.push_back(c);
+        } else if (c == '.' && !seen_dot) {
+            seen_dot = true;
+            out.push_back(c);
+        } else if ((c == '-' || c == '+') && out.empty()) {
+            out.push_back(c);
+        }
+    }
+    if (!seen_digit || out == "-" || out == "+") return "0";
+    return out;
+}
+
+std::uint32_t json_temperature_bits(const std::string& value) {
+    try {
+        const auto parsed = std::stod(json_number_or_zero(value));
+        if (parsed <= 0) return 0;
+        if (parsed >= 65535) return 65535;
+        return static_cast<std::uint32_t>(parsed + 0.5);
+    } catch (...) {
+        return 0;
+    }
+}
+
+std::string packed_temperature_json(const std::string& current, const std::string& target) {
+    return std::to_string(json_temperature_bits(current) | (json_temperature_bits(target) << 16));
+}
+
+std::uint32_t studio_extruder_id(const std::string& label, std::size_t index, std::size_t total) {
+    if (total <= 1) return 0;
+    if (label == "L" || label == "l") return 1;
+    if (label == "R" || label == "r") return 0;
+    return index == 0 ? 1 : 0;
+}
+
+std::uint32_t studio_active_extruder_id(const std::vector<std::string>& nozzles, const std::string& active_nozzle) {
+    if (nozzles.size() <= 1) return 0;
+    if (active_nozzle == "L" || active_nozzle == "l") return 1;
+    if (active_nozzle == "R" || active_nozzle == "r") return 0;
+    const auto first_label = nozzles.empty() ? std::string{} : field_from_json(nozzles.front(), "label");
+    return studio_extruder_id(first_label, 0, nozzles.size());
+}
+
+std::string studio_extruder_device_json(const std::vector<std::string>& nozzles, const std::string& active_nozzle) {
+    const auto total = nozzles.empty() ? std::size_t{1} : nozzles.size();
+    const auto active_id = studio_active_extruder_id(nozzles, active_nozzle);
+    std::string info = "[";
+    for (std::size_t i = 0; i < total; ++i) {
+        const auto nozzle = i < nozzles.size() ? nozzles[i] : std::string{};
+        const auto label = field_from_json(nozzle, "label");
+        const auto id = studio_extruder_id(label, i, total);
+        const auto temp = packed_temperature_json(
+            field_from_json(nozzle, "current_celsius"),
+            field_from_json(nozzle, "target_celsius"));
+        if (i != 0) info += ',';
+        info += std::string(R"({"id":)") + std::to_string(id) + R"(,"info":8,"temp":)" + temp +
+            R"(,"spre":65535,"snow":65535,"star":65535})";
+    }
+    info += "]";
+    return std::string(R"({"state":)") + std::to_string(total | (active_id << 4)) + R"(,"info":)" + info + "}";
+}
+
+std::string printer_telemetry_from_json(const std::string& printer) {
+    const auto nozzles = objects_from_array(printer, "nozzle_temperatures");
+    const auto nozzle = nozzles.empty() ? std::string{} : nozzles.front();
+    const auto right_nozzle = nozzles.size() > 1 ? nozzles[1] : std::string{};
+    const auto nozzle_current = json_number_or_zero(field_from_json(nozzle, "current_celsius"));
+    const auto nozzle_target = json_number_or_zero(field_from_json(nozzle, "target_celsius"));
+    const auto right_nozzle_current = json_number_or_zero(field_from_json(right_nozzle, "current_celsius"));
+    const auto right_nozzle_target = json_number_or_zero(field_from_json(right_nozzle, "target_celsius"));
+    const auto bed_current = json_number_or_zero(field_from_json(printer, "bed_temperature_celsius"));
+    const auto bed_target = json_number_or_zero(field_from_json(printer, "bed_target_temperature_celsius"));
+    const auto chamber_current = json_number_or_zero(field_from_json(printer, "chamber_temperature_celsius"));
+    const auto active_nozzle = field_from_json(printer, "active_nozzle");
+    const auto light_mode = bool_field_from_json(printer, "chamber_light_on") ? "on" : "off";
+    return std::string(R"("bed_temper":)") + bed_current +
+        R"(,"bed_target_temper":)" + bed_target +
+        R"(,"nozzle_temper":)" + nozzle_current +
+        R"(,"nozzle_target_temper":)" + nozzle_target +
+        R"(,"nozzle_temper2":)" + right_nozzle_current +
+        R"(,"nozzle_target_temper2":)" + right_nozzle_target +
+        R"(,"chamber_temper":)" + chamber_current +
+        R"(,"lights_report":[{"node":"chamber_light","mode":")" + escape_json(light_mode) + R"(}])" +
+        R"(,"device":{"bed_temp":)" + packed_temperature_json(bed_current, bed_target) +
+        R"(,"ctc":{"state":1,"info":{"temp":)" + packed_temperature_json(chamber_current, {}) +
+        R"(}},"extruder":)" + studio_extruder_device_json(nozzles, active_nozzle) + "}";
+}
+
 std::string studio_dev_id(std::string dev_id) {
     if (const auto separator = dev_id.find('|'); separator != std::string::npos) {
         dev_id.resize(separator);
@@ -371,7 +486,9 @@ std::vector<std::string> objects_from_array(const std::string& json, const char*
 
 void remember_printer_connections(Agent* agent, const std::string& body) {
     if (!agent) return;
+    std::lock_guard<std::mutex> lock(agent->status_mutex);
     agent->printer_connections.clear();
+    agent->printer_telemetry.clear();
     for (const auto& printer : objects_from_array(body, "devices")) {
         const auto dev_id = field_from_json(printer, "dev_id");
         if (dev_id.empty()) continue;
@@ -379,15 +496,26 @@ void remember_printer_connections(Agent* agent, const std::string& body) {
             field_from_json(printer, "dev_ip"),
             field_from_json(printer, "dev_access_code"),
         };
+        agent->printer_telemetry[dev_id] = printer_telemetry_from_json(printer);
     }
 }
 
 std::pair<std::string, std::string> printer_connection_for(const Agent* agent, const std::string& dev_id) {
     if (!agent) return {};
+    std::lock_guard<std::mutex> lock(agent->status_mutex);
     if (const auto it = agent->printer_connections.find(studio_dev_id(dev_id)); it != agent->printer_connections.end()) {
         return it->second;
     }
     return {};
+}
+
+std::string printer_telemetry_for(const Agent* agent, const std::string& dev_id) {
+    if (!agent) return printer_telemetry_from_json({});
+    std::lock_guard<std::mutex> lock(agent->status_mutex);
+    if (const auto it = agent->printer_telemetry.find(studio_dev_id(dev_id)); it != agent->printer_telemetry.end()) {
+        return it->second;
+    }
+    return printer_telemetry_from_json({});
 }
 
 std::uint32_t studio_ip_integer(const std::string& host) {
@@ -420,7 +548,9 @@ std::string printer_push_status_report(const Agent* agent, const std::string& de
     const auto [host, access_code] = printer_connection_for(agent, dev_id);
     const auto rtsp_url = "rtsps://bblp:" + access_code + "@" + host + "/streaming/live/1";
     const auto ip = studio_ip_integer(host);
-    return std::string(R"({"print":{"command":"push_status","msg":0,"gcode_state":"IDLE","mc_percent":0,"mc_remaining_time":0,"bed_temper":0,"bed_target_temper":0,"nozzle_temper":0,"nozzle_target_temper":0,"chamber_temper":0,"wifi_signal":"100%","sdcard":true,"ams":{"ams":[]},"ipcam":{"ipcam_dev":"1","liveview":{"local":"rtsps","remote":"none"},"rtsp_url":)") +
+    return std::string(R"({"print":{"command":"push_status","msg":0,"gcode_state":"IDLE","mc_percent":0,"mc_remaining_time":0,)")
+        + printer_telemetry_for(agent, dev_id) +
+        R"(,"wifi_signal":"100%","sdcard":true,"ams":{"ams":[]},"ipcam":{"ipcam_dev":"1","liveview":{"local":"rtsps","remote":"none"},"rtsp_url":)" +
         escape_json(rtsp_url) + R"(},"net":{"info":[{"ip":)" + std::to_string(ip) + R"(}]}}})";
 }
 
@@ -435,14 +565,49 @@ std::string printer_alive_report(const Agent* agent, const std::string& dev_id) 
 void emit_printer_connected_status(Agent* agent, const std::string& dev_id) {
     if (!agent || dev_id.empty()) return;
     const auto report = printer_push_status_report(agent, dev_id);
-    if (agent->on_message) agent->on_message(dev_id, report);
-    if (agent->on_local_message) agent->on_local_message(dev_id, report);
+    BBL::OnMessageFn on_message;
+    BBL::OnMessageFn on_local_message;
+    {
+        std::lock_guard<std::mutex> lock(agent->status_mutex);
+        on_message = agent->on_message;
+        on_local_message = agent->on_local_message;
+    }
+    if (on_message) on_message(dev_id, report);
+    if (on_local_message) on_local_message(dev_id, report);
 }
 
 void emit_printer_connected_statuses(Agent* agent, const std::vector<std::string>& dev_ids) {
     for (const auto& dev_id : dev_ids) {
         emit_printer_connected_status(agent, dev_id);
     }
+}
+
+std::vector<std::string> status_heartbeat_targets(Agent* agent) {
+    std::set<std::string> targets;
+    {
+        std::lock_guard<std::mutex> lock(agent->status_mutex);
+        targets = agent->subscribed_devices;
+        if (!agent->selected_machine.empty()) targets.insert(agent->selected_machine);
+    }
+    return {targets.begin(), targets.end()};
+}
+
+void start_status_heartbeat(Agent* agent) {
+    if (!agent || agent->status_thread.joinable()) return;
+    agent->status_thread_stop = false;
+    agent->status_thread = std::thread([agent] {
+        while (!agent->status_thread_stop.load()) {
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            if (agent->status_thread_stop.load()) break;
+            emit_printer_connected_statuses(agent, status_heartbeat_targets(agent));
+        }
+    });
+}
+
+void stop_status_heartbeat(Agent* agent) {
+    if (!agent) return;
+    agent->status_thread_stop = true;
+    if (agent->status_thread.joinable()) agent->status_thread.join();
 }
 
 std::string object_from_json(const std::string& json, const char* key) {
@@ -776,7 +941,9 @@ PANDAR_ABI std::string bambu_network_get_bambulab_host(void* agent) {
 
 PANDAR_ABI std::string bambu_network_get_user_selected_machine(void* agent) {
     auto* a = as_agent(agent);
-    return a ? a->selected_machine : std::string{};
+    if (!a) return {};
+    std::lock_guard<std::mutex> lock(a->status_mutex);
+    return a->selected_machine;
 }
 
 PANDAR_ABI std::string bambu_network_get_studio_info_url(void*) {
@@ -802,11 +969,14 @@ PANDAR_ABI void* bambu_network_create_agent(std::string log_dir) {
     agent->frontend_url = std::move(frontend_url);
     agent->hub_configured = hub_configured;
     agent->frontend_configured = frontend_configured;
+    start_status_heartbeat(agent);
     return agent;
 }
 
 PANDAR_ABI int bambu_network_destroy_agent(void* agent) {
-    delete as_agent(agent);
+    auto* a = as_agent(agent);
+    stop_status_heartbeat(a);
+    delete a;
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
@@ -870,6 +1040,7 @@ PANDAR_CALLBACK_SETTER(bambu_network_set_server_callback, OnServerErrFn)
 PANDAR_ABI int bambu_network_set_on_message_fn(void* agent, BBL::OnMessageFn callback) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    std::lock_guard<std::mutex> lock(a->status_mutex);
     a->on_message = std::move(callback);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
@@ -877,6 +1048,7 @@ PANDAR_ABI int bambu_network_set_on_message_fn(void* agent, BBL::OnMessageFn cal
 PANDAR_ABI int bambu_network_set_on_local_message_fn(void* agent, BBL::OnMessageFn callback) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    std::lock_guard<std::mutex> lock(a->status_mutex);
     a->on_local_message = std::move(callback);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
@@ -884,6 +1056,7 @@ PANDAR_ABI int bambu_network_set_on_local_message_fn(void* agent, BBL::OnMessage
 PANDAR_ABI int bambu_network_set_on_printer_connected_fn(void* agent, BBL::OnPrinterConnectedFn callback) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    std::lock_guard<std::mutex> lock(a->status_mutex);
     a->on_printer_connected = std::move(callback);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
@@ -891,6 +1064,7 @@ PANDAR_ABI int bambu_network_set_on_printer_connected_fn(void* agent, BBL::OnPri
 PANDAR_ABI int bambu_network_set_on_local_connect_fn(void* agent, BBL::OnLocalConnectedFn callback) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    std::lock_guard<std::mutex> lock(a->status_mutex);
     a->on_local_connect = std::move(callback);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
@@ -924,12 +1098,24 @@ PANDAR_ABI int bambu_network_stop_subscribe(void*, std::string) {
 PANDAR_ABI int bambu_network_add_subscribe(void* agent, std::vector<std::string> dev_ids) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    {
+        std::lock_guard<std::mutex> lock(a->status_mutex);
+        for (const auto& dev_id : dev_ids) {
+            if (!dev_id.empty()) a->subscribed_devices.insert(studio_dev_id(dev_id));
+        }
+    }
     emit_printer_connected_statuses(a, dev_ids);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
-PANDAR_ABI int bambu_network_del_subscribe(void* agent, std::vector<std::string>) {
-    return as_agent(agent) ? BBL::BAMBU_NETWORK_SUCCESS : BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+PANDAR_ABI int bambu_network_del_subscribe(void* agent, std::vector<std::string> dev_ids) {
+    auto* a = as_agent(agent);
+    if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    std::lock_guard<std::mutex> lock(a->status_mutex);
+    for (const auto& dev_id : dev_ids) {
+        a->subscribed_devices.erase(studio_dev_id(dev_id));
+    }
+    return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
 PANDAR_ABI void bambu_network_enable_multi_machine(void*, bool) {}
@@ -942,9 +1128,17 @@ PANDAR_ABI int bambu_network_connect_printer(void* agent, std::string dev_id, st
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     if (dev_id.empty()) return BBL::BAMBU_NETWORK_ERR_CONNECT_FAILED;
-    a->selected_machine = dev_id;
-    if (a->on_printer_connected) a->on_printer_connected(dev_id);
-    if (a->on_local_connect) a->on_local_connect(0, dev_id, printer_alive_report(a, dev_id));
+    BBL::OnPrinterConnectedFn on_printer_connected;
+    BBL::OnLocalConnectedFn on_local_connect;
+    {
+        std::lock_guard<std::mutex> lock(a->status_mutex);
+        a->selected_machine = dev_id;
+        a->subscribed_devices.insert(studio_dev_id(dev_id));
+        on_printer_connected = a->on_printer_connected;
+        on_local_connect = a->on_local_connect;
+    }
+    if (on_printer_connected) on_printer_connected(dev_id);
+    if (on_local_connect) on_local_connect(0, dev_id, printer_alive_report(a, dev_id));
     emit_printer_connected_status(a, dev_id);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
@@ -1068,7 +1262,11 @@ PANDAR_ABI int bambu_network_get_user_info(void* agent, int* identifier) {
 PANDAR_ABI int bambu_network_set_user_selected_machine(void* agent, std::string dev_id) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
-    a->selected_machine = dev_id;
+    {
+        std::lock_guard<std::mutex> lock(a->status_mutex);
+        a->selected_machine = dev_id;
+        if (!dev_id.empty()) a->subscribed_devices.insert(studio_dev_id(dev_id));
+    }
     emit_printer_connected_status(a, dev_id);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }

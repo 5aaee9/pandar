@@ -17,6 +17,8 @@
 ## Completed
 
 - Added an Agent-authenticated printer connection hydration endpoint and Agent startup restore path so saved LAN printer host/access-code details survive Agent restarts when `PANDAR_PRINTERS` is empty.
+- Kept Bambu Studio's native Device page connected by having the Pandar networking plugin keep emitting Studio-style `push_status` heartbeats for selected/subscribed printers instead of sending only a one-shot connection snapshot.
+- Forwarded cached printer temperature and light telemetry through the Bambu Studio networking plugin `push_status` payload so Studio's native Device page can render current nozzle, bed, chamber, and lamp state.
 - Added a Bambu Studio plugin no-auth session path for trusted local Hub development and persisted the plugin token/profile under the Studio config directory so Studio restarts restore Pandar login state without repeating sign-in.
 - Allowed Edit printer to update Hub-local printer metadata without requiring a live Agent session, while blank LAN IP/access-code fields preserve existing connection details.
 - Fixed the Bambu Studio plugin printer list response so Studio receives top-level `devices` with its native `dev_name` / `dev_online` / `dev_model_name` / `task_status` fields instead of Pandar's tenant API `printers` shape, and allowed trusted local no-auth plugin sign-in to create the Studio plugin token.
