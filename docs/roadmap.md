@@ -830,6 +830,8 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Polished auth recovery UI after Impeccable critique: plugin sign-in failures now keep actions and developer details in separate stable rows, passkey setup previews the browser/device confirmation prompt, auth buttons have explicit spacing, and sign-out shows visible progress or retry controls before returning to the dashboard.
 - Completed the follow-up auth hardening pass from the 34/40 Impeccable critique: plugin failure states now include an explicit action-required status marker, the standalone auth issuer resolves English/Chinese copy from the same locale cookie/headers as the dashboard, auth trusted origins include the issuer base URL by default, sign-out inspects Better Auth client errors before redirecting, and Studio plugin sign-in skips redundant tenant selection when exactly one tenant is available.
 - Added local camera tunneling from Agent to Hub and changed the dashboard camera viewer to use a native video element backed by fragmented MP4 instead of multipart image rendering.
+- Fixed Bambu Studio network plugin no-auth session recovery so a stale persisted plugin token is refreshed before printer listing, preventing Studio from falling back to `No printer` after local Hub token rotation.
+- Fixed dual-nozzle Bambu Studio AMS mapping by preserving 254/255 external-slot semantics and defaulting two AMS units with missing `info` to right/left toolhead bindings when the report exposes dual external slots.
 
 Exit criteria:
 

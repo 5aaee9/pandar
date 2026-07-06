@@ -1,5 +1,7 @@
+mod external;
 mod identifiers;
 
+use external::{has_dual_external_slots, normalize_external_spools};
 use identifiers::*;
 use serde_json::{Map, Value, json};
 
@@ -11,7 +13,7 @@ pub fn normalize_material_patch(report: &Value, observed_at: &str) -> Option<Val
     patch.insert("observed_at".to_owned(), json!(observed_at));
 
     if let Some(units) = ams.get("ams").and_then(Value::as_array) {
-        let normalized_units = normalize_ams_units(units, ams);
+        let normalized_units = normalize_ams_units(units, ams, print);
         if !normalized_units.is_empty() {
             patch.insert("ams_units".to_owned(), Value::Array(normalized_units));
         }
@@ -31,15 +33,11 @@ pub fn normalize_material_patch(report: &Value, observed_at: &str) -> Option<Val
     (patch.len() > 2).then_some(Value::Object(patch))
 }
 
-struct ExternalSpoolsPatch {
-    spools: Vec<Value>,
-    replace: bool,
-}
-
-fn normalize_ams_units(units: &[Value], ams: &Value) -> Vec<Value> {
+fn normalize_ams_units(units: &[Value], ams: &Value, print: &Value) -> Vec<Value> {
     let power_on = ams.get("power_on_flag").and_then(Value::as_bool);
     let tray_exist_bits = parse_tray_exist_bits(ams.get("tray_exist_bits"));
     let skip_zero_poweroff_cleanup = power_on == Some(false) && tray_exist_bits == Some(0);
+    let dual_nozzle = has_dual_nozzle_report(print, ams);
 
     units
         .iter()
@@ -56,7 +54,11 @@ fn normalize_ams_units(units: &[Value], ams: &Value) -> Vec<Value> {
                 "temperature_celsius",
                 unit.get("temperature_celsius").or_else(|| unit.get("temp")),
             );
-            if let Some(toolhead) = unit.get("info").and_then(normalize_toolhead) {
+            if let Some(toolhead) = unit
+                .get("info")
+                .and_then(normalize_toolhead)
+                .or_else(|| default_dual_ams_toolhead(unit, units.len(), dual_nozzle))
+            {
                 normalized.insert("toolhead".to_owned(), Value::String(toolhead));
             }
 
@@ -104,7 +106,7 @@ fn normalize_tray(tray: &Value, unit_id: &str, unit_kind: &str) -> Option<Value>
     Some(Value::Object(normalized))
 }
 
-fn apply_material_fields(normalized: &mut Map<String, Value>, source: &Value) {
+pub(super) fn apply_material_fields(normalized: &mut Map<String, Value>, source: &Value) {
     insert_string_field(normalized, "state", source.get("state"));
     insert_string_field(normalized, "filament_id", source.get("tray_info_idx"));
     insert_string_field(normalized, "setting_id", source.get("setting_id"));
@@ -237,56 +239,26 @@ fn empty_tray_clear(unit_id: &str, slot: u64) -> Value {
     })
 }
 
-fn normalize_external_spools(print: &Value, ams: &Value) -> Option<ExternalSpoolsPatch> {
-    if let Some(vir_slot) = print.get("vir_slot").or_else(|| ams.get("vir_slot")) {
-        return normalize_external_source(vir_slot, true);
-    }
-    print
-        .get("vt_tray")
-        .or_else(|| ams.get("vt_tray"))
-        .and_then(|vt_tray| normalize_external_source(vt_tray, false))
+fn has_dual_nozzle_report(print: &Value, ams: &Value) -> bool {
+    print.get("nozzle_temper2").is_some()
+        || print.get("right_nozzle_temper").is_some()
+        || print
+            .get("nozzles")
+            .and_then(Value::as_array)
+            .is_some_and(|nozzles| nozzles.len() > 1)
+        || has_dual_external_slots(print)
+        || has_dual_external_slots(ams)
 }
 
-fn normalize_external_source(value: &Value, vir_slot: bool) -> Option<ExternalSpoolsPatch> {
-    let (entries, replace_single) = match value {
-        Value::Array(entries) => (entries.iter().collect::<Vec<_>>(), vir_slot),
-        Value::Object(_) => (vec![value], false),
-        _ => return None,
-    };
-    if entries.is_empty() {
-        return Some(ExternalSpoolsPatch {
-            spools: Vec::new(),
-            replace: true,
-        });
+fn default_dual_ams_toolhead(unit: &Value, unit_count: usize, dual_nozzle: bool) -> Option<String> {
+    if !dual_nozzle || unit_count != 2 {
+        return None;
     }
-
-    let multi = entries.len() > 1;
-    let spools = entries
-        .iter()
-        .enumerate()
-        .map(|(index, spool)| normalize_external_spool(spool, index, multi))
-        .collect();
-
-    Some(ExternalSpoolsPatch {
-        spools,
-        replace: replace_single || multi,
-    })
-}
-
-fn normalize_external_spool(spool: &Value, index: usize, multi: bool) -> Value {
-    let mut normalized = Map::new();
-    normalized.insert("external_id".to_owned(), Value::String("254".to_owned()));
-    normalized.insert("exists".to_owned(), Value::Bool(true));
-    normalized.insert(
-        "tray_id".to_owned(),
-        Value::String(if multi {
-            index.to_string()
-        } else {
-            "0".to_owned()
-        }),
-    );
-    apply_material_fields(&mut normalized, spool);
-    Value::Object(normalized)
+    match unit_id(unit)?.as_str() {
+        "0" => Some("R".to_owned()),
+        "1" => Some("L".to_owned()),
+        _ => None,
+    }
 }
 
 fn normalize_active_tray(value: Option<&Value>) -> Option<Value> {
@@ -350,7 +322,7 @@ fn normalize_toolhead(value: &Value) -> Option<String> {
     }
 }
 
-fn normalize_extruder_toolhead(value: &Value) -> Option<String> {
+pub(super) fn normalize_extruder_toolhead(value: &Value) -> Option<String> {
     match parse_i64(value)? {
         0 => Some("R".to_owned()),
         1 => Some("L".to_owned()),

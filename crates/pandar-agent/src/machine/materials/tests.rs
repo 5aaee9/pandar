@@ -69,7 +69,7 @@ fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
         patch["ams_units"][0]["trays"][1]["remaining_estimate"],
         "73"
     );
-    assert_eq!(patch["external_spools"][0]["external_id"], "254");
+    assert_eq!(patch["external_spools"][0]["external_id"], "255");
     assert_eq!(patch["external_spools"][0]["exists"], true);
     assert_eq!(patch["external_spools"][0]["tray_id"], "0");
     assert_eq!(patch["external_spools"][0]["filament_id"], "P123");
@@ -100,6 +100,67 @@ fn humidity_raw_is_normalized_as_percent_and_humidity_as_level() {
 
     assert_eq!(patch["ams_units"][0]["humidity"], 24);
     assert_eq!(patch["ams_units"][0]["humidity_level"], 4);
+}
+
+#[test]
+fn dual_nozzle_report_defaults_two_ams_units_to_right_and_left_toolheads() {
+    let patch = normalize(json!({
+        "print": {
+            "nozzle_temper": 28,
+            "nozzle_temper2": 27,
+            "ams": {
+                "ams": [
+                    {"id": "0", "tray": [{"id": "0"}]},
+                    {"id": "1", "tray": [{"id": "0"}]}
+                ]
+            }
+        }
+    }))
+    .unwrap();
+
+    assert_eq!(patch["ams_units"][0]["toolhead"], "R");
+    assert_eq!(patch["ams_units"][1]["toolhead"], "L");
+}
+
+#[test]
+fn dual_external_slots_default_two_ams_units_to_right_and_left_toolheads() {
+    let patch = normalize(json!({
+        "print": {
+            "ams": {
+                "vir_slot": [
+                    {"id": 254},
+                    {"id": 255}
+                ],
+                "ams": [
+                    {"id": "0", "tray": [{"id": "0"}]},
+                    {"id": "1", "tray": [{"id": "0"}]}
+                ]
+            }
+        }
+    }))
+    .unwrap();
+
+    assert_eq!(patch["ams_units"][0]["toolhead"], "R");
+    assert_eq!(patch["ams_units"][1]["toolhead"], "L");
+}
+
+#[test]
+fn single_nozzle_report_does_not_guess_ams_toolhead_without_info() {
+    let patch = normalize(json!({
+        "print": {
+            "nozzle_temper": 28,
+            "ams": {
+                "ams": [
+                    {"id": "0", "tray": [{"id": "0"}]},
+                    {"id": "1", "tray": [{"id": "0"}]}
+                ]
+            }
+        }
+    }))
+    .unwrap();
+
+    assert!(patch["ams_units"][0].get("toolhead").is_none());
+    assert!(patch["ams_units"][1].get("toolhead").is_none());
 }
 
 #[test]
@@ -286,6 +347,8 @@ fn replace_external_spools_rules_follow_source_shape() {
     .unwrap();
     assert_eq!(multi_array["replace_external_spools"], true);
     assert_eq!(multi_array["external_spools"][1]["tray_id"], "1");
+    assert_eq!(multi_array["external_spools"][0]["external_id"], "255");
+    assert_eq!(multi_array["external_spools"][1]["external_id"], "254");
 }
 
 #[test]
@@ -320,7 +383,7 @@ fn top_level_vt_tray_normalizes_external_spool() {
 }
 
 #[test]
-fn vir_slot_takes_precedence_and_single_255_maps_to_external_254() {
+fn vir_slot_takes_precedence_and_preserves_single_255_external_id() {
     let patch = normalize(json!({
         "print": {"ams": {
             "vt_tray": [{"tray_type": "PLA"}, {"tray_type": "PETG"}],
@@ -331,7 +394,7 @@ fn vir_slot_takes_precedence_and_single_255_maps_to_external_254() {
 
     assert_eq!(patch["replace_external_spools"], true);
     assert_eq!(patch["external_spools"].as_array().unwrap().len(), 1);
-    assert_eq!(patch["external_spools"][0]["external_id"], "254");
+    assert_eq!(patch["external_spools"][0]["external_id"], "255");
     assert_eq!(patch["external_spools"][0]["exists"], true);
     assert_eq!(patch["external_spools"][0]["tray_id"], "0");
     assert_eq!(patch["external_spools"][0]["setting_id"], "GFSL05_07");

@@ -107,10 +107,17 @@ std::string studio_ams_unit_json(
 }
 
 std::string studio_virtual_slot_json(const std::string& spool, std::size_t index) {
-    std::string id = scalar_from_json(spool, "external_id");
-    if (id != "254" && id != "255") {
-        const auto toolhead = scalar_from_json(spool, "toolhead");
-        id = toolhead == "L" || toolhead == "l" ? "254" : index == 0 ? "255" : "254";
+    const auto toolhead = scalar_from_json(spool, "toolhead");
+    std::string id;
+    if (toolhead == "L" || toolhead == "l") {
+        id = "254";
+    } else if (toolhead == "R" || toolhead == "r") {
+        id = "255";
+    } else {
+        id = scalar_from_json(spool, "external_id");
+        if (id != "254" && id != "255") {
+            id = index == 0 ? "255" : "254";
+        }
     }
     std::string out = std::string(R"({"id":)") + escape_json(id);
     if (const auto value = scalar_from_json(spool, "filament_id"); !value.empty()) {

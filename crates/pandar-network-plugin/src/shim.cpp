@@ -262,6 +262,7 @@ void trace_plugin_event(const Agent* agent, const std::string& event, const std:
 std::string body_from_result(PluginHttpResult result);
 void refresh_local_webserver_config(Agent* agent);
 PluginHttpResult rust_get_printers(const Agent* agent);
+PluginHttpResult get_printers_with_token_refresh(Agent* agent);
 
 bool has_hub(const Agent* agent) {
     return agent && !agent->hub_url.empty();
@@ -600,7 +601,7 @@ std::string ensure_selected_machine(Agent* agent) {
     auto selected = first_known_printer_id(agent);
     if (selected.empty() && !agent->token.empty()) {
         refresh_local_webserver_config(agent);
-        auto result = rust_get_printers(agent);
+        auto result = get_printers_with_token_refresh(agent);
         auto body = body_from_result(result);
         if (result.status == 0) {
             remember_printer_connections(agent, body);
@@ -1023,6 +1024,26 @@ void try_no_auth_session(Agent* agent) {
     if (result.status != 0) return;
     apply_login_response_body(agent, body);
     persist_login_state(agent);
+}
+
+bool result_needs_token_refresh(const PluginHttpResult& result) {
+    return result.status != 0 && (result.http_code == 401 || result.http_code == 410);
+}
+
+bool refresh_no_auth_session(Agent* agent) {
+    if (!agent) return false;
+    clear_login_state(agent);
+    try_no_auth_session(agent);
+    return !agent->token.empty();
+}
+
+PluginHttpResult get_printers_with_token_refresh(Agent* agent) {
+    auto result = rust_get_printers(agent);
+    if (result_needs_token_refresh(result)) {
+        body_from_result(result);
+        if (refresh_no_auth_session(agent)) result = rust_get_printers(agent);
+    }
+    return result;
 }
 
 std::string login_envelope(const Agent* agent, bool logout) {
@@ -1618,7 +1639,7 @@ PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http
         if (http_body) *http_body = R"({"error":"invalid_auth_token"})";
         return BBL::BAMBU_NETWORK_ERR_GET_USER_PRINTINFO_FAILED;
     }
-    auto result = rust_get_printers(a);
+    auto result = get_printers_with_token_refresh(a);
     if (http_code) *http_code = result.http_code;
     auto body = body_from_result(result);
     if (result.status == 0) remember_printer_connections(a, body);

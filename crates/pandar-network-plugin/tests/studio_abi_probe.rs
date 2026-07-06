@@ -148,6 +148,7 @@ fn build_plugin() -> PathBuf {
 enum MockMode {
     Success,
     Failure,
+    StaleTokenRefresh,
 }
 
 struct MockHub {
@@ -184,13 +185,17 @@ fn write_response(stream: &mut std::net::TcpStream, status: &str, body: &str) {
 }
 
 fn assert_request(request: &str, method: &str, path: &str, bearer: bool) {
+    assert_request_with_token(request, method, path, bearer.then_some("probe-token"));
+}
+
+fn assert_request_with_token(request: &str, method: &str, path: &str, bearer_token: Option<&str>) {
     assert!(
         request.starts_with(&format!("{method} {path} HTTP/1.1\r\n")),
         "unexpected request line: {request}"
     );
-    if bearer {
+    if let Some(token) = bearer_token {
         assert!(
-            request.contains("authorization: Bearer probe-token"),
+            request.contains(&format!("authorization: Bearer {token}")),
             "missing bearer auth: {request}"
         );
     }
@@ -253,6 +258,66 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"job_id":"job-1"}"#);
                     }
                     7 => {
+                        assert_eq!(
+                            serde_json::from_str::<serde_json::Value>(request_body(&request))
+                                .unwrap(),
+                            serde_json::json!({"action":"home","axes":["x"]})
+                        );
+                        assert!(
+                            !request_body(&request).contains("G28"),
+                            "operation request leaked raw G-code: {request}"
+                        );
+                        write_response(
+                            &mut stream,
+                            "HTTP/1.1 202 Accepted",
+                            r#"{"command_id":"cmd-1","status":"queued"}"#,
+                        );
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+        MockMode::StaleTokenRefresh => {
+            let expected = [
+                ("GET", "/api/v1/plugin/printers", Some("stale-token")),
+                ("POST", "/api/v1/plugin/no-auth-session", None),
+                ("GET", "/api/v1/plugin/printers", Some("probe-token")),
+                ("GET", "/api/v1/plugin/printers", Some("probe-token")),
+                ("GET", "/api/v1/plugin/jobs", Some("probe-token")),
+                ("POST", "/api/v1/plugin/prints", Some("probe-token")),
+                (
+                    "POST",
+                    "/api/v1/plugin/printers/printer-1/operations",
+                    Some("probe-token"),
+                ),
+            ];
+            for (index, (method, path, bearer_token)) in expected.into_iter().enumerate() {
+                let mut stream = accept_with_timeout(&listener);
+                stream.set_read_timeout(Some(MOCK_HUB_TIMEOUT)).unwrap();
+                stream.set_write_timeout(Some(MOCK_HUB_TIMEOUT)).unwrap();
+                let request = read_http_request_with_timeout(&mut stream, Some(MOCK_HUB_TIMEOUT));
+                assert_request_with_token(&request, method, path, bearer_token);
+                match index {
+                    0 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 401 Unauthorized",
+                        r#"{"error":"token_expired"}"#,
+                    ),
+                    1 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
+                    ),
+                    2 | 3 => write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE),
+                    4 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"tasks":[]}"#),
+                    5 => {
+                        let body = request_body(&request);
+                        assert_multipart_print_request(&request);
+                        assert!(body.contains("probe.3mf"), "bad print filename: {body}");
+                        assert_multipart_file_part(&request, "probe.3mf", &artifact);
+                        write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"job_id":"job-1"}"#);
+                    }
+                    6 => {
                         assert_eq!(
                             serde_json::from_str::<serde_json::Value>(request_body(&request))
                                 .unwrap(),
@@ -427,6 +492,19 @@ fn probe_exercises_studio_abi_success_path() {
     assert_json_field(&stdout, "ft_start_job_rc", "0");
     assert_json_field(&stdout, "ft_job_result_ec", "-3");
     assert_json_field(&stdout, "ft_cancel_rc", "0");
+}
+
+#[test]
+fn probe_refreshes_stale_no_auth_session_when_listing_printers() {
+    let Some((stdout, stderr)) = run_probe(MockMode::StaleTokenRefresh, "stale-token-refresh")
+    else {
+        return;
+    };
+
+    assert!(stderr.is_empty(), "probe stderr was not empty: {stderr}");
+    assert_json_field(&stdout, "ok", "true");
+    assert_json_field(&stdout, "printer_rc", "0");
+    assert_json_field(&stdout, "restored_login", "true");
 }
 
 #[test]

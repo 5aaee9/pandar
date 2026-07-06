@@ -2,6 +2,8 @@
 #include <cstdlib>
 #include <atomic>
 #include <chrono>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <map>
@@ -130,6 +132,21 @@ std::string escape_json(const std::string& value) {
 
 bool contains(const std::string& haystack, const std::string& needle) {
     return haystack.find(needle) != std::string::npos;
+}
+
+void write_stale_login_state(const std::string& config_dir) {
+    const char* hub_url = std::getenv("PANDAR_PLUGIN_HUB_URL");
+    if (!hub_url || hub_url[0] == '\0') {
+        std::cerr << "missing hub URL env for stale login state\n";
+        std::exit(2);
+    }
+    std::filesystem::create_directories(config_dir);
+    std::ofstream file(std::filesystem::path(config_dir) / "pandar-plugin-login.json", std::ios::binary | std::ios::trunc);
+    file << "{\"hub_url\":\"" << hub_url << "\",\"token\":\"stale-token\",\"profile\":{\"token\":\"stale-token\",\"user_id\":\"stale-user\",\"user_name\":\"Stale User\",\"tenant_id\":\"tenant-1\",\"tenant_name\":\"Tenant\"}}";
+    if (!file) {
+        std::cerr << "failed writing stale login state\n";
+        std::exit(2);
+    }
 }
 
 struct ParsedUrl {
@@ -401,13 +418,14 @@ void ft_result_cb(void* user, ft_job_result result) {
 
 int main(int argc, char** argv) {
     if (argc < 3) {
-        std::cerr << "usage: studio_abi_probe <plugin-library> <artifact-path> [success|failure]\n";
+        std::cerr << "usage: studio_abi_probe <plugin-library> <artifact-path> [success|failure|stale-token-refresh]\n";
         return 2;
     }
     const std::string mode = argc >= 4 ? argv[3] : "success";
     const bool failure_mode = mode == "failure";
-    if (!failure_mode && mode != "success") {
-        std::cerr << "mode must be success or failure\n";
+    const bool stale_token_mode = mode == "stale-token-refresh";
+    if (!failure_mode && !stale_token_mode && mode != "success") {
+        std::cerr << "mode must be success, failure, or stale-token-refresh\n";
         return 2;
     }
 
@@ -499,6 +517,7 @@ int main(int argc, char** argv) {
         getpid()
 #endif
     ));
+    if (stale_token_mode) write_stale_login_state(config_dir);
     if (set_config_dir(agent, config_dir) != 0) fail(agent, destroy_agent, "set config dir failed");
 
     if (start(agent) != 0) fail(agent, destroy_agent, "agent start failed");
@@ -509,8 +528,12 @@ int main(int argc, char** argv) {
 
     unsigned int http_code = 0;
     std::string http_body;
-    int token_rc = get_token(agent, "probe-ticket", &http_code, &http_body);
-    if (failure_mode) {
+    int token_rc = stale_token_mode ? -1 : get_token(agent, "probe-ticket", &http_code, &http_body);
+    if (stale_token_mode) {
+        if (!is_user_login(agent) || !contains(build_login_cmd(agent), "stale-token")) {
+            fail(agent, destroy_agent, "stale token mode did not restore persisted login");
+        }
+    } else if (failure_mode) {
         if (token_rc == 0 || http_code != 401 || !contains(http_body, "invalid_plugin_ticket")) {
             fail(agent, destroy_agent, "ticket failure did not map to invalid_plugin_ticket");
         }
