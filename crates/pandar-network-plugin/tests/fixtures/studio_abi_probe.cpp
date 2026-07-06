@@ -699,8 +699,12 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "local connect callback registration failed");
     }
     std::atomic<int> message_count{0};
-    if (set_message(agent, [&out, &message_count, agent, destroy_agent](std::string dev_id, std::string body) {
+    if (set_message(agent, [&out, &message_count, agent, destroy_agent, failure_mode](std::string dev_id, std::string body) {
         if (dev_id == "printer-1" && contains(body, R"("command":"get_version")")) {
+            if (failure_mode) {
+                out.version_callback = true;
+                return;
+            }
             if (!contains(body, R"("sequence_id":"20001")") ||
                 !contains(body, R"("module")") ||
                 !contains(body, R"("name":"ota")") ||
@@ -711,6 +715,11 @@ int main(int argc, char** argv) {
             return;
         }
         if (dev_id != "printer-1" || !contains(body, R"("command":"push_status")")) return;
+        if (failure_mode) {
+            out.message_callback = true;
+            ++message_count;
+            return;
+        }
         if (!contains(body, R"("ipcam")") || !contains(body, R"("local":"rtsps")")) return;
         if (!contains(body, R"("nozzle_temper":28)") ||
             !contains(body, R"("nozzle_target_temper":220)") ||
@@ -777,12 +786,18 @@ int main(int argc, char** argv) {
     if (!out.version_callback) {
         fail(agent, destroy_agent, "cloud get_version request did not emit Studio version info");
     }
+    if (!failure_mode && send_cloud(agent, "printer-1", R"({"system":{"command":"ledctrl","led_node":"chamber_light","sequence_id":"20002","led_mode":"off","led_on_time":500,"led_off_time":500,"loop_times":1,"interval_time":1000}})", 0, 0) != 0) {
+        fail(agent, destroy_agent, "cloud printer light control failed");
+    }
+    if (!failure_mode && send_cloud(agent, "printer-1", R"({"print":{"command":"set_nozzle_temp","extruder_index":1,"target_temp":245,"sequence_id":"20003"}})", 0, 0) != 0) {
+        fail(agent, destroy_agent, "cloud printer nozzle temperature control failed");
+    }
     before_messages = message_count.load();
     if (start_subscribe(agent, "app") != 0) {
         fail(agent, destroy_agent, "cloud printer module subscription failed");
     }
     out.subscribe_messages = message_count.load() - before_messages;
-    if (out.subscribe_messages == 0) {
+    if (!failure_mode && out.subscribe_messages == 0) {
         fail(agent, destroy_agent, "module subscription did not emit Studio push status for listed printers");
     }
     before_messages = message_count.load();
@@ -790,7 +805,7 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "selected cloud printer failed");
     }
     out.selected_machine_messages = message_count.load() - before_messages;
-    if (out.selected_machine_messages == 0) {
+    if (!failure_mode && out.selected_machine_messages == 0) {
         fail(agent, destroy_agent, "selected cloud printer did not emit Studio push status");
     }
     before_messages = message_count.load();
@@ -799,7 +814,7 @@ int main(int argc, char** argv) {
     }
     const auto add_subscribe_messages = message_count.load() - before_messages;
     out.subscribe_messages += add_subscribe_messages;
-    if (add_subscribe_messages == 0) {
+    if (!failure_mode && add_subscribe_messages == 0) {
         fail(agent, destroy_agent, "cloud printer subscription did not emit Studio push status");
     }
     before_messages = message_count.load();
@@ -808,14 +823,14 @@ int main(int argc, char** argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
     out.heartbeat_messages = message_count.load() - before_messages;
-    if (out.heartbeat_messages == 0) {
+    if (!failure_mode && out.heartbeat_messages == 0) {
         fail(agent, destroy_agent, "cloud printer subscription did not keep Studio push status alive");
     }
     before_messages = message_count.load();
     out.direct_connect_rc = connect_printer(agent, "printer-1", "127.0.0.1", "user", "pass", false);
     out.connect_messages = message_count.load() - before_messages;
     out.direct_message_rc = send_printer(agent, "printer-1", "G28 X", 0, 0);
-    if (out.direct_connect_rc != 0 || !out.direct_connect_callback || !out.local_connect_callback || !out.message_callback || out.connect_messages == 0) {
+    if (!failure_mode && (out.direct_connect_rc != 0 || !out.direct_connect_callback || !out.local_connect_callback || !out.message_callback || out.connect_messages == 0)) {
         fail(agent, destroy_agent, "direct printer connect did not report Studio connection success");
     }
     if (failure_mode) {

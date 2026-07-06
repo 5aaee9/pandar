@@ -217,6 +217,8 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                 ("GET", "/api/v1/plugin/jobs", true),
                 ("POST", "/api/v1/plugin/prints", true),
                 ("POST", "/api/v1/plugin/printers/printer-1/operations", true),
+                ("POST", "/api/v1/plugin/printers/printer-1/operations", true),
+                ("POST", "/api/v1/plugin/printers/printer-1/operations", true),
             ];
             for (index, (method, path, bearer)) in expected.into_iter().enumerate() {
                 let mut stream = accept_with_timeout(&listener);
@@ -261,6 +263,35 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         assert_eq!(
                             serde_json::from_str::<serde_json::Value>(request_body(&request))
                                 .unwrap(),
+                            serde_json::json!({"action":"set_chamber_light","light_on":false})
+                        );
+                        write_response(
+                            &mut stream,
+                            "HTTP/1.1 202 Accepted",
+                            r#"{"command_id":"cmd-light","status":"queued"}"#,
+                        );
+                    }
+                    8 => {
+                        assert_eq!(
+                            serde_json::from_str::<serde_json::Value>(request_body(&request))
+                                .unwrap(),
+                            serde_json::json!({
+                                "action": "set_hotend_temperature",
+                                "temperature_celsius": 245,
+                                "wait": false,
+                                "extruder_id": 1
+                            })
+                        );
+                        write_response(
+                            &mut stream,
+                            "HTTP/1.1 202 Accepted",
+                            r#"{"command_id":"cmd-hotend","status":"queued"}"#,
+                        );
+                    }
+                    9 => {
+                        assert_eq!(
+                            serde_json::from_str::<serde_json::Value>(request_body(&request))
+                                .unwrap(),
                             serde_json::json!({"action":"home","axes":["x"]})
                         );
                         assert!(
@@ -285,6 +316,16 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                 ("GET", "/api/v1/plugin/printers", Some("probe-token")),
                 ("GET", "/api/v1/plugin/jobs", Some("probe-token")),
                 ("POST", "/api/v1/plugin/prints", Some("probe-token")),
+                (
+                    "POST",
+                    "/api/v1/plugin/printers/printer-1/operations",
+                    Some("probe-token"),
+                ),
+                (
+                    "POST",
+                    "/api/v1/plugin/printers/printer-1/operations",
+                    Some("probe-token"),
+                ),
                 (
                     "POST",
                     "/api/v1/plugin/printers/printer-1/operations",
@@ -321,6 +362,35 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         assert_eq!(
                             serde_json::from_str::<serde_json::Value>(request_body(&request))
                                 .unwrap(),
+                            serde_json::json!({"action":"set_chamber_light","light_on":false})
+                        );
+                        write_response(
+                            &mut stream,
+                            "HTTP/1.1 202 Accepted",
+                            r#"{"command_id":"cmd-light","status":"queued"}"#,
+                        );
+                    }
+                    7 => {
+                        assert_eq!(
+                            serde_json::from_str::<serde_json::Value>(request_body(&request))
+                                .unwrap(),
+                            serde_json::json!({
+                                "action": "set_hotend_temperature",
+                                "temperature_celsius": 245,
+                                "wait": false,
+                                "extruder_id": 1
+                            })
+                        );
+                        write_response(
+                            &mut stream,
+                            "HTTP/1.1 202 Accepted",
+                            r#"{"command_id":"cmd-hotend","status":"queued"}"#,
+                        );
+                    }
+                    8 => {
+                        assert_eq!(
+                            serde_json::from_str::<serde_json::Value>(request_body(&request))
+                                .unwrap(),
                             serde_json::json!({"action":"home","axes":["x"]})
                         );
                         assert!(
@@ -341,6 +411,8 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
             let expected = [
                 ("POST", "/api/v1/plugin/no-auth-session", false),
                 ("POST", "/api/v1/plugin/login-tickets/exchange", false),
+                ("GET", "/api/v1/plugin/printers", true),
+                ("POST", "/api/v1/plugin/no-auth-session", false),
                 ("GET", "/api/v1/plugin/printers", true),
                 ("POST", "/api/v1/plugin/prints", true),
             ];
@@ -367,6 +439,16 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         r#"{"error":"raw-auth-message","token":"secret"}"#,
                     ),
                     3 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
+                    ),
+                    4 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 401 Unauthorized",
+                        r#"{"error":"raw-auth-message","token":"secret"}"#,
+                    ),
+                    5 => write_response(
                         &mut stream,
                         "HTTP/1.1 403 Forbidden",
                         r#"{"error":"raw-forbidden-message","path":"/tmp/secret.3mf"}"#,
