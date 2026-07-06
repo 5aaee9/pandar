@@ -323,8 +323,8 @@ std::string field_from_json(const std::string& json, const char* key) {
     if (key_pos == std::string::npos) return {};
     const auto colon = json.find(':', key_pos + needle.size());
     if (colon == std::string::npos) return {};
-    const auto quote = json.find('"', colon + 1);
-    if (quote == std::string::npos) return {};
+    const auto quote = json.find_first_not_of(" \t\r\n", colon + 1);
+    if (quote == std::string::npos || json[quote] != '"') return {};
     std::string out;
     for (std::size_t i = quote + 1; i < json.size(); ++i) {
         const char c = json[i];

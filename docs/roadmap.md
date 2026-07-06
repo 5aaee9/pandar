@@ -832,6 +832,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Added local camera tunneling from Agent to Hub and changed the dashboard camera viewer to use a native video element backed by fragmented MP4 instead of multipart image rendering.
 - Fixed Bambu Studio network plugin no-auth session recovery so a stale persisted plugin token is refreshed before printer listing, preventing Studio from falling back to `No printer` after local Hub token rotation.
 - Fixed dual-nozzle Bambu Studio AMS mapping by preserving 254/255 external-slot semantics and defaulting two AMS units with missing `info` to right/left toolhead bindings when the report exposes dual external slots.
+- Fixed the Studio network plugin JSON field extractor so numeric fields do not consume the next string key, and expanded the ABI probe fixture to cover dual AMS units with all tray materials.
 
 Exit criteria:
 

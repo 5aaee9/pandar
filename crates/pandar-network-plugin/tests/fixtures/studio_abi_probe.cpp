@@ -732,19 +732,31 @@ int main(int argc, char** argv) {
             !contains(body, R"("state":18)") ||
             !contains(body, R"({"id":1,"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0})") ||
             !contains(body, R"({"id":0,"info":8,"temp":14090267,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0})") ||
-            !contains(body, R"("ams_exist_bits":"1")") ||
-            !contains(body, R"("tray_exist_bits":"1")") ||
-            !contains(body, R"("tray_now":"0")") ||
+            !contains(body, R"("ams_exist_bits":"3")") ||
+            !contains(body, R"("tray_exist_bits":"ff")") ||
+            !contains(body, R"("tray_now":"3")") ||
+            !contains(body, R"("id":"0","info":"1")") ||
+            !contains(body, R"("id":"1","info":"257")") ||
             !contains(body, R"("humidity":"3")") ||
             !contains(body, R"("humidity_raw":"25")") ||
             !contains(body, R"("temp":"28.5")") ||
+            !contains(body, R"("temp":"28.1")") ||
+            !contains(body, R"("tray_info_idx":"GFG50")") ||
+            !contains(body, R"("tray_type":"PETG-CF")") ||
             !contains(body, R"("tray_type":"PLA")") ||
             !contains(body, R"("tray_info_idx":"GFL99")") ||
+            !contains(body, R"("tray_info_idx":"GFA00")") ||
+            !contains(body, R"("tray_info_idx":"GFG00")") ||
+            !contains(body, R"("tray_type":"ABS")") ||
+            !contains(body, R"("tray_info_idx":"GFB00")") ||
+            !contains(body, R"("tray_type":"PLA-CF")") ||
+            !contains(body, R"("tray_info_idx":"GFA50")") ||
             !contains(body, R"("vir_slot":[)") ||
             !contains(body, R"("id":"254")") ||
+            !contains(body, R"("id":"255")") ||
             !contains(body, R"("tray_type":"PETG")") ||
             !contains(body, R"("lights_report":[{"node":"chamber_light","mode":"on"}])")) {
-            fail(agent, destroy_agent, "Studio push status did not include plugin printer telemetry");
+            fail(agent, destroy_agent, "Studio push status did not include plugin printer telemetry: " + body);
         }
         out.message_callback = true;
         ++message_count;
