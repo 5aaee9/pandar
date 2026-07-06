@@ -736,7 +736,7 @@ int main(int argc, char** argv) {
             !contains(body, R"("tray_exist_bits":"ff")") ||
             !contains(body, R"("tray_now":"3")") ||
             !contains(body, R"("id":"0","info":"1")") ||
-            !contains(body, R"("id":"1","info":"257")") ||
+            !contains(body, R"("id":"1","info":"101")") ||
             !contains(body, R"("humidity":"3")") ||
             !contains(body, R"("humidity_raw":"25")") ||
             !contains(body, R"("temp":"28.5")") ||

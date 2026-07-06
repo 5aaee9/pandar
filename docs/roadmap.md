@@ -833,6 +833,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Fixed Bambu Studio network plugin no-auth session recovery so a stale persisted plugin token is refreshed before printer listing, preventing Studio from falling back to `No printer` after local Hub token rotation.
 - Fixed dual-nozzle Bambu Studio AMS mapping by preserving 254/255 external-slot semantics and defaulting two AMS units with missing `info` to right/left toolhead bindings when the report exposes dual external slots.
 - Fixed the Studio network plugin JSON field extractor so numeric fields do not consume the next string key, and expanded the ABI probe fixture to cover dual AMS units with all tray materials.
+- Fixed dual-AMS Bambu Studio binding by emitting AMS `info` as the hex string format Studio parses, so the left toolhead's AMS is not misread as an invalid extruder binding.
 
 Exit criteria:
 

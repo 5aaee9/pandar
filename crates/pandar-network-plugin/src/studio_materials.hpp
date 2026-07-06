@@ -74,7 +74,7 @@ std::string studio_ams_unit_json(
 
     const auto toolhead = scalar_from_json(unit, "toolhead");
     const auto extruder_id = toolhead == "L" || toolhead == "l" ? 1 : 0;
-    const auto info = std::to_string(1 | (extruder_id << 8));
+    const auto info = hex_string(1 | (extruder_id << 8));
     std::string out = std::string(R"({"id":)") + escape_json(unit_id) +
         R"(,"info":)" + escape_json(info);
     if (const auto value = scalar_from_json(unit, "humidity_level"); !value.empty()) {
