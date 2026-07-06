@@ -51,6 +51,8 @@ message NozzleTemperature {
   string label = 1;
   string current_celsius = 2;
   string target_celsius = 3;
+  string diameter_mm = 4;
+  string nozzle_type = 5;
 }
 
 message PrinterMaterialsSnapshot {

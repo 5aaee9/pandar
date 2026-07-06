@@ -106,30 +106,24 @@ pub(super) fn post_multipart_print(
         .file_name(body.filename.clone())
         .mime_str("model/3mf")
         .map_err(|_| PrintSubmissionError::Request)?;
+        let mut form = reqwest::multipart::Form::new()
+            .text("printer_id", body.printer_id)
+            .text("filename", body.filename)
+            .text("content_type", "model/3mf")
+            .text("plate_id", body.plate_id.to_string())
+            .text("use_ams", body.use_ams.to_string())
+            .text("flow_cali", body.flow_cali.to_string())
+            .text("timelapse", body.timelapse.to_string());
+        if let Some(ams_mapping) = body.ams_mapping {
+            form = form.text("ams_mapping", ams_mapping.to_string());
+        }
+        if let Some(ams_mapping2) = body.ams_mapping2 {
+            form = form.text("ams_mapping2", ams_mapping2.to_string());
+        }
         let request = reqwest::Client::new()
             .post(url)
             .bearer_auth(token)
-            .multipart(
-                reqwest::multipart::Form::new()
-                    .text("printer_id", body.printer_id)
-                    .text("filename", body.filename)
-                    .text("content_type", "model/3mf")
-                    .text("plate_id", body.plate_id.to_string())
-                    .text("use_ams", body.use_ams.to_string())
-                    .text("flow_cali", body.flow_cali.to_string())
-                    .text("timelapse", body.timelapse.to_string())
-                    .text(
-                        "ams_mapping",
-                        body.ams_mapping
-                            .map_or_else(|| "null".to_string(), |value| value.to_string()),
-                    )
-                    .text(
-                        "ams_mapping2",
-                        body.ams_mapping2
-                            .map_or_else(|| "null".to_string(), |value| value.to_string()),
-                    )
-                    .part("file", file),
-            );
+            .multipart(form.part("file", file));
         request
             .send()
             .await
@@ -192,6 +186,7 @@ fn is_stable_hub_error(error: &str) -> bool {
             | "unsupported_printer_operation"
             | "invalid_plugin_ticket"
             | "invalid_auth_token"
+            | "invalid_printer_id"
             | "plugin_forbidden"
     )
 }

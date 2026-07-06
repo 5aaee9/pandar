@@ -106,6 +106,13 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
                         {"id": 0, "info": 8, "temp": (220 << 16) | 27},
                         {"id": 1, "info": 8, "temp": (215 << 16) | 22}
                     ]
+                },
+                "nozzle": {
+                    "exist": 3,
+                    "info": [
+                        {"id": 0, "diameter": 0.4, "type": "XS01", "stat": 0},
+                        {"id": 1, "diameter": 0.6, "type": "XS00", "stat": 0}
+                    ]
                 }
             }
         }
@@ -123,10 +130,26 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
         snapshot.nozzle_temperatures[0].target_celsius.as_deref(),
         Some("215")
     );
+    assert_eq!(
+        snapshot.nozzle_temperatures[0].diameter_mm.as_deref(),
+        Some("0.6")
+    );
+    assert_eq!(
+        snapshot.nozzle_temperatures[0].nozzle_type.as_deref(),
+        Some("Stainless steel")
+    );
     assert_eq!(snapshot.nozzle_temperatures[1].label.as_deref(), Some("R"));
     assert_eq!(
         snapshot.nozzle_temperatures[1].current_celsius.as_deref(),
         Some("27")
+    );
+    assert_eq!(
+        snapshot.nozzle_temperatures[1].diameter_mm.as_deref(),
+        Some("0.4")
+    );
+    assert_eq!(
+        snapshot.nozzle_temperatures[1].nozzle_type.as_deref(),
+        Some("Hardened steel")
     );
     assert_eq!(snapshot.active_nozzle.as_deref(), Some("L"));
     assert_eq!(snapshot.bed_temperature_celsius.as_deref(), Some("60"));

@@ -308,8 +308,20 @@ describe("PrinterInventory", () => {
     const dualNozzlePrinter: Printer = {
       ...printerWithMaterials,
       nozzle_temperatures: [
-        { label: "L", current_celsius: "41", target_celsius: "220" },
-        { label: "R", current_celsius: "42", target_celsius: "230" },
+        {
+          label: "L",
+          current_celsius: "41",
+          target_celsius: "220",
+          diameter_mm: "0.4",
+          nozzle_type: "Hardened steel",
+        },
+        {
+          label: "R",
+          current_celsius: "42",
+          target_celsius: "230",
+          diameter_mm: "0.4",
+          nozzle_type: "Hardened steel",
+        },
       ],
       active_nozzle: "R",
       bed_temperature_celsius: "60",
@@ -333,7 +345,9 @@ describe("PrinterInventory", () => {
     expect(switchForm?.querySelector('input[name="extruder_id"]')).toHaveValue("1");
     expect(switchButton).toHaveTextContent("L");
     expect(switchButton).toHaveTextContent("R");
-    expect(within(switchButton).getByText("R")).toHaveClass("text-primary");
+    expect(switchButton).toHaveTextContent("0.4 mm");
+    expect(switchButton).toHaveTextContent("Hardened steel");
+    expect(within(switchButton).getByText("R").parentElement).toHaveClass("text-primary");
   });
 
   it("renders a single nozzle without a duplicate label or target temperature", () => {

@@ -63,8 +63,6 @@ pub fn assert_multipart_print_request(request: &str) {
         "use_ams",
         "flow_cali",
         "timelapse",
-        "ams_mapping",
-        "ams_mapping2",
         "file",
     ] {
         assert!(

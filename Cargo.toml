@@ -35,6 +35,7 @@ futures-util = "0.3.32"
 http-body = "1.0.1"
 http-body-util = "0.1.3"
 jsonwebtoken = { version = "10.4.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
+md-5 = "0.10.6"
 pandar-core = { path = "crates/pandar-core" }
 pandar-studio-dev-hook = { path = "crates/pandar-studio-dev-hook" }
 prost = "0.14"

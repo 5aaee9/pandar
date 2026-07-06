@@ -142,6 +142,23 @@ async fn plugin_print_uses_stable_artifact_validation_errors() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(response, json!({ "error": "printer_not_found" }));
 
+    let (status, response) = multipart_request_as(
+        app.clone(),
+        Method::POST,
+        "/api/v1/plugin/prints",
+        multipart_print_body_with_mappings(
+            Some(&printer_id),
+            Some(("plugin plate.3mf", "model/3mf", b"abc")),
+            1,
+            Some(Value::Null),
+            Some(Value::Null),
+        ),
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert!(response["task_id"].is_string(), "{response}");
+
     for plate_id in [0, -1, 4294967296_i64] {
         let (status, response) = multipart_request_as(
             app.clone(),

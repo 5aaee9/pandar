@@ -342,6 +342,8 @@ struct ProbeResult {
     int ft_start_job_rc = 0;
     int ft_job_result_ec = 0;
     int ft_cancel_rc = 0;
+    int update_stage = -1;
+    int update_code = -1;
     std::string update_body;
     std::string sdcard_update_body;
     bool restored_login = false;
@@ -398,6 +400,8 @@ void print_json(const ProbeResult& result) {
         << ",\"ft_start_job_rc\":" << result.ft_start_job_rc
         << ",\"ft_job_result_ec\":" << result.ft_job_result_ec
         << ",\"ft_cancel_rc\":" << result.ft_cancel_rc
+        << ",\"update_stage\":" << result.update_stage
+        << ",\"update_code\":" << result.update_code
         << ",\"update_body\":" << escape_json(result.update_body)
         << ",\"sdcard_update_body\":" << escape_json(result.sdcard_update_body)
         << ",\"restored_login\":" << (result.restored_login ? "true" : "false")
@@ -602,7 +606,7 @@ int main(int argc, char** argv) {
         std::cerr << "invalid_auth_token\n";
     } else if (out.printer_rc != 0 || http_code != 200) {
         fail(agent, destroy_agent, "printer listing failed");
-    } else if (get_selected_machine(agent) != "printer-1") {
+    } else if (get_selected_machine(agent) != "studio-serial-1") {
         fail(agent, destroy_agent, "printer listing did not seed Studio selected machine");
     }
 
@@ -628,7 +632,7 @@ int main(int argc, char** argv) {
     }
 
     BBL::TaskQueryParams query;
-    query.dev_id = "printer-1";
+    query.dev_id = "studio-serial-1";
     std::string tasks_body;
     if (!failure_mode) {
         out.tasks_rc = get_tasks(agent, query, &tasks_body);
@@ -638,7 +642,7 @@ int main(int argc, char** argv) {
     }
 
     BBL::PrintParams params;
-    params.dev_id = "printer-1";
+    params.dev_id = "studio-serial-1";
     params.task_name = "probe.3mf";
     params.project_name = "wrong-display-name.3mf";
     params.filename = argv[2];
@@ -647,7 +651,9 @@ int main(int argc, char** argv) {
     params.task_flow_cali = false;
     params.task_record_timelapse = false;
 
-    BBL::OnUpdateStatusFn update = [&out](int, int, std::string body) {
+    BBL::OnUpdateStatusFn update = [&out](int stage, int code, std::string body) {
+        out.update_stage = stage;
+        out.update_code = code;
         out.update_body = std::move(body);
     };
     BBL::WasCancelledFn cancelled = [] { return false; };
@@ -666,6 +672,8 @@ int main(int argc, char** argv) {
         );
     } else if (out.print_rc != 0) {
         fail(agent, destroy_agent, "print submission failed");
+    } else if (out.update_stage != 6 || out.update_code != 0 || out.update_body != "3") {
+        fail(agent, destroy_agent, "print success callback did not match Studio stage contract");
     }
 
     BBL::OnUpdateStatusFn sdcard_update = [&out](int, int, std::string body) {
@@ -677,7 +685,7 @@ int main(int argc, char** argv) {
     }
 
     if (set_printer_connected(agent, [&out](std::string dev_id) {
-        out.direct_connect_callback = dev_id == "printer-1";
+        out.direct_connect_callback = dev_id == "studio-serial-1";
     }) != 0) {
         fail(agent, destroy_agent, "printer connected callback registration failed");
     }
@@ -694,13 +702,13 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "certificate update should be a no-op success");
     }
     if (set_local_connect(agent, [&out](int status, std::string dev_id, std::string body) {
-        out.local_connect_callback = status == 0 && dev_id == "printer-1" && contains(body, R"("dev_type":"N6")");
+        out.local_connect_callback = status == 0 && dev_id == "studio-serial-1" && contains(body, R"("dev_type":"N6")");
     }) != 0) {
         fail(agent, destroy_agent, "local connect callback registration failed");
     }
     std::atomic<int> message_count{0};
     if (set_message(agent, [&out, &message_count, agent, destroy_agent, failure_mode](std::string dev_id, std::string body) {
-        if (dev_id == "printer-1" && contains(body, R"("command":"get_version")")) {
+        if (dev_id == "studio-serial-1" && contains(body, R"("command":"get_version")")) {
             if (failure_mode) {
                 out.version_callback = true;
                 return;
@@ -714,7 +722,7 @@ int main(int argc, char** argv) {
             out.version_callback = true;
             return;
         }
-        if (dev_id != "printer-1" || !contains(body, R"("command":"push_status")")) return;
+        if (dev_id != "studio-serial-1" || !contains(body, R"("command":"push_status")")) return;
         if (failure_mode) {
             out.message_callback = true;
             ++message_count;
@@ -725,6 +733,11 @@ int main(int argc, char** argv) {
             !contains(body, R"("nozzle_target_temper":220)") ||
             !contains(body, R"("nozzle_temper2":27)") ||
             !contains(body, R"("nozzle_target_temper2":215)") ||
+            !contains(body, R"("nozzle_type":"XS01")") ||
+            !contains(body, R"("nozzle_diameter":0.4)") ||
+            !contains(body, R"("nozzle":{"exist":3)") ||
+            !contains(body, R"("id":1,"diameter":0.4,"type":"XS01")") ||
+            !contains(body, R"("id":0,"diameter":0.4,"type":"XS01")") ||
             !contains(body, R"("bed_temper":60)") ||
             !contains(body, R"("bed_target_temper":65)") ||
             !contains(body, R"("chamber_temper":32)") ||
@@ -739,7 +752,7 @@ int main(int argc, char** argv) {
             !contains(body, R"("type":1)") ||
             !contains(body, R"("extruder")") ||
             !contains(body, R"("state":18)") ||
-            !contains(body, R"({"id":1,"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0})") ||
+            !contains(body, R"({"id":1,"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":1})") ||
             !contains(body, R"({"id":0,"info":8,"temp":14090267,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0})") ||
             !contains(body, R"("ams_exist_bits":"3")") ||
             !contains(body, R"("tray_exist_bits":"ff")") ||
@@ -774,22 +787,22 @@ int main(int argc, char** argv) {
     }
 
     int before_messages = message_count.load();
-    if (send_cloud(agent, "printer-1", R"({"pushing":{"command":"pushall","sequence_id":"20000","version":1,"push_target":1}})", 0, 0) != 0) {
+    if (send_cloud(agent, "studio-serial-1", R"({"pushing":{"command":"pushall","sequence_id":"20000","version":1,"push_target":1}})", 0, 0) != 0) {
         fail(agent, destroy_agent, "cloud pushall request failed");
     }
     if (message_count.load() == before_messages) {
         fail(agent, destroy_agent, "cloud pushall request did not emit Studio push status");
     }
-    if (send_cloud(agent, "printer-1", R"({"info":{"command":"get_version","sequence_id":"20001"}})", 0, 0) != 0) {
+    if (send_cloud(agent, "studio-serial-1", R"({"info":{"command":"get_version","sequence_id":"20001"}})", 0, 0) != 0) {
         fail(agent, destroy_agent, "cloud get_version request failed");
     }
     if (!out.version_callback) {
         fail(agent, destroy_agent, "cloud get_version request did not emit Studio version info");
     }
-    if (!failure_mode && send_cloud(agent, "printer-1", R"({"system":{"command":"ledctrl","led_node":"chamber_light","sequence_id":"20002","led_mode":"off","led_on_time":500,"led_off_time":500,"loop_times":1,"interval_time":1000}})", 0, 0) != 0) {
+    if (!failure_mode && send_cloud(agent, "studio-serial-1", R"({"system":{"command":"ledctrl","led_node":"chamber_light","sequence_id":"20002","led_mode":"off","led_on_time":500,"led_off_time":500,"loop_times":1,"interval_time":1000}})", 0, 0) != 0) {
         fail(agent, destroy_agent, "cloud printer light control failed");
     }
-    if (!failure_mode && send_cloud(agent, "printer-1", R"({"print":{"command":"set_nozzle_temp","extruder_index":1,"target_temp":245,"sequence_id":"20003"}})", 0, 0) != 0) {
+    if (!failure_mode && send_cloud(agent, "studio-serial-1", R"({"print":{"command":"set_nozzle_temp","extruder_index":1,"target_temp":245,"sequence_id":"20003"}})", 0, 0) != 0) {
         fail(agent, destroy_agent, "cloud printer nozzle temperature control failed");
     }
     before_messages = message_count.load();
@@ -801,7 +814,7 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "module subscription did not emit Studio push status for listed printers");
     }
     before_messages = message_count.load();
-    if (set_selected_machine(agent, "printer-1") != 0) {
+    if (set_selected_machine(agent, "studio-serial-1") != 0) {
         fail(agent, destroy_agent, "selected cloud printer failed");
     }
     out.selected_machine_messages = message_count.load() - before_messages;
@@ -809,7 +822,7 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "selected cloud printer did not emit Studio push status");
     }
     before_messages = message_count.load();
-    if (add_subscribe(agent, {"printer-1"}) != 0) {
+    if (add_subscribe(agent, {"studio-serial-1"}) != 0) {
         fail(agent, destroy_agent, "cloud printer subscription failed");
     }
     const auto add_subscribe_messages = message_count.load() - before_messages;
@@ -827,9 +840,9 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "cloud printer subscription did not keep Studio push status alive");
     }
     before_messages = message_count.load();
-    out.direct_connect_rc = connect_printer(agent, "printer-1", "127.0.0.1", "user", "pass", false);
+    out.direct_connect_rc = connect_printer(agent, "studio-serial-1", "127.0.0.1", "user", "pass", false);
     out.connect_messages = message_count.load() - before_messages;
-    out.direct_message_rc = send_printer(agent, "printer-1", "G28 X", 0, 0);
+    out.direct_message_rc = send_printer(agent, "studio-serial-1", "G28 X", 0, 0);
     if (!failure_mode && (out.direct_connect_rc != 0 || !out.direct_connect_callback || !out.local_connect_callback || !out.message_callback || out.connect_messages == 0)) {
         fail(agent, destroy_agent, "direct printer connect did not report Studio connection success");
     }
@@ -841,7 +854,7 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "direct printer message did not submit operation");
     }
 
-    if (get_camera_url(agent, "printer-1|devver|\"tutk\"", [&out](std::string url) {
+    if (get_camera_url(agent, "studio-serial-1|devver|\"tutk\"", [&out](std::string url) {
         out.camera_url = std::move(url);
     }) != 0) {
         fail(agent, destroy_agent, "camera URL lookup failed");

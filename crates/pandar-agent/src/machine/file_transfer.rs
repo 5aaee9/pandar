@@ -89,6 +89,30 @@ impl FileTransferRequest {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileUploadResult {
+    pub path: String,
+    pub url: String,
+}
+
+impl FileUploadResult {
+    pub fn ftp(path: impl Into<String>) -> Self {
+        let path = path.into();
+        Self {
+            url: format!("ftp://{}", path.trim_start_matches('/')),
+            path,
+        }
+    }
+
+    pub fn brtc_emmc(path: impl Into<String>) -> Self {
+        let path = path.into();
+        Self {
+            url: format!("brtc://emmc/{}", path.trim_start_matches('/')),
+            path,
+        }
+    }
+}
+
 #[async_trait]
 pub trait MachineFileTransfer: Send + Sync {
     async fn list(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<Vec<String>>;
@@ -98,7 +122,7 @@ pub trait MachineFileTransfer: Send + Sync {
         path: &str,
         bytes: &[u8],
         mode: TransferProtectionMode,
-    ) -> anyhow::Result<()>;
+    ) -> anyhow::Result<FileUploadResult>;
     async fn delete(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<()>;
 }
 
@@ -237,8 +261,9 @@ impl MachineFileTransfer for FakeMachineFileTransfer {
         path: &str,
         bytes: &[u8],
         mode: TransferProtectionMode,
-    ) -> anyhow::Result<()> {
-        self.record(mode, FileTransferRequest::upload(path, bytes.len() as u64))
+    ) -> anyhow::Result<FileUploadResult> {
+        self.record(mode, FileTransferRequest::upload(path, bytes.len() as u64))?;
+        Ok(FileUploadResult::ftp(path))
     }
 
     async fn delete(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<()> {

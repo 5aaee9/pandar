@@ -73,6 +73,8 @@ fn studio_command_payloads_use_incrementing_studio_sequence_ids() {
         (
             BambuMqttCommand::ProjectFile(ProjectFileCommand {
                 filename: "job.3mf".to_string(),
+                url: None,
+                md5: None,
                 plate_id: 2,
                 task_id: "task-1".to_string(),
                 subtask_id: "subtask-1".to_string(),
@@ -351,6 +353,8 @@ fn raw_json_payload_is_preserved() {
 fn project_file_payload_reserves_dispatch_identity_and_flags() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
         filename: "job.3mf".to_string(),
+        url: None,
+        md5: None,
         plate_id: 2,
         task_id: "task-1".to_string(),
         subtask_id: "subtask-1".to_string(),
@@ -386,6 +390,8 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
 fn project_file_payload_omits_mapping_keys_when_no_mapping_supplied() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
         filename: "job.3mf".to_string(),
+        url: None,
+        md5: None,
         plate_id: 2,
         task_id: "task-1".to_string(),
         subtask_id: "subtask-1".to_string(),
@@ -406,6 +412,8 @@ fn project_file_payload_omits_mapping_keys_when_no_mapping_supplied() {
 fn project_file_payload_includes_ams_mapping_only_when_supplied() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
         filename: "job.3mf".to_string(),
+        url: None,
+        md5: None,
         plate_id: 2,
         task_id: "task-1".to_string(),
         subtask_id: "subtask-1".to_string(),
@@ -426,6 +434,8 @@ fn project_file_payload_includes_ams_mapping_only_when_supplied() {
 fn project_file_payload_includes_ams_mapping2_only_when_supplied() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
         filename: "job.3mf".to_string(),
+        url: None,
+        md5: None,
         plate_id: 2,
         task_id: "task-1".to_string(),
         subtask_id: "subtask-1".to_string(),
@@ -448,6 +458,8 @@ fn project_file_payload_includes_ams_mapping2_only_when_supplied() {
 fn project_file_payload_includes_both_mapping_keys_when_supplied() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
         filename: "job.3mf".to_string(),
+        url: None,
+        md5: None,
         plate_id: 2,
         task_id: "task-1".to_string(),
         subtask_id: "subtask-1".to_string(),
@@ -470,6 +482,8 @@ fn project_file_payload_includes_both_mapping_keys_when_supplied() {
 fn project_file_payload_rewrites_flat_external_mapping_values() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
         filename: "job.3mf".to_string(),
+        url: None,
+        md5: None,
         plate_id: 2,
         task_id: "task-1".to_string(),
         subtask_id: "subtask-1".to_string(),

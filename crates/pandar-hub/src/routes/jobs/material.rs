@@ -32,6 +32,9 @@ pub fn mapping_json(value: Option<Value>, field: &'static str) -> Result<Option<
     let Some(value) = value else {
         return Ok(None);
     };
+    if value.is_null() {
+        return Ok(None);
+    }
     let valid = match field {
         "ams_mapping" => valid_ams_mapping(&value),
         "ams_mapping2" => valid_ams_mapping2(&value),

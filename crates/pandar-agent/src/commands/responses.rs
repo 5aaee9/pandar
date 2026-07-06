@@ -101,6 +101,8 @@ pub(crate) fn printer_snapshot_event(
                         label: temperature.label.unwrap_or_default(),
                         current_celsius: temperature.current_celsius.unwrap_or_default(),
                         target_celsius: temperature.target_celsius.unwrap_or_default(),
+                        diameter_mm: temperature.diameter_mm.unwrap_or_default(),
+                        nozzle_type: temperature.nozzle_type.unwrap_or_default(),
                     },
                 )
                 .collect(),

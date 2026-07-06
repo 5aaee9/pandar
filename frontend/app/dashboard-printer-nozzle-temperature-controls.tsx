@@ -73,13 +73,14 @@ export function NozzleSwitchControl({ printer }: { printer: Printer }) {
         type="submit"
       >
         <ArrowLeftRightIcon className="size-4 text-yellow-500" />
-        <div className="mt-1 flex items-center justify-center gap-2 text-xs font-semibold">
+        <div className="mt-1 flex items-start justify-center gap-2 text-xs font-semibold">
           {nozzles.map((nozzle) => (
             <span
-              className={nozzle.label === activeNozzle ? 'text-primary' : 'text-muted-foreground'}
+              className={`flex flex-col items-center ${nozzle.label === activeNozzle ? 'text-primary' : 'text-muted-foreground'}`}
               key={nozzle.label}
             >
-              {nozzle.label}
+              <span>{nozzle.label}</span>
+              <NozzleInfo nozzle={nozzle} />
             </span>
           ))}
         </div>
@@ -87,6 +88,14 @@ export function NozzleSwitchControl({ printer }: { printer: Printer }) {
       </button>
     </form>
   )
+}
+
+function NozzleInfo({ nozzle }: { nozzle: ReturnType<typeof presentNozzles>[number] }) {
+  const details = [nozzle.diameter_mm ? `${nozzle.diameter_mm} mm` : null, nozzle.nozzle_type].filter(Boolean)
+  if (details.length === 0) {
+    return null
+  }
+  return <span className="mt-0.5 text-[0.625rem] font-medium leading-tight text-muted-foreground">{details.join(' ')}</span>
 }
 
 function NozzleTemperatureMenu({

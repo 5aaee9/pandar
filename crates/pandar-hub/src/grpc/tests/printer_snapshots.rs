@@ -145,11 +145,15 @@ async fn printer_snapshot_event_includes_temperatures() {
             label: "L".to_owned(),
             current_celsius: "41".to_owned(),
             target_celsius: "220".to_owned(),
+            diameter_mm: "0.4".to_owned(),
+            nozzle_type: "Hardened steel".to_owned(),
         },
         crate::protocol::agent::v1::NozzleTemperature {
             label: "R".to_owned(),
             current_celsius: "42".to_owned(),
             target_celsius: "230".to_owned(),
+            diameter_mm: "0.6".to_owned(),
+            nozzle_type: "Stainless steel".to_owned(),
         },
     ];
     snapshot.bed_temperature_celsius = "60".to_owned();
@@ -170,6 +174,22 @@ async fn printer_snapshot_event_includes_temperatures() {
     assert_eq!(
         printer.nozzle_temperatures[0].target_celsius.as_deref(),
         Some("220")
+    );
+    assert_eq!(
+        printer.nozzle_temperatures[0].diameter_mm.as_deref(),
+        Some("0.4")
+    );
+    assert_eq!(
+        printer.nozzle_temperatures[0].nozzle_type.as_deref(),
+        Some("Hardened steel")
+    );
+    assert_eq!(
+        printer.nozzle_temperatures[1].diameter_mm.as_deref(),
+        Some("0.6")
+    );
+    assert_eq!(
+        printer.nozzle_temperatures[1].nozzle_type.as_deref(),
+        Some("Stainless steel")
     );
     assert_eq!(printer.bed_temperature_celsius.as_deref(), Some("60"));
     assert_eq!(

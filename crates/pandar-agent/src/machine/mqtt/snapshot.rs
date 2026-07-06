@@ -92,6 +92,8 @@ fn nozzle_temperatures_from_report(print: &Value) -> Vec<MachineNozzleTemperatur
                 .or_else(|| print.get("target_nozzle_temper"))
                 .or_else(|| print.get("nozzle_target_temperature")),
         ),
+        diameter_mm: None,
+        nozzle_type: None,
     };
     let right = MachineNozzleTemperature {
         label: Some("R".to_owned()),
@@ -107,6 +109,8 @@ fn nozzle_temperatures_from_report(print: &Value) -> Vec<MachineNozzleTemperatur
                 .or_else(|| print.get("right_nozzle_target_temper"))
                 .or_else(|| print.get("target_nozzle_temper2")),
         ),
+        diameter_mm: None,
+        nozzle_type: None,
     };
 
     if right.current_celsius.is_some() || right.target_celsius.is_some() {
@@ -149,6 +153,8 @@ fn nozzle_temperatures_from_v2_report(print: &Value) -> Option<Vec<MachineNozzle
                 label: nozzle_label(total, id),
                 current_celsius,
                 target_celsius,
+                diameter_mm: nozzle_diameter_for_id(print, id),
+                nozzle_type: nozzle_type_for_id(print, id),
             },
         ));
     }
@@ -160,6 +166,42 @@ fn nozzle_temperatures_from_v2_report(print: &Value) -> Option<Vec<MachineNozzle
             .map(|(_, temperature)| temperature)
             .collect(),
     )
+}
+
+fn nozzle_diameter_for_id(print: &Value, id: u64) -> Option<String> {
+    let nozzle = nozzle_info_for_id(print, id)?;
+    match nozzle.get("diameter")? {
+        Value::Number(number) => number.as_f64().map(|value| {
+            let text = value.to_string();
+            text.strip_suffix(".0").unwrap_or(&text).to_owned()
+        }),
+        Value::String(value) => {
+            let trimmed = value.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_owned())
+        }
+        _ => None,
+    }
+}
+
+fn nozzle_type_for_id(print: &Value, id: u64) -> Option<String> {
+    let raw = nozzle_info_for_id(print, id)?.get("type")?.as_str()?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    Some(match raw {
+        "hardened_steel" | "XS01" | "XH01" | "XU01" => "Hardened steel".to_owned(),
+        "stainless_steel" | "XS00" | "XH00" | "XU00" => "Stainless steel".to_owned(),
+        "tungsten_carbide" | "XS05" | "XH05" | "XU05" => "Tungsten carbide".to_owned(),
+        value => value.to_owned(),
+    })
+}
+
+fn nozzle_info_for_id(print: &Value, id: u64) -> Option<&Value> {
+    print
+        .pointer("/device/nozzle/info")?
+        .as_array()?
+        .iter()
+        .find(|item| item.get("id").and_then(Value::as_u64) == Some(id))
 }
 
 fn nozzle_label(total: u64, id: u64) -> Option<String> {

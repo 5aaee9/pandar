@@ -11,8 +11,8 @@ use crate::{
         MaterialRefreshResult, PrinterOperation, PrinterOperationDispatchResult,
         PrinterRefreshResult,
         diagnostics::{redact_access_code, redact_known_access_codes},
-        ftps::FtpsMachineFileTransfer,
         mqtt::{RumqttcBambuMqttTransport, forward_print_reports, refresh_printer},
+        transfer::BambuMachineFileTransfer,
     },
     protocol::agent::v1::{AgentEvent, PrintProjectFile},
 };
@@ -206,7 +206,7 @@ impl BambuMachineGateway for RuntimeBambuMachineGateway {
     ) -> anyhow::Result<MachineSnapshot> {
         let command_transport = RumqttcBambuMqttTransport::connect(&endpoint);
         let report_transport = RumqttcBambuMqttTransport::connect_for_reports(&endpoint);
-        let transfer = FtpsMachineFileTransfer::new(endpoint.clone());
+        let transfer = BambuMachineFileTransfer::new(endpoint.clone());
         let mut inner = self.inner.lock().await;
         let snapshot = refresh_printer(&command_transport, &endpoint, self.report_timeout)
             .await

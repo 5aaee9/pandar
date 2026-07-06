@@ -40,6 +40,8 @@ pub async fn handle_snapshot(
                         label: trim_optional(temperature.label),
                         current_celsius: trim_optional(temperature.current_celsius),
                         target_celsius: trim_optional(temperature.target_celsius),
+                        diameter_mm: trim_optional(temperature.diameter_mm),
+                        nozzle_type: trim_optional(temperature.nozzle_type),
                     })
                     .collect(),
                 active_nozzle: trim_optional(snapshot.active_nozzle),

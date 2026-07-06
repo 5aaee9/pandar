@@ -7,7 +7,7 @@ use anyhow::anyhow;
 
 use super::*;
 use crate::machine::{
-    file_transfer::{FileTransferRequest, TransferProtectionMode},
+    file_transfer::{FileTransferRequest, FileUploadResult, TransferProtectionMode},
     mqtt::FakeMqttTransport,
 };
 
@@ -267,7 +267,7 @@ impl MachineFileTransfer for DiagnosticFakeTransfer {
         path: &str,
         bytes: &[u8],
         mode: TransferProtectionMode,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<FileUploadResult> {
         let mut state = self.state.lock().unwrap();
         state
             .recorded
@@ -275,7 +275,7 @@ impl MachineFileTransfer for DiagnosticFakeTransfer {
         if let Some(err) = state.upload_error.take() {
             Err(err)
         } else {
-            Ok(())
+            Ok(FileUploadResult::ftp(path))
         }
     }
 

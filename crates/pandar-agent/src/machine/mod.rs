@@ -1,3 +1,4 @@
+pub mod brtc;
 pub mod camera;
 pub mod compatibility;
 pub mod diagnostics;
@@ -8,7 +9,9 @@ pub mod materials;
 pub mod mqtt;
 mod noop;
 mod operations;
+mod print;
 pub mod runtime;
+mod transfer;
 mod types;
 
 use std::time::Duration;
@@ -17,20 +20,17 @@ use crate::{
     AgentConfig,
     protocol::agent::v1::{AgentEvent, PrintProjectFile},
 };
-use anyhow::{Context, bail};
+use anyhow::bail;
 use async_trait::async_trait;
-use compatibility::flow_calibration_supported;
 use diagnostics::PrinterDiagnosticResult;
 use discovery::{DiscoveredPrinter, PrinterDiscoveryResult};
-use file_transfer::{MachineFileTransfer, TransferModeCache, run_with_transfer_mode};
-use ftps::FtpsMachineFileTransfer;
-use mqtt::{
-    BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, ProjectFileCommand,
-    PublishedMqttCommand, refresh_printer, refresh_printer_materials,
-};
+use file_transfer::{MachineFileTransfer, TransferModeCache};
+use mqtt::{BambuMqttTransport, refresh_printer, refresh_printer_materials};
 pub use noop::NoopMachineGateway;
 use operations::dispatch_printer_operation;
 pub use operations::{PrinterAxis, PrinterOperation};
+use print::dispatch_print_project_file;
+use transfer::BambuMachineFileTransfer;
 pub use types::{
     BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot, MaterialRefreshResult,
     PrinterOperationDispatchResult, PrinterRefreshResult,
@@ -89,7 +89,7 @@ pub trait BambuMachineGateway: Send + Sync {
 }
 
 #[derive(Debug)]
-pub struct ConfiguredBambuMachineGateway<T, F = FtpsMachineFileTransfer> {
+pub struct ConfiguredBambuMachineGateway<T, F = BambuMachineFileTransfer> {
     printers: Vec<(BambuPrinterEndpoint, T, F)>,
     report_timeout: Duration,
     transfer_cache: TransferModeCache,
@@ -101,7 +101,7 @@ impl<T> ConfiguredBambuMachineGateway<T> {
             printers: printers
                 .into_iter()
                 .map(|(endpoint, mqtt)| {
-                    let transfer = FtpsMachineFileTransfer::new(endpoint.clone());
+                    let transfer = BambuMachineFileTransfer::new(endpoint.clone());
                     (endpoint, mqtt, transfer)
                 })
                 .collect(),
@@ -292,7 +292,7 @@ impl MachineFileTransfer for UnavailableMachineFileTransfer {
         _path: &str,
         _bytes: &[u8],
         _mode: file_transfer::TransferProtectionMode,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<file_transfer::FileUploadResult> {
         bail!("Bambu FTPS runtime is not implemented in this phase")
     }
 
@@ -303,58 +303,6 @@ impl MachineFileTransfer for UnavailableMachineFileTransfer {
     ) -> anyhow::Result<()> {
         bail!("Bambu FTPS runtime is not implemented in this phase")
     }
-}
-
-async fn dispatch_print_project_file<F, T>(
-    endpoint: &BambuPrinterEndpoint,
-    transfer: &F,
-    mqtt: &T,
-    cache: &TransferModeCache,
-    command: &PrintProjectFile,
-    artifact: &[u8],
-) -> anyhow::Result<()>
-where
-    F: MachineFileTransfer + Send + Sync,
-    T: BambuMqttTransport + Send + Sync,
-{
-    if command.flow_cali && !flow_calibration_supported(endpoint.model.as_deref()) {
-        bail!(
-            "flow calibration is not supported for model {}",
-            endpoint.model.as_deref().unwrap_or("unknown")
-        );
-    }
-
-    let remote_path = command.filename.clone();
-    run_with_transfer_mode(endpoint, cache, false, |mode| {
-        let remote_path = remote_path.clone();
-        async move { transfer.upload(&remote_path, artifact, mode).await }
-    })
-    .await
-    .with_context(|| format!("upload print artifact to {}", endpoint.serial))?;
-
-    let topics = BambuMqttTopics::for_serial(&endpoint.serial);
-    mqtt.publish(PublishedMqttCommand {
-        topic: topics.request,
-        payload: BambuMqttCommand::ProjectFile(ProjectFileCommand {
-            filename: command.filename.clone(),
-            plate_id: command.plate_id,
-            task_id: command.job_id.clone(),
-            subtask_id: command.artifact_id.clone(),
-            use_ams: command.use_ams,
-            flow_cali: command.flow_cali,
-            timelapse: command.timelapse,
-            ams_mapping_json: non_empty_string(&command.ams_mapping_json),
-            ams_mapping2_json: non_empty_string(&command.ams_mapping2_json),
-        })
-        .payload(),
-        qos: BAMBU_MQTT_QOS,
-    })
-    .await
-    .with_context(|| format!("publish project_file to {}", endpoint.serial))
-}
-
-fn non_empty_string(value: &str) -> Option<String> {
-    (!value.is_empty()).then(|| value.to_owned())
 }
 
 #[cfg(test)]

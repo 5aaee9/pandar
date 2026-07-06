@@ -103,6 +103,9 @@ pub fn normalize_model(model: &str) -> Option<String> {
     let normalized = match compact.as_str() {
         "N7" => "P2S",
         "N6" => "X2D",
+        "X1" | "BAMBULABX1" | "3DPRINTERX1" => "X1",
+        "X1E" | "BAMBULABX1E" => "X1E",
+        "X1CARBON" | "BAMBULABX1CARBON" | "3DPRINTERX1CARBON" => "X1C",
         "A1MINI" | "A1M" | "A1MIN" | "BAMBULABA1MINI" => "A1_MINI",
         "A1" | "BAMBULABA1" => "A1",
         "P2S" | "BAMBULABP2S" => "P2S",
@@ -129,6 +132,13 @@ pub fn ftps_clear_data_fallback(model: Option<&str>) -> bool {
     compatibility_for_model(model).ftps_clear_data_fallback
 }
 
+pub fn brtc_emmc_upload_supported(model: Option<&str>) -> bool {
+    matches!(
+        model.and_then(normalize_model).as_deref(),
+        Some("P2S" | "X2D" | "X1" | "X1C" | "X1E")
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -139,6 +149,12 @@ mod tests {
     fn normalizes_aliases_and_a1_mini_spellings() {
         assert_eq!(normalize_model("N7").as_deref(), Some("P2S"));
         assert_eq!(normalize_model("N6").as_deref(), Some("X2D"));
+        assert_eq!(normalize_model("X1 Carbon").as_deref(), Some("X1C"));
+        assert_eq!(
+            normalize_model("3DPrinter-X1-Carbon").as_deref(),
+            Some("X1C")
+        );
+        assert_eq!(normalize_model("Bambu Lab X1E").as_deref(), Some("X1E"));
         assert_eq!(normalize_model("Bambu Lab P2S").as_deref(), Some("P2S"));
         assert_eq!(normalize_model("Bambu Lab X2D").as_deref(), Some("X2D"));
         assert_eq!(normalize_model("A1 Mini").as_deref(), Some("A1_MINI"));
@@ -154,6 +170,11 @@ mod tests {
     fn matrix_covers_ftps_storage_and_unknown_defaults() {
         assert!(ftps_tls_1_2_cap(Some("N7")));
         assert!(ftps_tls_1_2_cap(Some("X2D")));
+        assert!(brtc_emmc_upload_supported(Some("N6")));
+        assert!(brtc_emmc_upload_supported(Some("P2S")));
+        assert!(brtc_emmc_upload_supported(Some("X1 Carbon")));
+        assert!(brtc_emmc_upload_supported(Some("X1E")));
+        assert!(!brtc_emmc_upload_supported(Some("A1 Mini")));
         assert!(ftps_clear_data_fallback(Some("A1")));
         assert!(ftps_clear_data_fallback(Some("A1 Mini")));
         assert_eq!(

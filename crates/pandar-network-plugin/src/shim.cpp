@@ -51,6 +51,8 @@ constexpr int BAMBU_NETWORK_ERR_PUT_SETTING_FAILED = -8;
 constexpr int BAMBU_NETWORK_ERR_DEL_SETTING_FAILED = -10;
 constexpr int BAMBU_NETWORK_ERR_GET_INSTANCE_ID_FAILED = -25;
 constexpr int BAMBU_NETWORK_ERR_GET_RATING_ID_FAILED = -21;
+constexpr int PrintingStageERROR = 7;
+constexpr int PrintingStageFinished = 6;
 
 using OnUserLoginFn = std::function<void(int, bool)>;
 using OnPrinterConnectedFn = std::function<void(std::string)>;
@@ -432,10 +434,26 @@ std::string studio_extruder_device_json(const std::vector<std::string>& nozzles,
             field_from_json(nozzle, "target_celsius"));
         if (i != 0) info += ',';
         info += std::string(R"({"id":)") + std::to_string(id) + R"(,"info":8,"temp":)" + temp +
-            R"(,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0})";
+            R"(,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":)" + std::to_string(id) + "}";
     }
     info += "]";
     return std::string(R"({"state":)") + std::to_string(total | (active_id << 4)) + R"(,"info":)" + info + "}";
+}
+
+std::string studio_nozzle_device_json(const std::vector<std::string>& nozzles) {
+    const auto total = nozzles.empty() ? std::size_t{1} : nozzles.size();
+    std::uint32_t exist = 0;
+    std::string info = "[";
+    for (std::size_t i = 0; i < total; ++i) {
+        const auto nozzle = i < nozzles.size() ? nozzles[i] : std::string{};
+        const auto label = field_from_json(nozzle, "label");
+        const auto id = studio_extruder_id(label, i, total);
+        exist |= (1u << id);
+        if (i != 0) info += ',';
+        info += std::string(R"({"id":)") + std::to_string(id) + R"(,"diameter":0.4,"type":"XS01","stat":0})";
+    }
+    info += "]";
+    return std::string(R"({"exist":)") + std::to_string(exist) + R"(,"state":0,"info":)" + info + "}";
 }
 
 std::string printer_telemetry_from_json(const std::string& printer) {
@@ -456,6 +474,7 @@ std::string printer_telemetry_from_json(const std::string& printer) {
         R"(,"support_chamber":true,"support_chamber_temp_display":true)" +
         R"(,"bed_temper":)" + bed_current +
         R"(,"bed_target_temper":)" + bed_target +
+        R"(,"nozzle_type":"XS01","nozzle_diameter":0.4)" +
         R"(,"nozzle_temper":)" + nozzle_current +
         R"(,"nozzle_target_temper":)" + nozzle_target +
         R"(,"nozzle_temper2":)" + right_nozzle_current +
@@ -464,7 +483,8 @@ std::string printer_telemetry_from_json(const std::string& printer) {
         R"(,"lights_report":[{"node":"chamber_light","mode":)" + escape_json(light_mode) + R"(}])" +
         R"(,"device":{"type":1,"bed_temp":)" + packed_temperature_json(bed_current, bed_target) +
         R"(,"ctc":{"state":1,"info":{"temp":)" + packed_temperature_json(chamber_current, {}) +
-        R"(}},"extruder":)" + studio_extruder_device_json(nozzles, active_nozzle) + "}" +
+        R"(}},"nozzle":)" + studio_nozzle_device_json(nozzles) +
+        R"(,"extruder":)" + studio_extruder_device_json(nozzles, active_nozzle) + "}" +
         studio_materials_payload(printer);
 }
 
@@ -968,13 +988,14 @@ PluginHttpResult rust_get_jobs(const Agent* agent) {
 PluginHttpResult rust_submit_print(const Agent* agent, const BBL::PrintParams& params) {
     const std::string& display_name = params.task_name.empty() ? params.project_name : params.task_name;
     const std::string& artifact_path = params.filename;
+    const auto printer_id = pandar_printer_id_for(agent, params.dev_id);
     return pandar_plugin_submit_print(
         reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
         agent->hub_url.size(),
         reinterpret_cast<const uint8_t*>(agent->token.data()),
         agent->token.size(),
-        reinterpret_cast<const uint8_t*>(params.dev_id.data()),
-        params.dev_id.size(),
+        reinterpret_cast<const uint8_t*>(printer_id.data()),
+        printer_id.size(),
         reinterpret_cast<const uint8_t*>(display_name.data()),
         display_name.size(),
         reinterpret_cast<const uint8_t*>(artifact_path.data()),
@@ -1565,18 +1586,18 @@ PANDAR_ABI int bambu_network_start_print(void* agent, BBL::PrintParams params, B
     refresh_local_webserver_config(a);
     if (cancel_fn && cancel_fn()) return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
     if (a->token.empty() || params.dev_id.empty() || params.filename.empty()) {
-        if (update_fn) update_fn(7, BBL::BAMBU_NETWORK_ERR_INVALID_RESULT, "Pandar plugin print submission is missing token, printer, or artifact");
+        if (update_fn) update_fn(BBL::PrintingStageERROR, BBL::BAMBU_NETWORK_ERR_INVALID_RESULT, "Pandar plugin print submission is missing token, printer, or artifact");
         return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
     }
     auto result = rust_submit_print(a, params);
     std::string body = body_from_result(result);
     if (result.status != 0) {
         a->last_error = body;
-        if (update_fn) update_fn(7, BBL::BAMBU_NETWORK_ERR_INVALID_RESULT, body);
+        if (update_fn) update_fn(BBL::PrintingStageERROR, BBL::BAMBU_NETWORK_ERR_INVALID_RESULT, body);
         return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
     }
     a->last_error.clear();
-    if (update_fn) update_fn(100, BBL::BAMBU_NETWORK_SUCCESS, body);
+    if (update_fn) update_fn(BBL::PrintingStageFinished, BBL::BAMBU_NETWORK_SUCCESS, "3");
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
@@ -1586,7 +1607,7 @@ PANDAR_ABI int bambu_network_start_local_print_with_record(void* agent, BBL::Pri
 
 PANDAR_ABI int bambu_network_start_send_gcode_to_sdcard(void* agent, BBL::PrintParams params, BBL::OnUpdateStatusFn update_fn, BBL::WasCancelledFn cancel_fn, BBL::OnWaitFn) {
     if (!as_agent(agent)) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
-    if (update_fn) update_fn(7, BBL::BAMBU_NETWORK_ERR_INVALID_RESULT, R"({"error":"unsupported_file_transfer"})");
+    if (update_fn) update_fn(BBL::PrintingStageERROR, BBL::BAMBU_NETWORK_ERR_INVALID_RESULT, R"({"error":"unsupported_file_transfer"})");
     if (cancel_fn && cancel_fn()) return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
     (void)params;
     return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;

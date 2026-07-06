@@ -49,6 +49,8 @@ pub struct PrinterNozzleTemperature {
     pub label: Option<String>,
     pub current_celsius: Option<String>,
     pub target_celsius: Option<String>,
+    pub diameter_mm: Option<String>,
+    pub nozzle_type: Option<String>,
 }
 
 impl Printer {

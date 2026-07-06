@@ -16,7 +16,7 @@ use support::{
 
 const MOCK_HUB_TIMEOUT: Duration = Duration::from_secs(5);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
-const PRINTERS_RESPONSE: &str = r##"{"devices":[{"dev_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","dev_model_name":"N6","nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220"},{"label":"R","current_celsius":"27","target_celsius":"215"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true,"materials":{"ams_units":[{"unit_id":"0","humidity":25,"humidity_level":3,"temperature_celsius":28.5,"toolhead":"R","trays":[{"tray_id":"0","global_tray_id":0,"type":"PETG-CF","filament_id":"GFG50","color":"000000FF","remaining_estimate":"-1"},{"tray_id":"1","global_tray_id":1,"type":"PLA","filament_id":"GFA00","color":"C12E1FFF","remaining_estimate":"100"},{"tray_id":"2","global_tray_id":2,"type":"PETG","filament_id":"GFG00","color":"FCE300FF","remaining_estimate":"36"},{"tray_id":"3","global_tray_id":3,"type":"PLA","filament_id":"GFL99","color":"FFF144FF","remaining_estimate":"-1"}]},{"unit_id":"1","humidity":28,"humidity_level":3,"temperature_celsius":28.1,"toolhead":"L","trays":[{"tray_id":"0","global_tray_id":4,"type":"PLA","filament_id":"GFA00","color":"000000FF","remaining_estimate":"55"},{"tray_id":"1","global_tray_id":5,"type":"ABS","filament_id":"GFB00","color":"46A8F9FF","remaining_estimate":"-1"},{"tray_id":"2","global_tray_id":6,"type":"ABS","filament_id":"GFB00","color":"057748FF","remaining_estimate":"-1"},{"tray_id":"3","global_tray_id":7,"type":"PLA-CF","filament_id":"GFA50","color":"69398EFF","remaining_estimate":"85"}]}],"external_spools":[{"external_id":"254","tray_id":"0","type":"PETG","filament_id":"GFG00","color":"11223344","toolhead":"L"},{"external_id":"255","tray_id":"1","type":"PLA","filament_id":"GFL99","color":"46A8F9FF","toolhead":"R"}],"active_tray":{"kind":"ams","ams_id":"0","tray_id":"3","global_tray_id":3},"observed_at":"2026-06-20T00:01:00Z"}}]}"##;
+const PRINTERS_RESPONSE: &str = r##"{"devices":[{"dev_id":"studio-serial-1","pandar_printer_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","dev_model_name":"N6","nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220"},{"label":"R","current_celsius":"27","target_celsius":"215"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true,"materials":{"ams_units":[{"unit_id":"0","humidity":25,"humidity_level":3,"temperature_celsius":28.5,"toolhead":"R","trays":[{"tray_id":"0","global_tray_id":0,"type":"PETG-CF","filament_id":"GFG50","color":"000000FF","remaining_estimate":"-1"},{"tray_id":"1","global_tray_id":1,"type":"PLA","filament_id":"GFA00","color":"C12E1FFF","remaining_estimate":"100"},{"tray_id":"2","global_tray_id":2,"type":"PETG","filament_id":"GFG00","color":"FCE300FF","remaining_estimate":"36"},{"tray_id":"3","global_tray_id":3,"type":"PLA","filament_id":"GFL99","color":"FFF144FF","remaining_estimate":"-1"}]},{"unit_id":"1","humidity":28,"humidity_level":3,"temperature_celsius":28.1,"toolhead":"L","trays":[{"tray_id":"0","global_tray_id":4,"type":"PLA","filament_id":"GFA00","color":"000000FF","remaining_estimate":"55"},{"tray_id":"1","global_tray_id":5,"type":"ABS","filament_id":"GFB00","color":"46A8F9FF","remaining_estimate":"-1"},{"tray_id":"2","global_tray_id":6,"type":"ABS","filament_id":"GFB00","color":"057748FF","remaining_estimate":"-1"},{"tray_id":"3","global_tray_id":7,"type":"PLA-CF","filament_id":"GFA50","color":"69398EFF","remaining_estimate":"85"}]}],"external_spools":[{"external_id":"254","tray_id":"0","type":"PETG","filament_id":"GFG00","color":"11223344","toolhead":"L"},{"external_id":"255","tray_id":"1","type":"PLA","filament_id":"GFL99","color":"46A8F9FF","toolhead":"R"}],"active_tray":{"kind":"ams","ams_id":"0","tray_id":"3","global_tray_id":3},"observed_at":"2026-06-20T00:01:00Z"}}]}"##;
 
 fn target_dir() -> PathBuf {
     let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -253,6 +253,16 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                             "bad print body: {body}"
                         );
                         assert!(
+                            body.contains("printer-1") && !body.contains("studio-serial-1"),
+                            "print body did not use Hub printer id: {body}"
+                        );
+                        assert!(
+                            !body.contains(r#"name="ams_mapping""#)
+                                && !body.contains(r#"name="ams_mapping2""#)
+                                && !body.contains("\r\nnull\r\n"),
+                            "empty print mappings should be omitted: {body}"
+                        );
+                        assert!(
                             body.contains(r#"name="filename""#),
                             "bad print filename: {body}"
                         );
@@ -354,6 +364,16 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                     5 => {
                         let body = request_body(&request);
                         assert_multipart_print_request(&request);
+                        assert!(
+                            body.contains("printer-1") && !body.contains("studio-serial-1"),
+                            "print body did not use Hub printer id: {body}"
+                        );
+                        assert!(
+                            !body.contains(r#"name="ams_mapping""#)
+                                && !body.contains(r#"name="ams_mapping2""#)
+                                && !body.contains("\r\nnull\r\n"),
+                            "empty print mappings should be omitted: {body}"
+                        );
                         assert!(body.contains("probe.3mf"), "bad print filename: {body}");
                         assert_multipart_file_part(&request, "probe.3mf", &artifact);
                         write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"job_id":"job-1"}"#);
@@ -567,6 +587,9 @@ fn probe_exercises_studio_abi_success_path() {
     assert_json_field(&stdout, "printer_rc", "0");
     assert_json_field(&stdout, "tasks_rc", "0");
     assert_json_field(&stdout, "print_rc", "0");
+    assert_json_field(&stdout, "update_stage", "6");
+    assert_json_field(&stdout, "update_code", "0");
+    assert!(stdout.contains(r#""update_body":"3""#));
     assert_json_field(&stdout, "restored_login", "true");
     assert_json_field(&stdout, "ft_abi_version", "1");
     assert_json_field(&stdout, "ft_start_connect_rc", "0");

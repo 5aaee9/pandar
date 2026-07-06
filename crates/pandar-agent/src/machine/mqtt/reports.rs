@@ -140,6 +140,8 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
                     label: temperature.label.unwrap_or_default(),
                     current_celsius: temperature.current_celsius.unwrap_or_default(),
                     target_celsius: temperature.target_celsius.unwrap_or_default(),
+                    diameter_mm: temperature.diameter_mm.unwrap_or_default(),
+                    nozzle_type: temperature.nozzle_type.unwrap_or_default(),
                 })
                 .collect(),
             bed_temperature_celsius: snapshot.bed_temperature_celsius.unwrap_or_default(),

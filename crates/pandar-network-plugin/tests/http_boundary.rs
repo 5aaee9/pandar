@@ -62,6 +62,12 @@ fn one_shot_server(
 
 fn assert_plugin_multipart_print_request(request: &str) {
     assert_multipart_print_request(request);
+    assert!(
+        !request.contains(r#"name="ams_mapping""#)
+            && !request.contains(r#"name="ams_mapping2""#)
+            && !request.contains("\r\nnull\r\n"),
+        "empty mapping fields should be omitted: {request}"
+    );
     assert_multipart_file_part(request, "job.3mf", b"not empty");
 }
 
@@ -351,6 +357,30 @@ fn hub_artifact_errors_pass_through_when_stable() {
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 400);
     assert_eq!(body(result), r#"{"error":"artifact_invalid_upload"}"#);
+}
+
+#[test]
+fn hub_invalid_printer_id_passes_through_when_stable() {
+    let artifact = std::env::temp_dir().join(format!(
+        "pandar-invalid-printer-id-{}.3mf",
+        std::process::id()
+    ));
+    write_artifact(&artifact, b"not empty");
+    let artifact_path = artifact.to_string_lossy();
+    let hub_url = one_shot_server(
+        "POST",
+        "/api/v1/plugin/prints",
+        Some("pandar_plugin_test_token"),
+        "HTTP/1.1 400 Bad Request",
+        r#"{"error":"invalid_printer_id"}"#,
+        Some(assert_plugin_multipart_print_request),
+    );
+    let result = submit_print(hub_url.as_bytes(), TOKEN, artifact_path.as_bytes());
+    fs::remove_file(&artifact).unwrap();
+
+    assert_ne!(result.status, 0);
+    assert_eq!(result.http_code, 400);
+    assert_eq!(body(result), r#"{"error":"invalid_printer_id"}"#);
 }
 
 #[test]

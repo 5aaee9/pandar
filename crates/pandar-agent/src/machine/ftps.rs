@@ -18,7 +18,7 @@ use crate::machine::{
     compatibility::ftps_tls_1_2_cap,
     file_transfer::{
         BAMBU_FILE_TRANSFER_CHUNK_SIZE, BAMBU_FILE_TRANSFER_PORT, BAMBU_FILE_TRANSFER_USERNAME,
-        MachineFileTransfer, TransferProtectionMode,
+        FileUploadResult, MachineFileTransfer, TransferProtectionMode,
     },
     mqtt::BambuLanCertificateVerifier,
 };
@@ -275,7 +275,7 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
         path: &str,
         bytes: &[u8],
         mode: TransferProtectionMode,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<FileUploadResult> {
         let path = path.to_string();
         let bytes = bytes.to_vec();
         let expected = bytes.len();
@@ -287,7 +287,7 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
                 .await
                 .with_context(|| format!("verify Bambu FTPS file size for {path}"))?;
             verify_uploaded_size(expected, Some(actual), &path)?;
-            Ok(())
+            Ok(FileUploadResult::ftp(path))
         })
         .await
     }

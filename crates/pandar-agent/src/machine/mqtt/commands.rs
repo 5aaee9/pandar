@@ -42,6 +42,8 @@ impl PrintSpeed {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectFileCommand {
     pub filename: String,
+    pub url: Option<String>,
+    pub md5: Option<String>,
     pub plate_id: u32,
     pub task_id: String,
     pub subtask_id: String,
@@ -252,9 +254,17 @@ fn project_file_payload(command: &ProjectFileCommand) -> Value {
     );
     print.insert(
         "url".to_owned(),
-        json!(format!("ftp://{}", command.filename)),
+        json!(
+            command
+                .url
+                .clone()
+                .unwrap_or_else(|| format!("ftp://{}", command.filename))
+        ),
     );
     print.insert("file".to_owned(), json!(command.filename));
+    if let Some(md5) = &command.md5 {
+        print.insert("md5".to_owned(), json!(md5));
+    }
     print.insert("task_id".to_owned(), json!(command.task_id));
     print.insert("subtask_id".to_owned(), json!(command.subtask_id));
     print.insert("use_ams".to_owned(), json!(command.use_ams));

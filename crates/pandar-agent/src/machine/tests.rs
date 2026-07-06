@@ -10,7 +10,8 @@ use crate::machine::{
     file_transfer::{
         FakeMachineFileTransfer, FileTransferRequest, TransferProtectionMode::ProtectedData,
     },
-    mqtt::{BambuMqttTransport, FakeMqttTransport, PublishedMqttCommand},
+    mqtt::{BAMBU_MQTT_QOS, BambuMqttTransport, FakeMqttTransport, PublishedMqttCommand},
+    print::pick_remote_name,
     runtime::test_support::{TestRuntimeBambuMachineGateway, assert_locked_for_a_moment},
 };
 
@@ -211,7 +212,10 @@ async fn configured_print_project_file_uploads_and_publishes_project_file() {
 
     assert_eq!(
         transfer.recorded_requests(),
-        vec![(ProtectedData, FileTransferRequest::upload("plate.3mf", 3))]
+        vec![(
+            ProtectedData,
+            FileTransferRequest::upload("plate.gcode.3mf", 3)
+        )]
     );
     let published = mqtt.published_commands().await;
     let sequence_id = dynamic_sequence_id(&published[0].payload);
@@ -224,8 +228,9 @@ async fn configured_print_project_file_uploads_and_publishes_project_file() {
                     "command": "project_file",
                     "sequence_id": sequence_id,
                     "param": "Metadata/plate_1.gcode",
-                    "url": "ftp://plate.3mf",
-                    "file": "plate.3mf",
+                    "url": "ftp://plate.gcode.3mf",
+                    "file": "plate.gcode.3mf",
+                    "md5": "900150983CD24FB0D6963F7D28E17F72",
                     "task_id": "job-1",
                     "subtask_id": "artifact-1",
                     "use_ams": true,
@@ -236,6 +241,14 @@ async fn configured_print_project_file_uploads_and_publishes_project_file() {
             qos: BAMBU_MQTT_QOS,
         }]
     );
+}
+
+#[test]
+fn print_project_remote_name_matches_studio_suffix_policy() {
+    assert_eq!(pick_remote_name("Cube"), "Cube.gcode.3mf");
+    assert_eq!(pick_remote_name("plate.3mf"), "plate.gcode.3mf");
+    assert_eq!(pick_remote_name("plate.gcode.3mf"), "plate.gcode.3mf");
+    assert_eq!(pick_remote_name("../bad/name.3mf"), "name.gcode.3mf");
 }
 
 #[tokio::test]
