@@ -1,13 +1,14 @@
 mod artifacts;
 mod diagnostics;
 mod print;
+mod reports;
 
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use async_trait::async_trait;
+use reports::{ams_ready_report, get_version_report};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tokio::{sync::Mutex, sync::mpsc};
 
 use super::*;
@@ -404,7 +405,7 @@ async fn refresh_printer_materials_command_works_for_runtime_linked_printer() {
     gateway
         .push_command_transport(FakeMqttTransport::with_reports([
             get_version_report("A1 Mini"),
-            json!({"print": {"gcode_state": "READY", "ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA"}]}]}}}),
+            ams_ready_report("PLA"),
         ]))
         .await;
     gateway
@@ -502,36 +503,6 @@ fn refresh_materials_command(
             },
         )),
     }
-}
-
-fn get_version_report(model: &str) -> serde_json::Value {
-    serde_json::to_value(TestGetVersionReport {
-        info: TestGetVersionInfo {
-            command: "get_version",
-            module: [TestGetVersionModule {
-                name: "ota",
-                product_name: model,
-            }],
-        },
-    })
-    .unwrap()
-}
-
-#[derive(Debug, Serialize)]
-struct TestGetVersionReport<'a> {
-    info: TestGetVersionInfo<'a>,
-}
-
-#[derive(Debug, Serialize)]
-struct TestGetVersionInfo<'a> {
-    command: &'static str,
-    module: [TestGetVersionModule<'a>; 1],
-}
-
-#[derive(Debug, Serialize)]
-struct TestGetVersionModule<'a> {
-    name: &'static str,
-    product_name: &'a str,
 }
 
 async fn drain_until_success(receiver: &mut mpsc::Receiver<AgentEvent>) {
