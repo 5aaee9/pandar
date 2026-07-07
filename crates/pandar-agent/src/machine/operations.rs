@@ -4,7 +4,7 @@ mod light;
 mod report;
 
 use super::{
-    BambuPrinterEndpoint, MachineJsonPayload, PrinterOperationDispatchResult,
+    BambuPrinterEndpoint, PrinterOperationDispatchResult,
     mqtt::{
         AmsFilamentCommand, AmsSlotCommand, BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics,
         BambuMqttTransport, GcodeLineCommand, PrintSpeed, PublishedMqttCommand,
@@ -118,7 +118,7 @@ where
             Ok(PrinterOperationDispatchResult {
                 sequence_id: Some(sequence_id),
                 error,
-                mqtt_report: Some(MachineJsonPayload::from(report.into_raw())),
+                mqtt_report: Some(report.into_payload()),
                 mqtt_summary,
             })
         }

@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Agent printer-operation report retention with typed `MachineJsonPayload` storage instead of carrying raw MQTT `Value` through the operation dispatch result.
 - Replaced Agent printer-operation MQTT result summary extraction with typed dispatch metadata instead of converting `MachineJsonPayload` back through `serde_json::Value` in the command-result serializer.
 - Replaced Agent MQTT `get_version` report detection with typed report ownership and a typed helper method instead of passing borrowed raw `Value` reports through model discovery.
 - Replaced Agent chamber-light status parsing with a typed serde report method instead of passing raw MQTT `Value` reports into the light-control helper.

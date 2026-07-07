@@ -4,7 +4,7 @@ use serde_json::{Number, Value};
 use crate::machine::{MachineJsonPayload, PrinterOperationMqttSummary};
 
 pub(super) struct OperationReport {
-    raw: Value,
+    payload: MachineJsonPayload,
     envelope: OperationEnvelope,
 }
 
@@ -39,7 +39,10 @@ enum SequenceId {
 impl OperationReport {
     pub(super) fn from_value(raw: Value) -> Option<Self> {
         let envelope = serde_json::from_value(raw.clone()).ok()?;
-        Some(Self { raw, envelope })
+        Some(Self {
+            payload: MachineJsonPayload::from(raw),
+            envelope,
+        })
     }
 
     pub(super) fn sequence_id(&self) -> Option<String> {
@@ -97,8 +100,8 @@ impl OperationReport {
         })
     }
 
-    pub(super) fn into_raw(self) -> Value {
-        self.raw
+    pub(super) fn into_payload(self) -> MachineJsonPayload {
+        self.payload
     }
 }
 
