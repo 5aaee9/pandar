@@ -90,7 +90,7 @@ struct MutableProjectFilePrint {
 #[derive(Debug, Deserialize, Serialize)]
 struct AmsMappingInfoEntry {
     #[serde(default, rename = "nozzleId")]
-    nozzle_id: Option<Value>,
+    nozzle_id: Option<i64>,
     #[serde(flatten)]
     extra: serde_json::Map<String, Value>,
 }
@@ -151,9 +151,9 @@ fn flip_nozzle_ids(payload: &mut Value) {
         return;
     };
     for entry in entries {
-        match entry.nozzle_id.as_ref().and_then(Value::as_i64) {
-            Some(0) => entry.nozzle_id = Some(Value::from(1)),
-            Some(1) => entry.nozzle_id = Some(Value::from(0)),
+        match entry.nozzle_id {
+            Some(0) => entry.nozzle_id = Some(1),
+            Some(1) => entry.nozzle_id = Some(0),
             _ => {}
         }
     }
