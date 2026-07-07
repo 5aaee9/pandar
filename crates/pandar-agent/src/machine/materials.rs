@@ -14,7 +14,10 @@ struct NormalizedTrayPatch {
     value: MaterialTrayPatch,
 }
 
-pub fn normalize_material_patch(report: &Value, observed_at: &str) -> Option<Value> {
+pub(crate) fn normalize_material_patch<'a>(
+    report: &Value,
+    observed_at: &'a str,
+) -> Option<MaterialPatchDocument<'a>> {
     let report = serde_json::from_value::<MaterialsReport>(report.clone()).ok()?;
     let print = report.print?;
     let ams = print.ams.as_ref()?;
@@ -47,7 +50,7 @@ pub fn normalize_material_patch(report: &Value, observed_at: &str) -> Option<Val
         || patch.external_spools.is_some()
         || patch.replace_external_spools
         || patch.active_tray.is_some())
-    .then(|| serde_json::to_value(patch).expect("material patch is serializable"))
+    .then_some(patch)
 }
 
 fn normalize_ams_units(

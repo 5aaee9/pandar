@@ -2,7 +2,7 @@ use serde::{Serialize, Serializer};
 use serde_json::Number;
 
 #[derive(Serialize)]
-pub(super) struct MaterialPatchDocument<'a> {
+pub(crate) struct MaterialPatchDocument<'a> {
     #[serde(rename = "type")]
     pub(super) document_type: &'static str,
     pub(super) observed_at: &'a str,
