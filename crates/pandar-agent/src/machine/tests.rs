@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, time::Duration};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use tokio::sync::{Mutex, Notify, mpsc};
 
 use super::*;
@@ -15,6 +15,10 @@ use crate::machine::{
     print::pick_remote_name,
     runtime::test_support::{TestRuntimeBambuMachineGateway, assert_locked_for_a_moment},
 };
+
+mod fixtures;
+
+use fixtures::*;
 
 fn endpoint(serial: &str) -> BambuPrinterEndpoint {
     BambuPrinterEndpoint {
@@ -170,13 +174,11 @@ async fn noop_refresh_printers_returns_no_snapshots() {
 
 #[tokio::test]
 async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
-    let first = FakeMqttTransport::with_reports([
-        get_version_report("P2S"),
-        json!({"print": {"state": "READY"}}),
-    ]);
+    let first =
+        FakeMqttTransport::with_reports([get_version_report("P2S"), print_state_report("READY")]);
     let second = FakeMqttTransport::with_reports([
         get_version_report("X1 Carbon"),
-        json!({"state": "IDLE"}),
+        root_state_report("IDLE"),
     ]);
     let first_endpoint = endpoint("SERIAL1");
     let second_endpoint = endpoint("SERIAL2");
@@ -245,12 +247,12 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
         [
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"info": {"command": "get_version", "sequence_id": get_version_sequence_id}}),
+                payload: expected_get_version_payload(&get_version_sequence_id),
                 qos: BAMBU_MQTT_QOS,
             },
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"pushing": {"command": "pushall", "sequence_id": pushall_sequence_id, "version": 1, "push_target": 1}}),
+                payload: expected_pushall_payload(&pushall_sequence_id),
                 qos: BAMBU_MQTT_QOS,
             },
         ]
@@ -297,34 +299,7 @@ async fn configured_print_project_file_uploads_and_publishes_project_file() {
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({
-                "print": {
-                    "command": "project_file",
-                    "sequence_id": sequence_id,
-                    "param": "Metadata/plate_1.gcode",
-                    "project_id": "0",
-                    "profile_id": "0",
-                    "task_id": "0",
-                    "subtask_id": "0",
-                    "subtask_name": "plate",
-                    "url": "ftp://plate.gcode.3mf",
-                    "file": "plate.gcode.3mf",
-                    "md5": "900150983CD24FB0D6963F7D28E17F72",
-                    "bed_type": "auto",
-                    "bed_leveling": false,
-                    "flow_cali": false,
-                    "vibration_cali": false,
-                    "layer_inspect": false,
-                    "timelapse": true,
-                    "use_ams": true,
-                    "ams_mapping": [],
-                    "ams_mapping2": [],
-                    "auto_bed_leveling": 0,
-                    "nozzle_offset_cali": 0,
-                    "cfg": "0",
-                    "extrude_cali_flag": 0
-                }
-            }),
+            payload: expected_project_file_payload(&sequence_id),
             qos: 0,
         }]
     );
@@ -401,7 +376,7 @@ async fn configured_operate_printer_publishes_pause_to_request_topic() {
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "pause", "param": "", "sequence_id": sequence_id}}),
+            payload: expected_print_command_payload("pause", "", &sequence_id),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -428,7 +403,7 @@ async fn configured_operate_printer_select_extruder_publishes_reference_command(
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "select_extruder", "extruder_index": 1, "sequence_id": sequence_id}}),
+            payload: expected_select_extruder_payload(1, &sequence_id),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -436,11 +411,7 @@ async fn configured_operate_printer_select_extruder_publishes_reference_command(
 
 #[tokio::test]
 async fn configured_operate_printer_toggle_light_sends_bambu_studio_light_nodes() {
-    let mqtt = FakeMqttTransport::with_reports([json!({
-        "print": {
-            "lights_report": [{"node": "chamber_light", "mode": "on"}]
-        }
-    })]);
+    let mqtt = FakeMqttTransport::with_reports([lights_report(&[("chamber_light", "on")])]);
     let transfer = FakeMachineFileTransfer::default();
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
@@ -462,40 +433,17 @@ async fn configured_operate_printer_toggle_light_sends_bambu_studio_light_nodes(
         vec![
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"pushing": {
-                    "command": "pushall",
-                    "sequence_id": pushall_sequence_id,
-                    "version": 1,
-                    "push_target": 1
-                }}),
+                payload: expected_pushall_payload(&pushall_sequence_id),
                 qos: BAMBU_MQTT_QOS,
             },
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"system": {
-                    "command": "ledctrl",
-                    "led_node": "chamber_light",
-                    "led_mode": "off",
-                    "led_on_time": 500,
-                    "led_off_time": 500,
-                    "loop_times": 1,
-                    "interval_time": 1000,
-                    "sequence_id": light_sequence_id
-                }}),
+                payload: expected_light_payload("chamber_light", "off", &light_sequence_id),
                 qos: BAMBU_MQTT_QOS,
             },
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"system": {
-                    "command": "ledctrl",
-                    "led_node": "chamber_light2",
-                    "led_mode": "off",
-                    "led_on_time": 500,
-                    "led_off_time": 500,
-                    "loop_times": 1,
-                    "interval_time": 1000,
-                    "sequence_id": light2_sequence_id
-                }}),
+                payload: expected_light_payload("chamber_light2", "off", &light2_sequence_id),
                 qos: BAMBU_MQTT_QOS,
             },
         ]
@@ -504,14 +452,10 @@ async fn configured_operate_printer_toggle_light_sends_bambu_studio_light_nodes(
 
 #[tokio::test]
 async fn configured_operate_printer_toggle_light_matches_bambu_studio_light_nodes() {
-    let mqtt = FakeMqttTransport::with_reports([json!({
-        "print": {
-            "lights_report": [
-                {"node": "chamber_light", "mode": "off"},
-                {"node": "chamber_light2", "mode": "off"}
-            ]
-        }
-    })]);
+    let mqtt = FakeMqttTransport::with_reports([lights_report(&[
+        ("chamber_light", "off"),
+        ("chamber_light2", "off"),
+    ])]);
     let transfer = FakeMachineFileTransfer::default();
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
@@ -533,40 +477,17 @@ async fn configured_operate_printer_toggle_light_matches_bambu_studio_light_node
         vec![
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"pushing": {
-                    "command": "pushall",
-                    "sequence_id": pushall_sequence_id,
-                    "version": 1,
-                    "push_target": 1
-                }}),
+                payload: expected_pushall_payload(&pushall_sequence_id),
                 qos: BAMBU_MQTT_QOS,
             },
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"system": {
-                    "command": "ledctrl",
-                    "led_node": "chamber_light",
-                    "led_mode": "on",
-                    "led_on_time": 500,
-                    "led_off_time": 500,
-                    "loop_times": 1,
-                    "interval_time": 1000,
-                    "sequence_id": light_sequence_id
-                }}),
+                payload: expected_light_payload("chamber_light", "on", &light_sequence_id),
                 qos: BAMBU_MQTT_QOS,
             },
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"system": {
-                    "command": "ledctrl",
-                    "led_node": "chamber_light2",
-                    "led_mode": "on",
-                    "led_on_time": 500,
-                    "led_off_time": 500,
-                    "loop_times": 1,
-                    "interval_time": 1000,
-                    "sequence_id": light2_sequence_id
-                }}),
+                payload: expected_light_payload("chamber_light2", "on", &light2_sequence_id),
                 qos: BAMBU_MQTT_QOS,
             },
         ]
@@ -575,11 +496,7 @@ async fn configured_operate_printer_toggle_light_matches_bambu_studio_light_node
 
 #[tokio::test]
 async fn configured_operate_printer_set_chamber_light_uses_requested_state() {
-    let mqtt = FakeMqttTransport::with_reports([json!({
-        "print": {
-            "lights_report": [{"node": "chamber_light", "mode": "on"}]
-        }
-    })]);
+    let mqtt = FakeMqttTransport::with_reports([lights_report(&[("chamber_light", "on")])]);
     let transfer = FakeMachineFileTransfer::default();
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint_without_model("SERIAL1"), mqtt.clone(), transfer)],
@@ -601,40 +518,17 @@ async fn configured_operate_printer_set_chamber_light_uses_requested_state() {
         vec![
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"pushing": {
-                    "command": "pushall",
-                    "sequence_id": pushall_sequence_id,
-                    "version": 1,
-                    "push_target": 1
-                }}),
+                payload: expected_pushall_payload(&pushall_sequence_id),
                 qos: BAMBU_MQTT_QOS,
             },
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"system": {
-                    "command": "ledctrl",
-                    "led_node": "chamber_light",
-                    "led_mode": "on",
-                    "led_on_time": 500,
-                    "led_off_time": 500,
-                    "loop_times": 1,
-                    "interval_time": 1000,
-                    "sequence_id": light_sequence_id
-                }}),
+                payload: expected_light_payload("chamber_light", "on", &light_sequence_id),
                 qos: BAMBU_MQTT_QOS,
             },
             PublishedMqttCommand {
                 topic: "device/SERIAL1/request".to_string(),
-                payload: json!({"system": {
-                    "command": "ledctrl",
-                    "led_node": "chamber_light2",
-                    "led_mode": "on",
-                    "led_on_time": 500,
-                    "led_off_time": 500,
-                    "loop_times": 1,
-                    "interval_time": 1000,
-                    "sequence_id": light2_sequence_id
-                }}),
+                payload: expected_light_payload("chamber_light2", "on", &light2_sequence_id),
                 qos: BAMBU_MQTT_QOS,
             },
         ]
@@ -644,11 +538,7 @@ async fn configured_operate_printer_set_chamber_light_uses_requested_state() {
 #[tokio::test]
 async fn configured_operate_printer_light_returns_primary_success_when_light2_fails() {
     let mqtt = FakeMqttTransport::with_reports_and_operation_reports_failed_led_node(
-        [json!({
-            "print": {
-                "lights_report": [{"node": "chamber_light", "mode": "off"}]
-            }
-        })],
+        [lights_report(&[("chamber_light", "off")])],
         "chamber_light2",
     );
     let transfer = FakeMachineFileTransfer::default();
@@ -728,7 +618,7 @@ async fn configured_operate_printer_print_speed_mode_4_publishes_to_request_topi
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "print_speed", "param": "4", "sequence_id": sequence_id}}),
+            payload: expected_print_command_payload("print_speed", "4", &sequence_id),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -760,7 +650,7 @@ async fn configured_operate_printer_home_publishes_bare_g28_for_axis_specific_re
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "gcode_line", "param": "G28", "sequence_id": sequence_id}}),
+            payload: expected_print_command_payload("gcode_line", "G28", &sequence_id),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -795,7 +685,11 @@ async fn configured_operate_printer_move_axes_publishes_relative_gcode_line() {
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "gcode_line", "param": "G91\nG0 X10 Z-0.5 F3000\nG90", "sequence_id": sequence_id}}),
+            payload: expected_print_command_payload(
+                "gcode_line",
+                "G91\nG0 X10 Z-0.5 F3000\nG90",
+                &sequence_id,
+            ),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -829,7 +723,7 @@ async fn configured_operate_printer_hotend_publishes_wait_gcode_line() {
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "gcode_line", "param": "M109 S215", "sequence_id": sequence_id}}),
+            payload: expected_print_command_payload("gcode_line", "M109 S215", &sequence_id),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -863,12 +757,7 @@ async fn configured_operate_printer_targeted_hotend_publishes_reference_command(
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {
-                "command": "set_nozzle_temp",
-                "extruder_index": 1,
-                "target_temp": 220,
-                "sequence_id": sequence_id
-            }}),
+            payload: expected_targeted_hotend_payload(1, 220, &sequence_id),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -922,16 +811,7 @@ async fn configured_operate_printer_ams_load_publishes_change_filament_command()
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {
-                "command": "ams_change_filament",
-                "sequence_id": sequence_id,
-                "ams_id": 0,
-                "slot_id": 1,
-                "target": 1,
-                "extruder_id": 0,
-                "curr_temp": -1,
-                "tar_temp": -1
-            }}),
+            payload: expected_ams_change_filament_payload(0, 1, 1, Some(0), -1, -1, &sequence_id),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -964,7 +844,7 @@ async fn configured_operate_printer_bed_temperature_publishes_reference_gcode() 
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "gcode_line", "param": "M140 S75", "sequence_id": sequence_id}}),
+            payload: expected_print_command_payload("gcode_line", "M140 S75", &sequence_id),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -997,7 +877,7 @@ async fn configured_operate_printer_chamber_temperature_publishes_reference_gcod
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {"command": "gcode_line", "param": "M141 S45", "sequence_id": sequence_id}}),
+            payload: expected_print_command_payload("gcode_line", "M141 S45", &sequence_id),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -1030,12 +910,7 @@ async fn configured_operate_printer_ams_reread_rfid_publishes_get_rfid_command()
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {
-                "command": "ams_get_rfid",
-                "sequence_id": sequence_id,
-                "ams_id": 0,
-                "slot_id": 1
-            }}),
+            payload: expected_ams_get_rfid_payload(0, 1, &sequence_id),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -1103,15 +978,15 @@ async fn configured_operate_printer_ams_unload_publishes_change_filament_unload_
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: json!({"print": {
-                "command": "ams_change_filament",
-                "sequence_id": sequence_id,
-                "ams_id": 0,
-                "slot_id": 255,
-                "target": 255,
-                "curr_temp": 210,
-                "tar_temp": 210
-            }}),
+            payload: expected_ams_change_filament_payload(
+                0,
+                255,
+                255,
+                None,
+                210,
+                210,
+                &sequence_id
+            ),
             qos: BAMBU_MQTT_QOS,
         }]
     );
