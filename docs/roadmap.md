@@ -985,6 +985,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced Hub gRPC link-printer redacted result assertions with typed serde structs instead of dynamic string maps.
 - Replaced the Hub printer snapshot material event assertion with direct typed `PrinterEventMaterialJson` comparison instead of a `serde_json::Value` round-trip.
 - Replaced core compatibility serialization tests with typed `DiagnosticCompatibility` string round-trips instead of `serde_json::Value` round-trips.
+- Replaced Hub material snapshot fixture decoders and Agent machine operation report helpers with typed serde string round-trips instead of `serde_json::Value` round-trips.
 
 Exit criteria:
 

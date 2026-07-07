@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use super::super::{AgentRepository, MaterialRepository, TenantRepository, material_repositories};
 use crate::repositories::{
@@ -6,11 +6,16 @@ use crate::repositories::{
 };
 
 pub(super) fn ams_units(snapshot: &MaterialSnapshot) -> Vec<TestMaterialUnit> {
-    serde_json::from_value(serde_json::to_value(&snapshot.ams_units).unwrap()).unwrap()
+    decode_material_json(&snapshot.ams_units)
 }
 
 pub(super) fn external_spools(snapshot: &MaterialSnapshot) -> Vec<TestExternalSpool> {
-    serde_json::from_value(serde_json::to_value(&snapshot.external_spools).unwrap()).unwrap()
+    decode_material_json(&snapshot.external_spools)
+}
+
+fn decode_material_json<T: DeserializeOwned>(value: &impl Serialize) -> T {
+    let json = serde_json::to_string(value).unwrap();
+    serde_json::from_str(&json).unwrap()
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
