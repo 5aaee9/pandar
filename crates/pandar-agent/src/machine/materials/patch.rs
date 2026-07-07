@@ -1,5 +1,5 @@
-use serde::Serialize;
-use serde_json::Value;
+use serde::{Serialize, Serializer};
+use serde_json::Number;
 
 #[derive(Serialize)]
 pub(super) struct MaterialPatchDocument<'a> {
@@ -7,44 +7,124 @@ pub(super) struct MaterialPatchDocument<'a> {
     pub(super) document_type: &'static str,
     pub(super) observed_at: &'a str,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub(super) ams_units: Vec<Value>,
+    pub(super) ams_units: Vec<AmsUnitPatch>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) external_spools: Option<Vec<Value>>,
+    pub(super) external_spools: Option<Vec<ExternalSpoolPatch>>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub(super) replace_external_spools: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) active_tray: Option<Value>,
+    pub(super) active_tray: Option<ActiveTrayPatch>,
 }
 
 #[derive(Serialize)]
-struct EmptyTrayClear<'a> {
+pub(super) struct AmsUnitPatch {
+    pub(super) unit_id: String,
+    pub(super) unit_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) humidity: Option<Number>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) humidity_level: Option<Number>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) temperature_celsius: Option<Number>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) toolhead: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(super) trays: Vec<MaterialTrayPatch>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub(super) replace_trays: bool,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+pub(super) enum MaterialTrayPatch {
+    Present(MaterialTrayEntryPatch),
+    EmptyClear(EmptyTrayClear),
+}
+
+#[derive(Serialize)]
+pub(super) struct MaterialTrayEntryPatch {
+    pub(super) tray_id: String,
+    pub(super) exists: bool,
+    pub(super) unit_kind: String,
+    pub(super) global_tray_id: Option<u64>,
+    #[serde(flatten)]
+    pub(super) fields: MaterialFieldsPatch,
+}
+
+#[derive(Serialize)]
+pub(super) struct ExternalSpoolPatch {
+    pub(super) external_id: String,
+    pub(super) exists: bool,
+    pub(super) tray_id: String,
+    #[serde(flatten)]
+    pub(super) fields: MaterialFieldsPatch,
+}
+
+#[derive(Default, Serialize)]
+pub(super) struct MaterialFieldsPatch {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) filament_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) setting_id: Option<String>,
+    #[serde(rename = "type")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) filament_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) multi_color: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) tag_uid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) tray_uuid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) remaining_estimate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) k_value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) toolhead: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(super) struct EmptyTrayClear {
     tray_id: String,
     exists: bool,
     unit_kind: &'static str,
     global_tray_id: Option<u64>,
     state: &'static str,
-    filament_id: Option<&'a str>,
-    setting_id: Option<&'a str>,
+    filament_id: Option<&'static str>,
+    setting_id: Option<&'static str>,
     #[serde(rename = "type")]
-    filament_type: Option<&'a str>,
-    color: Option<&'a str>,
-    multi_color: Option<Vec<Value>>,
-    tag_uid: Option<&'a str>,
-    tray_uuid: Option<&'a str>,
-    name: Option<&'a str>,
-    remaining_estimate: Option<&'a str>,
+    filament_type: Option<&'static str>,
+    color: Option<&'static str>,
+    multi_color: Option<Vec<String>>,
+    tag_uid: Option<&'static str>,
+    tray_uuid: Option<&'static str>,
+    name: Option<&'static str>,
+    remaining_estimate: Option<&'static str>,
+}
+
+pub(super) enum ActiveTrayPatch {
+    None,
+    External(ExternalActiveTray),
+    Ams(AmsActiveTray),
+    AmsHt(AmsHtActiveTray),
 }
 
 #[derive(Serialize)]
-struct ExternalActiveTray<'a> {
+pub(super) struct ExternalActiveTray {
     kind: &'static str,
-    external_id: &'a str,
-    tray_id: &'a str,
+    external_id: &'static str,
+    tray_id: &'static str,
     global_tray_id: Option<u64>,
 }
 
 #[derive(Serialize)]
-struct AmsActiveTray {
+pub(super) struct AmsActiveTray {
     kind: &'static str,
     global_tray_id: i64,
     ams_id: String,
@@ -52,15 +132,18 @@ struct AmsActiveTray {
 }
 
 #[derive(Serialize)]
-struct AmsHtActiveTray {
+pub(super) struct AmsHtActiveTray {
     kind: &'static str,
     global_tray_id: Option<u64>,
     ams_id: String,
     tray_id: &'static str,
 }
 
-pub(super) fn empty_tray_clear_value(tray_id: String, global_tray_id: Option<u64>) -> Value {
-    serde_json::to_value(EmptyTrayClear {
+pub(super) fn empty_tray_clear_patch(
+    tray_id: String,
+    global_tray_id: Option<u64>,
+) -> MaterialTrayPatch {
+    MaterialTrayPatch::EmptyClear(EmptyTrayClear {
         tray_id,
         exists: false,
         unit_kind: "ams",
@@ -76,35 +159,45 @@ pub(super) fn empty_tray_clear_value(tray_id: String, global_tray_id: Option<u64
         name: None,
         remaining_estimate: None,
     })
-    .expect("empty tray clear is serializable")
 }
 
-pub(super) fn external_active_tray_value() -> Value {
-    serde_json::to_value(ExternalActiveTray {
+pub(super) fn external_active_tray_patch() -> ActiveTrayPatch {
+    ActiveTrayPatch::External(ExternalActiveTray {
         kind: "external",
         external_id: "254",
         tray_id: "0",
         global_tray_id: None,
     })
-    .expect("external active tray is serializable")
 }
 
-pub(super) fn ams_active_tray_value(tray_now: i64) -> Value {
-    serde_json::to_value(AmsActiveTray {
+pub(super) fn ams_active_tray_patch(tray_now: i64) -> ActiveTrayPatch {
+    ActiveTrayPatch::Ams(AmsActiveTray {
         kind: "ams",
         global_tray_id: tray_now,
         ams_id: (tray_now / 4).to_string(),
         tray_id: (tray_now % 4).to_string(),
     })
-    .expect("AMS active tray is serializable")
 }
 
-pub(super) fn ams_ht_active_tray_value(tray_now: i64) -> Value {
-    serde_json::to_value(AmsHtActiveTray {
+pub(super) fn ams_ht_active_tray_patch(tray_now: i64) -> ActiveTrayPatch {
+    ActiveTrayPatch::AmsHt(AmsHtActiveTray {
         kind: "ams_ht",
         global_tray_id: None,
         ams_id: tray_now.to_string(),
         tray_id: "0",
     })
-    .expect("AMS HT active tray is serializable")
+}
+
+impl Serialize for ActiveTrayPatch {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::None => serializer.serialize_none(),
+            Self::External(value) => value.serialize(serializer),
+            Self::Ams(value) => value.serialize(serializer),
+            Self::AmsHt(value) => value.serialize(serializer),
+        }
+    }
 }

@@ -1,12 +1,11 @@
-use serde_json::{Map, Value};
-
 use super::{
-    apply_material_fields, normalize_extruder_toolhead, normalized_string,
+    material_fields, normalize_extruder_toolhead, normalized_string,
+    patch::ExternalSpoolPatch,
     schema::{AmsReport, ExternalMaterialSource, MaterialSlotReport, PrintMaterialsReport},
 };
 
 pub(super) struct ExternalSpoolsPatch {
-    pub(super) spools: Vec<Value>,
+    pub(super) spools: Vec<ExternalSpoolPatch>,
     pub(super) replace: bool,
 }
 
@@ -59,23 +58,21 @@ fn external_source_single(spool: &MaterialSlotReport, replace: bool) -> External
     }
 }
 
-fn normalize_external_spool(spool: &MaterialSlotReport, index: usize, multi: bool) -> Value {
-    let mut normalized = Map::new();
-    normalized.insert(
-        "external_id".to_owned(),
-        Value::String(normalize_external_id(spool, index, multi)),
-    );
-    normalized.insert("exists".to_owned(), Value::Bool(true));
-    normalized.insert(
-        "tray_id".to_owned(),
-        Value::String(if multi {
+fn normalize_external_spool(
+    spool: &MaterialSlotReport,
+    index: usize,
+    multi: bool,
+) -> ExternalSpoolPatch {
+    ExternalSpoolPatch {
+        external_id: normalize_external_id(spool, index, multi),
+        exists: true,
+        tray_id: if multi {
             index.to_string()
         } else {
             "0".to_owned()
-        }),
-    );
-    apply_material_fields(&mut normalized, spool);
-    Value::Object(normalized)
+        },
+        fields: material_fields(spool),
+    }
 }
 
 pub(super) fn has_dual_external_slots(print: &PrintMaterialsReport, ams: &AmsReport) -> bool {

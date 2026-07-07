@@ -7,11 +7,11 @@ use external::{has_dual_external_slots, normalize_external_spools};
 use identifiers::*;
 use patch::*;
 use schema::*;
-use serde_json::{Map, Value};
+use serde_json::{Number, Value};
 
 struct NormalizedTrayPatch {
     tray_id: String,
-    value: Value,
+    value: MaterialTrayPatch,
 }
 
 pub fn normalize_material_patch(report: &Value, observed_at: &str) -> Option<Value> {
@@ -54,7 +54,7 @@ fn normalize_ams_units(
     units: &[AmsUnitReport],
     ams: &AmsReport,
     print: &PrintMaterialsReport,
-) -> Vec<Value> {
+) -> Vec<AmsUnitPatch> {
     let power_on = ams.power_on_flag;
     let tray_exist_bits = parse_tray_exist_bits(ams.tray_exist_bits.as_ref());
     let skip_zero_poweroff_cleanup = power_on == Some(false) && tray_exist_bits == Some(0);
@@ -65,24 +65,13 @@ fn normalize_ams_units(
         .filter_map(|unit| {
             let unit_id = unit_id(unit)?;
             let unit_kind = unit_kind(&unit_id);
-            let mut normalized = Map::new();
-            normalized.insert("unit_id".to_owned(), Value::String(unit_id.clone()));
-            normalized.insert("unit_kind".to_owned(), Value::String(unit_kind.to_owned()));
-            insert_number_field(&mut normalized, "humidity", unit.humidity_raw.as_ref());
-            insert_number_field(&mut normalized, "humidity_level", unit.humidity.as_ref());
-            insert_number_field(
-                &mut normalized,
-                "temperature_celsius",
-                unit.temperature_celsius.as_ref().or(unit.temp.as_ref()),
-            );
-            if let Some(toolhead) = unit
+            let toolhead = unit
                 .info
                 .as_ref()
                 .and_then(normalize_toolhead)
-                .or_else(|| default_dual_ams_toolhead(unit, units.len(), dual_nozzle))
-            {
-                normalized.insert("toolhead".to_owned(), Value::String(toolhead));
-            }
+                .or_else(|| default_dual_ams_toolhead(unit, units.len(), dual_nozzle));
+            let mut trays = Vec::new();
+            let mut replace_trays = false;
 
             if !unit.trays.is_empty() {
                 let mut normalized_trays: Vec<NormalizedTrayPatch> = unit
@@ -96,26 +85,38 @@ fn normalize_ams_units(
                 {
                     apply_empty_tray_clears(&mut normalized_trays, &unit_id, bits);
                 }
-                let replace_trays = unit_kind != "ams"
+                replace_trays = unit_kind != "ams"
                     || (0..4).all(|slot| {
                         let tray_id = slot.to_string();
                         normalized_trays.iter().any(|tray| tray.tray_id == tray_id)
                     });
-                normalized.insert(
-                    "trays".to_owned(),
-                    Value::Array(
-                        normalized_trays
-                            .into_iter()
-                            .map(|tray| tray.value)
-                            .collect(),
-                    ),
-                );
-                if replace_trays {
-                    normalized.insert("replace_trays".to_owned(), Value::Bool(true));
-                }
+                trays = normalized_trays
+                    .into_iter()
+                    .map(|tray| tray.value)
+                    .collect();
             }
 
-            (normalized.len() > 2).then_some(Value::Object(normalized))
+            (unit.humidity_raw.is_some()
+                || unit.humidity.is_some()
+                || unit.temperature_celsius.is_some()
+                || unit.temp.is_some()
+                || toolhead.is_some()
+                || !trays.is_empty()
+                || replace_trays)
+                .then_some(AmsUnitPatch {
+                    unit_id,
+                    unit_kind: unit_kind.to_owned(),
+                    humidity: unit.humidity_raw.as_ref().and_then(normalized_number),
+                    humidity_level: unit.humidity.as_ref().and_then(normalized_number),
+                    temperature_celsius: unit
+                        .temperature_celsius
+                        .as_ref()
+                        .or(unit.temp.as_ref())
+                        .and_then(normalized_number),
+                    toolhead,
+                    trays,
+                    replace_trays,
+                })
         })
         .collect()
 }
@@ -126,24 +127,22 @@ fn normalize_tray(
     unit_kind: &str,
 ) -> Option<NormalizedTrayPatch> {
     let tray_id = tray_id(tray)?;
-    let mut normalized = Map::new();
-    normalized.insert("tray_id".to_owned(), Value::String(tray_id.clone()));
-    normalized.insert("exists".to_owned(), Value::Bool(true));
-    normalized.insert("unit_kind".to_owned(), Value::String(unit_kind.to_owned()));
-    normalized.insert(
-        "global_tray_id".to_owned(),
-        global_tray_id(unit_id, &tray_id).map_or(Value::Null, Value::from),
-    );
-
-    apply_material_fields(&mut normalized, tray);
+    let global_tray_id = global_tray_id(unit_id, &tray_id);
     Some(NormalizedTrayPatch {
-        tray_id,
-        value: Value::Object(normalized),
+        tray_id: tray_id.clone(),
+        value: MaterialTrayPatch::Present(MaterialTrayEntryPatch {
+            tray_id,
+            exists: true,
+            unit_kind: unit_kind.to_owned(),
+            global_tray_id,
+            fields: material_fields(tray),
+        }),
     })
 }
 
-fn apply_material_fields(normalized: &mut Map<String, Value>, source: &MaterialSlotReport) {
-    insert_string_field(normalized, "state", source.state.as_ref());
+pub(in crate::machine::materials) fn material_fields(
+    source: &MaterialSlotReport,
+) -> MaterialFieldsPatch {
     let filament_id = normalized_string(source.tray_info_idx.as_ref()).or_else(|| {
         normalized_string(source.setting_id.as_ref())
             .map(|setting_id| derive_filament_id(&setting_id))
@@ -152,66 +151,33 @@ fn apply_material_fields(normalized: &mut Map<String, Value>, source: &MaterialS
         normalized_string(source.tray_info_idx.as_ref())
             .map(|filament_id| derive_setting_id(&filament_id))
     });
-    if let Some(filament_id) = filament_id {
-        normalized.insert("filament_id".to_owned(), Value::String(filament_id));
-    }
-    if let Some(setting_id) = setting_id {
-        normalized.insert("setting_id".to_owned(), Value::String(setting_id));
-    }
-    insert_string_field(normalized, "type", source.tray_type.as_ref());
-    insert_string_field(normalized, "tag_uid", source.tag_uid.as_ref());
-    insert_string_field(normalized, "tray_uuid", source.tray_uuid.as_ref());
-    insert_string_field(normalized, "name", source.tray_sub_brands.as_ref());
-    insert_string_field(normalized, "remaining_estimate", source.remain.as_ref());
-    insert_string_field(
-        normalized,
-        "k_value",
-        source.k.as_ref().or(source.k_value.as_ref()),
-    );
-
-    if let Some(color) = source.tray_color.as_ref().and_then(normalize_color) {
-        normalized.insert("color".to_owned(), Value::String(color));
-    }
-    if let Some(multi_color) = source.cols.as_ref().and_then(normalize_multi_color) {
-        normalized.insert("multi_color".to_owned(), Value::Array(multi_color));
-    }
-    if let Some(toolhead) = source
-        .toolhead
-        .as_ref()
-        .and_then(|value| normalized_string(Some(value)))
-        .or_else(|| {
-            source
-                .extruder_id
-                .as_ref()
-                .and_then(normalize_extruder_toolhead)
-        })
-    {
-        normalized.insert("toolhead".to_owned(), Value::String(toolhead));
+    MaterialFieldsPatch {
+        state: normalized_string(source.state.as_ref()),
+        filament_id,
+        setting_id,
+        filament_type: normalized_string(source.tray_type.as_ref()),
+        color: source.tray_color.as_ref().and_then(normalize_color),
+        multi_color: source.cols.as_ref().and_then(normalize_multi_color),
+        tag_uid: normalized_string(source.tag_uid.as_ref()),
+        tray_uuid: normalized_string(source.tray_uuid.as_ref()),
+        name: normalized_string(source.tray_sub_brands.as_ref()),
+        remaining_estimate: normalized_string(source.remain.as_ref()),
+        k_value: normalized_string(source.k.as_ref().or(source.k_value.as_ref())),
+        toolhead: source
+            .toolhead
+            .as_ref()
+            .and_then(|value| normalized_string(Some(value)))
+            .or_else(|| {
+                source
+                    .extruder_id
+                    .as_ref()
+                    .and_then(normalize_extruder_toolhead)
+            }),
     }
 }
 
-fn insert_string_field(
-    normalized: &mut Map<String, Value>,
-    target: &str,
-    value: Option<&ScalarValue>,
-) {
-    if let Some(value) = normalized_string(value) {
-        normalized.insert(target.to_owned(), Value::String(value));
-    }
-}
-
-fn insert_number_field(
-    normalized: &mut Map<String, Value>,
-    target: &str,
-    value: Option<&ScalarValue>,
-) {
-    if let Some(value) = value.and_then(normalized_number) {
-        normalized.insert(target.to_owned(), value);
-    }
-}
-
-fn normalized_number(value: &ScalarValue) -> Option<Value> {
-    value.number_json()
+fn normalized_number(value: &ScalarValue) -> Option<Number> {
+    value.number()
 }
 
 pub(in crate::machine::materials) fn normalized_string(
@@ -242,7 +208,7 @@ fn apply_empty_tray_clears(trays: &mut Vec<NormalizedTrayPatch>, unit_id: &str, 
 
 fn empty_tray_clear(unit_id: &str, slot: u64) -> NormalizedTrayPatch {
     let tray_id = slot.to_string();
-    let value = empty_tray_clear_value(tray_id, global_tray_id(unit_id, &slot.to_string()));
+    let value = empty_tray_clear_patch(tray_id, global_tray_id(unit_id, &slot.to_string()));
     NormalizedTrayPatch {
         tray_id: slot.to_string(),
         value,
@@ -274,13 +240,13 @@ fn default_dual_ams_toolhead(
     }
 }
 
-fn normalize_active_tray(value: Option<&ScalarValue>) -> Option<Value> {
+fn normalize_active_tray(value: Option<&ScalarValue>) -> Option<ActiveTrayPatch> {
     let tray_now = parse_i64(value?)?;
     match tray_now {
-        255 => Some(Value::Null),
-        254 => Some(external_active_tray_value()),
-        0..=15 => Some(ams_active_tray_value(tray_now)),
-        128..=135 => Some(ams_ht_active_tray_value(tray_now)),
+        255 => Some(ActiveTrayPatch::None),
+        254 => Some(external_active_tray_patch()),
+        0..=15 => Some(ams_active_tray_patch(tray_now)),
+        128..=135 => Some(ams_ht_active_tray_patch(tray_now)),
         _ => None,
     }
 }
@@ -297,22 +263,13 @@ fn normalize_color_str(value: &str) -> Option<String> {
     (valid_len && valid_hex).then(|| raw.to_ascii_uppercase())
 }
 
-fn normalize_multi_color(value: &ColorSource) -> Option<Vec<Value>> {
-    let colors: Vec<Value> = match value {
-        ColorSource::List(values) => values
-            .iter()
-            .filter_map(normalize_color)
-            .map(Value::String)
-            .collect(),
-        ColorSource::Single(ScalarValue::String(raw)) => raw
-            .split(',')
-            .filter_map(normalize_color_str)
-            .map(Value::String)
-            .collect(),
-        ColorSource::Single(value) => normalize_color(value)
-            .map(Value::String)
-            .into_iter()
-            .collect(),
+fn normalize_multi_color(value: &ColorSource) -> Option<Vec<String>> {
+    let colors: Vec<String> = match value {
+        ColorSource::List(values) => values.iter().filter_map(normalize_color).collect(),
+        ColorSource::Single(ScalarValue::String(raw)) => {
+            raw.split(',').filter_map(normalize_color_str).collect()
+        }
+        ColorSource::Single(value) => normalize_color(value).into_iter().collect(),
     };
     (!colors.is_empty()).then_some(colors)
 }

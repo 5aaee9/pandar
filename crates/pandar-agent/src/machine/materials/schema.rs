@@ -130,17 +130,15 @@ impl ScalarValue {
         }
     }
 
-    pub(super) fn number_json(&self) -> Option<Value> {
+    pub(super) fn number(&self) -> Option<Number> {
         match self {
-            Self::Number(number) => Some(Value::Number(number.clone())),
+            Self::Number(number) => Some(number.clone()),
             Self::String(raw) => {
                 let raw = raw.trim();
-                raw.parse::<i64>().ok().map(Value::from).or_else(|| {
-                    raw.parse::<f64>()
-                        .ok()
-                        .and_then(Number::from_f64)
-                        .map(Value::Number)
-                })
+                raw.parse::<i64>()
+                    .ok()
+                    .map(Number::from)
+                    .or_else(|| raw.parse::<f64>().ok().and_then(Number::from_f64))
             }
             Self::Bool(_) => None,
         }

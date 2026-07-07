@@ -952,6 +952,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced fixed agent startup/command report and material patch test fixtures with typed serde-serializable structs.
 - Replaced fixed Hub printer material snapshot test fixtures with typed serde-serializable structs.
 - Replaced Hub material patch unknown-field redaction and merge-state fields with a typed recursive serde enum instead of recursively filtering `serde_json::Value` maps.
+- Replaced Agent material patch output assembly with typed serde patch structs for AMS units, trays, external spools, and active-tray references instead of hand-building `serde_json::Value` objects.
 
 Exit criteria:
 
