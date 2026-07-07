@@ -1,19 +1,18 @@
 use anyhow::Context;
 use serde::Deserialize;
-use serde_json::Value;
 
 use crate::machine::mqtt::{
     BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, PublishedMqttCommand,
-    chamber_light_payloads_for_nodes,
+    chamber_light_commands_for_nodes,
 };
 
 const BAMBU_STUDIO_CHAMBER_LIGHT_NODES: [&str; 2] = ["chamber_light", "chamber_light2"];
 
-pub(super) async fn chamber_light_payloads<T>(
+pub(super) async fn chamber_light_commands<T>(
     mqtt: &T,
     topics: &BambuMqttTopics,
     requested_on: Option<bool>,
-) -> anyhow::Result<Vec<Value>>
+) -> anyhow::Result<Vec<BambuMqttCommand>>
 where
     T: BambuMqttTransport + Send + Sync,
 {
@@ -26,7 +25,7 @@ where
     .context("request current light report before controlling chamber light")?;
 
     let report = latest_chamber_light_report(mqtt).await?;
-    Ok(chamber_light_payloads_for_nodes(
+    Ok(chamber_light_commands_for_nodes(
         BAMBU_STUDIO_CHAMBER_LIGHT_NODES,
         requested_on.unwrap_or(!report.on),
     ))
@@ -71,7 +70,7 @@ where
     .context("wait for chamber light status report")?
 }
 
-fn chamber_light_report(report: &Value) -> Option<ChamberLightReport> {
+fn chamber_light_report(report: &serde_json::Value) -> Option<ChamberLightReport> {
     let report = serde_json::from_value::<PrinterReport>(report.clone()).ok()?;
     let lights = report.print?.lights_report?;
     let mut on = None;

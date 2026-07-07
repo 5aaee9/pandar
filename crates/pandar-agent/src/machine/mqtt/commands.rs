@@ -75,6 +75,12 @@ pub struct SetNozzleTemperatureCommand {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChamberLightCommand {
+    pub node: String,
+    pub on: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AmsSlotCommand {
     pub ams_id: u32,
     pub slot_id: u32,
@@ -134,6 +140,7 @@ pub enum BambuMqttCommand {
     ResumePrint,
     StopPrint,
     SetChamberLight(bool),
+    SetChamberLightNode(ChamberLightCommand),
     SetPrintSpeed(PrintSpeed),
     SelectExtruder(u32),
     SetNozzleTemperature(SetNozzleTemperatureCommand),
@@ -154,6 +161,7 @@ impl BambuMqttCommand {
             Self::ResumePrint => basic_print_payload("resume"),
             Self::StopPrint => basic_print_payload("stop"),
             Self::SetChamberLight(on) => chamber_light_payload("chamber_light", *on),
+            Self::SetChamberLightNode(command) => chamber_light_payload(&command.node, command.on),
             Self::SetPrintSpeed(speed) => print_speed_payload(*speed),
             Self::SelectExtruder(extruder_id) => select_extruder_payload(*extruder_id),
             Self::SetNozzleTemperature(command) => set_nozzle_temperature_payload(command),
@@ -276,13 +284,18 @@ fn ams_reread_rfid_payload(command: &AmsSlotCommand) -> Value {
     })
 }
 
-pub(crate) fn chamber_light_payloads_for_nodes<'a>(
+pub(crate) fn chamber_light_commands_for_nodes<'a>(
     nodes: impl IntoIterator<Item = &'a str>,
     on: bool,
-) -> Vec<Value> {
+) -> Vec<BambuMqttCommand> {
     nodes
         .into_iter()
-        .map(|node| chamber_light_payload(node, on))
+        .map(|node| {
+            BambuMqttCommand::SetChamberLightNode(ChamberLightCommand {
+                node: node.to_owned(),
+                on,
+            })
+        })
         .collect()
 }
 

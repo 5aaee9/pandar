@@ -83,13 +83,17 @@ where
     mqtt.subscribe(&topics.report)
         .await
         .with_context(|| format!("subscribe to report topic {}", topics.report))?;
-    let payloads = match operation {
-        PrinterOperation::ToggleLight => light::chamber_light_payloads(mqtt, &topics, None).await?,
+    let commands = match operation {
+        PrinterOperation::ToggleLight => light::chamber_light_commands(mqtt, &topics, None).await?,
         PrinterOperation::SetChamberLight(on) => {
-            light::chamber_light_payloads(mqtt, &topics, Some(on)).await?
+            light::chamber_light_commands(mqtt, &topics, Some(on)).await?
         }
-        operation => vec![mqtt_command_for_printer_operation(operation)?.payload()],
+        operation => vec![mqtt_command_for_printer_operation(operation)?],
     };
+    let payloads = commands
+        .iter()
+        .map(BambuMqttCommand::payload)
+        .collect::<Vec<_>>();
     let sequence_ids = payloads
         .iter()
         .filter_map(report::command_sequence_id)

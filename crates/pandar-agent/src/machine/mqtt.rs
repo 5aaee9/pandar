@@ -15,7 +15,7 @@ use serde_json::Value;
 
 #[cfg(test)]
 pub(crate) use crate::{machine::MachineSnapshot, protocol::agent::v1::AgentEvent};
-pub(crate) use commands::chamber_light_payloads_for_nodes;
+pub(crate) use commands::chamber_light_commands_for_nodes;
 #[cfg(test)]
 pub(crate) use commands::next_studio_sequence_id_from;
 pub use commands::{
