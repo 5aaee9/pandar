@@ -9,6 +9,8 @@ use super::super::MachineReportDiagnosticPayload;
 pub(super) struct PrintReportEnvelope {
     #[serde(default)]
     pub(super) print: PrintReportSection,
+    #[serde(flatten)]
+    pub(super) fields: BTreeMap<String, HmsValue>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -33,6 +35,8 @@ pub(super) struct PrintReportSection {
     pub(super) subtask_name: Option<String>,
     #[serde(default)]
     pub(super) print_error: Option<DiagnosticValue>,
+    #[serde(flatten)]
+    pub(super) fields: BTreeMap<String, HmsValue>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,20 +91,6 @@ pub(super) enum ReportJson {
     Number(Number),
     Bool(bool),
     Null,
-}
-
-#[derive(Debug, Default, Deserialize)]
-pub(super) struct HmsEnvelope {
-    #[serde(default)]
-    pub(super) print: HmsPrint,
-    #[serde(flatten)]
-    pub(super) fields: BTreeMap<String, HmsValue>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-pub(super) struct HmsPrint {
-    #[serde(flatten)]
-    pub(super) fields: BTreeMap<String, HmsValue>,
 }
 
 impl DiagnosticValue {

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use pandar_core::created_at_now;
-use schema::{HmsEnvelope, NumericValue, PrintReportEnvelope};
+use schema::{HmsValue, NumericValue, PrintReportEnvelope};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -48,7 +48,7 @@ pub fn print_report_from_report(
                 .unwrap_or(MachineReportDiagnosticPayload::Null),
         });
     }
-    collect_hms_diagnostics(report, &mut diagnostics);
+    collect_hms_diagnostics(&envelope, &mut diagnostics);
 
     let observed_at = created_at_now();
     let printer_materials_json = normalize_material_patch(report, &observed_at)
@@ -267,27 +267,34 @@ fn bounded_u32(value: Option<&NumericValue>, min: u32, max: u32) -> Option<u32> 
     (min..=max).contains(&value).then_some(value)
 }
 
-fn collect_hms_diagnostics(report: &Value, diagnostics: &mut Vec<MachineReportDiagnostic>) {
-    let Ok(envelope) = serde_json::from_value::<HmsEnvelope>(report.clone()) else {
-        return;
-    };
+fn collect_hms_diagnostics(
+    envelope: &PrintReportEnvelope,
+    diagnostics: &mut Vec<MachineReportDiagnostic>,
+) {
     for fields in [&envelope.fields, &envelope.print.fields] {
-        for (key, value) in fields {
-            if key.to_ascii_lowercase().contains("hms") {
-                let mut objects = Vec::new();
-                value.collect_objects(&mut objects);
-                for object in objects {
-                    if let (Some(code), Some(message)) = (object.code(), object.message()) {
-                        diagnostics.push(MachineReportDiagnostic {
-                            kind: "hms".to_owned(),
-                            severity: "warning".to_owned(),
-                            code: Some(code),
-                            message,
-                            payload: object.payload(),
-                        });
-                    }
+        for value in hms_values(fields) {
+            let mut objects = Vec::new();
+            value.collect_objects(&mut objects);
+            for object in objects {
+                if let (Some(code), Some(message)) = (object.code(), object.message()) {
+                    diagnostics.push(MachineReportDiagnostic {
+                        kind: "hms".to_owned(),
+                        severity: "warning".to_owned(),
+                        code: Some(code),
+                        message,
+                        payload: object.payload(),
+                    });
                 }
             }
         }
     }
+}
+
+fn hms_values(
+    fields: &std::collections::BTreeMap<String, HmsValue>,
+) -> impl Iterator<Item = &HmsValue> {
+    fields
+        .iter()
+        .filter(|(key, _)| key.to_ascii_lowercase().contains("hms"))
+        .map(|(_, value)| value)
 }
