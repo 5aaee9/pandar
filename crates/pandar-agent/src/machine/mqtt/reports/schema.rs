@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
 
 #[derive(Debug, Default, Deserialize)]
@@ -30,7 +30,7 @@ pub(super) struct PrintReportSection {
     #[serde(default)]
     pub(super) subtask_name: Option<String>,
     #[serde(default)]
-    pub(super) print_error: Option<Value>,
+    pub(super) print_error: Option<DiagnosticValue>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -40,7 +40,23 @@ pub(super) enum NumericValue {
     String(String),
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub(super) enum DiagnosticValue {
+    Object(DiagnosticObject),
+    String(String),
+    Other(Value),
+}
+
 #[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(super) enum HmsValue {
+    Array(Vec<HmsValue>),
+    Object(DiagnosticObject),
+    Other(Value),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct DiagnosticObject {
     #[serde(default)]
     code: Option<String>,
@@ -56,6 +72,8 @@ pub(super) struct DiagnosticObject {
     description: Option<String>,
     #[serde(default)]
     info: Option<String>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -63,13 +81,44 @@ pub(super) struct HmsEnvelope {
     #[serde(default)]
     pub(super) print: HmsPrint,
     #[serde(flatten)]
-    pub(super) fields: BTreeMap<String, Value>,
+    pub(super) fields: BTreeMap<String, HmsValue>,
 }
 
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct HmsPrint {
     #[serde(flatten)]
-    pub(super) fields: BTreeMap<String, Value>,
+    pub(super) fields: BTreeMap<String, HmsValue>,
+}
+
+impl DiagnosticValue {
+    pub(super) fn message(&self) -> Option<String> {
+        match self {
+            Self::Object(object) => object.message(),
+            Self::String(raw) => trimmed_string(Some(raw)),
+            Self::Other(Value::Null) => None,
+            Self::Other(value) => Some(value.to_string()).filter(|message| !message.is_empty()),
+        }
+    }
+
+    pub(super) fn payload(&self) -> Value {
+        serde_json::to_value(self).unwrap_or(Value::Null)
+    }
+}
+
+impl HmsValue {
+    pub(super) fn collect_objects<'a>(&'a self, objects: &mut Vec<&'a DiagnosticObject>) {
+        match self {
+            Self::Array(values) => {
+                for value in values {
+                    value.collect_objects(objects);
+                }
+            }
+            Self::Object(object) => objects.push(object),
+            Self::Other(value) => {
+                let _ = value;
+            }
+        }
+    }
 }
 
 impl DiagnosticObject {

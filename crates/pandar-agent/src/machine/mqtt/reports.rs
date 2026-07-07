@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use pandar_core::created_at_now;
-use schema::{DiagnosticObject, HmsEnvelope, NumericValue, PrintReportEnvelope};
+use schema::{HmsEnvelope, NumericValue, PrintReportEnvelope};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -35,13 +35,17 @@ pub fn print_report_from_report(
     let subtask_id = trimmed_string(print.subtask_id.as_deref());
 
     let mut diagnostics = Vec::new();
-    if let Some(print_error) = print.print_error.as_ref().and_then(diagnostic_message) {
+    if let Some(print_error) = print.print_error.as_ref().and_then(|value| value.message()) {
         diagnostics.push(MachineReportDiagnostic {
             kind: "print_error".to_owned(),
             severity: "error".to_owned(),
             code: None,
             message: print_error,
-            payload: print.print_error.clone().unwrap_or(Value::Null),
+            payload: print
+                .print_error
+                .as_ref()
+                .map(|value| value.payload())
+                .unwrap_or(Value::Null),
         });
     }
     collect_hms_diagnostics(report, &mut diagnostics);
@@ -263,18 +267,6 @@ fn bounded_u32(value: Option<&NumericValue>, min: u32, max: u32) -> Option<u32> 
     (min..=max).contains(&value).then_some(value)
 }
 
-fn diagnostic_message(value: &Value) -> Option<String> {
-    match value {
-        Value::String(raw) => {
-            let trimmed = raw.trim();
-            (!trimmed.is_empty()).then(|| trimmed.to_owned())
-        }
-        Value::Object(_) => diagnostic_object(value).and_then(|object| object.message()),
-        Value::Null => None,
-        other => Some(other.to_string()).filter(|message| !message.is_empty()),
-    }
-}
-
 fn collect_hms_diagnostics(report: &Value, diagnostics: &mut Vec<MachineReportDiagnostic>) {
     let Ok(envelope) = serde_json::from_value::<HmsEnvelope>(report.clone()) else {
         return;
@@ -282,44 +274,20 @@ fn collect_hms_diagnostics(report: &Value, diagnostics: &mut Vec<MachineReportDi
     for fields in [&envelope.fields, &envelope.print.fields] {
         for (key, value) in fields {
             if key.to_ascii_lowercase().contains("hms") {
-                collect_hms_value(value, diagnostics);
+                let mut objects = Vec::new();
+                value.collect_objects(&mut objects);
+                for object in objects {
+                    if let (Some(code), Some(message)) = (object.code(), object.message()) {
+                        diagnostics.push(MachineReportDiagnostic {
+                            kind: "hms".to_owned(),
+                            severity: "warning".to_owned(),
+                            code: Some(code),
+                            message,
+                            payload: serde_json::to_value(object).unwrap_or(Value::Null),
+                        });
+                    }
+                }
             }
         }
     }
-}
-
-fn collect_hms_value(value: &Value, diagnostics: &mut Vec<MachineReportDiagnostic>) {
-    match value {
-        Value::Array(values) => {
-            for value in values {
-                collect_hms_value(value, diagnostics);
-            }
-        }
-        Value::Object(_) => {
-            if let (Some(code), Some(message)) =
-                (code_from_object(value), message_from_object(value))
-            {
-                diagnostics.push(MachineReportDiagnostic {
-                    kind: "hms".to_owned(),
-                    severity: "warning".to_owned(),
-                    code: Some(code),
-                    message,
-                    payload: value.clone(),
-                });
-            }
-        }
-        _ => {}
-    }
-}
-
-fn code_from_object(value: &Value) -> Option<String> {
-    diagnostic_object(value).and_then(|object| object.code())
-}
-
-fn message_from_object(value: &Value) -> Option<String> {
-    diagnostic_object(value).and_then(|object| object.message())
-}
-
-fn diagnostic_object(value: &Value) -> Option<DiagnosticObject> {
-    serde_json::from_value(value.clone()).ok()
 }

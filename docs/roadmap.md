@@ -22,6 +22,7 @@
 - Replaced Agent MQTT snapshot test report fixtures with typed serde structs and split the fixture definitions into a dedicated module to keep test files under the 400 LOC split threshold.
 - Replaced Agent MQTT command payload reference assertions with typed serde fixtures for pushall, get-version, print controls, chamber light, extruder selection, and gcode-line commands.
 - Replaced Agent MQTT refresh-flow state reports and expected publish payloads with typed serde fixtures for get-version, pushall, and print state reports.
+- Replaced Agent MQTT print-error and HMS diagnostic parsing with typed serde diagnostic enums instead of manually walking `Value` arrays and objects.
 - Replaced Agent MQTT report test fixtures with typed serde structs for progress reports, temperature snapshots, AMS material reports, external spool reports, and raw payload preservation.
 - Replaced Agent machine gateway tests' MQTT report and command expectations with typed serde fixtures for refresh, project-file dispatch, light controls, temperature/G-code controls, AMS operations, and raw runtime state reports.
 - Replaced the first Agent material-normalization report fixtures with typed serde structs and split shared decoded patch test types into a fixture module under the 400 LOC split threshold.
