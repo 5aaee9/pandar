@@ -903,6 +903,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced the remaining simple Hub route fixed error/status response assertions with typed serde response structs.
 - Replaced the Hub printer delete test's empty list response assertion with typed serde response decoding.
 - Replaced fixed Bambu MQTT/version runtime report test fixtures with typed serde-serializable structs.
+- Replaced fixed agent startup/command report and material patch test fixtures with typed serde-serializable structs.
 
 Exit criteria:
 

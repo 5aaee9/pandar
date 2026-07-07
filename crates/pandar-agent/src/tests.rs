@@ -1,4 +1,4 @@
-use serde_json::json;
+use serde::Serialize;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
@@ -239,21 +239,79 @@ fn test_config() -> AgentConfig {
 }
 
 fn get_version_report(model: &str) -> serde_json::Value {
-    json!({
-        "info": {
-            "command": "get_version",
-            "module": [{"name": "ota", "product_name": model}]
-        }
+    serde_json::to_value(TestGetVersionReport {
+        info: TestGetVersionInfo {
+            command: "get_version",
+            module: [TestGetVersionModule {
+                name: "ota",
+                product_name: model,
+            }],
+        },
     })
+    .unwrap()
 }
 
 fn runtime_state_report(state: &str) -> serde_json::Value {
-    json!({
-        "print": {
-            "state": state,
-            "ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA"}]}]}
-        }
+    serde_json::to_value(TestRuntimeStateReport {
+        print: TestRuntimePrintReport {
+            state,
+            ams: TestRuntimeAmsReport {
+                ams: [TestRuntimeAmsUnit {
+                    id: "0",
+                    tray: [TestRuntimeAmsTray {
+                        id: "0",
+                        tray_type: "PLA",
+                    }],
+                }],
+            },
+        },
     })
+    .unwrap()
+}
+
+#[derive(Debug, Serialize)]
+struct TestGetVersionReport<'a> {
+    info: TestGetVersionInfo<'a>,
+}
+
+#[derive(Debug, Serialize)]
+struct TestGetVersionInfo<'a> {
+    command: &'static str,
+    module: [TestGetVersionModule<'a>; 1],
+}
+
+#[derive(Debug, Serialize)]
+struct TestGetVersionModule<'a> {
+    name: &'static str,
+    product_name: &'a str,
+}
+
+#[derive(Debug, Serialize)]
+struct TestRuntimeStateReport<'a> {
+    print: TestRuntimePrintReport<'a>,
+}
+
+#[derive(Debug, Serialize)]
+struct TestRuntimePrintReport<'a> {
+    state: &'a str,
+    ams: TestRuntimeAmsReport,
+}
+
+#[derive(Debug, Serialize)]
+struct TestRuntimeAmsReport {
+    ams: [TestRuntimeAmsUnit; 1],
+}
+
+#[derive(Debug, Serialize)]
+struct TestRuntimeAmsUnit {
+    id: &'static str,
+    tray: [TestRuntimeAmsTray; 1],
+}
+
+#[derive(Debug, Serialize)]
+struct TestRuntimeAmsTray {
+    id: &'static str,
+    tray_type: &'static str,
 }
 
 fn link_printer_command() -> HubCommand {

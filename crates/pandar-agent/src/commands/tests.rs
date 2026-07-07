@@ -6,7 +6,7 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use async_trait::async_trait;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::{sync::Mutex, sync::mpsc};
 
@@ -505,12 +505,33 @@ fn refresh_materials_command(
 }
 
 fn get_version_report(model: &str) -> serde_json::Value {
-    json!({
-        "info": {
-            "command": "get_version",
-            "module": [{"name": "ota", "product_name": model}]
-        }
+    serde_json::to_value(TestGetVersionReport {
+        info: TestGetVersionInfo {
+            command: "get_version",
+            module: [TestGetVersionModule {
+                name: "ota",
+                product_name: model,
+            }],
+        },
     })
+    .unwrap()
+}
+
+#[derive(Debug, Serialize)]
+struct TestGetVersionReport<'a> {
+    info: TestGetVersionInfo<'a>,
+}
+
+#[derive(Debug, Serialize)]
+struct TestGetVersionInfo<'a> {
+    command: &'static str,
+    module: [TestGetVersionModule<'a>; 1],
+}
+
+#[derive(Debug, Serialize)]
+struct TestGetVersionModule<'a> {
+    name: &'static str,
+    product_name: &'a str,
 }
 
 async fn drain_until_success(receiver: &mut mpsc::Receiver<AgentEvent>) {
@@ -699,14 +720,42 @@ fn material_result(serial: &str, printer_id: Option<&str>) -> MaterialRefreshRes
     MaterialRefreshResult {
         serial: serial.to_owned(),
         printer_id: printer_id.map(str::to_owned),
-        printer_materials_json: json!({
-            "type": "printer_material_patch",
-            "observed_at": "2026-07-02T00:00:00Z",
-            "ams_units": [{"unit_id": "0", "trays": [{"tray_id": "0", "type": "PLA"}]}],
-            "external_spools": []
+        printer_materials_json: serde_json::to_string(&TestMaterialPatchResult {
+            kind: "printer_material_patch",
+            observed_at: "2026-07-02T00:00:00Z",
+            ams_units: [TestMaterialPatchResultAmsUnit {
+                unit_id: "0",
+                trays: [TestMaterialPatchResultTray {
+                    tray_id: "0",
+                    filament_type: "PLA",
+                }],
+            }],
+            external_spools: [],
         })
-        .to_string(),
+        .unwrap(),
     }
+}
+
+#[derive(Debug, Serialize)]
+struct TestMaterialPatchResult {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    observed_at: &'static str,
+    ams_units: [TestMaterialPatchResultAmsUnit; 1],
+    external_spools: [(); 0],
+}
+
+#[derive(Debug, Serialize)]
+struct TestMaterialPatchResultAmsUnit {
+    unit_id: &'static str,
+    trays: [TestMaterialPatchResultTray; 1],
+}
+
+#[derive(Debug, Serialize)]
+struct TestMaterialPatchResultTray {
+    tray_id: &'static str,
+    #[serde(rename = "type")]
+    filament_type: &'static str,
 }
 
 pub(super) fn assert_failure_contains(event: AgentEvent, command_id: &str, needle: &str) {
