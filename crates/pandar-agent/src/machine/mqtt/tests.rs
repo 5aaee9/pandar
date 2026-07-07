@@ -12,7 +12,10 @@ use crate::{
     protocol::agent::v1::{PrintJobReport, agent_event},
 };
 
+mod fixtures;
 mod snapshot;
+
+use fixtures::*;
 
 fn endpoint() -> BambuPrinterEndpoint {
     BambuPrinterEndpoint {
@@ -355,25 +358,14 @@ fn ftps_lan_tls_default_profile_config_constructs() {
 fn pushall_payload_matches_reference() {
     let payload = BambuMqttCommand::RequestPushAll.payload();
     let sequence_id = studio_sequence_id(&payload, "pushing");
-    assert_eq!(
-        payload,
-        json!({"pushing": {
-            "command": "pushall",
-            "sequence_id": sequence_id,
-            "version": 1,
-            "push_target": 1
-        }})
-    );
+    assert_eq!(payload, expected_pushall_payload(&sequence_id));
 }
 
 #[test]
 fn get_version_payload_matches_reference() {
     let payload = BambuMqttCommand::GetVersion.payload();
     let sequence_id = studio_sequence_id(&payload, "info");
-    assert_eq!(
-        payload,
-        json!({"info": {"command": "get_version", "sequence_id": sequence_id}})
-    );
+    assert_eq!(payload, expected_get_version_payload(&sequence_id));
 }
 
 #[test]
@@ -389,12 +381,7 @@ fn get_version_report_extracts_trimmed_ota_model() {
 
 #[test]
 fn get_version_report_rejects_missing_model() {
-    let report = json!({
-        "info": {
-            "command": "get_version",
-            "module": [{"name": "ota", "product_name": "   "}]
-        }
-    });
+    let report = get_version_report_with_blank_model();
 
     assert!(model_from_get_version_report(parse_get_version_report(&report).unwrap()).is_err());
 }
@@ -406,15 +393,15 @@ fn basic_print_control_payloads_match_reference() {
     let stop = BambuMqttCommand::StopPrint.payload();
     assert_eq!(
         pause,
-        json!({"print": {"command": "pause", "param": "", "sequence_id": studio_sequence_id(&pause, "print")}})
+        expected_print_command_payload("pause", "", &studio_sequence_id(&pause, "print"))
     );
     assert_eq!(
         resume,
-        json!({"print": {"command": "resume", "param": "", "sequence_id": studio_sequence_id(&resume, "print")}})
+        expected_print_command_payload("resume", "", &studio_sequence_id(&resume, "print"))
     );
     assert_eq!(
         stop,
-        json!({"print": {"command": "stop", "param": "", "sequence_id": studio_sequence_id(&stop, "print")}})
+        expected_print_command_payload("stop", "", &studio_sequence_id(&stop, "print"))
     );
 }
 
@@ -423,16 +410,7 @@ fn chamber_light_payload_matches_bambu_studio_reference() {
     let on = BambuMqttCommand::SetChamberLight(true).payload();
     assert_eq!(
         on,
-        json!({"system": {
-            "command": "ledctrl",
-            "led_node": "chamber_light",
-            "led_mode": "on",
-            "led_on_time": 500,
-            "led_off_time": 500,
-            "loop_times": 1,
-            "interval_time": 1000,
-            "sequence_id": studio_sequence_id(&on, "system")
-        }})
+        expected_chamber_light_payload(&studio_sequence_id(&on, "system"))
     );
 
     let off = BambuMqttCommand::SetChamberLight(false).payload();
@@ -444,7 +422,7 @@ fn print_speed_is_limited_to_reference_modes() {
     let payload = BambuMqttCommand::SetPrintSpeed(PrintSpeed::new(4).unwrap()).payload();
     assert_eq!(
         payload,
-        json!({"print": {"command": "print_speed", "param": "4", "sequence_id": studio_sequence_id(&payload, "print")}})
+        expected_print_command_payload("print_speed", "4", &studio_sequence_id(&payload, "print"))
     );
     assert!(PrintSpeed::new(0).is_err());
     assert!(PrintSpeed::new(5).is_err());
@@ -455,7 +433,7 @@ fn select_extruder_payload_matches_bambu_studio_reference() {
     let payload = BambuMqttCommand::SelectExtruder(1).payload();
     assert_eq!(
         payload,
-        json!({"print": {"command": "select_extruder", "extruder_index": 1, "sequence_id": studio_sequence_id(&payload, "print")}})
+        expected_select_extruder_payload(1, &studio_sequence_id(&payload, "print"))
     );
 }
 
@@ -467,7 +445,7 @@ fn gcode_line_payload_preserves_single_home_line() {
     .payload();
     assert_eq!(
         payload,
-        json!({"print": {"command": "gcode_line", "param": "G28", "sequence_id": studio_sequence_id(&payload, "print")}})
+        expected_print_command_payload("gcode_line", "G28", &studio_sequence_id(&payload, "print"))
     );
 }
 
@@ -483,7 +461,11 @@ fn gcode_line_payload_joins_relative_move_lines() {
     .payload();
     assert_eq!(
         payload,
-        json!({"print": {"command": "gcode_line", "param": "G91\nG0 X10 Z-0.5 F3000\nG90", "sequence_id": studio_sequence_id(&payload, "print")}})
+        expected_print_command_payload(
+            "gcode_line",
+            "G91\nG0 X10 Z-0.5 F3000\nG90",
+            &studio_sequence_id(&payload, "print")
+        )
     );
 }
 
@@ -495,7 +477,11 @@ fn gcode_line_payload_preserves_hotend_temperature_line() {
     .payload();
     assert_eq!(
         payload,
-        json!({"print": {"command": "gcode_line", "param": "M104 S200", "sequence_id": studio_sequence_id(&payload, "print")}})
+        expected_print_command_payload(
+            "gcode_line",
+            "M104 S200",
+            &studio_sequence_id(&payload, "print")
+        )
     );
 }
 
