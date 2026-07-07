@@ -1,5 +1,8 @@
 use super::*;
+use requests::agent_name_body;
 use serde::{Deserialize, de::DeserializeOwned};
+
+mod requests;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -180,7 +183,7 @@ async fn viewer_cannot_create_agent() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{}/agents", tenant.id),
-        Some(json!({ "name": "shop-agent" })),
+        agent_name_body("shop-agent"),
         &token,
     )
     .await;
@@ -206,7 +209,7 @@ async fn linked_viewer_jwt_cannot_create_agent() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{}/agents", tenant.id),
-        Some(json!({ "name": "shop-agent" })),
+        agent_name_body("shop-agent"),
         &token,
     )
     .await;
@@ -221,7 +224,7 @@ async fn invalid_tenant_id_on_agent_create_returns_bad_request() {
         app().await,
         Method::POST,
         "/api/v1/tenants/not-a-uuid/agents",
-        Some(json!({ "name": "shop-agent" })),
+        agent_name_body("shop-agent"),
     )
     .await;
 
@@ -247,7 +250,7 @@ async fn missing_tenant_on_agent_create_returns_forbidden() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "shop-agent" })),
+        agent_name_body("shop-agent"),
         &token,
     )
     .await;
@@ -274,7 +277,7 @@ async fn agent_create_returns_offline_record_and_audit_event() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "shop-agent" })),
+        agent_name_body("shop-agent"),
         &token,
     )
     .await;
@@ -312,7 +315,7 @@ async fn empty_agent_name_returns_bad_request() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "" })),
+        agent_name_body(""),
         &token,
     )
     .await;
@@ -338,7 +341,7 @@ async fn agent_list_returns_created_records() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "shop-agent" })),
+        agent_name_body("shop-agent"),
         &token,
     )
     .await;
@@ -596,7 +599,7 @@ async fn duplicate_agent_name_returns_conflict() {
         app.clone(),
         Method::POST,
         &uri,
-        Some(json!({ "name": "shop-agent" })),
+        agent_name_body("shop-agent"),
         &token,
     )
     .await;
@@ -606,7 +609,7 @@ async fn duplicate_agent_name_returns_conflict() {
         app,
         Method::POST,
         &uri,
-        Some(json!({ "name": "shop-agent" })),
+        agent_name_body("shop-agent"),
         &token,
     )
     .await;
