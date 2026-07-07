@@ -57,6 +57,7 @@ Use these projects as protocol and behavior references for SFTP / MQTT integrati
 - **Database backends**: pandar-hub must support both SQLite and PostgreSQL as first-class storage backends. New persistent data access must be written behind a backend-neutral repository/query boundary and tested against both backends when the behavior is database-dependent.
 - **Concurrent maps**: `dashmap` for hot-path instance-owned maps
 - **Frontend state management**: `zustand` owns frontend user settings and persisted browser state. Settings persistence uses the `persist` middleware under the `pandar.settings` key.
+- **Bambu Studio network plugin ABI**: `crates/pandar-network-plugin/src/shim.cpp` must stay a thin C++ ABI adapter for Bambu Studio's C++ entrypoints and STL-owned arguments only. Do not put Pandar policy, Studio status payload construction, printer-operation parsing, HTTP behavior, or other non-ABI business logic in the shim; implement that logic in Rust modules behind flat C FFI exports and call those from the shim.
 
 ## Memory Files
 

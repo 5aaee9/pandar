@@ -4,6 +4,7 @@ mod gcode;
 mod http;
 pub mod installer;
 mod local_webserver;
+mod studio_status;
 
 use serde_json::{Value, json};
 
@@ -256,6 +257,19 @@ pub extern "C" fn pandar_plugin_operation_json_from_gcode(
         Some(operation) => result(0, 200, operation.to_string()),
         None => invalid_input("unsupported_printer_operation"),
     }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn pandar_plugin_printer_telemetry_json(
+    printer_ptr: *const u8,
+    printer_len: usize,
+) -> PluginHttpResult {
+    let printer_json = read_utf8(printer_ptr, printer_len).unwrap_or_default();
+    result(
+        0,
+        200,
+        studio_status::printer_telemetry_fragment(&printer_json),
+    )
 }
 
 #[unsafe(no_mangle)]

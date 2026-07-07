@@ -197,6 +197,7 @@ PluginHttpResult pandar_plugin_submit_printer_operation(
     const uint8_t*, std::size_t
 );
 PluginHttpResult pandar_plugin_operation_json_from_gcode(const uint8_t*, std::size_t);
+PluginHttpResult pandar_plugin_printer_telemetry_json(const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_start_local_webserver(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t,
@@ -341,152 +342,15 @@ std::string field_from_json(const std::string& json, const char* key) {
     return out;
 }
 
-std::string scalar_from_json(const std::string& json, const char* key) {
-    if (auto value = field_from_json(json, key); !value.empty()) return value;
-
-    const std::string needle = std::string("\"") + key + "\"";
-    const auto key_pos = json.find(needle);
-    if (key_pos == std::string::npos) return {};
-    const auto colon = json.find(':', key_pos + needle.size());
-    if (colon == std::string::npos) return {};
-    auto start = json.find_first_not_of(" \t\r\n", colon + 1);
-    if (start == std::string::npos || json[start] == '{' || json[start] == '[' || json[start] == 'n') return {};
-    auto end = json.find_first_of(",}\r\n\t ", start);
-    if (end == std::string::npos) end = json.size();
-    return json.substr(start, end - start);
-}
-
 std::vector<std::string> objects_from_array(const std::string& json, const char* key);
 std::string object_from_json(const std::string& json, const char* key);
-std::string studio_materials_payload(const std::string& printer);
-
-bool bool_field_from_json(const std::string& json, const char* key) {
-    const std::string needle = std::string("\"") + key + "\"";
-    const auto key_pos = json.find(needle);
-    if (key_pos == std::string::npos) return false;
-    const auto colon = json.find(':', key_pos + needle.size());
-    if (colon == std::string::npos) return false;
-    auto value = json.find_first_not_of(" \t\r\n", colon + 1);
-    return value != std::string::npos && json.compare(value, 4, "true") == 0;
-}
-
-std::string json_number_or_zero(std::string value) {
-    if (value.empty()) return "0";
-    bool seen_digit = false;
-    bool seen_dot = false;
-    std::string out;
-    for (char c : value) {
-        if (c >= '0' && c <= '9') {
-            seen_digit = true;
-            out.push_back(c);
-        } else if (c == '.' && !seen_dot) {
-            seen_dot = true;
-            out.push_back(c);
-        } else if ((c == '-' || c == '+') && out.empty()) {
-            out.push_back(c);
-        }
-    }
-    if (!seen_digit || out == "-" || out == "+") return "0";
-    return out;
-}
-
-std::uint32_t json_temperature_bits(const std::string& value) {
-    try {
-        const auto parsed = std::stod(json_number_or_zero(value));
-        if (parsed <= 0) return 0;
-        if (parsed >= 65535) return 65535;
-        return static_cast<std::uint32_t>(parsed + 0.5);
-    } catch (...) {
-        return 0;
-    }
-}
-
-std::string packed_temperature_json(const std::string& current, const std::string& target) {
-    return std::to_string(json_temperature_bits(current) | (json_temperature_bits(target) << 16));
-}
-
-std::uint32_t studio_extruder_id(const std::string& label, std::size_t index, std::size_t total) {
-    if (total <= 1) return 0;
-    if (label == "L" || label == "l") return 1;
-    if (label == "R" || label == "r") return 0;
-    return index == 0 ? 1 : 0;
-}
-
-std::uint32_t studio_active_extruder_id(const std::vector<std::string>& nozzles, const std::string& active_nozzle) {
-    if (nozzles.size() <= 1) return 0;
-    if (active_nozzle == "L" || active_nozzle == "l") return 1;
-    if (active_nozzle == "R" || active_nozzle == "r") return 0;
-    const auto first_label = nozzles.empty() ? std::string{} : field_from_json(nozzles.front(), "label");
-    return studio_extruder_id(first_label, 0, nozzles.size());
-}
-
-#include "studio_materials.hpp"
-
-std::string studio_extruder_device_json(const std::vector<std::string>& nozzles, const std::string& active_nozzle) {
-    const auto total = nozzles.empty() ? std::size_t{1} : nozzles.size();
-    const auto active_id = studio_active_extruder_id(nozzles, active_nozzle);
-    std::string info = "[";
-    for (std::size_t i = 0; i < total; ++i) {
-        const auto nozzle = i < nozzles.size() ? nozzles[i] : std::string{};
-        const auto label = field_from_json(nozzle, "label");
-        const auto id = studio_extruder_id(label, i, total);
-        const auto temp = packed_temperature_json(
-            field_from_json(nozzle, "current_celsius"),
-            field_from_json(nozzle, "target_celsius"));
-        if (i != 0) info += ',';
-        info += std::string(R"({"id":)") + std::to_string(id) + R"(,"info":8,"temp":)" + temp +
-            R"(,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":)" + std::to_string(id) + "}";
-    }
-    info += "]";
-    return std::string(R"({"state":)") + std::to_string(total | (active_id << 4)) + R"(,"info":)" + info + "}";
-}
-
-std::string studio_nozzle_device_json(const std::vector<std::string>& nozzles) {
-    const auto total = nozzles.empty() ? std::size_t{1} : nozzles.size();
-    std::uint32_t exist = 0;
-    std::string info = "[";
-    for (std::size_t i = 0; i < total; ++i) {
-        const auto nozzle = i < nozzles.size() ? nozzles[i] : std::string{};
-        const auto label = field_from_json(nozzle, "label");
-        const auto id = studio_extruder_id(label, i, total);
-        exist |= (1u << id);
-        if (i != 0) info += ',';
-        info += std::string(R"({"id":)") + std::to_string(id) + R"(,"diameter":0.4,"type":"XS01","stat":0})";
-    }
-    info += "]";
-    return std::string(R"({"exist":)") + std::to_string(exist) + R"(,"state":0,"info":)" + info + "}";
-}
 
 std::string printer_telemetry_from_json(const std::string& printer) {
-    const auto nozzles = objects_from_array(printer, "nozzle_temperatures");
-    const auto nozzle = nozzles.empty() ? std::string{} : nozzles.front();
-    const auto right_nozzle = nozzles.size() > 1 ? nozzles[1] : std::string{};
-    const auto nozzle_current = json_number_or_zero(field_from_json(nozzle, "current_celsius"));
-    const auto nozzle_target = json_number_or_zero(field_from_json(nozzle, "target_celsius"));
-    const auto right_nozzle_current = json_number_or_zero(field_from_json(right_nozzle, "current_celsius"));
-    const auto right_nozzle_target = json_number_or_zero(field_from_json(right_nozzle, "target_celsius"));
-    const auto bed_current = json_number_or_zero(field_from_json(printer, "bed_temperature_celsius"));
-    const auto bed_target = json_number_or_zero(field_from_json(printer, "bed_target_temperature_celsius"));
-    const auto chamber_current = json_number_or_zero(field_from_json(printer, "chamber_temperature_celsius"));
-    const auto active_nozzle = field_from_json(printer, "active_nozzle");
-    const auto light_mode = bool_field_from_json(printer, "chamber_light_on") ? "on" : "off";
-    const auto printer_type = field_from_json(printer, "dev_model_name");
-    return std::string(R"("printer_type":)") + escape_json(printer_type.empty() ? "C11" : printer_type) +
-        R"(,"support_chamber":true,"support_chamber_temp_display":true)" +
-        R"(,"bed_temper":)" + bed_current +
-        R"(,"bed_target_temper":)" + bed_target +
-        R"(,"nozzle_type":"XS01","nozzle_diameter":0.4)" +
-        R"(,"nozzle_temper":)" + nozzle_current +
-        R"(,"nozzle_target_temper":)" + nozzle_target +
-        R"(,"nozzle_temper2":)" + right_nozzle_current +
-        R"(,"nozzle_target_temper2":)" + right_nozzle_target +
-        R"(,"chamber_temper":)" + chamber_current +
-        R"(,"lights_report":[{"node":"chamber_light","mode":)" + escape_json(light_mode) + R"(}])" +
-        R"(,"device":{"type":1,"bed_temp":)" + packed_temperature_json(bed_current, bed_target) +
-        R"(,"ctc":{"state":1,"info":{"temp":)" + packed_temperature_json(chamber_current, {}) +
-        R"(}},"nozzle":)" + studio_nozzle_device_json(nozzles) +
-        R"(,"extruder":)" + studio_extruder_device_json(nozzles, active_nozzle) + "}" +
-        studio_materials_payload(printer);
+    auto result = pandar_plugin_printer_telemetry_json(
+        reinterpret_cast<const uint8_t*>(printer.data()),
+        printer.size()
+    );
+    return body_from_result(result);
 }
 
 std::string studio_dev_id(std::string dev_id) {
