@@ -5,12 +5,12 @@ use std::{
 
 use pandar_core::{CommandRecord, Printer, PrinterNozzleTemperature, TenantId};
 use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
+use serde_json::Number;
 use tokio::sync::{Mutex, broadcast};
 
 use crate::{
     metrics::{MetricsState, SubscriptionGuard},
-    repositories::MaterialSnapshot,
+    repositories::{MaterialJsonValue, MaterialSnapshot},
     routes::jobs::JobResponse,
 };
 
@@ -106,8 +106,8 @@ pub fn printer_event_printer(
 impl From<MaterialSnapshot> for PrinterEventMaterials {
     fn from(snapshot: MaterialSnapshot) -> Self {
         Self {
-            ams_units: material_json(snapshot.ams_units).scrubbed(),
-            external_spools: material_json(snapshot.external_spools).scrubbed(),
+            ams_units: PrinterEventMaterialJson::from(snapshot.ams_units).scrubbed(),
+            external_spools: PrinterEventMaterialJson::from(snapshot.external_spools).scrubbed(),
             active_tray: snapshot.active_tray.map(scrub_material_json),
             observed_at: snapshot.observed_at,
         }
@@ -132,13 +132,8 @@ impl From<CommandRecord> for PrinterEventCommand {
     }
 }
 
-fn scrub_material_json(value: Value) -> PrinterEventMaterialJson {
-    material_json(value).scrubbed()
-}
-
-fn material_json(value: Value) -> PrinterEventMaterialJson {
-    serde_json::from_value::<PrinterEventMaterialJson>(value)
-        .expect("printer material JSON is representable")
+fn scrub_material_json(value: MaterialJsonValue) -> PrinterEventMaterialJson {
+    PrinterEventMaterialJson::from(value).scrubbed()
 }
 
 impl PrinterEventMaterialJson {
@@ -153,6 +148,26 @@ impl PrinterEventMaterialJson {
                     .collect(),
             ),
             value => value,
+        }
+    }
+}
+
+impl From<MaterialJsonValue> for PrinterEventMaterialJson {
+    fn from(value: MaterialJsonValue) -> Self {
+        match value {
+            MaterialJsonValue::Object(object) => Self::Object(
+                object
+                    .into_iter()
+                    .map(|(key, value)| (key, Self::from(value)))
+                    .collect(),
+            ),
+            MaterialJsonValue::Array(values) => {
+                Self::Array(values.into_iter().map(Self::from).collect())
+            }
+            MaterialJsonValue::String(value) => Self::String(value),
+            MaterialJsonValue::Number(value) => Self::Number(value),
+            MaterialJsonValue::Bool(value) => Self::Bool(value),
+            MaterialJsonValue::Null => Self::Null,
         }
     }
 }

@@ -1,18 +1,17 @@
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::entities::printer_material_snapshots;
 
 use super::patch::{
-    MaterialExternalSpoolPatch, MaterialJsonObject, MaterialTrayPatch, MaterialUnitPatch,
-    ParsedPatch, Presence, parse_object_json,
+    MaterialExternalSpoolPatch, MaterialJsonObject, MaterialJsonValue, MaterialTrayPatch,
+    MaterialUnitPatch, ParsedPatch, Presence, parse_object_json,
 };
 
 pub(super) struct MergedSnapshot {
-    pub(super) ams_units: Value,
-    pub(super) external_spools: Value,
-    pub(super) active_tray: Option<Value>,
+    pub(super) ams_units: MaterialJsonValue,
+    pub(super) external_spools: MaterialJsonValue,
+    pub(super) active_tray: Option<MaterialJsonValue>,
 }
 
 pub(super) fn merge_snapshot(
@@ -48,15 +47,10 @@ pub(super) fn merge_snapshot(
         Presence::Null => None,
         Presence::Value(value) => Some(value.clone()),
     };
-    let active_tray = active_tray
-        .map(serde_json::to_value)
-        .transpose()
-        .context("failed to serialize active material tray")?;
 
     Ok(MergedSnapshot {
-        ams_units: serde_json::to_value(ams_units)
-            .context("failed to serialize AMS merge state")?,
-        external_spools: serde_json::to_value(external_spools)
+        ams_units: material_json(ams_units).context("failed to serialize AMS merge state")?,
+        external_spools: material_json(external_spools)
             .context("failed to serialize external spool merge state")?,
         active_tray,
     })
@@ -99,6 +93,11 @@ fn parse_external_spools_json(
     context: &str,
 ) -> anyhow::Result<Vec<MaterialExternalSpoolState>> {
     serde_json::from_str(raw).with_context(|| format!("failed to parse {context}"))
+}
+
+fn material_json(input: impl Serialize) -> anyhow::Result<MaterialJsonValue> {
+    serde_json::from_value(serde_json::to_value(input)?)
+        .context("failed to convert material merge state")
 }
 
 fn merge_units(current: &mut Vec<MaterialUnitState>, patches: &[MaterialUnitPatch]) {

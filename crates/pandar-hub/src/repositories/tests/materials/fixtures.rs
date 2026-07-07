@@ -6,11 +6,11 @@ use crate::repositories::{
 };
 
 pub(super) fn ams_units(snapshot: &MaterialSnapshot) -> Vec<TestMaterialUnit> {
-    serde_json::from_value(snapshot.ams_units.clone()).unwrap()
+    serde_json::from_value(serde_json::to_value(&snapshot.ams_units).unwrap()).unwrap()
 }
 
 pub(super) fn external_spools(snapshot: &MaterialSnapshot) -> Vec<TestExternalSpool> {
-    serde_json::from_value(snapshot.external_spools.clone()).unwrap()
+    serde_json::from_value(serde_json::to_value(&snapshot.external_spools).unwrap()).unwrap()
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

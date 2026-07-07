@@ -5,7 +5,6 @@ use sea_orm::{
 };
 #[cfg(test)]
 use serde::Serialize;
-use serde_json::Value;
 
 use crate::{
     db::Database,
@@ -17,6 +16,7 @@ mod merge;
 mod patch;
 
 use merge::merge_snapshot;
+pub use patch::MaterialJsonValue;
 use patch::{is_older, parse_array_json, parse_object_json, parse_patch_result, sanitize_message};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,9 +35,9 @@ pub struct MaterialSnapshot {
     pub printer_id: String,
     pub agent_id: AgentId,
     pub serial_number: String,
-    pub ams_units: Value,
-    pub external_spools: Value,
-    pub active_tray: Option<Value>,
+    pub ams_units: MaterialJsonValue,
+    pub external_spools: MaterialJsonValue,
+    pub active_tray: Option<MaterialJsonValue>,
     pub observed_at: String,
     pub updated_at: String,
 }
@@ -66,9 +66,9 @@ impl MaterialSnapshot {
 #[cfg(test)]
 #[derive(Serialize)]
 struct PersistedMaterialSnapshotJson<'a> {
-    ams_units: &'a Value,
-    external_spools: &'a Value,
-    active_tray: Option<&'a Value>,
+    ams_units: &'a MaterialJsonValue,
+    external_spools: &'a MaterialJsonValue,
+    active_tray: Option<&'a MaterialJsonValue>,
 }
 
 #[derive(Debug, Clone)]
@@ -248,19 +248,16 @@ fn snapshot_from_model(
             printer_id: model.printer_id,
             agent_id: AgentId::parse(&model.agent_id).map_err(anyhow::Error::from)?,
             serial_number: model.serial_number,
-            ams_units: Value::Array(parse_array_json(&model.ams_json, "AMS material state")?),
-            external_spools: Value::Array(parse_array_json(
+            ams_units: parse_array_json(&model.ams_json, "AMS material state")?,
+            external_spools: parse_array_json(
                 &model.external_spools_json,
                 "external spool material state",
-            )?),
+            )?,
             active_tray: model
                 .active_tray_json
                 .as_deref()
                 .map(|json| parse_object_json(json, "active material tray"))
-                .transpose()?
-                .map(serde_json::to_value)
-                .transpose()
-                .context("failed to serialize active material tray")?,
+                .transpose()?,
             observed_at: model.observed_at,
             updated_at: model.updated_at,
         })

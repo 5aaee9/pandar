@@ -30,7 +30,8 @@ pub use jobs::{
     JobRepository, JobWithArtifact, PrintReportDiagnostic,
 };
 pub use materials::{
-    MaterialPatchInput, MaterialPatchOutcome, MaterialRepository, MaterialSnapshot,
+    MaterialJsonValue, MaterialPatchInput, MaterialPatchOutcome, MaterialRepository,
+    MaterialSnapshot,
 };
 pub use printer_event_tickets::{
     IssuedPrinterEventTicket, PrinterEventTicketConsumeResult, PrinterEventTicketRepository,

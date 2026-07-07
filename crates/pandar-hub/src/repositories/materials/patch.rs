@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use anyhow::{Context, bail};
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::{Number, Value};
+use serde_json::Number;
 use time::OffsetDateTime;
 
 #[derive(Debug)]
@@ -69,9 +69,9 @@ pub(super) struct MaterialExternalSpoolPatch {
 
 pub(super) type MaterialJsonObject = BTreeMap<String, MaterialJsonValue>;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(untagged)]
-pub(super) enum MaterialJsonValue {
+pub enum MaterialJsonValue {
     Object(MaterialJsonObject),
     Array(Vec<MaterialJsonValue>),
     String(String),
@@ -125,8 +125,10 @@ pub(super) fn is_older(observed_at: &str, persisted_at: &str) -> anyhow::Result<
     )
 }
 
-pub(super) fn parse_array_json(raw: &str, context: &str) -> anyhow::Result<Vec<Value>> {
-    serde_json::from_str::<Vec<Value>>(raw).with_context(|| format!("failed to parse {context}"))
+pub(super) fn parse_array_json(raw: &str, context: &str) -> anyhow::Result<MaterialJsonValue> {
+    let values: Vec<MaterialJsonValue> =
+        serde_json::from_str(raw).with_context(|| format!("failed to parse {context}"))?;
+    Ok(MaterialJsonValue::Array(values))
 }
 
 pub(super) fn parse_object_json(raw: &str, context: &str) -> anyhow::Result<MaterialJsonValue> {
