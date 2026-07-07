@@ -136,12 +136,12 @@ fn parse_zip_archive<R: Read + Seek>(
         })
         .collect::<Vec<_>>();
     Ok(Some(ArtifactMetadata {
-        source: "bambu_3mf",
+        source: "bambu_3mf".to_string(),
         display_name: display_name_from_filename(filename),
         default_plate_id,
         plate_count: plates.len(),
         plates,
-        warnings: draft.warnings.into_iter().collect(),
+        warnings: draft.warnings.into_iter().map(str::to_owned).collect(),
     }))
 }
 

@@ -1,3 +1,4 @@
+use crate::artifacts::metadata::ArtifactMetadata;
 use anyhow::Context;
 use pandar_core::{
     AgentId, CommandId, Job, JobArtifact, JobArtifactParts, JobFilamentUsage, JobId, JobParts,
@@ -120,7 +121,7 @@ pub(crate) fn usage_from_model(
 
 pub(crate) fn artifact_from_model(model: job_artifacts::Model) -> RepositoryResult<JobArtifact> {
     if let Some(metadata_json) = &model.metadata_json {
-        serde_json::from_str::<serde_json::Value>(metadata_json)
+        serde_json::from_str::<ArtifactMetadata>(metadata_json)
             .with_context(|| format!("invalid persisted artifact metadata for {}", model.id))?;
     }
     JobArtifact::from_parts(JobArtifactParts {

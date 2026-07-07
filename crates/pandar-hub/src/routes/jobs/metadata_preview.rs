@@ -1,11 +1,11 @@
 use axum::{extract::Multipart, http::StatusCode};
 
-use crate::{AppState, routes::ApiError};
+use crate::{AppState, artifacts::metadata::ArtifactMetadata, routes::ApiError};
 
 pub(in crate::routes) async fn preview_artifact_metadata_from_multipart(
     state: &AppState,
     multipart: Multipart,
-) -> Result<Option<serde_json::Value>, ApiError> {
+) -> Result<Option<ArtifactMetadata>, ApiError> {
     let parsed = super::multipart::parse_multipart_print_fields(state, multipart).await?;
     let result = preview_artifact_metadata(&parsed).await;
     parsed.cleanup_staged_uploads().await;
@@ -14,7 +14,7 @@ pub(in crate::routes) async fn preview_artifact_metadata_from_multipart(
 
 async fn preview_artifact_metadata(
     parsed: &super::multipart::MultipartPrintFields,
-) -> Result<Option<serde_json::Value>, ApiError> {
+) -> Result<Option<ArtifactMetadata>, ApiError> {
     let file = parsed
         .file
         .as_ref()
@@ -33,23 +33,16 @@ async fn preview_artifact_metadata(
         .or_else(|| file.content_type.clone())
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| "application/octet-stream".to_string());
-    parsed_metadata_json(&filename, &content_type, &file.path).await
+    parsed_artifact_metadata(&filename, &content_type, &file.path).await
 }
 
-pub(super) async fn parsed_metadata_json(
+pub(super) async fn parsed_artifact_metadata(
     filename: &str,
     content_type: &str,
     path: &std::path::Path,
-) -> Result<Option<serde_json::Value>, ApiError> {
+) -> Result<Option<ArtifactMetadata>, ApiError> {
     match crate::artifacts::metadata::parse_artifact_metadata(filename, content_type, path) {
-        Ok(Some(metadata)) => serde_json::to_value(metadata).map(Some).map_err(|err| {
-            tracing::error!(
-                error = %format!("{err:#}"),
-                "failed to serialize artifact metadata"
-            );
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
-        }),
-        Ok(None) => Ok(None),
+        Ok(metadata) => Ok(metadata),
         Err(err) => {
             tracing::warn!(
                 error = %super::redact_artifact_error(&format!("{err:#}")),
@@ -58,4 +51,19 @@ pub(super) async fn parsed_metadata_json(
             Ok(None)
         }
     }
+}
+
+pub(super) fn artifact_metadata_json(
+    metadata: Option<&ArtifactMetadata>,
+) -> Result<Option<String>, ApiError> {
+    metadata
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|err| {
+            tracing::error!(
+                error = %format!("{err:#}"),
+                "failed to serialize artifact metadata"
+            );
+            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
+        })
 }

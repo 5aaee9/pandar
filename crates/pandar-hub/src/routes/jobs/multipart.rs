@@ -1,5 +1,5 @@
 use axum::{extract::Multipart, http::StatusCode};
-use pandar_core::{Printer, TenantId};
+use pandar_core::TenantId;
 use serde::de::DeserializeOwned;
 use tokio::{fs, io::AsyncWriteExt};
 
@@ -8,6 +8,9 @@ use crate::{
     repositories::{AuditActor, CreatePrintJob, JobWithArtifact},
     routes::{ApiError, jobs::material},
 };
+
+use super::metadata_preview::{artifact_metadata_json, parsed_artifact_metadata};
+use types::PreparedPrintJob;
 
 mod types;
 
@@ -82,7 +85,7 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
                 artifact_content_type: content_type,
                 artifact_size_bytes: stored.size_bytes,
                 artifact_storage_path: stored.storage_path.clone(),
-                artifact_metadata_json: artifact_metadata.map(|value| value.to_string()),
+                artifact_metadata_json: artifact_metadata_json(artifact_metadata.as_ref())?,
                 plate_id,
                 use_ams,
                 flow_cali,
@@ -222,21 +225,6 @@ async fn read_text_field(
     String::from_utf8(bytes).map_err(|_| ApiError::bad_request("artifact_invalid_upload"))
 }
 
-type PreparedPrintJob = (
-    Printer,
-    u32,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    bool,
-    bool,
-    bool,
-    String,
-    String,
-    Option<serde_json::Value>,
-    fs::File,
-);
-
 async fn prepare_print_job(
     state: &AppState,
     tenant_id: TenantId,
@@ -284,8 +272,7 @@ async fn prepare_print_job(
         );
         ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
     })?;
-    let artifact_metadata =
-        super::metadata_preview::parsed_metadata_json(&filename, &content_type, &file.path).await?;
+    let artifact_metadata = parsed_artifact_metadata(&filename, &content_type, &file.path).await?;
 
     Ok((
         printer,

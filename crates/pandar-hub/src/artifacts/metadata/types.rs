@@ -6,12 +6,12 @@ use super::MAX_PLATES;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ArtifactMetadata {
-    pub source: &'static str,
+    pub source: String,
     pub display_name: String,
     pub default_plate_id: Option<u32>,
     pub plate_count: usize,
     pub plates: Vec<PlateMetadata>,
-    pub warnings: Vec<&'static str>,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

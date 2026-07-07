@@ -9,6 +9,7 @@ use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     AppState,
+    artifacts::metadata::ArtifactMetadata,
     repositories::{AuditActor, AuthenticatedPrincipal, RepositoryError, TenantTokenScope},
     routes::{ApiError, auth, printer_operations::PrinterOperationRequest},
 };
@@ -62,7 +63,7 @@ pub(super) struct PluginJobResponse {
     name: String,
     status: String,
     progress_percent: Option<u8>,
-    artifact_metadata: Option<serde_json::Value>,
+    artifact_metadata: Option<ArtifactMetadata>,
     created_at: String,
     updated_at: String,
     pandar_job_id: String,
@@ -74,7 +75,7 @@ pub(super) struct PluginPrintResponse {
     command_id: String,
     status: String,
     message: Option<String>,
-    artifact_metadata: Option<serde_json::Value>,
+    artifact_metadata: Option<ArtifactMetadata>,
     pandar_job_id: String,
 }
 

@@ -1,3 +1,4 @@
+use crate::artifacts::metadata::ArtifactMetadata;
 use axum::{
     Json,
     extract::Multipart,
@@ -7,7 +8,6 @@ use axum::{
 };
 use pandar_core::{Job, JobArtifact, JobId, JobPrintState};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::{
     AppState,
@@ -79,13 +79,13 @@ pub struct JobArtifactResponse {
     filename: String,
     content_type: String,
     size_bytes: u64,
-    metadata: Option<Value>,
+    metadata: Option<ArtifactMetadata>,
     created_at: String,
 }
 
 #[derive(Debug, Serialize)]
 pub struct ArtifactMetadataPreviewResponse {
-    metadata: Option<Value>,
+    metadata: Option<ArtifactMetadata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -337,7 +337,7 @@ impl JobArtifactResponse {
             size_bytes: artifact.size_bytes,
             metadata: artifact
                 .metadata_json
-                .map(|value| serde_json::from_str(&value))
+                .map(|value| serde_json::from_str::<ArtifactMetadata>(&value))
                 .transpose()
                 .map_err(|err| {
                     RepositoryError::Database(

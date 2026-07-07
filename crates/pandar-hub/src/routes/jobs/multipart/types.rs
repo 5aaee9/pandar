@@ -1,4 +1,7 @@
+use crate::artifacts::metadata::ArtifactMetadata;
 use crate::material_mapping::{AmsMapping, AmsMapping2, AmsMappingInfo};
+use pandar_core::Printer;
+use tokio::fs;
 
 #[derive(Debug, Default)]
 pub(in crate::routes::jobs) struct MultipartPrintFields {
@@ -29,3 +32,18 @@ pub(in crate::routes::jobs) struct StagedUpload {
     pub(in crate::routes::jobs) filename: Option<String>,
     pub(in crate::routes::jobs) content_type: Option<String>,
 }
+
+pub(super) type PreparedPrintJob = (
+    Printer,
+    u32,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    bool,
+    bool,
+    bool,
+    String,
+    String,
+    Option<ArtifactMetadata>,
+    fs::File,
+);

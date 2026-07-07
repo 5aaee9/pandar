@@ -1,4 +1,7 @@
-use crate::repositories::{JobWithArtifact, RepositoryError};
+use crate::{
+    artifacts::metadata::ArtifactMetadata,
+    repositories::{JobWithArtifact, RepositoryError},
+};
 
 use super::{PluginJobResponse, PluginPrintResponse};
 
@@ -37,9 +40,9 @@ impl TryFrom<JobWithArtifact> for PluginPrintResponse {
 
 fn artifact_metadata(
     metadata_json: Option<String>,
-) -> Result<Option<serde_json::Value>, RepositoryError> {
+) -> Result<Option<ArtifactMetadata>, RepositoryError> {
     metadata_json
-        .map(|value| serde_json::from_str(&value))
+        .map(|value| serde_json::from_str::<ArtifactMetadata>(&value))
         .transpose()
         .map_err(|err| {
             RepositoryError::Database(

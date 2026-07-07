@@ -6,14 +6,6 @@ use mappings::{
 
 mod mappings;
 
-#[derive(Debug, serde::Deserialize)]
-struct SlicerMetadata {
-    display_name: String,
-    default_plate_id: i64,
-    #[serde(flatten)]
-    _extra: std::collections::BTreeMap<String, serde_json::Value>,
-}
-
 #[tokio::test]
 async fn job_create_writes_artifact_queues_command_and_returns_created_job() {
     let state = state().await;
@@ -92,9 +84,9 @@ async fn job_create_persists_parsed_artifact_metadata() {
     .await;
     assert_eq!(status, StatusCode::CREATED);
     let body = decode::<JobResponse>(body);
-    let metadata = decode::<SlicerMetadata>(body.artifact.metadata.clone().unwrap());
+    let metadata = body.artifact.metadata.as_ref().unwrap();
     assert_eq!(metadata.display_name, "plate file");
-    assert_eq!(metadata.default_plate_id, 1);
+    assert_eq!(metadata.default_plate_id, Some(1));
 
     let (status, list) = request_as(
         app,

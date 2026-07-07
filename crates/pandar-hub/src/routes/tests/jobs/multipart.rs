@@ -37,7 +37,7 @@ async fn metadata_preview_authorizes_operator_and_rejects_viewer() {
             .metadata
             .unwrap()
             .display_name,
-        Some("project".to_owned())
+        "project"
     );
 
     let (status, body) = multipart_request_as(
@@ -80,7 +80,7 @@ async fn metadata_preview_accepts_file_only_and_creates_no_rows() {
     let metadata = decode::<ArtifactMetadataPreviewResponse>(body)
         .metadata
         .unwrap();
-    assert_eq!(metadata.plate_count, Some(1));
+    assert_eq!(metadata.plate_count, 1);
     assert_eq!(metadata.default_plate_id, Some(1));
     assert_eq!(metadata.plates[0].estimated_time_seconds, Some(120));
     assert_eq!(state.commands().count().await.unwrap(), 0);

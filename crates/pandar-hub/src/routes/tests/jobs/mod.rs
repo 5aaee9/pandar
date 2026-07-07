@@ -80,7 +80,7 @@ struct JobArtifactResponse {
     filename: String,
     content_type: String,
     size_bytes: u64,
-    metadata: Option<serde_json::Value>,
+    metadata: Option<ArtifactPreviewMetadata>,
     created_at: String,
 }
 
@@ -136,21 +136,38 @@ struct ArtifactMetadataPreviewResponse {
     metadata: Option<ArtifactPreviewMetadata>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 struct ArtifactPreviewMetadata {
-    display_name: Option<String>,
-    plate_count: Option<u32>,
-    default_plate_id: Option<i64>,
+    source: String,
+    display_name: String,
+    plate_count: usize,
+    default_plate_id: Option<u32>,
     plates: Vec<ArtifactPreviewPlate>,
-    #[serde(flatten)]
-    _extra: BTreeMap<String, serde_json::Value>,
+    warnings: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 struct ArtifactPreviewPlate {
+    plate_id: u32,
+    name: String,
+    object_count: usize,
+    objects: Vec<String>,
     estimated_time_seconds: Option<u64>,
-    #[serde(flatten)]
-    _extra: BTreeMap<String, serde_json::Value>,
+    filament_weight_grams: Option<f64>,
+    filaments: Vec<ArtifactPreviewFilament>,
+    has_thumbnail: bool,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct ArtifactPreviewFilament {
+    filament_id: Option<String>,
+    filament_type: Option<String>,
+    color: Option<String>,
+    used_grams: Option<f64>,
+    used_meters: Option<f64>,
 }
 
 #[derive(Debug, Deserialize)]
