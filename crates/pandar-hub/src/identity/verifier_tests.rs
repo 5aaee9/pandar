@@ -41,14 +41,12 @@ fn audience_claim_accepts_string_and_array() {
         aud: AudienceClaim,
     }
 
-    let string = serde_json::from_value::<Claims>(value(TestAudienceClaim {
+    let string: Claims = decode(TestAudienceClaim {
         aud: AudienceClaimForTest::One("api://pandar".to_owned()),
-    }))
-    .unwrap();
-    let array = serde_json::from_value::<Claims>(value(TestAudienceClaim {
+    });
+    let array: Claims = decode(TestAudienceClaim {
         aud: AudienceClaimForTest::Many(vec!["api://pandar".to_owned(), "api://other".to_owned()]),
-    }))
-    .unwrap();
+    });
 
     assert_eq!(string.aud, AudienceClaim::One("api://pandar".to_owned()));
     assert_eq!(
@@ -170,7 +168,7 @@ fn token(claims: TestClaims) -> String {
 }
 
 fn jwks() -> JwkSet {
-    serde_json::from_value(value(TestJwkSet {
+    decode(TestJwkSet {
         keys: vec![TestJwk {
             kty: "RSA",
             kid: "test-key",
@@ -178,12 +176,15 @@ fn jwks() -> JwkSet {
             n: "yRE6rHuNR0QbHO3H3Kt2pOKGVhQqGZXInOduQNxXzuKlvQTLUTv4l4sggh5_CYYi_cvI-SXVT9kPWSKXxJXBXd_4LkvcPuUakBoAkfh-eiFVMh2VrUyWyj3MFl0HTVF9KwRXLAcwkREiS3npThHRyIxuy0ZMeZfxVL5arMhw1SRELB8HoGfG_AtH89BIE9jDBHZ9dLelK9a184zAf8LwoPLxvJb3Il5nncqPcSfKDDodMFBIMc4lQzDKL5gvmiXLXB1AGLm8KBjfE8s3L5xqi-yUod-j8MtvIj812dkS4QMiRVN_by2h3ZY8LYVGrqZXZTcgn2ujn8uKjXLZVD5TdQ",
             e: "AQAB",
         }],
-    }))
-    .unwrap()
+    })
 }
 
-fn value(input: impl Serialize) -> serde_json::Value {
-    serde_json::to_value(input).unwrap()
+fn decode<T>(input: impl Serialize) -> T
+where
+    T: for<'de> Deserialize<'de>,
+{
+    let json = serde_json::to_string(&input).unwrap();
+    serde_json::from_str(&json).unwrap()
 }
 
 #[derive(Serialize)]
