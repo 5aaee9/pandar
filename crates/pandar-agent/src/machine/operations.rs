@@ -90,18 +90,18 @@ where
         }
         operation => vec![mqtt_command_for_printer_operation(operation)?],
     };
-    let payloads = commands
+    let command_payloads = commands
         .iter()
-        .map(BambuMqttCommand::payload)
+        .map(BambuMqttCommand::command_payload)
         .collect::<Vec<_>>();
-    let sequence_ids = payloads
+    let sequence_ids = command_payloads
         .iter()
-        .filter_map(report::command_sequence_id)
+        .filter_map(|payload| payload.sequence_id.clone())
         .collect::<Vec<_>>();
-    for payload in payloads {
+    for command_payload in command_payloads {
         mqtt.publish(PublishedMqttCommand {
             topic: topics.request.clone(),
-            payload,
+            payload: command_payload.payload,
             qos: BAMBU_MQTT_QOS,
         })
         .await

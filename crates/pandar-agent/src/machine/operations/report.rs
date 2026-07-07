@@ -29,10 +29,6 @@ enum SequenceId {
     Number(Number),
 }
 
-pub(super) fn command_sequence_id(payload: &Value) -> Option<String> {
-    operation_sequence_id(payload)
-}
-
 pub(super) fn report_sequence_id(report: &Value) -> Option<String> {
     operation_sequence_id(report)
 }

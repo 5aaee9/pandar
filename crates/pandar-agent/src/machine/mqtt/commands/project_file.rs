@@ -1,55 +1,57 @@
-use serde_json::Value;
-
-use super::{ProjectFileCommand, next_studio_sequence_id};
+use super::{BambuMqttCommandPayload, ProjectFileCommand, next_studio_sequence_id};
 use crate::machine::mqtt::commands::payload::{
     ProjectFileAmsMapping2, ProjectFileAmsMappingInfo, ProjectFilePayload, ProjectFilePayloadPrint,
     json_payload,
 };
 
-pub(super) fn project_file_payload(command: &ProjectFileCommand) -> Value {
-    json_payload(ProjectFilePayload {
-        print: ProjectFilePayloadPrint {
-            command: "project_file",
-            sequence_id: next_studio_sequence_id(),
-            param: format!("Metadata/plate_{}.gcode", command.plate_id),
-            project_id: "0",
-            profile_id: "0",
-            task_id: "0",
-            subtask_id: "0",
-            subtask_name: project_file_subtask_name(&command.filename),
-            url: command
-                .url
-                .clone()
-                .unwrap_or_else(|| format!("ftp://{}", command.filename)),
-            file: command.filename.clone(),
-            md5: command.md5.clone().unwrap_or_default(),
-            bed_type: "auto",
-            bed_leveling: false,
-            flow_cali: command.flow_cali,
-            vibration_cali: false,
-            layer_inspect: false,
-            timelapse: command.timelapse,
-            use_ams: command.use_ams,
-            ams_mapping: command
-                .ams_mapping_json
-                .as_deref()
-                .and_then(project_file_ams_mapping)
-                .unwrap_or_default(),
-            ams_mapping2: command
-                .ams_mapping2_json
-                .as_deref()
-                .and_then(project_file_ams_mapping2)
-                .unwrap_or_default(),
-            ams_mapping_info: command
-                .ams_mapping_info_json
-                .as_deref()
-                .and_then(project_file_ams_mapping_info),
-            auto_bed_leveling: 0,
-            nozzle_offset_cali: 0,
-            cfg: "0",
-            extrude_cali_flag: 0,
-        },
-    })
+pub(super) fn project_file_payload(command: &ProjectFileCommand) -> BambuMqttCommandPayload {
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(ProjectFilePayload {
+            print: ProjectFilePayloadPrint {
+                command: "project_file",
+                sequence_id: sequence_id.clone(),
+                param: format!("Metadata/plate_{}.gcode", command.plate_id),
+                project_id: "0",
+                profile_id: "0",
+                task_id: "0",
+                subtask_id: "0",
+                subtask_name: project_file_subtask_name(&command.filename),
+                url: command
+                    .url
+                    .clone()
+                    .unwrap_or_else(|| format!("ftp://{}", command.filename)),
+                file: command.filename.clone(),
+                md5: command.md5.clone().unwrap_or_default(),
+                bed_type: "auto",
+                bed_leveling: false,
+                flow_cali: command.flow_cali,
+                vibration_cali: false,
+                layer_inspect: false,
+                timelapse: command.timelapse,
+                use_ams: command.use_ams,
+                ams_mapping: command
+                    .ams_mapping_json
+                    .as_deref()
+                    .and_then(project_file_ams_mapping)
+                    .unwrap_or_default(),
+                ams_mapping2: command
+                    .ams_mapping2_json
+                    .as_deref()
+                    .and_then(project_file_ams_mapping2)
+                    .unwrap_or_default(),
+                ams_mapping_info: command
+                    .ams_mapping_info_json
+                    .as_deref()
+                    .and_then(project_file_ams_mapping_info),
+                auto_bed_leveling: 0,
+                nozzle_offset_cali: 0,
+                cfg: "0",
+                extrude_cali_flag: 0,
+            },
+        }),
+        sequence_id,
+    )
 }
 
 fn project_file_subtask_name(filename: &str) -> String {

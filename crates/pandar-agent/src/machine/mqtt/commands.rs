@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicU32, Ordering};
 
 use anyhow::bail;
 use serde::Serialize;
@@ -7,13 +6,13 @@ use serde_json::{Number, Value};
 
 mod payload;
 mod project_file;
+mod sequence;
 
 use payload::*;
 use project_file::project_file_payload;
-
-const STUDIO_START_SEQUENCE_ID: u32 = 20000;
-const STUDIO_END_SEQUENCE_ID: u32 = 30000;
-static STUDIO_SEQUENCE_ID: AtomicU32 = AtomicU32::new(STUDIO_START_SEQUENCE_ID);
+use sequence::next_studio_sequence_id;
+#[cfg(test)]
+pub(crate) use sequence::next_studio_sequence_id_from;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BambuMqttTopics {
@@ -94,6 +93,11 @@ pub struct AmsFilamentCommand {
     pub extruder_id: Option<u32>,
 }
 
+pub(crate) struct BambuMqttCommandPayload {
+    pub payload: Value,
+    pub sequence_id: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrintReportProgress {
     pub serial: String,
@@ -154,6 +158,10 @@ pub enum BambuMqttCommand {
 
 impl BambuMqttCommand {
     pub fn payload(&self) -> Value {
+        self.command_payload().payload
+    }
+
+    pub(crate) fn command_payload(&self) -> BambuMqttCommandPayload {
         match self {
             Self::GetVersion => info_payload("get_version"),
             Self::RequestPushAll => pushing_payload(),
@@ -169,119 +177,142 @@ impl BambuMqttCommand {
             Self::AmsRereadRfid(command) => ams_reread_rfid_payload(command),
             Self::AmsLoadFilament(command) => ams_load_filament_payload(command),
             Self::AmsUnloadFilament(command) => ams_unload_filament_payload(command),
-            Self::RawJson(payload) => payload.clone(),
+            Self::RawJson(payload) => BambuMqttCommandPayload::without_sequence(payload.clone()),
             Self::ProjectFile(command) => project_file_payload(command),
         }
     }
 }
 
-fn info_payload(command: &'static str) -> Value {
-    json_payload(InfoPayload {
-        info: InfoCommand {
-            command,
-            sequence_id: next_studio_sequence_id(),
-        },
-    })
-}
+impl BambuMqttCommandPayload {
+    fn with_sequence(payload: Value, sequence_id: String) -> Self {
+        Self {
+            payload,
+            sequence_id: Some(sequence_id),
+        }
+    }
 
-fn pushing_payload() -> Value {
-    json_payload(PushingPayload {
-        pushing: PushingCommand {
-            command: "pushall",
-            sequence_id: next_studio_sequence_id(),
-            version: 1,
-            push_target: 1,
-        },
-    })
-}
-
-fn basic_print_payload(command: &'static str) -> Value {
-    json_payload(PrintPayload {
-        print: BasicPrintCommand {
-            command,
-            param: "",
-            sequence_id: next_studio_sequence_id(),
-        },
-    })
-}
-
-fn print_speed_payload(speed: PrintSpeed) -> Value {
-    json_payload(PrintPayload {
-        print: PrintSpeedCommand {
-            command: "print_speed",
-            param: speed.as_u8().to_string(),
-            sequence_id: next_studio_sequence_id(),
-        },
-    })
-}
-
-fn select_extruder_payload(extruder_id: u32) -> Value {
-    json_payload(PrintPayload {
-        print: SelectExtruderCommand {
-            command: "select_extruder",
-            extruder_index: extruder_id,
-            sequence_id: next_studio_sequence_id(),
-        },
-    })
-}
-
-fn set_nozzle_temperature_payload(command: &SetNozzleTemperatureCommand) -> Value {
-    json_payload(PrintPayload {
-        print: SetNozzleTemperaturePayload {
-            command: "set_nozzle_temp",
-            extruder_index: command.extruder_id,
-            target_temp: command.target_temp,
-            sequence_id: next_studio_sequence_id(),
-        },
-    })
-}
-
-fn gcode_line_payload(command: &GcodeLineCommand) -> Value {
-    json_payload(PrintPayload {
-        print: GcodeLinePayload {
-            command: "gcode_line",
-            param: command.lines.join("\n"),
-            sequence_id: next_studio_sequence_id(),
-        },
-    })
-}
-
-fn next_studio_sequence_id() -> String {
-    next_studio_sequence_id_from(&STUDIO_SEQUENCE_ID)
-}
-
-pub(crate) fn next_studio_sequence_id_from(sequence: &AtomicU32) -> String {
-    loop {
-        let current = sequence.load(Ordering::Relaxed);
-        let sequence_id = if (STUDIO_START_SEQUENCE_ID..STUDIO_END_SEQUENCE_ID).contains(&current) {
-            current
-        } else {
-            STUDIO_START_SEQUENCE_ID
-        };
-        let next = if sequence_id + 1 >= STUDIO_END_SEQUENCE_ID {
-            STUDIO_START_SEQUENCE_ID
-        } else {
-            sequence_id + 1
-        };
-
-        if sequence
-            .compare_exchange(current, next, Ordering::Relaxed, Ordering::Relaxed)
-            .is_ok()
-        {
-            return sequence_id.to_string();
+    fn without_sequence(payload: Value) -> Self {
+        Self {
+            payload,
+            sequence_id: None,
         }
     }
 }
 
-fn ams_reread_rfid_payload(command: &AmsSlotCommand) -> Value {
-    json_payload(PrintPayload {
-        print: AmsSlotPayload {
-            command: "ams_get_rfid",
-            sequence_id: next_studio_sequence_id(),
-            ams_id: command.ams_id,
-            slot_id: command.slot_id,
-        },
-    })
+fn info_payload(command: &'static str) -> BambuMqttCommandPayload {
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(InfoPayload {
+            info: InfoCommand {
+                command,
+                sequence_id: sequence_id.clone(),
+            },
+        }),
+        sequence_id,
+    )
+}
+
+fn pushing_payload() -> BambuMqttCommandPayload {
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(PushingPayload {
+            pushing: PushingCommand {
+                command: "pushall",
+                sequence_id: sequence_id.clone(),
+                version: 1,
+                push_target: 1,
+            },
+        }),
+        sequence_id,
+    )
+}
+
+fn basic_print_payload(command: &'static str) -> BambuMqttCommandPayload {
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(PrintPayload {
+            print: BasicPrintCommand {
+                command,
+                param: "",
+                sequence_id: sequence_id.clone(),
+            },
+        }),
+        sequence_id,
+    )
+}
+
+fn print_speed_payload(speed: PrintSpeed) -> BambuMqttCommandPayload {
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(PrintPayload {
+            print: PrintSpeedCommand {
+                command: "print_speed",
+                param: speed.as_u8().to_string(),
+                sequence_id: sequence_id.clone(),
+            },
+        }),
+        sequence_id,
+    )
+}
+
+fn select_extruder_payload(extruder_id: u32) -> BambuMqttCommandPayload {
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(PrintPayload {
+            print: SelectExtruderCommand {
+                command: "select_extruder",
+                extruder_index: extruder_id,
+                sequence_id: sequence_id.clone(),
+            },
+        }),
+        sequence_id,
+    )
+}
+
+fn set_nozzle_temperature_payload(
+    command: &SetNozzleTemperatureCommand,
+) -> BambuMqttCommandPayload {
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(PrintPayload {
+            print: SetNozzleTemperaturePayload {
+                command: "set_nozzle_temp",
+                extruder_index: command.extruder_id,
+                target_temp: command.target_temp,
+                sequence_id: sequence_id.clone(),
+            },
+        }),
+        sequence_id,
+    )
+}
+
+fn gcode_line_payload(command: &GcodeLineCommand) -> BambuMqttCommandPayload {
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(PrintPayload {
+            print: GcodeLinePayload {
+                command: "gcode_line",
+                param: command.lines.join("\n"),
+                sequence_id: sequence_id.clone(),
+            },
+        }),
+        sequence_id,
+    )
+}
+
+fn ams_reread_rfid_payload(command: &AmsSlotCommand) -> BambuMqttCommandPayload {
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(PrintPayload {
+            print: AmsSlotPayload {
+                command: "ams_get_rfid",
+                sequence_id: sequence_id.clone(),
+                ams_id: command.ams_id,
+                slot_id: command.slot_id,
+            },
+        }),
+        sequence_id,
+    )
 }
 
 pub(crate) fn chamber_light_commands_for_nodes<'a>(
@@ -299,49 +330,61 @@ pub(crate) fn chamber_light_commands_for_nodes<'a>(
         .collect()
 }
 
-fn chamber_light_payload(node: &str, on: bool) -> Value {
-    json_payload(SystemPayload {
-        system: ChamberLightPayload {
-            command: "ledctrl",
-            led_node: node,
-            led_mode: if on { "on" } else { "off" },
-            led_on_time: 500,
-            led_off_time: 500,
-            loop_times: 1,
-            interval_time: 1000,
-            sequence_id: next_studio_sequence_id(),
-        },
-    })
+fn chamber_light_payload(node: &str, on: bool) -> BambuMqttCommandPayload {
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(SystemPayload {
+            system: ChamberLightPayload {
+                command: "ledctrl",
+                led_node: node,
+                led_mode: if on { "on" } else { "off" },
+                led_on_time: 500,
+                led_off_time: 500,
+                loop_times: 1,
+                interval_time: 1000,
+                sequence_id: sequence_id.clone(),
+            },
+        }),
+        sequence_id,
+    )
 }
 
-fn ams_load_filament_payload(command: &AmsFilamentCommand) -> Value {
-    json_payload(PrintPayload {
-        print: AmsChangeFilamentPayload {
-            command: "ams_change_filament",
-            sequence_id: next_studio_sequence_id(),
-            ams_id: command.ams_id,
-            slot_id: command.slot_id,
-            target: command.target,
-            curr_temp: -1,
-            tar_temp: -1,
-            extruder_id: command.extruder_id,
-        },
-    })
+fn ams_load_filament_payload(command: &AmsFilamentCommand) -> BambuMqttCommandPayload {
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(PrintPayload {
+            print: AmsChangeFilamentPayload {
+                command: "ams_change_filament",
+                sequence_id: sequence_id.clone(),
+                ams_id: command.ams_id,
+                slot_id: command.slot_id,
+                target: command.target,
+                curr_temp: -1,
+                tar_temp: -1,
+                extruder_id: command.extruder_id,
+            },
+        }),
+        sequence_id,
+    )
 }
 
-fn ams_unload_filament_payload(command: &AmsFilamentCommand) -> Value {
+fn ams_unload_filament_payload(command: &AmsFilamentCommand) -> BambuMqttCommandPayload {
     let _ = command.slot_id;
     let _ = command.target;
-    json_payload(PrintPayload {
-        print: AmsChangeFilamentPayload {
-            command: "ams_change_filament",
-            sequence_id: next_studio_sequence_id(),
-            ams_id: command.ams_id,
-            slot_id: 255,
-            target: 255,
-            curr_temp: 210,
-            tar_temp: 210,
-            extruder_id: None,
-        },
-    })
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(PrintPayload {
+            print: AmsChangeFilamentPayload {
+                command: "ams_change_filament",
+                sequence_id: sequence_id.clone(),
+                ams_id: command.ams_id,
+                slot_id: 255,
+                target: 255,
+                curr_temp: 210,
+                tar_temp: 210,
+                extruder_id: None,
+            },
+        }),
+        sequence_id,
+    )
 }
