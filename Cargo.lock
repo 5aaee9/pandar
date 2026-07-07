@@ -2917,6 +2917,7 @@ dependencies = [
  "http-body-util",
  "reqwest",
  "rust-embed",
+ "serde",
  "serde_json",
  "tempfile",
  "tokio",

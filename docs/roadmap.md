@@ -95,7 +95,7 @@
 - Forwarded Bambu Studio native cloud-path printer controls from the networking plugin `send_message` ABI into Hub printer operations so Studio Device controls such as Lamp and hotend temperature mutate the real printer instead of only updating displayed state.
 - Emitted Studio-native nozzle metadata in networking plugin `push_status` device blocks so Bambu Studio send-job preflight sees valid nozzle type and diameter information.
 - Carried Bambu nozzle diameter/type metadata from Agent snapshots through Hub printer responses and displayed it in the Devices dual-nozzle switch details.
-- Moved Bambu Studio `push_status` telemetry, nozzle, AMS, and external-spool payload construction out of the C++ networking plugin shim into Rust, leaving `shim.cpp` focused on the Studio C++ ABI boundary.
+- Moved Bambu Studio `push_status` telemetry, nozzle, AMS, and external-spool payload construction out of the C++ networking plugin shim into typed Rust serde structs, leaving `shim.cpp` focused on the Studio C++ ABI boundary.
 - Added a Windows-only Bambu Studio development hook DLL that can proxy `swscale-8.dll` from a copied Studio directory and force new Studio logs onto Bambu's local fallback log key for decryptable development logs.
 - Normalized top-level Bambu `vt_tray` / `vir_slot` material reports into external spool snapshots so the Devices Filaments panel can show external materials.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.

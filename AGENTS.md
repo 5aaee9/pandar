@@ -70,6 +70,7 @@ Use these projects as protocol and behavior references for SFTP / MQTT integrati
 - No legacy fallback
 - 数据库后端必须同时支持 SQLite 和 PostgreSQL。不要写只适配其中一个后端的 schema、SQL、migration 或查询逻辑，除非该差异被显式封装在 backend-specific adapter 中，并且对外行为一致。
 - 不要吞掉底层异常或 cause/context 链。跨运行时、reload、listener、配置源、网络/系统调用等边界记录或返回错误时，必须保留下层错误信息方便排查；Rust `anyhow` 错误进入日志时优先使用 `{err:#}` / `{error:#}` 或等价完整 context 链格式，而不是只输出最外层 `Display`。
+- Rust JSON serialization/deserialization should use typed `serde` structs/enums whenever the message shape is known. Avoid parsing into `serde_json::Value` and manually asserting or extracting fields as a substitute for schema modeling. Use `Value` only for genuinely open-ended JSON pass-through, generic validation boundaries, or tests comparing arbitrary JSON payloads.
 - Ignore superpowers:using-git-worktrees
 
 ## Avoid over-engineering. Only make changes that are directly requested or clearly necessary. Keep solutions simple and focused.
