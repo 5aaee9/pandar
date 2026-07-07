@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Hub provisioning agent-pairing request bodies with typed serde fixture structs instead of handwritten `json!` payload objects.
 - Replaced Hub print-job AMS mapping request/response validation with typed serde structs for `ams_mapping`, `ams_mapping2`, and `ams_mapping_info`, including multipart parsing, persisted mapping reads, repository validation, and gRPC command conversion.
 - Replaced Agent printer-operation MQTT result and chamber-light status field probing with typed serde report envelopes while preserving the raw MQTT report in command results.
 - Replaced Agent BRTC upload setup/init/chunk request serialization and upload reply parsing with typed serde protocol structs instead of manual `serde_json::Value` field probing.

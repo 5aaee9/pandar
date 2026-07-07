@@ -1,8 +1,11 @@
 use super::*;
 use crate::entities::agents;
+use requests::agent_pairing_body;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, de::DeserializeOwned};
 use tokio::sync::mpsc;
+
+mod requests;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -72,7 +75,7 @@ async fn tenant_admin_can_create_agent_pairing_bundle() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agent-pairings"),
-        Some(json!({ "name": "workshop-agent" })),
+        agent_pairing_body("workshop-agent"),
         &admin_token,
     )
     .await;
@@ -136,7 +139,7 @@ async fn agent_pairing_rejects_env_line_breaks_in_name() {
             app.clone(),
             Method::POST,
             &format!("/api/v1/tenants/{tenant_id}/agent-pairings"),
-            Some(json!({ "name": name })),
+            agent_pairing_body(name),
             &admin_token,
         )
         .await;
@@ -154,7 +157,7 @@ async fn tenant_admin_can_rotate_agent_credential_once() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agent-pairings"),
-        Some(json!({ "name": "rotating-agent" })),
+        agent_pairing_body("rotating-agent"),
         &admin_token,
     )
     .await;
@@ -224,7 +227,7 @@ async fn all_scope_tenant_token_can_rotate_and_revoke_agent_credential() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agent-pairings"),
-        Some(json!({ "name": "all-scope-agent" })),
+        agent_pairing_body("all-scope-agent"),
         &all_token,
     )
     .await;
@@ -300,7 +303,7 @@ async fn external_tenant_admin_rotate_and_revoke_audit_user_actor() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/agent-pairings", tenant.id),
-        Some(json!({ "name": "user-audited-agent" })),
+        agent_pairing_body("user-audited-agent"),
         &admin_token,
     )
     .await;
@@ -361,7 +364,7 @@ async fn agent_register_tenant_token_can_rotate_and_revoke_agent_credential() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agent-pairings"),
-        Some(json!({ "name": "register-scope-agent" })),
+        agent_pairing_body("register-scope-agent"),
         &all_token,
     )
     .await;
