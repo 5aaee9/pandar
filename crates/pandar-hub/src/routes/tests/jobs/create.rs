@@ -1,16 +1,17 @@
 use super::*;
 
+use mappings::{
+    empty_ams_mapping, empty_ams_mapping2, external_ams_mapping2, invalid_material_mapping_cases,
+};
+
+mod mappings;
+
 #[derive(Debug, serde::Deserialize)]
 struct SlicerMetadata {
     display_name: String,
     default_plate_id: i64,
     #[serde(flatten)]
     _extra: std::collections::BTreeMap<String, serde_json::Value>,
-}
-
-struct InvalidMaterialMappingCase {
-    ams_mapping: Option<serde_json::Value>,
-    ams_mapping2: Option<serde_json::Value>,
 }
 
 #[tokio::test]
@@ -249,8 +250,8 @@ async fn job_create_accepts_optional_material_mappings_and_responses_preserve_nu
             None,
             Some(("plate.3mf", "model/3mf", b"abc")),
             1,
-            Some(json!([])),
-            Some(json!([])),
+            Some(empty_ams_mapping()),
+            Some(empty_ams_mapping2()),
         ),
         &token,
     )
@@ -269,7 +270,7 @@ async fn job_create_accepts_optional_material_mappings_and_responses_preserve_nu
             Some(("external.3mf", "model/3mf", b"abc")),
             1,
             None,
-            Some(json!([{ "ams_id": 254, "slot_id": 8 }])),
+            Some(external_ams_mapping2()),
         ),
         &token,
     )
@@ -346,56 +347,7 @@ async fn job_create_rejects_invalid_material_mapping_shapes_without_echoing_valu
         .unwrap();
     let uri = format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/jobs");
 
-    for payload in [
-        InvalidMaterialMappingCase {
-            ams_mapping: Some(json!("sk-live-secret")),
-            ams_mapping2: None,
-        },
-        InvalidMaterialMappingCase {
-            ams_mapping: Some(json!(["sk-live-secret"])),
-            ams_mapping2: None,
-        },
-        InvalidMaterialMappingCase {
-            ams_mapping: Some(json!([2147483648_i64])),
-            ams_mapping2: None,
-        },
-        InvalidMaterialMappingCase {
-            ams_mapping: Some(json!(vec![0; 33])),
-            ams_mapping2: None,
-        },
-        InvalidMaterialMappingCase {
-            ams_mapping: None,
-            ams_mapping2: Some(json!("sk-live-secret")),
-        },
-        InvalidMaterialMappingCase {
-            ams_mapping: None,
-            ams_mapping2: Some(json!([{ "ams_id": "sk-live-secret", "slot_id": 0 }])),
-        },
-        InvalidMaterialMappingCase {
-            ams_mapping: None,
-            ams_mapping2: Some(json!([{ "ams_id": 0, "slot_id": 2147483648_i64 }])),
-        },
-        InvalidMaterialMappingCase {
-            ams_mapping: None,
-            ams_mapping2: Some(
-                json!([{ "ams_id": 0, "slot_id": 0, "password": "sk-live-secret" }]),
-            ),
-        },
-        InvalidMaterialMappingCase {
-            ams_mapping: None,
-            ams_mapping2: Some(json!([{ "ams_id": 0, "slot_id": 0, "token": "sk-live-secret" }])),
-        },
-        InvalidMaterialMappingCase {
-            ams_mapping: None,
-            ams_mapping2: Some(
-                json!([{ "ams_id": 0, "slot_id": 0, "access_code": "sk-live-secret" }]),
-            ),
-        },
-        InvalidMaterialMappingCase {
-            ams_mapping: None,
-            ams_mapping2: Some(json!(vec![json!({ "ams_id": 0, "slot_id": 0 }); 33])),
-        },
-    ] {
+    for payload in invalid_material_mapping_cases() {
         let (status, response) = multipart_request_as(
             app.clone(),
             Method::POST,
