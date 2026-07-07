@@ -983,6 +983,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Moved Agent chamber-light MQTT report decoding behind a typed helper so the light-control loop consumes `PrinterReport` instead of raw `serde_json::Value`.
 - Replaced Agent MQTT sequence-id test helpers with typed serde envelopes instead of `BTreeMap<String, ...>` lookups by JSON section name.
 - Replaced Hub gRPC link-printer redacted result assertions with typed serde structs instead of dynamic string maps.
+- Replaced the Hub printer snapshot material event assertion with direct typed `PrinterEventMaterialJson` comparison instead of a `serde_json::Value` round-trip.
 
 Exit criteria:
 

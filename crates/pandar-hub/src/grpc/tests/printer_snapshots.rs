@@ -1,9 +1,11 @@
-use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+use serde::Serialize;
 use tonic::Code;
 
 use super::*;
 use crate::{
-    printer_events::PrinterEvent,
+    printer_events::{PrinterEvent, PrinterEventMaterialJson},
     protocol::agent::v1::PrinterSnapshot,
     repositories::{MaterialPatchInput, test_helpers::insert_printer_fixture},
 };
@@ -132,33 +134,30 @@ async fn printer_snapshot_event_includes_latest_materials() {
     };
     assert_eq!(printer.id, printer_id);
     let materials = printer.materials.unwrap();
-    let ams_units: Vec<TestMaterialUnit> =
-        serde_json::from_value(serde_json::to_value(materials.ams_units).unwrap()).unwrap();
     assert_eq!(
-        ams_units,
-        vec![TestMaterialUnit {
-            unit_id: "0".to_owned(),
-            trays: vec![TestMaterialTray {
-                tray_id: "0".to_owned(),
-                filament_type: "PLA".to_owned(),
-            }],
-        }]
+        materials.ams_units,
+        PrinterEventMaterialJson::Array(vec![PrinterEventMaterialJson::Object(BTreeMap::from([
+            (
+                "unit_id".to_owned(),
+                PrinterEventMaterialJson::String("0".to_owned())
+            ),
+            (
+                "trays".to_owned(),
+                PrinterEventMaterialJson::Array(vec![PrinterEventMaterialJson::Object(
+                    BTreeMap::from([
+                        (
+                            "tray_id".to_owned(),
+                            PrinterEventMaterialJson::String("0".to_owned())
+                        ),
+                        (
+                            "type".to_owned(),
+                            PrinterEventMaterialJson::String("PLA".to_owned())
+                        ),
+                    ])
+                )])
+            ),
+        ]))])
     );
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-struct TestMaterialUnit {
-    unit_id: String,
-    trays: Vec<TestMaterialTray>,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-struct TestMaterialTray {
-    tray_id: String,
-    #[serde(rename = "type")]
-    filament_type: String,
 }
 
 #[tokio::test]
