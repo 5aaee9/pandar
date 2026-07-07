@@ -20,6 +20,7 @@
 - Replaced Agent MQTT snapshot test report fixtures with typed serde structs and split the fixture definitions into a dedicated module to keep test files under the 400 LOC split threshold.
 - Replaced Agent MQTT command payload reference assertions with typed serde fixtures for pushall, get-version, print controls, chamber light, extruder selection, and gcode-line commands.
 - Replaced Agent MQTT refresh-flow state reports and expected publish payloads with typed serde fixtures for get-version, pushall, and print state reports.
+- Replaced Agent MQTT report test fixtures with typed serde structs for progress reports, temperature snapshots, AMS material reports, external spool reports, and raw payload preservation.
 - Replaced the Hub printer command detail discovery-result fixture with typed serde structs instead of an inline `json!` object.
 - Replaced Agent command test MQTT report fixtures with typed serde structs for get-version and AMS-ready reports.
 - Replaced Hub printer route test request bodies with typed serde structs for printer updates, printer controls, and link-printer validation payloads.

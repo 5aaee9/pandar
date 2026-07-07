@@ -1,7 +1,6 @@
 use std::{collections::BTreeMap, sync::atomic::AtomicU32, time::Duration};
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
@@ -487,7 +486,7 @@ fn gcode_line_payload_preserves_hotend_temperature_line() {
 
 #[test]
 fn raw_json_payload_is_preserved() {
-    let payload = json!({"print": {"command": "custom", "sequence_id": "9"}});
+    let payload = raw_print_payload("custom", "9");
     assert_eq!(
         BambuMqttCommand::RawJson(payload.clone()).payload(),
         payload
@@ -732,7 +731,7 @@ async fn refresh_subscribes_publishes_and_maps_report() {
 async fn refresh_printer_returns_material_patch_when_pushall_report_has_ams() {
     let transport = FakeMqttTransport::with_reports([
         get_version_report("A1 Mini"),
-        json!({"print": {"gcode_state": "IDLE", "ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA", "tray_color": "FF0000"}]}], "tray_now": "0"}}}),
+        ams_print_report("IDLE", "PLA", Some("FF0000"), Some("0")),
     ]);
 
     let refreshed = refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
@@ -754,7 +753,7 @@ async fn refresh_printer_keeps_first_snapshot_and_continues_until_ams_patch() {
     let transport = FakeMqttTransport::with_reports([
         get_version_report("A1 Mini"),
         print_gcode_state_report("IDLE"),
-        json!({"print": {"gcode_state": "IDLE", "ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA"}]}]}}}),
+        ams_print_report("IDLE", "PLA", None, None),
     ]);
 
     let refreshed = refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
@@ -847,9 +846,7 @@ async fn refresh_missing_model_fails_before_pushall() {
     let sequence_id = studio_sequence_id(&published[0].payload, "info");
     assert_eq!(
         published,
-        [request_command(
-            json!({"info": {"command": "get_version", "sequence_id": sequence_id}})
-        )]
+        [request_command(expected_get_version_payload(&sequence_id))]
     );
 }
 
@@ -891,23 +888,7 @@ fn refresh_discovery_failure_log_includes_serial_and_error_chain() {
 
 #[test]
 fn print_report_from_report_extracts_progress_and_diagnostics() {
-    let report = json!({
-        "print": {
-            "task_id": "job-123",
-            "subtask_id": "artifact-456",
-            "gcode_state": "RUNNING",
-            "mc_percent": "42",
-            "mc_remaining_time": 87,
-            "layer_num": "12",
-            "total_layer_num": 120,
-            "gcode_file": "plate_1.gcode",
-            "subtask_name": "drawer-organizer",
-            "print_error": "nozzle temperature error",
-            "hms": [
-                {"code": "0300_0A00_0001_0002", "message": "fan speed is low"}
-            ]
-        }
-    });
+    let report = detailed_progress_report();
 
     let progress = print_report_from_report(&endpoint(), &report);
 
@@ -938,14 +919,7 @@ fn print_report_from_report_extracts_progress_and_diagnostics() {
 
 #[test]
 fn print_report_from_report_drops_out_of_range_numeric_values() {
-    let report = json!({
-        "print": {
-            "mc_percent": "101",
-            "mc_remaining_time": 4321,
-            "layer_num": "100001",
-            "total_layer_num": -1
-        }
-    });
+    let report = out_of_range_progress_report();
 
     let progress = print_report_from_report(&endpoint(), &report);
 
@@ -1017,14 +991,7 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
 
 #[test]
 fn print_report_from_report_populates_printer_materials_json() {
-    let report = json!({
-        "print": {
-            "ams": {
-                "tray_now": 254,
-                "vt_tray": {"tray_info_idx": "GFL05", "tray_color": "#abcdef"}
-            }
-        }
-    });
+    let report = external_vt_tray_report(254, "GFL05", "#abcdef");
 
     let progress = print_report_from_report(&endpoint(), &report);
     let materials = material_patch_json(&progress.printer_materials_json);
@@ -1050,14 +1017,12 @@ fn print_report_from_report_populates_printer_materials_json() {
 
 #[tokio::test]
 async fn forward_print_reports_uses_transport_without_live_socket() {
-    let transport = FakeMqttTransport::with_reports([json!({
-        "print": {
-            "task_id": "job-123",
-            "subtask_id": "artifact-456",
-            "gcode_state": "RUNNING",
-            "mc_percent": 55
-        }
-    })]);
+    let transport = FakeMqttTransport::with_reports([print_job_progress_report(
+        "job-123",
+        "artifact-456",
+        "RUNNING",
+        55,
+    )]);
     let (sender, mut receiver) = mpsc::channel(4);
     let config = AgentConfig {
         hub_grpc_url: "http://hub.internal:50051".to_owned(),
@@ -1109,15 +1074,8 @@ async fn forward_print_reports_uses_transport_without_live_socket() {
 
 #[tokio::test]
 async fn forward_print_reports_emits_printer_snapshot_with_temperatures() {
-    let transport = FakeMqttTransport::with_reports([json!({
-        "print": {
-            "gcode_state": "RUNNING",
-            "nozzle_temper": 41,
-            "nozzle_target_temper": 220,
-            "bed_temper": 60,
-            "chamber_temper": 32
-        }
-    })]);
+    let transport =
+        FakeMqttTransport::with_reports([print_temperature_report("RUNNING", 41, 220, 60, 32)]);
     let (sender, mut receiver) = mpsc::channel(4);
     let config = AgentConfig {
         hub_grpc_url: "http://hub.internal:50051".to_owned(),
@@ -1183,9 +1141,7 @@ async fn forward_print_reports_emits_material_snapshot_for_unsolicited_ams_repor
         printers: "[]".to_owned(),
         artifact_root: ".".into(),
     };
-    let transport = FakeMqttTransport::with_reports([json!({
-        "print": {"gcode_state": "IDLE", "ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA"}]}]}}
-    })]);
+    let transport = FakeMqttTransport::with_reports([ams_print_report("IDLE", "PLA", None, None)]);
     let (sender, mut receiver) = mpsc::channel(2);
 
     let task = tokio::spawn(async move {
