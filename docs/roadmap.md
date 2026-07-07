@@ -49,6 +49,7 @@
 - Replaced fixed-shape networking plugin ticket/no-auth request bodies and local webserver/callback response JSON construction with serializable structs.
 - Replaced Hub printer-operation audit metadata construction with typed serializable metadata structs instead of ad hoc JSON maps.
 - Replaced Hub material patch parsing and merge identity extraction with typed serde patch structs for patch documents, AMS units, trays, external spools, and persisted material identities.
+- Replaced Hub material repository test patch fixtures with typed serde structs, including absent-vs-null merge coverage, and split material merge tests into a sibling module under the 400 LOC threshold.
 - Replaced Hub printer route test JSON response and command-payload assertions with typed serde structs for printer lists/details, material snapshots, printer controls, refresh commands, link-printer commands, and error responses.
 - Replaced Hub plugin route test response assertions with typed serde structs for login tickets, plugin sessions, Studio printer devices, plugin print/job responses, and plugin error responses.
 - Replaced Hub printer-command route test response, command-payload, audit-metadata, and error assertions with typed serde structs for discovery, diagnostics, printer controls, command details, and invalid request responses.
