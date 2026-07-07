@@ -1,6 +1,9 @@
 use pandar_core::{AgentId, CommandId, JobId};
+use requests::{duplicate_job_body, empty_body, recovery_reason_body, recovery_reason_null_body};
 
 use super::*;
+
+mod requests;
 
 #[tokio::test]
 async fn job_recovery_routes_retry_reprint_duplicate_and_audit() {
@@ -58,7 +61,7 @@ async fn job_recovery_routes_retry_reprint_duplicate_and_audit() {
             "/api/v1/tenants/{tenant_id}/jobs/{}/retry-dispatch",
             retry_job_id
         ),
-        Some(json!({ "reason": "operator retry" })),
+        recovery_reason_body("operator retry"),
         &token,
     )
     .await;
@@ -95,7 +98,7 @@ async fn job_recovery_routes_retry_reprint_duplicate_and_audit() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/jobs/{finished_job_id}/reprint"),
-        Some(json!({ "reason": "print another" })),
+        recovery_reason_body("print another"),
         &token,
     )
     .await;
@@ -111,15 +114,7 @@ async fn job_recovery_routes_retry_reprint_duplicate_and_audit() {
             "/api/v1/tenants/{tenant_id}/jobs/{}/duplicate",
             retry_job_id
         ),
-        Some(json!({
-            "printer_id": printer_id,
-            "plate_id": 2,
-            "use_ams": true,
-            "flow_cali": true,
-            "timelapse": false,
-            "ams_mapping": null,
-            "ams_mapping2": null
-        })),
+        duplicate_job_body(&printer_id, 2),
         &token,
     )
     .await;
@@ -231,7 +226,7 @@ async fn retry_dispatch_wakes_agent_on_sibling_instance() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/jobs/{}/retry-dispatch", job_id),
-        Some(json!({ "reason": "operator retry" })),
+        recovery_reason_body("operator retry"),
         &token,
     )
     .await;
@@ -308,7 +303,7 @@ async fn reprint_wakes_agent_on_sibling_instance() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/jobs/{job_id}/reprint"),
-        Some(json!({ "reason": "print another" })),
+        recovery_reason_body("print another"),
         &token,
     )
     .await;
@@ -372,15 +367,7 @@ async fn duplicate_and_print_wakes_agent_on_sibling_instance() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/jobs/{}/duplicate", job_id),
-        Some(json!({
-            "printer_id": printer_id,
-            "plate_id": 2,
-            "use_ams": true,
-            "flow_cali": true,
-            "timelapse": false,
-            "ams_mapping": null,
-            "ams_mapping2": null
-        })),
+        duplicate_job_body(&printer_id, 2),
         &token,
     )
     .await;
@@ -431,7 +418,7 @@ async fn job_recovery_routes_reject_unsafe_retry_and_viewer_auth() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/jobs/{}/retry-dispatch", job_id),
-        Some(json!({ "reason": null })),
+        recovery_reason_null_body(),
         &operator,
     )
     .await;
@@ -442,7 +429,7 @@ async fn job_recovery_routes_reject_unsafe_retry_and_viewer_auth() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/jobs/{}/duplicate", job_id),
-        Some(json!({})),
+        empty_body(),
         &viewer,
     )
     .await;

@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Hub job recovery route test request bodies with typed serde fixture structs for retry, reprint, duplicate, and invalid recovery payloads.
 - Replaced Hub provisioning workflow test request bodies with typed serde fixture structs for user, identity, tenant-token, agent-pairing, and retired API-token mutations.
 - Replaced Hub onboarding route test request bodies with typed serde fixture structs for tenant self-creation, join-link creation, and join-link acceptance.
 - Replaced Hub tenant-token route test request bodies with typed serde fixture structs for token creation/rotation, agent creation, user creation, and retired token routes.
