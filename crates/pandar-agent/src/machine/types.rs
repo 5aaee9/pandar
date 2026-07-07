@@ -54,6 +54,7 @@ pub struct PrinterRefreshResult {
 pub struct PrinterOperationDispatchResult {
     pub sequence_id: Option<String>,
     pub mqtt_report: Option<MachineJsonPayload>,
+    pub mqtt_summary: Option<PrinterOperationMqttSummary>,
     pub error: Option<String>,
 }
 
@@ -62,9 +63,18 @@ impl PrinterOperationDispatchResult {
         Self {
             sequence_id: None,
             mqtt_report: None,
+            mqtt_summary: None,
             error: None,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrinterOperationMqttSummary {
+    pub result: Option<MachineJsonPayload>,
+    pub reason: Option<MachineJsonPayload>,
+    pub err_code: Option<MachineJsonPayload>,
+    pub errno: Option<MachineJsonPayload>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

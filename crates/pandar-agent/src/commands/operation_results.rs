@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::machine::{
     MachineJsonPayload, PrinterAxis as MachinePrinterAxis,
@@ -30,10 +30,7 @@ pub(super) fn printer_operation_result_json(
     operation: &MachinePrinterOperation,
     dispatch_result: &PrinterOperationDispatchResult,
 ) -> String {
-    let mqtt = dispatch_result
-        .mqtt_report
-        .as_ref()
-        .and_then(MqttReportSummary::from_report);
+    let mqtt = dispatch_result.mqtt_summary.as_ref();
     let mqtt_report = dispatch_result.mqtt_report.as_ref();
     serde_json::to_string(&PrinterOperationResult {
         kind: "printer_operation",
@@ -105,27 +102,6 @@ struct OperationResultFields {
     global_tray_id: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     external_id: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct MqttReport {
-    print: Option<MqttReportSection>,
-    system: Option<MqttReportSection>,
-}
-
-#[derive(Deserialize)]
-struct MqttReportSection {
-    result: Option<MachineJsonPayload>,
-    reason: Option<MachineJsonPayload>,
-    err_code: Option<MachineJsonPayload>,
-    errno: Option<MachineJsonPayload>,
-}
-
-struct MqttReportSummary {
-    result: Option<MachineJsonPayload>,
-    reason: Option<MachineJsonPayload>,
-    err_code: Option<MachineJsonPayload>,
-    errno: Option<MachineJsonPayload>,
 }
 
 impl OperationResultFields {
@@ -212,20 +188,6 @@ impl OperationResultFields {
             | MachinePrinterOperation::Stop
             | MachinePrinterOperation::ToggleLight => Self::default(),
         }
-    }
-}
-
-impl MqttReportSummary {
-    fn from_report(report: &MachineJsonPayload) -> Option<Self> {
-        let report =
-            serde_json::from_value::<MqttReport>(serde_json::to_value(report).ok()?).ok()?;
-        let section = report.print.or(report.system)?;
-        Some(Self {
-            result: section.result,
-            reason: section.reason,
-            err_code: section.err_code,
-            errno: section.errno,
-        })
     }
 }
 

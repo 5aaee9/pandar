@@ -34,7 +34,7 @@ use transfer::BambuMachineFileTransfer;
 pub use types::{
     BambuPrinterEndpoint, MachineJsonPayload, MachineNozzleTemperature, MachineSnapshot,
     MaterialRefreshResult, PrintProjectDispatchResult, PrinterOperationDispatchResult,
-    PrinterRefreshResult,
+    PrinterOperationMqttSummary, PrinterRefreshResult,
 };
 
 #[async_trait]

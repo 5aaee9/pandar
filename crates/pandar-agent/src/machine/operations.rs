@@ -112,11 +112,16 @@ where
     }
 
     match matching_sequence_report(mqtt, &sequence_ids).await {
-        Ok((sequence_id, report)) => Ok(PrinterOperationDispatchResult {
-            sequence_id: Some(sequence_id),
-            error: report.error(),
-            mqtt_report: Some(MachineJsonPayload::from(report.into_raw())),
-        }),
+        Ok((sequence_id, report)) => {
+            let error = report.error();
+            let mqtt_summary = report.summary();
+            Ok(PrinterOperationDispatchResult {
+                sequence_id: Some(sequence_id),
+                error,
+                mqtt_report: Some(MachineJsonPayload::from(report.into_raw())),
+                mqtt_summary,
+            })
+        }
         Err(err) => {
             let sequence_id = sequence_ids
                 .last()
@@ -131,6 +136,7 @@ where
             Ok(PrinterOperationDispatchResult {
                 sequence_id: Some(sequence_id),
                 mqtt_report: None,
+                mqtt_summary: None,
                 error: None,
             })
         }

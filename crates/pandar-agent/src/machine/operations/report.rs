@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use serde_json::{Number, Value};
 
+use crate::machine::{MachineJsonPayload, PrinterOperationMqttSummary};
+
 pub(super) struct OperationReport {
     raw: Value,
     envelope: OperationEnvelope,
@@ -18,13 +20,13 @@ struct OperationEnvelope {
 #[derive(Debug, Deserialize)]
 struct OperationSection {
     sequence_id: Option<SequenceId>,
-    result: Option<String>,
-    err_code: Option<i64>,
-    errno: Option<i64>,
-    reason: Option<String>,
-    message: Option<String>,
-    msg: Option<String>,
-    error: Option<String>,
+    result: Option<MachineJsonPayload>,
+    err_code: Option<MachineJsonPayload>,
+    errno: Option<MachineJsonPayload>,
+    reason: Option<MachineJsonPayload>,
+    message: Option<MachineJsonPayload>,
+    msg: Option<MachineJsonPayload>,
+    error: Option<MachineJsonPayload>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,13 +61,16 @@ impl OperationReport {
             .print
             .as_ref()
             .or(self.envelope.system.as_ref())?;
-        if section.result.as_deref() == Some("fail") {
+        if section.result.as_ref().and_then(payload_string).as_deref() == Some("fail") {
             return Some(
                 report_error_message(section)
                     .unwrap_or_else(|| "printer reported failure".to_owned()),
             );
         }
-        for (key, code) in [("err_code", section.err_code), ("errno", section.errno)] {
+        for (key, code) in [
+            ("err_code", section.err_code.as_ref().and_then(payload_i64)),
+            ("errno", section.errno.as_ref().and_then(payload_i64)),
+        ] {
             if let Some(code) = code
                 && code != 0
             {
@@ -78,6 +83,20 @@ impl OperationReport {
         None
     }
 
+    pub(super) fn summary(&self) -> Option<PrinterOperationMqttSummary> {
+        let section = self
+            .envelope
+            .print
+            .as_ref()
+            .or(self.envelope.system.as_ref())?;
+        Some(PrinterOperationMqttSummary {
+            result: section.result.clone(),
+            reason: section.reason.clone(),
+            err_code: section.err_code.clone(),
+            errno: section.errno.clone(),
+        })
+    }
+
     pub(super) fn into_raw(self) -> Value {
         self.raw
     }
@@ -85,16 +104,16 @@ impl OperationReport {
 
 fn report_error_message(section: &OperationSection) -> Option<String> {
     [
-        section.reason.as_deref(),
-        section.message.as_deref(),
-        section.msg.as_deref(),
-        section.error.as_deref(),
+        section.reason.as_ref(),
+        section.message.as_ref(),
+        section.msg.as_ref(),
+        section.error.as_ref(),
     ]
     .into_iter()
     .flatten()
-    .map(str::trim)
+    .filter_map(payload_string)
+    .map(|value| value.trim().to_owned())
     .find(|value| !value.is_empty())
-    .map(ToOwned::to_owned)
 }
 
 impl OperationSection {
@@ -109,5 +128,21 @@ impl SequenceId {
             Self::String(value) => value.clone(),
             Self::Number(value) => value.to_string(),
         }
+    }
+}
+
+fn payload_string(payload: &MachineJsonPayload) -> Option<String> {
+    match payload {
+        MachineJsonPayload::String(value) => Some(value.clone()),
+        _ => None,
+    }
+}
+
+fn payload_i64(payload: &MachineJsonPayload) -> Option<i64> {
+    match payload {
+        MachineJsonPayload::Number(value) => value
+            .as_i64()
+            .or_else(|| value.as_u64().and_then(|value| value.try_into().ok())),
+        _ => None,
     }
 }
