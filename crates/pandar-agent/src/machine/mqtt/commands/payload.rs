@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Number, Value};
 
 pub(super) fn json_payload<T: Serialize>(payload: T) -> Value {
     serde_json::to_value(payload).expect("MQTT payload is serializable")
@@ -156,5 +156,16 @@ pub(super) struct ProjectFileAmsMappingInfo {
     #[serde(rename = "nozzleId")]
     pub(super) nozzle_id: i64,
     #[serde(flatten)]
-    pub(super) extra: BTreeMap<String, Value>,
+    pub(super) extra: BTreeMap<String, ProjectFileAmsMappingInfoExtra>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+pub(super) enum ProjectFileAmsMappingInfoExtra {
+    Object(BTreeMap<String, ProjectFileAmsMappingInfoExtra>),
+    Array(Vec<ProjectFileAmsMappingInfoExtra>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
 }
