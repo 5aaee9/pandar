@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, de::IgnoredAny};
-use serde_json::{Number, Value};
+use serde_json::Number;
 
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct MaterialsReport {
@@ -134,7 +134,8 @@ impl ScalarValue {
                 let trimmed = raw.trim();
                 (!trimmed.is_empty()).then(|| trimmed.to_owned())
             }
-            Self::Number(_) | Self::Bool(_) => Some(self.to_json_value().to_string()),
+            Self::Number(value) => Some(value.to_string()),
+            Self::Bool(value) => Some(value.to_string()),
         }
     }
 
@@ -174,14 +175,6 @@ impl ScalarValue {
                 }
             }
             Self::Bool(_) => None,
-        }
-    }
-
-    fn to_json_value(&self) -> Value {
-        match self {
-            Self::String(value) => Value::String(value.clone()),
-            Self::Number(value) => Value::Number(value.clone()),
-            Self::Bool(value) => Value::Bool(*value),
         }
     }
 }
