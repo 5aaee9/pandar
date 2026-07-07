@@ -61,7 +61,10 @@ where
                 .next_report(std::time::Duration::from_secs(5))
                 .await
                 .context("wait for chamber light status report")?;
-            if let Some(light_report) = chamber_light_report(&report) {
+            let Some(report) = serde_json::from_value::<PrinterReport>(report).ok() else {
+                continue;
+            };
+            if let Some(light_report) = report.chamber_light_report() {
                 return Ok(light_report);
             }
         }
@@ -70,18 +73,19 @@ where
     .context("wait for chamber light status report")?
 }
 
-fn chamber_light_report(report: &serde_json::Value) -> Option<ChamberLightReport> {
-    let report = serde_json::from_value::<PrinterReport>(report.clone()).ok()?;
-    let lights = report.print?.lights_report?;
-    let mut on = None;
-    for light in lights {
-        let Some(node @ ("chamber_light" | "chamber_light2")) = light.node.as_deref() else {
-            continue;
-        };
-        if node == "chamber_light" || on.is_none() {
-            on = Some(light.mode.as_deref() == Some("on"));
+impl PrinterReport {
+    fn chamber_light_report(self) -> Option<ChamberLightReport> {
+        let lights = self.print?.lights_report?;
+        let mut on = None;
+        for light in lights {
+            let Some(node @ ("chamber_light" | "chamber_light2")) = light.node.as_deref() else {
+                continue;
+            };
+            if node == "chamber_light" || on.is_none() {
+                on = Some(light.mode.as_deref() == Some("on"));
+            }
         }
-    }
 
-    Some(ChamberLightReport { on: on? })
+        Some(ChamberLightReport { on: on? })
+    }
 }

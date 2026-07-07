@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Agent chamber-light status parsing with a typed serde report method instead of passing raw MQTT `Value` reports into the light-control helper.
 - Replaced Agent printer-operation result matching with a typed operation report wrapper instead of repeatedly deserializing raw `Value` helper inputs for sequence IDs and errors.
 - Replaced Agent printer-operation command sequence tracking with typed MQTT command metadata instead of re-reading `sequence_id` from serialized JSON payloads.
 - Replaced Agent chamber-light operation dispatch with typed MQTT command structs instead of passing raw JSON payload lists through the operation layer.
