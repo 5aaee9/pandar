@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::*;
 
@@ -110,12 +110,9 @@ fn partial_update_emits_only_observed_material_fields() {
 
 #[test]
 fn absent_or_null_report_materials_emit_no_patch() {
-    assert_eq!(normalize(json!({})), None);
-    assert_eq!(normalize(json!({"print": {"ams": null}})), None);
-    assert_eq!(
-        normalize(json!({"print": {"ams": {"ams": [{"id": 0}]}}})),
-        None
-    );
+    assert_eq!(normalize(empty_report()), None);
+    assert_eq!(normalize(null_ams_report()), None);
+    assert_eq!(normalize(empty_ams_unit_report()), None);
 }
 
 #[test]
@@ -189,27 +186,16 @@ fn power_off_zero_bitmask_skips_clears_but_non_zero_still_cleans_up() {
 
 #[test]
 fn replace_external_spools_rules_follow_source_shape() {
-    let single_object = material_patch(
-        normalize(json!({"print": {"ams": {"vt_tray": {"tray_type": "PLA"}}}})).unwrap(),
-    );
+    let single_object = material_patch(normalize(external_spool_single_object_report()).unwrap());
     assert_eq!(single_object.replace_external_spools, None);
 
-    let vir_slot_object = material_patch(
-        normalize(json!({"print": {"ams": {"vir_slot": {"tray_type": "PETG"}}}})).unwrap(),
-    );
+    let vir_slot_object = material_patch(normalize(vir_slot_single_object_report()).unwrap());
     assert_eq!(vir_slot_object.replace_external_spools, None);
 
-    let single_array = material_patch(
-        normalize(json!({"print": {"ams": {"vt_tray": [{"tray_type": "PLA"}]}}})).unwrap(),
-    );
+    let single_array = material_patch(normalize(external_spool_single_array_report()).unwrap());
     assert_eq!(single_array.replace_external_spools, None);
 
-    let multi_array = material_patch(
-        normalize(
-            json!({"print": {"ams": {"vt_tray": [{"tray_type": "PLA"}, {"tray_type": "PETG"}]}}}),
-        )
-        .unwrap(),
-    );
+    let multi_array = material_patch(normalize(external_spool_multi_array_report()).unwrap());
     let external_spools = multi_array.external_spools.as_ref().unwrap();
     assert_eq!(multi_array.replace_external_spools, Some(true));
     assert_eq!(external_spools[1].tray_id, "1");
@@ -219,25 +205,7 @@ fn replace_external_spools_rules_follow_source_shape() {
 
 #[test]
 fn top_level_vt_tray_normalizes_external_spool() {
-    let patch = material_patch(
-        normalize(json!({
-            "print": {
-                "vt_tray": [{
-                    "id": 254,
-                    "extruder_id": 1,
-                    "tray_info_idx": "GFG00",
-                    "tray_type": "PETG",
-                    "tray_color": "00FF00FF",
-                    "tray_sub_brands": "PETG HF",
-                    "remain": "64"
-                }],
-                "ams": {
-                    "ams": [{"id": 0, "tray": [{"id": 0}]}]
-                }
-            }
-        }))
-        .unwrap(),
-    );
+    let patch = material_patch(normalize(top_level_external_spool_report()).unwrap());
 
     let external = &patch.external_spools.as_ref().unwrap()[0];
     assert_eq!(external.external_id, "254");
@@ -253,15 +221,7 @@ fn top_level_vt_tray_normalizes_external_spool() {
 
 #[test]
 fn vir_slot_takes_precedence_and_preserves_single_255_external_id() {
-    let patch = material_patch(
-        normalize(json!({
-            "print": {"ams": {
-                "vt_tray": [{"tray_type": "PLA"}, {"tray_type": "PETG"}],
-                "vir_slot": [{"id": 255, "setting_id": "GFSL05_07"}]
-            }}
-        }))
-        .unwrap(),
-    );
+    let patch = material_patch(normalize(vir_slot_precedence_report()).unwrap());
 
     let external_spools = patch.external_spools.as_ref().unwrap();
     assert_eq!(patch.replace_external_spools, Some(true));
@@ -276,7 +236,7 @@ fn vir_slot_takes_precedence_and_preserves_single_255_external_id() {
 #[test]
 fn active_tray_ranges_are_normalized() {
     assert_eq!(
-        material_patch(normalize(json!({"print": {"ams": {"tray_now": 15}}})).unwrap()).active_tray,
+        material_patch(normalize(active_tray_report(15)).unwrap()).active_tray,
         Some(TestActiveTray::Ams {
             global_tray_id: 15,
             ams_id: "3".to_owned(),
@@ -284,8 +244,7 @@ fn active_tray_ranges_are_normalized() {
         })
     );
     assert_eq!(
-        material_patch(normalize(json!({"print": {"ams": {"tray_now": 128}}})).unwrap())
-            .active_tray,
+        material_patch(normalize(active_tray_report(128)).unwrap()).active_tray,
         Some(TestActiveTray::AmsHt {
             global_tray_id: None,
             ams_id: "128".to_owned(),
@@ -293,8 +252,7 @@ fn active_tray_ranges_are_normalized() {
         })
     );
     assert_eq!(
-        material_patch(normalize(json!({"print": {"ams": {"tray_now": 254}}})).unwrap())
-            .active_tray,
+        material_patch(normalize(active_tray_report(254)).unwrap()).active_tray,
         Some(TestActiveTray::External {
             external_id: "254".to_owned(),
             tray_id: "0".to_owned(),
@@ -302,20 +260,14 @@ fn active_tray_ranges_are_normalized() {
         })
     );
     assert_eq!(
-        material_patch(normalize(json!({"print": {"ams": {"tray_now": 255}}})).unwrap())
-            .active_tray,
+        material_patch(normalize(active_tray_report(255)).unwrap()).active_tray,
         None
     );
 }
 
 #[test]
 fn ams_ht_unit_has_no_global_tray_id() {
-    let patch = material_patch(
-        normalize(json!({
-            "print": {"ams": {"ams": [{"id": 128, "tray": [{"id": 0, "tray_type": "PLA"}]}]}}
-        }))
-        .unwrap(),
-    );
+    let patch = material_patch(normalize(ams_ht_unit_report()).unwrap());
 
     assert_eq!(patch.ams_units[0].unit_kind, "ams_ht");
     assert_eq!(patch.ams_units[0].trays[0].global_tray_id, None);
@@ -323,18 +275,7 @@ fn ams_ht_unit_has_no_global_tray_id() {
 
 #[test]
 fn color_and_credential_keys_are_filtered() {
-    let patch_value = normalize(json!({
-        "print": {"ams": {"ams": [{"id": 0, "tray": [{
-            "id": 0,
-            "tray_color": "not-a-color",
-            "access_code": "secret-access",
-            "password": "secret-password",
-            "passwd": "secret-passwd",
-            "token": "secret-token",
-            "auth": "secret-auth"
-        }]}]}}
-    }))
-    .unwrap();
+    let patch_value = normalize(credential_filter_report()).unwrap();
 
     let serialized = serde_json::to_string(&patch_value).unwrap();
     assert!(!serialized.contains("secret-access"));

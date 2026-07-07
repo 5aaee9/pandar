@@ -1,98 +1,12 @@
-use serde::Serialize;
 use serde_json::Value;
 
+mod edge_cases;
+mod input;
 mod types;
 
+pub(super) use edge_cases::*;
+use input::*;
 pub(super) use types::*;
-
-#[derive(Serialize)]
-struct MaterialReport<'a> {
-    print: MaterialPrint<'a>,
-}
-
-#[derive(Default, Serialize)]
-struct MaterialPrint<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    nozzle_temper: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    nozzle_temper2: Option<u32>,
-    ams: MaterialAms<'a>,
-}
-
-#[derive(Default, Serialize)]
-struct MaterialAms<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tray_now: Option<Scalar<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tray_exist_bits: Option<Scalar<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    power_on_flag: Option<bool>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    ams: Vec<MaterialAmsUnit<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    vt_tray: Option<ExternalTray<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    vir_slot: Vec<ExternalTray<'a>>,
-}
-
-#[derive(Serialize)]
-struct MaterialAmsUnit<'a> {
-    id: Scalar<'a>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    info: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    humidity: Option<Scalar<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    humidity_raw: Option<Scalar<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    temp: Option<&'a str>,
-    tray: Vec<MaterialTray<'a>>,
-}
-
-#[derive(Default, Serialize)]
-struct MaterialTray<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<Scalar<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    state: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tray_info_idx: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tray_type: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tray_color: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tray_sub_brands: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tag_uid: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tray_uuid: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    k: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    remain: Option<Scalar<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    cols: Vec<&'a str>,
-}
-
-#[derive(Default, Serialize)]
-struct ExternalTray<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id: Option<Scalar<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    extruder_id: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tray_info_idx: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tray_color: Option<&'a str>,
-}
-
-#[derive(Clone, Copy, Serialize)]
-#[serde(untagged)]
-enum Scalar<'a> {
-    Str(&'a str),
-    U32(u32),
-}
 
 pub(super) fn full_ams_snapshot_report() -> Value {
     value(MaterialReport {
@@ -119,17 +33,19 @@ pub(super) fn full_ams_snapshot_report() -> Value {
                             k: Some("0.020"),
                             remain: Some(Scalar::U32(73)),
                             cols: vec!["#112233", "not-a-color", "445566"],
+                            ..Default::default()
                         },
                         tray_with_id(Scalar::Str("2")),
                         tray_with_id(Scalar::Str("3")),
                     ],
                 }],
-                vt_tray: Some(ExternalTray {
+                vt_tray: Some(ExternalSource::Object(ExternalTray {
                     id: Some(Scalar::U32(254)),
                     extruder_id: Some(0),
                     tray_info_idx: Some("P123"),
                     tray_color: Some("11223344"),
-                }),
+                    ..Default::default()
+                })),
                 ..Default::default()
             },
             ..Default::default()
@@ -149,14 +65,14 @@ pub(super) fn humidity_raw_report() -> Value {
 }
 
 pub(super) fn dual_nozzle_ams_report() -> Value {
-    ams_unit_pair_report(Some(28), Some(27), Vec::new())
+    ams_unit_pair_report(Some(28), Some(27), None)
 }
 
 pub(super) fn dual_external_slot_ams_report() -> Value {
     ams_unit_pair_report(
         None,
         None,
-        vec![
+        Some(ExternalSource::Array(vec![
             ExternalTray {
                 id: Some(Scalar::U32(254)),
                 ..Default::default()
@@ -165,12 +81,12 @@ pub(super) fn dual_external_slot_ams_report() -> Value {
                 id: Some(Scalar::U32(255)),
                 ..Default::default()
             },
-        ],
+        ])),
     )
 }
 
 pub(super) fn single_nozzle_ams_report() -> Value {
-    ams_unit_pair_report(Some(28), None, Vec::new())
+    ams_unit_pair_report(Some(28), None, None)
 }
 
 pub(super) fn decimal_ams_temperature_report() -> Value {
@@ -323,7 +239,7 @@ fn power_off_report(bits: Scalar<'_>) -> Value {
 fn ams_unit_pair_report(
     nozzle_temper: Option<u32>,
     nozzle_temper2: Option<u32>,
-    vir_slot: Vec<ExternalTray<'_>>,
+    vir_slot: Option<ExternalSource<'_>>,
 ) -> Value {
     value(MaterialReport {
         print: MaterialPrint {
@@ -337,6 +253,7 @@ fn ams_unit_pair_report(
                 vir_slot,
                 ..Default::default()
             },
+            ..Default::default()
         },
     })
 }
@@ -369,8 +286,4 @@ fn tray_with_id(id: Scalar<'_>) -> MaterialTray<'_> {
         id: Some(id),
         ..Default::default()
     }
-}
-
-fn value(input: impl Serialize) -> Value {
-    serde_json::to_value(input).unwrap()
 }
