@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Hub printer route test request bodies with typed serde structs for printer updates, printer controls, and link-printer validation payloads.
 - Replaced Hub plugin route test request bodies and audit metadata fixtures with typed serde structs for login-ticket, ticket-exchange, and redaction coverage.
 - Replaced Hub printer-command route test request bodies with typed serde fixture structs for discovery, diagnostics, and printer-control payloads.
 - Replaced Hub job recovery route test request bodies with typed serde fixture structs for retry, reprint, duplicate, and invalid recovery payloads.

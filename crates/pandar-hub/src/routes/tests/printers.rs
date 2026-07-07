@@ -5,13 +5,20 @@ use std::{
 
 use super::*;
 use pandar_core::{AgentId, TenantId};
+use requests::{
+    link_printer_body, link_printer_value, link_printer_with_model_value,
+    link_printer_with_serial_number_value, link_printer_with_unexpected_field_body,
+    printer_ams_load_body, printer_select_extruder_body, update_printer_body,
+};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use tokio::sync::mpsc;
 use tonic::Status;
 use tracing_subscriber::fmt::MakeWriter;
 
 use crate::protocol::agent::v1::{CameraStreamMode, HubCommand, hub_camera_command, hub_command};
+
+mod requests;
 
 #[derive(Debug, Deserialize)]
 struct TenantResponse {
@@ -361,11 +368,7 @@ async fn update_printer_updates_details_without_agent_session() {
         app,
         Method::PATCH,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}"),
-        Some(json!({
-            "host": "192.0.2.11",
-            "access_code": access_code,
-            "name": "Office A1 Updated"
-        })),
+        update_printer_body("192.0.2.11", access_code, "Office A1 Updated"),
         &token,
     )
     .await;
@@ -409,11 +412,7 @@ async fn update_printer_keeps_existing_connection_when_fields_are_blank_without_
         app,
         Method::PATCH,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}"),
-        Some(json!({
-            "host": " ",
-            "access_code": "",
-            "name": "Office A1 Updated"
-        })),
+        update_printer_body(" ", "", "Office A1 Updated"),
         &token,
     )
     .await;
@@ -541,13 +540,7 @@ async fn printer_control_enqueues_ams_slot_operation() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls"),
-        Some(json!({
-            "action": "ams_load_filament",
-            "ams_id": 0,
-            "slot_id": 1,
-            "global_tray_id": 1,
-            "extruder_id": 0
-        })),
+        printer_ams_load_body(0, 1, 1, 0),
         &token,
     )
     .await;
@@ -592,10 +585,7 @@ async fn printer_control_enqueues_select_extruder_operation() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls"),
-        Some(json!({
-            "action": "select_extruder",
-            "extruder_id": 1
-        })),
+        printer_select_extruder_body(1),
         &token,
     )
     .await;
@@ -908,8 +898,8 @@ async fn link_printer_maps_absent_or_blank_optional_name_to_empty_proto_string()
     register_route_test_session(&state, tenant_id, agent_id, command_sender).await;
 
     for body in [
-        json!({ "type": "BambuLab", "host": "192.0.2.10", "access_code": "SECRET-LINK-CODE" }),
-        json!({ "type": "BambuLab", "host": "192.0.2.11", "access_code": "SECRET-LINK-CODE", "name": "   " }),
+        link_printer_value("BambuLab", "192.0.2.10", "SECRET-LINK-CODE", None),
+        link_printer_value("BambuLab", "192.0.2.11", "SECRET-LINK-CODE", Some("   ")),
     ] {
         let (status, response) = request_as(
             app.clone(),
@@ -1001,8 +991,8 @@ async fn link_printer_rejects_blank_required_fields() {
     let agent_id = decode::<AgentResponse>(agent).id;
 
     for body in [
-        json!({ "type": "BambuLab", "host": "", "access_code": "SECRET-LINK-CODE" }),
-        json!({ "type": "BambuLab", "host": "192.0.2.10", "access_code": "" }),
+        link_printer_value("BambuLab", "", "SECRET-LINK-CODE", None),
+        link_printer_value("BambuLab", "192.0.2.10", "", None),
     ] {
         let (status, body) = request_as(
             app.clone(),
@@ -1028,11 +1018,16 @@ async fn link_printer_rejects_invalid_type_host_and_legacy_metadata_fields() {
     let agent_id = decode::<AgentResponse>(agent).id;
 
     for request in [
-        json!({ "type": "", "host": "192.0.2.10", "access_code": "SECRET-LINK-CODE" }),
-        json!({ "type": "Other", "host": "192.0.2.10", "access_code": "SECRET-LINK-CODE" }),
-        json!({ "type": "BambuLab", "host": "printer.local", "access_code": "SECRET-LINK-CODE" }),
-        json!({ "type": "BambuLab", "host": "192.0.2.10", "access_code": "SECRET-LINK-CODE", "serial_number": "SERIAL123" }),
-        json!({ "type": "BambuLab", "host": "192.0.2.10", "access_code": "SECRET-LINK-CODE", "model": "X1 Carbon" }),
+        link_printer_value("", "192.0.2.10", "SECRET-LINK-CODE", None),
+        link_printer_value("Other", "192.0.2.10", "SECRET-LINK-CODE", None),
+        link_printer_value("BambuLab", "printer.local", "SECRET-LINK-CODE", None),
+        link_printer_with_serial_number_value(
+            "BambuLab",
+            "192.0.2.10",
+            "SECRET-LINK-CODE",
+            "SERIAL123",
+        ),
+        link_printer_with_model_value("BambuLab", "192.0.2.10", "SECRET-LINK-CODE", "X1 Carbon"),
     ] {
         let (status, body) = request_as(
             app.clone(),
@@ -1060,12 +1055,7 @@ async fn link_printer_rejects_unknown_fields() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer"),
-        Some(json!({
-            "type": "BambuLab",
-            "host": "192.0.2.10",
-            "access_code": "SECRET-LINK-CODE",
-            "unexpected": true
-        })),
+        link_printer_with_unexpected_field_body("BambuLab", "192.0.2.10", "SECRET-LINK-CODE"),
         &token,
     )
     .await;
@@ -1073,15 +1063,6 @@ async fn link_printer_rejects_unknown_fields() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(decode::<ErrorResponse>(body).error, "bad_request");
     assert_eq!(state.commands().count().await.unwrap(), 0);
-}
-
-fn link_printer_body(access_code: &str) -> serde_json::Value {
-    json!({
-        "type": "BambuLab",
-        "host": "192.0.2.10",
-        "access_code": access_code,
-        "name": "Office X1C"
-    })
 }
 
 async fn seed_printer_connection(
