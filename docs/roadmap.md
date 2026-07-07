@@ -982,6 +982,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced Agent project-file MQTT signing with typed command payload structs, so signing no longer deserializes a prebuilt `serde_json::Value` back into a duplicate project-file shape.
 - Moved Agent chamber-light MQTT report decoding behind a typed helper so the light-control loop consumes `PrinterReport` instead of raw `serde_json::Value`.
 - Replaced Agent MQTT sequence-id test helpers with typed serde envelopes instead of `BTreeMap<String, ...>` lookups by JSON section name.
+- Replaced Hub gRPC link-printer redacted result assertions with typed serde structs instead of dynamic string maps.
 
 Exit criteria:
 

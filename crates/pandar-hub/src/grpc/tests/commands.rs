@@ -1,5 +1,4 @@
 use std::{
-    collections::BTreeMap,
     io::{self, Write},
     sync::{Arc, Mutex},
 };
@@ -51,7 +50,25 @@ struct RedactedNumericLinkPrinterResult {
     status: String,
 }
 
-fn redacted_result_object(result_json: &str) -> BTreeMap<String, String> {
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct RedactedSecretKeyLinkPrinterResult {
+    #[serde(rename = "[redacted]")]
+    secret_key: String,
+    status: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct RedactedUnknownLinkPrinterResult {
+    #[serde(rename = "[redacted_0]")]
+    first: String,
+    #[serde(rename = "[redacted_1]")]
+    second: String,
+}
+
+fn redacted_result<T>(result_json: &str) -> T
+where
+    T: serde::de::DeserializeOwned,
+{
     serde_json::from_str(result_json).unwrap()
 }
 
@@ -989,7 +1006,7 @@ async fn grpc_link_printer_result_json_redacts_access_code() {
     let stored_result = stored.result_json.unwrap();
     assert!(!stored_result.contains(access_code));
     assert_eq!(
-        serde_json::from_str::<RedactedLinkPrinterResult>(&stored_result).unwrap(),
+        redacted_result::<RedactedLinkPrinterResult>(&stored_result),
         RedactedLinkPrinterResult {
             access_code: "[redacted]".to_owned(),
             status: "rejected".to_owned(),
@@ -1042,7 +1059,7 @@ async fn grpc_link_printer_numeric_result_json_redacts_digit_access_code() {
     let stored_result = stored.result_json.unwrap();
     assert!(!stored_result.contains(access_code));
     assert_eq!(
-        serde_json::from_str::<RedactedNumericLinkPrinterResult>(&stored_result).unwrap(),
+        redacted_result::<RedactedNumericLinkPrinterResult>(&stored_result),
         RedactedNumericLinkPrinterResult {
             echoed: "[redacted]".to_owned(),
             status: "rejected".to_owned(),
@@ -1094,8 +1111,13 @@ async fn grpc_link_printer_result_json_redacts_access_code_object_key() {
         .unwrap();
     let stored_result = stored.result_json.unwrap();
     assert!(!stored_result.contains(access_code));
-    let object = redacted_result_object(&stored_result);
-    assert!(object.keys().all(|key| !key.contains(access_code)));
+    assert_eq!(
+        redacted_result::<RedactedSecretKeyLinkPrinterResult>(&stored_result),
+        RedactedSecretKeyLinkPrinterResult {
+            secret_key: "rejected".to_owned(),
+            status: "failed".to_owned(),
+        }
+    );
 }
 
 #[tokio::test]
@@ -1412,9 +1434,13 @@ async fn grpc_link_printer_result_without_pending_secret_redacts_untrusted_strin
     assert!(!stored.error.unwrap().contains(access_code));
     let result_json = stored.result_json.unwrap();
     assert!(!result_json.contains(access_code));
-    let object = redacted_result_object(&result_json);
-    assert!(object.keys().all(|key| !key.contains(access_code)));
-    assert!(object.values().all(|value| value == "[redacted]"));
+    assert_eq!(
+        redacted_result::<RedactedUnknownLinkPrinterResult>(&result_json),
+        RedactedUnknownLinkPrinterResult {
+            first: "[redacted]".to_owned(),
+            second: "[redacted]".to_owned(),
+        }
+    );
 }
 
 #[tokio::test]
@@ -1461,9 +1487,13 @@ async fn grpc_link_printer_result_without_pending_secret_redacts_numeric_values(
         .unwrap();
     let result_json = stored.result_json.unwrap();
     assert!(!result_json.contains(access_code));
-    let object = redacted_result_object(&result_json);
-    assert!(object.keys().all(|key| !key.contains(access_code)));
-    assert!(object.values().all(|value| value == "[redacted]"));
+    assert_eq!(
+        redacted_result::<RedactedUnknownLinkPrinterResult>(&result_json),
+        RedactedUnknownLinkPrinterResult {
+            first: "[redacted]".to_owned(),
+            second: "[redacted]".to_owned(),
+        }
+    );
 }
 
 #[tokio::test]
@@ -1510,8 +1540,13 @@ async fn grpc_link_printer_result_without_pending_secret_redacts_numeric_object_
         .unwrap();
     let result_json = stored.result_json.unwrap();
     assert!(!result_json.contains(access_code));
-    let object = redacted_result_object(&result_json);
-    assert!(object.keys().all(|key| !key.contains(access_code)));
+    assert_eq!(
+        redacted_result::<RedactedUnknownLinkPrinterResult>(&result_json),
+        RedactedUnknownLinkPrinterResult {
+            first: "[redacted]".to_owned(),
+            second: "[redacted]".to_owned(),
+        }
+    );
 }
 
 #[tokio::test]
