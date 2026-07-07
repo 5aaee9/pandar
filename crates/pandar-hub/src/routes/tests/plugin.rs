@@ -1,5 +1,11 @@
 use super::*;
+use requests::{
+    plugin_login_ticket_body, plugin_ticket_exchange_body, redacted_audit_metadata_fixture,
+    safe_audit_metadata_fixture,
+};
 use serde::{Deserialize, Serialize, de::IgnoredAny};
+
+mod requests;
 
 #[derive(Debug, Deserialize)]
 struct LoginTicketResponse {
@@ -241,11 +247,7 @@ async fn plugin_login_ticket_creation_enforces_external_viewer_or_all_tenant_tok
     let plugin_studio =
         plugin_studio_tenant_token(&state, &tenant.id.to_string(), "plugin-studio").await;
     let uri = format!("/api/v1/tenants/{}/plugin/login-tickets", tenant.id);
-    let body = || {
-        Some(json!({
-            "redirect_url": "http://localhost:4100/callback?state=abc"
-        }))
-    };
+    let body = || plugin_login_ticket_body("http://localhost:4100/callback?state=abc");
 
     let (status, viewer_body) = request_as(app.clone(), Method::POST, &uri, body(), &viewer).await;
     assert_eq!(status, StatusCode::CREATED);
@@ -276,7 +278,7 @@ async fn plugin_login_ticket_creation_enforces_external_viewer_or_all_tenant_tok
             app.clone(),
             Method::POST,
             &uri,
-            Some(json!({ "redirect_url": redirect_url })),
+            plugin_login_ticket_body(redirect_url),
             &viewer,
         )
         .await;
@@ -305,7 +307,7 @@ async fn plugin_login_ticket_exchange_is_unauthenticated_one_use_and_rejects_exp
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/plugin/login-tickets", tenant.id),
-        Some(json!({ "redirect_url": "http://127.0.0.1:4100/callback" })),
+        plugin_login_ticket_body("http://127.0.0.1:4100/callback"),
         &viewer,
     )
     .await;
@@ -316,7 +318,7 @@ async fn plugin_login_ticket_exchange_is_unauthenticated_one_use_and_rejects_exp
         app.clone(),
         Method::POST,
         "/api/v1/plugin/login-tickets/exchange",
-        Some(json!({ "ticket": &ticket })),
+        plugin_ticket_exchange_body(&ticket),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -330,7 +332,7 @@ async fn plugin_login_ticket_exchange_is_unauthenticated_one_use_and_rejects_exp
         app.clone(),
         Method::POST,
         "/api/v1/plugin/login-tickets/exchange",
-        Some(json!({ "ticket": &ticket })),
+        plugin_ticket_exchange_body(&ticket),
     )
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
@@ -361,7 +363,7 @@ async fn plugin_login_ticket_exchange_is_unauthenticated_one_use_and_rejects_exp
         app,
         Method::POST,
         "/api/v1/plugin/login-tickets/exchange",
-        Some(json!({ "ticket": expired.plaintext_ticket })),
+        plugin_ticket_exchange_body(&expired.plaintext_ticket),
     )
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
@@ -839,22 +841,7 @@ async fn audit_events_route_authorizes_paginates_filters_and_redacts_metadata() 
         tenant.id,
         "first.action",
         "2026-06-20T00:00:00Z",
-        json!({
-            "safe": "keep",
-            "subject": "external-subject",
-            "plaintext_token": "secret",
-            "ticket": "ticket",
-            "plaintext_ticket": "ticket",
-            "nested": {
-                "credential_hash": "hash",
-                "provider_subject": "external-subject",
-                "ticket_hash": "hash",
-                "token_hash": "hash",
-                "ok": true
-            },
-            "headers": { "Authorization": "Bearer secret" },
-            "artifact_storage_path": "/tmp/secret"
-        }),
+        redacted_audit_metadata_fixture(),
     )
     .await;
     insert_audit_fixture(
@@ -862,7 +849,7 @@ async fn audit_events_route_authorizes_paginates_filters_and_redacts_metadata() 
         tenant.id,
         "second.action",
         "2026-06-21T00:00:00Z",
-        json!({ "safe": "second" }),
+        safe_audit_metadata_fixture("second"),
     )
     .await;
 
