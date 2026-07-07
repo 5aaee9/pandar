@@ -65,6 +65,7 @@
 - Replaced Agent MQTT project-file signing and fake transport command echo field handling with typed serde payload structs.
 - Moved Agent material patch normalization behind a typed `MaterialsReport` input so MQTT `Value` handling stays at the parse boundary instead of flowing into material business logic.
 - Moved Agent printer snapshot construction behind a typed `SnapshotReport` input so production MQTT report handling parses raw JSON before snapshot business logic.
+- Moved Agent print-progress and diagnostic report construction behind a typed `PrintReportEnvelope` input so raw MQTT `Value` parsing remains at the report boundary.
 - Replaced Agent MQTT `project_file` command payload construction with a serializable struct instead of manually assembling a JSON object map.
 - Replaced Agent print-project test dispatch payload fixtures with typed serde structs and split the oversized print-command test support into a sibling module.
 - Replaced Agent MQTT control command payload construction with serializable structs for info, pushall, print controls, light control, AMS RFID/load/unload, and temperature/G-code operations.

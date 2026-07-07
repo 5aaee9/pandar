@@ -6,7 +6,7 @@ use serde_json::Number;
 use super::super::MachineReportDiagnosticPayload;
 
 #[derive(Debug, Default, Deserialize)]
-pub(super) struct PrintReportEnvelope {
+pub(crate) struct PrintReportEnvelope {
     #[serde(default)]
     pub(super) print: PrintReportSection,
     #[serde(flatten)]

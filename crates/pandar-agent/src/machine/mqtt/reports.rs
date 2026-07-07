@@ -29,8 +29,35 @@ pub fn print_report_from_report(
     endpoint: &BambuPrinterEndpoint,
     report: &Value,
 ) -> PrintReportProgress {
-    let envelope =
-        serde_json::from_value::<PrintReportEnvelope>(report.clone()).unwrap_or_default();
+    let envelope = parse_print_report(report);
+    let observed_at = created_at_now();
+    let materials_report = parse_materials_report(report);
+    let printer_materials_json = materials_report
+        .as_ref()
+        .and_then(|report| normalize_material_patch(report, &observed_at))
+        .and_then(|patch| serde_json::to_string(&patch).ok())
+        .unwrap_or_default();
+
+    print_report_from_parsed_report(
+        endpoint,
+        envelope.as_ref(),
+        observed_at,
+        printer_materials_json,
+    )
+}
+
+pub(crate) fn parse_print_report(report: &Value) -> Option<PrintReportEnvelope> {
+    serde_json::from_value(report.clone()).ok()
+}
+
+pub(crate) fn print_report_from_parsed_report(
+    endpoint: &BambuPrinterEndpoint,
+    envelope: Option<&PrintReportEnvelope>,
+    observed_at: String,
+    printer_materials_json: String,
+) -> PrintReportProgress {
+    let default_envelope = PrintReportEnvelope::default();
+    let envelope = envelope.unwrap_or(&default_envelope);
     let print = &envelope.print;
     let subtask_id = trimmed_string(print.subtask_id.as_deref());
 
@@ -48,15 +75,7 @@ pub fn print_report_from_report(
                 .unwrap_or(MachineReportDiagnosticPayload::Null),
         });
     }
-    collect_hms_diagnostics(&envelope, &mut diagnostics);
-
-    let observed_at = created_at_now();
-    let materials_report = parse_materials_report(report);
-    let printer_materials_json = materials_report
-        .as_ref()
-        .and_then(|report| normalize_material_patch(report, &observed_at))
-        .and_then(|patch| serde_json::to_string(&patch).ok())
-        .unwrap_or_default();
+    collect_hms_diagnostics(envelope, &mut diagnostics);
 
     PrintReportProgress {
         serial: endpoint.serial.clone(),
@@ -198,7 +217,20 @@ where
 
         match transport.next_report(report_timeout).await {
             Ok(report) => {
-                let progress = print_report_from_report(endpoint, &report);
+                let observed_at = created_at_now();
+                let print_report = parse_print_report(&report);
+                let materials_report = parse_materials_report(&report);
+                let printer_materials_json = materials_report
+                    .as_ref()
+                    .and_then(|report| normalize_material_patch(report, &observed_at))
+                    .and_then(|patch| serde_json::to_string(&patch).ok())
+                    .unwrap_or_default();
+                let progress = print_report_from_parsed_report(
+                    endpoint,
+                    print_report.as_ref(),
+                    observed_at,
+                    printer_materials_json,
+                );
                 let snapshot_report = parse_snapshot_report(&report);
                 let snapshot = snapshot_from_parsed_report(endpoint, snapshot_report.as_ref());
                 let snapshot_event = snapshot_has_temperature_telemetry(&snapshot)
