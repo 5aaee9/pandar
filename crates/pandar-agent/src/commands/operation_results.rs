@@ -1,11 +1,8 @@
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
 
 use crate::machine::{
-    PrinterAxis as MachinePrinterAxis, PrinterOperation as MachinePrinterOperation,
-    PrinterOperationDispatchResult,
+    MachineJsonPayload, PrinterAxis as MachinePrinterAxis,
+    PrinterOperation as MachinePrinterOperation, PrinterOperationDispatchResult,
 };
 
 pub(super) fn printer_operation_action(operation: &MachinePrinterOperation) -> &'static str {
@@ -37,10 +34,7 @@ pub(super) fn printer_operation_result_json(
         .mqtt_report
         .as_ref()
         .and_then(MqttReportSummary::from_report);
-    let mqtt_report = dispatch_result
-        .mqtt_report
-        .as_ref()
-        .and_then(MqttReportField::from_value);
+    let mqtt_report = dispatch_result.mqtt_report.as_ref();
     serde_json::to_string(&PrinterOperationResult {
         kind: "printer_operation",
         action: printer_operation_action(operation),
@@ -51,7 +45,7 @@ pub(super) fn printer_operation_result_json(
         mqtt_reason: mqtt.as_ref().and_then(|summary| summary.reason.as_ref()),
         mqtt_err_code: mqtt.as_ref().and_then(|summary| summary.err_code.as_ref()),
         mqtt_errno: mqtt.as_ref().and_then(|summary| summary.errno.as_ref()),
-        mqtt_report: mqtt_report.as_ref(),
+        mqtt_report,
         operation: OperationResultFields::from(operation),
     })
     .expect("printer operation result is serializable")
@@ -68,15 +62,15 @@ struct PrinterOperationResult<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     mqtt_error: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mqtt_result: Option<&'a MqttReportField>,
+    mqtt_result: Option<&'a MachineJsonPayload>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mqtt_reason: Option<&'a MqttReportField>,
+    mqtt_reason: Option<&'a MachineJsonPayload>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mqtt_err_code: Option<&'a MqttReportField>,
+    mqtt_err_code: Option<&'a MachineJsonPayload>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mqtt_errno: Option<&'a MqttReportField>,
+    mqtt_errno: Option<&'a MachineJsonPayload>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mqtt_report: Option<&'a MqttReportField>,
+    mqtt_report: Option<&'a MachineJsonPayload>,
     #[serde(flatten)]
     operation: OperationResultFields,
 }
@@ -121,34 +115,17 @@ struct MqttReport {
 
 #[derive(Deserialize)]
 struct MqttReportSection {
-    result: Option<MqttReportField>,
-    reason: Option<MqttReportField>,
-    err_code: Option<MqttReportField>,
-    errno: Option<MqttReportField>,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(untagged)]
-enum MqttReportField {
-    Object(BTreeMap<String, MqttReportField>),
-    Array(Vec<MqttReportField>),
-    String(String),
-    Number(Number),
-    Bool(bool),
-    Null,
-}
-
-impl MqttReportField {
-    fn from_value(value: &Value) -> Option<Self> {
-        serde_json::from_value(value.clone()).ok()
-    }
+    result: Option<MachineJsonPayload>,
+    reason: Option<MachineJsonPayload>,
+    err_code: Option<MachineJsonPayload>,
+    errno: Option<MachineJsonPayload>,
 }
 
 struct MqttReportSummary {
-    result: Option<MqttReportField>,
-    reason: Option<MqttReportField>,
-    err_code: Option<MqttReportField>,
-    errno: Option<MqttReportField>,
+    result: Option<MachineJsonPayload>,
+    reason: Option<MachineJsonPayload>,
+    err_code: Option<MachineJsonPayload>,
+    errno: Option<MachineJsonPayload>,
 }
 
 impl OperationResultFields {
@@ -239,8 +216,9 @@ impl OperationResultFields {
 }
 
 impl MqttReportSummary {
-    fn from_report(report: &Value) -> Option<Self> {
-        let report = serde_json::from_value::<MqttReport>(report.clone()).ok()?;
+    fn from_report(report: &MachineJsonPayload) -> Option<Self> {
+        let report =
+            serde_json::from_value::<MqttReport>(serde_json::to_value(report).ok()?).ok()?;
         let section = report.print.or(report.system)?;
         Some(Self {
             result: section.result,

@@ -2,8 +2,8 @@ use anyhow::{Context, bail};
 
 use crate::{
     machine::{
-        BambuMqttTransport, BambuPrinterEndpoint, MachineFileTransfer, PrintProjectDispatchResult,
-        TransferModeCache,
+        BambuMqttTransport, BambuPrinterEndpoint, MachineFileTransfer, MachineJsonPayload,
+        PrintProjectDispatchResult, TransferModeCache,
         brtc::md5_upper,
         compatibility::flow_calibration_supported,
         file_transfer::run_with_transfer_mode,
@@ -68,7 +68,7 @@ where
 
     Ok(PrintProjectDispatchResult {
         topic: topics.request,
-        payload,
+        payload: MachineJsonPayload::from(payload),
         qos: 0,
         uploaded_path: uploaded.path,
         uploaded_url: uploaded.url,

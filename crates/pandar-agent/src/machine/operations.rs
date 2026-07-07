@@ -5,7 +5,7 @@ mod light;
 mod report;
 
 use super::{
-    BambuPrinterEndpoint, PrinterOperationDispatchResult,
+    BambuPrinterEndpoint, MachineJsonPayload, PrinterOperationDispatchResult,
     mqtt::{
         AmsFilamentCommand, AmsSlotCommand, BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics,
         BambuMqttTransport, GcodeLineCommand, PrintSpeed, PublishedMqttCommand,
@@ -112,7 +112,7 @@ where
         Ok((sequence_id, report)) => Ok(PrinterOperationDispatchResult {
             sequence_id: Some(sequence_id),
             error: report::printer_operation_report_error(&report),
-            mqtt_report: Some(report),
+            mqtt_report: Some(MachineJsonPayload::from(report)),
         }),
         Err(err) => {
             let sequence_id = sequence_ids

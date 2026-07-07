@@ -1,4 +1,7 @@
-use serde_json::Value;
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+use serde_json::{Number, Value};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub struct BambuPrinterEndpoint {
@@ -50,7 +53,7 @@ pub struct PrinterRefreshResult {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrinterOperationDispatchResult {
     pub sequence_id: Option<String>,
-    pub mqtt_report: Option<Value>,
+    pub mqtt_report: Option<MachineJsonPayload>,
     pub error: Option<String>,
 }
 
@@ -67,9 +70,26 @@ impl PrinterOperationDispatchResult {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrintProjectDispatchResult {
     pub topic: String,
-    pub payload: Value,
+    pub payload: MachineJsonPayload,
     pub qos: u8,
     pub uploaded_path: String,
     pub uploaded_url: String,
     pub md5: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum MachineJsonPayload {
+    Object(BTreeMap<String, MachineJsonPayload>),
+    Array(Vec<MachineJsonPayload>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
+}
+
+impl From<Value> for MachineJsonPayload {
+    fn from(value: Value) -> Self {
+        serde_json::from_value(value).expect("serde_json::Value is representable")
+    }
 }

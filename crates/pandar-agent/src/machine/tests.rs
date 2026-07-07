@@ -126,8 +126,8 @@ fn runtime_reports(model: &str, state: &str) -> [serde_json::Value; 2] {
     [get_version_report(model), runtime_state_report(state)]
 }
 
-fn operation_report(value: &Value) -> TestOperationReport {
-    serde_json::from_value(value.clone()).unwrap()
+fn operation_report(value: impl Serialize) -> TestOperationReport {
+    serde_json::from_value(serde_json::to_value(value).unwrap()).unwrap()
 }
 
 #[derive(Debug, Deserialize)]

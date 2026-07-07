@@ -32,8 +32,9 @@ pub use operations::{PrinterAxis, PrinterOperation};
 use print::dispatch_print_project_file;
 use transfer::BambuMachineFileTransfer;
 pub use types::{
-    BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot, MaterialRefreshResult,
-    PrintProjectDispatchResult, PrinterOperationDispatchResult, PrinterRefreshResult,
+    BambuPrinterEndpoint, MachineJsonPayload, MachineNozzleTemperature, MachineSnapshot,
+    MaterialRefreshResult, PrintProjectDispatchResult, PrinterOperationDispatchResult,
+    PrinterRefreshResult,
 };
 
 #[async_trait]

@@ -140,7 +140,8 @@ impl BambuMachineGateway for FakePrintGateway {
                     command: "project_file",
                 },
             })
-            .unwrap(),
+            .unwrap()
+            .into(),
             qos: 0,
             uploaded_path: "plate.gcode.3mf".to_string(),
             uploaded_url: "ftp://plate.gcode.3mf".to_string(),
