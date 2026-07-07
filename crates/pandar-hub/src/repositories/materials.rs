@@ -257,7 +257,10 @@ fn snapshot_from_model(
                 .active_tray_json
                 .as_deref()
                 .map(|json| parse_object_json(json, "active material tray"))
-                .transpose()?,
+                .transpose()?
+                .map(serde_json::to_value)
+                .transpose()
+                .context("failed to serialize active material tray")?,
             observed_at: model.observed_at,
             updated_at: model.updated_at,
         })

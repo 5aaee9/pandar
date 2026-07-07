@@ -1,7 +1,8 @@
+use std::collections::BTreeMap;
+
 use anyhow::{Context, bail};
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Deserializer};
-use serde_json::{Map, Value};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::{Number, Value};
 use time::OffsetDateTime;
 
 #[derive(Debug)]
@@ -18,7 +19,7 @@ pub(super) enum Presence {
     #[default]
     Absent,
     Null,
-    Value(Value),
+    Value(MaterialJsonValue),
 }
 
 #[derive(Debug, Deserialize)]
@@ -26,9 +27,9 @@ struct MaterialPatchDocument {
     #[serde(rename = "type")]
     kind: String,
     observed_at: String,
-    #[serde(default, deserialize_with = "optional_filtered_array")]
+    #[serde(default)]
     ams_units: Option<Vec<MaterialUnitPatch>>,
-    #[serde(default, deserialize_with = "optional_filtered_array")]
+    #[serde(default)]
     external_spools: Option<Vec<MaterialExternalSpoolPatch>>,
     #[serde(default)]
     replace_external_spools: bool,
@@ -42,10 +43,10 @@ pub(super) struct MaterialUnitPatch {
     pub(super) unit_id: Option<String>,
     #[serde(default)]
     pub(super) replace_trays: bool,
-    #[serde(default, deserialize_with = "optional_filtered_array")]
+    #[serde(default)]
     pub(super) trays: Option<Vec<MaterialTrayPatch>>,
     #[serde(flatten)]
-    fields: Map<String, Value>,
+    fields: MaterialJsonObject,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -53,7 +54,7 @@ pub(super) struct MaterialTrayPatch {
     #[serde(default)]
     pub(super) tray_id: Option<String>,
     #[serde(flatten)]
-    fields: Map<String, Value>,
+    fields: MaterialJsonObject,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -63,29 +64,42 @@ pub(super) struct MaterialExternalSpoolPatch {
     #[serde(default)]
     pub(super) tray_id: Option<String>,
     #[serde(flatten)]
-    fields: Map<String, Value>,
+    fields: MaterialJsonObject,
+}
+
+pub(super) type MaterialJsonObject = BTreeMap<String, MaterialJsonValue>;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub(super) enum MaterialJsonValue {
+    Object(MaterialJsonObject),
+    Array(Vec<MaterialJsonValue>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
 }
 
 impl MaterialUnitPatch {
-    pub(super) fn fields_with_nulls(&self) -> Map<String, Value> {
+    pub(super) fn fields_with_nulls(&self) -> MaterialJsonObject {
         self.fields.clone()
     }
 
-    pub(super) fn fields_without_nulls_for_new_unit(&self) -> Map<String, Value> {
+    pub(super) fn fields_without_nulls_for_new_unit(&self) -> MaterialJsonObject {
         let mut object = self.fields.clone();
         if self.replace_trays {
-            object.insert("replace_trays".to_owned(), Value::Bool(true));
+            object.insert("replace_trays".to_owned(), MaterialJsonValue::Bool(true));
         }
         object_without_null_fields(object)
     }
 }
 
 impl MaterialTrayPatch {
-    pub(super) fn fields_with_nulls(&self) -> Map<String, Value> {
+    pub(super) fn fields_with_nulls(&self) -> MaterialJsonObject {
         self.fields.clone()
     }
 
-    pub(super) fn fields_without_nulls(&self) -> Map<String, Value> {
+    pub(super) fn fields_without_nulls(&self) -> MaterialJsonObject {
         object_without_null_fields(self.fields.clone())
     }
 }
@@ -95,11 +109,11 @@ impl MaterialExternalSpoolPatch {
         Some((self.external_id.clone()?, self.tray_id.clone()?))
     }
 
-    pub(super) fn fields_with_nulls(&self) -> Map<String, Value> {
+    pub(super) fn fields_with_nulls(&self) -> MaterialJsonObject {
         self.fields.clone()
     }
 
-    pub(super) fn fields_without_nulls(&self) -> Map<String, Value> {
+    pub(super) fn fields_without_nulls(&self) -> MaterialJsonObject {
         object_without_null_fields(self.fields.clone())
     }
 }
@@ -115,10 +129,10 @@ pub(super) fn parse_array_json(raw: &str, context: &str) -> anyhow::Result<Vec<V
     serde_json::from_str::<Vec<Value>>(raw).with_context(|| format!("failed to parse {context}"))
 }
 
-pub(super) fn parse_object_json(raw: &str, context: &str) -> anyhow::Result<Value> {
-    let object: Map<String, Value> =
+pub(super) fn parse_object_json(raw: &str, context: &str) -> anyhow::Result<MaterialJsonValue> {
+    let object: MaterialJsonObject =
         serde_json::from_str(raw).with_context(|| format!("failed to parse {context}"))?;
-    Ok(Value::Object(object))
+    Ok(MaterialJsonValue::Object(object))
 }
 
 pub(super) fn parse_patch_result(raw: &str) -> anyhow::Result<ParsedPatch> {
@@ -131,36 +145,11 @@ pub(super) fn parse_patch_result(raw: &str) -> anyhow::Result<ParsedPatch> {
 
     Ok(ParsedPatch {
         observed_at: document.observed_at,
-        ams_units: document.ams_units,
-        external_spools: document.external_spools,
+        ams_units: document.ams_units.map(redacted_units),
+        external_spools: document.external_spools.map(redacted_external_spools),
         replace_external_spools: document.replace_external_spools,
-        active_tray: document.active_tray,
+        active_tray: document.active_tray.redacted(),
     })
-}
-
-fn filter_sensitive(value: &Value) -> Value {
-    match value {
-        Value::Array(values) => Value::Array(
-            values
-                .iter()
-                .map(filter_sensitive)
-                .filter(|value| !value.is_null())
-                .collect(),
-        ),
-        Value::Object(object) => Value::Object(
-            object
-                .iter()
-                .filter(|(key, value)| !is_sensitive(key) && !scalar_is_sensitive(value))
-                .map(|(key, value)| (key.clone(), filter_sensitive(value)))
-                .collect(),
-        ),
-        value if scalar_is_sensitive(value) => Value::Null,
-        value => value.clone(),
-    }
-}
-
-fn scalar_is_sensitive(value: &Value) -> bool {
-    value.as_str().map(is_sensitive).unwrap_or(false)
 }
 
 fn is_sensitive(value: &str) -> bool {
@@ -183,38 +172,97 @@ fn parse_time(value: &str) -> anyhow::Result<OffsetDateTime> {
         .context("failed to parse timestamp")
 }
 
-fn optional_filtered_array<'de, D, T>(deserializer: D) -> Result<Option<Vec<T>>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: DeserializeOwned,
-{
-    let value = Value::deserialize(deserializer)?;
-    let Value::Array(values) = value else {
-        return Err(serde::de::Error::custom("must be an array"));
-    };
-    values
-        .iter()
-        .map(filter_sensitive)
-        .map(serde_json::from_value)
-        .collect::<Result<Vec<T>, _>>()
-        .map(Some)
-        .map_err(serde::de::Error::custom)
-}
-
 fn presence<'de, D>(deserializer: D) -> Result<Presence, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let value = Value::deserialize(deserializer)?;
+    let value = MaterialJsonValue::deserialize(deserializer)?;
     Ok(match value {
-        Value::Null => Presence::Null,
-        value => Presence::Value(filter_sensitive(&value)),
+        MaterialJsonValue::Null => Presence::Null,
+        value => Presence::Value(value),
     })
 }
 
-fn object_without_null_fields(object: Map<String, Value>) -> Map<String, Value> {
+fn object_without_null_fields(object: MaterialJsonObject) -> MaterialJsonObject {
     object
         .into_iter()
         .filter(|(_, value)| !value.is_null())
         .collect()
+}
+
+fn redacted_units(units: Vec<MaterialUnitPatch>) -> Vec<MaterialUnitPatch> {
+    units
+        .into_iter()
+        .map(|unit| MaterialUnitPatch {
+            fields: redact_object(unit.fields),
+            trays: unit.trays.map(redacted_trays),
+            ..unit
+        })
+        .collect()
+}
+
+fn redacted_trays(trays: Vec<MaterialTrayPatch>) -> Vec<MaterialTrayPatch> {
+    trays
+        .into_iter()
+        .map(|tray| MaterialTrayPatch {
+            fields: redact_object(tray.fields),
+            ..tray
+        })
+        .collect()
+}
+
+fn redacted_external_spools(
+    spools: Vec<MaterialExternalSpoolPatch>,
+) -> Vec<MaterialExternalSpoolPatch> {
+    spools
+        .into_iter()
+        .map(|spool| MaterialExternalSpoolPatch {
+            fields: redact_object(spool.fields),
+            ..spool
+        })
+        .collect()
+}
+
+fn redact_object(object: MaterialJsonObject) -> MaterialJsonObject {
+    object
+        .into_iter()
+        .filter(|(key, value)| !is_sensitive(key) && !value.scalar_is_sensitive())
+        .filter_map(|(key, value)| value.redacted().map(|value| (key, value)))
+        .collect()
+}
+
+impl Presence {
+    fn redacted(self) -> Self {
+        match self {
+            Self::Value(value) => value.redacted().map(Self::Value).unwrap_or(Self::Null),
+            other => other,
+        }
+    }
+}
+
+impl MaterialJsonValue {
+    fn redacted(self) -> Option<Self> {
+        match self {
+            Self::Object(object) => Some(Self::Object(redact_object(object))),
+            Self::Array(values) => Some(Self::Array(
+                values
+                    .into_iter()
+                    .filter_map(MaterialJsonValue::redacted)
+                    .collect(),
+            )),
+            value if value.scalar_is_sensitive() => None,
+            value => Some(value),
+        }
+    }
+
+    pub(super) fn is_null(&self) -> bool {
+        matches!(self, Self::Null)
+    }
+
+    fn scalar_is_sensitive(&self) -> bool {
+        match self {
+            Self::String(value) => is_sensitive(value),
+            _ => false,
+        }
+    }
 }

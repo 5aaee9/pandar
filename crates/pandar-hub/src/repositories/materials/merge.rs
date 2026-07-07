@@ -1,12 +1,12 @@
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::entities::printer_material_snapshots;
 
 use super::patch::{
-    MaterialExternalSpoolPatch, MaterialTrayPatch, MaterialUnitPatch, ParsedPatch, Presence,
-    parse_object_json,
+    MaterialExternalSpoolPatch, MaterialJsonObject, MaterialTrayPatch, MaterialUnitPatch,
+    ParsedPatch, Presence, parse_object_json,
 };
 
 pub(super) struct MergedSnapshot {
@@ -48,6 +48,10 @@ pub(super) fn merge_snapshot(
         Presence::Null => None,
         Presence::Value(value) => Some(value.clone()),
     };
+    let active_tray = active_tray
+        .map(serde_json::to_value)
+        .transpose()
+        .context("failed to serialize active material tray")?;
 
     Ok(MergedSnapshot {
         ams_units: serde_json::to_value(ams_units)
@@ -65,7 +69,7 @@ struct MaterialUnitState {
     #[serde(default)]
     trays: Vec<MaterialTrayState>,
     #[serde(default, flatten)]
-    fields: Map<String, Value>,
+    fields: MaterialJsonObject,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -73,7 +77,7 @@ struct MaterialTrayState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     tray_id: Option<String>,
     #[serde(default, flatten)]
-    fields: Map<String, Value>,
+    fields: MaterialJsonObject,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -83,7 +87,7 @@ struct MaterialExternalSpoolState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     tray_id: Option<String>,
     #[serde(default, flatten)]
-    fields: Map<String, Value>,
+    fields: MaterialJsonObject,
 }
 
 fn parse_units_json(raw: &str, context: &str) -> anyhow::Result<Vec<MaterialUnitState>> {
@@ -210,7 +214,7 @@ fn new_tray_states(patches: &[MaterialTrayPatch]) -> Vec<MaterialTrayState> {
     trays
 }
 
-fn merge_fields(current: &mut Map<String, Value>, patch: Map<String, Value>) {
+fn merge_fields(current: &mut MaterialJsonObject, patch: MaterialJsonObject) {
     for (key, value) in patch {
         if value.is_null() {
             current.remove(&key);
