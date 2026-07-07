@@ -1,6 +1,7 @@
 use super::*;
 use crate::Database;
 use serde::Deserialize;
+use serde_json::Number;
 use std::collections::BTreeMap;
 
 mod auth_validation;
@@ -105,7 +106,18 @@ struct AmsMappingInfoEntry {
     #[serde(rename = "nozzleId")]
     nozzle_id: i32,
     #[serde(flatten)]
-    extra: BTreeMap<String, serde_json::Value>,
+    extra: BTreeMap<String, TestJsonValue>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(untagged)]
+enum TestJsonValue {
+    Object(BTreeMap<String, TestJsonValue>),
+    Array(Vec<TestJsonValue>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -178,5 +190,5 @@ struct JobRecoveryAuditMetadata {
     target_command_id: String,
     reason: Option<String>,
     #[serde(flatten)]
-    _extra: BTreeMap<String, serde_json::Value>,
+    _extra: BTreeMap<String, TestJsonValue>,
 }
