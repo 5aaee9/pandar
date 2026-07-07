@@ -75,6 +75,7 @@
 - Matched open-bamboo-networking's BRTC upload chunk ABI by omitting `file_md5` from non-final file chunks and sending it only on the final chunk, and persisted print dispatch upload/MQTT details in print-job command result JSON for real-printer debugging.
 - Forwarded Bambu Studio's `ams_mapping_info` through the networking plugin, Hub, gRPC, Agent, and printer MQTT `project_file` payload, and matched open-bamboo-networking's signed H2D-family payload behavior when a local Studio slicer key is available.
 - Replaced Agent project-file signing `ams_mapping_info[].nozzleId` handling with a typed serde integer field instead of deserializing it as `Value` and probing with `as_i64`.
+- Replaced Agent project-file signing unknown-field passthrough maps with a typed recursive serde enum instead of flattening into raw `Value` maps.
 - Kept Agent print-report streams alive when printers report non-Pandar job identifiers by ignoring invalid report `job_id` values instead of rejecting the whole reverse stream.
 - Added an Agent-authenticated printer connection hydration endpoint and Agent startup restore path so saved LAN printer host/access-code details survive Agent restarts when `PANDAR_PRINTERS` is empty.
 - Kept Bambu Studio's native Device page connected by having the Pandar networking plugin keep emitting Studio-style `push_status` heartbeats for selected/subscribed printers instead of sending only a one-shot connection snapshot.

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rsa::{
@@ -8,7 +8,7 @@ use rsa::{
     signature::{SignatureEncoding, Signer},
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Number, Value};
 use sha2::Sha256;
 
 pub(crate) fn maybe_sign_project_file_payload(
@@ -74,17 +74,28 @@ struct SignedProjectFileHeader {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+enum ProjectFileJson {
+    Object(BTreeMap<String, ProjectFileJson>),
+    Array(Vec<ProjectFileJson>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 struct MutableProjectFilePayload {
     print: Option<MutableProjectFilePrint>,
     #[serde(flatten)]
-    extra: serde_json::Map<String, Value>,
+    extra: BTreeMap<String, ProjectFileJson>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 struct MutableProjectFilePrint {
     ams_mapping_info: Option<Vec<AmsMappingInfoEntry>>,
     #[serde(flatten)]
-    extra: serde_json::Map<String, Value>,
+    extra: BTreeMap<String, ProjectFileJson>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -92,7 +103,7 @@ struct AmsMappingInfoEntry {
     #[serde(default, rename = "nozzleId")]
     nozzle_id: Option<i64>,
     #[serde(flatten)]
-    extra: serde_json::Map<String, Value>,
+    extra: BTreeMap<String, ProjectFileJson>,
 }
 
 fn slicer_key() -> Option<RsaPrivateKey> {
