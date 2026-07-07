@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::*;
@@ -48,14 +48,6 @@ struct TestExternalSpool {
 async fn material_repository_reports_changed_unchanged_empty_invalid_and_older_outcomes() {
     let (materials, tenant, agent, printer_id) = fixture().await;
 
-    let input = |body: serde_json::Value| MaterialPatchInput {
-        tenant_id: tenant.id,
-        agent_id: agent.id,
-        printer_id: printer_id.clone(),
-        serial_number: "serial".to_owned(),
-        printer_materials_json: body.to_string(),
-    };
-
     assert!(matches!(
         materials
             .upsert_from_patch_outcome(MaterialPatchInput {
@@ -71,36 +63,68 @@ async fn material_repository_reports_changed_unchanged_empty_invalid_and_older_o
     ));
     assert!(matches!(
         materials
-            .upsert_from_patch_outcome(input(json!({"type":"wrong"})))
+            .upsert_from_patch_outcome(material_outcome_input(
+                tenant.id,
+                agent.id,
+                &printer_id,
+                WrongMaterialPatchFixture { kind: "wrong" },
+            ))
             .await
             .unwrap(),
         MaterialPatchOutcome::Invalid { .. }
     ));
 
-    let patch = |observed_at: &str| {
-        json!({
-            "type": "printer_material_patch",
-            "observed_at": observed_at,
-            "ams_units": [{"unit_id": "0", "trays": [{"tray_id": "0", "type": "PLA"}]}],
-            "external_spools": []
-        })
-    };
-
     let changed = materials
-        .upsert_from_patch_outcome(input(patch("2026-07-02T00:00:00Z")))
+        .upsert_from_patch_outcome(material_outcome_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            patch("2026-07-02T00:00:00Z", &[tray("0", "0", "PLA", "FF0000")]),
+        ))
         .await
         .unwrap();
     assert!(matches!(changed, MaterialPatchOutcome::Changed(_)));
     let unchanged = materials
-        .upsert_from_patch_outcome(input(patch("2026-07-02T00:00:00Z")))
+        .upsert_from_patch_outcome(material_outcome_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            patch("2026-07-02T00:00:00Z", &[tray("0", "0", "PLA", "FF0000")]),
+        ))
         .await
         .unwrap();
     assert!(matches!(unchanged, MaterialPatchOutcome::Unchanged(_)));
     let older = materials
-        .upsert_from_patch_outcome(input(patch("2026-07-01T00:00:00Z")))
+        .upsert_from_patch_outcome(material_outcome_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            patch("2026-07-01T00:00:00Z", &[tray("0", "0", "PLA", "FF0000")]),
+        ))
         .await
         .unwrap();
     assert!(matches!(older, MaterialPatchOutcome::Older));
+}
+
+#[derive(Debug, Serialize)]
+struct WrongMaterialPatchFixture {
+    #[serde(rename = "type")]
+    kind: &'static str,
+}
+
+fn material_outcome_input(
+    tenant_id: pandar_core::TenantId,
+    agent_id: pandar_core::AgentId,
+    printer_id: &str,
+    patch: impl Serialize,
+) -> MaterialPatchInput {
+    MaterialPatchInput {
+        tenant_id,
+        agent_id,
+        printer_id: printer_id.to_owned(),
+        serial_number: "serial".to_owned(),
+        printer_materials_json: serde_json::to_string(&patch).unwrap(),
+    }
 }
 
 #[tokio::test]
