@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Agent MQTT project-file signing envelope fields with typed recursive serde JSON instead of passing the signed `print` section through raw `Value`.
 - Replaced Agent material report nozzle-list detection with a typed serde nozzle entry instead of storing the report entries as raw `Value`.
 - Replaced Hub material snapshot repository response fields with typed recursive serde material JSON instead of exposing persisted material state as raw `Value`.
 - Replaced Hub printer-event material response fields with a typed recursive serde enum so event material payloads scrub and serialize without exposing raw `Value` fields.

@@ -50,18 +50,18 @@ pub(crate) fn maybe_sign_project_file_payload(
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct ProjectFilePayload {
     #[serde(default)]
-    print: Value,
+    print: ProjectFileJson,
 }
 
 #[derive(Debug, Serialize)]
 struct SignedProjectFilePayload {
-    print: Value,
+    print: ProjectFileJson,
 }
 
 #[derive(Debug, Serialize)]
 struct SignedProjectFileEnvelope {
     header: SignedProjectFileHeader,
-    print: Value,
+    print: ProjectFileJson,
 }
 
 #[derive(Debug, Serialize)]
@@ -73,7 +73,7 @@ struct SignedProjectFileHeader {
     sign_ver: &'static str,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(untagged)]
 enum ProjectFileJson {
     Object(BTreeMap<String, ProjectFileJson>),
@@ -81,6 +81,7 @@ enum ProjectFileJson {
     String(String),
     Number(Number),
     Bool(bool),
+    #[default]
     Null,
 }
 
