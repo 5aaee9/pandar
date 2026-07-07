@@ -255,7 +255,7 @@ async fn tenant_admin_can_delete_printer() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "printers": [] }));
+    assert!(decode::<PrinterListResponse>(body).printers.is_empty());
 
     let events = state
         .audit_events()
