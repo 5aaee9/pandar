@@ -1,5 +1,6 @@
 use anyhow::Context;
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::machine::mqtt::{
     BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, PublishedMqttCommand,
@@ -57,11 +58,7 @@ where
 {
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
-            let report = mqtt
-                .next_report(std::time::Duration::from_secs(5))
-                .await
-                .context("wait for chamber light status report")?;
-            let Some(report) = serde_json::from_value::<PrinterReport>(report).ok() else {
+            let Some(report) = next_printer_report(mqtt).await? else {
                 continue;
             };
             if let Some(light_report) = report.chamber_light_report() {
@@ -71,6 +68,21 @@ where
     })
     .await
     .context("wait for chamber light status report")?
+}
+
+async fn next_printer_report<T>(mqtt: &T) -> anyhow::Result<Option<PrinterReport>>
+where
+    T: BambuMqttTransport + Send + Sync,
+{
+    let report = mqtt
+        .next_report(std::time::Duration::from_secs(5))
+        .await
+        .context("wait for chamber light status report")?;
+    Ok(parse_printer_report(report))
+}
+
+fn parse_printer_report(report: Value) -> Option<PrinterReport> {
+    serde_json::from_value(report).ok()
 }
 
 impl PrinterReport {
