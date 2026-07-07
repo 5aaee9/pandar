@@ -4,7 +4,7 @@ use serde::{Deserialize, de::IgnoredAny};
 use serde_json::{Number, Value};
 
 #[derive(Debug, Default, Deserialize)]
-pub(super) struct MaterialsReport {
+pub(crate) struct MaterialsReport {
     #[serde(default)]
     pub(super) print: Option<PrintMaterialsReport>,
 }

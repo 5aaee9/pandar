@@ -39,7 +39,7 @@ pub use transport::{RumqttcBambuMqttTransport, bambu_lan_mqtt_options, bambu_lan
 
 use crate::machine::{
     BambuPrinterEndpoint, MaterialRefreshResult, PrinterRefreshResult,
-    materials::normalize_material_patch,
+    materials::{normalize_material_patch, parse_materials_report},
 };
 
 pub const BAMBU_MQTT_PORT: u16 = 8883;
@@ -100,7 +100,11 @@ where
         let mut snapshot = snapshot_from_report(endpoint, &report);
         snapshot.model = Some(discovered_model);
         let observed_at = created_at_now();
-        let materials = match normalize_material_patch(&report, &observed_at) {
+        let materials_report = parse_materials_report(&report);
+        let materials = match materials_report
+            .as_ref()
+            .and_then(|report| normalize_material_patch(report, &observed_at))
+        {
             Some(patch) => Some(MaterialRefreshResult {
                 serial: endpoint.serial.clone(),
                 printer_id: None,
@@ -144,7 +148,11 @@ where
             }
         };
         let observed_at = created_at_now();
-        if let Some(patch) = normalize_material_patch(&report, &observed_at) {
+        let materials_report = parse_materials_report(&report);
+        if let Some(patch) = materials_report
+            .as_ref()
+            .and_then(|report| normalize_material_patch(report, &observed_at))
+        {
             return Ok(Some(MaterialRefreshResult {
                 serial: endpoint.serial.clone(),
                 printer_id: None,
@@ -193,7 +201,11 @@ where
             Err(err) => return Err(err),
         };
         let observed_at = created_at_now();
-        if let Some(patch) = normalize_material_patch(&report, &observed_at) {
+        let materials_report = parse_materials_report(&report);
+        if let Some(patch) = materials_report
+            .as_ref()
+            .and_then(|report| normalize_material_patch(report, &observed_at))
+        {
             return Ok(MaterialRefreshResult {
                 serial: endpoint.serial.clone(),
                 printer_id: printer_id.map(str::to_owned),

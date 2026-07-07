@@ -63,6 +63,7 @@
 - Replaced Agent MQTT `get_version` report detection and model extraction with typed serde structs for the `info` report section.
 - Replaced Agent MQTT printer snapshot/progress extraction with typed serde report structs for status, telemetry, nozzle info, lights, print progress, and diagnostic objects.
 - Replaced Agent MQTT project-file signing and fake transport command echo field handling with typed serde payload structs.
+- Moved Agent material patch normalization behind a typed `MaterialsReport` input so MQTT `Value` handling stays at the parse boundary instead of flowing into material business logic.
 - Replaced Agent MQTT `project_file` command payload construction with a serializable struct instead of manually assembling a JSON object map.
 - Replaced Agent print-project test dispatch payload fixtures with typed serde structs and split the oversized print-command test support into a sibling module.
 - Replaced Agent MQTT control command payload construction with serializable structs for info, pushall, print controls, light control, AMS RFID/load/unload, and temperature/G-code operations.

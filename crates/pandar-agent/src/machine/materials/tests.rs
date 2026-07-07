@@ -7,6 +7,7 @@ mod fixtures;
 use fixtures::*;
 
 fn normalize(report: Value) -> Option<Value> {
+    let report = parse_materials_report(&report)?;
     normalize_material_patch(&report, "2026-06-23T00:00:00Z")
         .map(|patch| serde_json::to_value(patch).unwrap())
 }

@@ -14,12 +14,15 @@ struct NormalizedTrayPatch {
     value: MaterialTrayPatch,
 }
 
+pub(crate) fn parse_materials_report(report: &Value) -> Option<MaterialsReport> {
+    serde_json::from_value(report.clone()).ok()
+}
+
 pub(crate) fn normalize_material_patch<'a>(
-    report: &Value,
+    report: &MaterialsReport,
     observed_at: &'a str,
 ) -> Option<MaterialPatchDocument<'a>> {
-    let report = serde_json::from_value::<MaterialsReport>(report.clone()).ok()?;
-    let print = report.print?;
+    let print = report.print.as_ref()?;
     let ams = print.ams.as_ref()?;
     let mut patch = MaterialPatchDocument {
         document_type: "printer_material_patch",
@@ -31,13 +34,13 @@ pub(crate) fn normalize_material_patch<'a>(
     };
 
     if !ams.ams.is_empty() {
-        let normalized_units = normalize_ams_units(&ams.ams, ams, &print);
+        let normalized_units = normalize_ams_units(&ams.ams, ams, print);
         if !normalized_units.is_empty() {
             patch.ams_units = normalized_units;
         }
     }
 
-    if let Some(external) = normalize_external_spools(&print) {
+    if let Some(external) = normalize_external_spools(print) {
         patch.external_spools = Some(external.spools);
         patch.replace_external_spools = external.replace;
     }

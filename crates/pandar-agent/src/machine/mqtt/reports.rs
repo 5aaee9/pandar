@@ -12,7 +12,7 @@ use crate::{
     AgentConfig,
     machine::{
         BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult,
-        materials::normalize_material_patch,
+        materials::{normalize_material_patch, parse_materials_report},
     },
     protocol::agent::v1::{
         AgentEvent, MachineDiagnostic, NozzleTemperature, PrintJobReport, PrinterMaterialsSnapshot,
@@ -51,7 +51,10 @@ pub fn print_report_from_report(
     collect_hms_diagnostics(&envelope, &mut diagnostics);
 
     let observed_at = created_at_now();
-    let printer_materials_json = normalize_material_patch(report, &observed_at)
+    let materials_report = parse_materials_report(report);
+    let printer_materials_json = materials_report
+        .as_ref()
+        .and_then(|report| normalize_material_patch(report, &observed_at))
         .and_then(|patch| serde_json::to_string(&patch).ok())
         .unwrap_or_default();
 
