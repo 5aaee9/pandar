@@ -6,7 +6,7 @@ use axum::{
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
+use serde_json::Number;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
@@ -31,7 +31,7 @@ struct AuditEventResponse {
     action: String,
     target_type: String,
     target_id: Option<String>,
-    metadata: Value,
+    metadata: AuditMetadata,
     created_at: String,
 }
 
@@ -63,10 +63,6 @@ impl AuditMetadata {
             Self::Array(values) => Self::Array(values.into_iter().map(Self::redacted).collect()),
             other => other,
         }
-    }
-
-    fn into_response_value(self) -> Value {
-        serde_json::to_value(self).unwrap_or_else(|_| Value::Object(Default::default()))
     }
 }
 
@@ -110,7 +106,7 @@ pub(in crate::routes) async fn list_audit_events(
     Ok(Json(AuditEventListResponse { audit_events }))
 }
 
-fn audit_metadata(metadata_json: &str, event_id: &str) -> Value {
+fn audit_metadata(metadata_json: &str, event_id: &str) -> AuditMetadata {
     let metadata = match serde_json::from_str::<AuditMetadata>(metadata_json) {
         Ok(AuditMetadata::Object(map)) => AuditMetadata::Object(map),
         Ok(_) => AuditMetadata::empty_object(),
@@ -122,7 +118,7 @@ fn audit_metadata(metadata_json: &str, event_id: &str) -> Value {
             AuditMetadata::empty_object()
         }
     };
-    metadata.redacted().into_response_value()
+    metadata.redacted()
 }
 
 fn is_forbidden_audit_metadata_key(key: &str) -> bool {

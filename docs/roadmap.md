@@ -60,6 +60,7 @@
 - Replaced Hub printer-operation audit metadata construction with typed serializable metadata structs instead of ad hoc JSON maps.
 - Replaced Hub audit-event metadata redaction with a typed recursive serde enum instead of deserializing persisted metadata as raw `Value` and manually matching JSON fields.
 - Replaced Hub audit-event actor metadata merge internals with a typed recursive serde enum instead of merging raw `Value::Object` maps.
+- Replaced Hub audit-event response metadata serialization with the typed redacted metadata enum instead of converting back through `serde_json::Value`.
 - Replaced Hub material patch parsing and merge identity extraction with typed serde patch structs for patch documents, AMS units, trays, external spools, and persisted material identities.
 - Replaced Hub material repository test patch fixtures with typed serde structs, including absent-vs-null merge coverage, and split material merge tests into a sibling module under the 400 LOC threshold.
 - Replaced Hub printer route test JSON response and command-payload assertions with typed serde structs for printer lists/details, material snapshots, printer controls, refresh commands, link-printer commands, and error responses.
