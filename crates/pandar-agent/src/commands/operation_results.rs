@@ -37,6 +37,10 @@ pub(super) fn printer_operation_result_json(
         .mqtt_report
         .as_ref()
         .and_then(MqttReportSummary::from_report);
+    let mqtt_report = dispatch_result
+        .mqtt_report
+        .as_ref()
+        .and_then(MqttReportField::from_value);
     serde_json::to_string(&PrinterOperationResult {
         kind: "printer_operation",
         action: printer_operation_action(operation),
@@ -47,7 +51,7 @@ pub(super) fn printer_operation_result_json(
         mqtt_reason: mqtt.as_ref().and_then(|summary| summary.reason.as_ref()),
         mqtt_err_code: mqtt.as_ref().and_then(|summary| summary.err_code.as_ref()),
         mqtt_errno: mqtt.as_ref().and_then(|summary| summary.errno.as_ref()),
-        mqtt_report: dispatch_result.mqtt_report.as_ref(),
+        mqtt_report: mqtt_report.as_ref(),
         operation: OperationResultFields::from(operation),
     })
     .expect("printer operation result is serializable")
@@ -72,7 +76,7 @@ struct PrinterOperationResult<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     mqtt_errno: Option<&'a MqttReportField>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mqtt_report: Option<&'a Value>,
+    mqtt_report: Option<&'a MqttReportField>,
     #[serde(flatten)]
     operation: OperationResultFields,
 }
@@ -132,6 +136,12 @@ enum MqttReportField {
     Number(Number),
     Bool(bool),
     Null,
+}
+
+impl MqttReportField {
+    fn from_value(value: &Value) -> Option<Self> {
+        serde_json::from_value(value.clone()).ok()
+    }
 }
 
 struct MqttReportSummary {

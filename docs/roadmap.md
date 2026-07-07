@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Agent command-result MQTT payload/report serialization fields with typed recursive serde JSON instead of embedding raw `Value` references in result structs.
 - Replaced Agent MQTT project-file signing envelope fields with typed recursive serde JSON instead of passing the signed `print` section through raw `Value`.
 - Replaced Agent material report nozzle-list detection with a typed serde nozzle entry instead of storing the report entries as raw `Value`.
 - Replaced Hub material snapshot repository response fields with typed recursive serde material JSON instead of exposing persisted material state as raw `Value`.

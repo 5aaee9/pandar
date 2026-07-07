@@ -1,6 +1,8 @@
+use std::collections::BTreeMap;
+
 use anyhow::Context;
-use serde::Serialize;
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
+use serde_json::{Number, Value};
 use tokio::sync::mpsc;
 
 use crate::{
@@ -100,6 +102,7 @@ where
 
     match result {
         Ok(dispatch) => {
+            let mqtt_payload = PrintProjectMqttPayload::from_value(&dispatch.payload);
             let result_json = serde_json::to_string(&PrintProjectFileResult {
                 kind: "print_project_file",
                 serial_number: &command.serial_number,
@@ -111,7 +114,7 @@ where
                 mqtt: PrintProjectMqttResult {
                     topic: &dispatch.topic,
                     qos: dispatch.qos,
-                    payload: &dispatch.payload,
+                    payload: &mqtt_payload,
                 },
             })
             .expect("print-project-file result is serializable");
@@ -149,7 +152,24 @@ struct PrintProjectFileResult<'a> {
 struct PrintProjectMqttResult<'a> {
     topic: &'a str,
     qos: u8,
-    payload: &'a Value,
+    payload: &'a PrintProjectMqttPayload,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+enum PrintProjectMqttPayload {
+    Object(BTreeMap<String, PrintProjectMqttPayload>),
+    Array(Vec<PrintProjectMqttPayload>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
+}
+
+impl PrintProjectMqttPayload {
+    fn from_value(value: &Value) -> Self {
+        serde_json::from_value(value.clone()).expect("MQTT payload JSON is representable")
+    }
 }
 
 fn read_print_artifact_context(command: &PrintProjectFile) -> String {
