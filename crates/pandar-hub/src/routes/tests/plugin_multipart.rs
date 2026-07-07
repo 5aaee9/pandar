@@ -40,7 +40,10 @@ async fn plugin_print_storage_put_failure_creates_no_job_or_command() {
     .await;
 
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-    assert_eq!(response, json!({ "error": "internal_server_error" }));
+    assert_eq!(
+        decode::<ErrorResponse>(response).error,
+        "internal_server_error"
+    );
     assert_eq!(state.commands().count().await.unwrap(), 0);
     let jobs: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM jobs")
         .fetch_one(sqlite_pool(&state))
@@ -79,7 +82,10 @@ async fn plugin_print_uses_stable_artifact_validation_errors() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response, json!({ "error": "artifact_invalid_upload" }));
+    assert_eq!(
+        decode::<ErrorResponse>(response).error,
+        "artifact_invalid_upload"
+    );
 
     let (status, response) = multipart_request_as(
         app.clone(),
@@ -94,7 +100,7 @@ async fn plugin_print_uses_stable_artifact_validation_errors() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response, json!({ "error": "artifact_empty" }));
+    assert_eq!(decode::<ErrorResponse>(response).error, "artifact_empty");
 
     let oversized = vec![b'x'; state.artifact_storage().max_artifact_bytes() + 1];
     let (status, response) = multipart_request_as(
@@ -110,7 +116,10 @@ async fn plugin_print_uses_stable_artifact_validation_errors() {
     )
     .await;
     assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
-    assert_eq!(response, json!({ "error": "artifact_too_large" }));
+    assert_eq!(
+        decode::<ErrorResponse>(response).error,
+        "artifact_too_large"
+    );
 
     let (status, response) = multipart_request_as(
         app.clone(),
@@ -125,7 +134,10 @@ async fn plugin_print_uses_stable_artifact_validation_errors() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response, json!({ "error": "invalid_printer_id" }));
+    assert_eq!(
+        decode::<ErrorResponse>(response).error,
+        "invalid_printer_id"
+    );
 
     let (status, response) = multipart_request_as(
         app.clone(),
@@ -140,7 +152,7 @@ async fn plugin_print_uses_stable_artifact_validation_errors() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(response, json!({ "error": "printer_not_found" }));
+    assert_eq!(decode::<ErrorResponse>(response).error, "printer_not_found");
 
     let (status, response) = multipart_request_as(
         app.clone(),
@@ -174,8 +186,16 @@ async fn plugin_print_uses_stable_artifact_validation_errors() {
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(response, json!({ "error": "artifact_invalid_plate" }));
+        assert_eq!(
+            decode::<ErrorResponse>(response).error,
+            "artifact_invalid_plate"
+        );
     }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ErrorResponse {
+    error: String,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -241,7 +261,10 @@ async fn plugin_print_deletes_stored_artifact_when_repository_fails() {
     )
     .await;
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-    assert_eq!(response, json!({ "error": "internal_server_error" }));
+    assert_eq!(
+        decode::<ErrorResponse>(response).error,
+        "internal_server_error"
+    );
 
     let artifacts: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM job_artifacts")
         .fetch_one(sqlite_pool(&state))

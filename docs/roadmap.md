@@ -899,6 +899,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced Hub material snapshot merge internals with typed serde unit/tray/external-spool state structs, leaving only open-ended material attributes in flattened maps.
 - Replaced Hub material repository test fixtures with typed serde material patch structs instead of fixed-shape `json!` fixture builders.
 - Replaced the Hub material repository outcome test's wrong/valid patch inputs with typed serde fixtures instead of constructing fixed-shape `Value` bodies.
+- Replaced Hub plugin multipart error-response assertions with typed serde response structs instead of direct `json!` object equality.
 
 Exit criteria:
 
