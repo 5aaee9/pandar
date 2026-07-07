@@ -971,6 +971,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced Agent material patch output assembly with typed serde patch structs for AMS units, trays, external spools, and active-tray references instead of hand-building `serde_json::Value` objects.
 - Replaced the remaining Hub job route test flatten-capture maps with typed recursive serde enums instead of `BTreeMap<String, serde_json::Value>`.
 - Replaced Agent print-report HMS diagnostic extraction with the same typed serde envelope used for print progress, avoiding a second raw `Value` deserialize path for the same MQTT report.
+- Replaced Agent printer-operation MQTT result handling with a single typed serde envelope that preserves unknown fields through flattened maps instead of cloning raw `Value` for a second payload conversion.
 
 Exit criteria:
 

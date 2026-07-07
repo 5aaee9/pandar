@@ -1,35 +1,53 @@
-use serde::Deserialize;
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
 
 use crate::machine::{MachineJsonPayload, PrinterOperationMqttSummary};
 
 pub(super) struct OperationReport {
-    payload: MachineJsonPayload,
     envelope: OperationEnvelope,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct OperationEnvelope {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     print: Option<OperationSection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     info: Option<OperationSection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pushing: Option<OperationSection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     system: Option<OperationSection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     camera: Option<OperationSection>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, MachineJsonPayload>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct OperationSection {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     sequence_id: Option<SequenceId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     result: Option<MachineJsonPayload>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     err_code: Option<MachineJsonPayload>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     errno: Option<MachineJsonPayload>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     reason: Option<MachineJsonPayload>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     message: Option<MachineJsonPayload>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     msg: Option<MachineJsonPayload>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     error: Option<MachineJsonPayload>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, MachineJsonPayload>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 enum SequenceId {
     String(String),
@@ -38,11 +56,8 @@ enum SequenceId {
 
 impl OperationReport {
     pub(super) fn from_value(raw: Value) -> Option<Self> {
-        let envelope = serde_json::from_value(raw.clone()).ok()?;
-        Some(Self {
-            payload: MachineJsonPayload::from(raw),
-            envelope,
-        })
+        let envelope = serde_json::from_value(raw).ok()?;
+        Some(Self { envelope })
     }
 
     pub(super) fn sequence_id(&self) -> Option<String> {
@@ -101,7 +116,9 @@ impl OperationReport {
     }
 
     pub(super) fn into_payload(self) -> MachineJsonPayload {
-        self.payload
+        MachineJsonPayload::from(
+            serde_json::to_value(self.envelope).expect("operation report is serializable"),
+        )
     }
 }
 
