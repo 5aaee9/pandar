@@ -1,6 +1,5 @@
 use anyhow::{Context, anyhow};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use super::{BRTC_CTRL_JSON_MTYPE, BRTC_CTRL_SETUP_MTYPE, BRTC_FILE_UPLOAD_CMD};
 
@@ -60,13 +59,13 @@ struct BrtcCtrlJson<'a, T: ?Sized> {
 }
 
 #[derive(Debug, Deserialize)]
-struct BrtcSetupAck {
+pub(super) struct BrtcSetupAck {
     mtype: Option<i64>,
     result: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
-struct BrtcUploadReply {
+pub(super) struct BrtcUploadReply {
     cmdtype: Option<i64>,
     sequence: Option<u32>,
     result: Option<i64>,
@@ -81,7 +80,7 @@ struct BrtcUploadReplyBody {
 
 #[derive(Debug)]
 pub(super) struct BrtcUploadReplyFrame {
-    raw: Value,
+    raw: String,
     reply: BrtcUploadReply,
 }
 
@@ -99,9 +98,8 @@ pub(super) fn setup_request(serial: &str) -> impl Serialize {
     }
 }
 
-pub(super) fn setup_ack_success(value: Value) -> bool {
-    serde_json::from_value::<BrtcSetupAck>(value)
-        .is_ok_and(|ack| ack.mtype == Some(BRTC_CTRL_SETUP_MTYPE) && ack.result == Some(0))
+pub(super) fn setup_ack_success(ack: BrtcSetupAck) -> bool {
+    ack.mtype == Some(BRTC_CTRL_SETUP_MTYPE) && ack.result == Some(0)
 }
 
 pub(super) fn upload_init_request(
@@ -140,10 +138,13 @@ pub(super) fn upload_chunk_request(
     }
 }
 
-pub(super) fn upload_reply(value: Value, sequence: u32) -> Option<BrtcUploadReplyFrame> {
-    let reply = serde_json::from_value::<BrtcUploadReply>(value.clone()).ok()?;
+pub(super) fn upload_reply(
+    raw: String,
+    reply: BrtcUploadReply,
+    sequence: u32,
+) -> Option<BrtcUploadReplyFrame> {
     if reply.cmdtype == Some(BRTC_FILE_UPLOAD_CMD) && reply.sequence == Some(sequence) {
-        Some(BrtcUploadReplyFrame { raw: value, reply })
+        Some(BrtcUploadReplyFrame { raw, reply })
     } else {
         None
     }
@@ -162,7 +163,7 @@ impl BrtcUploadReplyFrame {
         self.reply.result.unwrap_or(-1)
     }
 
-    pub(super) fn raw(&self) -> &Value {
+    pub(super) fn raw(&self) -> &str {
         &self.raw
     }
 

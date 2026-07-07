@@ -3,8 +3,7 @@ use std::{sync::Arc, time::Duration};
 use anyhow::{Context, anyhow, bail};
 use md5::{Digest, Md5};
 use rustls::{ClientConfig, pki_types::ServerName};
-use serde::Serialize;
-use serde_json::Value;
+use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -108,11 +107,11 @@ impl BrtcSession {
             .context("send BRTC setup")?;
 
         loop {
-            let value = self
-                .read_json_frame()
+            let ack = self
+                .read_json_frame::<protocol::BrtcSetupAck>()
                 .await
                 .context("read BRTC setup ack")?;
-            if protocol::setup_ack_success(value) {
+            if protocol::setup_ack_success(ack) {
                 return Ok(());
             }
         }
@@ -225,18 +224,33 @@ impl BrtcSession {
         sequence: u32,
     ) -> anyhow::Result<protocol::BrtcUploadReplyFrame> {
         loop {
-            let value = self.read_json_frame().await?;
-            if let Some(reply) = protocol::upload_reply(value, sequence) {
+            let (reply, raw) = self.read_json_frame_with_raw().await?;
+            if let Some(reply) = protocol::upload_reply(raw, reply, sequence) {
                 return Ok(reply);
             }
         }
     }
 
-    async fn read_json_frame(&mut self) -> anyhow::Result<Value> {
+    async fn read_json_frame<T>(&mut self) -> anyhow::Result<T>
+    where
+        T: DeserializeOwned,
+    {
+        let (value, _) = self.read_json_frame_with_raw().await?;
+        Ok(value)
+    }
+
+    async fn read_json_frame_with_raw<T>(&mut self) -> anyhow::Result<(T, String)>
+    where
+        T: DeserializeOwned,
+    {
         let frame = self.read_frame().await?;
         let json_len = json_prefix_len(&frame.payload)
             .ok_or_else(|| anyhow!("BRTC frame did not start with JSON"))?;
-        serde_json::from_slice(&frame.payload[..json_len]).context("decode BRTC JSON frame")
+        let raw = std::str::from_utf8(&frame.payload[..json_len])
+            .context("decode BRTC JSON frame text")?
+            .to_owned();
+        let value = serde_json::from_str(&raw).context("decode BRTC JSON frame")?;
+        Ok((value, raw))
     }
 
     async fn read_frame(&mut self) -> anyhow::Result<BrtcFrame> {

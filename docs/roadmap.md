@@ -43,6 +43,7 @@
 - Replaced the remaining fixed-shape Rust test `json!` fixtures with typed serde structs for route bootstrap requests, job artifact metadata, PostgreSQL metadata checks, and job material patches, while splitting oversized repository and route test modules under the 400 LOC threshold.
 - Replaced Agent printer-operation MQTT result and chamber-light status field probing with typed serde report envelopes while preserving the raw MQTT report in command results.
 - Replaced Agent BRTC upload setup/init/chunk request serialization and upload reply parsing with typed serde protocol structs instead of manual `serde_json::Value` field probing.
+- Replaced Agent BRTC frame handling with direct typed serde deserialization plus retained raw JSON text for diagnostics instead of routing setup/upload replies through `serde_json::Value`.
 - Replaced Agent MQTT `get_version` report detection and model extraction with typed serde structs for the `info` report section.
 - Replaced Agent MQTT printer snapshot/progress extraction with typed serde report structs for status, telemetry, nozzle info, lights, print progress, and diagnostic objects.
 - Replaced Agent MQTT project-file signing and fake transport command echo field handling with typed serde payload structs.
