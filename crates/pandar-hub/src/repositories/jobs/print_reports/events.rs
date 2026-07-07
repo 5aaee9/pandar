@@ -1,6 +1,7 @@
 use anyhow::Context;
 use pandar_core::PrintStatus;
 use sea_orm::{ActiveValue::Set, EntityTrait, TryInsertResult};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::{
@@ -22,6 +23,17 @@ struct MachineEventInsert {
     message: String,
     code: Option<String>,
     payload_json: String,
+}
+
+#[derive(Serialize)]
+struct ProgressEventPayload<'a> {
+    gcode_state: &'a Option<String>,
+    percent: Option<u8>,
+    remaining_time_minutes: Option<u32>,
+    current_layer: Option<u32>,
+    total_layers: Option<u32>,
+    gcode_file: &'a Option<String>,
+    subtask_name: &'a Option<String>,
 }
 
 pub(super) async fn insert_job_events<C>(
@@ -237,14 +249,14 @@ fn progress_message(input: &ApplyPrintReport) -> String {
 }
 
 fn progress_payload(input: &ApplyPrintReport) -> String {
-    serde_json::json!({
-        "gcode_state": input.gcode_state,
-        "percent": input.percent,
-        "remaining_time_minutes": input.remaining_time_minutes,
-        "current_layer": input.current_layer,
-        "total_layers": input.total_layers,
-        "gcode_file": input.gcode_file,
-        "subtask_name": input.subtask_name,
+    serde_json::to_string(&ProgressEventPayload {
+        gcode_state: &input.gcode_state,
+        percent: input.percent,
+        remaining_time_minutes: input.remaining_time_minutes,
+        current_layer: input.current_layer,
+        total_layers: input.total_layers,
+        gcode_file: &input.gcode_file,
+        subtask_name: &input.subtask_name,
     })
-    .to_string()
+    .expect("progress event payload is serializable")
 }

@@ -257,6 +257,8 @@ fn redact_key_value(line: &str, key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::{
         redact_link_printer_result_json, redact_link_printer_result_json_without_secret,
         redact_link_printer_secret, redact_secrets,
@@ -341,8 +343,7 @@ Caused by:
         );
 
         assert!(!redacted.contains("SECRET-LINK-CODE"));
-        let parsed: serde_json::Value = serde_json::from_str(&redacted).unwrap();
-        let object = parsed.as_object().unwrap();
+        let object: BTreeMap<String, String> = serde_json::from_str(&redacted).unwrap();
         assert!(object.keys().all(|key| key.starts_with("[redacted_")));
         assert!(object.values().all(|value| value == "[redacted]"));
     }

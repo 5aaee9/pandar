@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::normalized_string;
+use super::{normalized_string, schema::*};
 
 pub(super) fn derive_setting_id(filament_id: &str) -> String {
     let base = strip_version_suffix(filament_id);
@@ -29,12 +29,12 @@ pub(super) fn strip_version_suffix(value: &str) -> &str {
     }
 }
 
-pub(super) fn unit_id(unit: &Value) -> Option<String> {
-    normalized_string(unit.get("id")).or_else(|| normalized_string(unit.get("ams_id")))
+pub(super) fn unit_id(unit: &AmsUnitReport) -> Option<String> {
+    normalized_string(unit.id.as_ref()).or_else(|| normalized_string(unit.ams_id.as_ref()))
 }
 
-pub(super) fn tray_id(tray: &Value) -> Option<String> {
-    normalized_string(tray.get("id")).or_else(|| normalized_string(tray.get("tray_id")))
+pub(super) fn tray_id(tray: &MaterialSlotReport) -> Option<String> {
+    normalized_string(tray.id.as_ref()).or_else(|| normalized_string(tray.tray_id.as_ref()))
 }
 
 pub(super) fn unit_kind(unit_id: &str) -> &'static str {

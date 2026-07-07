@@ -16,6 +16,23 @@
 
 ## Completed
 
+- Replaced Hub print-job AMS mapping request/response validation with typed serde structs for `ams_mapping`, `ams_mapping2`, and `ams_mapping_info`, including multipart parsing, persisted mapping reads, repository validation, and gRPC command conversion.
+- Replaced Agent printer-operation MQTT result and chamber-light status field probing with typed serde report envelopes while preserving the raw MQTT report in command results.
+- Replaced Agent BRTC upload setup/init/chunk request serialization and upload reply parsing with typed serde protocol structs instead of manual `serde_json::Value` field probing.
+- Replaced Agent MQTT `get_version` report detection and model extraction with typed serde structs for the `info` report section.
+- Replaced Agent MQTT printer snapshot/progress extraction with typed serde report structs for status, telemetry, nozzle info, lights, print progress, and diagnostic objects.
+- Replaced Agent MQTT project-file signing and fake transport command echo field handling with typed serde payload structs.
+- Replaced Agent MQTT `project_file` command payload construction with a serializable struct instead of manually assembling a JSON object map.
+- Replaced Agent MQTT control command payload construction with serializable structs for info, pushall, print controls, light control, AMS RFID/load/unload, and temperature/G-code operations.
+- Replaced Agent material snapshot normalization input parsing with typed serde structs for AMS reports, units, trays, external spools, and dual-nozzle/external-slot detection.
+- Replaced fixed-shape Agent link-printer and print-project command result JSON construction with serializable structs.
+- Replaced fixed-shape networking plugin ticket/no-auth request bodies and local webserver/callback response JSON construction with serializable structs.
+- Replaced Hub printer-operation audit metadata construction with typed serializable metadata structs instead of ad hoc JSON maps.
+- Replaced Hub material patch parsing and merge identity extraction with typed serde patch structs for patch documents, AMS units, trays, external spools, and persisted material identities.
+- Replaced Hub printer route test JSON response and command-payload assertions with typed serde structs for printer lists/details, material snapshots, printer controls, refresh commands, link-printer commands, and error responses.
+- Replaced Hub plugin route test response assertions with typed serde structs for login tickets, plugin sessions, Studio printer devices, plugin print/job responses, and plugin error responses.
+- Replaced Hub printer-command route test response, command-payload, audit-metadata, and error assertions with typed serde structs for discovery, diagnostics, printer controls, command details, and invalid request responses.
+- Replaced fixed-shape `pandar` CLI JSON output construction with serializable structs instead of ad hoc `serde_json::json!` values.
 - Matched Bambu Studio/open-bamboo-networking local print upload behavior by naming dispatched artifacts as `*.gcode.3mf`, prioritizing BRTC eMMC upload for supported printer families, falling back to FTPS on BRTC failure, and publishing `project_file` with the actual upload URL plus MD5.
 - Aligned Agent `project_file` MQTT dispatch with Bambu Studio/open-bamboo-networking's payload shape, including unconditional `ams_mapping2`, default print option fields, and Studio-compatible task metadata.
 - Matched Bambu Studio/open-bamboo-networking's MQTT QoS behavior for `project_file` dispatch by publishing print-start commands with QoS 0 instead of the generic control-command QoS.
@@ -98,6 +115,9 @@
 - Moved Bambu Studio `push_status` telemetry, nozzle, AMS, and external-spool payload construction out of the C++ networking plugin shim into typed Rust serde structs, leaving `shim.cpp` focused on the Studio C++ ABI boundary.
 - Replaced networking plugin local config, Hub error, G-code, and Bambu Studio control-message JSON field assertions with typed serde request and operation structs/enums, keeping `Value` only for open-ended config or AMS mapping pass-through.
 - Replaced additional known-shape JSON handling with typed serde models for 3MF plate metadata, terminal filament-usage material snapshots, and agent printer-operation result serialization.
+- Replaced command repository fixed-shape payload and audit metadata test assertions with typed serde structs instead of deserializing to `Value` and indexing fields.
+- Replaced print-job repository queued command payload test assertions with the shared `PrintProjectFilePayload` serde type instead of ad hoc `Value` indexing.
+- Replaced Hub phase-1 agent delete audit metadata and gRPC printer snapshot material-event tests with typed serde test structs instead of fixed-field `Value` indexing.
 - Added a Windows-only Bambu Studio development hook DLL that can proxy `swscale-8.dll` from a copied Studio directory and force new Studio logs onto Bambu's local fallback log key for decryptable development logs.
 - Normalized top-level Bambu `vt_tray` / `vir_slot` material reports into external spool snapshots so the Devices Filaments panel can show external materials.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.
@@ -850,6 +870,32 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Fixed dual-nozzle Bambu Studio AMS mapping by preserving 254/255 external-slot semantics and defaulting two AMS units with missing `info` to right/left toolhead bindings when the report exposes dual external slots.
 - Fixed the Studio network plugin JSON field extractor so numeric fields do not consume the next string key, and expanded the ABI probe fixture to cover dual AMS units with all tray materials.
 - Fixed dual-AMS Bambu Studio binding by emitting AMS `info` as the hex string format Studio parses, so the left toolhead's AMS is not misread as an invalid extruder binding.
+- Replaced Hub audit metadata construction for agents, printers, commands, jobs, auth provisioning, and admin bootstrap with typed serde metadata structs instead of fixed-shape `json!` maps.
+- Replaced Agent material patch envelope, empty-tray clears, active-tray references, and signed project-file payload headers with typed serde structs while keeping open-ended printer report fields as `Value` at the protocol boundary.
+- Replaced remaining fixed-shape compatibility, fake MQTT, material-snapshot test JSON construction with typed serde structs so tests assert serialized contracts through serde instead of ad hoc `json!` field probing.
+- Replaced Agent command result tests for printer-link and printer-operation responses with typed serde deserialization instead of `serde_json::Value` field indexing.
+- Replaced Agent diagnostics/print-project result tests and Hub gRPC link-printer redaction result tests with typed serde deserialization or typed string maps instead of `Value` object indexing.
+- Replaced representative Agent material normalization tests with typed serde patch structs instead of direct `Value` indexing for fixed-shape assertions.
+- Replaced the remaining Agent material normalization assertions, Hub material repository snapshot assertions, MQTT project-file payload checks, MQTT material patch checks, and selected machine operation report checks with typed serde test structs instead of direct `Value` indexing.
+- Replaced Bambu Studio network plugin installer, local webserver, and operation parser test assertions with typed serde structs/enums instead of direct `Value` field indexing.
+- Replaced network plugin HTTP/ABI operation request assertions and small Hub agent-printer/no-auth route response checks with typed serde structs/enums.
+- Replaced Hub bootstrap route request/response assertions with typed serde structs instead of direct `Value` field indexing.
+- Replaced Hub readiness route response assertions with typed serde structs instead of direct `Value` field indexing.
+- Replaced Hub tenant-token route response and audit metadata assertions with typed serde structs instead of direct `Value` field indexing.
+- Replaced Hub onboarding and join-link route response assertions with typed serde structs instead of direct `Value` field indexing.
+- Replaced Hub agent route response and delete-audit metadata assertions with typed serde structs instead of direct `Value` field indexing.
+- Replaced Hub job create/read route response assertions with shared typed serde structs instead of direct `Value` field indexing.
+- Replaced Hub job auth-validation response assertions with shared typed serde structs instead of direct `Value` field indexing.
+- Replaced Hub multipart job validation and metadata-preview response assertions with typed serde structs instead of direct `Value` field indexing.
+- Replaced Hub job recovery response and audit metadata assertions with shared typed serde structs instead of direct `Value` field indexing.
+- Replaced Hub provisioning workflow and agent-pairing response/audit assertions with typed serde structs instead of direct `Value` field indexing.
+- Replaced Hub printer-events ticket/error/WebSocket event assertions with typed serde structs/enums instead of direct `Value` field indexing.
+- Replaced remaining Hub plugin print metadata, plugin-token audit metadata, and audit-events route assertions with typed serde structs instead of direct `Value` field indexing.
+- Replaced Hub plugin multipart print-created response assertions with typed serde structs instead of direct `Value` field indexing.
+- Replaced Bambu Studio network-plugin installer config patching with typed serde config structs while preserving unknown config fields through flatten maps.
+- Replaced the shared Hub route-test tenant fixture helper's response id extraction with typed serde deserialization instead of direct `Value` field indexing.
+- Replaced BRTC control JSON wrapping with a typed flattened serde wrapper and changed fixed redaction test assertions to typed map deserialization.
+- Replaced Hub job-create invalid material mapping test case splitting with explicit typed test cases instead of extracting fields from temporary `Value` objects.
 
 Exit criteria:
 

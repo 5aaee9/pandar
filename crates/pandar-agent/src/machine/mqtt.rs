@@ -10,6 +10,7 @@ mod transport;
 use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
 use pandar_core::created_at_now;
+use serde::Deserialize;
 use serde_json::Value;
 
 #[cfg(test)]
@@ -227,8 +228,8 @@ where
                 .next_report(report_timeout)
                 .await
                 .context("wait for MQTT get_version report")?;
-            if is_get_version_report(&report) {
-                return model_from_get_version_report(&report);
+            if let Some(report) = parse_get_version_report(&report) {
+                return model_from_get_version_report(report);
             }
         }
     })
@@ -238,21 +239,49 @@ where
     })?
 }
 
-fn is_get_version_report(report: &Value) -> bool {
-    report.pointer("/info/command").and_then(Value::as_str) == Some("get_version")
+#[derive(Debug, Deserialize)]
+struct GetVersionReport {
+    info: Option<GetVersionInfo>,
 }
 
-fn model_from_get_version_report(report: &Value) -> anyhow::Result<String> {
+#[derive(Debug, Deserialize)]
+struct GetVersionInfo {
+    command: Option<String>,
+    module: Option<Vec<GetVersionModule>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GetVersionModule {
+    name: Option<String>,
+    product_name: Option<String>,
+}
+
+fn parse_get_version_report(report: &Value) -> Option<GetVersionReport> {
+    let report = serde_json::from_value::<GetVersionReport>(report.clone()).ok()?;
+    if report.info.as_ref()?.command.as_deref() == Some("get_version") {
+        Some(report)
+    } else {
+        None
+    }
+}
+
+fn model_from_get_version_report(report: GetVersionReport) -> anyhow::Result<String> {
     let modules = report
-        .pointer("/info/module")
-        .and_then(Value::as_array)
+        .info
+        .and_then(|info| info.module)
         .ok_or_else(|| anyhow!("get_version report missing info.module array"))?;
 
     modules
-        .iter()
-        .find(|module| module.get("name").and_then(Value::as_str) == Some("ota"))
-        .and_then(|module| reports::trimmed_string(module.get("product_name")))
+        .into_iter()
+        .find(|module| module.name.as_deref() == Some("ota"))
+        .and_then(|module| trimmed_string(module.product_name))
         .ok_or_else(|| anyhow!("get_version report missing ota product_name"))
+}
+
+fn trimmed_string(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
 }
 
 #[cfg(test)]

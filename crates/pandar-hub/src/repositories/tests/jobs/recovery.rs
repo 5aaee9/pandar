@@ -49,9 +49,9 @@ async fn job_repository_retry_dispatch_requires_safe_pre_physical_failure() {
         .await
         .unwrap()
         .unwrap();
-    let payload: serde_json::Value = serde_json::from_str(&command.payload_json).unwrap();
+    let payload: PrintProjectFilePayload = serde_json::from_str(&command.payload_json).unwrap();
     assert_eq!(
-        payload["artifact_download_path"],
+        payload.artifact_download_path,
         format!("/api/v1/agents/{}/artifacts/{}", agent.id, safe.artifact.id)
     );
     commands
@@ -232,10 +232,10 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
         .await
         .unwrap()
         .unwrap();
-    let reprint_payload: serde_json::Value =
+    let reprint_payload: PrintProjectFilePayload =
         serde_json::from_str(&reprint_command.payload_json).unwrap();
     assert_eq!(
-        reprint_payload["artifact_download_path"],
+        reprint_payload.artifact_download_path,
         format!(
             "/api/v1/agents/{}/artifacts/{}",
             agent.id, source.artifact.id
@@ -315,10 +315,10 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
         .await
         .unwrap()
         .unwrap();
-    let duplicate_payload: serde_json::Value =
+    let duplicate_payload: PrintProjectFilePayload =
         serde_json::from_str(&duplicate_command.payload_json).unwrap();
     assert_eq!(
-        duplicate_payload["artifact_download_path"],
+        duplicate_payload.artifact_download_path,
         format!(
             "/api/v1/agents/{}/artifacts/{}",
             agent.id, running.artifact.id

@@ -5,7 +5,7 @@ async fn metadata_preview_authorizes_operator_and_rejects_viewer() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let operator = auth_token_for_role(
         &state,
         &tenant_id.to_string(),
@@ -32,7 +32,13 @@ async fn metadata_preview_authorizes_operator_and_rejects_viewer() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["metadata"]["display_name"], "project");
+    assert_eq!(
+        decode::<ArtifactMetadataPreviewResponse>(body)
+            .metadata
+            .unwrap()
+            .display_name,
+        Some("project".to_owned())
+    );
 
     let (status, body) = multipart_request_as(
         app,
@@ -43,7 +49,7 @@ async fn metadata_preview_authorizes_operator_and_rejects_viewer() {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 }
 
 #[tokio::test]
@@ -51,7 +57,7 @@ async fn metadata_preview_accepts_file_only_and_creates_no_rows() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let token = auth_token_for_role(
         &state,
         &tenant_id.to_string(),
@@ -71,9 +77,12 @@ async fn metadata_preview_accepts_file_only_and_creates_no_rows() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["metadata"]["plate_count"], 1);
-    assert_eq!(body["metadata"]["default_plate_id"], 1);
-    assert_eq!(body["metadata"]["plates"][0]["estimated_time_seconds"], 120);
+    let metadata = decode::<ArtifactMetadataPreviewResponse>(body)
+        .metadata
+        .unwrap();
+    assert_eq!(metadata.plate_count, Some(1));
+    assert_eq!(metadata.default_plate_id, Some(1));
+    assert_eq!(metadata.plates[0].estimated_time_seconds, Some(120));
     assert_eq!(state.commands().count().await.unwrap(), 0);
     let pool = sqlite_pool(&state);
     let jobs: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM jobs")
@@ -99,7 +108,7 @@ async fn metadata_preview_returns_null_for_unsupported_artifact() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let token = auth_token_for_role(
         &state,
         &tenant_id.to_string(),
@@ -121,7 +130,11 @@ async fn metadata_preview_returns_null_for_unsupported_artifact() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "metadata": Value::Null }));
+    assert!(
+        decode::<ArtifactMetadataPreviewResponse>(body)
+            .metadata
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -129,7 +142,7 @@ async fn job_create_rejects_missing_empty_oversized_and_invalid_multipart_upload
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let token = auth_token_for_role(
         &state,
         &tenant_id.to_string(),
@@ -152,7 +165,10 @@ async fn job_create_rejects_missing_empty_oversized_and_invalid_multipart_upload
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response, json!({ "error": "artifact_invalid_upload" }));
+    assert_eq!(
+        decode::<ErrorResponse>(response).error,
+        "artifact_invalid_upload"
+    );
 
     let (status, response) = multipart_request_as(
         app.clone(),
@@ -163,7 +179,7 @@ async fn job_create_rejects_missing_empty_oversized_and_invalid_multipart_upload
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response, json!({ "error": "artifact_empty" }));
+    assert_eq!(decode::<ErrorResponse>(response).error, "artifact_empty");
 
     let oversized = vec![b'x'; state.artifact_storage().max_artifact_bytes() + 1];
     let (status, response) = multipart_request_as(
@@ -175,7 +191,10 @@ async fn job_create_rejects_missing_empty_oversized_and_invalid_multipart_upload
     )
     .await;
     assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
-    assert_eq!(response, json!({ "error": "artifact_too_large" }));
+    assert_eq!(
+        decode::<ErrorResponse>(response).error,
+        "artifact_too_large"
+    );
 }
 
 #[tokio::test]
@@ -183,7 +202,7 @@ async fn job_create_rejects_invalid_and_missing_printer_and_bad_plate() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let token = auth_token_for_role(
         &state,
         &tenant_id.to_string(),
@@ -202,7 +221,10 @@ async fn job_create_rejects_invalid_and_missing_printer_and_bad_plate() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response, json!({ "error": "invalid_printer_id" }));
+    assert_eq!(
+        decode::<ErrorResponse>(response).error,
+        "invalid_printer_id"
+    );
 
     let (status, response) = multipart_request_as(
         app.clone(),
@@ -213,7 +235,7 @@ async fn job_create_rejects_invalid_and_missing_printer_and_bad_plate() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(response, json!({ "error": "printer_not_found" }));
+    assert_eq!(decode::<ErrorResponse>(response).error, "printer_not_found");
 
     let agent = state.agents().create(tenant_id, "agent").await.unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent.id)
@@ -228,7 +250,10 @@ async fn job_create_rejects_invalid_and_missing_printer_and_bad_plate() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response, json!({ "error": "artifact_invalid_plate" }));
+    assert_eq!(
+        decode::<ErrorResponse>(response).error,
+        "artifact_invalid_plate"
+    );
 }
 
 #[tokio::test]
@@ -236,7 +261,7 @@ async fn job_create_rejects_oversized_text_fields_before_buffering() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let token = auth_token_for_role(
         &state,
         &tenant_id.to_string(),
@@ -271,7 +296,10 @@ async fn job_create_rejects_oversized_text_fields_before_buffering() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response, json!({ "error": "artifact_invalid_upload" }));
+    assert_eq!(
+        decode::<ErrorResponse>(response).error,
+        "artifact_invalid_upload"
+    );
 }
 
 #[tokio::test]
@@ -295,7 +323,7 @@ async fn job_create_deletes_stored_artifact_when_repository_fails() {
     .with_bootstrap_token(TEST_BOOTSTRAP_TOKEN);
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let token = auth_token_for_role(
         &state,
         &tenant_id.to_string(),
@@ -326,7 +354,10 @@ async fn job_create_deletes_stored_artifact_when_repository_fails() {
     )
     .await;
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-    assert_eq!(response, json!({ "error": "internal_server_error" }));
+    assert_eq!(
+        decode::<ErrorResponse>(response).error,
+        "internal_server_error"
+    );
 
     let artifacts: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM job_artifacts")
         .fetch_one(sqlite_pool(&state))
@@ -342,7 +373,7 @@ async fn job_create_removes_staged_upload_when_later_text_field_is_invalid() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let token = auth_token_for_role(
         &state,
         &tenant_id.to_string(),
@@ -375,7 +406,7 @@ async fn job_create_removes_staged_upload_when_later_text_field_is_invalid() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(response, json!({ "error": "bad_request" }));
+    assert_eq!(decode::<ErrorResponse>(response).error, "bad_request");
     eventually_no_new_temp_uploads(&existing_temp_uploads).await;
 }
 

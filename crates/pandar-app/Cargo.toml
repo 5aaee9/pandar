@@ -16,6 +16,7 @@ pandar-agent = { path = "../pandar-agent" }
 pandar-hub = { path = "../pandar-hub" }
 pandar-network-plugin = { path = "../pandar-network-plugin" }
 pandar-studio-dev-hook.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tracing.workspace = true

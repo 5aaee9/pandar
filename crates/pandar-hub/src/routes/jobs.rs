@@ -11,6 +11,7 @@ use serde_json::Value;
 
 use crate::{
     AppState,
+    material_mapping::{AmsMapping, AmsMapping2, AmsMappingInfo},
     repositories::{DuplicatePrintJob, JobWithArtifact, RepositoryError, UserRole},
     routes::{ApiError, auth, parse_tenant_id},
 };
@@ -31,9 +32,9 @@ pub struct DuplicateJobRequest {
     use_ams: Option<bool>,
     flow_cali: Option<bool>,
     timelapse: Option<bool>,
-    ams_mapping: Option<Value>,
-    ams_mapping2: Option<Value>,
-    ams_mapping_info: Option<Value>,
+    ams_mapping: Option<AmsMapping>,
+    ams_mapping2: Option<AmsMapping2>,
+    ams_mapping_info: Option<AmsMappingInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,12 +210,9 @@ pub async fn duplicate(
                 use_ams: payload.use_ams,
                 flow_cali: payload.flow_cali,
                 timelapse: payload.timelapse,
-                ams_mapping_json: material::mapping_json(payload.ams_mapping, "ams_mapping")?,
-                ams_mapping2_json: material::mapping_json(payload.ams_mapping2, "ams_mapping2")?,
-                ams_mapping_info_json: material::mapping_json(
-                    payload.ams_mapping_info,
-                    "ams_mapping_info",
-                )?,
+                ams_mapping_json: material::ams_mapping_json(payload.ams_mapping)?,
+                ams_mapping2_json: material::ams_mapping2_json(payload.ams_mapping2)?,
+                ams_mapping_info_json: material::ams_mapping_info_json(payload.ams_mapping_info)?,
             },
             auth::audit_actor(&auth),
         )

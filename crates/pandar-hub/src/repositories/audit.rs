@@ -40,6 +40,22 @@ pub struct AuditActor {
     pub metadata: Option<Value>,
 }
 
+#[derive(Serialize)]
+pub(crate) struct EmptyAuditMetadata {}
+
+#[derive(Serialize)]
+struct AuditTokenActorMetadata {
+    tenant_token_id: String,
+    tenant_token_scopes: Vec<&'static str>,
+}
+
+pub(crate) fn audit_metadata<T>(metadata: T) -> Value
+where
+    T: Serialize,
+{
+    serde_json::to_value(metadata).expect("audit metadata is serializable")
+}
+
 impl AuditActor {
     pub fn user(user_id: impl Into<String>) -> Self {
         Self {
@@ -57,9 +73,9 @@ impl AuditActor {
         Self {
             actor_type: "tenant_token".to_owned(),
             user_id,
-            metadata: Some(serde_json::json!({
-                "tenant_token_id": tenant_token_id.into(),
-                "tenant_token_scopes": tenant_token_scopes,
+            metadata: Some(audit_metadata(AuditTokenActorMetadata {
+                tenant_token_id: tenant_token_id.into(),
+                tenant_token_scopes,
             })),
         }
     }
@@ -72,9 +88,9 @@ impl AuditActor {
         Self {
             actor_type: "plugin_token".to_owned(),
             user_id,
-            metadata: Some(serde_json::json!({
-                "tenant_token_id": tenant_token_id.into(),
-                "tenant_token_scopes": tenant_token_scopes,
+            metadata: Some(audit_metadata(AuditTokenActorMetadata {
+                tenant_token_id: tenant_token_id.into(),
+                tenant_token_scopes,
             })),
         }
     }

@@ -1,4 +1,84 @@
 use super::*;
+use serde::{Deserialize, de::DeserializeOwned};
+
+#[derive(Debug, Deserialize)]
+struct UserResponse {
+    id: String,
+    tenant_id: String,
+    email: String,
+    role: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserListResponse {
+    users: Vec<UserResponse>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct UserIdentityResponse {
+    provider: String,
+    subject: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct UserIdentityListResponse {
+    identities: Vec<UserIdentityResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TenantTokenResponse {
+    id: String,
+    name: String,
+    scopes: Vec<String>,
+    revoked_at: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TenantTokenWithPlaintextResponse {
+    tenant_token: TenantTokenResponse,
+    token: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TenantTokenListResponse {
+    tenant_tokens: Vec<TenantTokenResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RevokeTenantTokenResponse {
+    tenant_token: TenantTokenResponse,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ErrorResponse {
+    error: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserRoleAuditMetadata {
+    previous_role: String,
+    new_role: String,
+    tenant_token_id: String,
+    tenant_token_scopes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserIdentityAuditMetadata {
+    provider: String,
+    tenant_token_id: String,
+    subject: Option<String>,
+}
+
+fn decode<T>(body: Value) -> T
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_value(body).unwrap()
+}
 
 #[tokio::test]
 async fn tenant_admin_can_manage_users_identities_and_tokens() {
@@ -18,10 +98,11 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(user["tenant_id"], tenant_id);
-    assert_eq!(user["email"], "operator@example.test");
-    assert_eq!(user["role"], "operator");
-    let user_id = user["id"].as_str().unwrap();
+    let user = decode::<UserResponse>(user);
+    assert_eq!(user.tenant_id, tenant_id);
+    assert_eq!(user.email, "operator@example.test");
+    assert_eq!(user.role, "operator");
+    let user_id = user.id;
 
     let (status, users) = request_as(
         app.clone(),
@@ -32,7 +113,8 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(users["users"].as_array().unwrap().len(), 2);
+    let users = decode::<UserListResponse>(users);
+    assert_eq!(users.users.len(), 2);
 
     let (status, updated) = request_as(
         app.clone(),
@@ -43,7 +125,8 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(updated["role"], "viewer");
+    let updated = decode::<UserResponse>(updated);
+    assert_eq!(updated.role, "viewer");
 
     let (status, identity) = request_as(
         app.clone(),
@@ -54,8 +137,9 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(identity["provider"], "clerk");
-    assert_eq!(identity["subject"], "user_123");
+    let identity = decode::<UserIdentityResponse>(identity);
+    assert_eq!(identity.provider, "clerk");
+    assert_eq!(identity.subject, "user_123");
 
     let (status, identities) = request_as(
         app.clone(),
@@ -66,7 +150,8 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(identities, json!({ "identities": [identity] }));
+    let identities = decode::<UserIdentityListResponse>(identities);
+    assert_eq!(identities.identities, vec![identity]);
 
     let (status, token) = request_as(
         app.clone(),
@@ -77,17 +162,13 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(token["tenant_token"]["name"], "automation");
-    assert_eq!(token["tenant_token"]["scopes"], json!(["*"]));
-    assert!(
-        token["token"]
-            .as_str()
-            .unwrap()
-            .starts_with("pandar_tenant_")
-    );
-    assert_eq!(token["tenant_token"]["revoked_at"], Value::Null);
-    let plaintext_token = token["token"].as_str().unwrap();
-    let token_id = token["tenant_token"]["id"].as_str().unwrap();
+    let token = decode::<TenantTokenWithPlaintextResponse>(token);
+    assert_eq!(token.tenant_token.name, "automation");
+    assert_eq!(token.tenant_token.scopes, vec!["*".to_owned()]);
+    assert!(token.token.starts_with("pandar_tenant_"));
+    assert_eq!(token.tenant_token.revoked_at, None);
+    let plaintext_token = token.token;
+    let token_id = token.tenant_token.id;
 
     let (status, tokens) = request_as(
         app.clone(),
@@ -98,22 +179,21 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(tokens["tenant_tokens"].as_array().unwrap().len(), 2);
-    let listed = tokens["tenant_tokens"]
-        .as_array()
-        .unwrap()
+    let tokens = decode::<TenantTokenListResponse>(tokens);
+    assert_eq!(tokens.tenant_tokens.len(), 2);
+    let listed = tokens
+        .tenant_tokens
         .iter()
-        .find(|token| token["id"] == token_id)
+        .find(|token| token.id == token_id)
         .unwrap();
-    assert!(listed.get("token").is_none());
-    assert_eq!(listed["revoked_at"], Value::Null);
+    assert_eq!(listed.revoked_at, None);
 
     let (status, _) = request_as(
         app.clone(),
         Method::GET,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
         None,
-        plaintext_token,
+        &plaintext_token,
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -127,20 +207,20 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(revoked["tenant_token"]["id"], token_id);
-    assert!(revoked.get("token").is_none());
-    assert!(revoked["tenant_token"]["revoked_at"].as_str().is_some());
+    let revoked = decode::<RevokeTenantTokenResponse>(revoked);
+    assert_eq!(revoked.tenant_token.id, token_id);
+    assert!(revoked.tenant_token.revoked_at.is_some());
 
     let (status, body) = request_as(
         app.clone(),
         Method::GET,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
         None,
-        plaintext_token,
+        &plaintext_token,
     )
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_auth_token");
 
     let events = state
         .audit_events()
@@ -162,16 +242,16 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
         ]
     );
     let role_metadata =
-        serde_json::from_str::<serde_json::Value>(&events[1].metadata_json).unwrap();
-    assert_eq!(role_metadata["previous_role"], "operator");
-    assert_eq!(role_metadata["new_role"], "viewer");
-    assert!(role_metadata["tenant_token_id"].as_str().is_some());
-    assert_eq!(role_metadata["tenant_token_scopes"], json!(["*"]));
+        serde_json::from_str::<UserRoleAuditMetadata>(&events[1].metadata_json).unwrap();
+    assert_eq!(role_metadata.previous_role, "operator");
+    assert_eq!(role_metadata.new_role, "viewer");
+    assert!(!role_metadata.tenant_token_id.is_empty());
+    assert_eq!(role_metadata.tenant_token_scopes, vec!["*".to_owned()]);
     let identity_metadata =
-        serde_json::from_str::<serde_json::Value>(&events[2].metadata_json).unwrap();
-    assert_eq!(identity_metadata["provider"], "clerk");
-    assert!(identity_metadata.get("subject").is_none());
-    assert!(identity_metadata["tenant_token_id"].as_str().is_some());
+        serde_json::from_str::<UserIdentityAuditMetadata>(&events[2].metadata_json).unwrap();
+    assert_eq!(identity_metadata.provider, "clerk");
+    assert_eq!(identity_metadata.subject, None);
+    assert!(!identity_metadata.tenant_token_id.is_empty());
 
     let (status, body) = request_as(
         app,
@@ -186,7 +266,7 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_user_role" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_user_role");
 }
 
 #[tokio::test]
@@ -241,7 +321,7 @@ async fn provisioning_mutations_reject_empty_required_strings() {
         };
         let (status, body) = request_as(app.clone(), method, &uri, Some(body), &admin_token).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(body, json!({ "error": "bad_request" }));
+        assert_eq!(decode::<ErrorResponse>(body).error, "bad_request");
     }
 
     let (status, body) = request_as(
@@ -253,5 +333,5 @@ async fn provisioning_mutations_reject_empty_required_strings() {
     )
     .await;
     assert_eq!(status, StatusCode::GONE);
-    assert_eq!(body, json!({ "error": "api_tokens_retired" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "api_tokens_retired");
 }

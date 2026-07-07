@@ -8,7 +8,7 @@ use crate::{
     db::Database,
     repositories::{
         AuditActor, CreatePrintJob, JobWithArtifact, RepositoryResult,
-        audit::{insert_audit_event_tx, record_audit_event},
+        audit::{EmptyAuditMetadata, audit_metadata, insert_audit_event_tx, record_audit_event},
         jobs::create,
     },
 };
@@ -29,7 +29,7 @@ pub async fn create_print_job_with_audit(
         "job.create",
         "job",
         Some(created.job.id.to_string()),
-        serde_json::json!({}),
+        audit_metadata(EmptyAuditMetadata {}),
     );
     insert_audit_event_tx(&tx, &event).await?;
     tx.commit()

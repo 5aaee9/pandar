@@ -1,4 +1,53 @@
 use super::*;
+use serde::{Deserialize, de::DeserializeOwned};
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct AgentResponse {
+    id: String,
+    tenant_id: String,
+    name: String,
+    status: String,
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentListResponse {
+    agents: Vec<AgentResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct TenantResponse {
+    id: String,
+    slug: String,
+    display_name: String,
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ErrorResponse {
+    error: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentDeleteAuditMetadata {
+    agent_name: String,
+    previous_status: String,
+    tenant_token_id: String,
+    tenant_token_scopes: Vec<String>,
+}
+
+fn decode<T>(body: serde_json::Value) -> T
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_value(body).unwrap()
+}
 
 #[tokio::test]
 async fn missing_token_on_agent_list_returns_unauthorized() {
@@ -15,7 +64,7 @@ async fn missing_token_on_agent_list_returns_unauthorized() {
     .await;
 
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "missing_auth_token" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "missing_auth_token");
 }
 
 #[tokio::test]
@@ -40,7 +89,7 @@ async fn linked_external_jwt_can_read_tenant_resource() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "agents": [] }));
+    assert!(decode::<AgentListResponse>(body).agents.is_empty());
 }
 
 #[tokio::test]
@@ -55,7 +104,7 @@ async fn external_jwt_with_unknown_kid_returns_unauthorized() {
 
     let (status, body) = external_jwt_agent_list_response(&token).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_auth_token");
 }
 
 #[tokio::test]
@@ -70,7 +119,7 @@ async fn external_jwt_with_wrong_issuer_returns_unauthorized() {
 
     let (status, body) = external_jwt_agent_list_response(&token).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_auth_token");
 }
 
 #[tokio::test]
@@ -85,7 +134,7 @@ async fn external_jwt_with_wrong_audience_returns_unauthorized() {
 
     let (status, body) = external_jwt_agent_list_response(&token).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_auth_token");
 }
 
 #[tokio::test]
@@ -95,7 +144,7 @@ async fn expired_external_jwt_returns_unauthorized() {
     let (status, body) = external_jwt_agent_list_response(&token).await;
 
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_auth_token");
 }
 
 #[tokio::test]
@@ -111,7 +160,7 @@ async fn valid_unlinked_external_jwt_returns_tenant_forbidden() {
     let (status, body) = external_jwt_agent_list_response(&token).await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "tenant_forbidden");
 }
 
 #[tokio::test]
@@ -137,7 +186,7 @@ async fn viewer_cannot_create_agent() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 }
 
 #[tokio::test]
@@ -163,7 +212,7 @@ async fn linked_viewer_jwt_cannot_create_agent() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 }
 
 #[tokio::test]
@@ -177,7 +226,7 @@ async fn invalid_tenant_id_on_agent_create_returns_bad_request() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_tenant_id" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_tenant_id");
 }
 
 #[tokio::test]
@@ -185,9 +234,10 @@ async fn missing_tenant_on_agent_create_returns_forbidden() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant = decode::<TenantResponse>(tenant);
     let token = auth_token_for_role(
         &state,
-        tenant["id"].as_str().unwrap(),
+        &tenant.id,
         crate::repositories::UserRole::TenantAdmin,
         "other-admin",
     )
@@ -203,7 +253,7 @@ async fn missing_tenant_on_agent_create_returns_forbidden() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "tenant_forbidden");
 }
 
 #[tokio::test]
@@ -211,10 +261,10 @@ async fn agent_create_returns_offline_record_and_audit_event() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
     let token = auth_token_for_role(
         &state,
-        tenant_id,
+        &tenant_id,
         crate::repositories::UserRole::TenantAdmin,
         "agent-admin",
     )
@@ -230,14 +280,15 @@ async fn agent_create_returns_offline_record_and_audit_event() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["tenant_id"], tenant_id);
-    assert_eq!(body["name"], "shop-agent");
-    assert_eq!(body["status"], "offline");
-    assert!(body["id"].as_str().is_some());
-    assert!(body["created_at"].as_str().unwrap().ends_with('Z'));
+    let body = decode::<AgentResponse>(body);
+    assert_eq!(body.tenant_id, tenant_id);
+    assert_eq!(body.name, "shop-agent");
+    assert_eq!(body.status, "offline");
+    assert!(!body.id.is_empty());
+    assert!(body.created_at.ends_with('Z'));
     let events = state
         .audit_events()
-        .list_for_tenant(TenantId::parse(tenant_id).unwrap())
+        .list_for_tenant(TenantId::parse(&body.tenant_id).unwrap())
         .await
         .unwrap();
     assert!(events.iter().any(|event| event.action == "agent.create"));
@@ -248,10 +299,10 @@ async fn empty_agent_name_returns_bad_request() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
     let token = auth_token_for_role(
         &state,
-        tenant_id,
+        &tenant_id,
         crate::repositories::UserRole::TenantAdmin,
         "empty-agent-admin",
     )
@@ -267,7 +318,7 @@ async fn empty_agent_name_returns_bad_request() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "bad_request" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "bad_request");
 }
 
 #[tokio::test]
@@ -275,10 +326,10 @@ async fn agent_list_returns_created_records() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
     let token = auth_token_for_role(
         &state,
-        tenant_id,
+        &tenant_id,
         crate::repositories::UserRole::TenantAdmin,
         "agent-list-admin",
     )
@@ -292,6 +343,7 @@ async fn agent_list_returns_created_records() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
+    let created = decode::<AgentResponse>(created);
 
     let (status, body) = request_as(
         app,
@@ -303,7 +355,7 @@ async fn agent_list_returns_created_records() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "agents": [created] }));
+    assert_eq!(decode::<AgentListResponse>(body).agents, vec![created]);
 }
 
 #[tokio::test]
@@ -311,8 +363,9 @@ async fn tenant_admin_can_delete_offline_agent() {
     let state = state().await;
     let app = router(state.clone());
     let (_, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = agent["tenant_id"].as_str().unwrap();
-    let agent_id = agent["id"].as_str().unwrap();
+    let agent = decode::<AgentResponse>(agent);
+    let tenant_id = agent.tenant_id.clone();
+    let agent_id = agent.id.clone();
 
     let (status, body) = request_as(
         app.clone(),
@@ -324,7 +377,7 @@ async fn tenant_admin_can_delete_offline_agent() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, agent);
+    assert_eq!(decode::<AgentResponse>(body), agent);
 
     let (status, body) = request_as(
         app,
@@ -335,21 +388,23 @@ async fn tenant_admin_can_delete_offline_agent() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "agents": [] }));
+    assert!(decode::<AgentListResponse>(body).agents.is_empty());
 
     let events = state
         .audit_events()
-        .list_for_tenant(TenantId::parse(tenant_id).unwrap())
+        .list_for_tenant(TenantId::parse(&tenant_id).unwrap())
         .await
         .unwrap();
     let event = events
         .iter()
         .find(|event| event.action == "agent.delete")
         .expect("agent delete audit event");
-    assert_eq!(event.target_id.as_deref(), Some(agent_id));
-    let metadata = serde_json::from_str::<serde_json::Value>(&event.metadata_json).unwrap();
-    assert_eq!(metadata["agent_name"], "shop-agent");
-    assert_eq!(metadata["previous_status"], "offline");
+    assert_eq!(event.target_id.as_deref(), Some(agent_id.as_str()));
+    let metadata = serde_json::from_str::<AgentDeleteAuditMetadata>(&event.metadata_json).unwrap();
+    assert_eq!(metadata.agent_name, "shop-agent");
+    assert_eq!(metadata.previous_status, "offline");
+    assert!(!metadata.tenant_token_id.is_empty());
+    assert_eq!(metadata.tenant_token_scopes, vec!["*".to_owned()]);
 }
 
 #[tokio::test]
@@ -357,8 +412,9 @@ async fn agent_delete_rejects_online_agent() {
     let state = state().await;
     let app = router(state.clone());
     let (_, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(agent["tenant_id"].as_str().unwrap()).unwrap();
-    let agent_id = pandar_core::AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let agent = decode::<AgentResponse>(agent);
+    let tenant_id = TenantId::parse(&agent.tenant_id).unwrap();
+    let agent_id = pandar_core::AgentId::parse(&agent.id).unwrap();
     state
         .agents()
         .update_connection(
@@ -380,7 +436,7 @@ async fn agent_delete_rejects_online_agent() {
     .await;
 
     assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body, json!({ "error": "agent_online" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "agent_online");
     assert!(state.agents().get(agent_id).await.unwrap().is_some());
 }
 
@@ -389,10 +445,11 @@ async fn viewer_cannot_delete_agent() {
     let state = state().await;
     let app = router(state.clone());
     let (_, agent, _) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = agent["tenant_id"].as_str().unwrap();
+    let agent = decode::<AgentResponse>(agent);
+    let tenant_id = agent.tenant_id.clone();
     let token = auth_token_for_role(
         &state,
-        tenant_id,
+        &tenant_id,
         crate::repositories::UserRole::Viewer,
         "viewer-delete-agent",
     )
@@ -401,18 +458,14 @@ async fn viewer_cannot_delete_agent() {
     let (status, body) = request_as(
         app,
         Method::DELETE,
-        &format!(
-            "/api/v1/tenants/{}/agents/{}",
-            tenant_id,
-            agent["id"].as_str().unwrap()
-        ),
+        &format!("/api/v1/tenants/{}/agents/{}", tenant_id, agent.id),
         None,
         &token,
     )
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 }
 
 #[tokio::test]
@@ -420,6 +473,7 @@ async fn agent_delete_rejects_cross_tenant_agent() {
     let state = state().await;
     let app = router(state.clone());
     let (_, agent, _) = tenant_and_agent(&state, app.clone()).await;
+    let agent = decode::<AgentResponse>(agent);
     let other_tenant = state
         .tenants()
         .create("other-delete", "Other Delete")
@@ -436,18 +490,14 @@ async fn agent_delete_rejects_cross_tenant_agent() {
     let (status, body) = request_as(
         app,
         Method::DELETE,
-        &format!(
-            "/api/v1/tenants/{}/agents/{}",
-            other_tenant.id,
-            agent["id"].as_str().unwrap()
-        ),
+        &format!("/api/v1/tenants/{}/agents/{}", other_tenant.id, agent.id),
         None,
         &token,
     )
     .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body, json!({ "error": "agent_not_found" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "agent_not_found");
 }
 
 #[tokio::test]
@@ -455,10 +505,10 @@ async fn agent_delete_rejects_invalid_or_missing_agent() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
     let token = auth_token_for_role(
         &state,
-        tenant_id,
+        &tenant_id,
         crate::repositories::UserRole::TenantAdmin,
         "delete-missing-agent",
     )
@@ -473,7 +523,7 @@ async fn agent_delete_rejects_invalid_or_missing_agent() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_agent_id" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_agent_id");
 
     let (status, body) = request_as(
         app,
@@ -484,7 +534,7 @@ async fn agent_delete_rejects_invalid_or_missing_agent() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body, json!({ "error": "agent_not_found" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "agent_not_found");
 }
 
 #[tokio::test]
@@ -498,7 +548,7 @@ async fn invalid_tenant_id_on_agent_list_returns_bad_request() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_tenant_id" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_tenant_id");
 }
 
 #[tokio::test]
@@ -506,9 +556,10 @@ async fn missing_tenant_on_agent_list_returns_forbidden() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
+    let tenant = decode::<TenantResponse>(tenant);
     let token = auth_token_for_role(
         &state,
-        tenant["id"].as_str().unwrap(),
+        &tenant.id,
         crate::repositories::UserRole::Viewer,
         "other-viewer",
     )
@@ -524,7 +575,7 @@ async fn missing_tenant_on_agent_list_returns_forbidden() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "tenant_forbidden");
 }
 
 #[tokio::test]
@@ -532,10 +583,10 @@ async fn duplicate_agent_name_returns_conflict() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
     let token = auth_token_for_role(
         &state,
-        tenant_id,
+        &tenant_id,
         crate::repositories::UserRole::TenantAdmin,
         "duplicate-agent-admin",
     )
@@ -561,7 +612,7 @@ async fn duplicate_agent_name_returns_conflict() {
     .await;
 
     assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body, json!({ "error": "agent_name_exists" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "agent_name_exists");
 }
 
 async fn external_jwt_agent_list_response(token: &str) -> (StatusCode, serde_json::Value) {

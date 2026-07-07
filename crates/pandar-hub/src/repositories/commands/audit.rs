@@ -1,12 +1,13 @@
 use anyhow::Context;
 use pandar_core::{AgentId, CommandId, CommandRecord, CommandStatus, TenantId};
 use sea_orm::{EntityTrait, TransactionTrait};
+use serde::Serialize;
 
 use crate::{
     db::Database,
     repositories::{
         AuditActor, RepositoryError, RepositoryResult,
-        audit::{insert_audit_event_tx, record_audit_event},
+        audit::{EmptyAuditMetadata, audit_metadata, insert_audit_event_tx, record_audit_event},
         commands::{
             DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload,
             PrinterOperationKind, PrinterOperationPayload, RefreshPrinterMaterialsPayload,
@@ -17,6 +18,20 @@ use crate::{
         },
     },
 };
+
+#[derive(Serialize)]
+struct LinkPrinterAuditMetadata<'a> {
+    printer_type: &'a str,
+    host: &'a str,
+    name: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct RefreshPrinterMaterialsAuditMetadata<'a> {
+    agent_id: String,
+    printer_id: &'a str,
+    serial_number: &'a str,
+}
 
 pub async fn enqueue_refresh_printers_with_audit(
     database: &Database,
@@ -211,10 +226,10 @@ pub async fn create_link_printer_sent_with_audit(
         "agent.link_printer",
         "agent",
         Some(agent_id.to_string()),
-        serde_json::json!({
-            "printer_type": payload.printer_type,
-            "host": payload.host,
-            "name": payload.name,
+        audit_metadata(LinkPrinterAuditMetadata {
+            printer_type: &payload.printer_type,
+            host: &payload.host,
+            name: payload.name.as_deref(),
         }),
     );
     let id = CommandId::new();
@@ -330,10 +345,10 @@ fn refresh_printer_materials_audit_event(
         "printer.refresh_materials",
         "printer",
         Some(printer.id.clone()),
-        serde_json::json!({
-            "agent_id": printer.agent_id.to_string(),
-            "printer_id": printer.id.clone(),
-            "serial_number": printer.serial_number.clone(),
+        audit_metadata(RefreshPrinterMaterialsAuditMetadata {
+            agent_id: printer.agent_id.to_string(),
+            printer_id: &printer.id,
+            serial_number: &printer.serial_number,
         }),
     )
 }
@@ -350,7 +365,7 @@ fn audit_event(
         action,
         "agent",
         Some(agent_id.to_string()),
-        serde_json::json!({}),
+        audit_metadata(EmptyAuditMetadata {}),
     )
 }
 

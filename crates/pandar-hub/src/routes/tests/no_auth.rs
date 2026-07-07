@@ -1,4 +1,5 @@
 use super::*;
+use serde::{Deserialize, Serialize};
 
 #[tokio::test]
 async fn no_auth_allows_tenant_read_without_bearer_token() {
@@ -19,7 +20,8 @@ async fn no_auth_allows_tenant_read_without_bearer_token() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "agents": [] }));
+    let body: AgentsResponse = serde_json::from_value(body).unwrap();
+    assert_eq!(body.agents.len(), 0);
 }
 
 #[tokio::test]
@@ -31,16 +33,40 @@ async fn no_auth_allows_bootstrap_routes_without_bootstrap_token() {
         app,
         Method::POST,
         "/api/v1/tenants",
-        Some(json!({
-            "slug": "no-auth-tenant",
-            "display_name": "No Auth Tenant"
-        })),
+        Some(
+            serde_json::to_value(CreateTenantRequest {
+                slug: "no-auth-tenant",
+                display_name: "No Auth Tenant",
+            })
+            .unwrap(),
+        ),
     )
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["slug"], "no-auth-tenant");
-    assert_eq!(body["display_name"], "No Auth Tenant");
+    let body: TenantResponse = serde_json::from_value(body).unwrap();
+    assert_eq!(body.slug, "no-auth-tenant");
+    assert_eq!(body.display_name, "No Auth Tenant");
+}
+
+#[derive(Deserialize)]
+struct AgentsResponse {
+    agents: Vec<AgentResponse>,
+}
+
+#[derive(Deserialize)]
+struct AgentResponse {}
+
+#[derive(Serialize)]
+struct CreateTenantRequest<'a> {
+    slug: &'a str,
+    display_name: &'a str,
+}
+
+#[derive(Deserialize)]
+struct TenantResponse {
+    slug: String,
+    display_name: String,
 }
 
 #[tokio::test]
@@ -57,7 +83,7 @@ async fn no_auth_mutations_record_no_auth_audit_actor() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{}/agents", tenant.id),
-        Some(json!({ "name": "shop-agent" })),
+        Some(serde_json::to_value(CreateAgentRequest { name: "shop-agent" }).unwrap()),
     )
     .await;
 
@@ -73,4 +99,9 @@ async fn no_auth_mutations_record_no_auth_audit_actor() {
         .expect("agent create audit event");
     assert_eq!(event.actor_type, "no_auth");
     assert_eq!(event.user_id, None);
+}
+
+#[derive(Serialize)]
+struct CreateAgentRequest<'a> {
+    name: &'a str,
 }

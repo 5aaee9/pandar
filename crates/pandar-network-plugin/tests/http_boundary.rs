@@ -5,6 +5,7 @@ use pandar_network_plugin::{
     pandar_plugin_get_jobs, pandar_plugin_get_printers, pandar_plugin_submit_print,
     pandar_plugin_submit_printer_operation,
 };
+use serde::{Deserialize, Serialize};
 use std::{fs, io::Write, net::TcpListener, path::Path, thread};
 use support::{
     assert_multipart_file_part, assert_multipart_print_request, read_http_request_with_timeout,
@@ -425,10 +426,55 @@ fn exchange_ticket_rejects_empty_ticket_before_network() {
     assert_eq!(body(result), r#"{"error":"invalid_plugin_ticket"}"#);
 }
 
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+enum TestOperation {
+    Home {
+        axes: Vec<String>,
+    },
+    SelectExtruder {
+        extruder_id: u8,
+    },
+    SetHotendTemperature {
+        temperature_celsius: u16,
+        wait: bool,
+        extruder_id: Option<u8>,
+    },
+    SetBedTemperature {
+        temperature_celsius: u16,
+        wait: bool,
+    },
+    SetChamberTemperature {
+        temperature_celsius: u16,
+        wait: bool,
+    },
+    ToggleLight,
+    SetChamberLight {
+        light_on: bool,
+    },
+    AmsRereadRfid {
+        ams_id: u8,
+        slot_id: u8,
+    },
+    AmsLoadFilament {
+        ams_id: u8,
+        slot_id: u8,
+        global_tray_id: u16,
+        external_id: String,
+        extruder_id: u8,
+    },
+    AmsUnloadFilament {
+        ams_id: u8,
+        slot_id: u8,
+    },
+}
+
 fn assert_printer_operation_request(request: &str) {
     assert_eq!(
-        serde_json::from_str::<serde_json::Value>(request_body(request)).unwrap(),
-        serde_json::json!({"action":"home","axes":["x"]})
+        serde_json::from_str::<TestOperation>(request_body(request)).unwrap(),
+        TestOperation::Home {
+            axes: vec!["x".to_owned()]
+        }
     );
     assert!(
         !request_body(request).contains("G28"),
@@ -446,11 +492,11 @@ fn submit_printer_operation_posts_semantic_body_to_plugin_endpoint() {
         r#"{"command_id":"cmd","status":"queued"}"#,
         Some(assert_printer_operation_request),
     );
-    let result = submit_printer_operation(
-        hub_url.as_bytes(),
-        TOKEN,
-        br#"{"action":"home","axes":["x"]}"#,
-    );
+    let operation_body = serde_json::to_vec(&TestOperation::Home {
+        axes: vec!["x".to_owned()],
+    })
+    .unwrap();
+    let result = submit_printer_operation(hub_url.as_bytes(), TOKEN, operation_body.as_slice());
 
     assert_eq!(result.status, 0);
     assert_eq!(result.http_code, 202);
@@ -460,15 +506,37 @@ fn submit_printer_operation_posts_semantic_body_to_plugin_endpoint() {
 #[test]
 fn submit_printer_operation_accepts_latest_agent_operation_bodies() {
     for operation in [
-        serde_json::json!({"action":"select_extruder","extruder_id":1}),
-        serde_json::json!({"action":"set_hotend_temperature","temperature_celsius":210,"wait":false,"extruder_id":1}),
-        serde_json::json!({"action":"set_bed_temperature","temperature_celsius":65,"wait":true}),
-        serde_json::json!({"action":"set_chamber_temperature","temperature_celsius":50,"wait":false}),
-        serde_json::json!({"action":"toggle_light"}),
-        serde_json::json!({"action":"set_chamber_light","light_on":true}),
-        serde_json::json!({"action":"ams_reread_rfid","ams_id":1,"slot_id":2}),
-        serde_json::json!({"action":"ams_load_filament","ams_id":1,"slot_id":2,"global_tray_id":6,"external_id":"slot-2","extruder_id":0}),
-        serde_json::json!({"action":"ams_unload_filament","ams_id":1,"slot_id":2}),
+        TestOperation::SelectExtruder { extruder_id: 1 },
+        TestOperation::SetHotendTemperature {
+            temperature_celsius: 210,
+            wait: false,
+            extruder_id: Some(1),
+        },
+        TestOperation::SetBedTemperature {
+            temperature_celsius: 65,
+            wait: true,
+        },
+        TestOperation::SetChamberTemperature {
+            temperature_celsius: 50,
+            wait: false,
+        },
+        TestOperation::ToggleLight,
+        TestOperation::SetChamberLight { light_on: true },
+        TestOperation::AmsRereadRfid {
+            ams_id: 1,
+            slot_id: 2,
+        },
+        TestOperation::AmsLoadFilament {
+            ams_id: 1,
+            slot_id: 2,
+            global_tray_id: 6,
+            external_id: "slot-2".to_owned(),
+            extruder_id: 0,
+        },
+        TestOperation::AmsUnloadFilament {
+            ams_id: 1,
+            slot_id: 2,
+        },
     ] {
         let hub_url = one_shot_server(
             "POST",
@@ -478,8 +546,8 @@ fn submit_printer_operation_accepts_latest_agent_operation_bodies() {
             r#"{"command_id":"cmd","status":"queued"}"#,
             None,
         );
-        let operation_body = operation.to_string();
-        let result = submit_printer_operation(hub_url.as_bytes(), TOKEN, operation_body.as_bytes());
+        let operation_body = serde_json::to_vec(&operation).unwrap();
+        let result = submit_printer_operation(hub_url.as_bytes(), TOKEN, operation_body.as_slice());
 
         assert_eq!(result.status, 0);
         assert_eq!(result.http_code, 202);
@@ -537,11 +605,11 @@ fn submit_printer_operation_preserves_stable_operation_errors() {
         r#"{"error":"printer_operation_unavailable"}"#,
         Some(assert_printer_operation_request),
     );
-    let result = submit_printer_operation(
-        hub_url.as_bytes(),
-        TOKEN,
-        br#"{"action":"home","axes":["x"]}"#,
-    );
+    let operation_body = serde_json::to_vec(&TestOperation::Home {
+        axes: vec!["x".to_owned()],
+    })
+    .unwrap();
+    let result = submit_printer_operation(hub_url.as_bytes(), TOKEN, operation_body.as_slice());
 
     assert_ne!(result.status, 0);
     assert_eq!(result.http_code, 400);

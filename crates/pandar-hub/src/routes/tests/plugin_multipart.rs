@@ -157,7 +157,8 @@ async fn plugin_print_uses_stable_artifact_validation_errors() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    assert!(response["task_id"].is_string(), "{response}");
+    let response = decode::<PluginPrintCreatedResponse>(response);
+    assert!(!response.task_id.is_empty());
 
     for plate_id in [0, -1, 4294967296_i64] {
         let (status, response) = multipart_request_as(
@@ -175,6 +176,15 @@ async fn plugin_print_uses_stable_artifact_validation_errors() {
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert_eq!(response, json!({ "error": "artifact_invalid_plate" }));
     }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct PluginPrintCreatedResponse {
+    task_id: String,
+}
+
+fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
+    serde_json::from_value(value).unwrap()
 }
 
 #[tokio::test]

@@ -2,6 +2,7 @@ use anyhow::Context;
 use serde_json::Value;
 
 mod light;
+mod report;
 
 use super::{
     BambuPrinterEndpoint, PrinterOperationDispatchResult,
@@ -91,7 +92,7 @@ where
     };
     let sequence_ids = payloads
         .iter()
-        .filter_map(command_sequence_id)
+        .filter_map(report::command_sequence_id)
         .collect::<Vec<_>>();
     for payload in payloads {
         mqtt.publish(PublishedMqttCommand {
@@ -110,7 +111,7 @@ where
     match matching_sequence_report(mqtt, &sequence_ids).await {
         Ok((sequence_id, report)) => Ok(PrinterOperationDispatchResult {
             sequence_id: Some(sequence_id),
-            error: printer_operation_report_error(&report),
+            error: report::printer_operation_report_error(&report),
             mqtt_report: Some(report),
         }),
         Err(err) => {
@@ -269,13 +270,13 @@ where
                 .next_report(std::time::Duration::from_secs(5))
                 .await
                 .context("wait for printer operation MQTT result")?;
-            let Some(sequence_id) = report_sequence_id(&report) else {
+            let Some(sequence_id) = report::report_sequence_id(&report) else {
                 continue;
             };
             if !sequence_ids.contains(&sequence_id) {
                 continue;
             }
-            if printer_operation_report_error(&report).is_none() {
+            if report::printer_operation_report_error(&report).is_none() {
                 return Ok((sequence_id, report));
             }
             failures.push((sequence_id, report));
@@ -286,55 +287,6 @@ where
     })
     .await
     .context("wait for matching printer operation MQTT result")?
-}
-
-fn command_sequence_id(payload: &Value) -> Option<String> {
-    ["print", "info", "pushing", "system", "camera"]
-        .into_iter()
-        .find_map(|section| payload.get(section).and_then(section_sequence_id))
-}
-
-fn report_sequence_id(report: &Value) -> Option<String> {
-    ["print", "info", "pushing", "system", "camera"]
-        .into_iter()
-        .find_map(|section| report.get(section).and_then(section_sequence_id))
-}
-
-fn section_sequence_id(value: &Value) -> Option<String> {
-    match value.get("sequence_id")? {
-        Value::String(value) => Some(value.clone()),
-        Value::Number(value) => Some(value.to_string()),
-        _ => None,
-    }
-}
-
-fn printer_operation_report_error(report: &Value) -> Option<String> {
-    let section = report.get("print").or_else(|| report.get("system"))?;
-    if section.get("result").and_then(Value::as_str) == Some("fail") {
-        return Some(
-            report_error_message(section).unwrap_or_else(|| "printer reported failure".to_owned()),
-        );
-    }
-    for key in ["err_code", "errno"] {
-        if let Some(code) = section.get(key).and_then(Value::as_i64)
-            && code != 0
-        {
-            return Some(
-                report_error_message(section)
-                    .unwrap_or_else(|| format!("printer reported {key} {code}")),
-            );
-        }
-    }
-    None
-}
-
-fn report_error_message(value: &Value) -> Option<String> {
-    ["reason", "message", "msg", "error"]
-        .into_iter()
-        .find_map(|key| value.get(key).and_then(Value::as_str))
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
 }
 
 fn move_axes_gcode_line(

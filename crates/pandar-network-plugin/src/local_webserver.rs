@@ -8,14 +8,15 @@ use std::{
 
 use rust_embed::RustEmbed;
 use serde::Deserialize;
-use serde_json::json;
 use uuid::Uuid;
 
 use crate::{PluginHttpResult, result, stable_error_body};
 
 mod callback;
+mod response;
 mod routes;
 
+use response::{BaseUrlBody, ConfigBody, HttpConfigBody, StartBody, json_string};
 use routes::LocalRoute;
 
 #[derive(RustEmbed)]
@@ -88,7 +89,13 @@ pub fn start(
 
 pub fn base_url() -> PluginHttpResult {
     match LOCAL_WEBSERVER.get() {
-        Some(server) => result(0, 200, json!({ "base_url": server.base_url }).to_string()),
+        Some(server) => result(
+            0,
+            200,
+            json_string(&BaseUrlBody {
+                base_url: &server.base_url,
+            }),
+        ),
         None => result(1, 0, stable_error_body("local_webserver_unavailable")),
     }
 }
@@ -163,41 +170,38 @@ fn start_body(server: &LocalWebserver) -> String {
         .expect("local webserver config")
         .clone();
     let using_default_server = config.using_default_web_server || config.using_default_hub_server;
-    json!({
-        "base_url": server.base_url,
-        "web_url": config.web_url,
-        "hub_url": config.hub_url,
-        "using_default_server": using_default_server,
-        "using_default_web_server": config.using_default_web_server,
-        "using_default_hub_server": config.using_default_hub_server,
+    json_string(&StartBody {
+        base_url: &server.base_url,
+        web_url: &config.web_url,
+        hub_url: &config.hub_url,
+        using_default_server,
+        using_default_web_server: config.using_default_web_server,
+        using_default_hub_server: config.using_default_hub_server,
     })
-    .to_string()
 }
 
 fn config_body(config: &LocalWebserverConfig) -> String {
     let using_default_server = config.using_default_web_server || config.using_default_hub_server;
-    json!({
-        "web_url": config.web_url,
-        "hub_url": config.hub_url,
-        "using_default_server": using_default_server,
-        "using_default_web_server": config.using_default_web_server,
-        "using_default_hub_server": config.using_default_hub_server,
+    json_string(&ConfigBody {
+        web_url: &config.web_url,
+        hub_url: &config.hub_url,
+        using_default_server,
+        using_default_web_server: config.using_default_web_server,
+        using_default_hub_server: config.using_default_hub_server,
     })
-    .to_string()
 }
 
 fn http_config_body(base_url: &str, config: &LocalWebserverConfig) -> String {
     let using_default_server = config.using_default_web_server || config.using_default_hub_server;
-    json!({
-        "webUrl": config.web_url,
-        "hubUrl": config.hub_url,
-        "usingDefaultServer": using_default_server,
-        "usingDefaultWebServer": config.using_default_web_server,
-        "usingDefaultHubServer": config.using_default_hub_server,
-        "configNonce": config.config_nonce,
-        "callbackUrl": format!("{base_url}/callback"),
+    json_string(&HttpConfigBody {
+        web_url: &config.web_url,
+        hub_url: &config.hub_url,
+        using_default_server,
+        using_default_web_server: config.using_default_web_server,
+        using_default_hub_server: config.using_default_hub_server,
+        config_nonce: &config.config_nonce,
+        callback_url: format!("{base_url}/callback"),
     })
-    .to_string()
 }
 
 fn handle_local_connection(

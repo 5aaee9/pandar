@@ -2,6 +2,7 @@ use pandar_core::CommandRecord;
 use tonic::Status;
 
 use crate::{
+    material_mapping::{AmsMapping2Entry, AmsMappingInfoEntry, validate_mapping_len},
     protocol::agent::v1::{
         AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation, Axis,
         AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
@@ -272,32 +273,25 @@ fn mapping_payload_string(
     };
     match field {
         "ams_mapping_json" => {
-            parse_mapping::<Vec<i32>>(value, field, command_id)?;
+            parse_mapping::<i32>(value, field, command_id)?;
         }
         "ams_mapping2_json" => {
-            let entries = parse_mapping::<Vec<Mapping2Payload>>(value, field, command_id)?;
-            for entry in entries {
-                let _ = (entry.ams_id, entry.slot_id);
-            }
+            parse_mapping::<AmsMapping2Entry>(value, field, command_id)?;
+        }
+        "ams_mapping_info_json" => {
+            parse_mapping::<AmsMappingInfoEntry>(value, field, command_id)?;
         }
         _ => unreachable!("print mapping field should be known"),
     }
     Ok(value.to_string())
 }
 
-#[derive(serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Mapping2Payload {
-    ams_id: i32,
-    slot_id: i32,
-}
-
 fn parse_mapping<T: serde::de::DeserializeOwned>(
     value: &str,
     field: &'static str,
     command_id: &str,
-) -> Result<T, Status> {
-    serde_json::from_str::<T>(value).map_err(|err| {
+) -> Result<Vec<T>, Status> {
+    let mapping = serde_json::from_str::<Vec<T>>(value).map_err(|err| {
         let err = anyhow::Error::from(err).context(format!(
             "failed to parse persisted {field} for print command"
         ));
@@ -308,5 +302,14 @@ fn parse_mapping<T: serde::de::DeserializeOwned>(
             "failed to serialize print command mapping"
         );
         Status::internal("invalid print command mapping payload")
-    })
+    })?;
+    if !validate_mapping_len(mapping.len()) {
+        tracing::error!(
+            %command_id,
+            %field,
+            "print command mapping contains too many entries"
+        );
+        return Err(Status::internal("invalid print command mapping payload"));
+    }
+    Ok(mapping)
 }

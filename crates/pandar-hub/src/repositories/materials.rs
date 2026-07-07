@@ -3,6 +3,8 @@ use pandar_core::{AgentId, TenantId};
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, QueryOrder,
 };
+#[cfg(test)]
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
@@ -52,13 +54,21 @@ pub enum MaterialPatchOutcome {
 impl MaterialSnapshot {
     #[cfg(test)]
     pub(crate) fn persisted_json(&self) -> String {
-        serde_json::json!({
-            "ams_units": self.ams_units,
-            "external_spools": self.external_spools,
-            "active_tray": self.active_tray
+        serde_json::to_string(&PersistedMaterialSnapshotJson {
+            ams_units: &self.ams_units,
+            external_spools: &self.external_spools,
+            active_tray: self.active_tray.as_ref(),
         })
-        .to_string()
+        .expect("persisted material snapshot JSON is serializable")
     }
+}
+
+#[cfg(test)]
+#[derive(Serialize)]
+struct PersistedMaterialSnapshotJson<'a> {
+    ams_units: &'a Value,
+    external_spools: &'a Value,
+    active_tray: Option<&'a Value>,
 }
 
 #[derive(Debug, Clone)]

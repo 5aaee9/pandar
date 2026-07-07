@@ -1,4 +1,5 @@
 use pandar_core::{AgentId, AgentStatus, TenantId};
+use serde::Deserialize;
 
 use super::*;
 use crate::{
@@ -286,9 +287,22 @@ async fn agent_delete_offline_removes_agent_cascades_and_audits() {
         event.target_id.as_deref(),
         Some(agent.id.to_string().as_str())
     );
-    let metadata: serde_json::Value = serde_json::from_str(&event.metadata_json).unwrap();
-    assert_eq!(metadata["agent_name"], "stale-agent");
-    assert_eq!(metadata["previous_status"], "offline");
+    let metadata: TestAgentDeleteAuditMetadata =
+        serde_json::from_str(&event.metadata_json).unwrap();
+    assert_eq!(
+        metadata,
+        TestAgentDeleteAuditMetadata {
+            agent_name: "stale-agent".to_owned(),
+            previous_status: "offline".to_owned(),
+        }
+    );
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TestAgentDeleteAuditMetadata {
+    agent_name: String,
+    previous_status: String,
 }
 
 #[tokio::test]

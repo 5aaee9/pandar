@@ -1,4 +1,5 @@
 use anyhow::{Context, anyhow};
+use serde::Serialize;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -61,15 +62,15 @@ where
                 .send(printer_snapshot_event(config, snapshot.clone()))
                 .await
                 .context("queue linked printer snapshot event")?;
-            let result_json = serde_json::json!({
-                "type": "printer_link",
-                "serial_number": snapshot.serial,
-                "host": endpoint.host,
-                "name": snapshot.name,
-                "model": snapshot.model,
-                "status": snapshot.state,
+            let result_json = serde_json::to_string(&PrinterLinkResult {
+                kind: "printer_link",
+                serial_number: &snapshot.serial,
+                host: &endpoint.host,
+                name: &snapshot.name,
+                model: snapshot.model.as_deref(),
+                status: &snapshot.state,
             })
-            .to_string();
+            .expect("printer link result is serializable");
             sender
                 .send(success_event_with_result(config, command_id, result_json))
                 .await
@@ -90,6 +91,18 @@ where
     }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct PrinterLinkResult<'a> {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    serial_number: &'a str,
+    host: &'a str,
+    name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model: Option<&'a str>,
+    status: &'a str,
 }
 
 async fn discover_link_printer_endpoint<G>(

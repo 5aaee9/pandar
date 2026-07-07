@@ -1,16 +1,21 @@
 use anyhow::Context;
 use sea_orm::ActiveValue::Set;
-use serde_json::json;
+use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     entities::tenant_tokens,
     repositories::{
         AuditActor, AuditEvent, RepositoryResult,
-        audit::record_audit_event,
+        audit::{audit_metadata, record_audit_event},
         auth::tenant_tokens::{TenantToken, TenantTokenScope},
     },
 };
+
+#[derive(Serialize)]
+struct TenantTokenAuditMetadata<'a> {
+    name: &'a str,
+}
 
 pub(super) fn tenant_token_model(
     token: &TenantToken,
@@ -60,6 +65,6 @@ pub(super) fn tenant_token_audit_event(
         action,
         "tenant_token",
         Some(token.id.clone()),
-        json!({ "name": token.name }),
+        audit_metadata(TenantTokenAuditMetadata { name: &token.name }),
     )
 }

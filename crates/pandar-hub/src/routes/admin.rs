@@ -4,8 +4,7 @@ use axum::{
     extract::rejection::JsonRejection,
     http::{HeaderMap, StatusCode},
 };
-use serde::Deserialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
@@ -18,6 +17,11 @@ use crate::{
 pub(super) struct CreateTenantRequest {
     slug: String,
     display_name: String,
+}
+
+#[derive(Debug, Serialize)]
+struct TenantCreateAuditMetadata<'a> {
+    tenant_slug: &'a str,
 }
 
 pub(super) async fn summary(
@@ -76,7 +80,10 @@ pub(super) async fn create_tenant(
             action: "tenant.create".to_owned(),
             target_type: "tenant".to_owned(),
             target_id: Some(tenant.id.to_string()),
-            metadata_json: json!({ "tenant_slug": tenant.slug }).to_string(),
+            metadata_json: serde_json::to_string(&TenantCreateAuditMetadata {
+                tenant_slug: &tenant.slug,
+            })
+            .expect("tenant create audit metadata is serializable"),
         })
         .await?;
 

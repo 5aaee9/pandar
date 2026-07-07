@@ -1,21 +1,131 @@
 use anyhow::{Context, bail};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer};
 use serde_json::{Map, Value};
 use time::OffsetDateTime;
 
 #[derive(Debug)]
 pub(super) struct ParsedPatch {
     pub(super) observed_at: String,
-    pub(super) ams_units: Option<Vec<Value>>,
-    pub(super) external_spools: Option<Vec<Value>>,
+    pub(super) ams_units: Option<Vec<MaterialUnitPatch>>,
+    pub(super) external_spools: Option<Vec<MaterialExternalSpoolPatch>>,
     pub(super) replace_external_spools: bool,
     pub(super) active_tray: Presence,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(super) enum Presence {
+    #[default]
     Absent,
     Null,
     Value(Value),
+}
+
+#[derive(Debug, Deserialize)]
+struct MaterialPatchDocument {
+    #[serde(rename = "type")]
+    kind: String,
+    observed_at: String,
+    #[serde(default, deserialize_with = "optional_filtered_array")]
+    ams_units: Option<Vec<MaterialUnitPatch>>,
+    #[serde(default, deserialize_with = "optional_filtered_array")]
+    external_spools: Option<Vec<MaterialExternalSpoolPatch>>,
+    #[serde(default)]
+    replace_external_spools: bool,
+    #[serde(default, deserialize_with = "presence")]
+    active_tray: Presence,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub(super) struct MaterialUnitPatch {
+    #[serde(default)]
+    pub(super) unit_id: Option<String>,
+    #[serde(default)]
+    pub(super) replace_trays: bool,
+    #[serde(default, deserialize_with = "optional_filtered_array")]
+    pub(super) trays: Option<Vec<MaterialTrayPatch>>,
+    #[serde(flatten)]
+    fields: Map<String, Value>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub(super) struct MaterialTrayPatch {
+    #[serde(default)]
+    pub(super) tray_id: Option<String>,
+    #[serde(flatten)]
+    fields: Map<String, Value>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub(super) struct MaterialExternalSpoolPatch {
+    #[serde(default)]
+    pub(super) external_id: Option<String>,
+    #[serde(default)]
+    pub(super) tray_id: Option<String>,
+    #[serde(flatten)]
+    fields: Map<String, Value>,
+}
+
+impl MaterialUnitPatch {
+    pub(super) fn object_without_control_fields(&self) -> Value {
+        let mut object = self.fields.clone();
+        insert_optional_string(&mut object, "unit_id", self.unit_id.as_deref());
+        Value::Object(object)
+    }
+
+    pub(super) fn value_without_null_fields(&self) -> Value {
+        let mut object = self.fields.clone();
+        insert_optional_string(&mut object, "unit_id", self.unit_id.as_deref());
+        if self.replace_trays {
+            object.insert("replace_trays".to_owned(), Value::Bool(true));
+        }
+        if let Some(trays) = &self.trays {
+            object.insert(
+                "trays".to_owned(),
+                Value::Array(
+                    trays
+                        .iter()
+                        .map(MaterialTrayPatch::value_without_null_fields)
+                        .collect(),
+                ),
+            );
+        }
+        Value::Object(object_without_null_fields(object))
+    }
+}
+
+impl MaterialTrayPatch {
+    pub(super) fn value_with_null_fields(&self) -> Value {
+        let mut object = self.fields.clone();
+        insert_optional_string(&mut object, "tray_id", self.tray_id.as_deref());
+        Value::Object(object)
+    }
+
+    pub(super) fn value_without_null_fields(&self) -> Value {
+        let mut object = self.fields.clone();
+        insert_optional_string(&mut object, "tray_id", self.tray_id.as_deref());
+        Value::Object(object_without_null_fields(object))
+    }
+}
+
+impl MaterialExternalSpoolPatch {
+    pub(super) fn key(&self) -> Option<(String, String)> {
+        Some((self.external_id.clone()?, self.tray_id.clone()?))
+    }
+
+    pub(super) fn value_with_null_fields(&self) -> Value {
+        let mut object = self.fields.clone();
+        insert_optional_string(&mut object, "external_id", self.external_id.as_deref());
+        insert_optional_string(&mut object, "tray_id", self.tray_id.as_deref());
+        Value::Object(object)
+    }
+
+    pub(super) fn value_without_null_fields(&self) -> Value {
+        let mut object = self.fields.clone();
+        insert_optional_string(&mut object, "external_id", self.external_id.as_deref());
+        insert_optional_string(&mut object, "tray_id", self.tray_id.as_deref());
+        Value::Object(object_without_null_fields(object))
+    }
 }
 
 pub(super) fn is_older(observed_at: &str, persisted_at: &str) -> anyhow::Result<bool> {
@@ -26,65 +136,30 @@ pub(super) fn is_older(observed_at: &str, persisted_at: &str) -> anyhow::Result<
 }
 
 pub(super) fn parse_array_json(raw: &str, context: &str) -> anyhow::Result<Vec<Value>> {
-    serde_json::from_str::<Value>(raw)
-        .with_context(|| format!("failed to parse {context}"))?
-        .as_array()
-        .cloned()
-        .with_context(|| format!("{context} must be an array"))
+    serde_json::from_str::<Vec<Value>>(raw).with_context(|| format!("failed to parse {context}"))
 }
 
 pub(super) fn parse_object_json(raw: &str, context: &str) -> anyhow::Result<Value> {
-    let value: Value =
+    let object: Map<String, Value> =
         serde_json::from_str(raw).with_context(|| format!("failed to parse {context}"))?;
-    if value.is_object() {
-        Ok(value)
-    } else {
-        bail!("{context} must be an object")
-    }
+    Ok(Value::Object(object))
 }
 
 pub(super) fn parse_patch_result(raw: &str) -> anyhow::Result<ParsedPatch> {
-    let value: Value = serde_json::from_str(raw).context("failed to parse material patch JSON")?;
-    let object = value
-        .as_object()
-        .context("material patch root must be an object")?;
-    if object.get("type").and_then(Value::as_str) != Some("printer_material_patch") {
+    let document: MaterialPatchDocument =
+        serde_json::from_str(raw).context("failed to parse material patch JSON")?;
+    if document.kind != "printer_material_patch" {
         bail!("material patch type must be printer_material_patch");
     }
-    let observed_at = object
-        .get("observed_at")
-        .and_then(Value::as_str)
-        .context("material patch observed_at must be a string")?;
-    parse_time(observed_at).context("material patch observed_at must be RFC3339 UTC")?;
+    parse_time(&document.observed_at).context("material patch observed_at must be RFC3339 UTC")?;
 
     Ok(ParsedPatch {
-        observed_at: observed_at.to_string(),
-        ams_units: array_field(object, "ams_units")?,
-        external_spools: array_field(object, "external_spools")?,
-        replace_external_spools: object
-            .get("replace_external_spools")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        active_tray: presence_field(object, "active_tray"),
+        observed_at: document.observed_at,
+        ams_units: document.ams_units,
+        external_spools: document.external_spools,
+        replace_external_spools: document.replace_external_spools,
+        active_tray: document.active_tray,
     })
-}
-
-fn array_field(object: &Map<String, Value>, key: &str) -> anyhow::Result<Option<Vec<Value>>> {
-    let Some(value) = object.get(key) else {
-        return Ok(None);
-    };
-    let array = value
-        .as_array()
-        .with_context(|| format!("{key} must be an array"))?;
-    Ok(Some(array.iter().map(filter_sensitive).collect()))
-}
-
-fn presence_field(object: &Map<String, Value>, key: &str) -> Presence {
-    match object.get(key) {
-        None => Presence::Absent,
-        Some(Value::Null) => Presence::Null,
-        Some(value) => Presence::Value(filter_sensitive(value)),
-    }
 }
 
 fn filter_sensitive(value: &Value) -> Value {
@@ -130,4 +205,46 @@ pub(super) fn sanitize_message(message: &str) -> String {
 fn parse_time(value: &str) -> anyhow::Result<OffsetDateTime> {
     OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
         .context("failed to parse timestamp")
+}
+
+fn optional_filtered_array<'de, D, T>(deserializer: D) -> Result<Option<Vec<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: DeserializeOwned,
+{
+    let value = Value::deserialize(deserializer)?;
+    let Value::Array(values) = value else {
+        return Err(serde::de::Error::custom("must be an array"));
+    };
+    values
+        .iter()
+        .map(filter_sensitive)
+        .map(serde_json::from_value)
+        .collect::<Result<Vec<T>, _>>()
+        .map(Some)
+        .map_err(serde::de::Error::custom)
+}
+
+fn presence<'de, D>(deserializer: D) -> Result<Presence, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+    Ok(match value {
+        Value::Null => Presence::Null,
+        value => Presence::Value(filter_sensitive(&value)),
+    })
+}
+
+fn insert_optional_string(object: &mut Map<String, Value>, key: &str, value: Option<&str>) {
+    if let Some(value) = value {
+        object.insert(key.to_owned(), Value::String(value.to_owned()));
+    }
+}
+
+fn object_without_null_fields(object: Map<String, Value>) -> Map<String, Value> {
+    object
+        .into_iter()
+        .filter(|(_, value)| !value.is_null())
+        .collect()
 }

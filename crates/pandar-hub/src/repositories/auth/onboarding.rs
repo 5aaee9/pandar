@@ -2,7 +2,6 @@ use anyhow::Context;
 use pandar_core::{Tenant, TenantId, created_at_now};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::Serialize;
-use serde_json::json;
 use time::{Duration, OffsetDateTime};
 
 mod support;
@@ -14,7 +13,7 @@ use crate::{
     repositories::{
         AuditActor, AuthRepository, RepositoryError, RepositoryResult, User, UserIdentity,
         UserRole,
-        audit::{insert_audit_event_tx, record_audit_event},
+        audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
         auth::{hash_token, identities::insert_identity, insert_user, secrets::generate_secret},
     },
 };
@@ -60,6 +59,12 @@ pub struct AcceptedJoinLink {
     pub tenant: Tenant,
     pub user: User,
     pub created: bool,
+}
+
+#[derive(Serialize)]
+struct JoinLinkAcceptAuditMetadata<'a> {
+    role: &'a str,
+    email: &'a str,
 }
 
 impl AuthRepository {
@@ -301,7 +306,10 @@ impl AuthRepository {
                 "join_link.accept",
                 "join_link",
                 Some(join_link.id),
-                json!({ "role": user.role.as_str(), "email": user.email }),
+                audit_metadata(JoinLinkAcceptAuditMetadata {
+                    role: user.role.as_str(),
+                    email: &user.email,
+                }),
             ),
         )
         .await?;

@@ -4,13 +4,14 @@ use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel,
     PaginatorTrait, QueryFilter, QueryOrder, TransactionTrait,
 };
+use serde::Serialize;
 
 use crate::{
     db::Database,
     entities::{agents, printers, tenants},
     repositories::{
         AuditActor, RepositoryError, RepositoryResult, adapters,
-        audit::{insert_audit_event_tx, record_audit_event},
+        audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
     },
 };
 
@@ -34,6 +35,24 @@ pub struct PrinterSnapshotUpsert {
 #[derive(Debug, Clone)]
 pub struct PrinterRepository {
     database: Database,
+}
+
+#[derive(Serialize)]
+struct PrinterDeleteAuditMetadata<'a> {
+    printer_name: &'a str,
+    serial_number: &'a str,
+    agent_id: String,
+    previous_status: &'a str,
+}
+
+#[derive(Serialize)]
+struct PrinterUpdateAuditMetadata<'a> {
+    previous_name: &'a str,
+    previous_host: &'a Option<String>,
+    printer_name: &'a str,
+    printer_host: &'a Option<String>,
+    serial_number: &'a str,
+    agent_id: String,
 }
 
 impl PrinterRepository {
@@ -111,11 +130,11 @@ impl PrinterRepository {
                 "printer.delete",
                 "printer",
                 Some(printer.id.clone()),
-                serde_json::json!({
-                    "printer_name": printer.name.clone(),
-                    "serial_number": printer.serial_number.clone(),
-                    "agent_id": printer.agent_id.to_string(),
-                    "previous_status": printer.status.clone(),
+                audit_metadata(PrinterDeleteAuditMetadata {
+                    printer_name: &printer.name,
+                    serial_number: &printer.serial_number,
+                    agent_id: printer.agent_id.to_string(),
+                    previous_status: &printer.status,
                 }),
             ),
         )
@@ -173,13 +192,13 @@ impl PrinterRepository {
                 "printer.update",
                 "printer",
                 Some(printer.id.clone()),
-                serde_json::json!({
-                    "previous_name": previous_name,
-                    "previous_host": previous_host,
-                    "printer_name": printer.name.clone(),
-                    "printer_host": printer.host.clone(),
-                    "serial_number": printer.serial_number.clone(),
-                    "agent_id": printer.agent_id.to_string(),
+                audit_metadata(PrinterUpdateAuditMetadata {
+                    previous_name: &previous_name,
+                    previous_host: &previous_host,
+                    printer_name: &printer.name,
+                    printer_host: &printer.host,
+                    serial_number: &printer.serial_number,
+                    agent_id: printer.agent_id.to_string(),
                 }),
             ),
         )

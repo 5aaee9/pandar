@@ -1,6 +1,6 @@
 use axum::{extract::Multipart, http::StatusCode};
 use pandar_core::{Printer, TenantId};
-use serde_json::Value;
+use serde::de::DeserializeOwned;
 use tokio::{fs, io::AsyncWriteExt};
 
 use crate::{
@@ -185,12 +185,14 @@ pub(super) async fn parse_multipart_print_fields(
             "use_ams" => parse_bool(&text).map(|value| fields.use_ams = Some(value)),
             "flow_cali" => parse_bool(&text).map(|value| fields.flow_cali = Some(value)),
             "timelapse" => parse_bool(&text).map(|value| fields.timelapse = Some(value)),
-            "ams_mapping" => parse_json_field(&text).map(|value| fields.ams_mapping = Some(value)),
+            "ams_mapping" => {
+                parse_optional_json_field(&text).map(|value| fields.ams_mapping = value)
+            }
             "ams_mapping2" => {
-                parse_json_field(&text).map(|value| fields.ams_mapping2 = Some(value))
+                parse_optional_json_field(&text).map(|value| fields.ams_mapping2 = value)
             }
             "ams_mapping_info" => {
-                parse_json_field(&text).map(|value| fields.ams_mapping_info = Some(value))
+                parse_optional_json_field(&text).map(|value| fields.ams_mapping_info = value)
             }
             _ => Ok(()),
         };
@@ -246,10 +248,9 @@ async fn prepare_print_job(
         .ok_or_else(|| ApiError::bad_request("invalid_printer_id"))?;
     super::parse_printer_id(&printer_id)?;
     let plate_id = super::validated_plate_id(required(parsed.plate_id)?)?;
-    let ams_mapping_json = material::mapping_json(parsed.ams_mapping.clone(), "ams_mapping")?;
-    let ams_mapping2_json = material::mapping_json(parsed.ams_mapping2.clone(), "ams_mapping2")?;
-    let ams_mapping_info_json =
-        material::mapping_json(parsed.ams_mapping_info.clone(), "ams_mapping_info")?;
+    let ams_mapping_json = material::ams_mapping_json(parsed.ams_mapping.clone())?;
+    let ams_mapping2_json = material::ams_mapping2_json(parsed.ams_mapping2.clone())?;
+    let ams_mapping_info_json = material::ams_mapping_info_json(parsed.ams_mapping_info.clone())?;
     let use_ams = required(parsed.use_ams)?;
     let flow_cali = required(parsed.flow_cali)?;
     let timelapse = required(parsed.timelapse)?;
@@ -387,8 +388,11 @@ fn parse_bool(value: &str) -> Result<bool, ApiError> {
         .map_err(|_| ApiError::bad_request("bad_request"))
 }
 
-fn parse_json_field(value: &str) -> Result<Value, ApiError> {
-    serde_json::from_str(value).map_err(|_| ApiError::bad_request("bad_request"))
+fn parse_optional_json_field<T>(value: &str) -> Result<Option<T>, ApiError>
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_str(value).map_err(|_| ApiError::bad_request("invalid_material_mapping"))
 }
 
 fn required<T>(value: Option<T>) -> Result<T, ApiError> {

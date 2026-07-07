@@ -6,7 +6,8 @@ pub mod installer;
 mod local_webserver;
 mod studio_status;
 
-use serde_json::{Value, json};
+use serde::Serialize;
+use serde_json::Value;
 
 use gcode::{PrinterOperation, operation_json_from_gcode};
 use http::{
@@ -78,7 +79,7 @@ pub extern "C" fn pandar_plugin_exchange_ticket(
     post_json(
         &format!("{hub_url}/api/v1/plugin/login-tickets/exchange"),
         None,
-        json!({ "ticket": ticket }),
+        TicketExchangeRequest { ticket: &ticket },
         RequestKind::TicketExchange,
     )
 }
@@ -94,7 +95,7 @@ pub extern "C" fn pandar_plugin_create_no_auth_session(
     post_json(
         &format!("{hub_url}/api/v1/plugin/no-auth-session"),
         None,
-        json!({}),
+        EmptyRequest {},
         RequestKind::TicketExchange,
     )
 }
@@ -356,3 +357,11 @@ fn parse_optional_json(ptr: *const u8, len: usize) -> Option<Value> {
     }
     serde_json::from_str(&value).ok()
 }
+
+#[derive(Serialize)]
+struct TicketExchangeRequest<'a> {
+    ticket: &'a str,
+}
+
+#[derive(Serialize)]
+struct EmptyRequest {}

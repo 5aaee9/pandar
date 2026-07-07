@@ -156,10 +156,12 @@ async fn create_tenant_for_test(app: Router) -> (StatusCode, Value) {
 async fn tenant_and_agent(state: &AppState, app: Router) -> (Value, Value, String) {
     let (status, tenant) = create_tenant_for_test(app.clone()).await;
     assert_eq!(status, StatusCode::CREATED);
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = serde_json::from_value::<TestTenantResponse>(tenant.clone())
+        .unwrap()
+        .id;
     let token = auth_token_for_role(
         state,
-        tenant_id,
+        &tenant_id,
         crate::repositories::UserRole::TenantAdmin,
         "admin-token",
     )
@@ -174,6 +176,11 @@ async fn tenant_and_agent(state: &AppState, app: Router) -> (Value, Value, Strin
     .await;
     assert_eq!(status, StatusCode::CREATED);
     (tenant, agent, token)
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct TestTenantResponse {
+    id: String,
 }
 
 async fn auth_token_for_role(

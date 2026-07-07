@@ -9,7 +9,7 @@ use pandar_network_plugin::{
     PluginHttpResult, pandar_plugin_free_with_capacity, pandar_plugin_local_webserver_base_url,
     pandar_plugin_local_webserver_config, pandar_plugin_start_local_webserver,
 };
-use serde_json::{Value, json};
+use serde::Deserialize;
 
 fn body(result: PluginHttpResult) -> String {
     if result.body_ptr.is_null() || result.body_len == 0 {
@@ -21,7 +21,12 @@ fn body(result: PluginHttpResult) -> String {
     body
 }
 
-fn start_local(web_url: &str, hub_url: &str, web_configured: bool, hub_configured: bool) -> Value {
+fn start_local(
+    web_url: &str,
+    hub_url: &str,
+    web_configured: bool,
+    hub_configured: bool,
+) -> StartLocalResponse {
     let result = pandar_plugin_start_local_webserver(
         web_url.as_ptr(),
         web_url.len(),
@@ -94,8 +99,44 @@ fn response_body(response: &str) -> &str {
     response.split_once("\r\n\r\n").unwrap().1
 }
 
-fn response_json(response: &str) -> Value {
+fn response_json<T: for<'de> Deserialize<'de>>(response: &str) -> T {
     serde_json::from_str(response_body(response)).unwrap()
+}
+
+#[derive(Debug, Deserialize)]
+struct StartLocalResponse {
+    base_url: String,
+    web_url: String,
+    hub_url: String,
+    using_default_server: bool,
+    using_default_web_server: bool,
+    using_default_hub_server: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct BaseUrlResponse {
+    base_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginConfigResponse {
+    web_url: String,
+    hub_url: String,
+    using_default_server: bool,
+    using_default_web_server: bool,
+    using_default_hub_server: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserConfigResponse {
+    web_url: String,
+    hub_url: String,
+    using_default_server: bool,
+    using_default_web_server: bool,
+    using_default_hub_server: bool,
+    callback_url: String,
+    config_nonce: String,
 }
 
 #[test]
@@ -106,20 +147,18 @@ fn local_webserver_serves_assets_rejects_bad_requests_and_switches_target_server
         false,
         false,
     );
-    let base_url = start["base_url"].as_str().unwrap();
+    let base_url = start.base_url.as_str();
     assert!(base_url.starts_with("http://127.0.0.1:"));
-    assert_eq!(start["web_url"], "http://localhost:3000");
-    assert_eq!(start["hub_url"], "http://localhost:8080");
-    assert_eq!(start["using_default_server"], true);
-    assert_eq!(start["using_default_web_server"], true);
-    assert_eq!(start["using_default_hub_server"], true);
+    assert_eq!(start.web_url, "http://localhost:3000");
+    assert_eq!(start.hub_url, "http://localhost:8080");
+    assert!(start.using_default_server);
+    assert!(start.using_default_web_server);
+    assert!(start.using_default_hub_server);
 
     let base_result = pandar_plugin_local_webserver_base_url();
     assert_eq!(base_result.status, 0);
-    assert_eq!(
-        serde_json::from_str::<Value>(&body(base_result)).unwrap(),
-        json!({ "base_url": base_url })
-    );
+    let base_response: BaseUrlResponse = serde_json::from_str(&body(base_result)).unwrap();
+    assert_eq!(base_response.base_url, base_url);
 
     let sign_in = get(base_url, "/sign-in");
     assert!(sign_in.starts_with("HTTP/1.1 200 OK"));
@@ -136,14 +175,14 @@ fn local_webserver_serves_assets_rejects_bad_requests_and_switches_target_server
     assert!(styles.contains("Content-Type: text/css; charset=utf-8"));
     assert!(styles.contains(".panel"));
 
-    let config = response_json(&get(base_url, "/config"));
-    assert_eq!(config["webUrl"], "http://localhost:3000");
-    assert_eq!(config["hubUrl"], "http://localhost:8080");
-    assert_eq!(config["usingDefaultServer"], true);
-    assert_eq!(config["usingDefaultWebServer"], true);
-    assert_eq!(config["usingDefaultHubServer"], true);
-    assert_eq!(config["callbackUrl"], format!("{base_url}/callback"));
-    let config_nonce = config["configNonce"].as_str().unwrap();
+    let config: BrowserConfigResponse = response_json(&get(base_url, "/config"));
+    assert_eq!(config.web_url, "http://localhost:3000");
+    assert_eq!(config.hub_url, "http://localhost:8080");
+    assert!(config.using_default_server);
+    assert!(config.using_default_web_server);
+    assert!(config.using_default_hub_server);
+    assert_eq!(config.callback_url, format!("{base_url}/callback"));
+    let config_nonce = config.config_nonce;
 
     let invalid_config = post_json(
         base_url,
@@ -192,35 +231,34 @@ fn local_webserver_serves_assets_rejects_bad_requests_and_switches_target_server
     let idle = connect_idle(base_url);
     let response = get(base_url, "/config");
     assert!(response.starts_with("HTTP/1.1 200 OK"));
-    assert_eq!(response_json(&response)["hubUrl"], "http://localhost:8080");
+    assert_eq!(
+        response_json::<BrowserConfigResponse>(&response).hub_url,
+        "http://localhost:8080"
+    );
     thread::sleep(Duration::from_millis(20));
     drop(idle);
 
-    let updated = response_json(&post_json(
+    let updated: BrowserConfigResponse = response_json(&post_json(
         base_url,
         "/config",
         &format!(
             r#"{{"webUrl":"https://web.example.test/","hubUrl":"https://hub.example.test/","configNonce":"{config_nonce}"}}"#
         ),
     ));
-    assert_eq!(updated["webUrl"], "https://web.example.test");
-    assert_eq!(updated["hubUrl"], "https://hub.example.test");
-    assert_eq!(updated["usingDefaultServer"], false);
-    assert_eq!(updated["usingDefaultWebServer"], false);
-    assert_eq!(updated["usingDefaultHubServer"], false);
+    assert_eq!(updated.web_url, "https://web.example.test");
+    assert_eq!(updated.hub_url, "https://hub.example.test");
+    assert!(!updated.using_default_server);
+    assert!(!updated.using_default_web_server);
+    assert!(!updated.using_default_hub_server);
 
     let config_result = pandar_plugin_local_webserver_config();
     assert_eq!(config_result.status, 0);
-    assert_eq!(
-        serde_json::from_str::<Value>(&body(config_result)).unwrap(),
-        json!({
-            "web_url": "https://web.example.test",
-            "hub_url": "https://hub.example.test",
-            "using_default_server": false,
-            "using_default_web_server": false,
-            "using_default_hub_server": false
-        })
-    );
+    let plugin_config: PluginConfigResponse = serde_json::from_str(&body(config_result)).unwrap();
+    assert_eq!(plugin_config.web_url, "https://web.example.test");
+    assert_eq!(plugin_config.hub_url, "https://hub.example.test");
+    assert!(!plugin_config.using_default_server);
+    assert!(!plugin_config.using_default_web_server);
+    assert!(!plugin_config.using_default_hub_server);
 
     let restarted = start_local(
         "http://ignored-web.test",
@@ -228,9 +266,9 @@ fn local_webserver_serves_assets_rejects_bad_requests_and_switches_target_server
         true,
         true,
     );
-    assert_eq!(restarted["base_url"], base_url);
-    assert_eq!(restarted["web_url"], "https://web.example.test");
-    assert_eq!(restarted["hub_url"], "https://hub.example.test");
+    assert_eq!(restarted.base_url, base_url);
+    assert_eq!(restarted.web_url, "https://web.example.test");
+    assert_eq!(restarted.hub_url, "https://hub.example.test");
 
     let callback = get(base_url, "/callback?ticket=secret-ticket");
     assert!(callback.starts_with("HTTP/1.1 200 OK"));
@@ -253,7 +291,7 @@ fn localized_sign_in_routes_serve_root_relative_assets_and_reject_invalid_paths(
         false,
         false,
     );
-    let base_url = start["base_url"].as_str().unwrap();
+    let base_url = start.base_url.as_str();
 
     for path in ["/en/sign-in", "/en_GB/sign-in", "/zh-CN/sign-in"] {
         let response = get(base_url, path);

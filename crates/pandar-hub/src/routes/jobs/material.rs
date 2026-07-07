@@ -1,14 +1,18 @@
 use pandar_core::{Job, JobFilamentUsage};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
-use crate::{repositories::RepositoryError, routes::ApiError};
+use crate::{
+    material_mapping::{AmsMapping, AmsMapping2, AmsMappingInfo, validate_mapping_len},
+    repositories::RepositoryError,
+    routes::ApiError,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobMaterialResponse {
-    ams_mapping: Option<Value>,
-    ams_mapping2: Option<Value>,
-    ams_mapping_info: Option<Value>,
+    ams_mapping: Option<AmsMapping>,
+    ams_mapping2: Option<AmsMapping2>,
+    ams_mapping_info: Option<AmsMappingInfo>,
     filament_usage: Vec<JobFilamentUsageResponse>,
 }
 
@@ -29,20 +33,26 @@ struct JobFilamentUsageResponse {
     confidence: String,
 }
 
-pub fn mapping_json(value: Option<Value>, field: &'static str) -> Result<Option<String>, ApiError> {
+pub fn ams_mapping_json(value: Option<AmsMapping>) -> Result<Option<String>, ApiError> {
+    typed_mapping_json(value)
+}
+
+pub fn ams_mapping2_json(value: Option<AmsMapping2>) -> Result<Option<String>, ApiError> {
+    typed_mapping_json(value)
+}
+
+pub fn ams_mapping_info_json(value: Option<AmsMappingInfo>) -> Result<Option<String>, ApiError> {
+    typed_mapping_json(value)
+}
+
+fn typed_mapping_json<T>(value: Option<Vec<T>>) -> Result<Option<String>, ApiError>
+where
+    T: Serialize,
+{
     let Some(value) = value else {
         return Ok(None);
     };
-    if value.is_null() {
-        return Ok(None);
-    }
-    let valid = match field {
-        "ams_mapping" => valid_ams_mapping(&value),
-        "ams_mapping2" => valid_ams_mapping2(&value),
-        "ams_mapping_info" => valid_ams_mapping_info(&value),
-        _ => unreachable!("validated mapping field should be known"),
-    };
-    if !valid {
+    if !validate_mapping_len(value.len()) {
         return Err(ApiError::bad_request("invalid_material_mapping"));
     }
     serde_json::to_string(&value)
@@ -53,20 +63,11 @@ pub fn mapping_json(value: Option<Value>, field: &'static str) -> Result<Option<
 impl JobMaterialResponse {
     pub fn from_job(job: &Job) -> Result<Self, RepositoryError> {
         Ok(Self {
-            ams_mapping: parse_persisted_mapping(
-                &job.ams_mapping_json,
-                "ams_mapping_json",
-                valid_ams_mapping,
-            )?,
-            ams_mapping2: parse_persisted_mapping(
-                &job.ams_mapping2_json,
-                "ams_mapping2_json",
-                valid_ams_mapping2,
-            )?,
+            ams_mapping: parse_persisted_mapping(&job.ams_mapping_json, "ams_mapping_json")?,
+            ams_mapping2: parse_persisted_mapping(&job.ams_mapping2_json, "ams_mapping2_json")?,
             ams_mapping_info: parse_persisted_mapping(
                 &job.ams_mapping_info_json,
                 "ams_mapping_info_json",
-                valid_ams_mapping_info,
             )?,
             filament_usage: job
                 .filament_usage
@@ -78,82 +79,22 @@ impl JobMaterialResponse {
     }
 }
 
-fn valid_ams_mapping(value: &Value) -> bool {
-    let Some(entries) = value.as_array() else {
-        return false;
-    };
-    entries.len() <= 32
-        && entries.iter().all(|entry| {
-            entry
-                .as_i64()
-                .and_then(|value| i32::try_from(value).ok())
-                .is_some()
-        })
-}
-
-fn valid_ams_mapping2(value: &Value) -> bool {
-    let Some(entries) = value.as_array() else {
-        return false;
-    };
-    entries.len() <= 32
-        && entries.iter().all(|entry| {
-            let Some(object) = entry.as_object() else {
-                return false;
-            };
-            if object.len() != 2 {
-                return false;
-            }
-            if object
-                .get("ams_id")
-                .and_then(Value::as_i64)
-                .and_then(|value| i32::try_from(value).ok())
-                .is_none()
-            {
-                return false;
-            }
-            if object
-                .get("slot_id")
-                .and_then(Value::as_i64)
-                .and_then(|value| i32::try_from(value).ok())
-                .is_none()
-            {
-                return false;
-            }
-            true
-        })
-}
-
-fn valid_ams_mapping_info(value: &Value) -> bool {
-    let Some(entries) = value.as_array() else {
-        return false;
-    };
-    entries.len() <= 32
-        && entries.iter().all(|entry| {
-            let Some(object) = entry.as_object() else {
-                return false;
-            };
-            object
-                .get("nozzleId")
-                .and_then(Value::as_i64)
-                .and_then(|value| i32::try_from(value).ok())
-                .is_some()
-        })
-}
-
-fn parse_persisted_mapping(
+fn parse_persisted_mapping<T>(
     value: &Option<String>,
     field: &'static str,
-    valid: fn(&Value) -> bool,
-) -> Result<Option<Value>, RepositoryError> {
+) -> Result<Option<Vec<T>>, RepositoryError>
+where
+    T: DeserializeOwned,
+{
     value
         .as_deref()
         .map(|value| {
-            let parsed = serde_json::from_str::<Value>(value).map_err(|err| {
+            let parsed = serde_json::from_str::<Vec<T>>(value).map_err(|err| {
                 RepositoryError::Database(
                     anyhow::Error::from(err).context(format!("failed to parse persisted {field}")),
                 )
             })?;
-            if valid(&parsed) {
+            if validate_mapping_len(parsed.len()) {
                 Ok(parsed)
             } else {
                 Err(RepositoryError::Database(anyhow::anyhow!(

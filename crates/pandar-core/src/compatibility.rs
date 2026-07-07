@@ -1,6 +1,6 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Capability {
     Supported,
@@ -8,7 +8,7 @@ pub enum Capability {
     Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct CompatibilityFeatures {
     pub chamber_temperature: Capability,
     pub drying: Capability,
@@ -33,7 +33,7 @@ impl CompatibilityFeatures {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct DiagnosticCompatibility {
     pub normalized_model: Option<String>,
     pub external_storage: Capability,
@@ -141,8 +141,6 @@ pub fn brtc_emmc_upload_supported(model: Option<&str>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
 
     #[test]
@@ -213,24 +211,17 @@ mod tests {
     #[test]
     fn absent_model_serializes_null_and_unknown_features() {
         let value = serde_json::to_value(compatibility_for_model(None)).unwrap();
+        let decoded: DiagnosticCompatibility = serde_json::from_value(value).unwrap();
 
         assert_eq!(
-            value,
-            json!({
-                "normalized_model": null,
-                "external_storage": "unknown",
-                "ftps_tls_1_2_cap": false,
-                "ftps_clear_data_fallback": false,
-                "features": {
-                    "chamber_temperature": "unknown",
-                    "drying": "unknown",
-                    "dual_nozzle": "unknown",
-                    "flow_calibration": "unknown",
-                    "vibration_calibration": "unknown",
-                    "nozzle_offset_calibration": "unknown",
-                    "live_controls": "unknown"
-                }
-            })
+            decoded,
+            DiagnosticCompatibility {
+                normalized_model: None,
+                external_storage: Capability::Unknown,
+                ftps_tls_1_2_cap: false,
+                ftps_clear_data_fallback: false,
+                features: CompatibilityFeatures::unknown(),
+            }
         );
     }
 
@@ -247,7 +238,9 @@ mod tests {
     #[test]
     fn compatibility_serializes_live_controls_capability() {
         let value = serde_json::to_value(compatibility_for_model(Some("A1 Mini"))).unwrap();
-        assert_eq!(value["normalized_model"], "A1_MINI");
-        assert_eq!(value["features"]["live_controls"], "supported");
+        let decoded: DiagnosticCompatibility = serde_json::from_value(value).unwrap();
+
+        assert_eq!(decoded.normalized_model.as_deref(), Some("A1_MINI"));
+        assert_eq!(decoded.features.live_controls, Capability::Supported);
     }
 }

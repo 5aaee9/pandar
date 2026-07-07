@@ -1,5 +1,6 @@
-use std::{sync::atomic::AtomicU32, time::Duration};
+use std::{collections::BTreeMap, sync::atomic::AtomicU32, time::Duration};
 
+use serde::Deserialize;
 use serde_json::json;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -44,10 +45,132 @@ fn request_command(payload: serde_json::Value) -> PublishedMqttCommand {
 }
 
 fn studio_sequence_id(payload: &serde_json::Value, section: &str) -> String {
-    let sequence_id = payload[section]["sequence_id"].as_str().unwrap();
+    let sections: BTreeMap<String, TestSequenceSection> =
+        serde_json::from_value(payload.clone()).unwrap();
+    let sequence_id = &sections.get(section).unwrap().sequence_id;
     let parsed = sequence_id.parse::<u32>().unwrap();
     assert!((20000..30000).contains(&parsed));
     sequence_id.to_string()
+}
+
+#[derive(Debug, Deserialize)]
+struct TestSequenceSection {
+    sequence_id: String,
+}
+
+fn project_file_payload(payload: serde_json::Value) -> TestProjectFilePayload {
+    serde_json::from_value(payload).unwrap()
+}
+
+fn material_patch_json(json: &str) -> TestMaterialPatch {
+    serde_json::from_str(json).unwrap()
+}
+
+fn chamber_light_payload(payload: serde_json::Value) -> TestChamberLightPayload {
+    serde_json::from_value(payload).unwrap()
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestChamberLightPayload {
+    system: TestChamberLightSystem,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestChamberLightSystem {
+    led_mode: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestProjectFilePayload {
+    print: TestProjectFilePrint,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestProjectFilePrint {
+    command: String,
+    sequence_id: String,
+    param: String,
+    project_id: String,
+    profile_id: String,
+    task_id: String,
+    subtask_id: String,
+    subtask_name: String,
+    url: String,
+    file: String,
+    md5: String,
+    bed_type: String,
+    bed_leveling: bool,
+    flow_cali: bool,
+    vibration_cali: bool,
+    layer_inspect: bool,
+    timelapse: bool,
+    use_ams: bool,
+    #[serde(default)]
+    ams_mapping: Vec<i64>,
+    #[serde(default)]
+    ams_mapping2: Vec<TestAmsMapping2>,
+    ams_mapping_info: Option<Vec<TestAmsMappingInfo>>,
+    auto_bed_leveling: u8,
+    nozzle_offset_cali: u8,
+    cfg: String,
+    extrude_cali_flag: u8,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestAmsMapping2 {
+    ams_id: i64,
+    slot_id: i64,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestAmsMappingInfo {
+    #[serde(rename = "nozzleId")]
+    nozzle_id: i64,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestMaterialPatch {
+    #[serde(rename = "type")]
+    document_type: String,
+    #[serde(default)]
+    ams_units: Vec<TestMaterialUnit>,
+    #[serde(default)]
+    external_spools: Vec<TestExternalSpool>,
+    active_tray: Option<TestActiveTray>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestMaterialUnit {
+    #[serde(default)]
+    trays: Vec<TestMaterialTray>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestMaterialTray {
+    #[serde(rename = "type")]
+    material_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestExternalSpool {
+    external_id: String,
+    filament_id: Option<String>,
+    color: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum TestActiveTray {
+    Ams {
+        global_tray_id: i64,
+        ams_id: String,
+        tray_id: String,
+    },
+    External {
+        external_id: String,
+        tray_id: String,
+        global_tray_id: Option<u64>,
+    },
 }
 
 #[test]
@@ -224,7 +347,10 @@ fn get_version_payload_matches_reference() {
 #[test]
 fn get_version_report_extracts_trimmed_ota_model() {
     assert_eq!(
-        model_from_get_version_report(&get_version_report(" P2S ")).unwrap(),
+        model_from_get_version_report(
+            parse_get_version_report(&get_version_report(" P2S ")).unwrap()
+        )
+        .unwrap(),
         "P2S"
     );
 }
@@ -238,7 +364,7 @@ fn get_version_report_rejects_missing_model() {
         }
     });
 
-    assert!(model_from_get_version_report(&report).is_err());
+    assert!(model_from_get_version_report(parse_get_version_report(&report).unwrap()).is_err());
 }
 
 #[test]
@@ -278,7 +404,7 @@ fn chamber_light_payload_matches_bambu_studio_reference() {
     );
 
     let off = BambuMqttCommand::SetChamberLight(false).payload();
-    assert_eq!(off["system"]["led_mode"], "off");
+    assert_eq!(chamber_light_payload(off).system.led_mode, "off");
 }
 
 #[test]
@@ -370,35 +496,34 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
 
     let sequence_id = studio_sequence_id(&payload, "print");
     assert_eq!(
-        payload,
-        json!({
-            "print": {
-                "command": "project_file",
-                "sequence_id": sequence_id,
-                "param": "Metadata/plate_2.gcode",
-                "project_id": "0",
-                "profile_id": "0",
-                "task_id": "0",
-                "subtask_id": "0",
-                "subtask_name": "job",
-                "url": "ftp://job.3mf",
-                "file": "job.3mf",
-                "md5": "",
-                "bed_type": "auto",
-                "bed_leveling": false,
-                "flow_cali": true,
-                "vibration_cali": false,
-                "layer_inspect": false,
-                "timelapse": false,
-                "use_ams": true,
-                "ams_mapping": [],
-                "ams_mapping2": [],
-                "auto_bed_leveling": 0,
-                "nozzle_offset_cali": 0,
-                "cfg": "0",
-                "extrude_cali_flag": 0
-            }
-        })
+        project_file_payload(payload).print,
+        TestProjectFilePrint {
+            command: "project_file".to_owned(),
+            sequence_id,
+            param: "Metadata/plate_2.gcode".to_owned(),
+            project_id: "0".to_owned(),
+            profile_id: "0".to_owned(),
+            task_id: "0".to_owned(),
+            subtask_id: "0".to_owned(),
+            subtask_name: "job".to_owned(),
+            url: "ftp://job.3mf".to_owned(),
+            file: "job.3mf".to_owned(),
+            md5: String::new(),
+            bed_type: "auto".to_owned(),
+            bed_leveling: false,
+            flow_cali: true,
+            vibration_cali: false,
+            layer_inspect: false,
+            timelapse: false,
+            use_ams: true,
+            ams_mapping: Vec::new(),
+            ams_mapping2: Vec::new(),
+            ams_mapping_info: None,
+            auto_bed_leveling: 0,
+            nozzle_offset_cali: 0,
+            cfg: "0".to_owned(),
+            extrude_cali_flag: 0,
+        }
     );
 }
 
@@ -420,9 +545,10 @@ fn project_file_payload_defaults_mapping_keys_when_no_mapping_supplied() {
     })
     .payload();
 
-    assert_eq!(payload["print"]["ams_mapping"], json!([]));
-    assert_eq!(payload["print"]["ams_mapping2"], json!([]));
-    assert_eq!(payload["print"]["use_ams"], false);
+    let print = project_file_payload(payload).print;
+    assert_eq!(print.ams_mapping, Vec::<i64>::new());
+    assert_eq!(print.ams_mapping2, Vec::<TestAmsMapping2>::new());
+    assert!(!print.use_ams);
 }
 
 #[test]
@@ -443,9 +569,10 @@ fn project_file_payload_includes_ams_mapping_only_when_supplied() {
     })
     .payload();
 
-    assert_eq!(payload["print"]["ams_mapping"], json!([0, -1, 4]));
-    assert_eq!(payload["print"]["ams_mapping2"], json!([]));
-    assert_eq!(payload["print"]["use_ams"], true);
+    let print = project_file_payload(payload).print;
+    assert_eq!(print.ams_mapping, vec![0, -1, 4]);
+    assert_eq!(print.ams_mapping2, Vec::<TestAmsMapping2>::new());
+    assert!(print.use_ams);
 }
 
 #[test]
@@ -466,10 +593,14 @@ fn project_file_payload_includes_ams_mapping2_only_when_supplied() {
     })
     .payload();
 
-    assert_eq!(payload["print"]["ams_mapping"], json!([]));
+    let print = project_file_payload(payload).print;
+    assert_eq!(print.ams_mapping, Vec::<i64>::new());
     assert_eq!(
-        payload["print"]["ams_mapping2"],
-        json!([{"ams_id": 255, "slot_id": 0}])
+        print.ams_mapping2,
+        vec![TestAmsMapping2 {
+            ams_id: 255,
+            slot_id: 0
+        }]
     );
 }
 
@@ -491,14 +622,21 @@ fn project_file_payload_includes_both_mapping_keys_when_supplied() {
     })
     .payload();
 
-    assert_eq!(payload["print"]["ams_mapping"], json!([0, 1]));
+    let print = project_file_payload(payload).print;
+    assert_eq!(print.ams_mapping, vec![0, 1]);
     assert_eq!(
-        payload["print"]["ams_mapping2"],
-        json!([{"ams_id": 0, "slot_id": 1}])
+        print.ams_mapping2,
+        vec![TestAmsMapping2 {
+            ams_id: 0,
+            slot_id: 1
+        }]
     );
     assert_eq!(
-        payload["print"]["ams_mapping_info"],
-        json!([{"nozzleId": 0}, {"nozzleId": 1}])
+        print.ams_mapping_info,
+        Some(vec![
+            TestAmsMappingInfo { nozzle_id: 0 },
+            TestAmsMappingInfo { nozzle_id: 1 }
+        ])
     );
 }
 
@@ -520,7 +658,10 @@ fn project_file_payload_rewrites_flat_external_mapping_values() {
     })
     .payload();
 
-    assert_eq!(payload["print"]["ams_mapping"], json!([-1, -1, 15]));
+    assert_eq!(
+        project_file_payload(payload).print.ams_mapping,
+        vec![-1, -1, 15]
+    );
 }
 
 #[tokio::test]
@@ -589,9 +730,12 @@ async fn refresh_printer_returns_material_patch_when_pushall_report_has_ams() {
 
     assert_eq!(refreshed.snapshot.serial, "01S00EXAMPLE");
     let materials = refreshed.materials.unwrap();
-    let patch: serde_json::Value = serde_json::from_str(&materials.printer_materials_json).unwrap();
-    assert_eq!(patch["type"], "printer_material_patch");
-    assert_eq!(patch["ams_units"][0]["trays"][0]["type"], "PLA");
+    let patch = material_patch_json(&materials.printer_materials_json);
+    assert_eq!(patch.document_type, "printer_material_patch");
+    assert_eq!(
+        patch.ams_units[0].trays[0].material_type.as_deref(),
+        Some("PLA")
+    );
 }
 
 #[tokio::test]
@@ -886,13 +1030,25 @@ fn print_report_from_report_populates_printer_materials_json() {
     });
 
     let progress = print_report_from_report(&endpoint(), &report);
-    let materials: serde_json::Value =
-        serde_json::from_str(&progress.printer_materials_json).unwrap();
+    let materials = material_patch_json(&progress.printer_materials_json);
 
-    assert_eq!(materials["external_spools"][0]["external_id"], "254");
-    assert_eq!(materials["external_spools"][0]["filament_id"], "GFL05");
-    assert_eq!(materials["external_spools"][0]["color"], "ABCDEF");
-    assert_eq!(materials["active_tray"]["kind"], "external");
+    assert_eq!(materials.external_spools[0].external_id, "254");
+    assert_eq!(
+        materials.external_spools[0].filament_id.as_deref(),
+        Some("GFL05")
+    );
+    assert_eq!(
+        materials.external_spools[0].color.as_deref(),
+        Some("ABCDEF")
+    );
+    assert_eq!(
+        materials.active_tray,
+        Some(TestActiveTray::External {
+            external_id: "254".to_owned(),
+            tray_id: "0".to_owned(),
+            global_tray_id: None,
+        })
+    );
 }
 
 #[tokio::test]
@@ -1064,10 +1220,12 @@ fn assert_material_snapshot(event: AgentEvent, serial: &str, printer_id: Option<
         agent_event::Event::PrinterMaterialsSnapshot(snapshot) => {
             assert_eq!(snapshot.serial, serial);
             assert_eq!(snapshot.printer_id, printer_id.unwrap_or_default());
-            let patch: serde_json::Value =
-                serde_json::from_str(&snapshot.printer_materials_json).unwrap();
-            assert_eq!(patch["type"], "printer_material_patch");
-            assert_eq!(patch["ams_units"][0]["trays"][0]["type"], "PLA");
+            let patch = material_patch_json(&snapshot.printer_materials_json);
+            assert_eq!(patch.document_type, "printer_material_patch");
+            assert_eq!(
+                patch.ams_units[0].trays[0].material_type.as_deref(),
+                Some("PLA")
+            );
         }
         other => panic!("expected printer materials snapshot, got {other:?}"),
     }

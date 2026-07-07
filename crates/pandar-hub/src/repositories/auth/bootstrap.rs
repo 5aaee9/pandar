@@ -1,14 +1,14 @@
 use anyhow::Context;
 use pandar_core::{Tenant, created_at_now};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ConnectionTrait, TransactionTrait};
-use serde_json::json;
+use serde::Serialize;
 
 use crate::{
     entities::tenants,
     repositories::{
         AuditEvent, AuthRepository, RepositoryError, RepositoryResult, TenantToken,
         TenantTokenScope, User, UserRole,
-        audit::{build_audit_event, insert_audit_event_tx},
+        audit::{audit_metadata, build_audit_event, insert_audit_event_tx},
         auth::{insert_user, tenant_tokens::insert_tenant_token},
         is_sea_orm_unique_violation,
     },
@@ -22,6 +22,23 @@ pub struct BootstrappedTenantAdmin {
     pub user: User,
     pub tenant_token: TenantToken,
     pub plaintext_token: String,
+}
+
+#[derive(Serialize)]
+struct BootstrapTenantAuditMetadata<'a> {
+    tenant_slug: &'a str,
+}
+
+#[derive(Serialize)]
+struct BootstrapUserAuditMetadata<'a> {
+    email: &'a str,
+    role: &'a str,
+}
+
+#[derive(Serialize)]
+struct BootstrapTenantTokenAuditMetadata<'a> {
+    name: &'a str,
+    created_by_user_id: &'a Option<String>,
 }
 
 impl AuthRepository {
@@ -121,7 +138,10 @@ fn bootstrap_audit_events(tenant: &Tenant, user: &User, token: &TenantToken) -> 
             action: "tenant.bootstrap".to_owned(),
             target_type: "tenant".to_owned(),
             target_id: Some(tenant.id.to_string()),
-            metadata_json: json!({ "tenant_slug": tenant.slug }).to_string(),
+            metadata_json: audit_metadata(BootstrapTenantAuditMetadata {
+                tenant_slug: &tenant.slug,
+            })
+            .to_string(),
         }),
         build_audit_event(crate::repositories::RecordAuditEvent {
             tenant_id: tenant.id,
@@ -130,7 +150,11 @@ fn bootstrap_audit_events(tenant: &Tenant, user: &User, token: &TenantToken) -> 
             action: "user.create".to_owned(),
             target_type: "user".to_owned(),
             target_id: Some(user.id.clone()),
-            metadata_json: json!({ "email": user.email, "role": user.role.as_str() }).to_string(),
+            metadata_json: audit_metadata(BootstrapUserAuditMetadata {
+                email: &user.email,
+                role: user.role.as_str(),
+            })
+            .to_string(),
         }),
         build_audit_event(crate::repositories::RecordAuditEvent {
             tenant_id: tenant.id,
@@ -139,9 +163,11 @@ fn bootstrap_audit_events(tenant: &Tenant, user: &User, token: &TenantToken) -> 
             action: "tenant_token.create".to_owned(),
             target_type: "tenant_token".to_owned(),
             target_id: Some(token.id.clone()),
-            metadata_json:
-                json!({ "name": token.name, "created_by_user_id": token.created_by_user_id })
-                    .to_string(),
+            metadata_json: audit_metadata(BootstrapTenantTokenAuditMetadata {
+                name: &token.name,
+                created_by_user_id: &token.created_by_user_id,
+            })
+            .to_string(),
         }),
     ]
 }

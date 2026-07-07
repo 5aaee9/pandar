@@ -1,7 +1,10 @@
+mod schema;
+
 use std::time::Duration;
 
 use anyhow::Context;
 use pandar_core::created_at_now;
+use schema::{DiagnosticObject, HmsEnvelope, NumericValue, PrintReportEnvelope};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
@@ -26,17 +29,19 @@ pub fn print_report_from_report(
     endpoint: &BambuPrinterEndpoint,
     report: &Value,
 ) -> PrintReportProgress {
-    let print = report.get("print").unwrap_or(&Value::Null);
-    let subtask_id = trimmed_string(print.get("subtask_id"));
+    let envelope =
+        serde_json::from_value::<PrintReportEnvelope>(report.clone()).unwrap_or_default();
+    let print = &envelope.print;
+    let subtask_id = trimmed_string(print.subtask_id.as_deref());
 
     let mut diagnostics = Vec::new();
-    if let Some(print_error) = print.get("print_error").and_then(diagnostic_message) {
+    if let Some(print_error) = print.print_error.as_ref().and_then(diagnostic_message) {
         diagnostics.push(MachineReportDiagnostic {
             kind: "print_error".to_owned(),
             severity: "error".to_owned(),
             code: None,
             message: print_error,
-            payload: print.get("print_error").cloned().unwrap_or(Value::Null),
+            payload: print.print_error.clone().unwrap_or(Value::Null),
         });
     }
     collect_hms_diagnostics(report, &mut diagnostics);
@@ -48,16 +53,16 @@ pub fn print_report_from_report(
 
     PrintReportProgress {
         serial: endpoint.serial.clone(),
-        job_id: trimmed_string(print.get("task_id")),
+        job_id: trimmed_string(print.task_id.as_deref()),
         artifact_id: subtask_id.clone(),
         subtask_id,
-        gcode_state: trimmed_string(print.get("gcode_state")),
-        percent: bounded_u32(print.get("mc_percent"), 0, 100).map(|value| value as u8),
-        remaining_time_minutes: bounded_u32(print.get("mc_remaining_time"), 0, 4320),
-        current_layer: bounded_u32(print.get("layer_num"), 0, 100_000),
-        total_layers: bounded_u32(print.get("total_layer_num"), 0, 100_000),
-        gcode_file: trimmed_string(print.get("gcode_file")),
-        subtask_name: trimmed_string(print.get("subtask_name")),
+        gcode_state: trimmed_string(print.gcode_state.as_deref()),
+        percent: bounded_u32(print.mc_percent.as_ref(), 0, 100).map(|value| value as u8),
+        remaining_time_minutes: bounded_u32(print.mc_remaining_time.as_ref(), 0, 4320),
+        current_layer: bounded_u32(print.layer_num.as_ref(), 0, 100_000),
+        total_layers: bounded_u32(print.total_layer_num.as_ref(), 0, 100_000),
+        gcode_file: trimmed_string(print.gcode_file.as_deref()),
+        subtask_name: trimmed_string(print.subtask_name.as_deref()),
         diagnostics,
         observed_at,
         printer_materials_json,
@@ -230,17 +235,16 @@ where
     Ok(())
 }
 
-pub(super) fn trimmed_string(value: Option<&Value>) -> Option<String> {
+pub(super) fn trimmed_string(value: Option<&str>) -> Option<String> {
     value
-        .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
 }
 
-fn bounded_u32(value: Option<&Value>, min: u32, max: u32) -> Option<u32> {
+fn bounded_u32(value: Option<&NumericValue>, min: u32, max: u32) -> Option<u32> {
     let value = match value? {
-        Value::Number(number) => {
+        NumericValue::Number(number) => {
             if let Some(value) = number.as_u64() {
                 u32::try_from(value).ok()?
             } else if let Some(value) = number.as_i64() {
@@ -253,8 +257,7 @@ fn bounded_u32(value: Option<&Value>, min: u32, max: u32) -> Option<u32> {
                 u32::try_from(value as u64).ok()?
             }
         }
-        Value::String(raw) => raw.trim().parse().ok()?,
-        _ => return None,
+        NumericValue::String(raw) => raw.trim().parse().ok()?,
     };
 
     (min..=max).contains(&value).then_some(value)
@@ -266,17 +269,17 @@ fn diagnostic_message(value: &Value) -> Option<String> {
             let trimmed = raw.trim();
             (!trimmed.is_empty()).then(|| trimmed.to_owned())
         }
-        Value::Object(_) => message_from_object(value),
+        Value::Object(_) => diagnostic_object(value).and_then(|object| object.message()),
         Value::Null => None,
         other => Some(other.to_string()).filter(|message| !message.is_empty()),
     }
 }
 
 fn collect_hms_diagnostics(report: &Value, diagnostics: &mut Vec<MachineReportDiagnostic>) {
-    for container in [report, report.get("print").unwrap_or(&Value::Null)] {
-        let Value::Object(fields) = container else {
-            continue;
-        };
+    let Ok(envelope) = serde_json::from_value::<HmsEnvelope>(report.clone()) else {
+        return;
+    };
+    for fields in [&envelope.fields, &envelope.print.fields] {
         for (key, value) in fields {
             if key.to_ascii_lowercase().contains("hms") {
                 collect_hms_value(value, diagnostics);
@@ -310,13 +313,13 @@ fn collect_hms_value(value: &Value, diagnostics: &mut Vec<MachineReportDiagnosti
 }
 
 fn code_from_object(value: &Value) -> Option<String> {
-    ["code", "hms_code", "error_code"]
-        .into_iter()
-        .find_map(|key| trimmed_string(value.get(key)))
+    diagnostic_object(value).and_then(|object| object.code())
 }
 
 fn message_from_object(value: &Value) -> Option<String> {
-    ["message", "msg", "description", "info"]
-        .into_iter()
-        .find_map(|key| trimmed_string(value.get(key)))
+    diagnostic_object(value).and_then(|object| object.message())
+}
+
+fn diagnostic_object(value: &Value) -> Option<DiagnosticObject> {
+    serde_json::from_value(value.clone()).ok()
 }

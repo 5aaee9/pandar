@@ -1,4 +1,173 @@
 use super::*;
+use serde::{Deserialize, de::IgnoredAny};
+
+#[derive(Debug, Deserialize)]
+struct LoginTicketResponse {
+    ticket: String,
+    expires_at: String,
+    redirect_url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExchangeLoginTicketResponse {
+    token: String,
+    expires_at: String,
+    profile: PluginProfileResponse,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginProfileResponse {
+    tenant_id: String,
+    tenant_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginPrinterListResponse {
+    message: String,
+    devices: Vec<PluginPrinterResponse>,
+    #[serde(default)]
+    printers: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginPrinterResponse {
+    dev_id: String,
+    dev_name: String,
+    name: String,
+    dev_ip: Option<String>,
+    dev_access_code: Option<String>,
+    dev_model_name: Option<String>,
+    model: Option<String>,
+    dev_online: bool,
+    online: bool,
+    task_status: String,
+    state: String,
+    pandar_printer_id: String,
+    nozzle_temperatures: Vec<PluginNozzleTemperatureResponse>,
+    active_nozzle: Option<String>,
+    bed_temperature_celsius: Option<String>,
+    bed_target_temperature_celsius: Option<String>,
+    chamber_temperature_celsius: Option<String>,
+    chamber_light_on: Option<bool>,
+    materials: PluginMaterialsResponse,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginNozzleTemperatureResponse {
+    current_celsius: Option<String>,
+    target_celsius: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginMaterialsResponse {
+    ams_units: Vec<PluginAmsUnitResponse>,
+    external_spools: Vec<PluginExternalSpoolResponse>,
+    active_tray: PluginActiveTrayResponse,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginAmsUnitResponse {
+    unit_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginExternalSpoolResponse {
+    external_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginActiveTrayResponse {
+    global_tray_id: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginPrintResponse {
+    task_id: String,
+    command_id: String,
+    status: String,
+    message: Option<String>,
+    artifact_metadata: Option<SlicerMetadataResponse>,
+    pandar_job_id: String,
+    #[serde(default)]
+    print: Option<Value>,
+    #[serde(default)]
+    artifact: Option<Value>,
+    #[serde(default)]
+    printer_id: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginJobListResponse {
+    jobs: Vec<PluginJobResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginJobResponse {
+    artifact_metadata: Option<SlicerMetadataResponse>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct SlicerMetadataResponse {
+    display_name: String,
+    default_plate_id: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginTokenAuditMetadata {
+    tenant_token_id: String,
+    tenant_token_scopes: Vec<String>,
+    token: Option<String>,
+    ticket: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AuditEventListResponse<T> {
+    audit_events: Vec<AuditEventResponse<T>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AuditEventResponse<T> {
+    action: String,
+    metadata: T,
+}
+
+#[derive(Debug, Deserialize)]
+struct RedactedAuditMetadata {
+    safe: String,
+    nested: RedactedNestedAuditMetadata,
+    subject: Option<String>,
+    plaintext_token: Option<String>,
+    ticket: Option<String>,
+    plaintext_ticket: Option<String>,
+    headers: RedactedHeaders,
+    artifact_storage_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct RedactedNestedAuditMetadata {
+    ok: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct RedactedHeaders {
+    #[serde(rename = "Authorization")]
+    authorization: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EmptyAuditMetadata {}
+
+#[derive(Debug, Deserialize)]
+struct ErrorResponse {
+    error: String,
+}
+
+fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
+    serde_json::from_value(value).unwrap()
+}
+
 #[tokio::test]
 async fn plugin_login_ticket_creation_enforces_external_viewer_or_all_tenant_token() {
     let state = state().await;
@@ -30,15 +199,11 @@ async fn plugin_login_ticket_creation_enforces_external_viewer_or_all_tenant_tok
 
     let (status, viewer_body) = request_as(app.clone(), Method::POST, &uri, body(), &viewer).await;
     assert_eq!(status, StatusCode::CREATED);
-    assert!(
-        viewer_body["ticket"]
-            .as_str()
-            .unwrap()
-            .starts_with("pandar_plugin_ticket_")
-    );
-    assert!(viewer_body["expires_at"].as_str().unwrap().ends_with('Z'));
+    let viewer_body = decode::<LoginTicketResponse>(viewer_body);
+    assert!(viewer_body.ticket.starts_with("pandar_plugin_ticket_"));
+    assert!(viewer_body.expires_at.ends_with('Z'));
     assert_eq!(
-        viewer_body["redirect_url"],
+        viewer_body.redirect_url,
         "http://localhost:4100/callback?state=abc"
     );
 
@@ -47,7 +212,7 @@ async fn plugin_login_ticket_creation_enforces_external_viewer_or_all_tenant_tok
     for denied in [&empty, &agent_register, &plugin_studio] {
         let (status, body) = request_as(app.clone(), Method::POST, &uri, body(), denied).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
-        assert_eq!(body, json!({ "error": "role_forbidden" }));
+        assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
     }
 
     for redirect_url in [
@@ -66,7 +231,7 @@ async fn plugin_login_ticket_creation_enforces_external_viewer_or_all_tenant_tok
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(body, json!({ "error": "invalid_redirect_url" }));
+        assert_eq!(decode::<ErrorResponse>(body).error, "invalid_redirect_url");
     }
 }
 
@@ -95,35 +260,31 @@ async fn plugin_login_ticket_exchange_is_unauthenticated_one_use_and_rejects_exp
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let ticket = created["ticket"].as_str().unwrap();
+    let ticket = decode::<LoginTicketResponse>(created).ticket;
 
     let (status, exchanged) = request(
         app.clone(),
         Method::POST,
         "/api/v1/plugin/login-tickets/exchange",
-        Some(json!({ "ticket": ticket })),
+        Some(json!({ "ticket": &ticket })),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(
-        exchanged["token"]
-            .as_str()
-            .unwrap()
-            .starts_with("pandar_plugin_")
-    );
-    assert!(exchanged["expires_at"].as_str().unwrap().ends_with('Z'));
-    assert_eq!(exchanged["profile"]["tenant_id"], tenant.id.to_string());
-    assert_eq!(exchanged["profile"]["tenant_name"], "Plugin Exchange");
+    let exchanged = decode::<ExchangeLoginTicketResponse>(exchanged);
+    assert!(exchanged.token.starts_with("pandar_plugin_"));
+    assert!(exchanged.expires_at.ends_with('Z'));
+    assert_eq!(exchanged.profile.tenant_id, tenant.id.to_string());
+    assert_eq!(exchanged.profile.tenant_name, "Plugin Exchange");
 
     let (status, body) = request(
         app.clone(),
         Method::POST,
         "/api/v1/plugin/login-tickets/exchange",
-        Some(json!({ "ticket": ticket })),
+        Some(json!({ "ticket": &ticket })),
     )
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "invalid_plugin_ticket" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_plugin_ticket");
 
     let expired = state
         .auth()
@@ -154,7 +315,7 @@ async fn plugin_login_ticket_exchange_is_unauthenticated_one_use_and_rejects_exp
     )
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "invalid_plugin_ticket" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_plugin_ticket");
 }
 
 #[tokio::test]
@@ -176,19 +337,28 @@ async fn plugin_no_auth_session_is_only_available_in_no_auth_mode() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    let token = session["token"].as_str().unwrap();
-    assert!(token.starts_with("pandar_tenant_"));
-    assert_eq!(session["profile"]["tenant_id"], tenant.id.to_string());
-    assert_eq!(session["profile"]["tenant_name"], "Plugin No Auth");
+    let session = decode::<ExchangeLoginTicketResponse>(session);
+    assert!(session.token.starts_with("pandar_tenant_"));
+    assert_eq!(session.profile.tenant_id, tenant.id.to_string());
+    assert_eq!(session.profile.tenant_name, "Plugin No Auth");
 
-    let (status, body) = request_as(app, Method::GET, "/api/v1/plugin/printers", None, token).await;
+    let (status, body) = request_as(
+        app,
+        Method::GET,
+        "/api/v1/plugin/printers",
+        None,
+        &session.token,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "message": "success", "devices": [] }));
+    let body = decode::<PluginPrinterListResponse>(body);
+    assert_eq!(body.message, "success");
+    assert!(body.devices.is_empty());
 
     let app = router(state().await);
     let (status, body) = request(app, Method::POST, "/api/v1/plugin/no-auth-session", None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "no_auth_required" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "no_auth_required");
 }
 
 #[tokio::test]
@@ -214,7 +384,9 @@ async fn plugin_routes_only_accept_plugin_studio_tokens() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "message": "success", "devices": [] }));
+    let body = decode::<PluginPrinterListResponse>(body);
+    assert_eq!(body.message, "success");
+    assert!(body.devices.is_empty());
 
     for denied in [&all, &empty, &mixed] {
         let (status, body) = request_as(
@@ -226,7 +398,7 @@ async fn plugin_routes_only_accept_plugin_studio_tokens() {
         )
         .await;
         assert_eq!(status, StatusCode::FORBIDDEN);
-        assert_eq!(body, json!({ "error": "role_forbidden" }));
+        assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
     }
 }
 
@@ -323,54 +495,50 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
         request_as(app, Method::GET, "/api/v1/plugin/printers", None, &token).await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["message"], "success");
-    assert!(body.get("printers").is_none());
-    assert_eq!(body["devices"].as_array().unwrap().len(), 1);
-    assert_eq!(body["devices"][0]["dev_id"], "studio-printer-1");
-    assert_eq!(body["devices"][0]["dev_name"], "Studio Printer");
-    assert_eq!(body["devices"][0]["name"], "Studio Printer");
-    assert_eq!(body["devices"][0]["dev_ip"], "192.0.2.10");
-    assert_eq!(body["devices"][0]["dev_access_code"], "studio-access-code");
-    assert_eq!(body["devices"][0]["dev_model_name"], "N6");
-    assert_eq!(body["devices"][0]["model"], "Bambu Lab X2D");
-    assert_eq!(body["devices"][0]["dev_online"], true);
-    assert_eq!(body["devices"][0]["online"], true);
-    assert_eq!(body["devices"][0]["task_status"], "IDLE");
-    assert_eq!(body["devices"][0]["state"], "IDLE");
-    assert_eq!(body["devices"][0]["pandar_printer_id"], printer.id);
+    let body = decode::<PluginPrinterListResponse>(body);
+    assert_eq!(body.message, "success");
+    assert_eq!(body.printers, None);
+    assert_eq!(body.devices.len(), 1);
+    let device = &body.devices[0];
+    assert_eq!(device.dev_id, "studio-printer-1");
+    assert_eq!(device.dev_name, "Studio Printer");
+    assert_eq!(device.name, "Studio Printer");
+    assert_eq!(device.dev_ip.as_deref(), Some("192.0.2.10"));
     assert_eq!(
-        body["devices"][0]["nozzle_temperatures"][0]["current_celsius"],
-        "28"
+        device.dev_access_code.as_deref(),
+        Some("studio-access-code")
+    );
+    assert_eq!(device.dev_model_name.as_deref(), Some("N6"));
+    assert_eq!(device.model.as_deref(), Some("Bambu Lab X2D"));
+    assert!(device.dev_online);
+    assert!(device.online);
+    assert_eq!(device.task_status, "IDLE");
+    assert_eq!(device.state, "IDLE");
+    assert_eq!(device.pandar_printer_id, printer.id);
+    assert_eq!(
+        device.nozzle_temperatures[0].current_celsius.as_deref(),
+        Some("28")
     );
     assert_eq!(
-        body["devices"][0]["nozzle_temperatures"][0]["target_celsius"],
-        "220"
+        device.nozzle_temperatures[0].target_celsius.as_deref(),
+        Some("220")
     );
     assert_eq!(
-        body["devices"][0]["nozzle_temperatures"][1]["current_celsius"],
-        "27"
+        device.nozzle_temperatures[1].current_celsius.as_deref(),
+        Some("27")
     );
     assert_eq!(
-        body["devices"][0]["nozzle_temperatures"][1]["target_celsius"],
-        "215"
+        device.nozzle_temperatures[1].target_celsius.as_deref(),
+        Some("215")
     );
-    assert_eq!(body["devices"][0]["active_nozzle"], "L");
-    assert_eq!(body["devices"][0]["bed_temperature_celsius"], "60");
-    assert_eq!(body["devices"][0]["bed_target_temperature_celsius"], "65");
-    assert_eq!(body["devices"][0]["chamber_temperature_celsius"], "32");
-    assert_eq!(body["devices"][0]["chamber_light_on"], true);
-    assert_eq!(
-        body["devices"][0]["materials"]["ams_units"][0]["unit_id"],
-        "0"
-    );
-    assert_eq!(
-        body["devices"][0]["materials"]["external_spools"][0]["external_id"],
-        "254"
-    );
-    assert_eq!(
-        body["devices"][0]["materials"]["active_tray"]["global_tray_id"],
-        0
-    );
+    assert_eq!(device.active_nozzle.as_deref(), Some("L"));
+    assert_eq!(device.bed_temperature_celsius.as_deref(), Some("60"));
+    assert_eq!(device.bed_target_temperature_celsius.as_deref(), Some("65"));
+    assert_eq!(device.chamber_temperature_celsius.as_deref(), Some("32"));
+    assert_eq!(device.chamber_light_on, Some(true));
+    assert_eq!(device.materials.ams_units[0].unit_id, "0");
+    assert_eq!(device.materials.external_spools[0].external_id, "254");
+    assert_eq!(device.materials.active_tray.global_tray_id, 0);
 }
 
 #[tokio::test]
@@ -402,15 +570,16 @@ async fn plugin_print_returns_job_shape_and_records_plugin_actor_metadata() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["status"], "queued");
-    assert_eq!(body["message"], Value::Null);
-    assert_eq!(body["artifact_metadata"], Value::Null);
-    assert!(body["task_id"].as_str().is_some());
-    assert!(body["command_id"].as_str().is_some());
-    assert_eq!(body["pandar_job_id"], body["task_id"]);
-    assert!(body.get("print").is_none());
-    assert!(body.get("artifact").is_none());
-    assert!(body.get("printer_id").is_none());
+    let body = decode::<PluginPrintResponse>(body);
+    assert_eq!(body.status, "queued");
+    assert_eq!(body.message, None);
+    assert_eq!(body.artifact_metadata, None);
+    assert!(!body.task_id.is_empty());
+    assert!(!body.command_id.is_empty());
+    assert_eq!(body.pandar_job_id, body.task_id);
+    assert_eq!(body.print, None);
+    assert_eq!(body.artifact, None);
+    assert_eq!(body.printer_id, None);
 
     let events = state
         .audit_events()
@@ -421,12 +590,15 @@ async fn plugin_print_returns_job_shape_and_records_plugin_actor_metadata() {
         .iter()
         .find(|event| event.action == "job.create")
         .unwrap();
-    let metadata: Value = serde_json::from_str(&event.metadata_json).unwrap();
+    let metadata: PluginTokenAuditMetadata = serde_json::from_str(&event.metadata_json).unwrap();
     assert_eq!(event.actor_type, "plugin_token");
-    assert!(metadata["tenant_token_id"].as_str().is_some());
-    assert_eq!(metadata["tenant_token_scopes"], json!(["plugin:studio"]));
-    assert!(metadata.get("token").is_none());
-    assert!(metadata.get("ticket").is_none());
+    assert!(!metadata.tenant_token_id.is_empty());
+    assert_eq!(
+        metadata.tenant_token_scopes,
+        vec!["plugin:studio".to_owned()]
+    );
+    assert_eq!(metadata.token, None);
+    assert_eq!(metadata.ticket, None);
 }
 
 #[tokio::test]
@@ -478,9 +650,10 @@ async fn plugin_print_handles_concurrent_sqlite_writes() {
 
     for (status, body) in responses {
         assert_eq!(status, StatusCode::CREATED, "{body}");
-        assert_eq!(body["status"], "queued");
-        assert!(body["task_id"].as_str().is_some());
-        assert!(body["command_id"].as_str().is_some());
+        let body = decode::<PluginPrintResponse>(body);
+        assert_eq!(body.status, "queued");
+        assert!(!body.task_id.is_empty());
+        assert!(!body.command_id.is_empty());
     }
 }
 
@@ -514,15 +687,15 @@ async fn plugin_print_and_list_include_artifact_metadata() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["artifact_metadata"]["display_name"], "plate file");
-    assert_eq!(body["artifact_metadata"]["default_plate_id"], 1);
+    let body = decode::<PluginPrintResponse>(body);
+    let artifact_metadata = body.artifact_metadata.unwrap();
+    assert_eq!(artifact_metadata.display_name, "plate file");
+    assert_eq!(artifact_metadata.default_plate_id, 1);
 
     let (status, list) = request_as(app, Method::GET, "/api/v1/plugin/jobs", None, &token).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(
-        list["jobs"][0]["artifact_metadata"],
-        body["artifact_metadata"]
-    );
+    let list = decode::<PluginJobListResponse>(list);
+    assert_eq!(list.jobs[0].artifact_metadata, Some(artifact_metadata));
 }
 
 #[tokio::test]
@@ -575,7 +748,7 @@ async fn plugin_print_wakes_agent_on_sibling_instance() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["status"], "queued");
+    assert_eq!(decode::<PluginPrintResponse>(body).status, "queued");
     tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
         .await
         .expect("sibling agent should be woken")
@@ -641,9 +814,9 @@ async fn audit_events_route_authorizes_paginates_filters_and_redacts_metadata() 
     let uri = format!("/api/v1/tenants/{}/audit-events?limit=1", tenant.id);
     let (status, body) = request_as(app.clone(), Method::GET, &uri, None, &admin).await;
     assert_eq!(status, StatusCode::OK);
-    let events = body["audit_events"].as_array().unwrap();
-    assert_eq!(events.len(), 1);
-    assert_eq!(events[0]["action"], "second.action");
+    let body = decode::<AuditEventListResponse<IgnoredAny>>(body);
+    assert_eq!(body.audit_events.len(), 1);
+    assert_eq!(body.audit_events[0].action, "second.action");
 
     let uri = format!(
         "/api/v1/tenants/{}/audit-events?before=2026-06-21T00:00:00Z&action=first.action",
@@ -651,15 +824,16 @@ async fn audit_events_route_authorizes_paginates_filters_and_redacts_metadata() 
     );
     let (status, body) = request_as(app.clone(), Method::GET, &uri, None, &all).await;
     assert_eq!(status, StatusCode::OK);
-    let metadata = &body["audit_events"][0]["metadata"];
-    assert_eq!(metadata["safe"], "keep");
-    assert_eq!(metadata["nested"], json!({ "ok": true }));
-    assert!(metadata.get("subject").is_none());
-    assert!(metadata.get("plaintext_token").is_none());
-    assert!(metadata.get("ticket").is_none());
-    assert!(metadata.get("plaintext_ticket").is_none());
-    assert!(metadata["headers"].get("Authorization").is_none());
-    assert!(metadata.get("artifact_storage_path").is_none());
+    let body = decode::<AuditEventListResponse<RedactedAuditMetadata>>(body);
+    let metadata = &body.audit_events[0].metadata;
+    assert_eq!(metadata.safe, "keep");
+    assert_eq!(metadata.nested, RedactedNestedAuditMetadata { ok: true });
+    assert_eq!(metadata.subject, None);
+    assert_eq!(metadata.plaintext_token, None);
+    assert_eq!(metadata.ticket, None);
+    assert_eq!(metadata.plaintext_ticket, None);
+    assert_eq!(metadata.headers.authorization, None);
+    assert_eq!(metadata.artifact_storage_path, None);
 
     let (status, body) = request_as(
         app.clone(),
@@ -670,11 +844,11 @@ async fn audit_events_route_authorizes_paginates_filters_and_redacts_metadata() 
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_limit" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_limit");
 
     let (status, body) = request_as(app, Method::GET, &uri, None, &viewer).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 }
 
 #[tokio::test]
@@ -712,7 +886,8 @@ async fn audit_events_route_falls_back_to_empty_metadata_for_invalid_persisted_j
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["audit_events"][0]["metadata"], json!({}));
+    let body = decode::<AuditEventListResponse<EmptyAuditMetadata>>(body);
+    assert_eq!(body.audit_events.len(), 1);
 }
 
 async fn insert_audit_fixture(

@@ -1,4 +1,111 @@
 use super::*;
+use serde::{Deserialize, de::DeserializeOwned};
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct MeResponse {
+    identity: ExternalIdentityResponse,
+    tenants: Vec<ExternalMembershipResponse>,
+    can_self_create_tenant: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct ExternalIdentityResponse {
+    provider: String,
+    subject: String,
+    email: Option<String>,
+    email_verified: Option<bool>,
+    display_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct ExternalMembershipResponse {
+    tenant_id: String,
+    tenant_slug: String,
+    display_name: String,
+    role: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct TenantResponse {
+    id: String,
+    slug: String,
+    display_name: String,
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CreatedTenantResponse {
+    tenant: TenantResponse,
+    membership: ExternalMembershipResponse,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct AcceptedMembershipResponse {
+    user_id: String,
+    role: String,
+    created: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AcceptedJoinLinkResponse {
+    tenant: TenantResponse,
+    membership: AcceptedMembershipResponse,
+    created: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct JoinLinkResponse {
+    id: String,
+    tenant_id: String,
+    role: String,
+    email_constraint: Option<String>,
+    expires_at: String,
+    max_uses: i32,
+    used_count: i32,
+    created_by_user_id: Option<String>,
+    revoked_at: Option<String>,
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct JoinLinkWithPlaintextResponse {
+    join_link: JoinLinkResponse,
+    token: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct JoinLinkListResponse {
+    join_links: Vec<JoinLinkResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ErrorResponse {
+    error: String,
+}
+
+fn decode<T>(body: serde_json::Value) -> T
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_value(body).unwrap()
+}
 
 #[tokio::test]
 async fn me_returns_external_identity_and_memberships_without_side_effects() {
@@ -16,11 +123,12 @@ async fn me_returns_external_identity_and_memberships_without_side_effects() {
     let (status, body) = request_as(app, Method::GET, "/api/v1/me", None, &token).await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["identity"]["provider"], TEST_PROVIDER);
-    assert_eq!(body["identity"]["subject"], "me-subject");
-    assert_eq!(body["tenants"].as_array().unwrap().len(), 1);
-    assert_eq!(body["tenants"][0]["tenant_id"], tenant.id.to_string());
-    assert_eq!(body["tenants"][0]["role"], "operator");
+    let body = decode::<MeResponse>(body);
+    assert_eq!(body.identity.provider, TEST_PROVIDER);
+    assert_eq!(body.identity.subject, "me-subject");
+    assert_eq!(body.tenants.len(), 1);
+    assert_eq!(body.tenants[0].tenant_id, tenant.id.to_string());
+    assert_eq!(body.tenants[0].role, "operator");
 }
 
 #[tokio::test]
@@ -32,10 +140,14 @@ async fn me_succeeds_with_unverified_email_and_reports_onboarding_blocked() {
     let (status, body) = request_as(app, Method::GET, "/api/v1/me", None, &token).await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["identity"]["email"], "unverified@example.test");
-    assert_eq!(body["identity"]["email_verified"], false);
-    assert_eq!(body["tenants"], json!([]));
-    assert_eq!(body["can_self_create_tenant"], true);
+    let body = decode::<MeResponse>(body);
+    assert_eq!(
+        body.identity.email.as_deref(),
+        Some("unverified@example.test")
+    );
+    assert_eq!(body.identity.email_verified, Some(false));
+    assert!(body.tenants.is_empty());
+    assert!(body.can_self_create_tenant);
 }
 
 #[tokio::test]
@@ -58,7 +170,7 @@ async fn me_rejects_tenant_tokens() {
     let (status, body) = request_as(app, Method::GET, "/api/v1/me", None, &token).await;
 
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_auth_token");
 }
 
 #[tokio::test]
@@ -77,9 +189,10 @@ async fn self_create_tenant_creates_admin_projection() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["tenant"]["slug"], "creator-lab");
-    assert_eq!(body["membership"]["role"], "tenant_admin");
-    let tenant_id = TenantId::parse(body["tenant"]["id"].as_str().unwrap()).unwrap();
+    let body = decode::<CreatedTenantResponse>(body);
+    assert_eq!(body.tenant.slug, "creator-lab");
+    assert_eq!(body.membership.role, "tenant_admin");
+    let tenant_id = TenantId::parse(&body.tenant.id).unwrap();
     assert!(
         state
             .auth()
@@ -106,7 +219,10 @@ async fn self_create_tenant_can_be_disabled() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "tenant_self_create_disabled" }));
+    assert_eq!(
+        decode::<ErrorResponse>(body).error,
+        "tenant_self_create_disabled"
+    );
 }
 
 #[tokio::test]
@@ -136,8 +252,9 @@ async fn self_create_tenant_allows_identity_with_existing_membership() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["tenant"]["slug"], "second-tenant");
-    assert_eq!(body["membership"]["role"], "tenant_admin");
+    let body = decode::<CreatedTenantResponse>(body);
+    assert_eq!(body.tenant.slug, "second-tenant");
+    assert_eq!(body.membership.role, "tenant_admin");
 }
 
 #[tokio::test]
@@ -171,19 +288,14 @@ async fn tenant_admin_can_create_list_and_revoke_join_links() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(created["join_link"]["role"], "operator");
+    let created = decode::<JoinLinkWithPlaintextResponse>(created);
+    assert_eq!(created.join_link.role, "operator");
     assert_eq!(
-        created["join_link"]["email_constraint"],
-        "member@example.test"
+        created.join_link.email_constraint.as_deref(),
+        Some("member@example.test")
     );
-    assert!(
-        created["token"]
-            .as_str()
-            .unwrap()
-            .starts_with("pandar_join")
-    );
-    assert!(created["join_link"].get("token_hash").is_none());
-    let join_link_id = created["join_link"]["id"].as_str().unwrap();
+    assert!(created.token.starts_with("pandar_join"));
+    let join_link_id = created.join_link.id.clone();
 
     let (status, listed) = request_as(
         app.clone(),
@@ -194,9 +306,7 @@ async fn tenant_admin_can_create_list_and_revoke_join_links() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(listed["join_links"].as_array().unwrap().len(), 1);
-    assert!(listed["join_links"][0].get("token").is_none());
-    assert!(listed["join_links"][0].get("token_hash").is_none());
+    assert_eq!(decode::<JoinLinkListResponse>(listed).join_links.len(), 1);
 
     let (status, revoked) = request_as(
         app,
@@ -207,7 +317,7 @@ async fn tenant_admin_can_create_list_and_revoke_join_links() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(revoked["revoked_at"].as_str().is_some());
+    assert!(decode::<JoinLinkResponse>(revoked).revoked_at.is_some());
 }
 
 #[tokio::test]
@@ -235,7 +345,9 @@ async fn tenant_tokens_cannot_manage_join_links() {
         &admin,
     )
     .await;
-    let join_link_id = created["join_link"]["id"].as_str().unwrap();
+    let join_link_id = decode::<JoinLinkWithPlaintextResponse>(created)
+        .join_link
+        .id;
 
     let (status, body) = request_as(
         app.clone(),
@@ -246,7 +358,7 @@ async fn tenant_tokens_cannot_manage_join_links() {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 
     let (status, body) = request_as(
         app.clone(),
@@ -257,7 +369,7 @@ async fn tenant_tokens_cannot_manage_join_links() {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 
     let (status, body) = request_as(
         app,
@@ -268,7 +380,7 @@ async fn tenant_tokens_cannot_manage_join_links() {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 }
 
 #[tokio::test]
@@ -295,7 +407,7 @@ async fn join_link_accept_creates_member_from_body_token() {
         &admin,
     )
     .await;
-    let token = created["token"].as_str().unwrap();
+    let token = decode::<JoinLinkWithPlaintextResponse>(created).token;
     let member = jwt_for_profile("join-member", "member@example.test", true, "Member");
 
     let (status, accepted) = request_as(
@@ -308,11 +420,12 @@ async fn join_link_accept_creates_member_from_body_token() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(accepted["tenant"]["id"], tenant.id.to_string());
-    assert_eq!(accepted["membership"]["role"], "viewer");
-    assert!(accepted["membership"]["user_id"].as_str().is_some());
-    assert_eq!(accepted["membership"]["created"], true);
-    assert_eq!(accepted["created"], true);
+    let accepted = decode::<AcceptedJoinLinkResponse>(accepted);
+    assert_eq!(accepted.tenant.id, tenant.id.to_string());
+    assert_eq!(accepted.membership.role, "viewer");
+    assert!(!accepted.membership.user_id.is_empty());
+    assert!(accepted.membership.created);
+    assert!(accepted.created);
 }
 
 #[tokio::test]
@@ -339,19 +452,23 @@ async fn join_link_accept_rejects_email_mismatch() {
         &admin,
     )
     .await;
+    let created = decode::<JoinLinkWithPlaintextResponse>(created);
     let wrong = jwt_for_profile("wrong-email", "wrong@example.test", true, "Wrong");
 
     let (status, body) = request_as(
         app,
         Method::POST,
         "/api/v1/join-links/accept",
-        Some(json!({ "token": created["token"].as_str().unwrap() })),
+        Some(json!({ "token": created.token })),
         &wrong,
     )
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "join_link_email_mismatch" }));
+    assert_eq!(
+        decode::<ErrorResponse>(body).error,
+        "join_link_email_mismatch"
+    );
 }
 
 #[tokio::test]
@@ -378,20 +495,22 @@ async fn join_link_accept_existing_member_keeps_role() {
         &admin,
     )
     .await;
+    let created = decode::<JoinLinkWithPlaintextResponse>(created);
 
     let (status, accepted) = request_as(
         app,
         Method::POST,
         "/api/v1/join-links/accept",
-        Some(json!({ "token": created["token"].as_str().unwrap() })),
+        Some(json!({ "token": created.token })),
         &admin,
     )
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(accepted["membership"]["role"], "tenant_admin");
-    assert_eq!(accepted["membership"]["created"], false);
-    assert_eq!(accepted["created"], false);
+    let accepted = decode::<AcceptedJoinLinkResponse>(accepted);
+    assert_eq!(accepted.membership.role, "tenant_admin");
+    assert!(!accepted.membership.created);
+    assert!(!accepted.created);
 }
 
 #[tokio::test]
@@ -418,7 +537,7 @@ async fn join_link_audit_metadata_redacts_subject_and_secret() {
         &admin,
     )
     .await;
-    let token = created["token"].as_str().unwrap().to_owned();
+    let token = decode::<JoinLinkWithPlaintextResponse>(created).token;
     let member = jwt_for_profile(
         "raw-route-subject-secret",
         "audit-member@example.test",

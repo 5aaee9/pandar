@@ -1,20 +1,43 @@
 use super::*;
+use serde::Deserialize;
 use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
 static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+#[derive(Deserialize)]
+struct ReadyzResponse {
+    status: String,
+    checks: ReadyzChecks,
+}
+
+#[derive(Deserialize)]
+struct ReadyzChecks {
+    database: Option<ReadyzCheck>,
+    artifact_storage: ReadyzCheck,
+    external_auth: Option<ReadyzCheck>,
+    spool: Option<ReadyzCheck>,
+}
+
+#[derive(Deserialize)]
+struct ReadyzCheck {
+    ready: bool,
+    detail: Option<String>,
+}
 
 #[tokio::test]
 async fn readyz_reports_disabled_external_auth_as_ready() {
     let (status, body) = request(router(raw_state().await), Method::GET, "/readyz", None).await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["status"], "ready");
-    assert_eq!(body["checks"]["database"]["ready"], true);
-    assert_eq!(body["checks"]["artifact_storage"]["ready"], true);
-    assert!(body["checks"].get("spool").is_none());
-    assert_eq!(body["checks"]["external_auth"]["ready"], true);
-    assert_eq!(body["checks"]["external_auth"]["detail"], "disabled");
+    let body: ReadyzResponse = serde_json::from_value(body).unwrap();
+    assert_eq!(body.status, "ready");
+    assert!(body.checks.database.unwrap().ready);
+    assert!(body.checks.artifact_storage.ready);
+    assert!(body.checks.spool.is_none());
+    let external_auth = body.checks.external_auth.unwrap();
+    assert!(external_auth.ready);
+    assert_eq!(external_auth.detail.as_deref(), Some("disabled"));
 }
 
 #[tokio::test]
@@ -34,9 +57,10 @@ async fn readyz_reports_artifact_storage_failure() {
     let (status, body) = request(app, Method::GET, "/readyz", None).await;
 
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    assert_eq!(body["status"], "not_ready");
-    assert_eq!(body["checks"]["artifact_storage"]["ready"], false);
-    assert!(body["checks"].get("spool").is_none());
+    let body: ReadyzResponse = serde_json::from_value(body).unwrap();
+    assert_eq!(body.status, "not_ready");
+    assert!(!body.checks.artifact_storage.ready);
+    assert!(body.checks.spool.is_none());
 }
 
 #[tokio::test]
@@ -52,11 +76,12 @@ async fn readyz_reports_filesystem_not_shared_for_postgres_nats() {
     let (status, body) = request(app, Method::GET, "/readyz", None).await;
 
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    assert_eq!(body["status"], "not_ready");
-    assert_eq!(body["checks"]["artifact_storage"]["ready"], false);
+    let body: ReadyzResponse = serde_json::from_value(body).unwrap();
+    assert_eq!(body.status, "not_ready");
+    assert!(!body.checks.artifact_storage.ready);
     assert_eq!(
-        body["checks"]["artifact_storage"]["detail"],
-        "filesystem_not_shared"
+        body.checks.artifact_storage.detail.as_deref(),
+        Some("filesystem_not_shared")
     );
 }
 
@@ -72,7 +97,8 @@ async fn metrics_reports_ready_with_explicit_shared_filesystem_override() {
 
     let (status, body) = request(app.clone(), Method::GET, "/readyz", None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["checks"]["artifact_storage"]["ready"], true);
+    let body: ReadyzResponse = serde_json::from_value(body).unwrap();
+    assert!(body.checks.artifact_storage.ready);
 
     let response = app
         .oneshot(

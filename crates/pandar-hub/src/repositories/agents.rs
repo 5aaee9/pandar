@@ -4,6 +4,7 @@ use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, PaginatorTrait,
     QueryFilter, QueryOrder, TransactionTrait,
 };
+use serde::Serialize;
 
 mod pairing;
 mod rows;
@@ -17,7 +18,7 @@ use crate::{
     entities::{agents, tenants},
     repositories::{
         AuditActor, RepositoryError, RepositoryResult,
-        audit::{insert_audit_event_tx, record_audit_event},
+        audit::{EmptyAuditMetadata, audit_metadata, insert_audit_event_tx, record_audit_event},
         auth::hash_token,
         is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
     },
@@ -34,6 +35,12 @@ pub struct AgentCredentialRecord {
     pub credential_hash: Option<String>,
     pub credential_rotated_at: Option<String>,
     pub credential_revoked_at: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AgentDeleteAuditMetadata<'a> {
+    agent_name: &'a str,
+    previous_status: &'a str,
 }
 
 impl AgentRepository {
@@ -69,7 +76,7 @@ impl AgentRepository {
             "agent.create",
             "agent",
             Some(agent.id.to_string()),
-            serde_json::json!({}),
+            audit_metadata(EmptyAuditMetadata {}),
         );
         insert_audit_event_tx(&tx, &event).await?;
         tx.commit()
@@ -146,9 +153,9 @@ impl AgentRepository {
                 "agent.delete",
                 "agent",
                 Some(agent_id.to_string()),
-                serde_json::json!({
-                    "agent_name": agent.name.clone(),
-                    "previous_status": agent.status.as_str(),
+                audit_metadata(AgentDeleteAuditMetadata {
+                    agent_name: &agent.name,
+                    previous_status: agent.status.as_str(),
                 }),
             ),
         )
@@ -280,7 +287,7 @@ impl AgentRepository {
                 "agent.credential_rotate",
                 "agent",
                 Some(agent_id.to_string()),
-                serde_json::json!({}),
+                audit_metadata(EmptyAuditMetadata {}),
             ),
         )
         .await?;
@@ -329,7 +336,7 @@ impl AgentRepository {
                 "agent.credential_revoke",
                 "agent",
                 Some(agent_id.to_string()),
-                serde_json::json!({}),
+                audit_metadata(EmptyAuditMetadata {}),
             ),
         )
         .await?;

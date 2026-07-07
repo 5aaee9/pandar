@@ -6,6 +6,7 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use async_trait::async_trait;
+use serde::Deserialize;
 use serde_json::json;
 use tokio::{sync::Mutex, sync::mpsc};
 
@@ -566,6 +567,70 @@ pub(super) fn test_config() -> AgentConfig {
     }
 }
 
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestPrinterLinkResult {
+    #[serde(rename = "type")]
+    kind: String,
+    serial_number: String,
+    host: String,
+    name: String,
+    model: String,
+    status: String,
+}
+
+#[derive(Debug, Default, Deserialize, PartialEq)]
+struct TestPrinterOperationResult {
+    #[serde(rename = "type")]
+    kind: String,
+    action: String,
+    serial_number: String,
+    speed_mode: Option<u8>,
+    extruder_id: Option<u32>,
+    x_mm: Option<f64>,
+    y_mm: Option<f64>,
+    z_mm: Option<f64>,
+    feedrate_mm_per_min: Option<f64>,
+    temperature_celsius: Option<u16>,
+    wait: Option<bool>,
+    light_on: Option<bool>,
+    ams_id: Option<u32>,
+    slot_id: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestMaterialPatch {
+    #[serde(rename = "type")]
+    kind: String,
+    ams_units: Vec<TestMaterialPatchAmsUnit>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestMaterialPatchAmsUnit {
+    trays: Vec<TestMaterialPatchTray>,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestMaterialPatchTray {
+    #[serde(rename = "type")]
+    filament_type: String,
+}
+
+fn link_result(result_json: &str) -> TestPrinterLinkResult {
+    serde_json::from_str(result_json).unwrap()
+}
+
+fn operation_result(result_json: &str) -> TestPrinterOperationResult {
+    serde_json::from_str(result_json).unwrap()
+}
+
+fn empty_operation_result() -> TestPrinterOperationResult {
+    TestPrinterOperationResult::default()
+}
+
+fn material_patch(result_json: &str) -> TestMaterialPatch {
+    serde_json::from_str(result_json).unwrap()
+}
+
 fn snapshot(serial: &str, name: &str, model: Option<&str>, state: &str) -> MachineSnapshot {
     MachineSnapshot {
         serial: serial.to_owned(),
@@ -604,10 +669,17 @@ fn assert_material_snapshot(event: AgentEvent, serial: &str, printer_id: Option<
         agent_event::Event::PrinterMaterialsSnapshot(snapshot) => {
             assert_eq!(snapshot.serial, serial);
             assert_eq!(snapshot.printer_id, printer_id.unwrap_or_default());
-            let patch: serde_json::Value =
-                serde_json::from_str(&snapshot.printer_materials_json).unwrap();
-            assert_eq!(patch["type"], "printer_material_patch");
-            assert_eq!(patch["ams_units"][0]["trays"][0]["type"], "PLA");
+            assert_eq!(
+                material_patch(&snapshot.printer_materials_json),
+                TestMaterialPatch {
+                    kind: "printer_material_patch".to_owned(),
+                    ams_units: vec![TestMaterialPatchAmsUnit {
+                        trays: vec![TestMaterialPatchTray {
+                            filament_type: "PLA".to_owned(),
+                        }],
+                    }],
+                }
+            );
         }
         other => panic!("expected printer materials snapshot, got {other:?}"),
     }
@@ -859,13 +931,17 @@ async fn link_printer_emits_ack_snapshot_and_success_without_access_code() {
         agent_event::Event::CommandResult(result) => {
             assert!(result.success);
             assert!(!result.result_json.contains(access_code));
-            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["type"], "printer_link");
-            assert_eq!(json["serial_number"], "SERIAL123");
-            assert_eq!(json["host"], "192.0.2.10");
-            assert_eq!(json["name"], "Office X1C");
-            assert_eq!(json["model"], "X1 Carbon");
-            assert_eq!(json["status"], "READY");
+            assert_eq!(
+                link_result(&result.result_json),
+                TestPrinterLinkResult {
+                    kind: "printer_link".to_owned(),
+                    serial_number: "SERIAL123".to_owned(),
+                    host: "192.0.2.10".to_owned(),
+                    name: "Office X1C".to_owned(),
+                    model: "X1 Carbon".to_owned(),
+                    status: "READY".to_owned(),
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }
@@ -1300,10 +1376,15 @@ async fn printer_operation_valid_emits_ack_and_success_with_result_json() {
         agent_event::Event::CommandResult(result) => {
             assert_eq!(result.command_id, command_id);
             assert!(result.success);
-            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["type"], "printer_operation");
-            assert_eq!(json["action"], "pause");
-            assert_eq!(json["serial_number"], "SERIAL1");
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "pause".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    ..empty_operation_result()
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }
@@ -1348,10 +1429,17 @@ async fn printer_operation_ams_reread_rfid_emits_material_snapshot_after_dispatc
         agent_event::Event::CommandResult(result) => {
             assert_eq!(result.command_id, command_id);
             assert!(result.success);
-            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["action"], "ams_reread_rfid");
-            assert_eq!(json["ams_id"], 1);
-            assert_eq!(json["slot_id"], 2);
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "ams_reread_rfid".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    ams_id: Some(1),
+                    slot_id: Some(2),
+                    ..empty_operation_result()
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }
@@ -1753,9 +1841,16 @@ async fn printer_operation_does_not_reject_missing_local_model() {
         agent_event::Event::CommandResult(result) => {
             assert_eq!(result.command_id, command_id);
             assert!(result.success);
-            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["action"], "set_print_speed");
-            assert_eq!(json["speed_mode"], 4);
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "set_print_speed".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    speed_mode: Some(4),
+                    ..empty_operation_result()
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }
@@ -1792,10 +1887,16 @@ async fn printer_operation_select_extruder_dispatches_typed_details() {
     match receiver.recv().await.unwrap().event.unwrap() {
         agent_event::Event::CommandResult(result) => {
             assert!(result.success);
-            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["type"], "printer_operation");
-            assert_eq!(json["action"], "select_extruder");
-            assert_eq!(json["extruder_id"], 1);
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "select_extruder".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    extruder_id: Some(1),
+                    ..empty_operation_result()
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }
@@ -1832,13 +1933,18 @@ async fn printer_operation_move_axes_dispatches_typed_details() {
     match receiver.recv().await.unwrap().event.unwrap() {
         agent_event::Event::CommandResult(result) => {
             assert!(result.success);
-            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["type"], "printer_operation");
-            assert_eq!(json["action"], "move_axes");
-            assert_eq!(json["x_mm"], 10.0);
-            assert_eq!(json["z_mm"], -0.5);
-            assert_eq!(json["feedrate_mm_per_min"], 3000.0);
-            assert!(json.get("y_mm").is_none());
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "move_axes".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    x_mm: Some(10.0),
+                    z_mm: Some(-0.5),
+                    feedrate_mm_per_min: Some(3000.0),
+                    ..empty_operation_result()
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }
@@ -1880,12 +1986,17 @@ async fn printer_operation_hotend_dispatches_typed_details() {
     match receiver.recv().await.unwrap().event.unwrap() {
         agent_event::Event::CommandResult(result) => {
             assert!(result.success);
-            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["type"], "printer_operation");
-            assert_eq!(json["action"], "set_hotend_temperature");
-            assert_eq!(json["temperature_celsius"], 215);
-            assert_eq!(json["wait"], true);
-            assert!(json.get("extruder_id").is_none());
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "set_hotend_temperature".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    temperature_celsius: Some(215),
+                    wait: Some(true),
+                    ..empty_operation_result()
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }
@@ -1926,10 +2037,18 @@ async fn printer_operation_targeted_hotend_dispatches_extruder_id() {
     match receiver.recv().await.unwrap().event.unwrap() {
         agent_event::Event::CommandResult(result) => {
             assert!(result.success);
-            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["action"], "set_hotend_temperature");
-            assert_eq!(json["temperature_celsius"], 220);
-            assert_eq!(json["extruder_id"], 1);
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "set_hotend_temperature".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    temperature_celsius: Some(220),
+                    extruder_id: Some(1),
+                    wait: Some(false),
+                    ..empty_operation_result()
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }
@@ -1970,10 +2089,17 @@ async fn printer_operation_bed_temperature_dispatches_typed_details() {
     match receiver.recv().await.unwrap().event.unwrap() {
         agent_event::Event::CommandResult(result) => {
             assert!(result.success);
-            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["action"], "set_bed_temperature");
-            assert_eq!(json["temperature_celsius"], 75);
-            assert_eq!(json["wait"], false);
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "set_bed_temperature".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    temperature_celsius: Some(75),
+                    wait: Some(false),
+                    ..empty_operation_result()
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }
@@ -2013,10 +2139,17 @@ async fn printer_operation_chamber_temperature_dispatches_typed_details() {
     match receiver.recv().await.unwrap().event.unwrap() {
         agent_event::Event::CommandResult(result) => {
             assert!(result.success);
-            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["action"], "set_chamber_temperature");
-            assert_eq!(json["temperature_celsius"], 45);
-            assert_eq!(json["wait"], false);
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "set_chamber_temperature".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    temperature_celsius: Some(45),
+                    wait: Some(false),
+                    ..empty_operation_result()
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }
@@ -2062,8 +2195,15 @@ async fn printer_operation_toggle_light_dispatches_typed_action() {
     match receiver.recv().await.unwrap().event.unwrap() {
         agent_event::Event::CommandResult(result) => {
             assert!(result.success);
-            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["action"], "toggle_light");
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "toggle_light".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    ..empty_operation_result()
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }
@@ -2103,9 +2243,16 @@ async fn printer_operation_set_chamber_light_dispatches_requested_state() {
     match receiver.recv().await.unwrap().event.unwrap() {
         agent_event::Event::CommandResult(result) => {
             assert!(result.success);
-            let json: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(json["action"], "set_chamber_light");
-            assert_eq!(json["light_on"], true);
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "set_chamber_light".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    light_on: Some(true),
+                    ..empty_operation_result()
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }

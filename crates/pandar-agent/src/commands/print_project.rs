@@ -1,4 +1,6 @@
 use anyhow::Context;
+use serde::Serialize;
+use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::{
@@ -98,21 +100,21 @@ where
 
     match result {
         Ok(dispatch) => {
-            let result_json = serde_json::json!({
-                "type": "print_project_file",
-                "serial_number": command.serial_number,
-                "job_id": command.job_id,
-                "artifact_id": command.artifact_id,
-                "uploaded_path": dispatch.uploaded_path,
-                "uploaded_url": dispatch.uploaded_url,
-                "md5": dispatch.md5,
-                "mqtt": {
-                    "topic": dispatch.topic,
-                    "qos": dispatch.qos,
-                    "payload": dispatch.payload,
+            let result_json = serde_json::to_string(&PrintProjectFileResult {
+                kind: "print_project_file",
+                serial_number: &command.serial_number,
+                job_id: &command.job_id,
+                artifact_id: &command.artifact_id,
+                uploaded_path: &dispatch.uploaded_path,
+                uploaded_url: &dispatch.uploaded_url,
+                md5: &dispatch.md5,
+                mqtt: PrintProjectMqttResult {
+                    topic: &dispatch.topic,
+                    qos: dispatch.qos,
+                    payload: &dispatch.payload,
                 },
             })
-            .to_string();
+            .expect("print-project-file result is serializable");
             sender
                 .send(success_event_with_result(config, command_id, result_json))
                 .await
@@ -128,6 +130,26 @@ where
     }
 
     Ok(())
+}
+
+#[derive(Serialize)]
+struct PrintProjectFileResult<'a> {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    serial_number: &'a str,
+    job_id: &'a str,
+    artifact_id: &'a str,
+    uploaded_path: &'a str,
+    uploaded_url: &'a str,
+    md5: &'a str,
+    mqtt: PrintProjectMqttResult<'a>,
+}
+
+#[derive(Serialize)]
+struct PrintProjectMqttResult<'a> {
+    topic: &'a str,
+    qos: u8,
+    payload: &'a Value,
 }
 
 fn read_print_artifact_context(command: &PrintProjectFile) -> String {

@@ -1,13 +1,18 @@
 use anyhow::Context;
 use pandar_core::{TenantId, created_at_now};
 use sea_orm::TransactionTrait;
-use serde_json::json;
+use serde::Serialize;
 
 use crate::repositories::{
     AuditActor, AuditEvent, AuthRepository, RepositoryResult, UserIdentity,
-    audit::{insert_audit_event_tx, record_audit_event},
+    audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
     auth::identities::insert_identity,
 };
+
+#[derive(Serialize)]
+struct IdentityAuditMetadata<'a> {
+    provider: &'a str,
+}
 
 impl AuthRepository {
     pub async fn link_external_identity_with_audit(
@@ -54,6 +59,8 @@ fn identity_audit_event(identity: &UserIdentity, actor: AuditActor) -> AuditEven
         "user_identity.link",
         "user_identity",
         Some(identity.id.clone()),
-        json!({ "provider": identity.provider }),
+        audit_metadata(IdentityAuditMetadata {
+            provider: &identity.provider,
+        }),
     )
 }

@@ -1,4 +1,5 @@
 use anyhow::Context;
+use serde::Deserialize;
 use serde_json::Value;
 
 use crate::machine::mqtt::{
@@ -35,6 +36,22 @@ struct ChamberLightReport {
     on: bool,
 }
 
+#[derive(Debug, Deserialize)]
+struct PrinterReport {
+    print: Option<PrintSection>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PrintSection {
+    lights_report: Option<Vec<LightReport>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LightReport {
+    node: Option<String>,
+    mode: Option<String>,
+}
+
 async fn latest_chamber_light_report<T>(mqtt: &T) -> anyhow::Result<ChamberLightReport>
 where
     T: BambuMqttTransport + Send + Sync,
@@ -55,16 +72,15 @@ where
 }
 
 fn chamber_light_report(report: &Value) -> Option<ChamberLightReport> {
-    let lights = report.pointer("/print/lights_report")?.as_array()?;
+    let report = serde_json::from_value::<PrinterReport>(report.clone()).ok()?;
+    let lights = report.print?.lights_report?;
     let mut on = None;
     for light in lights {
-        let Some(node @ ("chamber_light" | "chamber_light2")) =
-            light.get("node").and_then(Value::as_str)
-        else {
+        let Some(node @ ("chamber_light" | "chamber_light2")) = light.node.as_deref() else {
             continue;
         };
         if node == "chamber_light" || on.is_none() {
-            on = Some(light.get("mode").and_then(Value::as_str) == Some("on"));
+            on = Some(light.mode.as_deref() == Some("on"));
         }
     }
 

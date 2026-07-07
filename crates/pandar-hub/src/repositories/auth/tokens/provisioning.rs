@@ -1,13 +1,19 @@
 use anyhow::Context;
 use pandar_core::{TenantId, created_at_now};
 use sea_orm::TransactionTrait;
-use serde_json::json;
+use serde::Serialize;
 
 use crate::repositories::{
     ApiToken, AuditEvent, AuthRepository, RepositoryResult,
-    audit::{build_audit_event, insert_audit_event_tx},
+    audit::{audit_metadata, build_audit_event, insert_audit_event_tx},
     auth::{hash_token, insert_api_token, tokens::revoke_api_token},
 };
+
+#[derive(Serialize)]
+struct ApiTokenAuditMetadata<'a> {
+    name: &'a str,
+    user_id: &'a str,
+}
 
 impl AuthRepository {
     pub async fn create_api_token_with_audit(
@@ -78,7 +84,11 @@ fn api_token_audit_event(token: &ApiToken, actor_user_id: String) -> AuditEvent 
         action: "api_token.create".to_owned(),
         target_type: "api_token".to_owned(),
         target_id: Some(token.id.clone()),
-        metadata_json: json!({ "name": token.name, "user_id": token.user_id }).to_string(),
+        metadata_json: audit_metadata(ApiTokenAuditMetadata {
+            name: &token.name,
+            user_id: &token.user_id,
+        })
+        .to_string(),
     })
 }
 
@@ -90,6 +100,10 @@ fn api_token_revoke_audit_event(token: &ApiToken, actor_user_id: String) -> Audi
         action: "api_token.revoke".to_owned(),
         target_type: "api_token".to_owned(),
         target_id: Some(token.id.clone()),
-        metadata_json: json!({ "name": token.name, "user_id": token.user_id }).to_string(),
+        metadata_json: audit_metadata(ApiTokenAuditMetadata {
+            name: &token.name,
+            user_id: &token.user_id,
+        })
+        .to_string(),
     })
 }

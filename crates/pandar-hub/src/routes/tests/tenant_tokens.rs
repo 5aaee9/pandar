@@ -1,7 +1,90 @@
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
+use serde::{Deserialize, de::DeserializeOwned};
 
 use super::*;
 use crate::entities::{audit_events, tenant_tokens};
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct TenantTokenResponse {
+    id: String,
+    tenant_id: String,
+    name: String,
+    scopes: Vec<String>,
+    created_by_user_id: Option<String>,
+    created_at: String,
+    last_used_at: Option<String>,
+    expires_at: Option<String>,
+    revoked_at: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TenantTokenWithPlaintextResponse {
+    tenant_token: TenantTokenResponse,
+    token: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RotatedTenantTokenResponse {
+    tenant_token: TenantTokenResponse,
+    token: String,
+    rotated_from_token_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RevokeTenantTokenResponse {
+    tenant_token: TenantTokenResponse,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TenantTokenListResponse {
+    tenant_tokens: Vec<TenantTokenResponse>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ErrorResponse {
+    error: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentsResponse {
+    agents: Vec<serde::de::IgnoredAny>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct UserResponse {
+    id: String,
+    tenant_id: String,
+    email: String,
+    display_name: String,
+    role: String,
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UserCreateAuditMetadata {
+    email: String,
+    role: String,
+    tenant_token_id: String,
+    tenant_token_scopes: Vec<String>,
+}
+
+fn decode<T>(body: serde_json::Value) -> T
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_value(body).unwrap()
+}
 
 #[tokio::test]
 async fn tenant_token_routes_create_list_rotate_and_revoke_without_exposing_hashes() {
@@ -29,19 +112,14 @@ async fn tenant_token_routes_create_list_rotate_and_revoke_without_exposing_hash
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(created["tenant_token"]["name"], "Studio");
+    let created = decode::<TenantTokenWithPlaintextResponse>(created);
+    assert_eq!(created.tenant_token.name, "Studio");
     assert_eq!(
-        created["tenant_token"]["scopes"],
-        json!(["*", "agent:register"])
+        created.tenant_token.scopes,
+        vec!["*".to_owned(), "agent:register".to_owned()]
     );
-    assert!(
-        created["token"]
-            .as_str()
-            .unwrap()
-            .starts_with("pandar_tenant_")
-    );
-    assert!(created.get("token_hash").is_none());
-    let token_id = created["tenant_token"]["id"].as_str().unwrap();
+    assert!(created.token.starts_with("pandar_tenant_"));
+    let token_id = created.tenant_token.id.clone();
 
     let (status, listed) = request_as(
         app.clone(),
@@ -52,9 +130,8 @@ async fn tenant_token_routes_create_list_rotate_and_revoke_without_exposing_hash
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(listed["tenant_tokens"].as_array().unwrap().len(), 1);
-    assert!(listed["tenant_tokens"][0].get("token").is_none());
-    assert!(listed["tenant_tokens"][0].get("token_hash").is_none());
+    let listed = decode::<TenantTokenListResponse>(listed);
+    assert_eq!(listed.tenant_tokens.len(), 1);
 
     let (status, rotated) = request_as(
         app.clone(),
@@ -68,15 +145,11 @@ async fn tenant_token_routes_create_list_rotate_and_revoke_without_exposing_hash
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(rotated["rotated_from_token_id"], token_id);
-    assert_ne!(rotated["tenant_token"]["id"], token_id);
-    assert!(
-        rotated["token"]
-            .as_str()
-            .unwrap()
-            .starts_with("pandar_tenant_")
-    );
-    assert_ne!(rotated["token"], created["token"]);
+    let rotated = decode::<RotatedTenantTokenResponse>(rotated);
+    assert_eq!(rotated.rotated_from_token_id, token_id);
+    assert_ne!(rotated.tenant_token.id, token_id);
+    assert!(rotated.token.starts_with("pandar_tenant_"));
+    assert_ne!(rotated.token, created.token);
 
     let (status, revoked) = request_as(
         app,
@@ -87,8 +160,8 @@ async fn tenant_token_routes_create_list_rotate_and_revoke_without_exposing_hash
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(revoked["tenant_token"]["revoked_at"].as_str().is_some());
-    assert!(revoked.get("token").is_none());
+    let revoked = decode::<RevokeTenantTokenResponse>(revoked);
+    assert!(revoked.tenant_token.revoked_at.is_some());
 }
 
 #[tokio::test]
@@ -111,7 +184,7 @@ async fn tenant_token_scopes_enforce_read_all_agent_register_and_plugin_studio()
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "agents": [] }));
+    assert!(decode::<AgentsResponse>(body).agents.is_empty());
 
     let (status, body) = request_as(
         app.clone(),
@@ -122,7 +195,7 @@ async fn tenant_token_scopes_enforce_read_all_agent_register_and_plugin_studio()
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 
     let (status, body) = request_as(
         app.clone(),
@@ -133,7 +206,7 @@ async fn tenant_token_scopes_enforce_read_all_agent_register_and_plugin_studio()
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 
     let (status, _) = request_as(
         app.clone(),
@@ -174,7 +247,7 @@ async fn tenant_token_scopes_enforce_read_all_agent_register_and_plugin_studio()
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 
     let (status, body) = request_as(
         app,
@@ -185,7 +258,7 @@ async fn tenant_token_scopes_enforce_read_all_agent_register_and_plugin_studio()
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 }
 
 #[tokio::test]
@@ -219,7 +292,7 @@ async fn tenant_token_create_rejects_unknown_scope() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_scope" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_scope");
 }
 
 #[tokio::test]
@@ -252,7 +325,7 @@ async fn tenant_token_create_requires_scopes_but_allows_explicit_empty_scopes() 
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "bad_request" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "bad_request");
 
     let (status, body) = request_as(
         app,
@@ -268,7 +341,8 @@ async fn tenant_token_create_requires_scopes_but_allows_explicit_empty_scopes() 
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["tenant_token"]["scopes"], json!([]));
+    let body = decode::<TenantTokenWithPlaintextResponse>(body);
+    assert_eq!(body.tenant_token.scopes, Vec::<String>::new());
 }
 
 #[tokio::test]
@@ -302,7 +376,7 @@ async fn tenant_token_create_and_rotate_reject_invalid_expires_at() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_expires_at" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_expires_at");
 
     let (status, created) = request_as(
         app.clone(),
@@ -317,7 +391,9 @@ async fn tenant_token_create_and_rotate_reject_invalid_expires_at() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let token_id = created["tenant_token"]["id"].as_str().unwrap();
+    let token_id = decode::<TenantTokenWithPlaintextResponse>(created)
+        .tenant_token
+        .id;
 
     let (status, body) = request_as(
         app,
@@ -332,7 +408,7 @@ async fn tenant_token_create_and_rotate_reject_invalid_expires_at() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_expires_at" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_expires_at");
 }
 
 #[tokio::test]
@@ -377,7 +453,10 @@ async fn all_scope_tenant_token_without_creator_can_perform_admin_mutation() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["email"], "created-by-token@example.test");
+    assert_eq!(
+        decode::<UserResponse>(body).email,
+        "created-by-token@example.test"
+    );
 
     let event = audit_events::Entity::find()
         .filter(audit_events::Column::TenantId.eq(tenant.id.to_string()))
@@ -443,7 +522,10 @@ async fn tenant_token_audit_actor_preserves_creator_and_token_metadata() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["email"], "created-by-creator-token@example.test");
+    assert_eq!(
+        decode::<UserResponse>(body).email,
+        "created-by-creator-token@example.test"
+    );
 
     let event = audit_events::Entity::find()
         .filter(audit_events::Column::TenantId.eq(tenant.id.to_string()))
@@ -454,10 +536,11 @@ async fn tenant_token_audit_actor_preserves_creator_and_token_metadata() {
         .unwrap();
     assert_eq!(event.actor_type, "tenant_token");
     assert_eq!(event.user_id, Some(user.id));
-    let metadata = serde_json::from_str::<serde_json::Value>(&event.metadata_json).unwrap();
-    assert_eq!(metadata["tenant_token_id"], token_id);
-    assert_eq!(metadata["tenant_token_scopes"], json!(["*"]));
-    assert_eq!(metadata["email"], "created-by-creator-token@example.test");
+    let metadata = serde_json::from_str::<UserCreateAuditMetadata>(&event.metadata_json).unwrap();
+    assert_eq!(metadata.tenant_token_id, token_id);
+    assert_eq!(metadata.tenant_token_scopes, vec!["*".to_owned()]);
+    assert_eq!(metadata.email, "created-by-creator-token@example.test");
+    assert_eq!(metadata.role, "viewer");
 }
 
 #[tokio::test]
@@ -504,7 +587,7 @@ async fn expired_and_revoked_tenant_tokens_are_rejected() {
         )
         .await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
-        assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+        assert_eq!(decode::<ErrorResponse>(body).error, "invalid_auth_token");
     }
 }
 
@@ -555,6 +638,6 @@ async fn retired_api_token_routes_always_return_gone() {
         )
         .await;
         assert_eq!(status, StatusCode::GONE);
-        assert_eq!(body, json!({ "error": "api_tokens_retired" }));
+        assert_eq!(decode::<ErrorResponse>(body).error, "api_tokens_retired");
     }
 }

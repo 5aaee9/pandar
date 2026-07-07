@@ -1,9 +1,12 @@
 use std::{
+    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context, bail};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone)]
 pub struct InstallNetworkPluginOptions {
@@ -86,19 +89,13 @@ fn patch_bambu_studio_config(path: &Path) -> anyhow::Result<()> {
     let raw =
         fs::read_to_string(path).with_context(|| format!("read config {}", path.display()))?;
     let json_body = strip_md5_checksum(&raw);
-    let mut config: serde_json::Value = serde_json::from_str(json_body)
+    let mut config: BambuStudioConfig = serde_json::from_str(json_body)
         .with_context(|| format!("parse config JSON {}", path.display()))?;
-    let Some(app) = config
-        .get_mut("app")
-        .and_then(serde_json::Value::as_object_mut)
-    else {
-        bail!("BambuStudio.conf has no app object");
-    };
 
-    app.insert("installed_networking".to_owned(), "1".into());
-    app.insert("update_network_plugin".to_owned(), "false".into());
+    config.app.installed_networking = "1".to_owned();
+    config.app.update_network_plugin = "false".to_owned();
     if cfg!(any(target_os = "windows", target_os = "macos")) {
-        app.insert("ignore_module_cert".to_owned(), "1".into());
+        config.app.ignore_module_cert = Some("1".to_owned());
     }
 
     let backup_path = path.with_extension("conf.pandar-bak");
@@ -117,6 +114,25 @@ fn patch_bambu_studio_config(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct BambuStudioConfig {
+    app: BambuStudioAppConfig,
+    #[serde(flatten)]
+    extra: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct BambuStudioAppConfig {
+    #[serde(default)]
+    installed_networking: String,
+    #[serde(default)]
+    update_network_plugin: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ignore_module_cert: Option<String>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, Value>,
+}
+
 fn strip_md5_checksum(raw: &str) -> &str {
     raw.split_once("\n# MD5 checksum")
         .map_or(raw.trim(), |(json, _)| json.trim())
@@ -124,7 +140,21 @@ fn strip_md5_checksum(raw: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+    use serde::Deserialize;
+
     use super::*;
+
+    #[derive(Debug, Deserialize)]
+    struct TestBambuStudioConfig {
+        app: TestBambuStudioAppConfig,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct TestBambuStudioAppConfig {
+        installed_networking: String,
+        update_network_plugin: String,
+        ignore_module_cert: Option<String>,
+    }
 
     #[test]
     fn installs_specified_file_as_bambu_studio_network_plugin() {
@@ -169,16 +199,18 @@ mod tests {
         patch_bambu_studio_config(&config_path).expect("patch config");
 
         let patched = fs::read_to_string(config_path).expect("read config");
-        let config: serde_json::Value = serde_json::from_str(
+        let config: TestBambuStudioConfig = serde_json::from_str(
             patched
                 .trim_end()
                 .trim_end_matches("# MD5 checksum 00000000000000000000000000000000"),
         )
         .expect("parse patched config");
-        assert_eq!(config["app"]["installed_networking"], "1");
-        assert_eq!(config["app"]["update_network_plugin"], "false");
+        assert_eq!(config.app.installed_networking, "1");
+        assert_eq!(config.app.update_network_plugin, "false");
         if cfg!(any(target_os = "windows", target_os = "macos")) {
-            assert_eq!(config["app"]["ignore_module_cert"], "1");
+            assert_eq!(config.app.ignore_module_cert.as_deref(), Some("1"));
+        } else {
+            assert_eq!(config.app.ignore_module_cert, None);
         }
     }
 }

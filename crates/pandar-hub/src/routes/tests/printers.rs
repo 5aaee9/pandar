@@ -5,20 +5,125 @@ use std::{
 
 use super::*;
 use pandar_core::{AgentId, TenantId};
-use serde_json::json;
+use serde::Deserialize;
+use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tonic::Status;
 use tracing_subscriber::fmt::MakeWriter;
 
 use crate::protocol::agent::v1::{CameraStreamMode, HubCommand, hub_camera_command, hub_command};
 
+#[derive(Debug, Deserialize)]
+struct TenantResponse {
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AgentResponse {
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PrinterListResponse {
+    printers: Vec<PrinterResponse>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct PrinterResponse {
+    id: String,
+    tenant_id: String,
+    agent_id: String,
+    name: String,
+    materials: Option<PrinterMaterialsResponse>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct PrinterMaterialsResponse {
+    ams_units: Vec<AmsUnitResponse>,
+    external_spools: Vec<ExternalSpoolResponse>,
+    active_tray: Option<ActiveTrayResponse>,
+    observed_at: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct AmsUnitResponse {
+    unit_id: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct ExternalSpoolResponse {
+    external_id: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct ActiveTrayResponse {
+    kind: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommandResponse {
+    id: String,
+    tenant_id: String,
+    agent_id: String,
+    printer_id: Option<String>,
+    kind: String,
+    status: String,
+    payload_json: String,
+    error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PrinterOperationPayload {
+    operation: PrinterOperation,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+enum PrinterOperation {
+    #[serde(rename = "ams_load_filament")]
+    AmsLoadFilament {
+        ams_id: u32,
+        slot_id: u32,
+        global_tray_id: u32,
+        extruder_id: u32,
+    },
+    #[serde(rename = "select_extruder")]
+    SelectExtruder { extruder_id: u32 },
+}
+
+#[derive(Debug, Deserialize)]
+struct RefreshPrinterMaterialsPayload {
+    printer_id: String,
+    serial_number: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LinkPrinterPayload {
+    printer_type: String,
+    host: String,
+    access_code: String,
+    name: String,
+    serial_number: Option<String>,
+    model: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ErrorResponse {
+    error: String,
+}
+
+fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
+    serde_json::from_value(value).unwrap()
+}
+
 #[tokio::test]
 async fn printer_list_returns_tenant_printers() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
@@ -33,10 +138,12 @@ async fn printer_list_returns_tenant_printers() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["printers"][0]["id"], printer_id);
-    assert_eq!(body["printers"][0]["tenant_id"], tenant_id.to_string());
-    assert_eq!(body["printers"][0]["agent_id"], agent_id.to_string());
-    assert_eq!(body["printers"][0]["materials"], serde_json::Value::Null);
+    let body = decode::<PrinterListResponse>(body);
+    let printer = body.printers.first().unwrap();
+    assert_eq!(printer.id, printer_id);
+    assert_eq!(printer.tenant_id, tenant_id.to_string());
+    assert_eq!(printer.agent_id, agent_id.to_string());
+    assert_eq!(printer.materials, None);
 }
 
 #[tokio::test]
@@ -44,8 +151,8 @@ async fn printer_detail_returns_tenant_printer() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
@@ -60,9 +167,10 @@ async fn printer_detail_returns_tenant_printer() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["id"], printer_id);
-    assert_eq!(body["tenant_id"], tenant_id.to_string());
-    assert_eq!(body["materials"], serde_json::Value::Null);
+    let body = decode::<PrinterResponse>(body);
+    assert_eq!(body.id, printer_id);
+    assert_eq!(body.tenant_id, tenant_id.to_string());
+    assert_eq!(body.materials, None);
 }
 
 #[tokio::test]
@@ -70,8 +178,8 @@ async fn printer_camera_stream_opens_agent_camera_tunnel() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
@@ -120,8 +228,8 @@ async fn tenant_admin_can_delete_printer() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
@@ -136,7 +244,7 @@ async fn tenant_admin_can_delete_printer() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["id"], printer_id);
+    assert_eq!(decode::<PrinterResponse>(body).id, printer_id);
 
     let (status, body) = request_as(
         app,
@@ -166,8 +274,8 @@ async fn viewer_cannot_delete_printer() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, _) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
@@ -197,8 +305,8 @@ async fn update_printer_updates_details_without_agent_session() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
@@ -218,8 +326,10 @@ async fn update_printer_updates_details_without_agent_session() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["name"], "Office A1 Updated");
-    assert!(!body.to_string().contains(access_code));
+    let body_text = body.to_string();
+    let body = decode::<PrinterResponse>(body);
+    assert_eq!(body.name, "Office A1 Updated");
+    assert!(!body_text.contains(access_code));
 
     let printer = state
         .printers()
@@ -237,8 +347,8 @@ async fn update_printer_keeps_existing_connection_when_fields_are_blank_without_
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
@@ -264,8 +374,10 @@ async fn update_printer_keeps_existing_connection_when_fields_are_blank_without_
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["name"], "Office A1 Updated");
-    assert!(!body.to_string().contains("EXISTING-LINK-CODE"));
+    let body_text = body.to_string();
+    let body = decode::<PrinterResponse>(body);
+    assert_eq!(body.name, "Office A1 Updated");
+    assert!(!body_text.contains("EXISTING-LINK-CODE"));
     let printer = state
         .printers()
         .get_for_tenant(tenant_id, &printer_id)
@@ -282,8 +394,8 @@ async fn printer_routes_return_material_snapshots_without_credentials() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
@@ -336,22 +448,6 @@ async fn printer_routes_return_material_snapshots_without_credentials() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(
-        body["printers"][0]["materials"]["observed_at"],
-        "2026-06-23T01:02:03Z"
-    );
-    assert_eq!(
-        body["printers"][0]["materials"]["ams_units"][0]["unit_id"],
-        "0"
-    );
-    assert_eq!(
-        body["printers"][0]["materials"]["external_spools"][0]["external_id"],
-        "254"
-    );
-    assert_eq!(
-        body["printers"][0]["materials"]["active_tray"]["kind"],
-        "ams"
-    );
     assert!(!body.to_string().contains("secret-token"));
     assert!(!body.to_string().contains("secret-auth"));
     assert!(!body.to_string().contains("secret-passwd"));
@@ -360,6 +456,12 @@ async fn printer_routes_return_material_snapshots_without_credentials() {
     assert!(!body.to_string().contains("auth"));
     assert!(!body.to_string().contains("passwd"));
     assert!(!body.to_string().contains("access_code"));
+    let body = decode::<PrinterListResponse>(body);
+    let materials = body.printers[0].materials.as_ref().unwrap();
+    assert_eq!(materials.observed_at, "2026-06-23T01:02:03Z");
+    assert_eq!(materials.ams_units[0].unit_id, "0");
+    assert_eq!(materials.external_spools[0].external_id, "254");
+    assert_eq!(materials.active_tray.as_ref().unwrap().kind, "ams");
 
     let (status, detail) = request_as(
         app,
@@ -370,7 +472,8 @@ async fn printer_routes_return_material_snapshots_without_credentials() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(detail["materials"], body["printers"][0]["materials"]);
+    let detail = decode::<PrinterResponse>(detail);
+    assert_eq!(detail.materials.as_ref(), Some(materials));
 }
 
 #[tokio::test]
@@ -378,8 +481,8 @@ async fn printer_control_enqueues_ams_slot_operation() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
         state.database(),
         tenant_id,
@@ -405,14 +508,23 @@ async fn printer_control_enqueues_ams_slot_operation() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "printer_operation");
-    let payload: serde_json::Value =
-        serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
-    assert_eq!(payload["operation"]["type"], "ams_load_filament");
-    assert_eq!(payload["operation"]["ams_id"], 0);
-    assert_eq!(payload["operation"]["slot_id"], 1);
-    assert_eq!(payload["operation"]["global_tray_id"], 1);
-    assert_eq!(payload["operation"]["extruder_id"], 0);
+    let body = decode::<CommandResponse>(body);
+    assert_eq!(body.kind, "printer_operation");
+    let payload: PrinterOperationPayload = serde_json::from_str(&body.payload_json).unwrap();
+    match payload.operation {
+        PrinterOperation::AmsLoadFilament {
+            ams_id,
+            slot_id,
+            global_tray_id,
+            extruder_id,
+        } => {
+            assert_eq!(ams_id, 0);
+            assert_eq!(slot_id, 1);
+            assert_eq!(global_tray_id, 1);
+            assert_eq!(extruder_id, 0);
+        }
+        other => panic!("expected ams_load_filament operation, got {other:?}"),
+    }
 }
 
 #[tokio::test]
@@ -420,8 +532,8 @@ async fn printer_control_enqueues_select_extruder_operation() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
         state.database(),
         tenant_id,
@@ -444,11 +556,13 @@ async fn printer_control_enqueues_select_extruder_operation() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "printer_operation");
-    let payload: serde_json::Value =
-        serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
-    assert_eq!(payload["operation"]["type"], "select_extruder");
-    assert_eq!(payload["operation"]["extruder_id"], 1);
+    let body = decode::<CommandResponse>(body);
+    assert_eq!(body.kind, "printer_operation");
+    let payload: PrinterOperationPayload = serde_json::from_str(&body.payload_json).unwrap();
+    match payload.operation {
+        PrinterOperation::SelectExtruder { extruder_id } => assert_eq!(extruder_id, 1),
+        other => panic!("expected select_extruder operation, got {other:?}"),
+    }
 }
 
 #[tokio::test]
@@ -456,7 +570,7 @@ async fn missing_printer_detail_returns_not_found() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, _, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
     let printer_id = uuid::Uuid::new_v4();
 
     let (status, body) = request_as(
@@ -469,7 +583,7 @@ async fn missing_printer_detail_returns_not_found() {
     .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body, json!({ "error": "printer_not_found" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "printer_not_found");
 }
 
 #[tokio::test]
@@ -477,7 +591,7 @@ async fn invalid_printer_id_returns_bad_request() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, _, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
 
     let (status, body) = request_as(
         app,
@@ -489,7 +603,7 @@ async fn invalid_printer_id_returns_bad_request() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_printer_id" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_printer_id");
 }
 
 #[tokio::test]
@@ -497,8 +611,8 @@ async fn refresh_printers_returns_command_record() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-    let agent_id = agent["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
+    let agent_id = decode::<AgentResponse>(agent).id;
 
     let (status, body) = request_as(
         app.clone(),
@@ -510,13 +624,14 @@ async fn refresh_printers_returns_command_record() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["tenant_id"], tenant_id);
-    assert_eq!(body["agent_id"], agent_id);
-    assert_eq!(body["kind"], "refresh_printers");
-    assert_eq!(body["status"], "queued");
+    let body = decode::<CommandResponse>(body);
+    assert_eq!(body.tenant_id, tenant_id);
+    assert_eq!(body.agent_id, agent_id);
+    assert_eq!(body.kind, "refresh_printers");
+    assert_eq!(body.status, "queued");
     let events = state
         .audit_events()
-        .list_for_tenant(TenantId::parse(tenant_id).unwrap())
+        .list_for_tenant(TenantId::parse(&tenant_id).unwrap())
         .await
         .unwrap();
     assert!(
@@ -532,8 +647,8 @@ async fn refresh_printer_materials_enqueues_for_owning_agent_and_wakes_it() {
     let _control_plane = start_control_plane(state.clone()).await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
@@ -550,13 +665,13 @@ async fn refresh_printer_materials_enqueues_for_owning_agent_and_wakes_it() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "refresh_printer_materials");
-    assert_eq!(body["agent_id"], agent_id.to_string());
-    assert_eq!(body["printer_id"], printer_id);
-    let payload: serde_json::Value =
-        serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
-    assert_eq!(payload["printer_id"], printer_id);
-    assert_eq!(payload["serial_number"], format!("serial-{printer_id}"));
+    let body = decode::<CommandResponse>(body);
+    assert_eq!(body.kind, "refresh_printer_materials");
+    assert_eq!(body.agent_id, agent_id.to_string());
+    assert_eq!(body.printer_id.as_deref(), Some(printer_id.as_str()));
+    let payload: RefreshPrinterMaterialsPayload = serde_json::from_str(&body.payload_json).unwrap();
+    assert_eq!(payload.printer_id, printer_id);
+    assert_eq!(payload.serial_number, format!("serial-{printer_id}"));
     tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
         .await
         .expect("agent should be woken")
@@ -579,7 +694,7 @@ async fn refresh_printer_materials_rejects_invalid_and_missing_printers() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, _agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
 
     let (status, body) = request_as(
         app.clone(),
@@ -590,7 +705,7 @@ async fn refresh_printer_materials_rejects_invalid_and_missing_printers() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["error"], "invalid_printer_id");
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_printer_id");
 
     let missing = uuid::Uuid::new_v4();
     let (status, body) = request_as(
@@ -602,7 +717,7 @@ async fn refresh_printer_materials_rejects_invalid_and_missing_printers() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body["error"], "printer_not_found");
+    assert_eq!(decode::<ErrorResponse>(body).error, "printer_not_found");
 }
 
 #[tokio::test]
@@ -610,11 +725,11 @@ async fn link_printer_requires_operator_role() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, _) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-    let agent_id = agent["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
+    let agent_id = decode::<AgentResponse>(agent).id;
     let token = auth_token_for_role(
         &state,
-        tenant_id,
+        &tenant_id,
         crate::repositories::UserRole::Viewer,
         "viewer-link-printer-token",
     )
@@ -630,7 +745,7 @@ async fn link_printer_requires_operator_role() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
     assert_eq!(state.commands().count().await.unwrap(), 0);
 }
 
@@ -639,8 +754,8 @@ async fn link_printer_rejects_missing_local_session_without_command_row() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-    let agent_id = agent["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
+    let agent_id = decode::<AgentResponse>(agent).id;
 
     let (status, body) = request_as(
         app,
@@ -652,7 +767,7 @@ async fn link_printer_rejects_missing_local_session_without_command_row() {
     .await;
 
     assert_eq!(status, StatusCode::CONFLICT);
-    assert_eq!(body, json!({ "error": "agent_not_connected" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "agent_not_connected");
     assert_eq!(state.commands().count().await.unwrap(), 0);
 }
 
@@ -667,8 +782,8 @@ async fn link_printer_missing_local_session_does_not_log_access_code() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-    let agent_id = agent["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
+    let agent_id = decode::<AgentResponse>(agent).id;
     let access_code = "SECRET-LINK-CODE";
 
     let _ = request_as(
@@ -689,8 +804,8 @@ async fn link_printer_direct_sends_secret_but_persists_only_redacted_payload() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let (command_sender, mut command_receiver) = tokio::sync::mpsc::channel(1);
     register_route_test_session(&state, tenant_id, agent_id, command_sender).await;
     let access_code = "SECRET-LINK-CODE";
@@ -705,10 +820,17 @@ async fn link_printer_direct_sends_secret_but_persists_only_redacted_payload() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "link_printer");
-    assert_eq!(body["status"], "sent");
-    assert!(!body.to_string().contains(access_code));
-    assert!(!body["payload_json"].as_str().unwrap().contains(access_code));
+    let body = decode::<CommandResponse>(body);
+    assert_eq!(body.kind, "link_printer");
+    assert_eq!(body.status, "sent");
+    assert!(!body.payload_json.contains(access_code));
+    assert!(
+        !body
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains(access_code)
+    );
 
     let sent = command_receiver.recv().await.unwrap().unwrap();
     match sent.command.unwrap() {
@@ -721,14 +843,13 @@ async fn link_printer_direct_sends_secret_but_persists_only_redacted_payload() {
         other => panic!("expected link printer command, got {other:?}"),
     }
 
-    let payload: serde_json::Value =
-        serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
-    assert_eq!(payload["printer_type"], "BambuLab");
-    assert_eq!(payload["host"], "192.0.2.10");
-    assert_eq!(payload["access_code"], "[redacted]");
-    assert_eq!(payload["name"], "Office X1C");
-    assert!(payload.get("serial_number").is_none());
-    assert!(payload.get("model").is_none());
+    let payload: LinkPrinterPayload = serde_json::from_str(&body.payload_json).unwrap();
+    assert_eq!(payload.printer_type, "BambuLab");
+    assert_eq!(payload.host, "192.0.2.10");
+    assert_eq!(payload.access_code, "[redacted]");
+    assert_eq!(payload.name, "Office X1C");
+    assert_eq!(payload.serial_number, None);
+    assert_eq!(payload.model, None);
 }
 
 #[tokio::test]
@@ -736,8 +857,8 @@ async fn link_printer_maps_absent_or_blank_optional_name_to_empty_proto_string()
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let (command_sender, mut command_receiver) = tokio::sync::mpsc::channel(1);
     register_route_test_session(&state, tenant_id, agent_id, command_sender).await;
 
@@ -755,6 +876,7 @@ async fn link_printer_maps_absent_or_blank_optional_name_to_empty_proto_string()
         .await;
 
         assert_eq!(status, StatusCode::OK);
+        let response = decode::<CommandResponse>(response);
         let sent = command_receiver.recv().await.unwrap().unwrap();
         match sent.command.unwrap() {
             hub_command::Command::LinkPrinter(command) => {
@@ -762,7 +884,7 @@ async fn link_printer_maps_absent_or_blank_optional_name_to_empty_proto_string()
             }
             other => panic!("expected link printer command, got {other:?}"),
         }
-        assert_eq!(response["status"], "sent");
+        assert_eq!(response.status, "sent");
     }
 }
 
@@ -771,8 +893,8 @@ async fn link_printer_marks_command_failed_when_live_channel_closed_after_row_cr
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let (command_sender, command_receiver) = tokio::sync::mpsc::channel(1);
     drop(command_receiver);
     register_route_test_session(&state, tenant_id, agent_id, command_sender).await;
@@ -788,15 +910,23 @@ async fn link_printer_marks_command_failed_when_live_channel_closed_after_row_cr
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "link_printer");
-    assert_eq!(body["status"], "failed");
+    let body = decode::<CommandResponse>(body);
+    assert_eq!(body.kind, "link_printer");
+    assert_eq!(body.status, "failed");
     assert_eq!(
-        body["error"],
-        "agent command channel unavailable before printer link completed"
+        body.error.as_deref(),
+        Some("agent command channel unavailable before printer link completed")
     );
-    assert!(!body.to_string().contains(access_code));
+    assert!(!body.payload_json.contains(access_code));
+    assert!(
+        !body
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains(access_code)
+    );
     assert_eq!(state.commands().count().await.unwrap(), 1);
-    let command_id = pandar_core::CommandId::parse(body["id"].as_str().unwrap()).unwrap();
+    let command_id = pandar_core::CommandId::parse(&body.id).unwrap();
     let stored = state
         .commands()
         .get_for_tenant(tenant_id, command_id)
@@ -822,8 +952,8 @@ async fn link_printer_rejects_blank_required_fields() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-    let agent_id = agent["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
+    let agent_id = decode::<AgentResponse>(agent).id;
 
     for body in [
         json!({ "type": "BambuLab", "host": "", "access_code": "SECRET-LINK-CODE" }),
@@ -838,7 +968,7 @@ async fn link_printer_rejects_blank_required_fields() {
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(body, json!({ "error": "bad_request" }));
+        assert_eq!(decode::<ErrorResponse>(body).error, "bad_request");
     }
 
     assert_eq!(state.commands().count().await.unwrap(), 0);
@@ -849,8 +979,8 @@ async fn link_printer_rejects_invalid_type_host_and_legacy_metadata_fields() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-    let agent_id = agent["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
+    let agent_id = decode::<AgentResponse>(agent).id;
 
     for request in [
         json!({ "type": "", "host": "192.0.2.10", "access_code": "SECRET-LINK-CODE" }),
@@ -868,7 +998,7 @@ async fn link_printer_rejects_invalid_type_host_and_legacy_metadata_fields() {
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(body["error"], "bad_request");
+        assert_eq!(decode::<ErrorResponse>(body).error, "bad_request");
     }
     assert_eq!(state.commands().count().await.unwrap(), 0);
 }
@@ -878,8 +1008,8 @@ async fn link_printer_rejects_unknown_fields() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-    let agent_id = agent["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
+    let agent_id = decode::<AgentResponse>(agent).id;
 
     let (status, body) = request_as(
         app,
@@ -896,7 +1026,7 @@ async fn link_printer_rejects_unknown_fields() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "bad_request" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "bad_request");
     assert_eq!(state.commands().count().await.unwrap(), 0);
 }
 

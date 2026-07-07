@@ -1,6 +1,7 @@
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use async_trait::async_trait;
+use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::{Mutex, Notify, mpsc};
 
@@ -61,6 +62,21 @@ fn runtime_state_report(state: &str) -> serde_json::Value {
 
 fn runtime_reports(model: &str, state: &str) -> [serde_json::Value; 2] {
     [get_version_report(model), runtime_state_report(state)]
+}
+
+fn operation_report(value: &Value) -> TestOperationReport {
+    serde_json::from_value(value.clone()).unwrap()
+}
+
+#[derive(Debug, Deserialize)]
+struct TestOperationReport {
+    system: Option<TestOperationReportSection>,
+    print: Option<TestOperationReportSection>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TestOperationReportSection {
+    result: String,
 }
 
 fn runtime_transport(
@@ -598,7 +614,10 @@ async fn configured_operate_printer_light_returns_primary_success_when_light2_fa
         Some(primary_sequence_id.as_str())
     );
     assert_eq!(
-        result.mqtt_report.as_ref().unwrap()["system"]["result"],
+        operation_report(result.mqtt_report.as_ref().unwrap())
+            .system
+            .unwrap()
+            .result,
         "success"
     );
     assert_eq!(result.error, None);
@@ -622,7 +641,10 @@ async fn configured_operate_printer_returns_matching_mqtt_sequence_result() {
     let sequence_id = dynamic_sequence_id(&mqtt.published_commands().await[0].payload);
     assert_eq!(result.sequence_id.as_deref(), Some(sequence_id.as_str()));
     assert_eq!(
-        result.mqtt_report.as_ref().unwrap()["print"]["result"],
+        operation_report(result.mqtt_report.as_ref().unwrap())
+            .print
+            .unwrap()
+            .result,
         "success"
     );
 }
@@ -799,10 +821,17 @@ fn dynamic_sequence_id(payload: &Value) -> String {
 }
 
 fn dynamic_section_sequence_id(payload: &Value, section: &str) -> String {
-    let sequence_id = payload[section]["sequence_id"].as_str().unwrap();
+    let sections: BTreeMap<String, TestSequenceSection> =
+        serde_json::from_value(payload.clone()).unwrap();
+    let sequence_id = &sections.get(section).unwrap().sequence_id;
     assert_ne!(sequence_id, "0");
     assert!((20000..30000).contains(&sequence_id.parse::<u32>().unwrap()));
     sequence_id.to_string()
+}
+
+#[derive(Debug, Deserialize)]
+struct TestSequenceSection {
+    sequence_id: String,
 }
 
 #[tokio::test]
@@ -978,12 +1007,8 @@ async fn configured_operate_printer_ams_reread_rfid_increments_sequence_id() {
     }
 
     let published = mqtt.published_commands().await;
-    let first = published[0].payload["print"]["sequence_id"]
-        .as_str()
-        .unwrap();
-    let second = published[1].payload["print"]["sequence_id"]
-        .as_str()
-        .unwrap();
+    let first = dynamic_sequence_id(&published[0].payload);
+    let second = dynamic_sequence_id(&published[1].payload);
 
     assert_ne!(first, "0");
     assert_ne!(second, "0");

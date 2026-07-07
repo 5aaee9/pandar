@@ -1,11 +1,11 @@
 use anyhow::Context;
 use pandar_core::{Agent, TenantId};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, TransactionTrait};
-use serde_json::json;
+use serde::Serialize;
 
 use crate::repositories::{
     AgentRepository, AuditActor, RepositoryError, RepositoryResult,
-    audit::{insert_audit_event_tx, record_audit_event},
+    audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
     auth::{hash_token, secrets::generate_secret},
     is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
 };
@@ -15,6 +15,11 @@ pub const AGENT_CREDENTIAL_PREFIX: &str = "pandar_ac_";
 pub struct AgentPairingBundle {
     pub agent: Agent,
     pub credential: String,
+}
+
+#[derive(Serialize)]
+struct AgentPairingAuditMetadata<'a> {
+    agent_name: &'a str,
 }
 
 impl AgentRepository {
@@ -83,6 +88,8 @@ fn pairing_event(agent: &Agent, actor: AuditActor) -> crate::repositories::Audit
         "agent.pairing_bundle",
         "agent",
         Some(agent.id.to_string()),
-        json!({ "agent_name": agent.name }),
+        audit_metadata(AgentPairingAuditMetadata {
+            agent_name: &agent.name,
+        }),
     )
 }

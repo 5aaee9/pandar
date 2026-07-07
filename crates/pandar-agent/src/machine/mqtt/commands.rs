@@ -1,7 +1,11 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use anyhow::bail;
-use serde_json::{Value, json};
+use serde_json::Value;
+
+mod payload;
+
+use payload::*;
 
 const STUDIO_START_SEQUENCE_ID: u32 = 20000;
 const STUDIO_END_SEQUENCE_ID: u32 = 30000;
@@ -129,37 +133,16 @@ pub enum BambuMqttCommand {
 impl BambuMqttCommand {
     pub fn payload(&self) -> Value {
         match self {
-            Self::GetVersion => {
-                json!({"info": {"command": "get_version", "sequence_id": next_studio_sequence_id()}})
-            }
-            Self::RequestPushAll => json!({"pushing": {
-                "command": "pushall",
-                "sequence_id": next_studio_sequence_id(),
-                "version": 1,
-                "push_target": 1
-            }}),
-            Self::PausePrint => {
-                json!({"print": {"command": "pause", "param": "", "sequence_id": next_studio_sequence_id()}})
-            }
-            Self::ResumePrint => {
-                json!({"print": {"command": "resume", "param": "", "sequence_id": next_studio_sequence_id()}})
-            }
-            Self::StopPrint => {
-                json!({"print": {"command": "stop", "param": "", "sequence_id": next_studio_sequence_id()}})
-            }
+            Self::GetVersion => info_payload("get_version"),
+            Self::RequestPushAll => pushing_payload(),
+            Self::PausePrint => basic_print_payload("pause"),
+            Self::ResumePrint => basic_print_payload("resume"),
+            Self::StopPrint => basic_print_payload("stop"),
             Self::SetChamberLight(on) => chamber_light_payload("chamber_light", *on),
-            Self::SetPrintSpeed(speed) => {
-                json!({"print": {"command": "print_speed", "param": speed.as_u8().to_string(), "sequence_id": next_studio_sequence_id()}})
-            }
-            Self::SelectExtruder(extruder_id) => {
-                json!({"print": {"command": "select_extruder", "extruder_index": extruder_id, "sequence_id": next_studio_sequence_id()}})
-            }
-            Self::SetNozzleTemperature(command) => {
-                json!({"print": {"command": "set_nozzle_temp", "extruder_index": command.extruder_id, "target_temp": command.target_temp, "sequence_id": next_studio_sequence_id()}})
-            }
-            Self::GcodeLine(command) => {
-                json!({"print": {"command": "gcode_line", "param": command.lines.join("\n"), "sequence_id": next_studio_sequence_id()}})
-            }
+            Self::SetPrintSpeed(speed) => print_speed_payload(*speed),
+            Self::SelectExtruder(extruder_id) => select_extruder_payload(*extruder_id),
+            Self::SetNozzleTemperature(command) => set_nozzle_temperature_payload(command),
+            Self::GcodeLine(command) => gcode_line_payload(command),
             Self::AmsRereadRfid(command) => ams_reread_rfid_payload(command),
             Self::AmsLoadFilament(command) => ams_load_filament_payload(command),
             Self::AmsUnloadFilament(command) => ams_unload_filament_payload(command),
@@ -167,6 +150,77 @@ impl BambuMqttCommand {
             Self::ProjectFile(command) => project_file_payload(command),
         }
     }
+}
+
+fn info_payload(command: &'static str) -> Value {
+    json_payload(InfoPayload {
+        info: InfoCommand {
+            command,
+            sequence_id: next_studio_sequence_id(),
+        },
+    })
+}
+
+fn pushing_payload() -> Value {
+    json_payload(PushingPayload {
+        pushing: PushingCommand {
+            command: "pushall",
+            sequence_id: next_studio_sequence_id(),
+            version: 1,
+            push_target: 1,
+        },
+    })
+}
+
+fn basic_print_payload(command: &'static str) -> Value {
+    json_payload(PrintPayload {
+        print: BasicPrintCommand {
+            command,
+            param: "",
+            sequence_id: next_studio_sequence_id(),
+        },
+    })
+}
+
+fn print_speed_payload(speed: PrintSpeed) -> Value {
+    json_payload(PrintPayload {
+        print: PrintSpeedCommand {
+            command: "print_speed",
+            param: speed.as_u8().to_string(),
+            sequence_id: next_studio_sequence_id(),
+        },
+    })
+}
+
+fn select_extruder_payload(extruder_id: u32) -> Value {
+    json_payload(PrintPayload {
+        print: SelectExtruderCommand {
+            command: "select_extruder",
+            extruder_index: extruder_id,
+            sequence_id: next_studio_sequence_id(),
+        },
+    })
+}
+
+fn set_nozzle_temperature_payload(command: &SetNozzleTemperatureCommand) -> Value {
+    json_payload(PrintPayload {
+        print: SetNozzleTemperaturePayload {
+            command: "set_nozzle_temp",
+            extruder_index: command.extruder_id,
+            target_temp: command.target_temp,
+            sequence_id: next_studio_sequence_id(),
+        },
+    })
+}
+
+fn gcode_line_payload(command: &GcodeLineCommand) -> Value {
+    json_payload(PrintPayload {
+        print: GcodeLinePayload {
+            command: "gcode_line",
+            param: command.lines.join("\n"),
+            sequence_id: next_studio_sequence_id(),
+        },
+    })
 }
 
 fn next_studio_sequence_id() -> String {
@@ -197,7 +251,14 @@ pub(crate) fn next_studio_sequence_id_from(sequence: &AtomicU32) -> String {
 }
 
 fn ams_reread_rfid_payload(command: &AmsSlotCommand) -> Value {
-    json!({"print": {"command": "ams_get_rfid", "sequence_id": next_studio_sequence_id(), "ams_id": command.ams_id, "slot_id": command.slot_id}})
+    json_payload(PrintPayload {
+        print: AmsSlotPayload {
+            command: "ams_get_rfid",
+            sequence_id: next_studio_sequence_id(),
+            ams_id: command.ams_id,
+            slot_id: command.slot_id,
+        },
+    })
 }
 
 pub(crate) fn chamber_light_payloads_for_nodes<'a>(
@@ -211,106 +272,96 @@ pub(crate) fn chamber_light_payloads_for_nodes<'a>(
 }
 
 fn chamber_light_payload(node: &str, on: bool) -> Value {
-    json!({"system": {
-        "command": "ledctrl",
-        "led_node": node,
-        "led_mode": if on { "on" } else { "off" },
-        "led_on_time": 500,
-        "led_off_time": 500,
-        "loop_times": 1,
-        "interval_time": 1000,
-        "sequence_id": next_studio_sequence_id()
-    }})
+    json_payload(SystemPayload {
+        system: ChamberLightPayload {
+            command: "ledctrl",
+            led_node: node,
+            led_mode: if on { "on" } else { "off" },
+            led_on_time: 500,
+            led_off_time: 500,
+            loop_times: 1,
+            interval_time: 1000,
+            sequence_id: next_studio_sequence_id(),
+        },
+    })
 }
 
 fn ams_load_filament_payload(command: &AmsFilamentCommand) -> Value {
-    let mut print = serde_json::Map::from_iter([
-        ("command".to_owned(), json!("ams_change_filament")),
-        ("sequence_id".to_owned(), json!(next_studio_sequence_id())),
-        ("ams_id".to_owned(), json!(command.ams_id)),
-        ("slot_id".to_owned(), json!(command.slot_id)),
-        ("target".to_owned(), json!(command.target)),
-        ("curr_temp".to_owned(), json!(-1)),
-        ("tar_temp".to_owned(), json!(-1)),
-    ]);
-    if let Some(extruder_id) = command.extruder_id {
-        print.insert("extruder_id".to_owned(), json!(extruder_id));
-    }
-    json!({ "print": print })
+    json_payload(PrintPayload {
+        print: AmsChangeFilamentPayload {
+            command: "ams_change_filament",
+            sequence_id: next_studio_sequence_id(),
+            ams_id: command.ams_id,
+            slot_id: command.slot_id,
+            target: command.target,
+            curr_temp: -1,
+            tar_temp: -1,
+            extruder_id: command.extruder_id,
+        },
+    })
 }
 
 fn ams_unload_filament_payload(command: &AmsFilamentCommand) -> Value {
     let _ = command.slot_id;
     let _ = command.target;
-    json!({"print": {"command": "ams_change_filament", "sequence_id": next_studio_sequence_id(), "ams_id": command.ams_id, "slot_id": 255, "target": 255, "curr_temp": 210, "tar_temp": 210}})
+    json_payload(PrintPayload {
+        print: AmsChangeFilamentPayload {
+            command: "ams_change_filament",
+            sequence_id: next_studio_sequence_id(),
+            ams_id: command.ams_id,
+            slot_id: 255,
+            target: 255,
+            curr_temp: 210,
+            tar_temp: 210,
+            extruder_id: None,
+        },
+    })
 }
 
 fn project_file_payload(command: &ProjectFileCommand) -> Value {
-    let mut print = serde_json::Map::new();
-    print.insert("command".to_owned(), json!("project_file"));
-    print.insert("sequence_id".to_owned(), json!(next_studio_sequence_id()));
-    print.insert(
-        "param".to_owned(),
-        json!(format!("Metadata/plate_{}.gcode", command.plate_id)),
-    );
-    print.insert("project_id".to_owned(), json!("0"));
-    print.insert("profile_id".to_owned(), json!("0"));
-    print.insert("task_id".to_owned(), json!("0"));
-    print.insert("subtask_id".to_owned(), json!("0"));
-    print.insert(
-        "subtask_name".to_owned(),
-        json!(project_file_subtask_name(&command.filename)),
-    );
-    print.insert(
-        "url".to_owned(),
-        json!(
-            command
+    json_payload(ProjectFilePayload {
+        print: ProjectFilePayloadPrint {
+            command: "project_file",
+            sequence_id: next_studio_sequence_id(),
+            param: format!("Metadata/plate_{}.gcode", command.plate_id),
+            project_id: "0",
+            profile_id: "0",
+            task_id: "0",
+            subtask_id: "0",
+            subtask_name: project_file_subtask_name(&command.filename),
+            url: command
                 .url
                 .clone()
-                .unwrap_or_else(|| format!("ftp://{}", command.filename))
-        ),
-    );
-    print.insert("file".to_owned(), json!(command.filename));
-    print.insert(
-        "md5".to_owned(),
-        json!(command.md5.as_deref().unwrap_or("")),
-    );
-    print.insert("bed_type".to_owned(), json!("auto"));
-    print.insert("bed_leveling".to_owned(), json!(false));
-    print.insert("flow_cali".to_owned(), json!(command.flow_cali));
-    print.insert("vibration_cali".to_owned(), json!(false));
-    print.insert("layer_inspect".to_owned(), json!(false));
-    print.insert("timelapse".to_owned(), json!(command.timelapse));
-    print.insert("use_ams".to_owned(), json!(command.use_ams));
-    print.insert(
-        "ams_mapping".to_owned(),
-        command
-            .ams_mapping_json
-            .as_deref()
-            .and_then(project_file_ams_mapping)
-            .unwrap_or_else(|| json!([])),
-    );
-    print.insert(
-        "ams_mapping2".to_owned(),
-        command
-            .ams_mapping2_json
-            .as_deref()
-            .and_then(project_file_mapping_value)
-            .unwrap_or_else(|| json!([])),
-    );
-    if let Some(ams_mapping_info) = command
-        .ams_mapping_info_json
-        .as_deref()
-        .and_then(project_file_mapping_value)
-    {
-        print.insert("ams_mapping_info".to_owned(), ams_mapping_info);
-    }
-    print.insert("auto_bed_leveling".to_owned(), json!(0));
-    print.insert("nozzle_offset_cali".to_owned(), json!(0));
-    print.insert("cfg".to_owned(), json!("0"));
-    print.insert("extrude_cali_flag".to_owned(), json!(0));
-
-    json!({ "print": print })
+                .unwrap_or_else(|| format!("ftp://{}", command.filename)),
+            file: command.filename.clone(),
+            md5: command.md5.clone().unwrap_or_default(),
+            bed_type: "auto",
+            bed_leveling: false,
+            flow_cali: command.flow_cali,
+            vibration_cali: false,
+            layer_inspect: false,
+            timelapse: command.timelapse,
+            use_ams: command.use_ams,
+            ams_mapping: command
+                .ams_mapping_json
+                .as_deref()
+                .and_then(project_file_ams_mapping)
+                .unwrap_or_default(),
+            ams_mapping2: command
+                .ams_mapping2_json
+                .as_deref()
+                .and_then(project_file_mapping_array)
+                .unwrap_or_default(),
+            ams_mapping_info: command
+                .ams_mapping_info_json
+                .as_deref()
+                .and_then(project_file_mapping_array),
+            auto_bed_leveling: 0,
+            nozzle_offset_cali: 0,
+            cfg: "0",
+            extrude_cali_flag: 0,
+        },
+    })
 }
 
 fn project_file_subtask_name(filename: &str) -> String {
@@ -331,21 +382,18 @@ fn project_file_subtask_name(filename: &str) -> String {
     }
 }
 
-fn project_file_ams_mapping(raw: &str) -> Option<Value> {
-    let Value::Array(values) = project_file_mapping_value(raw)? else {
-        return None;
-    };
-    Some(Value::Array(
-        values
+fn project_file_ams_mapping(raw: &str) -> Option<Vec<Value>> {
+    Some(
+        project_file_mapping_array(raw)?
             .into_iter()
             .map(|value| match value.as_i64() {
-                Some(254 | 255) => json!(-1),
+                Some(254 | 255) => Value::from(-1),
                 _ => value,
             })
             .collect(),
-    ))
+    )
 }
 
-fn project_file_mapping_value(raw: &str) -> Option<Value> {
+fn project_file_mapping_array(raw: &str) -> Option<Vec<Value>> {
     serde_json::from_str(raw).ok()
 }

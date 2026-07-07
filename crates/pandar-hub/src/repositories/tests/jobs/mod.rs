@@ -1,9 +1,10 @@
 use pandar_core::{AgentId, CommandId, JobId, JobStatus, PrintStatus};
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::*;
 use crate::repositories::{
-    AgentArtifactAccess, ApplyPrintReport, CreatePrintJob, PrintReportDiagnostic,
+    AgentArtifactAccess, ApplyPrintReport, CreatePrintJob, PrintProjectFilePayload,
+    PrintReportDiagnostic,
 };
 
 mod lifecycle;
@@ -125,7 +126,7 @@ async fn queued_payloads(
     commands: &crate::repositories::CommandRepository,
     tenant_id: pandar_core::TenantId,
     agent_id: AgentId,
-) -> Vec<Value> {
+) -> Vec<PrintProjectFilePayload> {
     let mut payloads = Vec::new();
     while let Some(command) = commands
         .next_queued_for_agent(tenant_id, agent_id)

@@ -1,6 +1,76 @@
 use super::*;
 use pandar_core::AgentId;
+use serde::Deserialize;
 use tokio::sync::mpsc;
+
+#[derive(Debug, Deserialize)]
+struct TenantResponse {
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AgentResponse {
+    id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CommandResponse {
+    id: String,
+    agent_id: String,
+    printer_id: Option<String>,
+    kind: String,
+    payload_json: String,
+    result_json: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DiscoverPrintersPayload {
+    timeout_seconds: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct DiagnosePrinterPayload {
+    serial_number: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PrinterOperationPayload {
+    printer_id: String,
+    serial_number: String,
+    operation: PrinterOperationPayloadDetails,
+}
+
+#[derive(Debug, Deserialize)]
+struct PrinterOperationPayloadDetails {
+    #[serde(rename = "type")]
+    kind: String,
+    speed_mode: Option<u8>,
+    extruder_id: Option<u32>,
+    on: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PrinterControlAuditMetadata {
+    agent_id: String,
+    serial_number: String,
+    action: String,
+    speed_mode: u8,
+}
+
+#[derive(Debug, Deserialize)]
+struct TenantTokenAuditMetadata {
+    tenant_token_id: String,
+    tenant_token_scopes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ErrorResponse {
+    error: String,
+}
+
+fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
+    serde_json::from_value(value).unwrap()
+}
 
 #[tokio::test]
 async fn discover_printers_requires_operator_role() {
@@ -34,7 +104,7 @@ async fn discover_printers_requires_operator_role() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 }
 
 #[tokio::test]
@@ -42,8 +112,8 @@ async fn discover_printers_rejects_invalid_timeout_payloads() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-    let agent_id = agent["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
+    let agent_id = decode::<AgentResponse>(agent).id;
 
     for payload in [
         json!({ "timeout_seconds": 0 }),
@@ -59,7 +129,10 @@ async fn discover_printers_rejects_invalid_timeout_payloads() {
         .await;
 
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(body, json!({ "error": "invalid_discovery_timeout" }));
+        assert_eq!(
+            decode::<ErrorResponse>(body).error,
+            "invalid_discovery_timeout"
+        );
     }
 
     let (status, body) = request_as(
@@ -72,7 +145,7 @@ async fn discover_printers_rejects_invalid_timeout_payloads() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "bad_request" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "bad_request");
 
     let response = app
         .oneshot(
@@ -91,8 +164,8 @@ async fn discover_printers_rejects_invalid_timeout_payloads() {
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    let body: Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(body, json!({ "error": "bad_request" }));
+    let body: ErrorResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body.error, "bad_request");
 }
 
 #[tokio::test]
@@ -101,8 +174,8 @@ async fn discover_printers_defaults_timeout_audits_and_wakes_agent() {
     let _control_plane = start_control_plane(state.clone()).await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let (wake_sender, mut wake_receiver) = mpsc::channel(1);
     let (close_sender, _) = mpsc::channel(1);
     state
@@ -132,12 +205,11 @@ async fn discover_printers_defaults_timeout_audits_and_wakes_agent() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "discover_printers");
-    assert_eq!(body["result_json"], Value::Null);
-    assert_eq!(
-        body["payload_json"],
-        json!({ "timeout_seconds": 5 }).to_string()
-    );
+    let body = decode::<CommandResponse>(body);
+    assert_eq!(body.kind, "discover_printers");
+    assert_eq!(body.result_json, None);
+    let payload: DiscoverPrintersPayload = serde_json::from_str(&body.payload_json).unwrap();
+    assert_eq!(payload.timeout_seconds, 5);
     tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
         .await
         .expect("agent should be woken")
@@ -160,8 +232,8 @@ async fn discover_printers_defaults_empty_json_body() {
     let _control_plane = start_control_plane(state.clone()).await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
-    let agent_id = agent["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
+    let agent_id = decode::<AgentResponse>(agent).id;
 
     let response = app
         .oneshot(
@@ -180,11 +252,9 @@ async fn discover_printers_defaults_empty_json_body() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    let body: Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(
-        body["payload_json"],
-        json!({ "timeout_seconds": 5 }).to_string()
-    );
+    let body: CommandResponse = serde_json::from_slice(&body).unwrap();
+    let payload: DiscoverPrintersPayload = serde_json::from_str(&body.payload_json).unwrap();
+    assert_eq!(payload.timeout_seconds, 5);
 }
 
 #[tokio::test]
@@ -192,8 +262,8 @@ async fn diagnose_printer_rejects_access_code_payload() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let access_code = "ACCESS-CODE-SHOULD-NOT-LEAK";
 
     let (status, body) = request_as(
@@ -218,8 +288,8 @@ async fn diagnose_printer_enqueues_redacted_payload_audits_and_wakes_agent() {
     let _control_plane = start_control_plane(state.clone()).await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let (wake_sender, mut wake_receiver) = mpsc::channel(1);
     let (close_sender, _) = mpsc::channel(1);
     state
@@ -249,11 +319,10 @@ async fn diagnose_printer_enqueues_redacted_payload_audits_and_wakes_agent() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "diagnose_printer");
-    assert_eq!(
-        body["payload_json"],
-        json!({ "serial_number": "BAMBU123" }).to_string()
-    );
+    let body = decode::<CommandResponse>(body);
+    assert_eq!(body.kind, "diagnose_printer");
+    let payload: DiagnosePrinterPayload = serde_json::from_str(&body.payload_json).unwrap();
+    assert_eq!(payload.serial_number, "BAMBU123");
     tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
         .await
         .expect("agent should be woken")
@@ -267,9 +336,9 @@ async fn diagnose_printer_enqueues_redacted_payload_audits_and_wakes_agent() {
         .iter()
         .find(|event| event.action == "agent.diagnose_printer")
         .expect("diagnostic audit event");
-    let metadata = serde_json::from_str::<serde_json::Value>(&event.metadata_json).unwrap();
-    assert!(metadata["tenant_token_id"].as_str().is_some());
-    assert_eq!(metadata["tenant_token_scopes"], json!(["*"]));
+    let metadata: TenantTokenAuditMetadata = serde_json::from_str(&event.metadata_json).unwrap();
+    assert!(!metadata.tenant_token_id.is_empty());
+    assert_eq!(metadata.tenant_token_scopes, vec!["*".to_string()]);
 }
 
 #[tokio::test]
@@ -279,8 +348,8 @@ async fn refresh_printers_wakes_agent_on_sibling_instance() {
     let _control_plane = start_control_plane(sibling.clone()).await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let (wake_sender, mut wake_receiver) = mpsc::channel(1);
     let (close_sender, _) = mpsc::channel(1);
     sibling
@@ -310,7 +379,7 @@ async fn refresh_printers_wakes_agent_on_sibling_instance() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "refresh_printers");
+    assert_eq!(decode::<CommandResponse>(body).kind, "refresh_printers");
     tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
         .await
         .expect("sibling agent should be woken")
@@ -331,8 +400,8 @@ async fn discover_printers_wakes_agent_on_sibling_instance() {
     let _control_plane = start_control_plane(sibling.clone()).await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let (wake_sender, mut wake_receiver) = mpsc::channel(1);
     let (close_sender, _) = mpsc::channel(1);
     sibling
@@ -362,7 +431,7 @@ async fn discover_printers_wakes_agent_on_sibling_instance() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "discover_printers");
+    assert_eq!(decode::<CommandResponse>(body).kind, "discover_printers");
     tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
         .await
         .expect("sibling agent should be woken")
@@ -376,8 +445,8 @@ async fn diagnose_printer_wakes_agent_on_sibling_instance() {
     let _control_plane = start_control_plane(sibling.clone()).await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let (wake_sender, mut wake_receiver) = mpsc::channel(1);
     let (close_sender, _) = mpsc::channel(1);
     sibling
@@ -407,7 +476,7 @@ async fn diagnose_printer_wakes_agent_on_sibling_instance() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "diagnose_printer");
+    assert_eq!(decode::<CommandResponse>(body).kind, "diagnose_printer");
     tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
         .await
         .expect("sibling agent should be woken")
@@ -453,7 +522,7 @@ async fn printer_control_requires_operator_role() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 }
 
 #[tokio::test]
@@ -462,8 +531,8 @@ async fn printer_control_enqueues_audits_and_wakes_owning_agent() {
     let _control_plane = start_control_plane(state.clone()).await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
         state.database(),
         tenant_id,
@@ -501,14 +570,15 @@ async fn printer_control_enqueues_audits_and_wakes_owning_agent() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["kind"], "printer_operation");
-    assert_eq!(body["agent_id"], agent_id.to_string());
-    assert_eq!(body["printer_id"], printer_id);
-    let payload: Value = serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
-    assert_eq!(payload["printer_id"], printer_id);
-    assert_eq!(payload["serial_number"], format!("serial-{printer_id}"));
-    assert_eq!(payload["operation"]["type"], "set_print_speed");
-    assert_eq!(payload["operation"]["speed_mode"], 4);
+    let body = decode::<CommandResponse>(body);
+    assert_eq!(body.kind, "printer_operation");
+    assert_eq!(body.agent_id, agent_id.to_string());
+    assert_eq!(body.printer_id.as_deref(), Some(printer_id.as_str()));
+    let payload: PrinterOperationPayload = serde_json::from_str(&body.payload_json).unwrap();
+    assert_eq!(payload.printer_id, printer_id);
+    assert_eq!(payload.serial_number, format!("serial-{printer_id}"));
+    assert_eq!(payload.operation.kind, "set_print_speed");
+    assert_eq!(payload.operation.speed_mode, Some(4));
     tokio::time::timeout(std::time::Duration::from_secs(1), wake_receiver.recv())
         .await
         .expect("owning agent should be woken")
@@ -524,11 +594,11 @@ async fn printer_control_enqueues_audits_and_wakes_owning_agent() {
         .expect("printer control audit event");
     assert_eq!(event.target_type, "printer");
     assert_eq!(event.target_id.as_deref(), Some(printer_id.as_str()));
-    let metadata: Value = serde_json::from_str(&event.metadata_json).unwrap();
-    assert_eq!(metadata["agent_id"], agent_id.to_string());
-    assert_eq!(metadata["serial_number"], format!("serial-{printer_id}"));
-    assert_eq!(metadata["action"], "set_print_speed");
-    assert_eq!(metadata["speed_mode"], 4);
+    let metadata: PrinterControlAuditMetadata = serde_json::from_str(&event.metadata_json).unwrap();
+    assert_eq!(metadata.agent_id, agent_id.to_string());
+    assert_eq!(metadata.serial_number, format!("serial-{printer_id}"));
+    assert_eq!(metadata.action, "set_print_speed");
+    assert_eq!(metadata.speed_mode, 4);
 }
 
 #[tokio::test]
@@ -536,8 +606,8 @@ async fn printer_control_rejects_unknown_model_before_command_or_audit_insert() 
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
         state.database(),
         tenant_id,
@@ -557,7 +627,10 @@ async fn printer_control_rejects_unknown_model_before_command_or_audit_insert() 
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "printer_control_unavailable" }));
+    assert_eq!(
+        decode::<ErrorResponse>(body).error,
+        "printer_control_unavailable"
+    );
     assert_eq!(state.commands().count().await.unwrap(), 0);
     assert_no_printer_control_audit(&state, tenant_id).await;
 }
@@ -569,8 +642,8 @@ async fn printer_control_wakes_owning_agent_not_sibling() {
     let _control_plane = start_control_plane(sibling.clone()).await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let owner_agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let owner_agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let other_agent = state
         .agents()
         .create(tenant_id, "other-agent")
@@ -631,7 +704,10 @@ async fn printer_control_wakes_owning_agent_not_sibling() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["agent_id"], owner_agent_id.to_string());
+    assert_eq!(
+        decode::<CommandResponse>(body).agent_id,
+        owner_agent_id.to_string()
+    );
     tokio::time::timeout(
         std::time::Duration::from_secs(1),
         owner_wake_receiver.recv(),
@@ -654,8 +730,8 @@ async fn printer_control_rejects_invalid_action_and_speed_payloads() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
         state.database(),
         tenant_id,
@@ -702,7 +778,10 @@ async fn printer_control_rejects_invalid_action_and_speed_payloads() {
         .await;
 
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(body, json!({ "error": "invalid_printer_control" }));
+        assert_eq!(
+            decode::<ErrorResponse>(body).error,
+            "invalid_printer_control"
+        );
         assert_eq!(state.commands().count().await.unwrap(), 0);
         assert_no_printer_control_audit(&state, tenant_id).await;
     }
@@ -713,8 +792,8 @@ async fn printer_control_accepts_semantic_home_move_and_hotend_operations() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
-    let agent_id = AgentId::parse(agent["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
     let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
         state.database(),
         tenant_id,
@@ -779,14 +858,15 @@ async fn printer_control_accepts_semantic_home_move_and_hotend_operations() {
         .await;
 
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body["kind"], "printer_operation");
-        let payload: Value = serde_json::from_str(body["payload_json"].as_str().unwrap()).unwrap();
-        assert_eq!(payload["operation"]["type"], expected_type);
+        let body = decode::<CommandResponse>(body);
+        assert_eq!(body.kind, "printer_operation");
+        let payload: PrinterOperationPayload = serde_json::from_str(&body.payload_json).unwrap();
+        assert_eq!(payload.operation.kind, expected_type);
         if expected_type == "set_hotend_temperature" {
-            assert_eq!(payload["operation"]["extruder_id"], 1);
+            assert_eq!(payload.operation.extruder_id, Some(1));
         }
         if expected_type == "set_chamber_light" {
-            assert_eq!(payload["operation"]["on"], true);
+            assert_eq!(payload.operation.on, Some(true));
         }
     }
 }
@@ -861,8 +941,9 @@ async fn command_detail_requires_viewer_and_returns_result_json() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["id"], command.id.to_string());
-    assert_eq!(body["result_json"], result_json);
+    let body = decode::<CommandResponse>(body);
+    assert_eq!(body.id, command.id.to_string());
+    assert_eq!(body.result_json.as_deref(), Some(result_json.as_str()));
 
     let other_tenant = state.tenants().create("other", "Other Labs").await.unwrap();
     let other_token = auth_token_for_role(
@@ -885,7 +966,7 @@ async fn command_detail_requires_viewer_and_returns_result_json() {
     .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body, json!({ "error": "command_not_found" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "command_not_found");
 }
 
 #[tokio::test]
@@ -893,7 +974,7 @@ async fn invalid_command_id_returns_bad_request() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, _, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
 
     let (status, body) = request_as(
         app,
@@ -905,7 +986,7 @@ async fn invalid_command_id_returns_bad_request() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_command_id" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_command_id");
 }
 
 #[tokio::test]
@@ -913,7 +994,7 @@ async fn invalid_agent_id_on_refresh_returns_bad_request() {
     let state = state().await;
     let app = router(state.clone());
     let (tenant, _, token) = tenant_and_agent(&state, app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
 
     let (status, body) = request_as(
         app,
@@ -925,5 +1006,5 @@ async fn invalid_agent_id_on_refresh_returns_bad_request() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_agent_id" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_agent_id");
 }

@@ -5,7 +5,7 @@ async fn job_list_and_detail_return_tenant_jobs() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let token = auth_token_for_role(
         &state,
         &tenant_id.to_string(),
@@ -25,7 +25,8 @@ async fn job_list_and_detail_return_tenant_jobs() {
         &token,
     )
     .await;
-    let job_id = created["id"].as_str().unwrap();
+    let created = decode::<JobResponse>(created);
+    let job_id = &created.id;
 
     let (status, list) = request_as(
         app.clone(),
@@ -36,7 +37,7 @@ async fn job_list_and_detail_return_tenant_jobs() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(list["jobs"].as_array().unwrap().len(), 1);
+    assert_eq!(decode::<JobListResponse>(list).jobs.len(), 1);
 
     let (status, detail) = request_as(
         app,
@@ -47,10 +48,11 @@ async fn job_list_and_detail_return_tenant_jobs() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(detail["id"], created["id"]);
-    assert_eq!(detail["command"], created["command"]);
-    assert_eq!(detail["print"], created["print"]);
-    assert_eq!(detail["material"], created["material"]);
+    let detail = decode::<JobResponse>(detail);
+    assert_eq!(detail.id, created.id);
+    assert_eq!(detail.command, created.command);
+    assert_eq!(detail.print, created.print);
+    assert_eq!(detail.material, created.material);
 }
 
 #[tokio::test]
@@ -58,7 +60,7 @@ async fn job_detail_returns_internal_error_for_corrupt_persisted_mapping_json() 
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let token = auth_token_for_role(
         &state,
         &tenant_id.to_string(),
@@ -78,12 +80,12 @@ async fn job_detail_returns_internal_error_for_corrupt_persisted_mapping_json() 
         &token,
     )
     .await;
-    let job_id = created["id"].as_str().unwrap();
+    let job_id = decode::<JobResponse>(created).id;
     let Database::Sqlite(pool) = state.database() else {
         panic!("expected SQLite database");
     };
     sqlx::query("UPDATE jobs SET ams_mapping_json = ?2 WHERE id = ?1")
-        .bind(job_id)
+        .bind(&job_id)
         .bind(r#"["sk-live-secret"]"#)
         .execute(pool)
         .await
@@ -99,8 +101,9 @@ async fn job_detail_returns_internal_error_for_corrupt_persisted_mapping_json() 
     .await;
 
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-    assert_eq!(body, json!({ "error": "internal_server_error" }));
-    assert!(!body.to_string().contains("sk-live-secret"));
+    let body_text = body.to_string();
+    assert_eq!(decode::<ErrorResponse>(body).error, "internal_server_error");
+    assert!(!body_text.contains("sk-live-secret"));
 }
 
 #[tokio::test]
@@ -108,10 +111,10 @@ async fn missing_job_detail_returns_not_found() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
     let token = auth_token_for_role(
         &state,
-        tenant_id,
+        &tenant_id,
         crate::repositories::UserRole::Viewer,
         "missing-job-viewer",
     )
@@ -127,5 +130,5 @@ async fn missing_job_detail_returns_not_found() {
     .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body, json!({ "error": "job_not_found" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "job_not_found");
 }

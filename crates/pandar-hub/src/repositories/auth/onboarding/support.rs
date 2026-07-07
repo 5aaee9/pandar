@@ -5,18 +5,37 @@ use sea_orm::{
     DatabaseTransaction, DbBackend, EntityTrait, QueryFilter, SqliteTransactionMode, Statement,
     TransactionOptions, TransactionTrait, Value,
 };
-use serde_json::json;
+use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     entities::{join_links, tenants, user_identities, users},
     repositories::{
         AuditActor, AuditEvent, RepositoryError, RepositoryResult, User, UserIdentity,
-        audit::record_audit_event,
+        audit::{audit_metadata, record_audit_event},
         auth::{UserRole, onboarding::JoinLink, user_from_model},
         is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
     },
 };
+
+#[derive(Serialize)]
+struct ExternalProjectionAuditMetadata<'a> {
+    email: &'a str,
+    role: &'a str,
+    provider: &'a str,
+}
+
+#[derive(Serialize)]
+struct TenantSelfCreateAuditMetadata<'a> {
+    tenant_slug: &'a str,
+}
+
+#[derive(Serialize)]
+struct JoinLinkAuditMetadata<'a> {
+    role: &'a str,
+    email_constraint: &'a Option<String>,
+    max_uses: i32,
+}
 
 pub(super) async fn begin_onboarding_write_transaction(
     connection: &DatabaseConnection,
@@ -266,10 +285,10 @@ pub(super) fn user_external_projection_audit_event(
         "user.external_projection_create",
         "user",
         Some(user.id.clone()),
-        json!({
-            "email": user.email,
-            "role": user.role.as_str(),
-            "provider": identity.provider,
+        audit_metadata(ExternalProjectionAuditMetadata {
+            email: &user.email,
+            role: user.role.as_str(),
+            provider: &identity.provider,
         }),
     )
 }
@@ -281,7 +300,9 @@ pub(super) fn tenant_self_create_audit_event(tenant: &Tenant, actor: AuditActor)
         "tenant.self_create",
         "tenant",
         Some(tenant.id.to_string()),
-        json!({ "tenant_slug": tenant.slug }),
+        audit_metadata(TenantSelfCreateAuditMetadata {
+            tenant_slug: &tenant.slug,
+        }),
     )
 }
 
@@ -296,10 +317,10 @@ pub(super) fn join_link_audit_event(
         action,
         "join_link",
         Some(join_link.id.clone()),
-        json!({
-            "role": join_link.role.as_str(),
-            "email_constraint": join_link.email_constraint,
-            "max_uses": join_link.max_uses,
+        audit_metadata(JoinLinkAuditMetadata {
+            role: join_link.role.as_str(),
+            email_constraint: &join_link.email_constraint,
+            max_uses: join_link.max_uses,
         }),
     )
 }

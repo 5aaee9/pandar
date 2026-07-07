@@ -1,7 +1,62 @@
 use super::*;
 use crate::entities::agents;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use serde::{Deserialize, de::DeserializeOwned};
 use tokio::sync::mpsc;
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[allow(dead_code)]
+struct AgentResponse {
+    id: String,
+    tenant_id: String,
+    name: String,
+    status: String,
+    created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentPairingResponse {
+    agent: AgentResponse,
+    agent_env: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AgentCredentialRotateResponse {
+    agent: AgentResponse,
+    credential: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AgentPairingAuditMetadata {
+    agent_name: String,
+    tenant_token_id: String,
+    tenant_token_scopes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TenantTokenAgentCredentialAuditMetadata {
+    tenant_token_id: String,
+    tenant_token_scopes: Vec<String>,
+    credential: Option<String>,
+    credential_hash: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UserAgentCredentialAuditMetadata {
+    tenant_token_id: Option<String>,
+    credential: Option<String>,
+    credential_hash: Option<String>,
+}
+
+fn decode<T>(body: Value) -> T
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_value(body).unwrap()
+}
 
 #[tokio::test]
 async fn tenant_admin_can_create_agent_pairing_bundle() {
@@ -18,11 +73,12 @@ async fn tenant_admin_can_create_agent_pairing_bundle() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["agent"]["tenant_id"], tenant_id);
-    assert_eq!(body["agent"]["name"], "workshop-agent");
-    assert_eq!(body["agent"]["status"], "offline");
-    let agent_id = body["agent"]["id"].as_str().unwrap();
-    let agent_env = body["agent_env"].as_str().unwrap();
+    let body = decode::<AgentPairingResponse>(body);
+    assert_eq!(body.agent.tenant_id, tenant_id);
+    assert_eq!(body.agent.name, "workshop-agent");
+    assert_eq!(body.agent.status, "offline");
+    let agent_id = body.agent.id;
+    let agent_env = body.agent_env;
     assert!(agent_env.contains(&format!("PANDAR_TENANT_ID={tenant_id}\n")));
     assert!(agent_env.contains(&format!("PANDAR_AGENT_ID={agent_id}\n")));
     assert!(agent_env.contains("PANDAR_AGENT_NAME=workshop-agent\n"));
@@ -55,10 +111,11 @@ async fn tenant_admin_can_create_agent_pairing_bundle() {
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].action, "agent.pairing_bundle");
     assert_eq!(events[0].actor_type, "tenant_token");
-    let metadata = serde_json::from_str::<serde_json::Value>(&events[0].metadata_json).unwrap();
-    assert_eq!(metadata["agent_name"], "workshop-agent");
-    assert!(metadata["tenant_token_id"].as_str().is_some());
-    assert_eq!(metadata["tenant_token_scopes"], json!(["*"]));
+    let metadata =
+        serde_json::from_str::<AgentPairingAuditMetadata>(&events[0].metadata_json).unwrap();
+    assert_eq!(metadata.agent_name, "workshop-agent");
+    assert!(!metadata.tenant_token_id.is_empty());
+    assert_eq!(metadata.tenant_token_scopes, vec!["*".to_owned()]);
 }
 
 #[tokio::test]
@@ -97,13 +154,14 @@ async fn tenant_admin_can_rotate_agent_credential_once() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let agent_id = paired["agent"]["id"].as_str().unwrap();
-    let old_credential = paired["agent_env"]
-        .as_str()
-        .unwrap()
+    let paired = decode::<AgentPairingResponse>(paired);
+    let agent_id = paired.agent.id;
+    let old_credential = paired
+        .agent_env
         .lines()
         .find_map(|line| line.strip_prefix("PANDAR_AGENT_CREDENTIAL="))
-        .unwrap();
+        .unwrap()
+        .to_owned();
 
     let (status, body) = request_as(
         app,
@@ -115,20 +173,20 @@ async fn tenant_admin_can_rotate_agent_credential_once() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["agent"]["id"], agent_id);
-    let credential = body["credential"].as_str().unwrap();
+    let body = decode::<AgentCredentialRotateResponse>(body);
+    assert_eq!(body.agent.id, agent_id);
+    let credential = body.credential;
     assert!(credential.starts_with("pandar_ac_"));
     assert_ne!(credential, old_credential);
-    assert!(body["agent"].get("credential_hash").is_none());
     let stored_agent = agents::Entity::find()
-        .filter(agents::Column::Id.eq(agent_id))
+        .filter(agents::Column::Id.eq(&agent_id))
         .one(&state.database().sea_orm_connection())
         .await
         .unwrap()
         .unwrap();
     assert_eq!(
         stored_agent.credential_hash,
-        Some(crate::repositories::hash_token_for_test(credential))
+        Some(crate::repositories::hash_token_for_test(&credential))
     );
     assert_eq!(stored_agent.credential_revoked_at, None);
 
@@ -143,12 +201,14 @@ async fn tenant_admin_can_rotate_agent_credential_once() {
         .unwrap();
     assert_eq!(event.actor_type, "tenant_token");
     assert_eq!(event.target_type, "agent");
-    assert_eq!(event.target_id.as_deref(), Some(agent_id));
-    let metadata = serde_json::from_str::<serde_json::Value>(&event.metadata_json).unwrap();
-    assert!(metadata.get("tenant_token_id").is_some());
-    assert_eq!(metadata["tenant_token_scopes"], json!(["*"]));
-    assert!(metadata.get("credential").is_none());
-    assert!(metadata.get("credential_hash").is_none());
+    assert_eq!(event.target_id.as_deref(), Some(agent_id.as_str()));
+    let metadata =
+        serde_json::from_str::<TenantTokenAgentCredentialAuditMetadata>(&event.metadata_json)
+            .unwrap();
+    assert!(!metadata.tenant_token_id.is_empty());
+    assert_eq!(metadata.tenant_token_scopes, vec!["*".to_owned()]);
+    assert_eq!(metadata.credential, None);
+    assert_eq!(metadata.credential_hash, None);
 }
 
 #[tokio::test]
@@ -164,7 +224,8 @@ async fn all_scope_tenant_token_can_rotate_and_revoke_agent_credential() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let agent_id = paired["agent"]["id"].as_str().unwrap();
+    let paired = decode::<AgentPairingResponse>(paired);
+    let agent_id = paired.agent.id;
 
     let (status, _) = request_as(
         app.clone(),
@@ -186,9 +247,10 @@ async fn all_scope_tenant_token_can_rotate_and_revoke_agent_credential() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(revoked["id"], agent_id);
+    let revoked = decode::<AgentResponse>(revoked);
+    assert_eq!(revoked.id, agent_id);
     let stored_agent = agents::Entity::find()
-        .filter(agents::Column::Id.eq(agent_id))
+        .filter(agents::Column::Id.eq(&agent_id))
         .one(&state.database().sea_orm_connection())
         .await
         .unwrap()
@@ -200,19 +262,21 @@ async fn all_scope_tenant_token_can_rotate_and_revoke_agent_credential() {
     assert!(events.iter().any(|event| {
         event.action == "agent.credential_rotate"
             && event.actor_type == "tenant_token"
-            && event.target_id.as_deref() == Some(agent_id)
+            && event.target_id.as_deref() == Some(agent_id.as_str())
     }));
     let revoke = events
         .iter()
         .find(|event| event.action == "agent.credential_revoke")
         .unwrap();
     assert_eq!(revoke.actor_type, "tenant_token");
-    assert_eq!(revoke.target_id.as_deref(), Some(agent_id));
-    let metadata = serde_json::from_str::<serde_json::Value>(&revoke.metadata_json).unwrap();
-    assert!(metadata.get("tenant_token_id").is_some());
-    assert_eq!(metadata["tenant_token_scopes"], json!(["*"]));
-    assert!(metadata.get("credential").is_none());
-    assert!(metadata.get("credential_hash").is_none());
+    assert_eq!(revoke.target_id.as_deref(), Some(agent_id.as_str()));
+    let metadata =
+        serde_json::from_str::<TenantTokenAgentCredentialAuditMetadata>(&revoke.metadata_json)
+            .unwrap();
+    assert!(!metadata.tenant_token_id.is_empty());
+    assert_eq!(metadata.tenant_token_scopes, vec!["*".to_owned()]);
+    assert_eq!(metadata.credential, None);
+    assert_eq!(metadata.credential_hash, None);
 }
 
 #[tokio::test]
@@ -236,7 +300,8 @@ async fn external_tenant_admin_rotate_and_revoke_audit_user_actor() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let agent_id = paired["agent"]["id"].as_str().unwrap();
+    let paired = decode::<AgentPairingResponse>(paired);
+    let agent_id = paired.agent.id;
 
     let (status, _) = request_as(
         app.clone(),
@@ -272,11 +337,12 @@ async fn external_tenant_admin_rotate_and_revoke_audit_user_actor() {
         let event = events.iter().find(|event| event.action == action).unwrap();
         assert_eq!(event.actor_type, "user");
         assert!(event.user_id.is_some());
-        assert_eq!(event.target_id.as_deref(), Some(agent_id));
-        let metadata = serde_json::from_str::<serde_json::Value>(&event.metadata_json).unwrap();
-        assert!(metadata.get("tenant_token_id").is_none());
-        assert!(metadata.get("credential").is_none());
-        assert!(metadata.get("credential_hash").is_none());
+        assert_eq!(event.target_id.as_deref(), Some(agent_id.as_str()));
+        let metadata =
+            serde_json::from_str::<UserAgentCredentialAuditMetadata>(&event.metadata_json).unwrap();
+        assert_eq!(metadata.tenant_token_id, None);
+        assert_eq!(metadata.credential, None);
+        assert_eq!(metadata.credential_hash, None);
     }
 }
 
@@ -295,7 +361,8 @@ async fn agent_register_tenant_token_can_rotate_and_revoke_agent_credential() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    let agent_id = paired["agent"]["id"].as_str().unwrap();
+    let paired = decode::<AgentPairingResponse>(paired);
+    let agent_id = paired.agent.id;
 
     let (status, _) = request_as(
         app.clone(),
@@ -317,7 +384,8 @@ async fn agent_register_tenant_token_can_rotate_and_revoke_agent_credential() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(revoked["id"], agent_id);
+    let revoked = decode::<AgentResponse>(revoked);
+    assert_eq!(revoked.id, agent_id);
 }
 
 #[tokio::test]
@@ -405,11 +473,11 @@ async fn agent_credential_rotate_returns_secret_when_close_publish_fails() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(rotated["agent"]["id"], agent.id.to_string());
+    let rotated = decode::<AgentCredentialRotateResponse>(rotated);
+    assert_eq!(rotated.agent.id, agent.id.to_string());
     assert!(
-        rotated["credential"]
-            .as_str()
-            .unwrap()
+        rotated
+            .credential
             .starts_with(crate::repositories::AGENT_CREDENTIAL_PREFIX)
     );
 }
@@ -522,7 +590,8 @@ async fn agent_credential_revoke_closes_sibling_session() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(revoked["id"], agent.id.to_string());
+    let revoked = decode::<AgentResponse>(revoked);
+    assert_eq!(revoked.id, agent.id.to_string());
     tokio::time::timeout(std::time::Duration::from_secs(1), close_receiver.recv())
         .await
         .expect("sibling agent session should be closed")

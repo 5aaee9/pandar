@@ -19,28 +19,23 @@ async fn print_command_created_by_job_transaction_has_linked_job() {
         .await
         .unwrap()
         .unwrap();
-    let payload: Value = serde_json::from_str(&command.payload_json).unwrap();
+    let payload: PrintProjectFilePayload = serde_json::from_str(&command.payload_json).unwrap();
 
     assert_eq!(command.kind, "print_project_file");
     assert_eq!(command.id, created.job.command_id);
     assert_eq!(command.printer_id.as_deref(), Some(printer_id.as_str()));
-    assert_eq!(payload["job_id"], created.job.id.to_string());
-    assert_eq!(payload["artifact_id"], created.artifact.id);
-    assert_eq!(payload["printer_id"], printer_id);
+    assert_eq!(payload.job_id, created.job.id.to_string());
+    assert_eq!(payload.artifact_id, created.artifact.id);
+    assert_eq!(payload.printer_id, printer_id);
     assert_eq!(
-        payload["artifact_download_path"],
+        payload.artifact_download_path,
         format!(
             "/api/v1/agents/{}/artifacts/{}",
             agent.id, created.artifact.id
         )
     );
-    assert_eq!(payload["storage_path"], created.artifact.storage_path);
-    assert!(
-        payload["serial_number"]
-            .as_str()
-            .unwrap()
-            .starts_with("serial-")
-    );
+    assert_eq!(payload.storage_path, created.artifact.storage_path);
+    assert!(payload.serial_number.starts_with("serial-"));
     assert_eq!(
         jobs.get_for_tenant(tenant.id, created.job.id)
             .await
@@ -87,8 +82,8 @@ async fn job_repository_persists_mapping_json_null_and_empty_distinctly() {
     assert_eq!(empty.job.ams_mapping2_json.as_deref(), Some("[]"));
 
     let payloads = queued_payloads(&commands, tenant.id, agent.id).await;
-    assert_eq!(payloads[0]["ams_mapping_json"], Value::Null);
-    assert_eq!(payloads[1]["ams_mapping_json"], "[]");
+    assert_eq!(payloads[0].ams_mapping_json, None);
+    assert_eq!(payloads[1].ams_mapping_json.as_deref(), Some("[]"));
 }
 
 #[tokio::test]
@@ -144,8 +139,8 @@ async fn job_repository_accepts_mapping2_external_slot_outside_ams_tray_range() 
         Some(r#"[{"ams_id":254,"slot_id":8}]"#)
     );
     assert_eq!(
-        payloads[0]["ams_mapping2_json"],
-        r#"[{"ams_id":254,"slot_id":8}]"#
+        payloads[0].ams_mapping2_json.as_deref(),
+        Some(r#"[{"ams_id":254,"slot_id":8}]"#)
     );
 }
 

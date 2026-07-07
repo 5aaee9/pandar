@@ -1,10 +1,11 @@
 use pandar_core::{AgentId, AgentStatus, CommandId, CommandStatus};
-use serde_json::Value;
+use serde::Deserialize;
 
 use super::*;
 use crate::repositories::tests::postgres::postgres_database;
 use crate::repositories::{
-    AuditActor, LinkPrinterPayload, PrinterOperationKind, RefreshPrinterMaterialsPayload,
+    AuditActor, LinkPrinterPayload, PrinterOperationKind, PrinterOperationPayload,
+    RefreshPrinterMaterialsPayload,
 };
 
 #[tokio::test]
@@ -259,11 +260,18 @@ async fn postgres_printer_operation_enqueue_behavior_when_configured() {
         )
         .await
         .unwrap();
-    let payload: Value = serde_json::from_str(&command.payload_json).unwrap();
+    let payload: PrinterOperationPayload = serde_json::from_str(&command.payload_json).unwrap();
     assert_eq!(command.kind, "printer_operation");
     assert_eq!(command.agent_id, agent.id);
     assert_eq!(command.printer_id.as_deref(), Some(printer_id.as_str()));
-    assert_eq!(payload["operation"]["type"], "pause");
+    assert_eq!(
+        payload,
+        PrinterOperationPayload {
+            printer_id: printer_id.clone(),
+            serial_number: format!("serial-{printer_id}"),
+            operation: PrinterOperationKind::Pause,
+        }
+    );
     assert!(
         audit
             .list_for_tenant(tenant.id)
@@ -366,15 +374,19 @@ async fn postgres_link_printer_command_behavior_when_configured() {
         .await
         .unwrap();
 
-    let payload: Value = serde_json::from_str(&old_owned.payload_json).unwrap();
+    let payload: TestRedactedLinkPrinterPayload =
+        serde_json::from_str(&old_owned.payload_json).unwrap();
     assert_eq!(old_owned.kind, "link_printer");
     assert_eq!(old_owned.status, CommandStatus::Sent);
-    assert_eq!(payload["printer_type"], "BambuLab");
-    assert_eq!(payload["host"], "192.0.2.10");
-    assert_eq!(payload["access_code"], "[redacted]");
-    assert_eq!(payload["name"], "Office X1C");
-    assert!(payload.get("serial_number").is_none());
-    assert!(payload.get("model").is_none());
+    assert_eq!(
+        payload,
+        TestRedactedLinkPrinterPayload {
+            printer_type: "BambuLab".to_owned(),
+            host: "192.0.2.10".to_owned(),
+            access_code: "[redacted]".to_owned(),
+            name: Some("Office X1C".to_owned()),
+        }
+    );
     assert!(!old_owned.payload_json.contains("SECRET-OWNED"));
     let event = audit
         .list_for_tenant(tenant.id)
@@ -383,12 +395,17 @@ async fn postgres_link_printer_command_behavior_when_configured() {
         .into_iter()
         .find(|event| event.action == "agent.link_printer")
         .expect("link printer audit event");
-    let metadata: Value = serde_json::from_str(&event.metadata_json).unwrap();
-    assert_eq!(metadata["printer_type"], "BambuLab");
-    assert_eq!(metadata["host"], "192.0.2.10");
-    assert_eq!(metadata["name"], "Office X1C");
-    assert!(metadata.get("serial_number").is_none());
-    assert!(metadata.get("model").is_none());
+    let metadata: TestLinkPrinterAuditMetadata =
+        serde_json::from_str(&event.metadata_json).unwrap();
+    assert_eq!(
+        metadata,
+        TestLinkPrinterAuditMetadata {
+            printer_type: "BambuLab".to_owned(),
+            host: "192.0.2.10".to_owned(),
+            name: Some("Office X1C".to_owned()),
+            audit: test_audit_metadata(),
+        }
+    );
     assert!(!event.metadata_json.contains("SECRET-OWNED"));
 
     set_command_updated_at(&database, old_owned.id, "2026-07-01T00:00:00Z").await;
@@ -451,4 +468,37 @@ fn link_payload(serial: &str) -> LinkPrinterPayload {
 
 fn test_audit_actor() -> AuditActor {
     AuditActor::tenant_token(None, "postgres-repository-test-token", vec!["*"])
+}
+
+fn test_audit_metadata() -> TestAuditActorMetadata {
+    TestAuditActorMetadata {
+        tenant_token_id: "postgres-repository-test-token".to_owned(),
+        tenant_token_scopes: vec!["*".to_owned()],
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TestAuditActorMetadata {
+    tenant_token_id: String,
+    tenant_token_scopes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TestRedactedLinkPrinterPayload {
+    printer_type: String,
+    host: String,
+    access_code: String,
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TestLinkPrinterAuditMetadata {
+    printer_type: String,
+    host: String,
+    name: Option<String>,
+    #[serde(flatten)]
+    audit: TestAuditActorMetadata,
 }

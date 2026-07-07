@@ -10,6 +10,7 @@ use crate::{
     repositories::CreatePrintJob,
 };
 use pandar_core::AgentId;
+use serde::{Deserialize, de::DeserializeOwned};
 use tokio::net::TcpListener;
 use tokio_stream::{
     StreamExt,
@@ -17,6 +18,65 @@ use tokio_stream::{
 };
 use tokio_tungstenite::tungstenite::{Message, client::IntoClientRequest};
 use tonic::transport::Server;
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ErrorResponse {
+    error: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PrinterEventTicketResponse {
+    ticket: String,
+    expires_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+enum WebSocketPrinterEvent {
+    #[serde(rename = "printer_snapshot")]
+    PrinterSnapshot { printer: EventPrinter },
+    #[serde(rename = "job_progress")]
+    JobProgress { job: EventJob },
+}
+
+#[derive(Debug, Deserialize)]
+struct EventPrinter {
+    tenant_id: String,
+    agent_id: String,
+    serial_number: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct EventJob {
+    id: String,
+    status: String,
+    print: EventJobPrint,
+}
+
+#[derive(Debug, Deserialize)]
+struct EventJobPrint {
+    status: String,
+    progress_percent: Option<u8>,
+}
+
+fn decode<T>(body: Value) -> T
+where
+    T: DeserializeOwned,
+{
+    serde_json::from_value(body).unwrap()
+}
+
+fn decode_ws_message<T>(message: Message) -> T
+where
+    T: DeserializeOwned,
+{
+    match message {
+        Message::Text(text) => serde_json::from_str(&text).unwrap(),
+        other => panic!("expected text websocket message, got {other:?}"),
+    }
+}
 
 #[tokio::test]
 async fn printer_events_invalid_tenant_returns_bad_request_before_upgrade() {
@@ -29,7 +89,7 @@ async fn printer_events_invalid_tenant_returns_bad_request_before_upgrade() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_tenant_id" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_tenant_id");
 }
 
 #[tokio::test]
@@ -56,7 +116,7 @@ async fn printer_events_missing_tenant_returns_not_found_before_upgrade() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "tenant_forbidden");
 }
 
 #[tokio::test]
@@ -136,7 +196,7 @@ async fn printer_events_ticket_requires_linked_viewer() {
     )
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "missing_auth_token" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "missing_auth_token");
 
     let (status, body) = request_as(
         app.clone(),
@@ -147,7 +207,7 @@ async fn printer_events_ticket_requires_linked_viewer() {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "tenant_forbidden");
 
     let (status, body) = request_as(
         app,
@@ -158,16 +218,9 @@ async fn printer_events_ticket_requires_linked_viewer() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert!(
-        body["ticket"]
-            .as_str()
-            .is_some_and(|ticket| !ticket.is_empty())
-    );
-    assert!(
-        body["expires_at"]
-            .as_str()
-            .is_some_and(|value| !value.is_empty())
-    );
+    let body = decode::<PrinterEventTicketResponse>(body);
+    assert!(!body.ticket.is_empty());
+    assert!(!body.expires_at.is_empty());
 }
 
 #[tokio::test]
@@ -192,7 +245,7 @@ async fn printer_events_websocket_accepts_browser_ticket_once() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let ticket = body["ticket"].as_str().unwrap();
+    let ticket = decode::<PrinterEventTicketResponse>(body).ticket;
 
     let (ws, _) = tokio_tungstenite::connect_async(format!(
         "ws://{http_addr}/api/v1/tenants/{}/printer-events?ticket={ticket}",
@@ -238,7 +291,7 @@ async fn printer_events_websocket_accepts_browser_ticket_from_sibling_instance()
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let ticket = body["ticket"].as_str().unwrap();
+    let ticket = decode::<PrinterEventTicketResponse>(body).ticket;
 
     let (ws, _) = tokio_tungstenite::connect_async(format!(
         "ws://{http_addr}/api/v1/tenants/{}/printer-events?ticket={ticket}",
@@ -310,7 +363,7 @@ async fn printer_events_websocket_accepts_browser_ticket_from_separate_sqlite_co
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let ticket = body["ticket"].as_str().unwrap();
+    let ticket = decode::<PrinterEventTicketResponse>(body).ticket;
 
     let (ws, _) = tokio_tungstenite::connect_async(format!(
         "ws://{http_addr}/api/v1/tenants/{}/printer-events?ticket={ticket}",
@@ -389,7 +442,7 @@ async fn printer_events_websocket_rejects_invalid_ticket_before_upgrade() {
     .await;
 
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_auth_token");
 }
 
 #[tokio::test]
@@ -414,7 +467,7 @@ async fn printer_events_websocket_rejects_wrong_tenant_ticket_before_upgrade() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let ticket = body["ticket"].as_str().unwrap();
+    let ticket = decode::<PrinterEventTicketResponse>(body).ticket;
 
     let (status, body) = request(
         app,
@@ -428,7 +481,7 @@ async fn printer_events_websocket_rejects_wrong_tenant_ticket_before_upgrade() {
     .await;
 
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_auth_token");
 }
 
 #[tokio::test]
@@ -454,7 +507,7 @@ async fn printer_events_unlinked_external_jwt_returns_forbidden_before_upgrade()
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "tenant_forbidden");
 }
 
 #[tokio::test]
@@ -513,15 +566,13 @@ async fn printer_events_websocket_receives_snapshot_from_grpc_stream() {
         .unwrap();
 
     let message = ws.next().await.unwrap().unwrap();
-    let body: Value = match message {
-        Message::Text(text) => serde_json::from_str(&text).unwrap(),
-        other => panic!("expected text websocket message, got {other:?}"),
+    let body = decode_ws_message::<WebSocketPrinterEvent>(message);
+    let WebSocketPrinterEvent::PrinterSnapshot { printer } = body else {
+        panic!("expected printer snapshot websocket event");
     };
-
-    assert_eq!(body["type"], "printer_snapshot");
-    assert_eq!(body["printer"]["tenant_id"], tenant.id.to_string());
-    assert_eq!(body["printer"]["agent_id"], agent.id.to_string());
-    assert_eq!(body["printer"]["serial_number"], "SN-001");
+    assert_eq!(printer.tenant_id, tenant.id.to_string());
+    assert_eq!(printer.agent_id, agent.id.to_string());
+    assert_eq!(printer.serial_number, "SN-001");
     drop(stream);
 }
 
@@ -612,20 +663,18 @@ async fn printer_events_websocket_receives_job_progress_from_grpc_stream() {
         .unwrap();
 
     let message = ws.next().await.unwrap().unwrap();
-    let body: Value = match message {
-        Message::Text(text) => serde_json::from_str(&text).unwrap(),
-        other => panic!("expected text websocket message, got {other:?}"),
+    let body = decode_ws_message::<WebSocketPrinterEvent>(message);
+    let WebSocketPrinterEvent::JobProgress { job } = body else {
+        panic!("expected job progress websocket event");
     };
-
-    assert_eq!(body["type"], "job_progress");
-    assert_eq!(body["job"]["id"], created.job.id.to_string());
+    assert_eq!(job.id, created.job.id.to_string());
     assert!(
-        body["job"]["status"] == "queued" || body["job"]["status"] == "sent",
+        job.status == "queued" || job.status == "sent",
         "unexpected dispatch status: {}",
-        body["job"]["status"]
+        job.status
     );
-    assert_eq!(body["job"]["print"]["status"], "running");
-    assert_eq!(body["job"]["print"]["progress_percent"], 66);
+    assert_eq!(job.print.status, "running");
+    assert_eq!(job.print.progress_percent, Some(66));
     drop(stream);
 }
 
@@ -683,12 +732,11 @@ async fn printer_events_websocket_receives_event_from_sibling_instance() {
         .expect("sibling websocket should receive event")
         .unwrap()
         .unwrap();
-    let body: Value = match message {
-        Message::Text(text) => serde_json::from_str(&text).unwrap(),
-        other => panic!("expected text websocket message, got {other:?}"),
+    let body = decode_ws_message::<WebSocketPrinterEvent>(message);
+    let WebSocketPrinterEvent::PrinterSnapshot { printer } = body else {
+        panic!("expected printer snapshot websocket event");
     };
-    assert_eq!(body["type"], "printer_snapshot");
-    assert_eq!(body["printer"]["tenant_id"], tenant.id.to_string());
+    assert_eq!(printer.tenant_id, tenant.id.to_string());
 }
 
 #[tokio::test]
@@ -827,7 +875,7 @@ async fn issue_ticket(app: Router, tenant_id: TenantId, token: &str) -> String {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    body["ticket"].as_str().unwrap().to_owned()
+    decode::<PrinterEventTicketResponse>(body).ticket
 }
 
 async fn assert_ws_ticket_rejected(

@@ -1,4 +1,4 @@
-use serde_json::Value;
+use crate::material_mapping::{AmsMapping, AmsMapping2, AmsMappingInfo};
 
 #[derive(Debug, Default)]
 pub(in crate::routes::jobs) struct MultipartPrintFields {
@@ -9,9 +9,9 @@ pub(in crate::routes::jobs) struct MultipartPrintFields {
     pub(super) use_ams: Option<bool>,
     pub(super) flow_cali: Option<bool>,
     pub(super) timelapse: Option<bool>,
-    pub(super) ams_mapping: Option<Value>,
-    pub(super) ams_mapping2: Option<Value>,
-    pub(super) ams_mapping_info: Option<Value>,
+    pub(super) ams_mapping: Option<AmsMapping>,
+    pub(super) ams_mapping2: Option<AmsMapping2>,
+    pub(super) ams_mapping_info: Option<AmsMappingInfo>,
     pub(in crate::routes::jobs) file: Option<StagedUpload>,
 }
 

@@ -1,27 +1,36 @@
 use serde_json::{Map, Value};
 
-use super::{apply_material_fields, normalize_extruder_toolhead, normalized_string};
+use super::{
+    apply_material_fields, normalize_extruder_toolhead, normalized_string,
+    schema::{AmsReport, ExternalMaterialSource, MaterialSlotReport, PrintMaterialsReport},
+};
 
 pub(super) struct ExternalSpoolsPatch {
     pub(super) spools: Vec<Value>,
     pub(super) replace: bool,
 }
 
-pub(super) fn normalize_external_spools(print: &Value, ams: &Value) -> Option<ExternalSpoolsPatch> {
-    if let Some(vir_slot) = print.get("vir_slot").or_else(|| ams.get("vir_slot")) {
+pub(super) fn normalize_external_spools(
+    print: &PrintMaterialsReport,
+) -> Option<ExternalSpoolsPatch> {
+    let ams = print.ams.as_ref()?;
+    if let Some(vir_slot) = print.vir_slot.as_ref().or(ams.vir_slot.as_ref()) {
         return normalize_external_source(vir_slot, true);
     }
     print
-        .get("vt_tray")
-        .or_else(|| ams.get("vt_tray"))
+        .vt_tray
+        .as_ref()
+        .or(ams.vt_tray.as_ref())
         .and_then(|vt_tray| normalize_external_source(vt_tray, false))
 }
 
-fn normalize_external_source(value: &Value, vir_slot: bool) -> Option<ExternalSpoolsPatch> {
+fn normalize_external_source(
+    value: &ExternalMaterialSource,
+    vir_slot: bool,
+) -> Option<ExternalSpoolsPatch> {
     let (entries, replace_single) = match value {
-        Value::Array(entries) => (entries.iter().collect::<Vec<_>>(), vir_slot),
-        Value::Object(_) => (vec![value], false),
-        _ => return None,
+        ExternalMaterialSource::Array(entries) => (entries, vir_slot),
+        ExternalMaterialSource::Object(entry) => return Some(external_source_single(entry, false)),
     };
     if entries.is_empty() {
         return Some(ExternalSpoolsPatch {
@@ -43,7 +52,14 @@ fn normalize_external_source(value: &Value, vir_slot: bool) -> Option<ExternalSp
     })
 }
 
-fn normalize_external_spool(spool: &Value, index: usize, multi: bool) -> Value {
+fn external_source_single(spool: &MaterialSlotReport, replace: bool) -> ExternalSpoolsPatch {
+    ExternalSpoolsPatch {
+        spools: vec![normalize_external_spool(spool, 0, false)],
+        replace,
+    }
+}
+
+fn normalize_external_spool(spool: &MaterialSlotReport, index: usize, multi: bool) -> Value {
     let mut normalized = Map::new();
     normalized.insert(
         "external_id".to_owned(),
@@ -62,12 +78,14 @@ fn normalize_external_spool(spool: &Value, index: usize, multi: bool) -> Value {
     Value::Object(normalized)
 }
 
-pub(super) fn has_dual_external_slots(value: &Value) -> bool {
-    value
-        .get("vir_slot")
-        .or_else(|| value.get("vt_tray"))
-        .and_then(Value::as_array)
-        .is_some_and(|slots| {
+pub(super) fn has_dual_external_slots(print: &PrintMaterialsReport, ams: &AmsReport) -> bool {
+    has_dual_external_source(print.vir_slot.as_ref().or(print.vt_tray.as_ref()))
+        || has_dual_external_source(ams.vir_slot.as_ref().or(ams.vt_tray.as_ref()))
+}
+
+fn has_dual_external_source(source: Option<&ExternalMaterialSource>) -> bool {
+    source.is_some_and(|source| match source {
+        ExternalMaterialSource::Array(slots) => {
             let has_main = slots
                 .iter()
                 .any(|slot| external_slot_id(slot).as_deref() == Some("255"));
@@ -75,22 +93,24 @@ pub(super) fn has_dual_external_slots(value: &Value) -> bool {
                 .iter()
                 .any(|slot| external_slot_id(slot).as_deref() == Some("254"));
             has_main && has_deputy
-        })
+        }
+        ExternalMaterialSource::Object(_) => false,
+    })
 }
 
-fn external_slot_id(slot: &Value) -> Option<String> {
-    slot.get("id")
-        .or_else(|| slot.get("external_id"))
-        .and_then(|value| normalized_string(Some(value)))
+fn external_slot_id(slot: &MaterialSlotReport) -> Option<String> {
+    normalized_string(slot.id.as_ref()).or_else(|| normalized_string(slot.external_id.as_ref()))
 }
 
-fn normalize_external_id(spool: &Value, index: usize, multi: bool) -> String {
+fn normalize_external_id(spool: &MaterialSlotReport, index: usize, multi: bool) -> String {
     if let Some(toolhead) = spool
-        .get("toolhead")
+        .toolhead
+        .as_ref()
         .and_then(|value| normalized_string(Some(value)))
         .or_else(|| {
             spool
-                .get("extruder_id")
+                .extruder_id
+                .as_ref()
                 .and_then(normalize_extruder_toolhead)
         })
     {
@@ -98,8 +118,9 @@ fn normalize_external_id(spool: &Value, index: usize, multi: bool) -> String {
     }
 
     if let Some(id) = spool
-        .get("external_id")
-        .or_else(|| spool.get("id"))
+        .external_id
+        .as_ref()
+        .or(spool.id.as_ref())
         .and_then(|value| normalized_string(Some(value)))
         && matches!(id.as_str(), "254" | "255")
     {

@@ -1,8 +1,12 @@
+use serde::Deserialize;
 use serde_json::Value;
 
 use crate::entities::printer_material_snapshots;
 
-use super::patch::{ParsedPatch, Presence, parse_array_json, parse_object_json};
+use super::patch::{
+    MaterialExternalSpoolPatch, MaterialTrayPatch, MaterialUnitPatch, ParsedPatch, Presence,
+    parse_array_json, parse_object_json,
+};
 
 pub(super) struct MergedSnapshot {
     pub(super) ams_units: Value,
@@ -51,62 +55,58 @@ pub(super) fn merge_snapshot(
     })
 }
 
-fn merge_units(current: &mut Vec<Value>, patches: &[Value]) {
+fn merge_units(current: &mut Vec<Value>, patches: &[MaterialUnitPatch]) {
     for patch in patches {
-        let Some(unit_id) = patch.get("unit_id").and_then(Value::as_str) else {
+        let Some(unit_id) = patch.unit_id.as_deref() else {
             continue;
         };
-        let replace_trays = patch
-            .get("replace_trays")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
-        let patch_trays = patch.get("trays").and_then(Value::as_array).cloned();
-        let patch_object = strip_control_fields(patch, &["trays", "replace_trays"]);
+        let patch_object = patch.object_without_control_fields();
 
         if let Some(current_unit) = current
             .iter_mut()
-            .find(|unit| unit.get("unit_id").and_then(Value::as_str) == Some(unit_id))
+            .find(|unit| unit_key(unit).as_deref() == Some(unit_id))
         {
             merge_object_fields(current_unit, &patch_object);
-            if let Some(trays) = patch_trays {
-                merge_nested_array(current_unit, "trays", &trays, tray_key, replace_trays);
+            if let Some(trays) = &patch.trays {
+                merge_trays(current_unit, trays, patch.replace_trays);
             }
         } else {
-            let mut created = object_without_nulls(&patch_object);
+            let mut created = patch.value_without_null_fields();
             if let Value::Object(object) = &mut created {
-                object.insert(
-                    "trays".to_string(),
-                    Value::Array(
-                        patch_trays
-                            .unwrap_or_default()
-                            .into_iter()
-                            .map(|tray| object_without_nulls(&tray))
-                            .collect(),
-                    ),
-                );
+                object
+                    .entry("trays".to_string())
+                    .or_insert_with(|| Value::Array(Vec::new()));
             }
             current.push(created);
         }
     }
-    current.sort_by_key(|unit| identity(unit, "unit_id"));
+    current.sort_by_key(unit_key);
 }
 
-fn merge_external_spools(current: &mut Vec<Value>, patches: &[Value], replace: bool) {
+fn merge_external_spools(
+    current: &mut Vec<Value>,
+    patches: &[MaterialExternalSpoolPatch],
+    replace: bool,
+) {
     for patch in patches {
-        let Some(patch_key) = external_key(patch) else {
+        let Some(patch_key) = patch.key() else {
             continue;
         };
+        let patch_value = patch.value_without_null_fields();
         if let Some(current_spool) = current
             .iter_mut()
             .find(|spool| external_key(spool).as_ref() == Some(&patch_key))
         {
-            merge_object_fields(current_spool, patch);
+            merge_object_fields(current_spool, &patch.value_with_null_fields());
         } else {
-            current.push(object_without_nulls(patch));
+            current.push(patch_value);
         }
     }
     if replace {
-        let patch_keys = patches.iter().filter_map(external_key).collect::<Vec<_>>();
+        let patch_keys = patches
+            .iter()
+            .filter_map(MaterialExternalSpoolPatch::key)
+            .collect::<Vec<_>>();
         current.retain(|spool| {
             external_key(spool)
                 .map(|key| patch_keys.contains(&key))
@@ -116,34 +116,35 @@ fn merge_external_spools(current: &mut Vec<Value>, patches: &[Value], replace: b
     current.sort_by_key(external_key);
 }
 
-fn merge_nested_array<F>(parent: &mut Value, key: &str, patches: &[Value], key_fn: F, replace: bool)
-where
-    F: Fn(&Value) -> Option<String> + Copy,
-{
+fn merge_trays(parent: &mut Value, patches: &[MaterialTrayPatch], replace: bool) {
     let object = parent.as_object_mut().expect("unit state should be object");
     let current = object
-        .entry(key)
+        .entry("trays")
         .or_insert_with(|| Value::Array(Vec::new()))
         .as_array_mut()
         .expect("nested material collection should be array");
     for patch in patches {
-        let Some(patch_key) = key_fn(patch) else {
+        let Some(patch_key) = patch.tray_id.as_deref() else {
             continue;
         };
+        let patch_value = patch.value_without_null_fields();
         if let Some(existing) = current
             .iter_mut()
-            .find(|entry| key_fn(entry).as_ref() == Some(&patch_key))
+            .find(|entry| tray_key(entry).as_deref() == Some(patch_key))
         {
-            merge_object_fields(existing, patch);
+            merge_object_fields(existing, &patch.value_with_null_fields());
         } else {
-            current.push(object_without_nulls(patch));
+            current.push(patch_value);
         }
     }
     if replace {
-        let patch_keys = patches.iter().filter_map(key_fn).collect::<Vec<_>>();
+        let patch_keys = patches
+            .iter()
+            .filter_map(|patch| patch.tray_id.as_deref())
+            .collect::<Vec<_>>();
         current.retain(|entry| {
-            key_fn(entry)
-                .map(|key| patch_keys.contains(&key))
+            tray_key(entry)
+                .map(|key| patch_keys.contains(&key.as_str()))
                 .unwrap_or(false)
         });
     }
@@ -167,37 +168,35 @@ fn merge_object_fields(current: &mut Value, patch: &Value) {
     }
 }
 
-fn object_without_nulls(value: &Value) -> Value {
-    let Some(object) = value.as_object() else {
-        return value.clone();
-    };
-    Value::Object(
-        object
-            .iter()
-            .filter(|(_, value)| !value.is_null())
-            .map(|(key, value)| (key.clone(), value.clone()))
-            .collect(),
-    )
+#[derive(Deserialize)]
+struct UnitIdentity {
+    unit_id: Option<String>,
 }
 
-fn strip_control_fields(value: &Value, controls: &[&str]) -> Value {
-    let mut value = value.clone();
-    if let Value::Object(object) = &mut value {
-        for control in controls {
-            object.remove(*control);
-        }
-    }
-    value
+#[derive(Deserialize)]
+struct TrayIdentity {
+    tray_id: Option<String>,
 }
 
-fn identity(value: &Value, key: &str) -> Option<String> {
-    value.get(key).and_then(Value::as_str).map(str::to_string)
+#[derive(Deserialize)]
+struct ExternalIdentity {
+    external_id: Option<String>,
+    tray_id: Option<String>,
+}
+
+fn unit_key(value: &Value) -> Option<String> {
+    serde_json::from_value::<UnitIdentity>(value.clone())
+        .ok()?
+        .unit_id
 }
 
 fn tray_key(value: &Value) -> Option<String> {
-    identity(value, "tray_id")
+    serde_json::from_value::<TrayIdentity>(value.clone())
+        .ok()?
+        .tray_id
 }
 
 fn external_key(value: &Value) -> Option<(String, String)> {
-    Some((identity(value, "external_id")?, identity(value, "tray_id")?))
+    let identity = serde_json::from_value::<ExternalIdentity>(value.clone()).ok()?;
+    Some((identity.external_id?, identity.tray_id?))
 }

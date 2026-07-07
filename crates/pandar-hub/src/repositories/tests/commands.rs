@@ -1,10 +1,10 @@
 use pandar_core::{AgentId, CommandId, CommandStatus};
-use serde_json::Value;
+use serde::Deserialize;
 
 use super::*;
 use crate::repositories::{
     AuditActor, LinkPrinterPayload, PrintProjectFilePayload, PrinterOperationKind,
-    RefreshPrinterMaterialsPayload,
+    PrinterOperationPayload, RefreshPrinterMaterialsPayload,
 };
 
 #[tokio::test]
@@ -87,26 +87,12 @@ async fn command_enqueue_print_project_file_persists_payload_and_printer() {
         )
         .await
         .unwrap();
-    let payload: Value = serde_json::from_str(&command.payload_json).unwrap();
+    let payload: PrintProjectFilePayload = serde_json::from_str(&command.payload_json).unwrap();
 
     assert_eq!(command.kind, "print_project_file");
     assert_eq!(command.status, CommandStatus::Queued);
     assert_eq!(command.printer_id.as_deref(), Some(printer_id.as_str()));
-    assert_eq!(payload["job_id"], "job-1");
-    assert_eq!(payload["artifact_id"], "artifact-1");
-    assert_eq!(payload["printer_id"], printer_id);
-    assert_eq!(payload["serial_number"], "serial-explicit");
-    assert_eq!(payload["filename"], "plate.3mf");
-    assert_eq!(payload["storage_path"], "tenant/artifact/plate.3mf");
-    assert_eq!(
-        payload["artifact_download_path"],
-        "/api/v1/agents/agent-1/artifacts/artifact-1"
-    );
-    assert_eq!(payload["size_bytes"], 3);
-    assert_eq!(payload["plate_id"], 1);
-    assert_eq!(payload["use_ams"], true);
-    assert_eq!(payload["flow_cali"], false);
-    assert_eq!(payload["timelapse"], true);
+    assert_eq!(payload, print_payload(&printer_id, "serial-explicit"));
 }
 
 #[tokio::test]
@@ -181,16 +167,20 @@ async fn command_enqueue_printer_operation_derives_agent_persists_payload_and_au
         )
         .await
         .unwrap();
-    let payload: Value = serde_json::from_str(&command.payload_json).unwrap();
+    let payload: PrinterOperationPayload = serde_json::from_str(&command.payload_json).unwrap();
 
     assert_eq!(command.kind, "printer_operation");
     assert_eq!(command.status, CommandStatus::Queued);
     assert_eq!(command.agent_id, agent.id);
     assert_eq!(command.printer_id.as_deref(), Some(printer_id.as_str()));
-    assert_eq!(payload["printer_id"], printer_id);
-    assert_eq!(payload["serial_number"], format!("serial-{printer_id}"));
-    assert_eq!(payload["operation"]["type"], "set_print_speed");
-    assert_eq!(payload["operation"]["speed_mode"], 3);
+    assert_eq!(
+        payload,
+        PrinterOperationPayload {
+            printer_id: printer_id.clone(),
+            serial_number: format!("serial-{printer_id}"),
+            operation: PrinterOperationKind::SetPrintSpeed { speed_mode: 3 },
+        }
+    );
 
     let events = audit.list_for_tenant(tenant.id).await.unwrap();
     let event = events
@@ -199,11 +189,17 @@ async fn command_enqueue_printer_operation_derives_agent_persists_payload_and_au
         .expect("printer control audit event");
     assert_eq!(event.target_type, "printer");
     assert_eq!(event.target_id.as_deref(), Some(printer_id.as_str()));
-    let metadata: Value = serde_json::from_str(&event.metadata_json).unwrap();
-    assert_eq!(metadata["agent_id"], agent.id.to_string());
-    assert_eq!(metadata["serial_number"], format!("serial-{printer_id}"));
-    assert_eq!(metadata["action"], "set_print_speed");
-    assert_eq!(metadata["speed_mode"], 3);
+    let metadata: TestPrintSpeedAuditMetadata = serde_json::from_str(&event.metadata_json).unwrap();
+    assert_eq!(
+        metadata,
+        TestPrintSpeedAuditMetadata {
+            agent_id: agent.id.to_string(),
+            serial_number: format!("serial-{printer_id}"),
+            action: "set_print_speed".to_owned(),
+            speed_mode: 3,
+            audit: test_audit_metadata(),
+        }
+    );
 }
 
 #[tokio::test]
@@ -244,10 +240,17 @@ async fn command_enqueue_refresh_printer_materials_derives_agent_persists_payloa
         event.target_id.as_deref(),
         Some(payload.printer_id.as_str())
     );
-    let metadata: Value = serde_json::from_str(&event.metadata_json).unwrap();
-    assert_eq!(metadata["agent_id"], agent.id.to_string());
-    assert_eq!(metadata["printer_id"], payload.printer_id);
-    assert_eq!(metadata["serial_number"], payload.serial_number);
+    let metadata: TestRefreshPrinterMaterialsAuditMetadata =
+        serde_json::from_str(&event.metadata_json).unwrap();
+    assert_eq!(
+        metadata,
+        TestRefreshPrinterMaterialsAuditMetadata {
+            agent_id: agent.id.to_string(),
+            printer_id: payload.printer_id,
+            serial_number: payload.serial_number,
+            audit: test_audit_metadata(),
+        }
+    );
 }
 
 #[tokio::test]
@@ -277,13 +280,17 @@ async fn command_create_link_printer_sent_persists_redacted_payload_and_audit() 
     assert_eq!(command.status, CommandStatus::Sent);
     assert_eq!(command.printer_id, None);
     assert!(!command.payload_json.contains(access_code));
-    let payload: serde_json::Value = serde_json::from_str(&command.payload_json).unwrap();
-    assert_eq!(payload["printer_type"], "BambuLab");
-    assert_eq!(payload["host"], "192.0.2.10");
-    assert_eq!(payload["access_code"], "[redacted]");
-    assert_eq!(payload["name"], "Office X1C");
-    assert!(payload.get("serial_number").is_none());
-    assert!(payload.get("model").is_none());
+    let payload: TestRedactedLinkPrinterPayload =
+        serde_json::from_str(&command.payload_json).unwrap();
+    assert_eq!(
+        payload,
+        TestRedactedLinkPrinterPayload {
+            printer_type: "BambuLab".to_owned(),
+            host: "192.0.2.10".to_owned(),
+            access_code: "[redacted]".to_owned(),
+            name: Some("Office X1C".to_owned()),
+        }
+    );
 
     let events = audit.list_for_tenant(tenant.id).await.unwrap();
     let event = events
@@ -296,12 +303,17 @@ async fn command_create_link_printer_sent_persists_redacted_payload_and_audit() 
         Some(agent.id.to_string().as_str())
     );
     assert!(!event.metadata_json.contains(access_code));
-    let metadata: serde_json::Value = serde_json::from_str(&event.metadata_json).unwrap();
-    assert_eq!(metadata["printer_type"], "BambuLab");
-    assert_eq!(metadata["host"], "192.0.2.10");
-    assert_eq!(metadata["name"], "Office X1C");
-    assert!(metadata.get("serial_number").is_none());
-    assert!(metadata.get("model").is_none());
+    let metadata: TestLinkPrinterAuditMetadata =
+        serde_json::from_str(&event.metadata_json).unwrap();
+    assert_eq!(
+        metadata,
+        TestLinkPrinterAuditMetadata {
+            printer_type: "BambuLab".to_owned(),
+            host: "192.0.2.10".to_owned(),
+            name: Some("Office X1C".to_owned()),
+            audit: test_audit_metadata(),
+        }
+    );
 }
 
 #[tokio::test]
@@ -529,6 +541,60 @@ fn link_payload(serial: &str) -> LinkPrinterPayload {
 
 fn test_audit_actor() -> AuditActor {
     AuditActor::tenant_token(None, "repository-test-token", vec!["*"])
+}
+
+fn test_audit_metadata() -> TestAuditActorMetadata {
+    TestAuditActorMetadata {
+        tenant_token_id: "repository-test-token".to_owned(),
+        tenant_token_scopes: vec!["*".to_owned()],
+    }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TestAuditActorMetadata {
+    tenant_token_id: String,
+    tenant_token_scopes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TestPrintSpeedAuditMetadata {
+    agent_id: String,
+    serial_number: String,
+    action: String,
+    speed_mode: u8,
+    #[serde(flatten)]
+    audit: TestAuditActorMetadata,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TestRefreshPrinterMaterialsAuditMetadata {
+    agent_id: String,
+    printer_id: String,
+    serial_number: String,
+    #[serde(flatten)]
+    audit: TestAuditActorMetadata,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TestRedactedLinkPrinterPayload {
+    printer_type: String,
+    host: String,
+    access_code: String,
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TestLinkPrinterAuditMetadata {
+    printer_type: String,
+    host: String,
+    name: Option<String>,
+    #[serde(flatten)]
+    audit: TestAuditActorMetadata,
 }
 
 #[tokio::test]

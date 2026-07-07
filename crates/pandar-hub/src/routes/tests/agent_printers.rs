@@ -1,4 +1,5 @@
 use super::*;
+use serde::Deserialize;
 
 const AGENT_CREDENTIAL: &str = "pandar_ac_agent_printers";
 const OTHER_AGENT_CREDENTIAL: &str = "pandar_ac_other_agent_printers";
@@ -19,12 +20,14 @@ async fn agent_credential_lists_owned_printer_connections() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body["printers"].as_array().unwrap().len(), 1);
-    assert_eq!(body["printers"][0]["serial"], fixture.serial);
-    assert_eq!(body["printers"][0]["host"], "192.0.2.10");
-    assert_eq!(body["printers"][0]["access_code"], "RESTORED-LINK-CODE");
-    assert_eq!(body["printers"][0]["name"], "Fixture Printer");
-    assert_eq!(body["printers"][0]["model"], serde_json::Value::Null);
+    let body: AgentPrintersResponse = serde_json::from_value(body).unwrap();
+    assert_eq!(body.printers.len(), 1);
+    let printer = &body.printers[0];
+    assert_eq!(printer.serial, fixture.serial);
+    assert_eq!(printer.host, "192.0.2.10");
+    assert_eq!(printer.access_code, "RESTORED-LINK-CODE");
+    assert_eq!(printer.name, "Fixture Printer");
+    assert_eq!(printer.model, None);
 }
 
 #[tokio::test]
@@ -43,7 +46,27 @@ async fn agent_credential_cannot_list_another_agent_printers() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "forbidden" }));
+    let body: ErrorResponse = serde_json::from_value(body).unwrap();
+    assert_eq!(body.error, "forbidden");
+}
+
+#[derive(Deserialize)]
+struct AgentPrintersResponse {
+    printers: Vec<AgentPrinterResponse>,
+}
+
+#[derive(Deserialize)]
+struct AgentPrinterResponse {
+    serial: String,
+    host: String,
+    access_code: String,
+    name: String,
+    model: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ErrorResponse {
+    error: String,
 }
 
 struct AgentPrinterFixture {

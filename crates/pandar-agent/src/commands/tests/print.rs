@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
+use serde::Deserialize;
 use tokio::sync::{Mutex, mpsc};
 
 use super::{assert_failure_contains, test_config};
@@ -16,6 +17,36 @@ use crate::{
     },
     protocol::agent::v1::{AgentEvent, HubCommand, PrintProjectFile, agent_event, hub_command},
 };
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestPrintProjectFileResult {
+    #[serde(rename = "type")]
+    kind: String,
+    serial_number: String,
+    job_id: String,
+    artifact_id: String,
+    uploaded_path: String,
+    uploaded_url: String,
+    md5: String,
+    mqtt: TestPrintProjectMqttResult,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestPrintProjectMqttResult {
+    topic: String,
+    qos: u8,
+    payload: TestPrintProjectMqttPayload,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestPrintProjectMqttPayload {
+    print: TestPrintProjectPrintPayload,
+}
+
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestPrintProjectPrintPayload {
+    command: String,
+}
 
 #[tokio::test]
 async fn print_project_file_reads_artifact_reader_and_emits_ack_success() {
@@ -276,19 +307,26 @@ fn assert_print_success(event: AgentEvent, command_id: &str) {
             assert_eq!(result.command_id, command_id);
             assert!(result.success);
             assert_eq!(result.error, "");
-            let value: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(value["type"], "print_project_file");
-            assert_eq!(value["serial_number"], "SERIAL1");
-            assert_eq!(value["job_id"], "job-1");
-            assert_eq!(value["artifact_id"], "artifact-1");
-            assert_eq!(value["uploaded_path"], "plate.gcode.3mf");
-            assert_eq!(value["uploaded_url"], "ftp://plate.gcode.3mf");
-            assert_eq!(value["md5"], "900150983CD24FB0D6963F7D28E17F72");
-            assert_eq!(value["mqtt"]["topic"], "device/SERIAL1/request");
-            assert_eq!(value["mqtt"]["qos"], 0);
             assert_eq!(
-                value["mqtt"]["payload"],
-                serde_json::json!({"print":{"command":"project_file"}})
+                serde_json::from_str::<TestPrintProjectFileResult>(&result.result_json).unwrap(),
+                TestPrintProjectFileResult {
+                    kind: "print_project_file".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    job_id: "job-1".to_owned(),
+                    artifact_id: "artifact-1".to_owned(),
+                    uploaded_path: "plate.gcode.3mf".to_owned(),
+                    uploaded_url: "ftp://plate.gcode.3mf".to_owned(),
+                    md5: "900150983CD24FB0D6963F7D28E17F72".to_owned(),
+                    mqtt: TestPrintProjectMqttResult {
+                        topic: "device/SERIAL1/request".to_owned(),
+                        qos: 0,
+                        payload: TestPrintProjectMqttPayload {
+                            print: TestPrintProjectPrintPayload {
+                                command: "project_file".to_owned(),
+                            },
+                        },
+                    },
+                }
             );
         }
         other => panic!("expected command result, got {other:?}"),

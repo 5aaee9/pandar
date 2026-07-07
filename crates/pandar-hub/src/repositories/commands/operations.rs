@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::repositories::{RepositoryError, RepositoryResult};
 
@@ -205,93 +205,148 @@ pub fn operation_audit_metadata(
     serial_number: String,
     operation: &PrinterOperationKind,
 ) -> Value {
-    let mut metadata = serde_json::Map::from_iter([
-        ("agent_id".to_owned(), json!(agent_id)),
-        ("serial_number".to_owned(), json!(serial_number)),
-        ("action".to_owned(), json!(operation.action())),
-    ]);
+    serde_json::to_value(OperationAuditMetadata {
+        agent_id,
+        serial_number,
+        action: operation.action(),
+        fields: OperationAuditFields::from(operation),
+    })
+    .expect("printer operation audit metadata is serializable")
+}
 
-    match operation {
-        PrinterOperationKind::SetPrintSpeed { speed_mode } => {
-            metadata.insert("speed_mode".to_owned(), json!(speed_mode));
+#[derive(Serialize)]
+struct OperationAuditMetadata {
+    agent_id: String,
+    serial_number: String,
+    action: &'static str,
+    #[serde(flatten)]
+    fields: OperationAuditFields,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum OperationAuditFields {
+    Empty {},
+    PrintSpeed {
+        speed_mode: u8,
+    },
+    Extruder {
+        extruder_id: u32,
+    },
+    Home {
+        axes: Vec<&'static str>,
+    },
+    MoveAxes {
+        movements: Vec<OperationAuditMovement>,
+        feedrate_mm_per_min: Option<u32>,
+    },
+    HotendTemperature {
+        temperature_celsius: u16,
+        wait: bool,
+        extruder_id: Option<u32>,
+    },
+    Temperature {
+        temperature_celsius: u16,
+        wait: bool,
+    },
+    AmsSlot {
+        ams_id: u32,
+        slot_id: u32,
+    },
+    ChamberLight {
+        light_on: bool,
+    },
+    AmsFilament {
+        ams_id: u32,
+        slot_id: u32,
+        global_tray_id: Option<u32>,
+        external_id: Option<String>,
+        extruder_id: Option<u32>,
+    },
+}
+
+#[derive(Serialize)]
+struct OperationAuditMovement {
+    axis: &'static str,
+    delta_mm: f64,
+}
+
+impl OperationAuditFields {
+    fn from(operation: &PrinterOperationKind) -> Self {
+        match operation {
+            PrinterOperationKind::SetPrintSpeed { speed_mode } => Self::PrintSpeed {
+                speed_mode: *speed_mode,
+            },
+            PrinterOperationKind::SelectExtruder { extruder_id } => Self::Extruder {
+                extruder_id: *extruder_id,
+            },
+            PrinterOperationKind::Home { axes } => Self::Home {
+                axes: axis_names(axes),
+            },
+            PrinterOperationKind::MoveAxes {
+                movements,
+                feedrate_mm_per_min,
+            } => Self::MoveAxes {
+                movements: movements
+                    .iter()
+                    .map(|movement| OperationAuditMovement {
+                        axis: movement.axis.as_str(),
+                        delta_mm: movement.delta_mm,
+                    })
+                    .collect(),
+                feedrate_mm_per_min: *feedrate_mm_per_min,
+            },
+            PrinterOperationKind::SetHotendTemperature {
+                temperature_celsius,
+                wait,
+                extruder_id,
+            } => Self::HotendTemperature {
+                temperature_celsius: *temperature_celsius,
+                wait: *wait,
+                extruder_id: *extruder_id,
+            },
+            PrinterOperationKind::SetBedTemperature {
+                temperature_celsius,
+                wait,
+            }
+            | PrinterOperationKind::SetChamberTemperature {
+                temperature_celsius,
+                wait,
+            } => Self::Temperature {
+                temperature_celsius: *temperature_celsius,
+                wait: *wait,
+            },
+            PrinterOperationKind::AmsRereadRfid { ams_id, slot_id } => Self::AmsSlot {
+                ams_id: *ams_id,
+                slot_id: *slot_id,
+            },
+            PrinterOperationKind::SetChamberLight { on } => Self::ChamberLight { light_on: *on },
+            PrinterOperationKind::AmsLoadFilament {
+                ams_id,
+                slot_id,
+                global_tray_id,
+                external_id,
+                extruder_id,
+            }
+            | PrinterOperationKind::AmsUnloadFilament {
+                ams_id,
+                slot_id,
+                global_tray_id,
+                external_id,
+                extruder_id,
+            } => Self::AmsFilament {
+                ams_id: *ams_id,
+                slot_id: *slot_id,
+                global_tray_id: *global_tray_id,
+                external_id: external_id.clone(),
+                extruder_id: *extruder_id,
+            },
+            PrinterOperationKind::Pause
+            | PrinterOperationKind::Resume
+            | PrinterOperationKind::Stop
+            | PrinterOperationKind::ToggleLight => Self::Empty {},
         }
-        PrinterOperationKind::SelectExtruder { extruder_id } => {
-            metadata.insert("extruder_id".to_owned(), json!(extruder_id));
-        }
-        PrinterOperationKind::Home { axes } => {
-            metadata.insert("axes".to_owned(), json!(axis_names(axes)));
-        }
-        PrinterOperationKind::MoveAxes {
-            movements,
-            feedrate_mm_per_min,
-        } => {
-            metadata.insert(
-                "movements".to_owned(),
-                json!(
-                    movements
-                        .iter()
-                        .map(|movement| json!({
-                            "axis": movement.axis.as_str(),
-                            "delta_mm": movement.delta_mm,
-                        }))
-                        .collect::<Vec<_>>()
-                ),
-            );
-            metadata.insert("feedrate_mm_per_min".to_owned(), json!(feedrate_mm_per_min));
-        }
-        PrinterOperationKind::SetHotendTemperature {
-            temperature_celsius,
-            wait,
-            extruder_id,
-        } => {
-            metadata.insert("temperature_celsius".to_owned(), json!(temperature_celsius));
-            metadata.insert("wait".to_owned(), json!(wait));
-            metadata.insert("extruder_id".to_owned(), json!(extruder_id));
-        }
-        PrinterOperationKind::SetBedTemperature {
-            temperature_celsius,
-            wait,
-        }
-        | PrinterOperationKind::SetChamberTemperature {
-            temperature_celsius,
-            wait,
-        } => {
-            metadata.insert("temperature_celsius".to_owned(), json!(temperature_celsius));
-            metadata.insert("wait".to_owned(), json!(wait));
-        }
-        PrinterOperationKind::AmsRereadRfid { ams_id, slot_id } => {
-            metadata.insert("ams_id".to_owned(), json!(ams_id));
-            metadata.insert("slot_id".to_owned(), json!(slot_id));
-        }
-        PrinterOperationKind::SetChamberLight { on } => {
-            metadata.insert("light_on".to_owned(), json!(on));
-        }
-        PrinterOperationKind::AmsLoadFilament {
-            ams_id,
-            slot_id,
-            global_tray_id,
-            external_id,
-            extruder_id,
-        }
-        | PrinterOperationKind::AmsUnloadFilament {
-            ams_id,
-            slot_id,
-            global_tray_id,
-            external_id,
-            extruder_id,
-        } => {
-            metadata.insert("ams_id".to_owned(), json!(ams_id));
-            metadata.insert("slot_id".to_owned(), json!(slot_id));
-            metadata.insert("global_tray_id".to_owned(), json!(global_tray_id));
-            metadata.insert("external_id".to_owned(), json!(external_id));
-            metadata.insert("extruder_id".to_owned(), json!(extruder_id));
-        }
-        PrinterOperationKind::Pause | PrinterOperationKind::Resume | PrinterOperationKind::Stop => {
-        }
-        PrinterOperationKind::ToggleLight => {}
     }
-
-    Value::Object(metadata)
 }
 
 fn validate_move_axes(

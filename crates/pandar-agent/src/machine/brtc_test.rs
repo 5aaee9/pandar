@@ -18,7 +18,7 @@ fn json_prefix_stops_before_binary_separator() {
 #[test]
 fn upload_chunk_request_only_includes_md5_for_final_chunk() {
     assert_eq!(
-        brtc_upload_chunk_request(7, 0, 0, 1024, None),
+        serde_json::to_value(protocol::upload_chunk_request(7, 0, 0, 1024, None)).unwrap(),
         json!({
             "cmdtype": BRTC_FILE_UPLOAD_CMD,
             "sequence": 7,
@@ -30,7 +30,14 @@ fn upload_chunk_request_only_includes_md5_for_final_chunk() {
         })
     );
     assert_eq!(
-        brtc_upload_chunk_request(7, 1, 1024, 512, Some("abc123")),
+        serde_json::to_value(protocol::upload_chunk_request(
+            7,
+            1,
+            1024,
+            512,
+            Some("abc123")
+        ))
+        .unwrap(),
         json!({
             "cmdtype": BRTC_FILE_UPLOAD_CMD,
             "sequence": 7,

@@ -3,7 +3,8 @@ use std::{sync::Arc, time::Duration};
 use anyhow::{Context, anyhow, bail};
 use md5::{Digest, Md5};
 use rustls::{ClientConfig, pki_types::ServerName};
-use serde_json::{Value, json};
+use serde::Serialize;
+use serde_json::Value;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -12,6 +13,8 @@ use tokio::{
 use tokio_rustls::{TlsConnector, client::TlsStream};
 
 use crate::machine::{BambuPrinterEndpoint, mqtt::BambuLanCertificateVerifier};
+
+mod protocol;
 
 const BRTC_PORT: u16 = 6000;
 const BRTC_TIMEOUT: Duration = Duration::from_secs(120);
@@ -99,17 +102,7 @@ impl BrtcSession {
             bail!("unexpected BRTC login ack magic 0x{:08x}", login_ack.magic);
         }
 
-        let setup = json!({
-            "sequence": 0,
-            "mtype": BRTC_CTRL_SETUP_MTYPE,
-            "req": {
-                "t_av": 1,
-                "mtype": BRTC_CTRL_JSON_MTYPE,
-                "peer_t": 3,
-                "pid": format!("pandar-{}", endpoint.serial),
-                "ver": "02.08.00.53"
-            }
-        });
+        let setup = protocol::setup_request(&endpoint.serial);
         self.send_abi_json(&setup)
             .await
             .context("send BRTC setup")?;
@@ -119,9 +112,7 @@ impl BrtcSession {
                 .read_json_frame()
                 .await
                 .context("read BRTC setup ack")?;
-            if value.get("mtype").and_then(Value::as_i64) == Some(BRTC_CTRL_SETUP_MTYPE)
-                && value.get("result").and_then(Value::as_i64) == Some(0)
-            {
+            if protocol::setup_ack_success(value) {
                 return Ok(());
             }
         }
@@ -133,16 +124,7 @@ impl BrtcSession {
         }
 
         let sequence = self.next_wire_seq();
-        let init = json!({
-            "cmdtype": BRTC_FILE_UPLOAD_CMD,
-            "sequence": sequence,
-            "req": {
-                "type": "model",
-                "path": dest_name,
-                "total": bytes.len(),
-                "storage": "emmc"
-            }
-        });
+        let init = protocol::upload_init_request(sequence, dest_name, bytes.len());
         self.send_abi_json(&init)
             .await
             .with_context(|| format!("start BRTC upload for emmc/{dest_name}"))?;
@@ -151,22 +133,15 @@ impl BrtcSession {
             .read_matching_upload_reply(sequence)
             .await
             .context("read BRTC upload init reply")?;
-        let result = init_reply
-            .get("result")
-            .and_then(Value::as_i64)
-            .unwrap_or(-1);
+        let result = init_reply.result();
         if result != 1 && result != 19 {
-            bail!("BRTC upload init failed with result {result}: {init_reply}");
+            bail!(
+                "BRTC upload init failed with result {result}: {}",
+                init_reply.raw()
+            );
         }
-        let reply = init_reply.get("reply").unwrap_or(&Value::Null);
-        let chunk_size = reply
-            .get("chunk_size")
-            .and_then(Value::as_u64)
-            .filter(|value| *value > 0)
-            .ok_or_else(|| anyhow!("BRTC upload init reply did not include chunk_size"))?
-            as usize
-            * 1024;
-        let mut offset = reply.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize;
+        let chunk_size = init_reply.chunk_size_bytes()?;
+        let mut offset = init_reply.offset();
         if offset > bytes.len() {
             bail!(
                 "BRTC upload resume offset {offset} exceeds file size {}",
@@ -180,7 +155,7 @@ impl BrtcSession {
             let end = (offset + chunk_size).min(bytes.len());
             let chunk = &bytes[offset..end];
             let last = end == bytes.len();
-            let chunk_request = brtc_upload_chunk_request(
+            let chunk_request = protocol::upload_chunk_request(
                 sequence,
                 fragment,
                 offset,
@@ -201,10 +176,10 @@ impl BrtcSession {
                 .read_matching_upload_reply(sequence)
                 .await
                 .context("read BRTC upload final reply")?;
-            match value.get("result").and_then(Value::as_i64).unwrap_or(-1) {
+            match value.result() {
                 0 | 19 => return Ok(digest_lower),
                 1 => continue,
-                result => bail!("BRTC upload failed with result {result}: {value}"),
+                result => bail!("BRTC upload failed with result {result}: {}", value.raw()),
             }
         }
 
@@ -217,18 +192,18 @@ impl BrtcSession {
         sequence
     }
 
-    async fn send_abi_json(&mut self, value: &Value) -> anyhow::Result<()> {
-        let body = wrap_ctrl_json(value)?;
+    async fn send_abi_json(&mut self, value: &impl Serialize) -> anyhow::Result<()> {
+        let body = protocol::wrap_ctrl_json(value)?;
         self.send_frame(BRTC_CTRL_CLIENT_MAGIC, body.as_bytes())
             .await
     }
 
     async fn send_abi_json_with_binary(
         &mut self,
-        value: &Value,
+        value: &impl Serialize,
         binary: &[u8],
     ) -> anyhow::Result<()> {
-        let mut body = wrap_ctrl_json(value)?.into_bytes();
+        let mut body = protocol::wrap_ctrl_json(value)?.into_bytes();
         body.extend_from_slice(b"\n\n");
         body.extend_from_slice(binary);
         self.send_frame(BRTC_CTRL_CLIENT_MAGIC, &body).await
@@ -245,13 +220,14 @@ impl BrtcSession {
         Ok(())
     }
 
-    async fn read_matching_upload_reply(&mut self, sequence: u32) -> anyhow::Result<Value> {
+    async fn read_matching_upload_reply(
+        &mut self,
+        sequence: u32,
+    ) -> anyhow::Result<protocol::BrtcUploadReplyFrame> {
         loop {
             let value = self.read_json_frame().await?;
-            if value.get("cmdtype").and_then(Value::as_i64) == Some(BRTC_FILE_UPLOAD_CMD)
-                && value.get("sequence").and_then(Value::as_u64) == Some(sequence as u64)
-            {
-                return Ok(value);
+            if let Some(reply) = protocol::upload_reply(value, sequence) {
+                return Ok(reply);
             }
         }
     }
@@ -300,38 +276,6 @@ fn padded_ascii(value: &str, width: usize) -> String {
         out.push('\0');
     }
     out
-}
-
-fn wrap_ctrl_json(value: &Value) -> anyhow::Result<String> {
-    let mut object = value
-        .as_object()
-        .cloned()
-        .ok_or_else(|| anyhow!("BRTC ABI payload must be a JSON object"))?;
-    object.insert("mtype".to_owned(), Value::from(BRTC_CTRL_JSON_MTYPE));
-    Ok(Value::Object(object).to_string())
-}
-
-fn brtc_upload_chunk_request(
-    sequence: u32,
-    fragment: u32,
-    offset: usize,
-    size: usize,
-    file_md5: Option<&str>,
-) -> Value {
-    let mut request = serde_json::Map::from_iter([
-        ("frag_id".to_owned(), json!(fragment)),
-        ("offset".to_owned(), json!(offset)),
-        ("size".to_owned(), json!(size)),
-    ]);
-    if let Some(file_md5) = file_md5 {
-        request.insert("file_md5".to_owned(), json!(file_md5));
-    }
-
-    json!({
-        "cmdtype": BRTC_FILE_UPLOAD_CMD,
-        "sequence": sequence,
-        "req": request
-    })
 }
 
 fn json_prefix_len(bytes: &[u8]) -> Option<usize> {

@@ -27,7 +27,7 @@ async fn linked_operator_jwt_can_create_print_job() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["status"], "queued");
+    assert_eq!(decode::<JobResponse>(body).status, "queued");
 }
 
 #[tokio::test]
@@ -57,7 +57,7 @@ async fn linked_viewer_jwt_cannot_create_print_job() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 }
 
 #[tokio::test]
@@ -81,7 +81,7 @@ async fn job_create_rejects_invalid_tenant_printer_and_job_ids() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "invalid_tenant_id" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_tenant_id");
 
     let (status, body) = multipart_request_as(
         app.clone(),
@@ -92,7 +92,7 @@ async fn job_create_rejects_invalid_tenant_printer_and_job_ids() {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "tenant_forbidden");
 
     let (status, body) = request_as(
         app,
@@ -103,7 +103,7 @@ async fn job_create_rejects_invalid_tenant_printer_and_job_ids() {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "tenant_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "tenant_forbidden");
 }
 
 #[tokio::test]
@@ -111,10 +111,10 @@ async fn job_create_rejects_missing_printer() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = tenant["id"].as_str().unwrap();
+    let tenant_id = decode::<TenantResponse>(tenant).id;
     let token = auth_token_for_role(
         &state,
-        tenant_id,
+        &tenant_id,
         crate::repositories::UserRole::Operator,
         "missing-printer-operator",
     )
@@ -130,7 +130,7 @@ async fn job_create_rejects_missing_printer() {
     .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body, json!({ "error": "printer_not_found" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "printer_not_found");
 }
 
 #[tokio::test]
@@ -138,7 +138,7 @@ async fn job_create_rejects_empty_invalid_and_oversized_artifacts() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let token = auth_token_for_role(
         &state,
         &tenant_id.to_string(),
@@ -161,7 +161,7 @@ async fn job_create_rejects_empty_invalid_and_oversized_artifacts() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "artifact_empty" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "artifact_empty");
 
     let (status, body) = multipart_request_as(
         app.clone(),
@@ -172,7 +172,10 @@ async fn job_create_rejects_empty_invalid_and_oversized_artifacts() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "artifact_invalid_upload" }));
+    assert_eq!(
+        decode::<ErrorResponse>(body).error,
+        "artifact_invalid_upload"
+    );
 
     let oversized = vec![0_u8; state.job_storage().max_artifact_bytes() + 1];
     let (status, body) = multipart_request_as(
@@ -184,7 +187,7 @@ async fn job_create_rejects_empty_invalid_and_oversized_artifacts() {
     )
     .await;
     assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
-    assert_eq!(body, json!({ "error": "artifact_too_large" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "artifact_too_large");
 }
 
 #[tokio::test]
@@ -192,7 +195,7 @@ async fn job_create_defaults_content_type_and_rejects_invalid_plate() {
     let state = state().await;
     let app = router(state.clone());
     let (_, tenant) = create_tenant_for_test(app.clone()).await;
-    let tenant_id = TenantId::parse(tenant["id"].as_str().unwrap()).unwrap();
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
     let token = auth_token_for_role(
         &state,
         &tenant_id.to_string(),
@@ -225,7 +228,10 @@ async fn job_create_defaults_content_type_and_rejects_invalid_plate() {
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    assert_eq!(body["artifact"]["content_type"], "application/octet-stream");
+    assert_eq!(
+        decode::<JobResponse>(body).artifact.content_type,
+        "application/octet-stream"
+    );
 
     for plate_id in [0, -1] {
         let (status, body) = multipart_request_as(
@@ -237,7 +243,10 @@ async fn job_create_defaults_content_type_and_rejects_invalid_plate() {
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(body, json!({ "error": "artifact_invalid_plate" }));
+        assert_eq!(
+            decode::<ErrorResponse>(body).error,
+            "artifact_invalid_plate"
+        );
     }
 
     let (status, body) = multipart_request_as(
@@ -253,5 +262,8 @@ async fn job_create_defaults_content_type_and_rejects_invalid_plate() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({ "error": "artifact_invalid_plate" }));
+    assert_eq!(
+        decode::<ErrorResponse>(body).error,
+        "artifact_invalid_plate"
+    );
 }

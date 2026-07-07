@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use tonic::Code;
 
 use super::*;
@@ -130,7 +131,33 @@ async fn printer_snapshot_event_includes_latest_materials() {
         panic!("expected printer snapshot")
     };
     assert_eq!(printer.id, printer_id);
-    assert_eq!(printer.materials.unwrap().ams_units[0]["unit_id"], "0");
+    let materials = printer.materials.unwrap();
+    let ams_units: Vec<TestMaterialUnit> = serde_json::from_value(materials.ams_units).unwrap();
+    assert_eq!(
+        ams_units,
+        vec![TestMaterialUnit {
+            unit_id: "0".to_owned(),
+            trays: vec![TestMaterialTray {
+                tray_id: "0".to_owned(),
+                filament_type: "PLA".to_owned(),
+            }],
+        }]
+    );
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TestMaterialUnit {
+    unit_id: String,
+    trays: Vec<TestMaterialTray>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct TestMaterialTray {
+    tray_id: String,
+    #[serde(rename = "type")]
+    filament_type: String,
 }
 
 #[tokio::test]

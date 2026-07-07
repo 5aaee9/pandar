@@ -7,7 +7,7 @@ use std::{
 use pandar_network_plugin::{
     PluginHttpResult, pandar_plugin_free_with_capacity, pandar_plugin_start_local_webserver,
 };
-use serde_json::Value;
+use serde::Deserialize;
 
 fn body(result: PluginHttpResult) -> String {
     if result.body_ptr.is_null() || result.body_len == 0 {
@@ -19,7 +19,7 @@ fn body(result: PluginHttpResult) -> String {
     body
 }
 
-fn start_local(web_url: &str, hub_url: &str) -> Value {
+fn start_local(web_url: &str, hub_url: &str) -> StartLocalResponse {
     let result = pandar_plugin_start_local_webserver(
         web_url.as_ptr(),
         web_url.len(),
@@ -31,6 +31,11 @@ fn start_local(web_url: &str, hub_url: &str) -> Value {
     assert_eq!(result.status, 0);
     assert_eq!(result.http_code, 200);
     serde_json::from_str(&body(result)).unwrap()
+}
+
+#[derive(Debug, Deserialize)]
+struct StartLocalResponse {
+    base_url: String,
 }
 
 #[test]
@@ -55,14 +60,13 @@ fn concurrent_first_start_uses_one_local_webserver() {
         .collect::<Vec<_>>();
     let base_urls = starts
         .iter()
-        .map(|value| value["base_url"].as_str().unwrap().to_owned())
+        .map(|value| value.base_url.clone())
         .collect::<BTreeSet<_>>();
 
     assert_eq!(base_urls.len(), 1);
-    assert!(starts.iter().all(|value| {
-        value["base_url"]
-            .as_str()
-            .unwrap()
-            .starts_with("http://127.0.0.1:")
-    }));
+    assert!(
+        starts
+            .iter()
+            .all(|value| value.base_url.starts_with("http://127.0.0.1:"))
+    );
 }

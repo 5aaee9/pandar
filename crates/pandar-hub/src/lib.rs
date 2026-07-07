@@ -8,6 +8,7 @@ pub mod entities;
 pub mod grpc;
 pub mod identity;
 pub mod jobs;
+pub(crate) mod material_mapping;
 pub mod metrics;
 mod metrics_export;
 pub mod printer_events;

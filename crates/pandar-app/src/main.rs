@@ -10,6 +10,7 @@ use pandar_studio_dev_hook::installer::{
     InstallStudioDevHookOptions, UninstallStudioDevHookOptions, install_studio_dev_hook,
     uninstall_studio_dev_hook,
 };
+use serde::Serialize;
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -108,10 +109,10 @@ async fn main() -> anyhow::Result<()> {
             })?;
             println!(
                 "{}",
-                serde_json::to_string(&serde_json::json!({
-                    "plugin_path": summary.plugin_path,
-                    "config_path": summary.config_path,
-                }))?
+                serde_json::to_string(&NetworkPluginJson {
+                    plugin_path: summary.plugin_path,
+                    config_path: summary.config_path,
+                })?
             );
         }
         Command::InstallStudioDevHook {
@@ -122,11 +123,11 @@ async fn main() -> anyhow::Result<()> {
                 hook_file,
                 studio_dir,
             })?;
-            println!("{}", serde_json::to_string(&studio_hook_json(&summary))?);
+            println!("{}", serde_json::to_string(&studio_hook_json(summary))?);
         }
         Command::UninstallStudioDevHook { studio_dir } => {
             let summary = uninstall_studio_dev_hook(UninstallStudioDevHookOptions { studio_dir })?;
-            println!("{}", serde_json::to_string(&studio_hook_json(&summary))?);
+            println!("{}", serde_json::to_string(&studio_hook_json(summary))?);
         }
         Command::DecryptBambuStudioLog {
             log_file,
@@ -135,10 +136,10 @@ async fn main() -> anyhow::Result<()> {
             decrypt_bambu_studio_local_key_log(&log_file, &output_file)?;
             println!(
                 "{}",
-                serde_json::to_string(&serde_json::json!({
-                    "log_file": log_file,
-                    "output_file": output_file,
-                }))?
+                serde_json::to_string(&DecryptBambuStudioLogJson {
+                    log_file,
+                    output_file,
+                })?
             );
         }
     }
@@ -146,34 +147,66 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[derive(Serialize)]
+struct NetworkPluginJson {
+    plugin_path: PathBuf,
+    config_path: PathBuf,
+}
+
+#[derive(Serialize)]
+struct DecryptBambuStudioLogJson {
+    log_file: PathBuf,
+    output_file: PathBuf,
+}
+
+#[derive(Serialize)]
+struct StudioHookJson {
+    studio_dir: PathBuf,
+    proxy_path: PathBuf,
+    original_path: PathBuf,
+}
+
 fn studio_hook_json(
-    summary: &pandar_studio_dev_hook::installer::StudioDevHookSummary,
-) -> serde_json::Value {
-    serde_json::json!({
-        "studio_dir": summary.studio_dir,
-        "proxy_path": summary.proxy_path,
-        "original_path": summary.original_path,
-    })
+    summary: pandar_studio_dev_hook::installer::StudioDevHookSummary,
+) -> StudioHookJson {
+    StudioHookJson {
+        studio_dir: summary.studio_dir,
+        proxy_path: summary.proxy_path,
+        original_path: summary.original_path,
+    }
+}
+
+#[derive(Serialize)]
+struct CleanupSummaryJson<'a> {
+    mode: &'a str,
+    jobs: i64,
+    artifacts: i64,
+    artifact_bytes: i64,
+    commands: i64,
+    machine_events: i64,
+    audit_events: i64,
+    plugin_login_tickets: i64,
+    tenant_tokens: i64,
 }
 
 fn summary_json(
     summary: &pandar_hub::cleanup::CleanupSummary,
     mode: CleanupMode,
-) -> serde_json::Value {
-    serde_json::json!({
-        "mode": match mode {
+) -> CleanupSummaryJson<'static> {
+    CleanupSummaryJson {
+        mode: match mode {
             CleanupMode::DryRun => "dry_run",
             CleanupMode::Execute => "execute",
         },
-        "jobs": summary.jobs,
-        "artifacts": summary.artifacts,
-        "artifact_bytes": summary.artifact_bytes,
-        "commands": summary.commands,
-        "machine_events": summary.machine_events,
-        "audit_events": summary.audit_events,
-        "plugin_login_tickets": summary.plugin_login_tickets,
-        "tenant_tokens": summary.tenant_tokens,
-    })
+        jobs: summary.jobs,
+        artifacts: summary.artifacts,
+        artifact_bytes: summary.artifact_bytes,
+        commands: summary.commands,
+        machine_events: summary.machine_events,
+        audit_events: summary.audit_events,
+        plugin_login_tickets: summary.plugin_login_tickets,
+        tenant_tokens: summary.tenant_tokens,
+    }
 }
 
 #[cfg(test)]

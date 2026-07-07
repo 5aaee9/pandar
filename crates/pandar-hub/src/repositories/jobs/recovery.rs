@@ -4,13 +4,14 @@ use sea_orm::{
     ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, DatabaseTransaction, EntityTrait,
     QueryFilter, TransactionTrait,
 };
+use serde::Serialize;
 
 use crate::{
     db::Database,
     entities::{commands, job_artifacts, job_filament_usages, jobs},
     repositories::{
         AuditActor, DuplicatePrintJob, JobWithArtifact, RepositoryError, RepositoryResult,
-        audit::{insert_audit_event_tx, record_audit_event},
+        audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
         commands::inserts::{self, InsertCommand},
         jobs::{
             create::{self, NewPrintJobFromArtifact},
@@ -321,6 +322,15 @@ struct RecoveryAudit {
     reason: Option<String>,
 }
 
+#[derive(Serialize)]
+struct RecoveryAuditMetadata {
+    reason: Option<String>,
+    source_job_id: JobId,
+    source_command_id: CommandId,
+    target_job_id: JobId,
+    target_command_id: CommandId,
+}
+
 async fn insert_recovery_audit(
     connection: &DatabaseTransaction,
     tenant_id: TenantId,
@@ -333,12 +343,12 @@ async fn insert_recovery_audit(
         audit.action,
         "job",
         Some(audit.target_job_id.to_string()),
-        serde_json::json!({
-            "reason": audit.reason,
-            "source_job_id": audit.source_job_id,
-            "source_command_id": audit.source_command_id,
-            "target_job_id": audit.target_job_id,
-            "target_command_id": audit.target_command_id,
+        audit_metadata(RecoveryAuditMetadata {
+            reason: audit.reason,
+            source_job_id: audit.source_job_id,
+            source_command_id: audit.source_command_id,
+            target_job_id: audit.target_job_id,
+            target_command_id: audit.target_command_id,
         }),
     );
     insert_audit_event_tx(connection, &event).await

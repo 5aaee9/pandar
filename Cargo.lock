@@ -2847,6 +2847,7 @@ dependencies = [
  "pandar-hub",
  "pandar-network-plugin",
  "pandar-studio-dev-hook",
+ "serde",
  "serde_json",
  "tokio",
  "tracing",

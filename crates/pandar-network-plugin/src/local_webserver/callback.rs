@@ -1,4 +1,4 @@
-use serde_json::json;
+use serde::Serialize;
 
 pub(super) fn body(path: &str) -> String {
     let Some(url) = reqwest::Url::parse(&format!("http://localhost{path}")).ok() else {
@@ -19,17 +19,28 @@ pub(super) fn body(path: &str) -> String {
     if redirect_url.is_none() {
         return pending_body();
     }
-    let message = json!({
-        "command": "user_ticket_login",
-        "data": {
-            "ticket": ticket,
+    let message = serde_json::to_string(&CallbackMessage {
+        command: "user_ticket_login",
+        data: CallbackMessageData {
+            ticket: ticket.as_str(),
         },
     })
-    .to_string();
+    .expect("callback message is serializable");
     let message = serde_json::to_string(&message).expect("callback script message encodes");
     format!(
         "<!doctype html><html><body><main>Sign-in request received. Return to Studio.</main><script>window.wx?.postMessage?.({message});</script></body></html>"
     )
+}
+
+#[derive(Serialize)]
+struct CallbackMessage<'a> {
+    command: &'static str,
+    data: CallbackMessageData<'a>,
+}
+
+#[derive(Serialize)]
+struct CallbackMessageData<'a> {
+    ticket: &'a str,
 }
 
 fn pending_body() -> String {

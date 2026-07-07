@@ -2,6 +2,24 @@ use tokio::sync::mpsc;
 
 use super::*;
 
+#[derive(Debug, serde::Deserialize, PartialEq)]
+struct TestPrinterDiscoveryResult {
+    #[serde(rename = "type")]
+    kind: String,
+    printers: Vec<TestDiscoveredPrinter>,
+}
+
+#[derive(Debug, serde::Deserialize, PartialEq)]
+struct TestDiscoveredPrinter {}
+
+#[derive(Debug, serde::Deserialize, PartialEq)]
+struct TestPrinterDiagnosticResult {
+    #[serde(rename = "type")]
+    kind: String,
+    serial_number: String,
+    overall: String,
+}
+
 #[tokio::test]
 async fn discover_printers_emits_success_with_structured_result_json() {
     let config = test_config();
@@ -27,8 +45,11 @@ async fn discover_printers_emits_success_with_structured_result_json() {
         agent_event::Event::CommandResult(result) => {
             assert!(result.success);
             assert_eq!(
-                serde_json::from_str::<serde_json::Value>(&result.result_json).unwrap(),
-                serde_json::json!({"type": "printer_discovery", "printers": []})
+                serde_json::from_str::<TestPrinterDiscoveryResult>(&result.result_json).unwrap(),
+                TestPrinterDiscoveryResult {
+                    kind: "printer_discovery".to_owned(),
+                    printers: Vec::new(),
+                }
             );
         }
         other => panic!("expected command result, got {other:?}"),
@@ -60,10 +81,14 @@ async fn diagnose_printer_emits_success_with_structured_problem_result() {
         agent_event::Event::CommandResult(result) => {
             assert!(result.success);
             assert_eq!(result.error, "");
-            let value: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
-            assert_eq!(value["type"], "printer_diagnostic");
-            assert_eq!(value["serial_number"], "SERIAL1");
-            assert_eq!(value["overall"], "problem");
+            assert_eq!(
+                serde_json::from_str::<TestPrinterDiagnosticResult>(&result.result_json).unwrap(),
+                TestPrinterDiagnosticResult {
+                    kind: "printer_diagnostic".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    overall: "problem".to_owned(),
+                }
+            );
         }
         other => panic!("expected command result, got {other:?}"),
     }

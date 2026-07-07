@@ -6,7 +6,6 @@ use sea_orm::{
     TransactionTrait,
 };
 use serde::Serialize;
-use serde_json::json;
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
@@ -14,7 +13,7 @@ use crate::{
     repositories::{
         AuditActor, AuditEvent, AuthRepository, RepositoryError, RepositoryResult,
         TenantTokenWithPlaintext,
-        audit::{insert_audit_event_tx, record_audit_event},
+        audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
         auth::{hash_token, secrets::generate_secret, user_exists},
         is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
     },
@@ -47,6 +46,11 @@ pub struct PluginLoginTicketExchange {
     pub ticket: PluginLoginTicket,
     pub redirect_url: String,
     pub tenant_token: TenantTokenWithPlaintext,
+}
+
+#[derive(Serialize)]
+struct PluginLoginTicketAuditMetadata<'a> {
+    issued_tenant_token_id: Option<&'a str>,
 }
 
 impl AuthRepository {
@@ -301,6 +305,8 @@ fn plugin_login_ticket_audit_event(
         action,
         "plugin_login_ticket",
         Some(ticket.id.clone()),
-        json!({ "issued_tenant_token_id": tenant_token_id }),
+        audit_metadata(PluginLoginTicketAuditMetadata {
+            issued_tenant_token_id: tenant_token_id.as_deref(),
+        }),
     )
 }

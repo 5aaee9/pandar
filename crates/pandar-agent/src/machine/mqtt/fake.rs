@@ -4,7 +4,8 @@ use std::{collections::VecDeque, sync::Arc, time::Duration};
 
 use anyhow::bail;
 use async_trait::async_trait;
-use serde_json::{Value, json};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tokio::sync::Mutex;
 
 use crate::machine::materials::normalize_material_patch;
@@ -155,55 +156,159 @@ impl BambuMqttTransport for FakeMqttTransport {
             }
         }
         tokio::time::sleep(Duration::from_millis(1)).await;
-        Ok(json!({"print": {"gcode_state": "RUNNING"}}))
+        Ok(json_value(FakeRunningReport {
+            print: FakeRunningPrintReport {
+                gcode_state: "RUNNING",
+            },
+        }))
     }
 }
 
 #[cfg(test)]
 fn is_pushall_payload(payload: &Value) -> bool {
-    payload["pushing"]["command"].as_str() == Some("pushall")
+    serde_json::from_value::<FakeMqttPayload>(payload.clone())
+        .ok()
+        .and_then(|payload| payload.pushing)
+        .and_then(|section| section.command)
+        .and_then(|command| command.as_str().map(str::to_owned))
+        == Some("pushall".to_owned())
 }
 
 #[cfg(test)]
 fn published_payload_matches(expected: &Value, actual: &Value) -> bool {
     expected == actual
-        || ["info", "pushing", "print", "system"]
+        || command_sections(&serde_json::from_value::<FakeMqttPayload>(expected.clone()).ok())
             .into_iter()
-            .any(|section| {
-                expected[section]["command"].as_str().is_some()
-                    && expected[section]["command"].as_str() == actual[section]["command"].as_str()
-            })
+            .zip(command_sections(
+                &serde_json::from_value::<FakeMqttPayload>(actual.clone()).ok(),
+            ))
+            .any(|(expected, actual)| expected.is_some() && expected == actual)
 }
 
 #[cfg(test)]
 fn operation_report_for_payload(payload: &Value, failed_led_node: Option<&str>) -> Option<Value> {
-    if let Some(print) = payload.get("print") {
-        return Some(json!({
-            "print": {
-                "command": print.get("command")?.clone(),
-                "sequence_id": print.get("sequence_id")?.clone(),
-                "result": "success"
-            }
+    let payload = serde_json::from_value::<FakeMqttPayload>(payload.clone()).ok()?;
+    if let Some(print) = payload.print {
+        let command = print.command?;
+        let sequence_id = print.sequence_id?;
+        return Some(json_value(FakeOperationReport {
+            print: Some(FakeOperationReportSection {
+                command,
+                sequence_id,
+                result: "success",
+                reason: None,
+            }),
+            system: None,
         }));
     }
-    let system = payload.get("system")?;
-    if let Some(led_node) = system.get("led_node").and_then(Value::as_str)
+    let system = payload.system?;
+    let command = system.command?;
+    let sequence_id = system.sequence_id?;
+    if let Some(led_node) = system.led_node.as_deref()
         && Some(led_node) == failed_led_node
     {
-        return Some(json!({
-            "system": {
-                "command": system.get("command")?.clone(),
-                "sequence_id": system.get("sequence_id")?.clone(),
-                "result": "fail",
-                "reason": format!("did not find the valid led: {led_node}")
-            }
+        return Some(json_value(FakeOperationReport {
+            print: None,
+            system: Some(FakeOperationReportSection {
+                command,
+                sequence_id,
+                result: "fail",
+                reason: Some(format!("did not find the valid led: {led_node}")),
+            }),
         }));
     }
-    Some(json!({
-        "system": {
-            "command": system.get("command")?.clone(),
-            "sequence_id": system.get("sequence_id")?.clone(),
-            "result": "success"
-        }
+    Some(json_value(FakeOperationReport {
+        print: None,
+        system: Some(FakeOperationReportSection {
+            command,
+            sequence_id,
+            result: "success",
+            reason: None,
+        }),
     }))
+}
+
+#[cfg(test)]
+fn json_value(value: impl Serialize) -> Value {
+    serde_json::to_value(value).expect("fake MQTT report is serializable")
+}
+
+#[cfg(test)]
+#[derive(Debug, Serialize)]
+struct FakeRunningReport {
+    print: FakeRunningPrintReport,
+}
+
+#[cfg(test)]
+#[derive(Debug, Serialize)]
+struct FakeRunningPrintReport {
+    gcode_state: &'static str,
+}
+
+#[cfg(test)]
+#[derive(Debug, Serialize)]
+struct FakeOperationReport {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    print: Option<FakeOperationReportSection>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    system: Option<FakeOperationReportSection>,
+}
+
+#[cfg(test)]
+#[derive(Debug, Serialize)]
+struct FakeOperationReportSection {
+    command: Value,
+    sequence_id: Value,
+    result: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+}
+
+#[cfg(test)]
+#[derive(Debug, Deserialize)]
+struct FakeMqttPayload {
+    #[serde(default)]
+    info: Option<FakeCommandSection>,
+    #[serde(default)]
+    pushing: Option<FakeCommandSection>,
+    #[serde(default)]
+    print: Option<FakeCommandSection>,
+    #[serde(default)]
+    system: Option<FakeCommandSection>,
+}
+
+#[cfg(test)]
+#[derive(Debug, Deserialize)]
+struct FakeCommandSection {
+    #[serde(default)]
+    command: Option<Value>,
+    #[serde(default)]
+    sequence_id: Option<Value>,
+    #[serde(default)]
+    led_node: Option<String>,
+}
+
+#[cfg(test)]
+fn command_sections(payload: &Option<FakeMqttPayload>) -> [Option<&Value>; 4] {
+    let Some(payload) = payload else {
+        return [None, None, None, None];
+    };
+    [
+        payload
+            .info
+            .as_ref()
+            .and_then(|section| section.command.as_ref()),
+        payload
+            .pushing
+            .as_ref()
+            .and_then(|section| section.command.as_ref()),
+        payload
+            .print
+            .as_ref()
+            .and_then(|section| section.command.as_ref()),
+        payload
+            .system
+            .as_ref()
+            .and_then(|section| section.command.as_ref()),
+    ]
 }

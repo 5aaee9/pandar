@@ -1,17 +1,22 @@
-use serde_json::Value;
+use serde::Deserialize;
+use serde_json::{Number, Value};
 
 use crate::machine::{BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot};
 
 pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> MachineSnapshot {
-    let print = report.get("print").unwrap_or(&Value::Null);
-    let state = ["/print/gcode_state", "/print/state", "/state"]
-        .into_iter()
-        .find_map(|path| report.pointer(path).and_then(Value::as_str))
-        .unwrap_or("unknown");
+    let report = serde_json::from_value::<SnapshotReport>(report.clone()).unwrap_or_default();
+    let print = report.print.as_ref();
+    let state = print
+        .and_then(|print| {
+            trimmed_string(print.gcode_state.as_ref())
+                .or_else(|| trimmed_string(print.state.as_ref()))
+        })
+        .or_else(|| trimmed_string(report.state.as_ref()))
+        .unwrap_or_else(|| "unknown".to_owned());
     let (packed_bed_temperature, packed_bed_target_temperature) =
-        packed_temperature_pair(print.pointer("/device/bed_temp"));
+        packed_temperature_pair(print.and_then(|print| print.device.bed_temp.as_ref()));
     let (packed_chamber_temperature, _) =
-        packed_temperature_pair(print.pointer("/device/ctc/info/temp"));
+        packed_temperature_pair(print.and_then(|print| print.device.ctc.info.temp.as_ref()));
 
     MachineSnapshot {
         serial: endpoint.serial.clone(),
@@ -22,45 +27,158 @@ pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> 
             .clone()
             .unwrap_or_else(|| endpoint.serial.clone()),
         model: endpoint.model.clone(),
-        state: state.to_string(),
+        state,
         nozzle_temperatures: nozzle_temperatures_from_report(print),
         active_nozzle: active_nozzle_from_report(print),
         bed_temperature_celsius: temperature_string(
-            print
-                .get("bed_temper")
-                .or_else(|| print.get("bed_temp"))
-                .or_else(|| print.get("bed_temperature")),
+            print.and_then(|print| print.bed_temper.as_ref()),
         )
         .or(packed_bed_temperature),
         bed_target_temperature_celsius: temperature_string(
-            print
-                .get("bed_target_temper")
-                .or_else(|| print.get("target_bed_temper"))
-                .or_else(|| print.get("bed_target_temperature")),
+            print.and_then(|print| print.bed_target_temper.as_ref()),
         )
         .or(packed_bed_target_temperature),
         chamber_temperature_celsius: temperature_string(
-            print
-                .get("chamber_temper")
-                .or_else(|| print.get("chamber_temp"))
-                .or_else(|| print.get("chamber_temperature")),
+            print.and_then(|print| print.chamber_temper.as_ref()),
         )
         .or(packed_chamber_temperature),
         chamber_light_on: chamber_light_on_from_report(print),
     }
 }
 
-fn chamber_light_on_from_report(print: &Value) -> Option<bool> {
-    let lights = print.get("lights_report")?.as_array()?;
-    lights
+#[derive(Debug, Default, Deserialize)]
+struct SnapshotReport {
+    #[serde(default)]
+    state: Option<ScalarValue>,
+    #[serde(default)]
+    print: Option<SnapshotPrint>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct SnapshotPrint {
+    #[serde(default)]
+    gcode_state: Option<ScalarValue>,
+    #[serde(default)]
+    state: Option<ScalarValue>,
+    #[serde(default, alias = "bed_temp", alias = "bed_temperature")]
+    bed_temper: Option<TemperatureValue>,
+    #[serde(default, alias = "target_bed_temper", alias = "bed_target_temperature")]
+    bed_target_temper: Option<TemperatureValue>,
+    #[serde(default, alias = "chamber_temp", alias = "chamber_temperature")]
+    chamber_temper: Option<TemperatureValue>,
+    #[serde(default, alias = "nozzle_temp", alias = "nozzle_temperature")]
+    nozzle_temper: Option<TemperatureValue>,
+    #[serde(
+        default,
+        alias = "target_nozzle_temper",
+        alias = "nozzle_target_temperature"
+    )]
+    nozzle_target_temper: Option<TemperatureValue>,
+    #[serde(default, alias = "right_nozzle_temper", alias = "nozzle_temp2")]
+    nozzle_temper2: Option<TemperatureValue>,
+    #[serde(
+        default,
+        alias = "right_nozzle_target_temper",
+        alias = "target_nozzle_temper2"
+    )]
+    nozzle_target_temper2: Option<TemperatureValue>,
+    #[serde(default)]
+    lights_report: Vec<LightReport>,
+    #[serde(default)]
+    device: SnapshotDevice,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct SnapshotDevice {
+    #[serde(default)]
+    bed_temp: Option<TemperatureValue>,
+    #[serde(default)]
+    ctc: CtcDevice,
+    #[serde(default)]
+    extruder: ExtruderDevice,
+    #[serde(default)]
+    nozzle: NozzleDevice,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct CtcDevice {
+    #[serde(default)]
+    info: CtcInfo,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct CtcInfo {
+    #[serde(default)]
+    temp: Option<TemperatureValue>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct ExtruderDevice {
+    #[serde(default)]
+    state: Option<u64>,
+    #[serde(default)]
+    info: Vec<ExtruderInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExtruderInfo {
+    #[serde(default)]
+    id: Option<u64>,
+    #[serde(default)]
+    temp: Option<TemperatureValue>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct NozzleDevice {
+    #[serde(default)]
+    info: Vec<NozzleInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+struct NozzleInfo {
+    #[serde(default)]
+    id: Option<u64>,
+    #[serde(default)]
+    diameter: Option<ScalarValue>,
+    #[serde(default)]
+    nozzle_type: Option<String>,
+    #[serde(default, rename = "type")]
+    kind: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LightReport {
+    #[serde(default)]
+    node: Option<String>,
+    #[serde(default)]
+    mode: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum TemperatureValue {
+    Number(Number),
+    String(String),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ScalarValue {
+    Number(Number),
+    String(String),
+}
+
+fn chamber_light_on_from_report(print: Option<&SnapshotPrint>) -> Option<bool> {
+    print?
+        .lights_report
         .iter()
-        .find(|light| light.get("node").and_then(Value::as_str) == Some("chamber_light"))
-        .and_then(|light| light.get("mode").and_then(Value::as_str))
+        .find(|light| light.node.as_deref() == Some("chamber_light"))
+        .and_then(|light| light.mode.as_deref())
         .map(|mode| mode == "on")
 }
 
-fn active_nozzle_from_report(print: &Value) -> Option<String> {
-    let state = print.pointer("/device/extruder/state")?.as_u64()?;
+fn active_nozzle_from_report(print: Option<&SnapshotPrint>) -> Option<String> {
+    let state = print?.device.extruder.state?;
     let total = state & 0xf;
     if total <= 1 {
         return None;
@@ -73,42 +191,26 @@ fn active_nozzle_from_report(print: &Value) -> Option<String> {
     })
 }
 
-fn nozzle_temperatures_from_report(print: &Value) -> Vec<MachineNozzleTemperature> {
+fn nozzle_temperatures_from_report(print: Option<&SnapshotPrint>) -> Vec<MachineNozzleTemperature> {
+    let Some(print) = print else {
+        return Vec::new();
+    };
+
     if let Some(nozzles) = nozzle_temperatures_from_v2_report(print) {
         return nozzles;
     }
 
     let left = MachineNozzleTemperature {
         label: None,
-        current_celsius: temperature_string(
-            print
-                .get("nozzle_temper")
-                .or_else(|| print.get("nozzle_temp"))
-                .or_else(|| print.get("nozzle_temperature")),
-        ),
-        target_celsius: temperature_string(
-            print
-                .get("nozzle_target_temper")
-                .or_else(|| print.get("target_nozzle_temper"))
-                .or_else(|| print.get("nozzle_target_temperature")),
-        ),
+        current_celsius: temperature_string(print.nozzle_temper.as_ref()),
+        target_celsius: temperature_string(print.nozzle_target_temper.as_ref()),
         diameter_mm: None,
         nozzle_type: None,
     };
     let right = MachineNozzleTemperature {
         label: Some("R".to_owned()),
-        current_celsius: temperature_string(
-            print
-                .get("nozzle_temper2")
-                .or_else(|| print.get("right_nozzle_temper"))
-                .or_else(|| print.get("nozzle_temp2")),
-        ),
-        target_celsius: temperature_string(
-            print
-                .get("nozzle_target_temper2")
-                .or_else(|| print.get("right_nozzle_target_temper"))
-                .or_else(|| print.get("target_nozzle_temper2")),
-        ),
+        current_celsius: temperature_string(print.nozzle_temper2.as_ref()),
+        target_celsius: temperature_string(print.nozzle_target_temper2.as_ref()),
         diameter_mm: None,
         nozzle_type: None,
     };
@@ -128,25 +230,27 @@ fn nozzle_temperatures_from_report(print: &Value) -> Vec<MachineNozzleTemperatur
     }
 }
 
-fn nozzle_temperatures_from_v2_report(print: &Value) -> Option<Vec<MachineNozzleTemperature>> {
-    let extruder = print.pointer("/device/extruder")?;
-    let info = extruder.get("info")?.as_array()?;
-    let total = extruder
-        .get("state")
-        .and_then(Value::as_u64)
+fn nozzle_temperatures_from_v2_report(
+    print: &SnapshotPrint,
+) -> Option<Vec<MachineNozzleTemperature>> {
+    let info = &print.device.extruder.info;
+    if info.is_empty() {
+        return None;
+    }
+    let total = print
+        .device
+        .extruder
+        .state
         .map(|value| value & 0xf)
         .unwrap_or(info.len() as u64);
     let mut nozzles = Vec::new();
 
     for (index, item) in info.iter().enumerate() {
-        let (current_celsius, target_celsius) = packed_temperature_pair(item.get("temp"));
+        let (current_celsius, target_celsius) = packed_temperature_pair(item.temp.as_ref());
         if current_celsius.is_none() && target_celsius.is_none() {
             continue;
         }
-        let id = item
-            .get("id")
-            .and_then(Value::as_u64)
-            .unwrap_or(index as u64);
+        let id = item.id.unwrap_or(index as u64);
         nozzles.push((
             nozzle_sort_key(total, id),
             MachineNozzleTemperature {
@@ -168,23 +272,26 @@ fn nozzle_temperatures_from_v2_report(print: &Value) -> Option<Vec<MachineNozzle
     )
 }
 
-fn nozzle_diameter_for_id(print: &Value, id: u64) -> Option<String> {
-    let nozzle = nozzle_info_for_id(print, id)?;
-    match nozzle.get("diameter")? {
-        Value::Number(number) => number.as_f64().map(|value| {
+fn nozzle_diameter_for_id(print: &SnapshotPrint, id: u64) -> Option<String> {
+    match nozzle_info_for_id(print, id)?.diameter.as_ref()? {
+        ScalarValue::Number(number) => number.as_f64().map(|value| {
             let text = value.to_string();
             text.strip_suffix(".0").unwrap_or(&text).to_owned()
         }),
-        Value::String(value) => {
+        ScalarValue::String(value) => {
             let trimmed = value.trim();
             (!trimmed.is_empty()).then(|| trimmed.to_owned())
         }
-        _ => None,
     }
 }
 
-fn nozzle_type_for_id(print: &Value, id: u64) -> Option<String> {
-    let raw = nozzle_info_for_id(print, id)?.get("type")?.as_str()?.trim();
+fn nozzle_type_for_id(print: &SnapshotPrint, id: u64) -> Option<String> {
+    let nozzle = nozzle_info_for_id(print, id)?;
+    let raw = nozzle
+        .kind
+        .as_deref()
+        .or(nozzle.nozzle_type.as_deref())?
+        .trim();
     if raw.is_empty() {
         return None;
     }
@@ -196,12 +303,13 @@ fn nozzle_type_for_id(print: &Value, id: u64) -> Option<String> {
     })
 }
 
-fn nozzle_info_for_id(print: &Value, id: u64) -> Option<&Value> {
+fn nozzle_info_for_id(print: &SnapshotPrint, id: u64) -> Option<&NozzleInfo> {
     print
-        .pointer("/device/nozzle/info")?
-        .as_array()?
+        .device
+        .nozzle
+        .info
         .iter()
-        .find(|item| item.get("id").and_then(Value::as_u64) == Some(id))
+        .find(|item| item.id == Some(id))
 }
 
 fn nozzle_label(total: u64, id: u64) -> Option<String> {
@@ -223,25 +331,37 @@ fn nozzle_sort_key(total: u64, id: u64) -> u64 {
     }
 }
 
-fn temperature_string(value: Option<&Value>) -> Option<String> {
+fn temperature_string(value: Option<&TemperatureValue>) -> Option<String> {
     match value? {
-        Value::Number(number) => number.as_f64().and_then(temperature_string_from_number),
-        Value::String(value) => {
+        TemperatureValue::Number(number) => {
+            number.as_f64().and_then(temperature_string_from_number)
+        }
+        TemperatureValue::String(value) => {
             let trimmed = value.trim();
             (!trimmed.is_empty() && trimmed != "-1").then(|| trimmed.to_owned())
         }
-        _ => None,
     }
 }
 
-fn packed_temperature_pair(value: Option<&Value>) -> (Option<String>, Option<String>) {
-    let Some(bits) = value.and_then(Value::as_u64) else {
+fn packed_temperature_pair(value: Option<&TemperatureValue>) -> (Option<String>, Option<String>) {
+    let Some(TemperatureValue::Number(number)) = value else {
+        return (None, None);
+    };
+    let Some(bits) = number.as_u64() else {
         return (None, None);
     };
     (
         temperature_string_from_number((bits & 0xffff) as f64),
         temperature_string_from_number(((bits >> 16) & 0xffff) as f64),
     )
+}
+
+fn trimmed_string(value: Option<&ScalarValue>) -> Option<String> {
+    let ScalarValue::String(value) = value? else {
+        return None;
+    };
+    let trimmed = value.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_owned())
 }
 
 fn temperature_string_from_number(value: f64) -> Option<String> {

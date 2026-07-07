@@ -7,7 +7,8 @@ use rsa::{
     pkcs8::DecodePrivateKey,
     signature::{SignatureEncoding, Signer},
 };
-use serde_json::{Value, json};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::Sha256;
 
 pub(crate) fn maybe_sign_project_file_payload(
@@ -24,22 +25,74 @@ pub(crate) fn maybe_sign_project_file_payload(
     if h2d_family(printer_model) {
         flip_nozzle_ids(&mut payload);
     }
-    let to_sign = json!({ "print": payload.get("print").cloned().unwrap_or(Value::Null) });
+    let project = serde_json::from_value::<ProjectFilePayload>(payload.clone()).unwrap_or_default();
+    let to_sign = SignedProjectFilePayload {
+        print: project.print.clone(),
+    };
     let Ok(to_sign_bytes) = serde_json::to_vec(&to_sign) else {
         return payload;
     };
     let signing_key = SigningKey::<Sha256>::new(key);
     let signature = signing_key.sign(&to_sign_bytes);
-    json!({
-        "header": {
-            "cert_id": slicer_cert_id().unwrap_or_default(),
-            "payload_len": to_sign_bytes.len(),
-            "sign_alg": "RSA_SHA256",
-            "sign_string": STANDARD.encode(signature.to_bytes()),
-            "sign_ver": "v1.0"
+    serde_json::to_value(SignedProjectFileEnvelope {
+        header: SignedProjectFileHeader {
+            cert_id: slicer_cert_id().unwrap_or_default(),
+            payload_len: to_sign_bytes.len(),
+            sign_alg: "RSA_SHA256",
+            sign_string: STANDARD.encode(signature.to_bytes()),
+            sign_ver: "v1.0",
         },
-        "print": payload.get("print").cloned().unwrap_or(Value::Null)
+        print: project.print,
     })
+    .expect("signed project file payload is serializable")
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct ProjectFilePayload {
+    #[serde(default)]
+    print: Value,
+}
+
+#[derive(Debug, Serialize)]
+struct SignedProjectFilePayload {
+    print: Value,
+}
+
+#[derive(Debug, Serialize)]
+struct SignedProjectFileEnvelope {
+    header: SignedProjectFileHeader,
+    print: Value,
+}
+
+#[derive(Debug, Serialize)]
+struct SignedProjectFileHeader {
+    cert_id: String,
+    payload_len: usize,
+    sign_alg: &'static str,
+    sign_string: String,
+    sign_ver: &'static str,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct MutableProjectFilePayload {
+    print: Option<MutableProjectFilePrint>,
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct MutableProjectFilePrint {
+    ams_mapping_info: Option<Vec<AmsMappingInfoEntry>>,
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct AmsMappingInfoEntry {
+    #[serde(default, rename = "nozzleId")]
+    nozzle_id: Option<Value>,
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
 }
 
 fn slicer_key() -> Option<RsaPrivateKey> {
@@ -87,29 +140,64 @@ fn h2d_family(model: Option<&str>) -> bool {
 }
 
 fn flip_nozzle_ids(payload: &mut Value) {
-    let Some(entries) = payload
-        .pointer_mut("/print/ams_mapping_info")
-        .and_then(Value::as_array_mut)
+    let Ok(mut project) = serde_json::from_value::<MutableProjectFilePayload>(payload.clone())
     else {
         return;
     };
+    let Some(print) = &mut project.print else {
+        return;
+    };
+    let Some(entries) = &mut print.ams_mapping_info else {
+        return;
+    };
     for entry in entries {
-        let Some(nozzle_id) = entry.get_mut("nozzleId") else {
-            continue;
-        };
-        match nozzle_id.as_i64() {
-            Some(0) => *nozzle_id = json!(1),
-            Some(1) => *nozzle_id = json!(0),
+        match entry.nozzle_id.as_ref().and_then(Value::as_i64) {
+            Some(0) => entry.nozzle_id = Some(Value::from(1)),
+            Some(1) => entry.nozzle_id = Some(Value::from(0)),
             _ => {}
         }
+    }
+    if let Ok(value) = serde_json::to_value(project) {
+        *payload = value;
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use serde::Serialize;
+    use serde_json::Value;
 
     use super::{flip_nozzle_ids, h2d_family};
+
+    #[derive(Serialize)]
+    struct ProjectFileTestPayload {
+        print: ProjectFileTestPrint,
+    }
+
+    #[derive(Serialize)]
+    struct ProjectFileTestPrint {
+        command: &'static str,
+        ams_mapping_info: Vec<NozzleMappingEntry>,
+    }
+
+    #[derive(Serialize)]
+    struct NozzleMappingEntry {
+        #[serde(rename = "nozzleId")]
+        nozzle_id: u8,
+    }
+
+    fn test_payload(nozzle_ids: impl IntoIterator<Item = u8>) -> Value {
+        serde_json::to_value(ProjectFileTestPayload {
+            print: ProjectFileTestPrint {
+                command: "project_file",
+                ams_mapping_info: nozzle_ids
+                    .into_iter()
+                    .map(|nozzle_id| NozzleMappingEntry { nozzle_id })
+                    .collect(),
+            },
+        })
+        .expect("test project file payload is serializable")
+    }
 
     #[test]
     fn h2d_family_matches_new_dual_nozzle_models() {
@@ -122,18 +210,10 @@ mod tests {
 
     #[test]
     fn flip_nozzle_ids_only_swaps_zero_and_one() {
-        let mut payload = json!({
-            "print": {
-                "command": "project_file",
-                "ams_mapping_info": [{"nozzleId": 0}, {"nozzleId": 1}, {"nozzleId": 2}]
-            }
-        });
+        let mut payload = test_payload([0, 1, 2]);
 
         flip_nozzle_ids(&mut payload);
 
-        assert_eq!(
-            payload["print"]["ams_mapping_info"],
-            json!([{"nozzleId": 1}, {"nozzleId": 0}, {"nozzleId": 2}])
-        );
+        assert_eq!(payload, test_payload([1, 0, 2]));
     }
 }

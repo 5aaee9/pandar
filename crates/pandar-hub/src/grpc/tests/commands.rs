@@ -1,9 +1,11 @@
 use std::{
+    collections::BTreeMap,
     io::{self, Write},
     sync::{Arc, Mutex},
 };
 
 use pandar_core::{AgentId, CommandId, CommandRecord, CommandRecordParts, CommandStatus, TenantId};
+use serde::Deserialize;
 use tokio_stream::StreamExt;
 use tonic::Code;
 use tracing_subscriber::fmt::MakeWriter;
@@ -35,6 +37,22 @@ fn command_result_payload(
         error: error.into(),
         result_json: result_json.into(),
     }
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct RedactedLinkPrinterResult {
+    access_code: String,
+    status: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct RedactedNumericLinkPrinterResult {
+    echoed: String,
+    status: String,
+}
+
+fn redacted_result_object(result_json: &str) -> BTreeMap<String, String> {
+    serde_json::from_str(result_json).unwrap()
 }
 
 #[tokio::test]
@@ -970,9 +988,13 @@ async fn grpc_link_printer_result_json_redacts_access_code() {
         .unwrap();
     let stored_result = stored.result_json.unwrap();
     assert!(!stored_result.contains(access_code));
-    let parsed: serde_json::Value = serde_json::from_str(&stored_result).unwrap();
-    assert_eq!(parsed["access_code"], "[redacted]");
-    assert_eq!(parsed["status"], "rejected");
+    assert_eq!(
+        serde_json::from_str::<RedactedLinkPrinterResult>(&stored_result).unwrap(),
+        RedactedLinkPrinterResult {
+            access_code: "[redacted]".to_owned(),
+            status: "rejected".to_owned(),
+        }
+    );
 }
 
 #[tokio::test]
@@ -1019,9 +1041,13 @@ async fn grpc_link_printer_numeric_result_json_redacts_digit_access_code() {
         .unwrap();
     let stored_result = stored.result_json.unwrap();
     assert!(!stored_result.contains(access_code));
-    let parsed: serde_json::Value = serde_json::from_str(&stored_result).unwrap();
-    assert_eq!(parsed["echoed"], "[redacted]");
-    assert_eq!(parsed["status"], "rejected");
+    assert_eq!(
+        serde_json::from_str::<RedactedNumericLinkPrinterResult>(&stored_result).unwrap(),
+        RedactedNumericLinkPrinterResult {
+            echoed: "[redacted]".to_owned(),
+            status: "rejected".to_owned(),
+        }
+    );
 }
 
 #[tokio::test]
@@ -1068,8 +1094,7 @@ async fn grpc_link_printer_result_json_redacts_access_code_object_key() {
         .unwrap();
     let stored_result = stored.result_json.unwrap();
     assert!(!stored_result.contains(access_code));
-    let parsed: serde_json::Value = serde_json::from_str(&stored_result).unwrap();
-    let object = parsed.as_object().unwrap();
+    let object = redacted_result_object(&stored_result);
     assert!(object.keys().all(|key| !key.contains(access_code)));
 }
 
@@ -1387,8 +1412,7 @@ async fn grpc_link_printer_result_without_pending_secret_redacts_untrusted_strin
     assert!(!stored.error.unwrap().contains(access_code));
     let result_json = stored.result_json.unwrap();
     assert!(!result_json.contains(access_code));
-    let parsed: serde_json::Value = serde_json::from_str(&result_json).unwrap();
-    let object = parsed.as_object().unwrap();
+    let object = redacted_result_object(&result_json);
     assert!(object.keys().all(|key| !key.contains(access_code)));
     assert!(object.values().all(|value| value == "[redacted]"));
 }
@@ -1437,8 +1461,7 @@ async fn grpc_link_printer_result_without_pending_secret_redacts_numeric_values(
         .unwrap();
     let result_json = stored.result_json.unwrap();
     assert!(!result_json.contains(access_code));
-    let parsed: serde_json::Value = serde_json::from_str(&result_json).unwrap();
-    let object = parsed.as_object().unwrap();
+    let object = redacted_result_object(&result_json);
     assert!(object.keys().all(|key| !key.contains(access_code)));
     assert!(object.values().all(|value| value == "[redacted]"));
 }
@@ -1487,8 +1510,7 @@ async fn grpc_link_printer_result_without_pending_secret_redacts_numeric_object_
         .unwrap();
     let result_json = stored.result_json.unwrap();
     assert!(!result_json.contains(access_code));
-    let parsed: serde_json::Value = serde_json::from_str(&result_json).unwrap();
-    let object = parsed.as_object().unwrap();
+    let object = redacted_result_object(&result_json);
     assert!(object.keys().all(|key| !key.contains(access_code)));
 }
 

@@ -1,5 +1,6 @@
 mod support;
 
+use serde::Deserialize;
 use std::{
     env, fs,
     io::Write,
@@ -201,6 +202,27 @@ fn assert_request_with_token(request: &str, method: &str, path: &str, bearer_tok
     }
 }
 
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(tag = "action", rename_all = "snake_case")]
+enum TestOperation {
+    Home {
+        axes: Vec<String>,
+    },
+    SetChamberLight {
+        light_on: bool,
+    },
+    SetHotendTemperature {
+        temperature_celsius: u16,
+        wait: bool,
+        extruder_id: u8,
+    },
+}
+
+fn assert_operation_body_eq(request: &str, expected: TestOperation) {
+    let actual: TestOperation = serde_json::from_str(request_body(request)).unwrap();
+    assert_eq!(actual, expected);
+}
+
 fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
@@ -270,10 +292,9 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"job_id":"job-1"}"#);
                     }
                     7 => {
-                        assert_eq!(
-                            serde_json::from_str::<serde_json::Value>(request_body(&request))
-                                .unwrap(),
-                            serde_json::json!({"action":"set_chamber_light","light_on":false})
+                        assert_operation_body_eq(
+                            &request,
+                            TestOperation::SetChamberLight { light_on: false },
                         );
                         write_response(
                             &mut stream,
@@ -282,15 +303,13 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         );
                     }
                     8 => {
-                        assert_eq!(
-                            serde_json::from_str::<serde_json::Value>(request_body(&request))
-                                .unwrap(),
-                            serde_json::json!({
-                                "action": "set_hotend_temperature",
-                                "temperature_celsius": 245,
-                                "wait": false,
-                                "extruder_id": 1
-                            })
+                        assert_operation_body_eq(
+                            &request,
+                            TestOperation::SetHotendTemperature {
+                                temperature_celsius: 245,
+                                wait: false,
+                                extruder_id: 1,
+                            },
                         );
                         write_response(
                             &mut stream,
@@ -299,10 +318,11 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         );
                     }
                     9 => {
-                        assert_eq!(
-                            serde_json::from_str::<serde_json::Value>(request_body(&request))
-                                .unwrap(),
-                            serde_json::json!({"action":"home","axes":["x"]})
+                        assert_operation_body_eq(
+                            &request,
+                            TestOperation::Home {
+                                axes: vec!["x".to_owned()],
+                            },
                         );
                         assert!(
                             !request_body(&request).contains("G28"),
@@ -379,10 +399,9 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"job_id":"job-1"}"#);
                     }
                     6 => {
-                        assert_eq!(
-                            serde_json::from_str::<serde_json::Value>(request_body(&request))
-                                .unwrap(),
-                            serde_json::json!({"action":"set_chamber_light","light_on":false})
+                        assert_operation_body_eq(
+                            &request,
+                            TestOperation::SetChamberLight { light_on: false },
                         );
                         write_response(
                             &mut stream,
@@ -391,15 +410,13 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         );
                     }
                     7 => {
-                        assert_eq!(
-                            serde_json::from_str::<serde_json::Value>(request_body(&request))
-                                .unwrap(),
-                            serde_json::json!({
-                                "action": "set_hotend_temperature",
-                                "temperature_celsius": 245,
-                                "wait": false,
-                                "extruder_id": 1
-                            })
+                        assert_operation_body_eq(
+                            &request,
+                            TestOperation::SetHotendTemperature {
+                                temperature_celsius: 245,
+                                wait: false,
+                                extruder_id: 1,
+                            },
                         );
                         write_response(
                             &mut stream,
@@ -408,10 +425,11 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         );
                     }
                     8 => {
-                        assert_eq!(
-                            serde_json::from_str::<serde_json::Value>(request_body(&request))
-                                .unwrap(),
-                            serde_json::json!({"action":"home","axes":["x"]})
+                        assert_operation_body_eq(
+                            &request,
+                            TestOperation::Home {
+                                axes: vec!["x".to_owned()],
+                            },
                         );
                         assert!(
                             !request_body(&request).contains("G28"),
