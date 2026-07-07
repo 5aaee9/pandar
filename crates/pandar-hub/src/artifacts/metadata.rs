@@ -6,6 +6,7 @@ use std::{
 
 use anyhow::Context;
 use quick_xml::{Reader, XmlVersion, events::Event, events::attributes::Attribute};
+use serde::Deserialize;
 use zip::ZipArchive;
 
 mod types;
@@ -19,6 +20,16 @@ const MAX_TOTAL_METADATA_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_PLATES: usize = 64;
 const MAX_OBJECTS_PER_PLATE: usize = 32;
 const MAX_FILAMENTS_PER_PLATE: usize = 32;
+
+#[derive(Deserialize)]
+struct PlateJson {
+    bbox_objects: Option<Vec<PlateJsonObject>>,
+}
+
+#[derive(Deserialize)]
+struct PlateJsonObject {
+    name: Option<String>,
+}
 
 pub fn parse_artifact_metadata(
     filename: &str,
@@ -326,22 +337,20 @@ fn parse_model_settings(contents: &str, draft: &mut Draft) -> anyhow::Result<()>
 }
 
 fn parse_plate_json(plate_id: u32, contents: &str, draft: &mut Draft) {
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(contents) else {
+    let Ok(value) = serde_json::from_str::<PlateJson>(contents) else {
         return;
     };
-    let Some(objects) = value.get("bbox_objects").and_then(|value| value.as_array()) else {
+    let Some(objects) = value.bbox_objects else {
         return;
     };
     let Some(plate) = draft.ensure_plate(plate_id, PlateSource::Json) else {
         return;
     };
-    for name in objects.iter().filter_map(|object| {
-        object
-            .get("name")
-            .and_then(|name| name.as_str())
-            .filter(|name| !name.trim().is_empty())
-    }) {
-        push_object(&mut plate.metadata, name.to_string());
+    for name in objects
+        .into_iter()
+        .filter_map(|object| object.name.filter(|name| !name.trim().is_empty()))
+    {
+        push_object(&mut plate.metadata, name);
     }
 }
 

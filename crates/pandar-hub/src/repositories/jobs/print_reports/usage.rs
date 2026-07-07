@@ -3,7 +3,6 @@ use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
 };
 use serde::Deserialize;
-use serde_json::Value;
 
 use crate::{
     entities::{job_filament_usages, jobs, printer_material_snapshots},
@@ -26,6 +25,44 @@ struct FilamentIdentity {
     setting_id: Option<String>,
     filament_type: Option<String>,
     color: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MaterialUnit {
+    unit_id: Option<ScalarField>,
+    #[serde(default)]
+    trays: Vec<MaterialTray>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MaterialTray {
+    tray_id: Option<ScalarField>,
+    global_tray_id: Option<ScalarField>,
+    filament_id: Option<ScalarField>,
+    setting_id: Option<ScalarField>,
+    #[serde(rename = "type")]
+    filament_type: Option<ScalarField>,
+    color: Option<ScalarField>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExternalSpool {
+    external_id: Option<ScalarField>,
+    tray_id: Option<ScalarField>,
+    filament_id: Option<ScalarField>,
+    setting_id: Option<ScalarField>,
+    #[serde(rename = "type")]
+    filament_type: Option<ScalarField>,
+    color: Option<ScalarField>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum ScalarField {
+    String(String),
+    I64(i64),
+    U64(u64),
+    F64(f64),
 }
 
 #[derive(Debug, Deserialize)]
@@ -212,57 +249,104 @@ fn filament_for_identity(
     snapshot: &printer_material_snapshots::Model,
     identity: &SlotIdentity,
 ) -> RepositoryResult<Option<FilamentIdentity>> {
-    let ams_units: Vec<Value> = serde_json::from_str(&snapshot.ams_json)
+    let ams_units: Vec<MaterialUnit> = serde_json::from_str(&snapshot.ams_json)
         .context("failed to parse material AMS snapshot for job usage derivation")?;
-    let external_spools: Vec<Value> = serde_json::from_str(&snapshot.external_spools_json)
+    let external_spools: Vec<ExternalSpool> = serde_json::from_str(&snapshot.external_spools_json)
         .context("failed to parse material external spool snapshot for job usage derivation")?;
 
     if identity.external_id.is_some() {
         return Ok(external_spools
             .iter()
             .find(|spool| {
-                field_string(spool, "external_id").as_deref() == identity.external_id.as_deref()
-                    && field_string(spool, "tray_id").as_deref() == identity.tray_id.as_deref()
+                spool
+                    .external_id
+                    .as_ref()
+                    .and_then(ScalarField::string)
+                    .as_deref()
+                    == identity.external_id.as_deref()
+                    && spool
+                        .tray_id
+                        .as_ref()
+                        .and_then(ScalarField::string)
+                        .as_deref()
+                        == identity.tray_id.as_deref()
             })
-            .map(filament_from_value));
+            .map(FilamentIdentity::from));
     }
 
     Ok(ams_units
         .iter()
-        .find(|unit| field_string(unit, "unit_id").as_deref() == identity.ams_id.as_deref())
-        .and_then(|unit| unit.get("trays").and_then(Value::as_array))
-        .and_then(|trays| {
-            trays.iter().find(|tray| {
-                field_string(tray, "tray_id").as_deref() == identity.tray_id.as_deref()
-                    || field_i64(tray, "global_tray_id")
+        .find(|unit| {
+            unit.unit_id
+                .as_ref()
+                .and_then(ScalarField::string)
+                .as_deref()
+                == identity.ams_id.as_deref()
+        })
+        .and_then(|unit| {
+            unit.trays.iter().find(|tray| {
+                tray.tray_id
+                    .as_ref()
+                    .and_then(ScalarField::string)
+                    .as_deref()
+                    == identity.tray_id.as_deref()
+                    || tray
+                        .global_tray_id
+                        .as_ref()
+                        .and_then(ScalarField::i64)
                         .zip(identity.global_tray_id)
                         .is_some_and(|(left, right)| left == i64::from(right))
             })
         })
-        .map(filament_from_value))
+        .map(FilamentIdentity::from))
 }
 
-fn filament_from_value(value: &Value) -> FilamentIdentity {
-    FilamentIdentity {
-        filament_id: field_string(value, "filament_id"),
-        setting_id: field_string(value, "setting_id"),
-        filament_type: field_string(value, "type"),
-        color: field_string(value, "color"),
+impl From<&MaterialTray> for FilamentIdentity {
+    fn from(value: &MaterialTray) -> Self {
+        Self {
+            filament_id: value.filament_id.as_ref().and_then(ScalarField::string),
+            setting_id: value.setting_id.as_ref().and_then(ScalarField::string),
+            filament_type: value.filament_type.as_ref().and_then(ScalarField::string),
+            color: value.color.as_ref().and_then(ScalarField::string),
+        }
     }
 }
 
-fn field_string(value: &Value, key: &str) -> Option<String> {
-    value.get(key).and_then(|value| match value {
-        Value::String(value) => Some(value.clone()),
-        Value::Number(value) => Some(value.to_string()),
-        _ => None,
-    })
+impl From<&ExternalSpool> for FilamentIdentity {
+    fn from(value: &ExternalSpool) -> Self {
+        Self {
+            filament_id: value.filament_id.as_ref().and_then(ScalarField::string),
+            setting_id: value.setting_id.as_ref().and_then(ScalarField::string),
+            filament_type: value.filament_type.as_ref().and_then(ScalarField::string),
+            color: value.color.as_ref().and_then(ScalarField::string),
+        }
+    }
 }
 
-fn field_i64(value: &Value, key: &str) -> Option<i64> {
-    value.get(key).and_then(|value| match value {
-        Value::Number(value) => value.as_i64(),
-        Value::String(value) => value.parse().ok(),
-        _ => None,
-    })
+impl ScalarField {
+    fn string(&self) -> Option<String> {
+        match self {
+            Self::String(value) => Some(value.clone()),
+            Self::I64(value) => Some(value.to_string()),
+            Self::U64(value) => Some(value.to_string()),
+            Self::F64(value) if value.is_finite() => Some(value.to_string()),
+            Self::F64(_) => None,
+        }
+    }
+
+    fn i64(&self) -> Option<i64> {
+        match self {
+            Self::String(value) => value.parse().ok(),
+            Self::I64(value) => Some(*value),
+            Self::U64(value) => i64::try_from(*value).ok(),
+            Self::F64(value)
+                if value.fract() == 0.0
+                    && *value >= i64::MIN as f64
+                    && *value <= i64::MAX as f64 =>
+            {
+                Some(*value as i64)
+            }
+            Self::F64(_) => None,
+        }
+    }
 }

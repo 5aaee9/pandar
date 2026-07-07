@@ -97,6 +97,7 @@
 - Carried Bambu nozzle diameter/type metadata from Agent snapshots through Hub printer responses and displayed it in the Devices dual-nozzle switch details.
 - Moved Bambu Studio `push_status` telemetry, nozzle, AMS, and external-spool payload construction out of the C++ networking plugin shim into typed Rust serde structs, leaving `shim.cpp` focused on the Studio C++ ABI boundary.
 - Replaced networking plugin local config, Hub error, G-code, and Bambu Studio control-message JSON field assertions with typed serde request and operation structs/enums, keeping `Value` only for open-ended config or AMS mapping pass-through.
+- Replaced additional known-shape JSON handling with typed serde models for 3MF plate metadata, terminal filament-usage material snapshots, and agent printer-operation result serialization.
 - Added a Windows-only Bambu Studio development hook DLL that can proxy `swscale-8.dll` from a copied Studio directory and force new Studio logs onto Bambu's local fallback log key for decryptable development logs.
 - Normalized top-level Bambu `vt_tray` / `vir_slot` material reports into external spool snapshots so the Devices Filaments panel can show external materials.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.
