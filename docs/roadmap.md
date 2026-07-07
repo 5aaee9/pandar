@@ -990,6 +990,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced Agent machine and MQTT test payload inspectors with typed serde string decoders instead of cloning `serde_json::Value` into fixed-shape structs.
 - Replaced Agent fake MQTT payload matching helpers with typed serde decoders over borrowed payloads instead of cloning `serde_json::Value` into fixed-shape structs.
 - Replaced Agent material normalization tests with direct typed patch decoding instead of converting normalized patches through `serde_json::Value`.
+- Added a shared Hub route-test typed JSON decoder and removed direct `serde_json::from_value` usage from Hub route tests.
 
 Exit criteria:
 

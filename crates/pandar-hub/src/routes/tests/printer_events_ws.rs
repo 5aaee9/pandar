@@ -65,7 +65,7 @@ fn decode<T>(body: Value) -> T
 where
     T: DeserializeOwned,
 {
-    serde_json::from_value(body).unwrap()
+    decode_json(body)
 }
 
 fn decode_ws_message<T>(message: Message) -> T

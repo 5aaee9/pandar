@@ -49,7 +49,7 @@ fn decode<T>(body: serde_json::Value) -> T
 where
     T: DeserializeOwned,
 {
-    serde_json::from_value(body).unwrap()
+    decode_json(body)
 }
 
 #[tokio::test]

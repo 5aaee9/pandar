@@ -20,7 +20,7 @@ async fn agent_credential_lists_owned_printer_connections() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    let body: AgentPrintersResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<AgentPrintersResponse>(body);
     assert_eq!(body.printers.len(), 1);
     let printer = &body.printers[0];
     assert_eq!(printer.serial, fixture.serial);
@@ -46,7 +46,7 @@ async fn agent_credential_cannot_list_another_agent_printers() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    let body: ErrorResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<ErrorResponse>(body);
     assert_eq!(body.error, "forbidden");
 }
 
@@ -67,6 +67,10 @@ struct AgentPrinterResponse {
 #[derive(Deserialize)]
 struct ErrorResponse {
     error: String,
+}
+
+fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
+    decode_json(value)
 }
 
 struct AgentPrinterFixture {

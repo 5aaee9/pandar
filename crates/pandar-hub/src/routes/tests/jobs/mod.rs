@@ -139,7 +139,7 @@ struct JobFilamentUsageResponse {
 }
 
 fn decode<T: serde::de::DeserializeOwned>(value: serde_json::Value) -> T {
-    serde_json::from_value(value).unwrap()
+    decode_json(value)
 }
 
 #[derive(Debug, Deserialize)]

@@ -30,7 +30,7 @@ async fn readyz_reports_disabled_external_auth_as_ready() {
     let (status, body) = request(router(raw_state().await), Method::GET, "/readyz", None).await;
 
     assert_eq!(status, StatusCode::OK);
-    let body: ReadyzResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<ReadyzResponse>(body);
     assert_eq!(body.status, "ready");
     assert!(body.checks.database.unwrap().ready);
     assert!(body.checks.artifact_storage.ready);
@@ -57,7 +57,7 @@ async fn readyz_reports_artifact_storage_failure() {
     let (status, body) = request(app, Method::GET, "/readyz", None).await;
 
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    let body: ReadyzResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<ReadyzResponse>(body);
     assert_eq!(body.status, "not_ready");
     assert!(!body.checks.artifact_storage.ready);
     assert!(body.checks.spool.is_none());
@@ -76,7 +76,7 @@ async fn readyz_reports_filesystem_not_shared_for_postgres_nats() {
     let (status, body) = request(app, Method::GET, "/readyz", None).await;
 
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    let body: ReadyzResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<ReadyzResponse>(body);
     assert_eq!(body.status, "not_ready");
     assert!(!body.checks.artifact_storage.ready);
     assert_eq!(
@@ -97,7 +97,7 @@ async fn metrics_reports_ready_with_explicit_shared_filesystem_override() {
 
     let (status, body) = request(app.clone(), Method::GET, "/readyz", None).await;
     assert_eq!(status, StatusCode::OK);
-    let body: ReadyzResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<ReadyzResponse>(body);
     assert!(body.checks.artifact_storage.ready);
 
     let response = app
@@ -229,6 +229,10 @@ async fn metrics_redacts_tenant_ids_and_reports_required_series() {
 struct EnvGuard {
     name: &'static str,
     previous: Option<String>,
+}
+
+fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
+    decode_json(value)
 }
 
 impl EnvGuard {

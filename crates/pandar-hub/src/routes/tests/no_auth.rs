@@ -20,7 +20,7 @@ async fn no_auth_allows_tenant_read_without_bearer_token() {
     .await;
 
     assert_eq!(status, StatusCode::OK);
-    let body: AgentsResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<AgentsResponse>(body);
     assert_eq!(body.agents.len(), 0);
 }
 
@@ -44,7 +44,7 @@ async fn no_auth_allows_bootstrap_routes_without_bootstrap_token() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    let body: TenantResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<TenantResponse>(body);
     assert_eq!(body.slug, "no-auth-tenant");
     assert_eq!(body.display_name, "No Auth Tenant");
 }
@@ -67,6 +67,10 @@ struct CreateTenantRequest<'a> {
 struct TenantResponse {
     slug: String,
     display_name: String,
+}
+
+fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
+    decode_json(value)
 }
 
 #[tokio::test]

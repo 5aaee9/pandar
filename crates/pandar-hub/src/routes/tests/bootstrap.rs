@@ -85,6 +85,10 @@ struct AgentsResponse {
 #[derive(Debug, Deserialize)]
 struct AgentResponse {}
 
+fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
+    decode_json(value)
+}
+
 #[tokio::test]
 async fn summary_reports_repository_counts() {
     let state = bootstrap_state().await;
@@ -92,8 +96,7 @@ async fn summary_reports_repository_counts() {
     let (status, _) = create_tenant_for_test(app.clone()).await;
     assert_eq!(status, StatusCode::CREATED);
 
-    let tenants: TenantsResponse =
-        serde_json::from_value(bootstrap_get(app.clone(), "/api/v1/tenants").await.1).unwrap();
+    let tenants: TenantsResponse = decode(bootstrap_get(app.clone(), "/api/v1/tenants").await.1);
     let tenant_id = tenants.tenants[0].id.clone();
     let token = auth_token_for_role(&state, &tenant_id, admin(), "summary-admin").await;
     let (status, _) = request_as(
@@ -125,7 +128,7 @@ async fn summary_reports_repository_counts() {
     let (status, body) = bootstrap_get(app, "/api/v1/summary").await;
 
     assert_eq!(status, StatusCode::OK);
-    let body: SummaryResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<SummaryResponse>(body);
     assert_eq!(
         body,
         SummaryResponse {
@@ -142,7 +145,7 @@ async fn tenant_create_returns_created_record() {
     let (status, body) = create_tenant_for_test(bootstrap_app().await).await;
 
     assert_eq!(status, StatusCode::CREATED);
-    let body: TenantResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<TenantResponse>(body);
     assert_eq!(body.slug, "acme");
     assert_eq!(body.display_name, "Acme Labs");
     assert!(!body.id.is_empty());
@@ -158,8 +161,8 @@ async fn tenant_list_returns_created_records() {
     let (status, body) = bootstrap_get(app, "/api/v1/tenants").await;
 
     assert_eq!(status, StatusCode::OK);
-    let created: TenantResponse = serde_json::from_value(created).unwrap();
-    let body: TenantsResponse = serde_json::from_value(body).unwrap();
+    let created = decode::<TenantResponse>(created);
+    let body = decode::<TenantsResponse>(body);
     assert_eq!(body.tenants, vec![created]);
 }
 
@@ -172,7 +175,7 @@ async fn duplicate_tenant_slug_returns_conflict() {
     let (status, body) = create_tenant_for_test(app).await;
 
     assert_eq!(status, StatusCode::CONFLICT);
-    let body: ErrorResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<ErrorResponse>(body);
     assert_eq!(body.error, "tenant_slug_exists");
 }
 
@@ -190,7 +193,7 @@ async fn empty_tenant_fields_return_bad_request() {
     .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    let body: ErrorResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<ErrorResponse>(body);
     assert_eq!(body.error, "bad_request");
 }
 
@@ -232,17 +235,17 @@ async fn summary_and_tenant_listing_require_bootstrap_token() {
     for uri in ["/api/v1/summary", "/api/v1/tenants"] {
         let (status, body) = request(app.clone(), Method::GET, uri, None).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
-        let body: ErrorResponse = serde_json::from_value(body).unwrap();
+        let body = decode::<ErrorResponse>(body);
         assert_eq!(body.error, "missing_auth_token");
 
         let (status, body) = request_as(app.clone(), Method::GET, uri, None, "wrong-token").await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
-        let body: ErrorResponse = serde_json::from_value(body).unwrap();
+        let body = decode::<ErrorResponse>(body);
         assert_eq!(body.error, "invalid_auth_token");
 
         let (status, body) = request_as(app.clone(), Method::GET, uri, None, &tenant_token).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
-        let body: ErrorResponse = serde_json::from_value(body).unwrap();
+        let body = decode::<ErrorResponse>(body);
         assert_eq!(body.error, "invalid_auth_token");
 
         let (status, _) = bootstrap_get(app.clone(), uri).await;
@@ -262,7 +265,7 @@ async fn bootstrap_disabled_rejects_bootstrap_only_endpoints() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    let body: ErrorResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<ErrorResponse>(body);
     assert_eq!(body.error, "bootstrap_disabled");
 }
 
@@ -286,7 +289,7 @@ async fn bootstrap_tenant_admin_creates_tenant_user_token_and_audit_events() {
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
-    let body: BootstrapTenantAdminResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<BootstrapTenantAdminResponse>(body);
     assert_eq!(body.tenant.slug, "bootstrap-acme");
     assert_eq!(body.user.role, "tenant_admin");
     assert_eq!(body.tenant_token.name, "bootstrap-admin");
@@ -305,7 +308,7 @@ async fn bootstrap_tenant_admin_creates_tenant_user_token_and_audit_events() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    let body: AgentsResponse = serde_json::from_value(body).unwrap();
+    let body = decode::<AgentsResponse>(body);
     assert_eq!(body.agents.len(), 0);
 
     let events = state

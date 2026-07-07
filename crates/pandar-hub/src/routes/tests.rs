@@ -6,7 +6,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set};
-use serde::Serialize;
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -126,6 +126,11 @@ fn json_body(input: impl Serialize) -> Value {
     serde_json::to_value(input).unwrap()
 }
 
+fn decode_json<T: DeserializeOwned>(value: Value) -> T {
+    let json = serde_json::to_string(&value).unwrap();
+    serde_json::from_str(&json).unwrap()
+}
+
 async fn raw_request_as(
     app: Router,
     method: Method,
@@ -167,9 +172,7 @@ struct TestCreateTenantRequest<'a> {
 async fn tenant_and_agent(state: &AppState, app: Router) -> (Value, Value, String) {
     let (status, tenant) = create_tenant_for_test(app.clone()).await;
     assert_eq!(status, StatusCode::CREATED);
-    let tenant_id = serde_json::from_value::<TestTenantResponse>(tenant.clone())
-        .unwrap()
-        .id;
+    let tenant_id = decode_json::<TestTenantResponse>(tenant.clone()).id;
     let token = auth_token_for_role(
         state,
         &tenant_id,

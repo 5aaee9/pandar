@@ -19,7 +19,7 @@ struct ErrorResponse {
 }
 
 fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
-    serde_json::from_value(value).unwrap()
+    decode_json(value)
 }
 
 #[tokio::test]
