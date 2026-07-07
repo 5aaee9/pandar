@@ -32,6 +32,7 @@ pub use reports::{
 #[cfg(test)]
 pub(crate) use rumqttc::TlsConfiguration;
 pub use snapshot::snapshot_from_report;
+pub(crate) use snapshot::{parse_snapshot_report, snapshot_from_parsed_report};
 pub(crate) use transport::BambuLanCertificateVerifier;
 #[cfg(test)]
 pub(crate) use transport::warn_mqtt_report_receive_failed;
@@ -97,7 +98,8 @@ where
             .next_report(report_timeout)
             .await
             .context("wait for MQTT report")?;
-        let mut snapshot = snapshot_from_report(endpoint, &report);
+        let snapshot_report = parse_snapshot_report(&report);
+        let mut snapshot = snapshot_from_parsed_report(endpoint, snapshot_report.as_ref());
         snapshot.model = Some(discovered_model);
         let observed_at = created_at_now();
         let materials_report = parse_materials_report(&report);

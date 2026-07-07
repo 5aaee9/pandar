@@ -4,14 +4,25 @@ use serde_json::{Number, Value};
 use crate::machine::{BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot};
 
 pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> MachineSnapshot {
-    let report = serde_json::from_value::<SnapshotReport>(report.clone()).unwrap_or_default();
-    let print = report.print.as_ref();
+    let report = parse_snapshot_report(report);
+    snapshot_from_parsed_report(endpoint, report.as_ref())
+}
+
+pub(crate) fn parse_snapshot_report(report: &Value) -> Option<SnapshotReport> {
+    serde_json::from_value(report.clone()).ok()
+}
+
+pub(crate) fn snapshot_from_parsed_report(
+    endpoint: &BambuPrinterEndpoint,
+    report: Option<&SnapshotReport>,
+) -> MachineSnapshot {
+    let print = report.and_then(|report| report.print.as_ref());
     let state = print
         .and_then(|print| {
             trimmed_string(print.gcode_state.as_ref())
                 .or_else(|| trimmed_string(print.state.as_ref()))
         })
-        .or_else(|| trimmed_string(report.state.as_ref()))
+        .or_else(|| report.and_then(|report| trimmed_string(report.state.as_ref())))
         .unwrap_or_else(|| "unknown".to_owned());
     let (packed_bed_temperature, packed_bed_target_temperature) =
         packed_temperature_pair(print.and_then(|print| print.device.bed_temp.as_ref()));
@@ -47,7 +58,7 @@ pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> 
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct SnapshotReport {
+pub(crate) struct SnapshotReport {
     #[serde(default)]
     state: Option<ScalarValue>,
     #[serde(default)]

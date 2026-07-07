@@ -22,7 +22,7 @@ use crate::{
 
 use super::{
     BambuMqttTopics, BambuMqttTransport, MachineReportDiagnostic, MachineReportDiagnosticPayload,
-    PrintReportProgress, snapshot_from_report,
+    PrintReportProgress, parse_snapshot_report, snapshot_from_parsed_report,
 };
 
 pub fn print_report_from_report(
@@ -199,7 +199,8 @@ where
         match transport.next_report(report_timeout).await {
             Ok(report) => {
                 let progress = print_report_from_report(endpoint, &report);
-                let snapshot = snapshot_from_report(endpoint, &report);
+                let snapshot_report = parse_snapshot_report(&report);
+                let snapshot = snapshot_from_parsed_report(endpoint, snapshot_report.as_ref());
                 let snapshot_event = snapshot_has_temperature_telemetry(&snapshot)
                     .then(|| printer_snapshot_event(config, snapshot));
                 let materials =
