@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Agent BRTC upload chunk test expected payloads with typed serde structs instead of handwritten `json!` objects.
 - Replaced Agent command test MQTT report fixtures with typed serde structs for get-version and AMS-ready reports.
 - Replaced Hub printer route test request bodies with typed serde structs for printer updates, printer controls, and link-printer validation payloads.
 - Replaced Hub plugin route test request bodies and audit metadata fixtures with typed serde structs for login-ticket, ticket-exchange, and redaction coverage.
