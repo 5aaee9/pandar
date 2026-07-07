@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Hub onboarding route test request bodies with typed serde fixture structs for tenant self-creation, join-link creation, and join-link acceptance.
 - Replaced Hub tenant-token route test request bodies with typed serde fixture structs for token creation/rotation, agent creation, user creation, and retired token routes.
 - Replaced Hub provisioning agent-pairing request bodies with typed serde fixture structs instead of handwritten `json!` payload objects.
 - Replaced Hub print-job AMS mapping request/response validation with typed serde structs for `ams_mapping`, `ams_mapping2`, and `ams_mapping_info`, including multipart parsing, persisted mapping reads, repository validation, and gRPC command conversion.

@@ -1,5 +1,11 @@
 use super::*;
+use requests::{
+    join_link_accept_body, join_link_create_body, join_link_create_with_email_body,
+    join_link_create_with_email_constraint_body, tenant_create_body,
+};
 use serde::{Deserialize, de::DeserializeOwned};
+
+mod requests;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -183,7 +189,7 @@ async fn self_create_tenant_creates_admin_projection() {
         app,
         Method::POST,
         "/api/v1/onboarding/tenants",
-        Some(json!({ "slug": "creator-lab", "display_name": "Creator Lab" })),
+        tenant_create_body("creator-lab", "Creator Lab"),
         &token,
     )
     .await;
@@ -213,7 +219,7 @@ async fn self_create_tenant_can_be_disabled() {
         app,
         Method::POST,
         "/api/v1/onboarding/tenants",
-        Some(json!({ "slug": "disabled-lab", "display_name": "Disabled Lab" })),
+        tenant_create_body("disabled-lab", "Disabled Lab"),
         &token,
     )
     .await;
@@ -246,7 +252,7 @@ async fn self_create_tenant_allows_identity_with_existing_membership() {
         app,
         Method::POST,
         "/api/v1/onboarding/tenants",
-        Some(json!({ "slug": "second-tenant", "display_name": "Second Tenant" })),
+        tenant_create_body("second-tenant", "Second Tenant"),
         &token,
     )
     .await;
@@ -278,12 +284,7 @@ async fn tenant_admin_can_create_list_and_revoke_join_links() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/join-links", tenant.id),
-        Some(json!({
-            "role": "operator",
-            "email": "member@example.test",
-            "expires_in_seconds": 3600,
-            "max_uses": 1
-        })),
+        join_link_create_with_email_body("operator", "member@example.test", 3600, 1),
         &admin,
     )
     .await;
@@ -341,7 +342,7 @@ async fn tenant_tokens_cannot_manage_join_links() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/join-links", tenant.id),
-        Some(json!({ "role": "viewer" })),
+        join_link_create_body("viewer"),
         &admin,
     )
     .await;
@@ -353,7 +354,7 @@ async fn tenant_tokens_cannot_manage_join_links() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/join-links", tenant.id),
-        Some(json!({ "role": "viewer" })),
+        join_link_create_body("viewer"),
         &token,
     )
     .await;
@@ -403,7 +404,7 @@ async fn join_link_accept_creates_member_from_body_token() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/join-links", tenant.id),
-        Some(json!({ "role": "viewer" })),
+        join_link_create_body("viewer"),
         &admin,
     )
     .await;
@@ -414,7 +415,7 @@ async fn join_link_accept_creates_member_from_body_token() {
         app,
         Method::POST,
         "/api/v1/join-links/accept",
-        Some(json!({ "token": token })),
+        join_link_accept_body(&token),
         &member,
     )
     .await;
@@ -448,7 +449,7 @@ async fn join_link_accept_rejects_email_mismatch() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/join-links", tenant.id),
-        Some(json!({ "role": "viewer", "email_constraint": "allowed@example.test" })),
+        join_link_create_with_email_constraint_body("viewer", "allowed@example.test"),
         &admin,
     )
     .await;
@@ -459,7 +460,7 @@ async fn join_link_accept_rejects_email_mismatch() {
         app,
         Method::POST,
         "/api/v1/join-links/accept",
-        Some(json!({ "token": created.token })),
+        join_link_accept_body(&created.token),
         &wrong,
     )
     .await;
@@ -491,7 +492,7 @@ async fn join_link_accept_existing_member_keeps_role() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/join-links", tenant.id),
-        Some(json!({ "role": "viewer" })),
+        join_link_create_body("viewer"),
         &admin,
     )
     .await;
@@ -501,7 +502,7 @@ async fn join_link_accept_existing_member_keeps_role() {
         app,
         Method::POST,
         "/api/v1/join-links/accept",
-        Some(json!({ "token": created.token })),
+        join_link_accept_body(&created.token),
         &admin,
     )
     .await;
@@ -533,7 +534,7 @@ async fn join_link_audit_metadata_redacts_subject_and_secret() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/join-links", tenant.id),
-        Some(json!({ "role": "operator" })),
+        join_link_create_body("operator"),
         &admin,
     )
     .await;
@@ -548,7 +549,7 @@ async fn join_link_audit_metadata_redacts_subject_and_secret() {
         app,
         Method::POST,
         "/api/v1/join-links/accept",
-        Some(json!({ "token": token })),
+        join_link_accept_body(&token),
         &member,
     )
     .await;
