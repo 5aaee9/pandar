@@ -190,43 +190,34 @@ fn apply_material_fields(normalized: &mut Map<String, Value>, source: &MaterialS
     }
 }
 
-fn insert_string_field(normalized: &mut Map<String, Value>, target: &str, value: Option<&Value>) {
+fn insert_string_field(
+    normalized: &mut Map<String, Value>,
+    target: &str,
+    value: Option<&ScalarValue>,
+) {
     if let Some(value) = normalized_string(value) {
         normalized.insert(target.to_owned(), Value::String(value));
     }
 }
 
-fn insert_number_field(normalized: &mut Map<String, Value>, target: &str, value: Option<&Value>) {
+fn insert_number_field(
+    normalized: &mut Map<String, Value>,
+    target: &str,
+    value: Option<&ScalarValue>,
+) {
     if let Some(value) = value.and_then(normalized_number) {
         normalized.insert(target.to_owned(), value);
     }
 }
 
-fn normalized_number(value: &Value) -> Option<Value> {
-    match value {
-        Value::Number(_) => Some(value.clone()),
-        Value::String(raw) => {
-            let raw = raw.trim();
-            raw.parse::<i64>().ok().map(Value::from).or_else(|| {
-                raw.parse::<f64>()
-                    .ok()
-                    .and_then(serde_json::Number::from_f64)
-                    .map(Value::Number)
-            })
-        }
-        _ => None,
-    }
+fn normalized_number(value: &ScalarValue) -> Option<Value> {
+    value.number_json()
 }
 
-pub(super) fn normalized_string(value: Option<&Value>) -> Option<String> {
-    match value? {
-        Value::String(raw) => {
-            let trimmed = raw.trim();
-            (!trimmed.is_empty()).then(|| trimmed.to_owned())
-        }
-        Value::Number(_) | Value::Bool(_) => Some(value?.to_string()),
-        _ => None,
-    }
+pub(in crate::machine::materials) fn normalized_string(
+    value: Option<&ScalarValue>,
+) -> Option<String> {
+    value?.string()
 }
 
 fn apply_empty_tray_clears(trays: &mut Vec<NormalizedTrayPatch>, unit_id: &str, bits: u64) {
@@ -283,7 +274,7 @@ fn default_dual_ams_toolhead(
     }
 }
 
-fn normalize_active_tray(value: Option<&Value>) -> Option<Value> {
+fn normalize_active_tray(value: Option<&ScalarValue>) -> Option<Value> {
     let tray_now = parse_i64(value?)?;
     match tray_now {
         255 => Some(Value::Null),
@@ -294,31 +285,39 @@ fn normalize_active_tray(value: Option<&Value>) -> Option<Value> {
     }
 }
 
-fn normalize_color(value: &Value) -> Option<String> {
-    let raw = value.as_str()?.trim().trim_start_matches('#');
+fn normalize_color(value: &ScalarValue) -> Option<String> {
+    let raw = value.string()?;
+    normalize_color_str(&raw)
+}
+
+fn normalize_color_str(value: &str) -> Option<String> {
+    let raw = value.trim().trim_start_matches('#');
     let valid_len = raw.len() == 6 || raw.len() == 8;
     let valid_hex = raw.chars().all(|ch| ch.is_ascii_hexdigit());
     (valid_len && valid_hex).then(|| raw.to_ascii_uppercase())
 }
 
-fn normalize_multi_color(value: &Value) -> Option<Vec<Value>> {
+fn normalize_multi_color(value: &ColorSource) -> Option<Vec<Value>> {
     let colors: Vec<Value> = match value {
-        Value::Array(values) => values
+        ColorSource::List(values) => values
             .iter()
             .filter_map(normalize_color)
             .map(Value::String)
             .collect(),
-        Value::String(raw) => raw
+        ColorSource::Single(ScalarValue::String(raw)) => raw
             .split(',')
-            .filter_map(|part| normalize_color(&Value::String(part.to_owned())))
+            .filter_map(normalize_color_str)
             .map(Value::String)
             .collect(),
-        _ => return None,
+        ColorSource::Single(value) => normalize_color(value)
+            .map(Value::String)
+            .into_iter()
+            .collect(),
     };
     (!colors.is_empty()).then_some(colors)
 }
 
-fn normalize_toolhead(value: &Value) -> Option<String> {
+fn normalize_toolhead(value: &ScalarValue) -> Option<String> {
     let raw = normalized_string(Some(value))?;
     let parsed =
         u64::from_str_radix(raw.trim_start_matches("0x").trim_start_matches("0X"), 16).ok()?;
@@ -329,7 +328,9 @@ fn normalize_toolhead(value: &Value) -> Option<String> {
     }
 }
 
-pub(super) fn normalize_extruder_toolhead(value: &Value) -> Option<String> {
+pub(in crate::machine::materials) fn normalize_extruder_toolhead(
+    value: &ScalarValue,
+) -> Option<String> {
     match parse_i64(value)? {
         0 => Some("R".to_owned()),
         1 => Some("L".to_owned()),

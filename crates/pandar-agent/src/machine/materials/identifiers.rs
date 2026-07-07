@@ -1,5 +1,3 @@
-use serde_json::Value;
-
 use super::{normalized_string, schema::*};
 
 pub(super) fn derive_setting_id(filament_id: &str) -> String {
@@ -51,27 +49,10 @@ pub(super) fn global_tray_id(unit_id: &str, tray_id: &str) -> Option<u64> {
     (unit_id < 64).then_some(unit_id * 4 + tray_id)
 }
 
-pub(super) fn parse_tray_exist_bits(value: Option<&Value>) -> Option<u64> {
-    match value? {
-        Value::Number(number) => number.as_u64(),
-        Value::String(raw) => {
-            let trimmed = raw.trim();
-            let hex = trimmed
-                .strip_prefix("0x")
-                .or_else(|| trimmed.strip_prefix("0X"));
-            match hex {
-                Some(hex) => u64::from_str_radix(hex, 16).ok(),
-                None => trimmed.parse::<u64>().ok(),
-            }
-        }
-        _ => None,
-    }
+pub(super) fn parse_tray_exist_bits(value: Option<&ScalarValue>) -> Option<u64> {
+    value?.parse_u64_or_hex()
 }
 
-pub(super) fn parse_i64(value: &Value) -> Option<i64> {
-    match value {
-        Value::Number(number) => number.as_i64().or_else(|| number.as_u64()?.try_into().ok()),
-        Value::String(raw) => raw.trim().parse().ok(),
-        _ => None,
-    }
+pub(super) fn parse_i64(value: &ScalarValue) -> Option<i64> {
+    value.parse_i64()
 }
