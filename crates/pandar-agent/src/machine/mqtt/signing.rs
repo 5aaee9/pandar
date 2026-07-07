@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::PathBuf};
+use std::path::PathBuf;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rsa::{
@@ -7,22 +7,22 @@ use rsa::{
     pkcs8::DecodePrivateKey,
     signature::{SignatureEncoding, Signer},
 };
-use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
+use serde::Serialize;
+use serde_json::Value;
 use sha2::Sha256;
 
+use super::commands::payload::{ProjectFilePayload, ProjectFilePayloadPrint, json_payload};
+
 pub(crate) fn maybe_sign_project_file_payload(
-    payload: Value,
+    mut project: ProjectFilePayload,
     printer_model: Option<&str>,
 ) -> Value {
     let Some(key) = slicer_key() else {
         tracing::warn!(
             "Bambu Studio slicer signing key was not found; sending unsigned project_file"
         );
-        return payload;
+        return json_payload(project);
     };
-    let mut project =
-        serde_json::from_value::<ProjectFilePayload>(payload.clone()).unwrap_or_default();
     if h2d_family(printer_model) {
         project.flip_nozzle_ids();
     }
@@ -30,7 +30,7 @@ pub(crate) fn maybe_sign_project_file_payload(
         print: project.print.clone(),
     };
     let Ok(to_sign_bytes) = serde_json::to_vec(&to_sign) else {
-        return payload;
+        return json_payload(project);
     };
     let signing_key = SigningKey::<Sha256>::new(key);
     let signature = signing_key.sign(&to_sign_bytes);
@@ -47,21 +47,15 @@ pub(crate) fn maybe_sign_project_file_payload(
     .expect("signed project file payload is serializable")
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-struct ProjectFilePayload {
-    #[serde(default)]
-    print: Option<ProjectFilePrint>,
-}
-
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct SignedProjectFilePayload {
-    print: Option<ProjectFilePrint>,
+    print: ProjectFilePayloadPrint,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 struct SignedProjectFileEnvelope {
     header: SignedProjectFileHeader,
-    print: Option<ProjectFilePrint>,
+    print: ProjectFilePayloadPrint,
 }
 
 #[derive(Debug, Serialize)]
@@ -71,33 +65,6 @@ struct SignedProjectFileHeader {
     sign_alg: &'static str,
     sign_string: String,
     sign_ver: &'static str,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-struct ProjectFilePrint {
-    ams_mapping_info: Option<Vec<AmsMappingInfoEntry>>,
-    #[serde(flatten)]
-    extra: BTreeMap<String, ProjectFileJson>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[serde(untagged)]
-enum ProjectFileJson {
-    Object(BTreeMap<String, ProjectFileJson>),
-    Array(Vec<ProjectFileJson>),
-    String(String),
-    Number(Number),
-    Bool(bool),
-    #[default]
-    Null,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct AmsMappingInfoEntry {
-    #[serde(default, rename = "nozzleId")]
-    nozzle_id: Option<i64>,
-    #[serde(flatten)]
-    extra: BTreeMap<String, ProjectFileJson>,
 }
 
 fn slicer_key() -> Option<RsaPrivateKey> {
@@ -146,16 +113,13 @@ fn h2d_family(model: Option<&str>) -> bool {
 
 impl ProjectFilePayload {
     fn flip_nozzle_ids(&mut self) {
-        let Some(print) = &mut self.print else {
-            return;
-        };
-        let Some(entries) = &mut print.ams_mapping_info else {
+        let Some(entries) = &mut self.print.ams_mapping_info else {
             return;
         };
         for entry in entries {
             match entry.nozzle_id {
-                Some(0) => entry.nozzle_id = Some(1),
-                Some(1) => entry.nozzle_id = Some(0),
+                0 => entry.nozzle_id = 1,
+                1 => entry.nozzle_id = 0,
                 _ => {}
             }
         }
@@ -164,45 +128,57 @@ impl ProjectFilePayload {
 
 #[cfg(test)]
 mod tests {
-    use serde::Serialize;
     use serde_json::Value;
 
-    use super::{ProjectFilePayload, h2d_family};
+    use crate::machine::mqtt::commands::payload::{
+        ProjectFileAmsMappingInfo, ProjectFilePayloadPrint,
+    };
 
-    #[derive(Serialize)]
-    struct ProjectFileTestPayload {
-        print: ProjectFileTestPrint,
-    }
+    use super::{ProjectFilePayload, h2d_family, json_payload};
 
-    #[derive(Serialize)]
-    struct ProjectFileTestPrint {
-        command: &'static str,
-        ams_mapping_info: Vec<NozzleMappingEntry>,
-    }
-
-    #[derive(Serialize)]
-    struct NozzleMappingEntry {
-        #[serde(rename = "nozzleId")]
-        nozzle_id: u8,
-    }
-
-    fn test_payload(nozzle_ids: impl IntoIterator<Item = u8>) -> Value {
-        serde_json::to_value(ProjectFileTestPayload {
-            print: ProjectFileTestPrint {
+    fn test_payload(nozzle_ids: impl IntoIterator<Item = i64>) -> ProjectFilePayload {
+        ProjectFilePayload {
+            print: ProjectFilePayloadPrint {
                 command: "project_file",
-                ams_mapping_info: nozzle_ids
-                    .into_iter()
-                    .map(|nozzle_id| NozzleMappingEntry { nozzle_id })
-                    .collect(),
+                sequence_id: "20000".to_owned(),
+                param: "Metadata/plate_1.gcode".to_owned(),
+                project_id: "0",
+                profile_id: "0",
+                task_id: "0",
+                subtask_id: "0",
+                subtask_name: "job".to_owned(),
+                url: "ftp://job.3mf".to_owned(),
+                file: "job.3mf".to_owned(),
+                md5: String::new(),
+                bed_type: "auto",
+                bed_leveling: false,
+                flow_cali: false,
+                vibration_cali: false,
+                layer_inspect: false,
+                timelapse: false,
+                use_ams: true,
+                ams_mapping: Vec::new(),
+                ams_mapping2: Vec::new(),
+                ams_mapping_info: Some(
+                    nozzle_ids
+                        .into_iter()
+                        .map(|nozzle_id| ProjectFileAmsMappingInfo {
+                            nozzle_id,
+                            extra: Default::default(),
+                        })
+                        .collect(),
+                ),
+                auto_bed_leveling: 0,
+                nozzle_offset_cali: 0,
+                cfg: "0",
+                extrude_cali_flag: 0,
             },
-        })
-        .expect("test project file payload is serializable")
+        }
     }
 
-    fn flip_nozzle_ids(payload: Value) -> Value {
-        let mut payload: ProjectFilePayload = serde_json::from_value(payload).unwrap();
+    fn flip_nozzle_ids(mut payload: ProjectFilePayload) -> Value {
         payload.flip_nozzle_ids();
-        serde_json::to_value(payload).unwrap()
+        json_payload(payload)
     }
 
     #[test]
@@ -218,6 +194,6 @@ mod tests {
     fn flip_nozzle_ids_only_swaps_zero_and_one() {
         let payload = flip_nozzle_ids(test_payload([0, 1, 2]));
 
-        assert_eq!(payload, test_payload([1, 0, 2]));
+        assert_eq!(payload, json_payload(test_payload([1, 0, 2])));
     }
 }

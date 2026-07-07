@@ -31,7 +31,6 @@ pub use reports::{
 };
 #[cfg(test)]
 pub(crate) use rumqttc::TlsConfiguration;
-pub(crate) use signing::maybe_sign_project_file_payload;
 pub use snapshot::snapshot_from_report;
 pub(crate) use transport::BambuLanCertificateVerifier;
 #[cfg(test)]

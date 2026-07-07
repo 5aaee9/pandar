@@ -4,7 +4,7 @@ use anyhow::bail;
 use serde::Serialize;
 use serde_json::{Number, Value};
 
-mod payload;
+pub(super) mod payload;
 mod project_file;
 mod sequence;
 
@@ -48,6 +48,7 @@ impl PrintSpeed {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectFileCommand {
+    pub printer_model: Option<String>,
     pub filename: String,
     pub url: Option<String>,
     pub md5: Option<String>,

@@ -229,6 +229,7 @@ fn studio_command_payloads_use_incrementing_studio_sequence_ids() {
         ),
         (
             BambuMqttCommand::ProjectFile(ProjectFileCommand {
+                printer_model: None,
                 filename: "job.3mf".to_string(),
                 url: None,
                 md5: None,
@@ -496,6 +497,7 @@ fn raw_json_payload_is_preserved() {
 #[test]
 fn project_file_payload_reserves_dispatch_identity_and_flags() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        printer_model: None,
         filename: "job.3mf".to_string(),
         url: None,
         md5: None,
@@ -547,6 +549,7 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
 #[test]
 fn project_file_payload_defaults_mapping_keys_when_no_mapping_supplied() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        printer_model: None,
         filename: "job.3mf".to_string(),
         url: None,
         md5: None,
@@ -571,6 +574,7 @@ fn project_file_payload_defaults_mapping_keys_when_no_mapping_supplied() {
 #[test]
 fn project_file_payload_includes_ams_mapping_only_when_supplied() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        printer_model: None,
         filename: "job.3mf".to_string(),
         url: None,
         md5: None,
@@ -595,6 +599,7 @@ fn project_file_payload_includes_ams_mapping_only_when_supplied() {
 #[test]
 fn project_file_payload_includes_ams_mapping2_only_when_supplied() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        printer_model: None,
         filename: "job.3mf".to_string(),
         url: None,
         md5: None,
@@ -624,6 +629,7 @@ fn project_file_payload_includes_ams_mapping2_only_when_supplied() {
 #[test]
 fn project_file_payload_includes_both_mapping_keys_when_supplied() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        printer_model: None,
         filename: "job.3mf".to_string(),
         url: None,
         md5: None,
@@ -660,6 +666,7 @@ fn project_file_payload_includes_both_mapping_keys_when_supplied() {
 #[test]
 fn project_file_payload_rewrites_flat_external_mapping_values() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        printer_model: None,
         filename: "job.3mf".to_string(),
         url: None,
         md5: None,

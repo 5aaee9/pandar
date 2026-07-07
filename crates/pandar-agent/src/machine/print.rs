@@ -42,6 +42,7 @@ where
     let topics = BambuMqttTopics::for_serial(&endpoint.serial);
     let md5 = md5_upper(artifact);
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        printer_model: endpoint.model.clone(),
         filename: uploaded.path.clone(),
         url: Some(uploaded.url.clone()),
         md5: Some(md5.clone()),
@@ -56,8 +57,6 @@ where
         ams_mapping_info_json: non_empty_string(&command.ams_mapping_info_json),
     })
     .payload();
-    let payload =
-        crate::machine::mqtt::maybe_sign_project_file_payload(payload, endpoint.model.as_deref());
     mqtt.publish(PublishedMqttCommand {
         topic: topics.request.clone(),
         payload: payload.clone(),

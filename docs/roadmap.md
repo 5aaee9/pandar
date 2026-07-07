@@ -972,6 +972,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced the remaining Hub job route test flatten-capture maps with typed recursive serde enums instead of `BTreeMap<String, serde_json::Value>`.
 - Replaced Agent print-report HMS diagnostic extraction with the same typed serde envelope used for print progress, avoiding a second raw `Value` deserialize path for the same MQTT report.
 - Replaced Agent printer-operation MQTT result handling with a single typed serde envelope that preserves unknown fields through flattened maps instead of cloning raw `Value` for a second payload conversion.
+- Replaced Agent project-file MQTT signing with typed command payload structs, so signing no longer deserializes a prebuilt `serde_json::Value` back into a duplicate project-file shape.
 
 Exit criteria:
 
