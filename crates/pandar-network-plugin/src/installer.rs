@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::Number;
 
 #[derive(Debug, Clone)]
 pub struct InstallNetworkPluginOptions {
@@ -118,7 +118,7 @@ fn patch_bambu_studio_config(path: &Path) -> anyhow::Result<()> {
 struct BambuStudioConfig {
     app: BambuStudioAppConfig,
     #[serde(flatten)]
-    extra: BTreeMap<String, Value>,
+    extra: BTreeMap<String, BambuStudioConfigValue>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -130,7 +130,18 @@ struct BambuStudioAppConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ignore_module_cert: Option<String>,
     #[serde(flatten)]
-    extra: BTreeMap<String, Value>,
+    extra: BTreeMap<String, BambuStudioConfigValue>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+enum BambuStudioConfigValue {
+    Object(BTreeMap<String, BambuStudioConfigValue>),
+    Array(Vec<BambuStudioConfigValue>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
 }
 
 fn strip_md5_checksum(raw: &str) -> &str {

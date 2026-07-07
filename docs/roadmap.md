@@ -52,6 +52,7 @@
 - Replaced the remaining Agent material-normalization inline JSON test inputs with typed serde report builders for invalid AMS shapes, external spool sources, active trays, AMS-HT trays, and credential filtering.
 - Replaced fixed-shape Agent link-printer and print-project command result JSON construction with serializable structs.
 - Replaced fixed-shape networking plugin ticket/no-auth request bodies and local webserver/callback response JSON construction with serializable structs.
+- Replaced Bambu Studio network-plugin installer config passthrough fields with a typed recursive serde enum instead of flattening unknown config fields into raw `Value`.
 - Replaced Hub printer-operation audit metadata construction with typed serializable metadata structs instead of ad hoc JSON maps.
 - Replaced Hub audit-event metadata redaction with a typed recursive serde enum instead of deserializing persisted metadata as raw `Value` and manually matching JSON fields.
 - Replaced Hub material patch parsing and merge identity extraction with typed serde patch structs for patch documents, AMS units, trays, external spools, and persisted material identities.
