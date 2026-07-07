@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Agent project-file signing nozzle-id mutation with typed serde payload structs instead of mutating the MQTT payload as raw `Value`.
 - Replaced Agent print dispatch and printer-operation result payload fields with a shared typed serde JSON enum instead of exposing raw `Value` across the command boundary.
 - Replaced Agent material patch normalization output with a typed serde document instead of returning a raw `Value` for production serialization.
 - Replaced Agent MQTT print diagnostic payloads with a typed recursive serde payload enum instead of converting typed diagnostics back into raw `Value`.

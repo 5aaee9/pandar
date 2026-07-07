@@ -21,11 +21,11 @@ pub(crate) fn maybe_sign_project_file_payload(
         );
         return payload;
     };
-    let mut payload = payload;
+    let mut project =
+        serde_json::from_value::<ProjectFilePayload>(payload.clone()).unwrap_or_default();
     if h2d_family(printer_model) {
-        flip_nozzle_ids(&mut payload);
+        project.flip_nozzle_ids();
     }
-    let project = serde_json::from_value::<ProjectFilePayload>(payload.clone()).unwrap_or_default();
     let to_sign = SignedProjectFilePayload {
         print: project.print.clone(),
     };
@@ -50,18 +50,18 @@ pub(crate) fn maybe_sign_project_file_payload(
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 struct ProjectFilePayload {
     #[serde(default)]
-    print: ProjectFileJson,
+    print: Option<ProjectFilePrint>,
 }
 
 #[derive(Debug, Serialize)]
 struct SignedProjectFilePayload {
-    print: ProjectFileJson,
+    print: Option<ProjectFilePrint>,
 }
 
 #[derive(Debug, Serialize)]
 struct SignedProjectFileEnvelope {
     header: SignedProjectFileHeader,
-    print: ProjectFileJson,
+    print: Option<ProjectFilePrint>,
 }
 
 #[derive(Debug, Serialize)]
@@ -71,6 +71,13 @@ struct SignedProjectFileHeader {
     sign_alg: &'static str,
     sign_string: String,
     sign_ver: &'static str,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct ProjectFilePrint {
+    ams_mapping_info: Option<Vec<AmsMappingInfoEntry>>,
+    #[serde(flatten)]
+    extra: BTreeMap<String, ProjectFileJson>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -85,21 +92,7 @@ enum ProjectFileJson {
     Null,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct MutableProjectFilePayload {
-    print: Option<MutableProjectFilePrint>,
-    #[serde(flatten)]
-    extra: BTreeMap<String, ProjectFileJson>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct MutableProjectFilePrint {
-    ams_mapping_info: Option<Vec<AmsMappingInfoEntry>>,
-    #[serde(flatten)]
-    extra: BTreeMap<String, ProjectFileJson>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct AmsMappingInfoEntry {
     #[serde(default, rename = "nozzleId")]
     nozzle_id: Option<i64>,
@@ -151,26 +144,21 @@ fn h2d_family(model: Option<&str>) -> bool {
         .any(|token| model.contains(token))
 }
 
-fn flip_nozzle_ids(payload: &mut Value) {
-    let Ok(mut project) = serde_json::from_value::<MutableProjectFilePayload>(payload.clone())
-    else {
-        return;
-    };
-    let Some(print) = &mut project.print else {
-        return;
-    };
-    let Some(entries) = &mut print.ams_mapping_info else {
-        return;
-    };
-    for entry in entries {
-        match entry.nozzle_id {
-            Some(0) => entry.nozzle_id = Some(1),
-            Some(1) => entry.nozzle_id = Some(0),
-            _ => {}
+impl ProjectFilePayload {
+    fn flip_nozzle_ids(&mut self) {
+        let Some(print) = &mut self.print else {
+            return;
+        };
+        let Some(entries) = &mut print.ams_mapping_info else {
+            return;
+        };
+        for entry in entries {
+            match entry.nozzle_id {
+                Some(0) => entry.nozzle_id = Some(1),
+                Some(1) => entry.nozzle_id = Some(0),
+                _ => {}
+            }
         }
-    }
-    if let Ok(value) = serde_json::to_value(project) {
-        *payload = value;
     }
 }
 
@@ -179,7 +167,7 @@ mod tests {
     use serde::Serialize;
     use serde_json::Value;
 
-    use super::{flip_nozzle_ids, h2d_family};
+    use super::{ProjectFilePayload, h2d_family};
 
     #[derive(Serialize)]
     struct ProjectFileTestPayload {
@@ -211,6 +199,12 @@ mod tests {
         .expect("test project file payload is serializable")
     }
 
+    fn flip_nozzle_ids(payload: Value) -> Value {
+        let mut payload: ProjectFilePayload = serde_json::from_value(payload).unwrap();
+        payload.flip_nozzle_ids();
+        serde_json::to_value(payload).unwrap()
+    }
+
     #[test]
     fn h2d_family_matches_new_dual_nozzle_models() {
         assert!(h2d_family(Some("Bambu Lab X2D")));
@@ -222,9 +216,7 @@ mod tests {
 
     #[test]
     fn flip_nozzle_ids_only_swaps_zero_and_one() {
-        let mut payload = test_payload([0, 1, 2]);
-
-        flip_nozzle_ids(&mut payload);
+        let payload = flip_nozzle_ids(test_payload([0, 1, 2]));
 
         assert_eq!(payload, test_payload([1, 0, 2]));
     }
