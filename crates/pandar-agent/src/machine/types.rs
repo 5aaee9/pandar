@@ -100,6 +100,18 @@ pub enum MachineJsonPayload {
 
 impl From<Value> for MachineJsonPayload {
     fn from(value: Value) -> Self {
-        serde_json::from_value(value).expect("serde_json::Value is representable")
+        match value {
+            Value::Object(object) => Self::Object(
+                object
+                    .into_iter()
+                    .map(|(key, value)| (key, Self::from(value)))
+                    .collect(),
+            ),
+            Value::Array(values) => Self::Array(values.into_iter().map(Self::from).collect()),
+            Value::String(value) => Self::String(value),
+            Value::Number(value) => Self::Number(value),
+            Value::Bool(value) => Self::Bool(value),
+            Value::Null => Self::Null,
+        }
     }
 }
