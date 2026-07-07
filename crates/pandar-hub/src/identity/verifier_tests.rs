@@ -41,12 +41,12 @@ fn audience_claim_accepts_string_and_array() {
         aud: AudienceClaim,
     }
 
-    let string = serde_json::from_value::<Claims>(serde_json::json!({
-        "aud": "api://pandar"
+    let string = serde_json::from_value::<Claims>(value(TestAudienceClaim {
+        aud: AudienceClaimForTest::One("api://pandar".to_owned()),
     }))
     .unwrap();
-    let array = serde_json::from_value::<Claims>(serde_json::json!({
-        "aud": ["api://pandar", "api://other"]
+    let array = serde_json::from_value::<Claims>(value(TestAudienceClaim {
+        aud: AudienceClaimForTest::Many(vec!["api://pandar".to_owned(), "api://other".to_owned()]),
     }))
     .unwrap();
 
@@ -170,16 +170,39 @@ fn token(claims: TestClaims) -> String {
 }
 
 fn jwks() -> JwkSet {
-    serde_json::from_value(serde_json::json!({
-        "keys": [{
-            "kty": "RSA",
-            "kid": "test-key",
-            "alg": "RS256",
-            "n": "yRE6rHuNR0QbHO3H3Kt2pOKGVhQqGZXInOduQNxXzuKlvQTLUTv4l4sggh5_CYYi_cvI-SXVT9kPWSKXxJXBXd_4LkvcPuUakBoAkfh-eiFVMh2VrUyWyj3MFl0HTVF9KwRXLAcwkREiS3npThHRyIxuy0ZMeZfxVL5arMhw1SRELB8HoGfG_AtH89BIE9jDBHZ9dLelK9a184zAf8LwoPLxvJb3Il5nncqPcSfKDDodMFBIMc4lQzDKL5gvmiXLXB1AGLm8KBjfE8s3L5xqi-yUod-j8MtvIj812dkS4QMiRVN_by2h3ZY8LYVGrqZXZTcgn2ujn8uKjXLZVD5TdQ",
-            "e": "AQAB"
-        }]
+    serde_json::from_value(value(TestJwkSet {
+        keys: vec![TestJwk {
+            kty: "RSA",
+            kid: "test-key",
+            alg: "RS256",
+            n: "yRE6rHuNR0QbHO3H3Kt2pOKGVhQqGZXInOduQNxXzuKlvQTLUTv4l4sggh5_CYYi_cvI-SXVT9kPWSKXxJXBXd_4LkvcPuUakBoAkfh-eiFVMh2VrUyWyj3MFl0HTVF9KwRXLAcwkREiS3npThHRyIxuy0ZMeZfxVL5arMhw1SRELB8HoGfG_AtH89BIE9jDBHZ9dLelK9a184zAf8LwoPLxvJb3Il5nncqPcSfKDDodMFBIMc4lQzDKL5gvmiXLXB1AGLm8KBjfE8s3L5xqi-yUod-j8MtvIj812dkS4QMiRVN_by2h3ZY8LYVGrqZXZTcgn2ujn8uKjXLZVD5TdQ",
+            e: "AQAB",
+        }],
     }))
     .unwrap()
+}
+
+fn value(input: impl Serialize) -> serde_json::Value {
+    serde_json::to_value(input).unwrap()
+}
+
+#[derive(Serialize)]
+struct TestAudienceClaim {
+    aud: AudienceClaimForTest,
+}
+
+#[derive(Serialize)]
+struct TestJwkSet {
+    keys: Vec<TestJwk>,
+}
+
+#[derive(Serialize)]
+struct TestJwk {
+    kty: &'static str,
+    kid: &'static str,
+    alg: &'static str,
+    n: &'static str,
+    e: &'static str,
 }
 
 #[derive(Serialize)]
@@ -204,4 +227,5 @@ struct TestClaims {
 #[serde(untagged)]
 enum AudienceClaimForTest {
     One(String),
+    Many(Vec<String>),
 }

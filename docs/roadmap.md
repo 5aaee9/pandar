@@ -51,6 +51,7 @@
 - Replaced Hub printer route test JSON response and command-payload assertions with typed serde structs for printer lists/details, material snapshots, printer controls, refresh commands, link-printer commands, and error responses.
 - Replaced Hub plugin route test response assertions with typed serde structs for login tickets, plugin sessions, Studio printer devices, plugin print/job responses, and plugin error responses.
 - Replaced Hub printer-command route test response, command-payload, audit-metadata, and error assertions with typed serde structs for discovery, diagnostics, printer controls, command details, and invalid request responses.
+- Replaced Hub identity verifier test audience-claim and JWKS JSON fixtures with typed serde structs.
 - Replaced fixed-shape `pandar` CLI JSON output construction with serializable structs instead of ad hoc `serde_json::json!` values.
 - Matched Bambu Studio/open-bamboo-networking local print upload behavior by naming dispatched artifacts as `*.gcode.3mf`, prioritizing BRTC eMMC upload for supported printer families, falling back to FTPS on BRTC failure, and publishing `project_file` with the actual upload URL plus MD5.
 - Aligned Agent `project_file` MQTT dispatch with Bambu Studio/open-bamboo-networking's payload shape, including unconditional `ams_mapping2`, default print option fields, and Studio-compatible task metadata.
