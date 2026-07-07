@@ -1,6 +1,11 @@
 use serde::Deserialize;
 use serde_json::{Number, Value};
 
+pub(super) struct OperationReport {
+    raw: Value,
+    envelope: OperationEnvelope,
+}
+
 #[derive(Debug, Deserialize)]
 struct OperationEnvelope {
     print: Option<OperationSection>,
@@ -29,47 +34,53 @@ enum SequenceId {
     Number(Number),
 }
 
-pub(super) fn report_sequence_id(report: &Value) -> Option<String> {
-    operation_sequence_id(report)
-}
-
-pub(super) fn printer_operation_report_error(report: &Value) -> Option<String> {
-    let envelope = operation_envelope(report)?;
-    let section = envelope.print.as_ref().or(envelope.system.as_ref())?;
-    if section.result.as_deref() == Some("fail") {
-        return Some(
-            report_error_message(section).unwrap_or_else(|| "printer reported failure".to_owned()),
-        );
+impl OperationReport {
+    pub(super) fn from_value(raw: Value) -> Option<Self> {
+        let envelope = serde_json::from_value(raw.clone()).ok()?;
+        Some(Self { raw, envelope })
     }
-    for (key, code) in [("err_code", section.err_code), ("errno", section.errno)] {
-        if let Some(code) = code
-            && code != 0
-        {
+
+    pub(super) fn sequence_id(&self) -> Option<String> {
+        [
+            self.envelope.print.as_ref(),
+            self.envelope.info.as_ref(),
+            self.envelope.pushing.as_ref(),
+            self.envelope.system.as_ref(),
+            self.envelope.camera.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        .find_map(OperationSection::sequence_id_string)
+    }
+
+    pub(super) fn error(&self) -> Option<String> {
+        let section = self
+            .envelope
+            .print
+            .as_ref()
+            .or(self.envelope.system.as_ref())?;
+        if section.result.as_deref() == Some("fail") {
             return Some(
                 report_error_message(section)
-                    .unwrap_or_else(|| format!("printer reported {key} {code}")),
+                    .unwrap_or_else(|| "printer reported failure".to_owned()),
             );
         }
+        for (key, code) in [("err_code", section.err_code), ("errno", section.errno)] {
+            if let Some(code) = code
+                && code != 0
+            {
+                return Some(
+                    report_error_message(section)
+                        .unwrap_or_else(|| format!("printer reported {key} {code}")),
+                );
+            }
+        }
+        None
     }
-    None
-}
 
-fn operation_sequence_id(value: &Value) -> Option<String> {
-    let envelope = operation_envelope(value)?;
-    [
-        envelope.print.as_ref(),
-        envelope.info.as_ref(),
-        envelope.pushing.as_ref(),
-        envelope.system.as_ref(),
-        envelope.camera.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
-    .find_map(OperationSection::sequence_id_string)
-}
-
-fn operation_envelope(value: &Value) -> Option<OperationEnvelope> {
-    serde_json::from_value(value.clone()).ok()
+    pub(super) fn into_raw(self) -> Value {
+        self.raw
+    }
 }
 
 fn report_error_message(section: &OperationSection) -> Option<String> {

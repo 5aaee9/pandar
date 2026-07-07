@@ -1,5 +1,4 @@
 use anyhow::Context;
-use serde_json::Value;
 
 mod light;
 mod report;
@@ -115,8 +114,8 @@ where
     match matching_sequence_report(mqtt, &sequence_ids).await {
         Ok((sequence_id, report)) => Ok(PrinterOperationDispatchResult {
             sequence_id: Some(sequence_id),
-            error: report::printer_operation_report_error(&report),
-            mqtt_report: Some(MachineJsonPayload::from(report)),
+            error: report.error(),
+            mqtt_report: Some(MachineJsonPayload::from(report.into_raw())),
         }),
         Err(err) => {
             let sequence_id = sequence_ids
@@ -263,7 +262,7 @@ fn ams_command_slot_id(slot_id: u32, external_id: Option<&str>) -> u32 {
 async fn matching_sequence_report<T>(
     mqtt: &T,
     sequence_ids: &[String],
-) -> anyhow::Result<(String, Value)>
+) -> anyhow::Result<(String, report::OperationReport)>
 where
     T: BambuMqttTransport + Send + Sync,
 {
@@ -274,13 +273,16 @@ where
                 .next_report(std::time::Duration::from_secs(5))
                 .await
                 .context("wait for printer operation MQTT result")?;
-            let Some(sequence_id) = report::report_sequence_id(&report) else {
+            let Some(report) = report::OperationReport::from_value(report) else {
+                continue;
+            };
+            let Some(sequence_id) = report.sequence_id() else {
                 continue;
             };
             if !sequence_ids.contains(&sequence_id) {
                 continue;
             }
-            if report::printer_operation_report_error(&report).is_none() {
+            if report.error().is_none() {
                 return Ok((sequence_id, report));
             }
             failures.push((sequence_id, report));
