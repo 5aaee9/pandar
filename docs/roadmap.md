@@ -120,6 +120,7 @@
 - Replaced Hub phase-1 agent delete audit metadata and gRPC printer snapshot material-event tests with typed serde test structs instead of fixed-field `Value` indexing.
 - Replaced Hub artifact download route error-response byte comparisons with typed serde response decoding, and split artifact route test support into a focused submodule under the 400 LOC limit.
 - Replaced Hub print-job route AMS mapping test payload construction with typed serializable fixtures and split the create-job mapping cases into a focused submodule under the 400 LOC limit.
+- Replaced Hub provisioning access route test request bodies with typed serde fixtures instead of handwritten `json!` payload objects.
 - Added a Windows-only Bambu Studio development hook DLL that can proxy `swscale-8.dll` from a copied Studio directory and force new Studio logs onto Bambu's local fallback log key for decryptable development logs.
 - Normalized top-level Bambu `vt_tray` / `vir_slot` material reports into external spool snapshots so the Devices Filaments panel can show external materials.
 - Completed: Agents page now includes tenant-aware pairing guidance, restricted/no-tenant states, and in-context pairing creation for tenant admins.

@@ -5,8 +5,40 @@ struct ErrorResponse {
     error: String,
 }
 
+#[derive(serde::Serialize)]
+struct UserCreateRequest {
+    email: &'static str,
+    display_name: &'static str,
+    role: &'static str,
+}
+
+#[derive(serde::Serialize)]
+struct RoleRequest {
+    role: &'static str,
+}
+
+#[derive(serde::Serialize)]
+struct IdentityRequest {
+    provider: &'static str,
+    subject: &'static str,
+}
+
+#[derive(serde::Serialize)]
+struct AgentPairingRequest {
+    name: &'static str,
+}
+
+#[derive(serde::Serialize)]
+struct TokenCreateRequest {
+    name: &'static str,
+}
+
 fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
     serde_json::from_value(value).unwrap()
+}
+
+fn request_body(input: impl serde::Serialize) -> Option<Value> {
+    Some(serde_json::to_value(input).unwrap())
 }
 
 #[tokio::test]
@@ -51,16 +83,16 @@ async fn operator_and_viewer_cannot_use_provisioning_routes() {
             (
                 Method::POST,
                 format!("/api/v1/tenants/{tenant_id}/users"),
-                Some(json!({
-                    "email": "blocked@example.test",
-                    "display_name": "Blocked",
-                    "role": "viewer"
-                })),
+                request_body(UserCreateRequest {
+                    email: "blocked@example.test",
+                    display_name: "Blocked",
+                    role: "viewer",
+                }),
             ),
             (
                 Method::PATCH,
                 format!("/api/v1/tenants/{tenant_id}/users/{target_user_id}/role"),
-                Some(json!({ "role": "operator" })),
+                request_body(RoleRequest { role: "operator" }),
             ),
             (
                 Method::GET,
@@ -70,12 +102,17 @@ async fn operator_and_viewer_cannot_use_provisioning_routes() {
             (
                 Method::POST,
                 format!("/api/v1/tenants/{tenant_id}/users/{target_user_id}/identities"),
-                Some(json!({ "provider": "clerk", "subject": "blocked" })),
+                request_body(IdentityRequest {
+                    provider: "clerk",
+                    subject: "blocked",
+                }),
             ),
             (
                 Method::POST,
                 format!("/api/v1/tenants/{tenant_id}/agent-pairings"),
-                Some(json!({ "name": "blocked-agent" })),
+                request_body(AgentPairingRequest {
+                    name: "blocked-agent",
+                }),
             ),
         ] {
             let (status, body) = request_as(app.clone(), method, &uri, body, token).await;
@@ -93,7 +130,7 @@ async fn operator_and_viewer_cannot_use_provisioning_routes() {
         (
             Method::POST,
             format!("/api/v1/tenants/{tenant_id}/users/{target_user_id}/api-tokens"),
-            Some(json!({ "name": "blocked" })),
+            request_body(TokenCreateRequest { name: "blocked" }),
         ),
         (
             Method::DELETE,
@@ -164,7 +201,7 @@ async fn tenant_admin_cannot_manage_other_tenant_users() {
             app.clone(),
             method,
             &uri,
-            Some(json!({ "name": "retired" })),
+            request_body(TokenCreateRequest { name: "retired" }),
             &admin_a_token,
         )
         .await;
