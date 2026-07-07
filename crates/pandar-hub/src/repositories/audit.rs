@@ -1,11 +1,13 @@
+use std::{collections::BTreeMap, fmt};
+
 use anyhow::Context;
 use pandar_core::{TenantId, created_at_now};
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseTransaction,
     EntityTrait, QueryFilter, QueryOrder, QuerySelect,
 };
-use serde::Serialize;
-use serde_json::{Map, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::Number;
 
 use crate::{db::Database, entities::audit_events, repositories::RepositoryResult};
 
@@ -37,7 +39,7 @@ pub struct RecordAuditEvent {
 pub struct AuditActor {
     pub actor_type: String,
     pub user_id: Option<String>,
-    pub metadata: Option<Value>,
+    pub metadata: Option<AuditMetadata>,
 }
 
 #[derive(Serialize)]
@@ -49,11 +51,30 @@ struct AuditTokenActorMetadata {
     tenant_token_scopes: Vec<&'static str>,
 }
 
-pub(crate) fn audit_metadata<T>(metadata: T) -> Value
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum AuditMetadata {
+    Object(BTreeMap<String, AuditMetadata>),
+    Array(Vec<AuditMetadata>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
+}
+
+impl fmt::Display for AuditMetadata {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let json = serde_json::to_string(self).map_err(|_| fmt::Error)?;
+        f.write_str(&json)
+    }
+}
+
+pub(crate) fn audit_metadata<T>(metadata: T) -> AuditMetadata
 where
     T: Serialize,
 {
-    serde_json::to_value(metadata).expect("audit metadata is serializable")
+    let bytes = serde_json::to_vec(&metadata).expect("audit metadata is serializable");
+    serde_json::from_slice(&bytes).expect("audit metadata JSON shape is supported")
 }
 
 impl AuditActor {
@@ -228,7 +249,7 @@ pub(crate) fn record_audit_event(
     action: impl Into<String>,
     target_type: impl Into<String>,
     target_id: Option<String>,
-    metadata: Value,
+    metadata: AuditMetadata,
 ) -> AuditEvent {
     build_audit_event(RecordAuditEvent {
         tenant_id,
@@ -241,23 +262,26 @@ pub(crate) fn record_audit_event(
     })
 }
 
-fn merge_actor_metadata(metadata: Value, actor_metadata: Option<Value>) -> Value {
+fn merge_actor_metadata(
+    metadata: AuditMetadata,
+    actor_metadata: Option<AuditMetadata>,
+) -> AuditMetadata {
     let Some(actor_metadata) = actor_metadata else {
         return metadata;
     };
 
     let mut merged = match metadata {
-        Value::Object(map) => map,
+        AuditMetadata::Object(map) => map,
         other => {
-            let mut map = Map::new();
+            let mut map = BTreeMap::new();
             map.insert("metadata".to_owned(), other);
             map
         }
     };
-    if let Value::Object(actor_map) = actor_metadata {
+    if let AuditMetadata::Object(actor_map) = actor_metadata {
         merged.extend(actor_map);
     }
-    Value::Object(merged)
+    AuditMetadata::Object(merged)
 }
 
 fn audit_event_from_model(model: audit_events::Model) -> RepositoryResult<AuditEvent> {

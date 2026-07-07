@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
-use crate::repositories::{RepositoryError, RepositoryResult};
+use crate::repositories::{
+    RepositoryError, RepositoryResult,
+    audit::{AuditMetadata, audit_metadata},
+};
 
 const MAX_MOVE_DELTA_MM: f64 = 50.0;
 const MIN_MOVE_FEEDRATE_MM_PER_MIN: u32 = 1;
@@ -204,14 +206,13 @@ pub fn operation_audit_metadata(
     agent_id: String,
     serial_number: String,
     operation: &PrinterOperationKind,
-) -> Value {
-    serde_json::to_value(OperationAuditMetadata {
+) -> AuditMetadata {
+    audit_metadata(OperationAuditMetadata {
         agent_id,
         serial_number,
         action: operation.action(),
         fields: OperationAuditFields::from(operation),
     })
-    .expect("printer operation audit metadata is serializable")
 }
 
 #[derive(Serialize)]
