@@ -55,6 +55,19 @@ struct ExpectedSystemPayload<'a> {
 }
 
 #[derive(Serialize)]
+struct PrintStateReport<'a> {
+    print: PrintState<'a>,
+}
+
+#[derive(Serialize)]
+struct PrintState<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gcode_state: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    state: Option<&'a str>,
+}
+
+#[derive(Serialize)]
 struct ExpectedSystem<'a> {
     command: &'static str,
     led_node: &'static str,
@@ -96,6 +109,34 @@ pub(super) fn get_version_report_with_blank_model() -> Value {
                 name: "ota",
                 product_name: "   ",
             }],
+        },
+    })
+}
+
+pub(super) fn info_command_report(command: &'static str) -> Value {
+    value(ExpectedInfoPayload {
+        info: ExpectedInfo {
+            command,
+            sequence_id: None,
+            module: Vec::new(),
+        },
+    })
+}
+
+pub(super) fn print_gcode_state_report(gcode_state: &str) -> Value {
+    value(PrintStateReport {
+        print: PrintState {
+            gcode_state: Some(gcode_state),
+            state: None,
+        },
+    })
+}
+
+pub(super) fn print_state_report(state: &str) -> Value {
+    value(PrintStateReport {
+        print: PrintState {
+            gcode_state: None,
+            state: Some(state),
         },
     })
 }

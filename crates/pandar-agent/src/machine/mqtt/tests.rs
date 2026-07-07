@@ -688,7 +688,7 @@ async fn refresh_subscribes_publishes_and_maps_report() {
     endpoint.model = Some("Configured Model".to_string());
     let transport = FakeMqttTransport::with_reports([
         get_version_report("P2S"),
-        json!({"print": {"gcode_state": "RUNNING"}}),
+        print_gcode_state_report("RUNNING"),
     ]);
 
     let refreshed = refresh_printer(&transport, &endpoint, Duration::from_secs(1))
@@ -722,15 +722,8 @@ async fn refresh_subscribes_publishes_and_maps_report() {
     assert_eq!(
         published,
         [
-            request_command(
-                json!({"info": {"command": "get_version", "sequence_id": get_version_sequence_id}})
-            ),
-            request_command(json!({"pushing": {
-                "command": "pushall",
-                "sequence_id": pushall_sequence_id,
-                "version": 1,
-                "push_target": 1
-            }})),
+            request_command(expected_get_version_payload(&get_version_sequence_id)),
+            request_command(expected_pushall_payload(&pushall_sequence_id)),
         ]
     );
 }
@@ -760,7 +753,7 @@ async fn refresh_printer_returns_material_patch_when_pushall_report_has_ams() {
 async fn refresh_printer_keeps_first_snapshot_and_continues_until_ams_patch() {
     let transport = FakeMqttTransport::with_reports([
         get_version_report("A1 Mini"),
-        json!({"print": {"gcode_state": "IDLE"}}),
+        print_gcode_state_report("IDLE"),
         json!({"print": {"gcode_state": "IDLE", "ams": {"ams": [{"id": "0", "tray": [{"id": "0", "tray_type": "PLA"}]}]}}}),
     ]);
 
@@ -787,10 +780,10 @@ async fn material_refresh_uses_total_deadline_for_infinite_non_ams_reports() {
 #[tokio::test]
 async fn refresh_ignores_unrelated_reports_before_get_version() {
     let transport = FakeMqttTransport::with_reports([
-        json!({"print": {"gcode_state": "STALE"}}),
-        json!({"info": {"command": "other"}}),
+        print_gcode_state_report("STALE"),
+        info_command_report("other"),
         get_version_report("X1 Carbon"),
-        json!({"print": {"state": "READY"}}),
+        print_state_report("READY"),
     ]);
 
     let refreshed = refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
@@ -805,15 +798,8 @@ async fn refresh_ignores_unrelated_reports_before_get_version() {
     assert_eq!(
         published,
         [
-            request_command(
-                json!({"info": {"command": "get_version", "sequence_id": get_version_sequence_id}})
-            ),
-            request_command(json!({"pushing": {
-                "command": "pushall",
-                "sequence_id": pushall_sequence_id,
-                "version": 1,
-                "push_target": 1
-            }})),
+            request_command(expected_get_version_payload(&get_version_sequence_id)),
+            request_command(expected_pushall_payload(&pushall_sequence_id)),
         ]
     );
 }
@@ -844,20 +830,13 @@ async fn refresh_fails_total_get_version_deadline_when_unrelated_reports_continu
     let sequence_id = studio_sequence_id(&published[0].payload, "info");
     assert_eq!(
         published,
-        [request_command(
-            json!({"info": {"command": "get_version", "sequence_id": sequence_id}})
-        )]
+        [request_command(expected_get_version_payload(&sequence_id))]
     );
 }
 
 #[tokio::test]
 async fn refresh_missing_model_fails_before_pushall() {
-    let transport = FakeMqttTransport::with_reports([json!({
-        "info": {
-            "command": "get_version",
-            "module": [{"name": "ota", "product_name": "   "}]
-        }
-    })]);
+    let transport = FakeMqttTransport::with_reports([get_version_report_with_blank_model()]);
 
     let err = refresh_printer(&transport, &endpoint(), Duration::from_secs(1))
         .await
