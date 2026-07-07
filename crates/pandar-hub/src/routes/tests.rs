@@ -5,15 +5,15 @@ use axum::{
     http::{Method, Request, header::AUTHORIZATION},
 };
 use http_body_util::BodyExt;
-use jsonwebtoken::{Algorithm, EncodingKey, Header, encode, jwk::JwkSet};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 use tower::ServiceExt;
 
 mod agent_printers;
 mod agents;
 mod artifacts;
+mod auth_support;
 mod basic;
 mod bootstrap;
 mod jobs;
@@ -30,6 +30,7 @@ mod provisioning;
 mod readiness_metrics;
 mod tenant_tokens;
 
+use auth_support::*;
 use multipart::{
     multipart_print_body, multipart_print_body_file_first, multipart_print_body_with_fields,
     multipart_print_body_with_mappings, multipart_request_as,
@@ -121,6 +122,10 @@ async fn request_with_token(
     (status, body)
 }
 
+fn json_body(input: impl Serialize) -> Value {
+    serde_json::to_value(input).unwrap()
+}
+
 async fn raw_request_as(
     app: Router,
     method: Method,
@@ -144,13 +149,19 @@ async fn create_tenant_for_test(app: Router) -> (StatusCode, Value) {
         app,
         Method::POST,
         "/api/v1/tenants",
-        Some(json!({
-            "slug": "acme",
-            "display_name": "Acme Labs"
+        Some(json_body(TestCreateTenantRequest {
+            slug: "acme",
+            display_name: "Acme Labs",
         })),
         TEST_BOOTSTRAP_TOKEN,
     )
     .await
+}
+
+#[derive(Serialize)]
+struct TestCreateTenantRequest<'a> {
+    slug: &'a str,
+    display_name: &'a str,
 }
 
 async fn tenant_and_agent(state: &AppState, app: Router) -> (Value, Value, String) {
@@ -170,12 +181,17 @@ async fn tenant_and_agent(state: &AppState, app: Router) -> (Value, Value, Strin
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "shop-agent" })),
+        Some(json_body(TestCreateAgentRequest { name: "shop-agent" })),
         &token,
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
     (tenant, agent, token)
+}
+
+#[derive(Serialize)]
+struct TestCreateAgentRequest<'a> {
+    name: &'a str,
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -320,136 +336,4 @@ async fn all_and_plugin_studio_tenant_token(
         ],
     )
     .await
-}
-
-fn external_auth_state(state: AppState) -> AppState {
-    let config = crate::identity::ExternalAuthConfig {
-        provider: TEST_PROVIDER.to_owned(),
-        issuer: TEST_ISSUER.to_owned(),
-        jwks_url: "https://identity.example.test/.well-known/jwks.json".to_owned(),
-        audience: Some(TEST_AUDIENCE.to_owned()),
-        algorithms: vec![Algorithm::RS256],
-        authorized_parties: Vec::new(),
-        required_scopes: Vec::new(),
-        leeway_seconds: 60,
-    };
-    let jwks = serde_json::from_str::<JwkSet>(TEST_PUBLIC_JWK_JSON).unwrap();
-    state.with_external_auth(crate::identity::JwtVerifier::static_jwks(config, jwks))
-}
-
-fn jwt_for(
-    subject: &str,
-    issuer: &str,
-    audience: &str,
-    kid: &str,
-    exp_offset_seconds: i64,
-) -> String {
-    jwt_for_claims(ExternalAuthClaims {
-        kid,
-        iss: issuer,
-        sub: subject,
-        aud: audience,
-        exp_offset_seconds,
-        email: None,
-        email_verified: None,
-        name: None,
-        preferred_username: None,
-    })
-}
-
-fn jwt_for_profile(subject: &str, email: &str, email_verified: bool, name: &str) -> String {
-    jwt_for_claims(ExternalAuthClaims {
-        kid: "test-key",
-        iss: TEST_ISSUER,
-        sub: subject,
-        aud: TEST_AUDIENCE,
-        exp_offset_seconds: 3600,
-        email: Some(email),
-        email_verified: Some(email_verified),
-        name: Some(name),
-        preferred_username: None,
-    })
-}
-
-fn jwt_for_claims(claims: ExternalAuthClaims<'_>) -> String {
-    let mut header = Header::new(Algorithm::RS256);
-    header.kid = Some(claims.kid.to_owned());
-    let now = jsonwebtoken::get_current_timestamp() as i64;
-    let exp = now.saturating_add(claims.exp_offset_seconds).max(0) as u64;
-    let nbf = now.saturating_sub(30).max(0) as u64;
-    encode(
-        &header,
-        &EncodedExternalAuthClaims {
-            iss: claims.iss,
-            sub: claims.sub,
-            aud: claims.aud,
-            exp,
-            nbf,
-            email: claims.email,
-            email_verified: claims.email_verified,
-            name: claims.name,
-            preferred_username: claims.preferred_username,
-        },
-        &EncodingKey::from_rsa_pem(TEST_PRIVATE_KEY_PEM.as_bytes()).unwrap(),
-    )
-    .unwrap()
-}
-
-async fn external_auth_token_for_role(
-    state: &AppState,
-    tenant_id: TenantId,
-    role: crate::repositories::UserRole,
-    subject: &str,
-) -> String {
-    let user = state
-        .auth()
-        .create_user(
-            tenant_id,
-            format!("{subject}@example.test"),
-            "External Test User",
-            role,
-        )
-        .await
-        .unwrap();
-    state
-        .auth()
-        .link_external_identity(tenant_id, &user.id, TEST_PROVIDER, subject)
-        .await
-        .unwrap();
-    jwt_for_profile(
-        subject,
-        &format!("{subject}@example.test"),
-        true,
-        "External Test User",
-    )
-}
-
-#[derive(Serialize)]
-struct ExternalAuthClaims<'a> {
-    kid: &'a str,
-    iss: &'a str,
-    sub: &'a str,
-    aud: &'a str,
-    exp_offset_seconds: i64,
-    email: Option<&'a str>,
-    email_verified: Option<bool>,
-    name: Option<&'a str>,
-    preferred_username: Option<&'a str>,
-}
-
-#[derive(Serialize)]
-struct EncodedExternalAuthClaims<'a> {
-    iss: &'a str,
-    sub: &'a str,
-    aud: &'a str,
-    exp: u64,
-    nbf: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    email: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    email_verified: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    preferred_username: Option<&'a str>,
 }

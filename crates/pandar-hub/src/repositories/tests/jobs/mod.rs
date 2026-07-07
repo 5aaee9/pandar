@@ -1,5 +1,5 @@
 use pandar_core::{AgentId, CommandId, JobId, JobStatus, PrintStatus};
-use serde_json::json;
+use serde::Serialize;
 
 use super::*;
 use crate::repositories::{
@@ -11,6 +11,7 @@ mod lifecycle;
 mod mapping;
 mod recovery;
 mod repository;
+mod transitions;
 
 pub(super) fn create_input(
     tenant_id: pandar_core::TenantId,
@@ -143,65 +144,132 @@ async fn queued_payloads(
 }
 
 fn material_patch_json(observed_at: &str) -> String {
-    json!({
-        "type": "printer_material_patch",
-        "observed_at": observed_at,
-        "ams_units": [{
-            "unit_id": "0",
-            "trays": [
-                {
-                    "tray_id": "0",
-                    "global_tray_id": 0,
-                    "filament_id": "GFL00",
-                    "setting_id": "GFSL00",
-                    "type": "PLA",
-                    "color": "FF0000"
-                },
-                {
-                    "tray_id": "3",
-                    "global_tray_id": 11,
-                    "filament_id": "GFL03",
-                    "setting_id": "GFSL03",
-                    "type": "ASA",
-                    "color": "0000FF"
-                }
-            ]
-        }, {
-            "unit_id": "128",
-            "trays": [{
-                "tray_id": "0",
-                "filament_id": "GFL128",
-                "setting_id": "GFSL128",
-                "type": "PA",
-                "color": "00FFFF"
-            }]
-        }],
-        "external_spools": [
-            {
-                "external_id": "254",
-                "tray_id": "0",
-                "filament_id": "EXT0",
-                "setting_id": "EXTS0",
-                "type": "PETG",
-                "color": "00FF00"
+    serde_json::to_string(&TestMaterialPatch {
+        kind: "printer_material_patch",
+        observed_at,
+        ams_units: vec![
+            TestAmsUnit {
+                unit_id: "0",
+                trays: vec![
+                    TestMaterialTray {
+                        tray_id: "0",
+                        global_tray_id: Some(0),
+                        filament_id: "GFL00",
+                        setting_id: "GFSL00",
+                        material_type: "PLA",
+                        color: "FF0000",
+                    },
+                    TestMaterialTray {
+                        tray_id: "3",
+                        global_tray_id: Some(11),
+                        filament_id: "GFL03",
+                        setting_id: "GFSL03",
+                        material_type: "ASA",
+                        color: "0000FF",
+                    },
+                ],
             },
-            {
-                "external_id": "254",
-                "tray_id": "1",
-                "filament_id": "EXT1",
-                "setting_id": "EXTS1",
-                "type": "ABS",
-                "color": "FFFF00"
+            TestAmsUnit {
+                unit_id: "128",
+                trays: vec![TestMaterialTray {
+                    tray_id: "0",
+                    global_tray_id: None,
+                    filament_id: "GFL128",
+                    setting_id: "GFSL128",
+                    material_type: "PA",
+                    color: "00FFFF",
+                }],
             },
-            {
-                "external_id": "254",
-                "tray_id": "8",
-                "filament_id": "EXT8",
-                "setting_id": "EXTS8",
-                "type": "TPU",
-                "color": "111111"
-            }
-        ]
+        ],
+        external_spools: vec![
+            TestExternalSpool {
+                external_id: "254",
+                tray_id: "0",
+                filament_id: "EXT0",
+                setting_id: "EXTS0",
+                material_type: "PETG",
+                color: "00FF00",
+            },
+            TestExternalSpool {
+                external_id: "254",
+                tray_id: "1",
+                filament_id: "EXT1",
+                setting_id: "EXTS1",
+                material_type: "ABS",
+                color: "FFFF00",
+            },
+            TestExternalSpool {
+                external_id: "254",
+                tray_id: "8",
+                filament_id: "EXT8",
+                setting_id: "EXTS8",
+                material_type: "TPU",
+                color: "111111",
+            },
+        ],
     })
-    .to_string()
+    .unwrap()
 }
+
+pub(super) fn artifact_metadata_json(display_name: &str, default_plate_id: u32) -> String {
+    serde_json::to_string(&TestArtifactMetadata {
+        source: "bambu_3mf",
+        display_name,
+        default_plate_id,
+        plate_count: 1,
+        plates: Vec::<TestPlateMetadata>::new(),
+        warnings: Vec::<String>::new(),
+    })
+    .unwrap()
+}
+
+#[derive(Serialize)]
+struct TestMaterialPatch<'a> {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    observed_at: &'a str,
+    ams_units: Vec<TestAmsUnit>,
+    external_spools: Vec<TestExternalSpool>,
+}
+
+#[derive(Serialize)]
+struct TestAmsUnit {
+    unit_id: &'static str,
+    trays: Vec<TestMaterialTray>,
+}
+
+#[derive(Serialize)]
+struct TestMaterialTray {
+    tray_id: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    global_tray_id: Option<u32>,
+    filament_id: &'static str,
+    setting_id: &'static str,
+    #[serde(rename = "type")]
+    material_type: &'static str,
+    color: &'static str,
+}
+
+#[derive(Serialize)]
+struct TestExternalSpool {
+    external_id: &'static str,
+    tray_id: &'static str,
+    filament_id: &'static str,
+    setting_id: &'static str,
+    #[serde(rename = "type")]
+    material_type: &'static str,
+    color: &'static str,
+}
+
+#[derive(Serialize)]
+struct TestArtifactMetadata<'a> {
+    source: &'static str,
+    display_name: &'a str,
+    default_plate_id: u32,
+    plate_count: u32,
+    plates: Vec<TestPlateMetadata>,
+    warnings: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct TestPlateMetadata;
