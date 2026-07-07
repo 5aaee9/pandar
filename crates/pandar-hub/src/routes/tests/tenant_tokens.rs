@@ -3,6 +3,12 @@ use serde::{Deserialize, de::DeserializeOwned};
 
 use super::*;
 use crate::entities::{audit_events, tenant_tokens};
+use requests::{
+    agent_name_body, retired_api_token_body, tenant_token_create_body,
+    tenant_token_create_without_scopes_body, tenant_token_rotate_body, user_create_body,
+};
+
+mod requests;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -103,11 +109,7 @@ async fn tenant_token_routes_create_list_rotate_and_revoke_without_exposing_hash
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/tenant-tokens", tenant.id),
-        Some(json!({
-            "name": "Studio",
-            "scopes": ["*", "agent:register"],
-            "expires_at": null
-        })),
+        tenant_token_create_body("Studio", &["*", "agent:register"], None),
         &admin,
     )
     .await;
@@ -140,7 +142,7 @@ async fn tenant_token_routes_create_list_rotate_and_revoke_without_exposing_hash
             "/api/v1/tenants/{}/tenant-tokens/{token_id}/rotate",
             tenant.id
         ),
-        Some(json!({ "expires_at": null })),
+        tenant_token_rotate_body(None),
         &admin,
     )
     .await;
@@ -190,7 +192,7 @@ async fn tenant_token_scopes_enforce_read_all_agent_register_and_plugin_studio()
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "read-only-agent" })),
+        agent_name_body("read-only-agent"),
         &read_only,
     )
     .await;
@@ -212,7 +214,7 @@ async fn tenant_token_scopes_enforce_read_all_agent_register_and_plugin_studio()
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "agent-register-agent" })),
+        agent_name_body("agent-register-agent"),
         &agent_register,
     )
     .await;
@@ -222,7 +224,7 @@ async fn tenant_token_scopes_enforce_read_all_agent_register_and_plugin_studio()
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agent-pairings"),
-        Some(json!({ "name": "agent-register-agent" })),
+        agent_name_body("agent-register-agent"),
         &agent_register,
     )
     .await;
@@ -232,7 +234,7 @@ async fn tenant_token_scopes_enforce_read_all_agent_register_and_plugin_studio()
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "all-agent" })),
+        agent_name_body("all-agent"),
         &all,
     )
     .await;
@@ -253,7 +255,7 @@ async fn tenant_token_scopes_enforce_read_all_agent_register_and_plugin_studio()
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents"),
-        Some(json!({ "name": "plugin-agent" })),
+        agent_name_body("plugin-agent"),
         &plugin_studio,
     )
     .await;
@@ -282,11 +284,7 @@ async fn tenant_token_create_rejects_unknown_scope() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{}/tenant-tokens", tenant.id),
-        Some(json!({
-            "name": "Bad",
-            "scopes": ["jobs:write"],
-            "expires_at": null
-        })),
+        tenant_token_create_body("Bad", &["jobs:write"], None),
         &admin,
     )
     .await;
@@ -316,10 +314,7 @@ async fn tenant_token_create_requires_scopes_but_allows_explicit_empty_scopes() 
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/tenant-tokens", tenant.id),
-        Some(json!({
-            "name": "Missing scopes",
-            "expires_at": null
-        })),
+        tenant_token_create_without_scopes_body("Missing scopes", None),
         &admin,
     )
     .await;
@@ -331,11 +326,7 @@ async fn tenant_token_create_requires_scopes_but_allows_explicit_empty_scopes() 
         app,
         Method::POST,
         &format!("/api/v1/tenants/{}/tenant-tokens", tenant.id),
-        Some(json!({
-            "name": "Read only",
-            "scopes": [],
-            "expires_at": null
-        })),
+        tenant_token_create_body("Read only", &[], None),
         &admin,
     )
     .await;
@@ -366,11 +357,7 @@ async fn tenant_token_create_and_rotate_reject_invalid_expires_at() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/tenant-tokens", tenant.id),
-        Some(json!({
-            "name": "Bad Expiry",
-            "scopes": ["*"],
-            "expires_at": "not-rfc3339"
-        })),
+        tenant_token_create_body("Bad Expiry", &["*"], Some("not-rfc3339")),
         &admin,
     )
     .await;
@@ -382,11 +369,7 @@ async fn tenant_token_create_and_rotate_reject_invalid_expires_at() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{}/tenant-tokens", tenant.id),
-        Some(json!({
-            "name": "Good Expiry",
-            "scopes": ["*"],
-            "expires_at": "2027-01-01T00:00:00Z"
-        })),
+        tenant_token_create_body("Good Expiry", &["*"], Some("2027-01-01T00:00:00Z")),
         &admin,
     )
     .await;
@@ -402,7 +385,7 @@ async fn tenant_token_create_and_rotate_reject_invalid_expires_at() {
             "/api/v1/tenants/{}/tenant-tokens/{token_id}/rotate",
             tenant.id
         ),
-        Some(json!({ "expires_at": "also-not-rfc3339" })),
+        tenant_token_rotate_body(Some("also-not-rfc3339")),
         &admin,
     )
     .await;
@@ -443,11 +426,11 @@ async fn all_scope_tenant_token_without_creator_can_perform_admin_mutation() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{}/users", tenant.id),
-        Some(json!({
-            "email": "created-by-token@example.test",
-            "display_name": "Created By Token",
-            "role": "viewer"
-        })),
+        user_create_body(
+            "created-by-token@example.test",
+            "Created By Token",
+            "viewer",
+        ),
         &plaintext,
     )
     .await;
@@ -512,11 +495,11 @@ async fn tenant_token_audit_actor_preserves_creator_and_token_metadata() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{}/users", tenant.id),
-        Some(json!({
-            "email": "created-by-creator-token@example.test",
-            "display_name": "Created By Creator Token",
-            "role": "viewer"
-        })),
+        user_create_body(
+            "created-by-creator-token@example.test",
+            "Created By Creator Token",
+            "viewer",
+        ),
         &plaintext,
     )
     .await;
@@ -633,7 +616,7 @@ async fn retired_api_token_routes_always_return_gone() {
             app.clone(),
             method,
             &uri,
-            Some(json!({ "name": "ignored" })),
+            retired_api_token_body("ignored"),
             bearer,
         )
         .await;
