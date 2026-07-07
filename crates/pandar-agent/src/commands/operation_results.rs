@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Number, Value};
 
 use crate::machine::{
     PrinterAxis as MachinePrinterAxis, PrinterOperation as MachinePrinterOperation,
@@ -62,13 +64,13 @@ struct PrinterOperationResult<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     mqtt_error: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mqtt_result: Option<&'a Value>,
+    mqtt_result: Option<&'a MqttReportField>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mqtt_reason: Option<&'a Value>,
+    mqtt_reason: Option<&'a MqttReportField>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mqtt_err_code: Option<&'a Value>,
+    mqtt_err_code: Option<&'a MqttReportField>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mqtt_errno: Option<&'a Value>,
+    mqtt_errno: Option<&'a MqttReportField>,
     #[serde(skip_serializing_if = "Option::is_none")]
     mqtt_report: Option<&'a Value>,
     #[serde(flatten)]
@@ -115,17 +117,28 @@ struct MqttReport {
 
 #[derive(Deserialize)]
 struct MqttReportSection {
-    result: Option<Value>,
-    reason: Option<Value>,
-    err_code: Option<Value>,
-    errno: Option<Value>,
+    result: Option<MqttReportField>,
+    reason: Option<MqttReportField>,
+    err_code: Option<MqttReportField>,
+    errno: Option<MqttReportField>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(untagged)]
+enum MqttReportField {
+    Object(BTreeMap<String, MqttReportField>),
+    Array(Vec<MqttReportField>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
 }
 
 struct MqttReportSummary {
-    result: Option<Value>,
-    reason: Option<Value>,
-    err_code: Option<Value>,
-    errno: Option<Value>,
+    result: Option<MqttReportField>,
+    reason: Option<MqttReportField>,
+    err_code: Option<MqttReportField>,
+    errno: Option<MqttReportField>,
 }
 
 impl OperationResultFields {
