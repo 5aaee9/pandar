@@ -1,5 +1,11 @@
 use super::*;
+use requests::{
+    agent_name_value, retired_api_token_value, tenant_token_create_value, user_create_value,
+    user_identity_value, user_role_value,
+};
 use serde::{Deserialize, de::DeserializeOwned};
+
+mod requests;
 
 #[derive(Debug, Deserialize)]
 struct UserResponse {
@@ -89,11 +95,11 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/users"),
-        Some(json!({
-            "email": "operator@example.test",
-            "display_name": "Operator",
-            "role": "operator"
-        })),
+        Some(user_create_value(
+            "operator@example.test",
+            "Operator",
+            "operator",
+        )),
         &admin_token,
     )
     .await;
@@ -120,7 +126,7 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
         app.clone(),
         Method::PATCH,
         &format!("/api/v1/tenants/{tenant_id}/users/{user_id}/role"),
-        Some(json!({ "role": "viewer" })),
+        Some(user_role_value("viewer")),
         &admin_token,
     )
     .await;
@@ -132,7 +138,7 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/users/{user_id}/identities"),
-        Some(json!({ "provider": "clerk", "subject": "user_123" })),
+        Some(user_identity_value("clerk", "user_123")),
         &admin_token,
     )
     .await;
@@ -157,7 +163,7 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/tenant-tokens"),
-        Some(json!({ "name": "automation", "scopes": ["*"], "expires_at": null })),
+        Some(tenant_token_create_value("automation", &["*"], None)),
         &admin_token,
     )
     .await;
@@ -257,11 +263,11 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/users"),
-        Some(json!({
-            "email": "bad-role@example.test",
-            "display_name": "Bad Role",
-            "role": "admin"
-        })),
+        Some(user_create_value(
+            "bad-role@example.test",
+            "Bad Role",
+            "admin",
+        )),
         &admin_token,
     )
     .await;
@@ -287,31 +293,31 @@ async fn provisioning_mutations_reject_empty_required_strings() {
     for (uri, body) in [
         (
             format!("/api/v1/tenants/{tenant_id}/users"),
-            json!({ "email": "", "display_name": "Target", "role": "viewer" }),
+            user_create_value("", "Target", "viewer"),
         ),
         (
             format!("/api/v1/tenants/{tenant_id}/users"),
-            json!({ "email": "empty-name@example.test", "display_name": "", "role": "viewer" }),
+            user_create_value("empty-name@example.test", "", "viewer"),
         ),
         (
             format!("/api/v1/tenants/{tenant_id}/users"),
-            json!({ "email": "empty-role@example.test", "display_name": "Target", "role": "" }),
+            user_create_value("empty-role@example.test", "Target", ""),
         ),
         (
             format!("/api/v1/tenants/{tenant_id}/users/{}/role", user.id),
-            json!({ "role": "" }),
+            user_role_value(""),
         ),
         (
             format!("/api/v1/tenants/{tenant_id}/users/{}/identities", user.id),
-            json!({ "provider": "", "subject": "subject" }),
+            user_identity_value("", "subject"),
         ),
         (
             format!("/api/v1/tenants/{tenant_id}/users/{}/identities", user.id),
-            json!({ "provider": "clerk", "subject": "" }),
+            user_identity_value("clerk", ""),
         ),
         (
             format!("/api/v1/tenants/{tenant_id}/agent-pairings"),
-            json!({ "name": "" }),
+            agent_name_value(""),
         ),
     ] {
         let method = if uri.ends_with("/role") {
@@ -328,7 +334,7 @@ async fn provisioning_mutations_reject_empty_required_strings() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/users/{}/api-tokens", user.id),
-        Some(json!({ "name": "" })),
+        Some(retired_api_token_value("")),
         &admin_token,
     )
     .await;

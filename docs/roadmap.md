@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Hub provisioning workflow test request bodies with typed serde fixture structs for user, identity, tenant-token, agent-pairing, and retired API-token mutations.
 - Replaced Hub onboarding route test request bodies with typed serde fixture structs for tenant self-creation, join-link creation, and join-link acceptance.
 - Replaced Hub tenant-token route test request bodies with typed serde fixture structs for token creation/rotation, agent creation, user creation, and retired token routes.
 - Replaced Hub provisioning agent-pairing request bodies with typed serde fixture structs instead of handwritten `json!` payload objects.

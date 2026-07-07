@@ -1,5 +1,5 @@
 use axum::http::Method;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::*;
 
