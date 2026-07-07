@@ -17,6 +17,22 @@ struct DiagnosePrinterRequest<'a> {
 }
 
 #[derive(Serialize)]
+struct PrinterDiscoveryResult<'a> {
+    #[serde(rename = "type")]
+    kind: &'a str,
+    printers: Vec<DiscoveredPrinter<'a>>,
+}
+
+#[derive(Serialize)]
+struct DiscoveredPrinter<'a> {
+    serial_number: &'a str,
+    host: &'a str,
+    name: &'a str,
+    model: &'a str,
+    source: &'a str,
+}
+
+#[derive(Serialize)]
 pub(super) struct PrinterControlRequest<'a> {
     action: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -160,6 +176,20 @@ pub(super) fn printer_control_body(request: PrinterControlRequest<'_>) -> Option
 
 pub(super) fn printer_control_value(request: PrinterControlRequest<'_>) -> Value {
     value(request)
+}
+
+pub(super) fn printer_discovery_result_json() -> String {
+    value(PrinterDiscoveryResult {
+        kind: "printer_discovery",
+        printers: vec![DiscoveredPrinter {
+            serial_number: "BAMBU123",
+            host: "192.0.2.10",
+            name: "Shop A1",
+            model: "A1",
+            source: "ssdp",
+        }],
+    })
+    .to_string()
 }
 
 fn value(input: impl Serialize) -> Value {

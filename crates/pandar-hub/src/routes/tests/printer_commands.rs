@@ -3,7 +3,7 @@ use pandar_core::AgentId;
 use requests::{
     PrinterControlRequest, diagnose_printer_body, diagnose_printer_with_access_code_body,
     discover_printers_body, discover_printers_timeout_string_body, empty_body, move_axis,
-    printer_control_body, printer_control_value,
+    printer_control_body, printer_control_value, printer_discovery_result_json,
 };
 use serde::Deserialize;
 use tokio::sync::mpsc;
@@ -910,17 +910,7 @@ async fn command_detail_requires_viewer_and_returns_result_json() {
         )
         .await
         .unwrap();
-    let result_json = json!({
-        "type": "printer_discovery",
-        "printers": [{
-            "serial_number": "BAMBU123",
-            "host": "192.0.2.10",
-            "name": "Shop A1",
-            "model": "A1",
-            "source": "ssdp"
-        }]
-    })
-    .to_string();
+    let result_json = printer_discovery_result_json();
     state
         .commands()
         .mark_sent(command.id, tenant.id, agent.id)
