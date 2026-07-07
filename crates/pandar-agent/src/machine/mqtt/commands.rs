@@ -1,7 +1,9 @@
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use anyhow::bail;
-use serde_json::Value;
+use serde::Serialize;
+use serde_json::{Number, Value};
 
 mod payload;
 mod project_file;
@@ -110,7 +112,18 @@ pub struct MachineReportDiagnostic {
     pub severity: String,
     pub code: Option<String>,
     pub message: String,
-    pub payload: Value,
+    pub payload: MachineReportDiagnosticPayload,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum MachineReportDiagnosticPayload {
+    Object(BTreeMap<String, MachineReportDiagnosticPayload>),
+    Array(Vec<MachineReportDiagnosticPayload>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -21,8 +21,8 @@ use crate::{
 };
 
 use super::{
-    BambuMqttTopics, BambuMqttTransport, MachineReportDiagnostic, PrintReportProgress,
-    snapshot_from_report,
+    BambuMqttTopics, BambuMqttTransport, MachineReportDiagnostic, MachineReportDiagnosticPayload,
+    PrintReportProgress, snapshot_from_report,
 };
 
 pub fn print_report_from_report(
@@ -45,7 +45,7 @@ pub fn print_report_from_report(
                 .print_error
                 .as_ref()
                 .map(|value| value.payload())
-                .unwrap_or(Value::Null),
+                .unwrap_or(MachineReportDiagnosticPayload::Null),
         });
     }
     collect_hms_diagnostics(report, &mut diagnostics);
@@ -283,7 +283,7 @@ fn collect_hms_diagnostics(report: &Value, diagnostics: &mut Vec<MachineReportDi
                             severity: "warning".to_owned(),
                             code: Some(code),
                             message,
-                            payload: serde_json::to_value(object).unwrap_or(Value::Null),
+                            payload: object.payload(),
                         });
                     }
                 }

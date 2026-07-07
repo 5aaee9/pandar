@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
+use serde_json::Number;
+
+use super::super::MachineReportDiagnosticPayload;
 
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct PrintReportEnvelope {
@@ -111,8 +113,12 @@ impl DiagnosticValue {
         }
     }
 
-    pub(super) fn payload(&self) -> Value {
-        serde_json::to_value(self).unwrap_or(Value::Null)
+    pub(super) fn payload(&self) -> MachineReportDiagnosticPayload {
+        match self {
+            Self::Object(object) => object.payload(),
+            Self::String(value) => MachineReportDiagnosticPayload::String(value.clone()),
+            Self::Other(value) => MachineReportDiagnosticPayload::from(value.clone()),
+        }
     }
 }
 
@@ -133,6 +139,24 @@ impl HmsValue {
 }
 
 impl DiagnosticObject {
+    pub(super) fn payload(&self) -> MachineReportDiagnosticPayload {
+        let mut fields = BTreeMap::new();
+        insert_optional_string(&mut fields, "code", self.code.as_deref());
+        insert_optional_string(&mut fields, "hms_code", self.hms_code.as_deref());
+        insert_optional_string(&mut fields, "error_code", self.error_code.as_deref());
+        insert_optional_string(&mut fields, "message", self.message.as_deref());
+        insert_optional_string(&mut fields, "msg", self.msg.as_deref());
+        insert_optional_string(&mut fields, "description", self.description.as_deref());
+        insert_optional_string(&mut fields, "info", self.info.as_deref());
+        fields.extend(self.extra.iter().map(|(key, value)| {
+            (
+                key.clone(),
+                MachineReportDiagnosticPayload::from(value.clone()),
+            )
+        }));
+        MachineReportDiagnosticPayload::Object(fields)
+    }
+
     pub(super) fn code(&self) -> Option<String> {
         trimmed_string(
             self.code
@@ -150,6 +174,37 @@ impl DiagnosticObject {
                 .or(self.description.as_deref())
                 .or(self.info.as_deref()),
         )
+    }
+}
+
+impl From<ReportJson> for MachineReportDiagnosticPayload {
+    fn from(value: ReportJson) -> Self {
+        match value {
+            ReportJson::Object(object) => Self::Object(
+                object
+                    .into_iter()
+                    .map(|(key, value)| (key, Self::from(value)))
+                    .collect(),
+            ),
+            ReportJson::Array(values) => Self::Array(values.into_iter().map(Self::from).collect()),
+            ReportJson::String(value) => Self::String(value),
+            ReportJson::Number(value) => Self::Number(value),
+            ReportJson::Bool(value) => Self::Bool(value),
+            ReportJson::Null => Self::Null,
+        }
+    }
+}
+
+fn insert_optional_string(
+    fields: &mut BTreeMap<String, MachineReportDiagnosticPayload>,
+    key: &'static str,
+    value: Option<&str>,
+) {
+    if let Some(value) = value {
+        fields.insert(
+            key.to_owned(),
+            MachineReportDiagnosticPayload::String(value.to_owned()),
+        );
     }
 }
 
