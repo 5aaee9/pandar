@@ -6,19 +6,26 @@ mod fixtures;
 
 use fixtures::*;
 
-fn normalize(report: Value) -> Option<Value> {
+fn normalize(report: Value) -> Option<TestMaterialPatch> {
     let report = parse_materials_report(&report)?;
-    normalize_material_patch(&report, "2026-06-23T00:00:00Z")
-        .map(|patch| serde_json::to_value(patch).unwrap())
+    let patch = normalize_material_patch(&report, "2026-06-23T00:00:00Z")?;
+    Some(decode_patch(&patch))
 }
 
-fn material_patch(value: Value) -> TestMaterialPatch {
-    serde_json::from_value(value).unwrap()
+fn normalize_json(report: Value) -> Option<String> {
+    let report = parse_materials_report(&report)?;
+    let patch = normalize_material_patch(&report, "2026-06-23T00:00:00Z")?;
+    Some(serde_json::to_string(&patch).unwrap())
+}
+
+fn decode_patch(input: impl serde::Serialize) -> TestMaterialPatch {
+    let json = serde_json::to_string(&input).unwrap();
+    serde_json::from_str(&json).unwrap()
 }
 
 #[test]
 fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
-    let patch = material_patch(normalize(full_ams_snapshot_report()).unwrap());
+    let patch = normalize(full_ams_snapshot_report()).unwrap();
 
     assert_eq!(patch.document_type, "printer_material_patch");
     let unit = &patch.ams_units[0];
@@ -60,7 +67,7 @@ fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
 
 #[test]
 fn humidity_raw_is_normalized_as_percent_and_humidity_as_level() {
-    let patch = material_patch(normalize(humidity_raw_report()).unwrap());
+    let patch = normalize(humidity_raw_report()).unwrap();
 
     assert_eq!(patch.ams_units[0].humidity, Some(24.0));
     assert_eq!(patch.ams_units[0].humidity_level, Some(4.0));
@@ -68,7 +75,7 @@ fn humidity_raw_is_normalized_as_percent_and_humidity_as_level() {
 
 #[test]
 fn dual_nozzle_report_defaults_two_ams_units_to_right_and_left_toolheads() {
-    let patch = material_patch(normalize(dual_nozzle_ams_report()).unwrap());
+    let patch = normalize(dual_nozzle_ams_report()).unwrap();
 
     assert_eq!(patch.ams_units[0].toolhead.as_deref(), Some("R"));
     assert_eq!(patch.ams_units[1].toolhead.as_deref(), Some("L"));
@@ -76,7 +83,7 @@ fn dual_nozzle_report_defaults_two_ams_units_to_right_and_left_toolheads() {
 
 #[test]
 fn dual_external_slots_default_two_ams_units_to_right_and_left_toolheads() {
-    let patch = material_patch(normalize(dual_external_slot_ams_report()).unwrap());
+    let patch = normalize(dual_external_slot_ams_report()).unwrap();
 
     assert_eq!(patch.ams_units[0].toolhead.as_deref(), Some("R"));
     assert_eq!(patch.ams_units[1].toolhead.as_deref(), Some("L"));
@@ -84,7 +91,7 @@ fn dual_external_slots_default_two_ams_units_to_right_and_left_toolheads() {
 
 #[test]
 fn single_nozzle_report_does_not_guess_ams_toolhead_without_info() {
-    let patch = material_patch(normalize(single_nozzle_ams_report()).unwrap());
+    let patch = normalize(single_nozzle_ams_report()).unwrap();
 
     assert_eq!(patch.ams_units[0].toolhead, None);
     assert_eq!(patch.ams_units[1].toolhead, None);
@@ -92,14 +99,14 @@ fn single_nozzle_report_does_not_guess_ams_toolhead_without_info() {
 
 #[test]
 fn decimal_ams_temperature_is_normalized() {
-    let patch = material_patch(normalize(decimal_ams_temperature_report()).unwrap());
+    let patch = normalize(decimal_ams_temperature_report()).unwrap();
 
     assert_eq!(patch.ams_units[0].temperature_celsius, Some(24.0));
 }
 
 #[test]
 fn partial_update_emits_only_observed_material_fields() {
-    let patch = material_patch(normalize(partial_material_update_report()).unwrap());
+    let patch = normalize(partial_material_update_report()).unwrap();
 
     let unit = &patch.ams_units[0];
     let tray = &unit.trays[0];
@@ -123,7 +130,7 @@ fn tray_exist_bits_integer_and_hex_clear_missing_normal_ams_slots() {
         tray_exist_bits_integer_report(),
         tray_exist_bits_hex_report(),
     ] {
-        let patch = material_patch(normalize(report).unwrap());
+        let patch = normalize(report).unwrap();
 
         let unit = &patch.ams_units[0];
         let trays = &unit.trays;
@@ -148,7 +155,7 @@ fn tray_exist_bits_integer_and_hex_clear_missing_normal_ams_slots() {
 
 #[test]
 fn tray_exist_bits_absent_slots_override_stale_tray_objects() {
-    let patch = material_patch(normalize(absent_slots_override_report()).unwrap());
+    let patch = normalize(absent_slots_override_report()).unwrap();
 
     let slot_one = patch.ams_units[0]
         .trays
@@ -162,7 +169,7 @@ fn tray_exist_bits_absent_slots_override_stale_tray_objects() {
 
 #[test]
 fn tray_exist_bits_use_global_tray_bits_across_ams_units() {
-    let patch = material_patch(normalize(global_tray_bits_report()).unwrap());
+    let patch = normalize(global_tray_bits_report()).unwrap();
 
     let unit_zero = &patch.ams_units[0];
     assert_eq!(unit_zero.replace_trays, Some(true));
@@ -179,25 +186,25 @@ fn tray_exist_bits_use_global_tray_bits_across_ams_units() {
 
 #[test]
 fn power_off_zero_bitmask_skips_clears_but_non_zero_still_cleans_up() {
-    let zero = material_patch(normalize(power_off_zero_bitmask_report()).unwrap());
+    let zero = normalize(power_off_zero_bitmask_report()).unwrap();
     assert_eq!(zero.ams_units[0].trays.len(), 1);
 
-    let non_zero = material_patch(normalize(power_off_non_zero_bitmask_report()).unwrap());
+    let non_zero = normalize(power_off_non_zero_bitmask_report()).unwrap();
     assert_eq!(non_zero.ams_units[0].trays.len(), 4);
 }
 
 #[test]
 fn replace_external_spools_rules_follow_source_shape() {
-    let single_object = material_patch(normalize(external_spool_single_object_report()).unwrap());
+    let single_object = normalize(external_spool_single_object_report()).unwrap();
     assert_eq!(single_object.replace_external_spools, None);
 
-    let vir_slot_object = material_patch(normalize(vir_slot_single_object_report()).unwrap());
+    let vir_slot_object = normalize(vir_slot_single_object_report()).unwrap();
     assert_eq!(vir_slot_object.replace_external_spools, None);
 
-    let single_array = material_patch(normalize(external_spool_single_array_report()).unwrap());
+    let single_array = normalize(external_spool_single_array_report()).unwrap();
     assert_eq!(single_array.replace_external_spools, None);
 
-    let multi_array = material_patch(normalize(external_spool_multi_array_report()).unwrap());
+    let multi_array = normalize(external_spool_multi_array_report()).unwrap();
     let external_spools = multi_array.external_spools.as_ref().unwrap();
     assert_eq!(multi_array.replace_external_spools, Some(true));
     assert_eq!(external_spools[1].tray_id, "1");
@@ -207,7 +214,7 @@ fn replace_external_spools_rules_follow_source_shape() {
 
 #[test]
 fn top_level_vt_tray_normalizes_external_spool() {
-    let patch = material_patch(normalize(top_level_external_spool_report()).unwrap());
+    let patch = normalize(top_level_external_spool_report()).unwrap();
 
     let external = &patch.external_spools.as_ref().unwrap()[0];
     assert_eq!(external.external_id, "254");
@@ -223,7 +230,7 @@ fn top_level_vt_tray_normalizes_external_spool() {
 
 #[test]
 fn vir_slot_takes_precedence_and_preserves_single_255_external_id() {
-    let patch = material_patch(normalize(vir_slot_precedence_report()).unwrap());
+    let patch = normalize(vir_slot_precedence_report()).unwrap();
 
     let external_spools = patch.external_spools.as_ref().unwrap();
     assert_eq!(patch.replace_external_spools, Some(true));
@@ -238,7 +245,7 @@ fn vir_slot_takes_precedence_and_preserves_single_255_external_id() {
 #[test]
 fn active_tray_ranges_are_normalized() {
     assert_eq!(
-        material_patch(normalize(active_tray_report(15)).unwrap()).active_tray,
+        normalize(active_tray_report(15)).unwrap().active_tray,
         Some(TestActiveTray::Ams {
             global_tray_id: 15,
             ams_id: "3".to_owned(),
@@ -246,7 +253,7 @@ fn active_tray_ranges_are_normalized() {
         })
     );
     assert_eq!(
-        material_patch(normalize(active_tray_report(128)).unwrap()).active_tray,
+        normalize(active_tray_report(128)).unwrap().active_tray,
         Some(TestActiveTray::AmsHt {
             global_tray_id: None,
             ams_id: "128".to_owned(),
@@ -254,7 +261,7 @@ fn active_tray_ranges_are_normalized() {
         })
     );
     assert_eq!(
-        material_patch(normalize(active_tray_report(254)).unwrap()).active_tray,
+        normalize(active_tray_report(254)).unwrap().active_tray,
         Some(TestActiveTray::External {
             external_id: "254".to_owned(),
             tray_id: "0".to_owned(),
@@ -262,14 +269,14 @@ fn active_tray_ranges_are_normalized() {
         })
     );
     assert_eq!(
-        material_patch(normalize(active_tray_report(255)).unwrap()).active_tray,
+        normalize(active_tray_report(255)).unwrap().active_tray,
         None
     );
 }
 
 #[test]
 fn ams_ht_unit_has_no_global_tray_id() {
-    let patch = material_patch(normalize(ams_ht_unit_report()).unwrap());
+    let patch = normalize(ams_ht_unit_report()).unwrap();
 
     assert_eq!(patch.ams_units[0].unit_kind, "ams_ht");
     assert_eq!(patch.ams_units[0].trays[0].global_tray_id, None);
@@ -277,14 +284,12 @@ fn ams_ht_unit_has_no_global_tray_id() {
 
 #[test]
 fn color_and_credential_keys_are_filtered() {
-    let patch_value = normalize(credential_filter_report()).unwrap();
-
-    let serialized = serde_json::to_string(&patch_value).unwrap();
+    let serialized = normalize_json(credential_filter_report()).unwrap();
     assert!(!serialized.contains("secret-access"));
     assert!(!serialized.contains("secret-password"));
     assert!(!serialized.contains("secret-passwd"));
     assert!(!serialized.contains("secret-token"));
     assert!(!serialized.contains("secret-auth"));
-    let patch = material_patch(patch_value);
+    let patch = normalize(credential_filter_report()).unwrap();
     assert_eq!(patch.ams_units[0].trays[0].color, None);
 }

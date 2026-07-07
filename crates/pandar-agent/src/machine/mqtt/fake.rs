@@ -170,8 +170,7 @@ impl BambuMqttTransport for FakeMqttTransport {
 
 #[cfg(test)]
 fn is_pushall_payload(payload: &Value) -> bool {
-    serde_json::from_value::<FakeMqttPayload>(payload.clone())
-        .ok()
+    decode_payload::<FakeMqttPayload>(payload)
         .and_then(|payload| payload.pushing)
         .and_then(|section| section.command)
         == Some("pushall".to_owned())
@@ -180,17 +179,15 @@ fn is_pushall_payload(payload: &Value) -> bool {
 #[cfg(test)]
 fn published_payload_matches(expected: &Value, actual: &Value) -> bool {
     expected == actual
-        || command_sections(&serde_json::from_value::<FakeMqttPayload>(expected.clone()).ok())
+        || command_sections(&decode_payload::<FakeMqttPayload>(expected))
             .into_iter()
-            .zip(command_sections(
-                &serde_json::from_value::<FakeMqttPayload>(actual.clone()).ok(),
-            ))
+            .zip(command_sections(&decode_payload::<FakeMqttPayload>(actual)))
             .any(|(expected, actual)| expected.is_some() && expected == actual)
 }
 
 #[cfg(test)]
 fn operation_report_for_payload(payload: &Value, failed_led_node: Option<&str>) -> Option<Value> {
-    let payload = serde_json::from_value::<FakeMqttPayload>(payload.clone()).ok()?;
+    let payload = decode_payload::<FakeMqttPayload>(payload)?;
     if let Some(print) = payload.print {
         let command = print.command?;
         let sequence_id = print.sequence_id?;
@@ -229,6 +226,15 @@ fn operation_report_for_payload(payload: &Value, failed_led_node: Option<&str>) 
             reason: None,
         }),
     }))
+}
+
+#[cfg(test)]
+fn decode_payload<T>(payload: &Value) -> Option<T>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    let json = serde_json::to_string(payload).ok()?;
+    serde_json::from_str(&json).ok()
 }
 
 #[cfg(test)]

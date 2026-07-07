@@ -988,6 +988,8 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced Hub material snapshot fixture decoders and Agent machine operation report helpers with typed serde string round-trips instead of `serde_json::Value` round-trips.
 - Replaced Hub JWT verifier test audience/JWKS decoders with typed serde string round-trips instead of `serde_json::Value` conversion helpers.
 - Replaced Agent machine and MQTT test payload inspectors with typed serde string decoders instead of cloning `serde_json::Value` into fixed-shape structs.
+- Replaced Agent fake MQTT payload matching helpers with typed serde decoders over borrowed payloads instead of cloning `serde_json::Value` into fixed-shape structs.
+- Replaced Agent material normalization tests with direct typed patch decoding instead of converting normalized patches through `serde_json::Value`.
 
 Exit criteria:
 
