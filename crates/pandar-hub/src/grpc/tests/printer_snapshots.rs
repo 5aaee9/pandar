@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tonic::Code;
 
 use super::*;
@@ -259,11 +259,42 @@ pub(super) fn snapshot_event(
 }
 
 pub(super) fn valid_material_patch(observed_at: &str) -> String {
-    serde_json::json!({
-        "type": "printer_material_patch",
-        "observed_at": observed_at,
-        "ams_units": [{"unit_id": "0", "trays": [{"tray_id": "0", "type": "PLA"}]}],
-        "external_spools": []
+    serde_json::to_string(&TestMaterialPatch {
+        kind: "printer_material_patch",
+        observed_at,
+        ams_units: vec![TestAmsUnit {
+            unit_id: "0",
+            trays: vec![TestMaterialPatchTray {
+                tray_id: "0",
+                material_type: "PLA",
+            }],
+        }],
+        external_spools: Vec::<TestExternalSpool>::new(),
     })
-    .to_string()
+    .unwrap()
 }
+
+#[derive(Serialize)]
+struct TestMaterialPatch<'a> {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    observed_at: &'a str,
+    ams_units: Vec<TestAmsUnit>,
+    external_spools: Vec<TestExternalSpool>,
+}
+
+#[derive(Serialize)]
+struct TestAmsUnit {
+    unit_id: &'static str,
+    trays: Vec<TestMaterialPatchTray>,
+}
+
+#[derive(Serialize)]
+struct TestMaterialPatchTray {
+    tray_id: &'static str,
+    #[serde(rename = "type")]
+    material_type: &'static str,
+}
+
+#[derive(Serialize)]
+struct TestExternalSpool {}

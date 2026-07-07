@@ -40,6 +40,7 @@
 - Replaced Agent MQTT printer snapshot/progress extraction with typed serde report structs for status, telemetry, nozzle info, lights, print progress, and diagnostic objects.
 - Replaced Agent MQTT project-file signing and fake transport command echo field handling with typed serde payload structs.
 - Replaced Agent MQTT `project_file` command payload construction with a serializable struct instead of manually assembling a JSON object map.
+- Replaced Agent print-project test dispatch payload fixtures with typed serde structs and split the oversized print-command test support into a sibling module.
 - Replaced Agent MQTT control command payload construction with serializable structs for info, pushall, print controls, light control, AMS RFID/load/unload, and temperature/G-code operations.
 - Replaced Agent material snapshot normalization input parsing with typed serde structs for AMS reports, units, trays, external spools, and dual-nozzle/external-slot detection.
 - Replaced Agent material-normalization tray bitmask and power-state test fixtures with typed serde report builders instead of inline JSON objects.
@@ -52,6 +53,7 @@
 - Replaced Hub plugin route test response assertions with typed serde structs for login tickets, plugin sessions, Studio printer devices, plugin print/job responses, and plugin error responses.
 - Replaced Hub printer-command route test response, command-payload, audit-metadata, and error assertions with typed serde structs for discovery, diagnostics, printer controls, command details, and invalid request responses.
 - Replaced Hub identity verifier test audience-claim and JWKS JSON fixtures with typed serde structs.
+- Replaced Hub gRPC printer material/snapshot test material patch fixtures with typed serde structs and split the oversized printer-material test support into a sibling module.
 - Replaced fixed-shape `pandar` CLI JSON output construction with serializable structs instead of ad hoc `serde_json::json!` values.
 - Matched Bambu Studio/open-bamboo-networking local print upload behavior by naming dispatched artifacts as `*.gcode.3mf`, prioritizing BRTC eMMC upload for supported printer families, falling back to FTPS on BRTC failure, and publishing `project_file` with the actual upload URL plus MD5.
 - Aligned Agent `project_file` MQTT dispatch with Bambu Studio/open-bamboo-networking's payload shape, including unconditional `ams_mapping2`, default print option fields, and Studio-compatible task metadata.
