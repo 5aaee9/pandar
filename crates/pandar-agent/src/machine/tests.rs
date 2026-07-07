@@ -769,11 +769,19 @@ fn dynamic_sequence_id(payload: &Value) -> String {
 }
 
 fn dynamic_section_sequence_id(payload: &Value, section: &str) -> String {
-    let envelope: TestSequenceEnvelope = serde_json::from_value(payload.clone()).unwrap();
+    let envelope: TestSequenceEnvelope = decode_payload(payload);
     let sequence_id = &envelope.section(section).sequence_id;
     assert_ne!(sequence_id, "0");
     assert!((20000..30000).contains(&sequence_id.parse::<u32>().unwrap()));
     sequence_id.to_string()
+}
+
+fn decode_payload<T>(payload: &Value) -> T
+where
+    T: for<'de> Deserialize<'de>,
+{
+    let json = serde_json::to_string(payload).unwrap();
+    serde_json::from_str(&json).unwrap()
 }
 
 #[derive(Debug, Deserialize)]

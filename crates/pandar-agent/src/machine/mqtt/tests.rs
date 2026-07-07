@@ -79,11 +79,19 @@ fn request_command(payload: serde_json::Value) -> PublishedMqttCommand {
 }
 
 fn studio_sequence_id(payload: &serde_json::Value, section: &str) -> String {
-    let envelope: TestSequenceEnvelope = serde_json::from_value(payload.clone()).unwrap();
+    let envelope: TestSequenceEnvelope = decode_payload(payload);
     let sequence_id = &envelope.section(section).sequence_id;
     let parsed = sequence_id.parse::<u32>().unwrap();
     assert!((20000..30000).contains(&parsed));
     sequence_id.to_string()
+}
+
+fn decode_payload<T>(payload: &serde_json::Value) -> T
+where
+    T: for<'de> Deserialize<'de>,
+{
+    let json = serde_json::to_string(payload).unwrap();
+    serde_json::from_str(&json).unwrap()
 }
 
 #[derive(Debug, Deserialize)]
@@ -112,16 +120,16 @@ struct TestSequenceSection {
     sequence_id: String,
 }
 
-fn project_file_payload(payload: serde_json::Value) -> TestProjectFilePayload {
-    serde_json::from_value(payload).unwrap()
+fn project_file_payload(payload: &serde_json::Value) -> TestProjectFilePayload {
+    decode_payload(payload)
 }
 
 fn material_patch_json(json: &str) -> TestMaterialPatch {
     serde_json::from_str(json).unwrap()
 }
 
-fn chamber_light_payload(payload: serde_json::Value) -> TestChamberLightPayload {
-    serde_json::from_value(payload).unwrap()
+fn chamber_light_payload(payload: &serde_json::Value) -> TestChamberLightPayload {
+    decode_payload(payload)
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -434,7 +442,7 @@ fn chamber_light_payload_matches_bambu_studio_reference() {
     );
 
     let off = BambuMqttCommand::SetChamberLight(false).payload();
-    assert_eq!(chamber_light_payload(off).system.led_mode, "off");
+    assert_eq!(chamber_light_payload(&off).system.led_mode, "off");
 }
 
 #[test]
@@ -535,7 +543,7 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
 
     let sequence_id = studio_sequence_id(&payload, "print");
     assert_eq!(
-        project_file_payload(payload).print,
+        project_file_payload(&payload).print,
         TestProjectFilePrint {
             command: "project_file".to_owned(),
             sequence_id,
@@ -585,7 +593,7 @@ fn project_file_payload_defaults_mapping_keys_when_no_mapping_supplied() {
     })
     .payload();
 
-    let print = project_file_payload(payload).print;
+    let print = project_file_payload(&payload).print;
     assert_eq!(print.ams_mapping, Vec::<i64>::new());
     assert_eq!(print.ams_mapping2, Vec::<TestAmsMapping2>::new());
     assert!(!print.use_ams);
@@ -610,7 +618,7 @@ fn project_file_payload_includes_ams_mapping_only_when_supplied() {
     })
     .payload();
 
-    let print = project_file_payload(payload).print;
+    let print = project_file_payload(&payload).print;
     assert_eq!(print.ams_mapping, vec![0, -1, 4]);
     assert_eq!(print.ams_mapping2, Vec::<TestAmsMapping2>::new());
     assert!(print.use_ams);
@@ -635,7 +643,7 @@ fn project_file_payload_includes_ams_mapping2_only_when_supplied() {
     })
     .payload();
 
-    let print = project_file_payload(payload).print;
+    let print = project_file_payload(&payload).print;
     assert_eq!(print.ams_mapping, Vec::<i64>::new());
     assert_eq!(
         print.ams_mapping2,
@@ -665,7 +673,7 @@ fn project_file_payload_includes_both_mapping_keys_when_supplied() {
     })
     .payload();
 
-    let print = project_file_payload(payload).print;
+    let print = project_file_payload(&payload).print;
     assert_eq!(print.ams_mapping, vec![0, 1]);
     assert_eq!(
         print.ams_mapping2,
@@ -703,7 +711,7 @@ fn project_file_payload_rewrites_flat_external_mapping_values() {
     .payload();
 
     assert_eq!(
-        project_file_payload(payload).print.ams_mapping,
+        project_file_payload(&payload).print.ams_mapping,
         vec![-1, -1, 15]
     );
 }
