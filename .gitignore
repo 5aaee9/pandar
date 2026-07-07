@@ -19,6 +19,7 @@ target/
 /pandar.db
 /pandar.db-shm
 /pandar.db-wal
+/pandar-spool/
 /logs/
 /.logs/
 .impeccable/
