@@ -170,7 +170,6 @@ fn is_pushall_payload(payload: &Value) -> bool {
         .ok()
         .and_then(|payload| payload.pushing)
         .and_then(|section| section.command)
-        .and_then(|command| command.as_str().map(str::to_owned))
         == Some("pushall".to_owned())
 }
 
@@ -257,8 +256,8 @@ struct FakeOperationReport {
 #[cfg(test)]
 #[derive(Debug, Serialize)]
 struct FakeOperationReportSection {
-    command: Value,
-    sequence_id: Value,
+    command: String,
+    sequence_id: String,
     result: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     reason: Option<String>,
@@ -281,15 +280,15 @@ struct FakeMqttPayload {
 #[derive(Debug, Deserialize)]
 struct FakeCommandSection {
     #[serde(default)]
-    command: Option<Value>,
+    command: Option<String>,
     #[serde(default)]
-    sequence_id: Option<Value>,
+    sequence_id: Option<String>,
     #[serde(default)]
     led_node: Option<String>,
 }
 
 #[cfg(test)]
-fn command_sections(payload: &Option<FakeMqttPayload>) -> [Option<&Value>; 4] {
+fn command_sections(payload: &Option<FakeMqttPayload>) -> [Option<&str>; 4] {
     let Some(payload) = payload else {
         return [None, None, None, None];
     };
@@ -297,18 +296,18 @@ fn command_sections(payload: &Option<FakeMqttPayload>) -> [Option<&Value>; 4] {
         payload
             .info
             .as_ref()
-            .and_then(|section| section.command.as_ref()),
+            .and_then(|section| section.command.as_deref()),
         payload
             .pushing
             .as_ref()
-            .and_then(|section| section.command.as_ref()),
+            .and_then(|section| section.command.as_deref()),
         payload
             .print
             .as_ref()
-            .and_then(|section| section.command.as_ref()),
+            .and_then(|section| section.command.as_deref()),
         payload
             .system
             .as_ref()
-            .and_then(|section| section.command.as_ref()),
+            .and_then(|section| section.command.as_deref()),
     ]
 }

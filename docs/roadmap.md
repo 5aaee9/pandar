@@ -17,6 +17,7 @@
 ## Completed
 
 - Replaced Agent BRTC upload chunk test expected payloads with typed serde structs instead of handwritten `json!` objects.
+- Replaced Agent fake MQTT command echo parsing with typed command and sequence-id fields instead of `Value` scalar probes.
 - Replaced Agent MQTT `project_file` AMS mapping parsing with typed serde mapping structs instead of parsing into `Value` arrays and probing scalar fields manually.
 - Replaced Agent MQTT snapshot test report fixtures with typed serde structs and split the fixture definitions into a dedicated module to keep test files under the 400 LOC split threshold.
 - Replaced Agent MQTT command payload reference assertions with typed serde fixtures for pushall, get-version, print controls, chamber light, extruder selection, and gcode-line commands.
