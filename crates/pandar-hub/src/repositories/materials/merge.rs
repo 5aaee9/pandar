@@ -1,5 +1,5 @@
 use anyhow::Context;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use crate::entities::printer_material_snapshots;
 
@@ -49,14 +49,13 @@ pub(super) fn merge_snapshot(
     };
 
     Ok(MergedSnapshot {
-        ams_units: material_json(ams_units).context("failed to serialize AMS merge state")?,
-        external_spools: material_json(external_spools)
-            .context("failed to serialize external spool merge state")?,
+        ams_units: material_units_json(ams_units),
+        external_spools: material_external_spools_json(external_spools),
         active_tray,
     })
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct MaterialUnitState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     unit_id: Option<String>,
@@ -66,7 +65,7 @@ struct MaterialUnitState {
     fields: MaterialJsonObject,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct MaterialTrayState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     tray_id: Option<String>,
@@ -74,7 +73,7 @@ struct MaterialTrayState {
     fields: MaterialJsonObject,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct MaterialExternalSpoolState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     external_id: Option<String>,
@@ -95,9 +94,22 @@ fn parse_external_spools_json(
     serde_json::from_str(raw).with_context(|| format!("failed to parse {context}"))
 }
 
-fn material_json(input: impl Serialize) -> anyhow::Result<MaterialJsonValue> {
-    serde_json::from_value(serde_json::to_value(input)?)
-        .context("failed to convert material merge state")
+fn material_units_json(units: Vec<MaterialUnitState>) -> MaterialJsonValue {
+    MaterialJsonValue::Array(
+        units
+            .into_iter()
+            .map(MaterialUnitState::into_json)
+            .collect(),
+    )
+}
+
+fn material_external_spools_json(spools: Vec<MaterialExternalSpoolState>) -> MaterialJsonValue {
+    MaterialJsonValue::Array(
+        spools
+            .into_iter()
+            .map(MaterialExternalSpoolState::into_json)
+            .collect(),
+    )
 }
 
 fn merge_units(current: &mut Vec<MaterialUnitState>, patches: &[MaterialUnitPatch]) {
@@ -226,5 +238,48 @@ fn merge_fields(current: &mut MaterialJsonObject, patch: MaterialJsonObject) {
 impl MaterialExternalSpoolState {
     fn key(&self) -> Option<(String, String)> {
         Some((self.external_id.clone()?, self.tray_id.clone()?))
+    }
+
+    fn into_json(self) -> MaterialJsonValue {
+        let mut object = self.fields;
+        if let Some(external_id) = self.external_id {
+            object.insert(
+                "external_id".to_owned(),
+                MaterialJsonValue::String(external_id),
+            );
+        }
+        if let Some(tray_id) = self.tray_id {
+            object.insert("tray_id".to_owned(), MaterialJsonValue::String(tray_id));
+        }
+        MaterialJsonValue::Object(object)
+    }
+}
+
+impl MaterialUnitState {
+    fn into_json(self) -> MaterialJsonValue {
+        let mut object = self.fields;
+        if let Some(unit_id) = self.unit_id {
+            object.insert("unit_id".to_owned(), MaterialJsonValue::String(unit_id));
+        }
+        object.insert(
+            "trays".to_owned(),
+            MaterialJsonValue::Array(
+                self.trays
+                    .into_iter()
+                    .map(MaterialTrayState::into_json)
+                    .collect(),
+            ),
+        );
+        MaterialJsonValue::Object(object)
+    }
+}
+
+impl MaterialTrayState {
+    fn into_json(self) -> MaterialJsonValue {
+        let mut object = self.fields;
+        if let Some(tray_id) = self.tray_id {
+            object.insert("tray_id".to_owned(), MaterialJsonValue::String(tray_id));
+        }
+        MaterialJsonValue::Object(object)
     }
 }
