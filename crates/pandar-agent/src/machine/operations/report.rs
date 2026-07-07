@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{Number, Value};
 
 use crate::machine::{MachineJsonPayload, PrinterOperationMqttSummary};
@@ -9,7 +9,7 @@ pub(super) struct OperationReport {
     envelope: OperationEnvelope,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 struct OperationEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     print: Option<OperationSection>,
@@ -25,7 +25,7 @@ struct OperationEnvelope {
     extra: BTreeMap<String, MachineJsonPayload>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 struct OperationSection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sequence_id: Option<SequenceId>,
@@ -47,7 +47,7 @@ struct OperationSection {
     extra: BTreeMap<String, MachineJsonPayload>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum SequenceId {
     String(String),
@@ -116,9 +116,7 @@ impl OperationReport {
     }
 
     pub(super) fn into_payload(self) -> MachineJsonPayload {
-        MachineJsonPayload::from(
-            serde_json::to_value(self.envelope).expect("operation report is serializable"),
-        )
+        self.envelope.into_payload()
     }
 }
 
@@ -140,6 +138,23 @@ impl OperationSection {
     fn sequence_id_string(&self) -> Option<String> {
         self.sequence_id.as_ref().map(SequenceId::as_string)
     }
+
+    fn into_payload(self) -> MachineJsonPayload {
+        let mut object = self.extra;
+        insert_payload(
+            &mut object,
+            "sequence_id",
+            self.sequence_id.map(SequenceId::into_payload),
+        );
+        insert_payload(&mut object, "result", self.result);
+        insert_payload(&mut object, "err_code", self.err_code);
+        insert_payload(&mut object, "errno", self.errno);
+        insert_payload(&mut object, "reason", self.reason);
+        insert_payload(&mut object, "message", self.message);
+        insert_payload(&mut object, "msg", self.msg);
+        insert_payload(&mut object, "error", self.error);
+        MachineJsonPayload::Object(object)
+    }
 }
 
 impl SequenceId {
@@ -148,6 +163,43 @@ impl SequenceId {
             Self::String(value) => value.clone(),
             Self::Number(value) => value.to_string(),
         }
+    }
+
+    fn into_payload(self) -> MachineJsonPayload {
+        match self {
+            Self::String(value) => MachineJsonPayload::String(value),
+            Self::Number(value) => MachineJsonPayload::Number(value),
+        }
+    }
+}
+
+impl OperationEnvelope {
+    fn into_payload(self) -> MachineJsonPayload {
+        let mut object = self.extra;
+        insert_section(&mut object, "print", self.print);
+        insert_section(&mut object, "info", self.info);
+        insert_section(&mut object, "pushing", self.pushing);
+        insert_section(&mut object, "system", self.system);
+        insert_section(&mut object, "camera", self.camera);
+        MachineJsonPayload::Object(object)
+    }
+}
+
+fn insert_section(
+    object: &mut BTreeMap<String, MachineJsonPayload>,
+    key: &str,
+    section: Option<OperationSection>,
+) {
+    insert_payload(object, key, section.map(OperationSection::into_payload));
+}
+
+fn insert_payload(
+    object: &mut BTreeMap<String, MachineJsonPayload>,
+    key: &str,
+    payload: Option<MachineJsonPayload>,
+) {
+    if let Some(payload) = payload {
+        object.insert(key.to_owned(), payload);
     }
 }
 
