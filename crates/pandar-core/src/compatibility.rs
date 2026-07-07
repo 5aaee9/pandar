@@ -210,8 +210,8 @@ mod tests {
 
     #[test]
     fn absent_model_serializes_null_and_unknown_features() {
-        let value = serde_json::to_value(compatibility_for_model(None)).unwrap();
-        let decoded: DiagnosticCompatibility = serde_json::from_value(value).unwrap();
+        let json = serde_json::to_string(&compatibility_for_model(None)).unwrap();
+        let decoded: DiagnosticCompatibility = serde_json::from_str(&json).unwrap();
 
         assert_eq!(
             decoded,
@@ -237,8 +237,8 @@ mod tests {
 
     #[test]
     fn compatibility_serializes_live_controls_capability() {
-        let value = serde_json::to_value(compatibility_for_model(Some("A1 Mini"))).unwrap();
-        let decoded: DiagnosticCompatibility = serde_json::from_value(value).unwrap();
+        let json = serde_json::to_string(&compatibility_for_model(Some("A1 Mini"))).unwrap();
+        let decoded: DiagnosticCompatibility = serde_json::from_str(&json).unwrap();
 
         assert_eq!(decoded.normalized_model.as_deref(), Some("A1_MINI"));
         assert_eq!(decoded.features.live_controls, Capability::Supported);
