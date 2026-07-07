@@ -4,8 +4,10 @@ use anyhow::bail;
 use serde_json::Value;
 
 mod payload;
+mod project_file;
 
 use payload::*;
+use project_file::project_file_payload;
 
 const STUDIO_START_SEQUENCE_ID: u32 = 20000;
 const STUDIO_END_SEQUENCE_ID: u32 = 30000;
@@ -316,84 +318,4 @@ fn ams_unload_filament_payload(command: &AmsFilamentCommand) -> Value {
             extruder_id: None,
         },
     })
-}
-
-fn project_file_payload(command: &ProjectFileCommand) -> Value {
-    json_payload(ProjectFilePayload {
-        print: ProjectFilePayloadPrint {
-            command: "project_file",
-            sequence_id: next_studio_sequence_id(),
-            param: format!("Metadata/plate_{}.gcode", command.plate_id),
-            project_id: "0",
-            profile_id: "0",
-            task_id: "0",
-            subtask_id: "0",
-            subtask_name: project_file_subtask_name(&command.filename),
-            url: command
-                .url
-                .clone()
-                .unwrap_or_else(|| format!("ftp://{}", command.filename)),
-            file: command.filename.clone(),
-            md5: command.md5.clone().unwrap_or_default(),
-            bed_type: "auto",
-            bed_leveling: false,
-            flow_cali: command.flow_cali,
-            vibration_cali: false,
-            layer_inspect: false,
-            timelapse: command.timelapse,
-            use_ams: command.use_ams,
-            ams_mapping: command
-                .ams_mapping_json
-                .as_deref()
-                .and_then(project_file_ams_mapping)
-                .unwrap_or_default(),
-            ams_mapping2: command
-                .ams_mapping2_json
-                .as_deref()
-                .and_then(project_file_mapping_array)
-                .unwrap_or_default(),
-            ams_mapping_info: command
-                .ams_mapping_info_json
-                .as_deref()
-                .and_then(project_file_mapping_array),
-            auto_bed_leveling: 0,
-            nozzle_offset_cali: 0,
-            cfg: "0",
-            extrude_cali_flag: 0,
-        },
-    })
-}
-
-fn project_file_subtask_name(filename: &str) -> String {
-    let base = filename
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or(filename)
-        .trim();
-    let stem = base
-        .strip_suffix(".gcode.3mf")
-        .or_else(|| base.strip_suffix(".3mf"))
-        .unwrap_or(base)
-        .trim();
-    if stem.is_empty() {
-        "print".to_string()
-    } else {
-        stem.to_string()
-    }
-}
-
-fn project_file_ams_mapping(raw: &str) -> Option<Vec<Value>> {
-    Some(
-        project_file_mapping_array(raw)?
-            .into_iter()
-            .map(|value| match value.as_i64() {
-                Some(254 | 255) => Value::from(-1),
-                _ => value,
-            })
-            .collect(),
-    )
-}
-
-fn project_file_mapping_array(raw: &str) -> Option<Vec<Value>> {
-    serde_json::from_str(raw).ok()
 }

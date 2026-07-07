@@ -1,4 +1,6 @@
-use serde::Serialize;
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub(super) fn json_payload<T: Serialize>(payload: T) -> Value {
@@ -133,12 +135,26 @@ pub(super) struct ProjectFilePayloadPrint {
     pub(super) layer_inspect: bool,
     pub(super) timelapse: bool,
     pub(super) use_ams: bool,
-    pub(super) ams_mapping: Vec<Value>,
-    pub(super) ams_mapping2: Vec<Value>,
+    pub(super) ams_mapping: Vec<i64>,
+    pub(super) ams_mapping2: Vec<ProjectFileAmsMapping2>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) ams_mapping_info: Option<Vec<Value>>,
+    pub(super) ams_mapping_info: Option<Vec<ProjectFileAmsMappingInfo>>,
     pub(super) auto_bed_leveling: u8,
     pub(super) nozzle_offset_cali: u8,
     pub(super) cfg: &'static str,
     pub(super) extrude_cali_flag: u8,
+}
+
+#[derive(Serialize, Deserialize)]
+pub(super) struct ProjectFileAmsMapping2 {
+    pub(super) ams_id: i64,
+    pub(super) slot_id: i64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub(super) struct ProjectFileAmsMappingInfo {
+    #[serde(rename = "nozzleId")]
+    pub(super) nozzle_id: i64,
+    #[serde(flatten)]
+    pub(super) extra: BTreeMap<String, Value>,
 }
