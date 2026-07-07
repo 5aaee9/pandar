@@ -5,7 +5,7 @@ use std::{
 
 use super::*;
 use pandar_core::{AgentId, TenantId};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tonic::Status;
@@ -115,6 +115,51 @@ struct ErrorResponse {
 
 fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
     serde_json::from_value(value).unwrap()
+}
+
+#[derive(Debug, Serialize)]
+struct PrinterMaterialPatchFixture {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    observed_at: &'static str,
+    ams_units: [PrinterMaterialPatchAmsUnit; 1],
+    external_spools: [PrinterMaterialPatchExternalSpool; 1],
+    active_tray: PrinterMaterialPatchActiveTray,
+}
+
+#[derive(Debug, Serialize)]
+struct PrinterMaterialPatchAmsUnit {
+    unit_id: &'static str,
+    trays: [PrinterMaterialPatchTray; 1],
+}
+
+#[derive(Debug, Serialize)]
+struct PrinterMaterialPatchTray {
+    tray_id: &'static str,
+    filament_id: &'static str,
+    #[serde(rename = "type")]
+    material_type: &'static str,
+    color: &'static str,
+    access_token: &'static str,
+    auth: &'static str,
+    passwd: &'static str,
+    access_code: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct PrinterMaterialPatchExternalSpool {
+    external_id: &'static str,
+    tray_id: &'static str,
+    #[serde(rename = "type")]
+    material_type: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct PrinterMaterialPatchActiveTray {
+    kind: &'static str,
+    global_tray_id: u8,
+    ams_id: &'static str,
+    tray_id: &'static str,
 }
 
 #[tokio::test]
@@ -406,35 +451,35 @@ async fn printer_routes_return_material_snapshots_without_credentials() {
             agent_id,
             printer_id: printer_id.clone(),
             serial_number: "serial".to_string(),
-            printer_materials_json: json!({
-                "type": "printer_material_patch",
-                "observed_at": "2026-06-23T01:02:03Z",
-                "ams_units": [{
-                    "unit_id": "0",
-                    "trays": [{
-                        "tray_id": "0",
-                        "filament_id": "GFL00",
-                        "type": "PLA",
-                        "color": "FF0000",
-                        "access_token": "secret-token",
-                        "auth": "secret-auth",
-                        "passwd": "secret-passwd",
-                        "access_code": "secret-access-code"
-                    }]
+            printer_materials_json: serde_json::to_string(&PrinterMaterialPatchFixture {
+                kind: "printer_material_patch",
+                observed_at: "2026-06-23T01:02:03Z",
+                ams_units: [PrinterMaterialPatchAmsUnit {
+                    unit_id: "0",
+                    trays: [PrinterMaterialPatchTray {
+                        tray_id: "0",
+                        filament_id: "GFL00",
+                        material_type: "PLA",
+                        color: "FF0000",
+                        access_token: "secret-token",
+                        auth: "secret-auth",
+                        passwd: "secret-passwd",
+                        access_code: "secret-access-code",
+                    }],
                 }],
-                "external_spools": [{
-                    "external_id": "254",
-                    "tray_id": "0",
-                    "type": "PETG"
+                external_spools: [PrinterMaterialPatchExternalSpool {
+                    external_id: "254",
+                    tray_id: "0",
+                    material_type: "PETG",
                 }],
-                "active_tray": {
-                    "kind": "ams",
-                    "global_tray_id": 0,
-                    "ams_id": "0",
-                    "tray_id": "0"
-                }
+                active_tray: PrinterMaterialPatchActiveTray {
+                    kind: "ams",
+                    global_tray_id: 0,
+                    ams_id: "0",
+                    tray_id: "0",
+                },
             })
-            .to_string(),
+            .unwrap(),
         })
         .await
         .unwrap();

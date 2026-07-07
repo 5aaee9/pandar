@@ -1,4 +1,5 @@
 use pandar_core::{JobStatus, PrintStatus};
+use serde::Serialize;
 use serde_json::json;
 
 use super::*;
@@ -89,14 +90,42 @@ fn valid_material_input(
         agent_id,
         printer_id: printer_id.to_owned(),
         serial_number: format!("serial-{printer_id}"),
-        printer_materials_json: json!({
-            "type": "printer_material_patch",
-            "observed_at": observed_at,
-            "ams_units": [{"unit_id": "0", "trays": [{"tray_id": "0", "type": "PLA"}]}],
-            "external_spools": []
+        printer_materials_json: serde_json::to_string(&PostgresMaterialPatchFixture {
+            kind: "printer_material_patch",
+            observed_at,
+            ams_units: [PostgresMaterialPatchAmsUnit {
+                unit_id: "0",
+                trays: [PostgresMaterialPatchTray {
+                    tray_id: "0",
+                    material_type: "PLA",
+                }],
+            }],
+            external_spools: [],
         })
-        .to_string(),
+        .unwrap(),
     }
+}
+
+#[derive(Debug, Serialize)]
+struct PostgresMaterialPatchFixture<'a> {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    observed_at: &'a str,
+    ams_units: [PostgresMaterialPatchAmsUnit; 1],
+    external_spools: [(); 0],
+}
+
+#[derive(Debug, Serialize)]
+struct PostgresMaterialPatchAmsUnit {
+    unit_id: &'static str,
+    trays: [PostgresMaterialPatchTray; 1],
+}
+
+#[derive(Debug, Serialize)]
+struct PostgresMaterialPatchTray {
+    tray_id: &'static str,
+    #[serde(rename = "type")]
+    material_type: &'static str,
 }
 
 #[tokio::test]

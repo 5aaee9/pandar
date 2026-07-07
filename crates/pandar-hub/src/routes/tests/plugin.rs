@@ -1,5 +1,5 @@
 use super::*;
-use serde::{Deserialize, de::IgnoredAny};
+use serde::{Deserialize, Serialize, de::IgnoredAny};
 
 #[derive(Debug, Deserialize)]
 struct LoginTicketResponse {
@@ -162,6 +162,56 @@ struct EmptyAuditMetadata {}
 #[derive(Debug, Deserialize)]
 struct ErrorResponse {
     error: String,
+}
+
+#[derive(Debug, Serialize)]
+struct PluginMaterialPatchFixture {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    observed_at: &'static str,
+    ams_units: [PluginMaterialPatchAmsUnit; 1],
+    external_spools: [PluginMaterialPatchExternalSpool; 1],
+    active_tray: PluginMaterialPatchActiveTray,
+}
+
+#[derive(Debug, Serialize)]
+struct PluginMaterialPatchAmsUnit {
+    unit_id: &'static str,
+    humidity: u8,
+    humidity_level: u8,
+    temperature_celsius: f64,
+    toolhead: &'static str,
+    trays: [PluginMaterialPatchTray; 1],
+}
+
+#[derive(Debug, Serialize)]
+struct PluginMaterialPatchTray {
+    tray_id: &'static str,
+    global_tray_id: u8,
+    #[serde(rename = "type")]
+    material_type: &'static str,
+    filament_id: &'static str,
+    color: &'static str,
+    remaining_estimate: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct PluginMaterialPatchExternalSpool {
+    external_id: &'static str,
+    tray_id: &'static str,
+    #[serde(rename = "type")]
+    material_type: &'static str,
+    filament_id: &'static str,
+    color: &'static str,
+    toolhead: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct PluginMaterialPatchActiveTray {
+    kind: &'static str,
+    ams_id: &'static str,
+    tray_id: &'static str,
+    global_tray_id: u8,
 }
 
 fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
@@ -458,35 +508,40 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
             agent_id: agent.id,
             printer_id: printer.id.clone(),
             serial_number: "studio-printer-1".to_string(),
-            printer_materials_json: json!({
-                "type": "printer_material_patch",
-                "observed_at": "2026-06-20T00:01:00Z",
-                "ams_units": [{
-                    "unit_id": "0",
-                    "humidity": 25,
-                    "humidity_level": 3,
-                    "temperature_celsius": 28.5,
-                    "toolhead": "R",
-                    "trays": [{
-                        "tray_id": "0",
-                        "global_tray_id": 0,
-                        "type": "PLA",
-                        "filament_id": "GFL99",
-                        "color": "00FF00",
-                        "remaining_estimate": "72"
-                    }]
+            printer_materials_json: serde_json::to_string(&PluginMaterialPatchFixture {
+                kind: "printer_material_patch",
+                observed_at: "2026-06-20T00:01:00Z",
+                ams_units: [PluginMaterialPatchAmsUnit {
+                    unit_id: "0",
+                    humidity: 25,
+                    humidity_level: 3,
+                    temperature_celsius: 28.5,
+                    toolhead: "R",
+                    trays: [PluginMaterialPatchTray {
+                        tray_id: "0",
+                        global_tray_id: 0,
+                        material_type: "PLA",
+                        filament_id: "GFL99",
+                        color: "00FF00",
+                        remaining_estimate: "72",
+                    }],
                 }],
-                "external_spools": [{
-                    "external_id": "254",
-                    "tray_id": "0",
-                    "type": "PETG",
-                    "filament_id": "GFG00",
-                    "color": "11223344",
-                    "toolhead": "L"
+                external_spools: [PluginMaterialPatchExternalSpool {
+                    external_id: "254",
+                    tray_id: "0",
+                    material_type: "PETG",
+                    filament_id: "GFG00",
+                    color: "11223344",
+                    toolhead: "L",
                 }],
-                "active_tray": {"kind": "ams", "ams_id": "0", "tray_id": "0", "global_tray_id": 0}
+                active_tray: PluginMaterialPatchActiveTray {
+                    kind: "ams",
+                    ams_id: "0",
+                    tray_id: "0",
+                    global_tray_id: 0,
+                },
             })
-            .to_string(),
+            .unwrap(),
         })
         .await
         .unwrap();
