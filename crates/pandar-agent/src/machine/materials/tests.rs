@@ -1,7 +1,10 @@
-use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::*;
+
+mod fixtures;
+
+use fixtures::*;
 
 fn normalize(report: Value) -> Option<Value> {
     normalize_material_patch(&report, "2026-06-23T00:00:00Z")
@@ -13,48 +16,7 @@ fn material_patch(value: Value) -> TestMaterialPatch {
 
 #[test]
 fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
-    let patch = material_patch(
-        normalize(json!({
-            "print": {
-                "ams": {
-                    "tray_now": 5,
-                        "ams": [{
-                            "id": "1",
-                            "info": "10001103",
-                            "humidity": 4,
-                            "humidity_raw": 30,
-                            "temp": "28",
-                            "tray": [{
-                                "id": "0"
-                            }, {
-                                "id": "1",
-                                "state": 1,
-                                "tray_info_idx": "GFL05_07",
-                            "tray_type": "PLA",
-                            "tray_color": "#aabbcc",
-                            "tray_sub_brands": "Basic",
-                            "tag_uid": "tag-1",
-                            "tray_uuid": "uuid-1",
-                                "k": "0.020",
-                                "remain": 73,
-                                "cols": ["#112233", "not-a-color", "445566"]
-                            }, {
-                                "id": "2"
-                            }, {
-                                "id": "3"
-                            }]
-                        }],
-                    "vt_tray": {
-                        "id": 254,
-                        "extruder_id": 0,
-                        "tray_info_idx": "P123",
-                        "tray_color": "11223344"
-                    }
-                }
-            }
-        }))
-        .unwrap(),
-    );
+    let patch = material_patch(normalize(full_ams_snapshot_report()).unwrap());
 
     assert_eq!(patch.document_type, "printer_material_patch");
     let unit = &patch.ams_units[0];
@@ -96,21 +58,7 @@ fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
 
 #[test]
 fn humidity_raw_is_normalized_as_percent_and_humidity_as_level() {
-    let patch = material_patch(
-        normalize(json!({
-            "print": {
-                "ams": {
-                    "ams": [{
-                        "id": "0",
-                        "humidity": "4",
-                        "humidity_raw": "24",
-                        "tray": [{"id": "0"}]
-                    }]
-                }
-            }
-        }))
-        .unwrap(),
-    );
+    let patch = material_patch(normalize(humidity_raw_report()).unwrap());
 
     assert_eq!(patch.ams_units[0].humidity, Some(24.0));
     assert_eq!(patch.ams_units[0].humidity_level, Some(4.0));
@@ -118,21 +66,7 @@ fn humidity_raw_is_normalized_as_percent_and_humidity_as_level() {
 
 #[test]
 fn dual_nozzle_report_defaults_two_ams_units_to_right_and_left_toolheads() {
-    let patch = material_patch(
-        normalize(json!({
-            "print": {
-                "nozzle_temper": 28,
-                "nozzle_temper2": 27,
-                "ams": {
-                    "ams": [
-                        {"id": "0", "tray": [{"id": "0"}]},
-                        {"id": "1", "tray": [{"id": "0"}]}
-                    ]
-                }
-            }
-        }))
-        .unwrap(),
-    );
+    let patch = material_patch(normalize(dual_nozzle_ams_report()).unwrap());
 
     assert_eq!(patch.ams_units[0].toolhead.as_deref(), Some("R"));
     assert_eq!(patch.ams_units[1].toolhead.as_deref(), Some("L"));
@@ -140,23 +74,7 @@ fn dual_nozzle_report_defaults_two_ams_units_to_right_and_left_toolheads() {
 
 #[test]
 fn dual_external_slots_default_two_ams_units_to_right_and_left_toolheads() {
-    let patch = material_patch(
-        normalize(json!({
-            "print": {
-                "ams": {
-                    "vir_slot": [
-                        {"id": 254},
-                        {"id": 255}
-                    ],
-                    "ams": [
-                        {"id": "0", "tray": [{"id": "0"}]},
-                        {"id": "1", "tray": [{"id": "0"}]}
-                    ]
-                }
-            }
-        }))
-        .unwrap(),
-    );
+    let patch = material_patch(normalize(dual_external_slot_ams_report()).unwrap());
 
     assert_eq!(patch.ams_units[0].toolhead.as_deref(), Some("R"));
     assert_eq!(patch.ams_units[1].toolhead.as_deref(), Some("L"));
@@ -164,20 +82,7 @@ fn dual_external_slots_default_two_ams_units_to_right_and_left_toolheads() {
 
 #[test]
 fn single_nozzle_report_does_not_guess_ams_toolhead_without_info() {
-    let patch = material_patch(
-        normalize(json!({
-            "print": {
-                "nozzle_temper": 28,
-                "ams": {
-                    "ams": [
-                        {"id": "0", "tray": [{"id": "0"}]},
-                        {"id": "1", "tray": [{"id": "0"}]}
-                    ]
-                }
-            }
-        }))
-        .unwrap(),
-    );
+    let patch = material_patch(normalize(single_nozzle_ams_report()).unwrap());
 
     assert_eq!(patch.ams_units[0].toolhead, None);
     assert_eq!(patch.ams_units[1].toolhead, None);
@@ -185,39 +90,14 @@ fn single_nozzle_report_does_not_guess_ams_toolhead_without_info() {
 
 #[test]
 fn decimal_ams_temperature_is_normalized() {
-    let patch = material_patch(
-        normalize(json!({
-            "print": {
-                "ams": {
-                    "ams": [{
-                        "id": "0",
-                        "temp": "24.0",
-                        "tray": [{"id": "0"}]
-                    }]
-                }
-            }
-        }))
-        .unwrap(),
-    );
+    let patch = material_patch(normalize(decimal_ams_temperature_report()).unwrap());
 
     assert_eq!(patch.ams_units[0].temperature_celsius, Some(24.0));
 }
 
 #[test]
 fn partial_update_emits_only_observed_material_fields() {
-    let patch = material_patch(
-        normalize(json!({
-            "print": {
-                "ams": {
-                    "ams": [{
-                        "id": 0,
-                        "tray": [{"id": 2, "tray_color": "#00ff11"}]
-                    }]
-                }
-            }
-        }))
-        .unwrap(),
-    );
+    let patch = material_patch(normalize(partial_material_update_report()).unwrap());
 
     let unit = &patch.ams_units[0];
     let tray = &unit.trays[0];
@@ -226,82 +106,6 @@ fn partial_update_emits_only_observed_material_fields() {
     assert_eq!(tray.filament_id, None);
     assert_eq!(unit.replace_trays, None);
     assert_eq!(patch.active_tray, None);
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-struct TestMaterialPatch {
-    #[serde(rename = "type")]
-    document_type: String,
-    #[serde(default)]
-    ams_units: Vec<TestAmsUnit>,
-    external_spools: Option<Vec<TestExternalSpool>>,
-    replace_external_spools: Option<bool>,
-    active_tray: Option<TestActiveTray>,
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-struct TestAmsUnit {
-    unit_id: String,
-    unit_kind: String,
-    #[serde(default)]
-    trays: Vec<TestAmsTray>,
-    replace_trays: Option<bool>,
-    humidity: Option<f64>,
-    humidity_level: Option<f64>,
-    temperature_celsius: Option<f64>,
-    toolhead: Option<String>,
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-struct TestAmsTray {
-    tray_id: String,
-    exists: Option<bool>,
-    global_tray_id: Option<u64>,
-    filament_id: Option<String>,
-    setting_id: Option<String>,
-    #[serde(rename = "type")]
-    material_type: Option<String>,
-    name: Option<String>,
-    color: Option<String>,
-    multi_color: Option<Vec<String>>,
-    remaining_estimate: Option<String>,
-    k_value: Option<String>,
-    state: Option<String>,
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-struct TestExternalSpool {
-    external_id: String,
-    exists: Option<bool>,
-    tray_id: String,
-    setting_id: Option<String>,
-    filament_id: Option<String>,
-    #[serde(rename = "type")]
-    material_type: Option<String>,
-    name: Option<String>,
-    color: Option<String>,
-    remaining_estimate: Option<String>,
-    toolhead: Option<String>,
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-enum TestActiveTray {
-    Ams {
-        global_tray_id: i64,
-        ams_id: String,
-        tray_id: String,
-    },
-    AmsHt {
-        global_tray_id: Option<u64>,
-        ams_id: String,
-        tray_id: String,
-    },
-    External {
-        external_id: String,
-        tray_id: String,
-        global_tray_id: Option<u64>,
-    },
 }
 
 #[test]
