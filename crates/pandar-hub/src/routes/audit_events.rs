@@ -3,8 +3,10 @@ use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
 };
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::{Number, Value};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
@@ -31,6 +33,41 @@ struct AuditEventResponse {
     target_id: Option<String>,
     metadata: Value,
     created_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+enum AuditMetadata {
+    Object(BTreeMap<String, AuditMetadata>),
+    Array(Vec<AuditMetadata>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
+}
+
+impl AuditMetadata {
+    fn empty_object() -> Self {
+        Self::Object(BTreeMap::new())
+    }
+
+    fn redacted(self) -> Self {
+        match self {
+            Self::Object(map) => Self::Object(
+                map.into_iter()
+                    .filter_map(|(key, value)| {
+                        (!is_forbidden_audit_metadata_key(&key)).then(|| (key, value.redacted()))
+                    })
+                    .collect(),
+            ),
+            Self::Array(values) => Self::Array(values.into_iter().map(Self::redacted).collect()),
+            other => other,
+        }
+    }
+
+    fn into_response_value(self) -> Value {
+        serde_json::to_value(self).unwrap_or_else(|_| Value::Object(Default::default()))
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -74,38 +111,18 @@ pub(in crate::routes) async fn list_audit_events(
 }
 
 fn audit_metadata(metadata_json: &str, event_id: &str) -> Value {
-    let metadata = match serde_json::from_str::<Value>(metadata_json) {
-        Ok(Value::Object(map)) => Value::Object(map),
-        Ok(_) => Value::Object(Map::new()),
+    let metadata = match serde_json::from_str::<AuditMetadata>(metadata_json) {
+        Ok(AuditMetadata::Object(map)) => AuditMetadata::Object(map),
+        Ok(_) => AuditMetadata::empty_object(),
         Err(err) => {
             let error = anyhow::Error::new(err).context(format!(
                 "failed to parse audit metadata for event {event_id}"
             ));
             tracing::error!(error = %format!("{error:#}"), "invalid persisted audit metadata");
-            Value::Object(Map::new())
+            AuditMetadata::empty_object()
         }
     };
-    redact_audit_metadata(metadata)
-}
-
-fn redact_audit_metadata(value: Value) -> Value {
-    match value {
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .filter_map(|(key, value)| {
-                    if is_forbidden_audit_metadata_key(&key) {
-                        None
-                    } else {
-                        Some((key, redact_audit_metadata(value)))
-                    }
-                })
-                .collect(),
-        ),
-        Value::Array(values) => {
-            Value::Array(values.into_iter().map(redact_audit_metadata).collect())
-        }
-        other => other,
-    }
+    metadata.redacted().into_response_value()
 }
 
 fn is_forbidden_audit_metadata_key(key: &str) -> bool {
