@@ -1,7 +1,14 @@
 use super::*;
 use pandar_core::AgentId;
+use requests::{
+    PrinterControlRequest, diagnose_printer_body, diagnose_printer_with_access_code_body,
+    discover_printers_body, discover_printers_timeout_string_body, empty_body, move_axis,
+    printer_control_body, printer_control_value,
+};
 use serde::Deserialize;
 use tokio::sync::mpsc;
+
+mod requests;
 
 #[derive(Debug, Deserialize)]
 struct TenantResponse {
@@ -98,7 +105,7 @@ async fn discover_printers_requires_operator_role() {
             "/api/v1/tenants/{}/agents/{}/discover-printers",
             tenant.id, agent.id
         ),
-        Some(json!({ "timeout_seconds": 5 })),
+        discover_printers_body(5),
         &token,
     )
     .await;
@@ -116,8 +123,8 @@ async fn discover_printers_rejects_invalid_timeout_payloads() {
     let agent_id = decode::<AgentResponse>(agent).id;
 
     for payload in [
-        json!({ "timeout_seconds": 0 }),
-        json!({ "timeout_seconds": 16 }),
+        discover_printers_body(0).unwrap(),
+        discover_printers_body(16).unwrap(),
     ] {
         let (status, body) = request_as(
             app.clone(),
@@ -139,7 +146,7 @@ async fn discover_printers_rejects_invalid_timeout_payloads() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/discover-printers"),
-        Some(json!({ "timeout_seconds": "bad" })),
+        discover_printers_timeout_string_body("bad"),
         &token,
     )
     .await;
@@ -199,7 +206,7 @@ async fn discover_printers_defaults_timeout_audits_and_wakes_agent() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/discover-printers"),
-        Some(json!({})),
+        empty_body(),
         &token,
     )
     .await;
@@ -270,10 +277,7 @@ async fn diagnose_printer_rejects_access_code_payload() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/diagnose-printer"),
-        Some(json!({
-            "serial_number": "BAMBU123",
-            "access_code": access_code
-        })),
+        diagnose_printer_with_access_code_body("BAMBU123", access_code),
         &token,
     )
     .await;
@@ -313,7 +317,7 @@ async fn diagnose_printer_enqueues_redacted_payload_audits_and_wakes_agent() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/diagnose-printer"),
-        Some(json!({ "serial_number": "BAMBU123" })),
+        diagnose_printer_body("BAMBU123"),
         &token,
     )
     .await;
@@ -425,7 +429,7 @@ async fn discover_printers_wakes_agent_on_sibling_instance() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/discover-printers"),
-        Some(json!({ "timeout_seconds": 5 })),
+        discover_printers_body(5),
         &token,
     )
     .await;
@@ -470,7 +474,7 @@ async fn diagnose_printer_wakes_agent_on_sibling_instance() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/diagnose-printer"),
-        Some(json!({ "serial_number": "BAMBU123" })),
+        diagnose_printer_body("BAMBU123"),
         &token,
     )
     .await;
@@ -516,7 +520,7 @@ async fn printer_control_requires_operator_role() {
             "/api/v1/tenants/{}/printers/{printer_id}/controls",
             tenant.id
         ),
-        Some(json!({ "action": "pause" })),
+        printer_control_body(PrinterControlRequest::action("pause")),
         &token,
     )
     .await;
@@ -564,7 +568,7 @@ async fn printer_control_enqueues_audits_and_wakes_owning_agent() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls"),
-        Some(json!({ "action": "set_print_speed", "speed_mode": 4 })),
+        printer_control_body(PrinterControlRequest::set_print_speed(4)),
         &token,
     )
     .await;
@@ -621,7 +625,7 @@ async fn printer_control_rejects_unknown_model_before_command_or_audit_insert() 
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls"),
-        Some(json!({ "action": "pause" })),
+        printer_control_body(PrinterControlRequest::action("pause")),
         &token,
     )
     .await;
@@ -698,7 +702,7 @@ async fn printer_control_wakes_owning_agent_not_sibling() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls"),
-        Some(json!({ "action": "resume" })),
+        printer_control_body(PrinterControlRequest::action("resume")),
         &token,
     )
     .await;
@@ -742,31 +746,30 @@ async fn printer_control_rejects_invalid_action_and_speed_payloads() {
     .unwrap();
 
     for payload in [
-        json!({ "action": "dance" }),
-        json!({ "action": "set_print_speed" }),
-        json!({ "action": "set_print_speed", "speed_mode": 0 }),
-        json!({ "action": "set_print_speed", "speed_mode": 5 }),
-        json!({ "action": "select_extruder" }),
-        json!({ "action": "select_extruder", "extruder_id": 2 }),
-        json!({ "action": "pause", "speed_mode": 2 }),
-        json!({ "action": "pause", "raw_command": "M400" }),
-        json!({ "action": "move_axes", "movements": [] }),
-        json!({
-            "action": "move_axes",
-            "movements": [{ "axis": "x", "delta_mm": 0.0 }]
-        }),
-        json!({
-            "action": "move_axes",
-            "movements": [{ "axis": "a", "delta_mm": 5.0 }]
-        }),
-        json!({
-            "action": "move_axes",
-            "movements": [
-                { "axis": "x", "delta_mm": 5.0 },
-                { "axis": "x", "delta_mm": 6.0 }
-            ]
-        }),
-        json!({ "action": "set_hotend_temperature", "temperature_celsius": 301 }),
+        printer_control_value(PrinterControlRequest::action("dance")),
+        printer_control_value(PrinterControlRequest::action("set_print_speed")),
+        printer_control_value(PrinterControlRequest::set_print_speed(0)),
+        printer_control_value(PrinterControlRequest::set_print_speed(5)),
+        printer_control_value(PrinterControlRequest::action("select_extruder")),
+        printer_control_value(PrinterControlRequest::select_extruder(2)),
+        printer_control_value(PrinterControlRequest::action("pause").with_speed_mode(2)),
+        printer_control_value(PrinterControlRequest::action("pause").with_raw_command("M400")),
+        printer_control_value(PrinterControlRequest::move_axes(Vec::new(), None)),
+        printer_control_value(PrinterControlRequest::move_axes(
+            vec![move_axis("x", 0.0)],
+            None,
+        )),
+        printer_control_value(PrinterControlRequest::move_axes(
+            vec![move_axis("a", 5.0)],
+            None,
+        )),
+        printer_control_value(PrinterControlRequest::move_axes(
+            vec![move_axis("x", 5.0), move_axis("x", 6.0)],
+            None,
+        )),
+        printer_control_value(PrinterControlRequest::set_hotend_temperature(
+            301, None, None,
+        )),
     ] {
         let (status, body) = request_as(
             app.clone(),
@@ -804,49 +807,47 @@ async fn printer_control_accepts_semantic_home_move_and_hotend_operations() {
     .unwrap();
 
     for (payload, expected_type) in [
-        (json!({ "action": "home", "axes": ["x", "z"] }), "home"),
         (
-            json!({
-                "action": "move_axes",
-                "movements": [
-                    { "axis": "x", "delta_mm": 10.0 },
-                    { "axis": "z", "delta_mm": -1.0 }
-                ],
-                "feedrate_mm_per_min": 1200
-            }),
+            printer_control_value(PrinterControlRequest::home(vec!["x", "z"])),
+            "home",
+        ),
+        (
+            printer_control_value(PrinterControlRequest::move_axes(
+                vec![move_axis("x", 10.0), move_axis("z", -1.0)],
+                Some(1200),
+            )),
             "move_axes",
         ),
         (
-            json!({
-                "action": "set_hotend_temperature",
-                "temperature_celsius": 215,
-                "wait": true,
-                "extruder_id": 1
-            }),
+            printer_control_value(PrinterControlRequest::set_hotend_temperature(
+                215,
+                Some(true),
+                Some(1),
+            )),
             "set_hotend_temperature",
         ),
         (
-            json!({
-                "action": "set_bed_temperature",
-                "temperature_celsius": 75
-            }),
+            printer_control_value(PrinterControlRequest::set_temperature(
+                "set_bed_temperature",
+                75,
+            )),
             "set_bed_temperature",
         ),
         (
-            json!({
-                "action": "set_chamber_temperature",
-                "temperature_celsius": 45
-            }),
+            printer_control_value(PrinterControlRequest::set_temperature(
+                "set_chamber_temperature",
+                45,
+            )),
             "set_chamber_temperature",
         ),
         (
-            json!({
-                "action": "set_chamber_light",
-                "light_on": true
-            }),
+            printer_control_value(PrinterControlRequest::set_chamber_light(true)),
             "set_chamber_light",
         ),
-        (json!({ "action": "toggle_light" }), "toggle_light"),
+        (
+            printer_control_value(PrinterControlRequest::action("toggle_light")),
+            "toggle_light",
+        ),
     ] {
         let (status, body) = request_as(
             app.clone(),
