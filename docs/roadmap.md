@@ -42,6 +42,7 @@
 - Replaced Agent MQTT `project_file` command payload construction with a serializable struct instead of manually assembling a JSON object map.
 - Replaced Agent MQTT control command payload construction with serializable structs for info, pushall, print controls, light control, AMS RFID/load/unload, and temperature/G-code operations.
 - Replaced Agent material snapshot normalization input parsing with typed serde structs for AMS reports, units, trays, external spools, and dual-nozzle/external-slot detection.
+- Replaced Agent material-normalization tray bitmask and power-state test fixtures with typed serde report builders instead of inline JSON objects.
 - Replaced fixed-shape Agent link-printer and print-project command result JSON construction with serializable structs.
 - Replaced fixed-shape networking plugin ticket/no-auth request bodies and local webserver/callback response JSON construction with serializable structs.
 - Replaced Hub printer-operation audit metadata construction with typed serializable metadata structs instead of ad hoc JSON maps.

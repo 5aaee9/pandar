@@ -120,16 +120,11 @@ fn absent_or_null_report_materials_emit_no_patch() {
 
 #[test]
 fn tray_exist_bits_integer_and_hex_clear_missing_normal_ams_slots() {
-    for bits in [json!(5), json!("0x5")] {
-        let patch = material_patch(
-            normalize(json!({
-                "print": {"ams": {
-                    "tray_exist_bits": bits,
-                    "ams": [{"id": 0, "tray": [{"id": 0}, {"id": 2}]}]
-                }}
-            }))
-            .unwrap(),
-        );
+    for report in [
+        tray_exist_bits_integer_report(),
+        tray_exist_bits_hex_report(),
+    ] {
+        let patch = material_patch(normalize(report).unwrap());
 
         let unit = &patch.ams_units[0];
         let trays = &unit.trays;
@@ -154,18 +149,7 @@ fn tray_exist_bits_integer_and_hex_clear_missing_normal_ams_slots() {
 
 #[test]
 fn tray_exist_bits_absent_slots_override_stale_tray_objects() {
-    let patch = material_patch(
-        normalize(json!({
-            "print": {"ams": {
-                "tray_exist_bits": 1,
-                "ams": [{"id": 0, "tray": [
-                    {"id": 0, "tray_info_idx": "GFL05"},
-                    {"id": 1, "tray_info_idx": "GFL99", "tray_color": "#ff0000"}
-                ]}]
-            }}
-        }))
-        .unwrap(),
-    );
+    let patch = material_patch(normalize(absent_slots_override_report()).unwrap());
 
     let slot_one = patch.ams_units[0]
         .trays
@@ -179,18 +163,7 @@ fn tray_exist_bits_absent_slots_override_stale_tray_objects() {
 
 #[test]
 fn tray_exist_bits_use_global_tray_bits_across_ams_units() {
-    let patch = material_patch(
-        normalize(json!({
-            "print": {"ams": {
-                "tray_exist_bits": "0x0f",
-                "ams": [
-                    {"id": 0, "tray": [{"id": 0}, {"id": 1}, {"id": 2}, {"id": 3}]},
-                    {"id": 1, "tray": [{"id": 0, "tray_info_idx": "GFL99"}]}
-                ]
-            }}
-        }))
-        .unwrap(),
-    );
+    let patch = material_patch(normalize(global_tray_bits_report()).unwrap());
 
     let unit_zero = &patch.ams_units[0];
     assert_eq!(unit_zero.replace_trays, Some(true));
@@ -207,28 +180,10 @@ fn tray_exist_bits_use_global_tray_bits_across_ams_units() {
 
 #[test]
 fn power_off_zero_bitmask_skips_clears_but_non_zero_still_cleans_up() {
-    let zero = material_patch(
-        normalize(json!({
-            "print": {"ams": {
-                "power_on_flag": false,
-                "tray_exist_bits": 0,
-                "ams": [{"id": 0, "tray": [{"id": 0}]}]
-            }}
-        }))
-        .unwrap(),
-    );
+    let zero = material_patch(normalize(power_off_zero_bitmask_report()).unwrap());
     assert_eq!(zero.ams_units[0].trays.len(), 1);
 
-    let non_zero = material_patch(
-        normalize(json!({
-            "print": {"ams": {
-                "power_on_flag": false,
-                "tray_exist_bits": "0x1",
-                "ams": [{"id": 0, "tray": [{"id": 0}]}]
-            }}
-        }))
-        .unwrap(),
-    );
+    let non_zero = material_patch(normalize(power_off_non_zero_bitmask_report()).unwrap());
     assert_eq!(non_zero.ams_units[0].trays.len(), 4);
 }
 

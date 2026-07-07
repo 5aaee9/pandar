@@ -1,5 +1,9 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
+
+mod types;
+
+pub(super) use types::*;
 
 #[derive(Serialize)]
 struct MaterialReport<'a> {
@@ -19,6 +23,10 @@ struct MaterialPrint<'a> {
 struct MaterialAms<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     tray_now: Option<Scalar<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tray_exist_bits: Option<Scalar<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    power_on_flag: Option<bool>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     ams: Vec<MaterialAmsUnit<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -84,82 +92,6 @@ struct ExternalTray<'a> {
 enum Scalar<'a> {
     Str(&'a str),
     U32(u32),
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-pub(super) struct TestMaterialPatch {
-    #[serde(rename = "type")]
-    pub(super) document_type: String,
-    #[serde(default)]
-    pub(super) ams_units: Vec<TestAmsUnit>,
-    pub(super) external_spools: Option<Vec<TestExternalSpool>>,
-    pub(super) replace_external_spools: Option<bool>,
-    pub(super) active_tray: Option<TestActiveTray>,
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-pub(super) struct TestAmsUnit {
-    pub(super) unit_id: String,
-    pub(super) unit_kind: String,
-    #[serde(default)]
-    pub(super) trays: Vec<TestAmsTray>,
-    pub(super) replace_trays: Option<bool>,
-    pub(super) humidity: Option<f64>,
-    pub(super) humidity_level: Option<f64>,
-    pub(super) temperature_celsius: Option<f64>,
-    pub(super) toolhead: Option<String>,
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-pub(super) struct TestAmsTray {
-    pub(super) tray_id: String,
-    pub(super) exists: Option<bool>,
-    pub(super) global_tray_id: Option<u64>,
-    pub(super) filament_id: Option<String>,
-    pub(super) setting_id: Option<String>,
-    #[serde(rename = "type")]
-    pub(super) material_type: Option<String>,
-    pub(super) name: Option<String>,
-    pub(super) color: Option<String>,
-    pub(super) multi_color: Option<Vec<String>>,
-    pub(super) remaining_estimate: Option<String>,
-    pub(super) k_value: Option<String>,
-    pub(super) state: Option<String>,
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-pub(super) struct TestExternalSpool {
-    pub(super) external_id: String,
-    pub(super) exists: Option<bool>,
-    pub(super) tray_id: String,
-    pub(super) setting_id: Option<String>,
-    pub(super) filament_id: Option<String>,
-    #[serde(rename = "type")]
-    pub(super) material_type: Option<String>,
-    pub(super) name: Option<String>,
-    pub(super) color: Option<String>,
-    pub(super) remaining_estimate: Option<String>,
-    pub(super) toolhead: Option<String>,
-}
-
-#[derive(Debug, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub(super) enum TestActiveTray {
-    Ams {
-        global_tray_id: i64,
-        ams_id: String,
-        tray_id: String,
-    },
-    AmsHt {
-        global_tray_id: Option<u64>,
-        ams_id: String,
-        tray_id: String,
-    },
-    External {
-        external_id: String,
-        tray_id: String,
-        global_tray_id: Option<u64>,
-    },
 }
 
 pub(super) fn full_ams_snapshot_report() -> Value {
@@ -265,6 +197,127 @@ pub(super) fn partial_material_update_report() -> Value {
         humidity_raw: None,
         temp: None,
     }))
+}
+
+pub(super) fn tray_exist_bits_integer_report() -> Value {
+    tray_exist_bits_report(Scalar::U32(5))
+}
+
+pub(super) fn tray_exist_bits_hex_report() -> Value {
+    tray_exist_bits_report(Scalar::Str("0x5"))
+}
+
+pub(super) fn absent_slots_override_report() -> Value {
+    value(MaterialReport {
+        print: MaterialPrint {
+            ams: MaterialAms {
+                tray_exist_bits: Some(Scalar::U32(1)),
+                ams: vec![MaterialAmsUnit {
+                    id: Scalar::U32(0),
+                    tray: vec![
+                        MaterialTray {
+                            id: Some(Scalar::U32(0)),
+                            tray_info_idx: Some("GFL05"),
+                            ..Default::default()
+                        },
+                        MaterialTray {
+                            id: Some(Scalar::U32(1)),
+                            tray_info_idx: Some("GFL99"),
+                            tray_color: Some("#ff0000"),
+                            ..Default::default()
+                        },
+                    ],
+                    info: None,
+                    humidity: None,
+                    humidity_raw: None,
+                    temp: None,
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    })
+}
+
+pub(super) fn global_tray_bits_report() -> Value {
+    value(MaterialReport {
+        print: MaterialPrint {
+            ams: MaterialAms {
+                tray_exist_bits: Some(Scalar::Str("0x0f")),
+                ams: vec![
+                    MaterialAmsUnit {
+                        id: Scalar::U32(0),
+                        tray: vec![
+                            tray_with_id(Scalar::U32(0)),
+                            tray_with_id(Scalar::U32(1)),
+                            tray_with_id(Scalar::U32(2)),
+                            tray_with_id(Scalar::U32(3)),
+                        ],
+                        info: None,
+                        humidity: None,
+                        humidity_raw: None,
+                        temp: None,
+                    },
+                    MaterialAmsUnit {
+                        id: Scalar::U32(1),
+                        tray: vec![MaterialTray {
+                            id: Some(Scalar::U32(0)),
+                            tray_info_idx: Some("GFL99"),
+                            ..Default::default()
+                        }],
+                        info: None,
+                        humidity: None,
+                        humidity_raw: None,
+                        temp: None,
+                    },
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    })
+}
+
+pub(super) fn power_off_zero_bitmask_report() -> Value {
+    power_off_report(Scalar::U32(0))
+}
+
+pub(super) fn power_off_non_zero_bitmask_report() -> Value {
+    power_off_report(Scalar::Str("0x1"))
+}
+
+fn tray_exist_bits_report(bits: Scalar<'_>) -> Value {
+    value(MaterialReport {
+        print: MaterialPrint {
+            ams: MaterialAms {
+                tray_exist_bits: Some(bits),
+                ams: vec![MaterialAmsUnit {
+                    id: Scalar::U32(0),
+                    tray: vec![tray_with_id(Scalar::U32(0)), tray_with_id(Scalar::U32(2))],
+                    info: None,
+                    humidity: None,
+                    humidity_raw: None,
+                    temp: None,
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    })
+}
+
+fn power_off_report(bits: Scalar<'_>) -> Value {
+    value(MaterialReport {
+        print: MaterialPrint {
+            ams: MaterialAms {
+                power_on_flag: Some(false),
+                tray_exist_bits: Some(bits),
+                ams: vec![unit_with_tray(Scalar::U32(0), Scalar::U32(0))],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    })
 }
 
 fn ams_unit_pair_report(
