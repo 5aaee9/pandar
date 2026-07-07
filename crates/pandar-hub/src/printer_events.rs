@@ -47,15 +47,15 @@ pub struct PrinterEventPrinter {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrinterEventMaterials {
-    pub ams_units: Value,
-    pub external_spools: Value,
-    pub active_tray: Option<Value>,
+    pub ams_units: PrinterEventMaterialJson,
+    pub external_spools: PrinterEventMaterialJson,
+    pub active_tray: Option<PrinterEventMaterialJson>,
     pub observed_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-enum PrinterEventMaterialJson {
+pub enum PrinterEventMaterialJson {
     Object(BTreeMap<String, PrinterEventMaterialJson>),
     Array(Vec<PrinterEventMaterialJson>),
     String(String),
@@ -106,8 +106,8 @@ pub fn printer_event_printer(
 impl From<MaterialSnapshot> for PrinterEventMaterials {
     fn from(snapshot: MaterialSnapshot) -> Self {
         Self {
-            ams_units: scrub_material_json(snapshot.ams_units),
-            external_spools: scrub_material_json(snapshot.external_spools),
+            ams_units: material_json(snapshot.ams_units).scrubbed(),
+            external_spools: material_json(snapshot.external_spools).scrubbed(),
             active_tray: snapshot.active_tray.map(scrub_material_json),
             observed_at: snapshot.observed_at,
         }
@@ -132,11 +132,13 @@ impl From<CommandRecord> for PrinterEventCommand {
     }
 }
 
-fn scrub_material_json(value: Value) -> Value {
+fn scrub_material_json(value: Value) -> PrinterEventMaterialJson {
+    material_json(value).scrubbed()
+}
+
+fn material_json(value: Value) -> PrinterEventMaterialJson {
     serde_json::from_value::<PrinterEventMaterialJson>(value)
         .expect("printer material JSON is representable")
-        .scrubbed()
-        .into_value()
 }
 
 impl PrinterEventMaterialJson {
@@ -152,10 +154,6 @@ impl PrinterEventMaterialJson {
             ),
             value => value,
         }
-    }
-
-    fn into_value(self) -> Value {
-        serde_json::to_value(self).expect("printer material JSON is serializable")
     }
 }
 

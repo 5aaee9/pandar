@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Hub printer-event material response fields with a typed recursive serde enum so event material payloads scrub and serialize without exposing raw `Value` fields.
 - Replaced Agent BRTC upload chunk test expected payloads with typed serde structs instead of handwritten `json!` objects.
 - Replaced Agent fake MQTT command echo parsing with typed command and sequence-id fields instead of `Value` scalar probes.
 - Replaced Agent MQTT `project_file` AMS mapping parsing with typed serde mapping structs instead of parsing into `Value` arrays and probing scalar fields manually.

@@ -132,7 +132,8 @@ async fn printer_snapshot_event_includes_latest_materials() {
     };
     assert_eq!(printer.id, printer_id);
     let materials = printer.materials.unwrap();
-    let ams_units: Vec<TestMaterialUnit> = serde_json::from_value(materials.ams_units).unwrap();
+    let ams_units: Vec<TestMaterialUnit> =
+        serde_json::from_value(serde_json::to_value(materials.ams_units).unwrap()).unwrap();
     assert_eq!(
         ams_units,
         vec![TestMaterialUnit {
