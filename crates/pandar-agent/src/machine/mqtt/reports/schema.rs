@@ -45,7 +45,7 @@ pub(super) enum NumericValue {
 pub(super) enum DiagnosticValue {
     Object(DiagnosticObject),
     String(String),
-    Other(Value),
+    Other(ReportJson),
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,7 +53,7 @@ pub(super) enum DiagnosticValue {
 pub(super) enum HmsValue {
     Array(Vec<HmsValue>),
     Object(DiagnosticObject),
-    Other(Value),
+    Other(ReportJson),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,7 +73,18 @@ pub(super) struct DiagnosticObject {
     #[serde(default)]
     info: Option<String>,
     #[serde(flatten)]
-    extra: BTreeMap<String, Value>,
+    extra: BTreeMap<String, ReportJson>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub(super) enum ReportJson {
+    Object(BTreeMap<String, ReportJson>),
+    Array(Vec<ReportJson>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -95,8 +106,8 @@ impl DiagnosticValue {
         match self {
             Self::Object(object) => object.message(),
             Self::String(raw) => trimmed_string(Some(raw)),
-            Self::Other(Value::Null) => None,
-            Self::Other(value) => Some(value.to_string()).filter(|message| !message.is_empty()),
+            Self::Other(ReportJson::Null) => None,
+            Self::Other(value) => json_text(value),
         }
     }
 
@@ -147,4 +158,10 @@ fn trimmed_string(value: Option<&str>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+fn json_text(value: &impl Serialize) -> Option<String> {
+    serde_json::to_string(value)
+        .ok()
+        .filter(|message| !message.is_empty())
 }
