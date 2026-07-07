@@ -896,6 +896,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced the shared Hub route-test tenant fixture helper's response id extraction with typed serde deserialization instead of direct `Value` field indexing.
 - Replaced BRTC control JSON wrapping with a typed flattened serde wrapper and changed fixed redaction test assertions to typed map deserialization.
 - Replaced Hub job-create invalid material mapping test case splitting with explicit typed test cases instead of extracting fields from temporary `Value` objects.
+- Replaced Hub material snapshot merge internals with typed serde unit/tray/external-spool state structs, leaving only open-ended material attributes in flattened maps.
 
 Exit criteria:
 

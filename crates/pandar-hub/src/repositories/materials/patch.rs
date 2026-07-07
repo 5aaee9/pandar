@@ -67,44 +67,26 @@ pub(super) struct MaterialExternalSpoolPatch {
 }
 
 impl MaterialUnitPatch {
-    pub(super) fn object_without_control_fields(&self) -> Value {
-        let mut object = self.fields.clone();
-        insert_optional_string(&mut object, "unit_id", self.unit_id.as_deref());
-        Value::Object(object)
+    pub(super) fn fields_with_nulls(&self) -> Map<String, Value> {
+        self.fields.clone()
     }
 
-    pub(super) fn value_without_null_fields(&self) -> Value {
+    pub(super) fn fields_without_nulls_for_new_unit(&self) -> Map<String, Value> {
         let mut object = self.fields.clone();
-        insert_optional_string(&mut object, "unit_id", self.unit_id.as_deref());
         if self.replace_trays {
             object.insert("replace_trays".to_owned(), Value::Bool(true));
         }
-        if let Some(trays) = &self.trays {
-            object.insert(
-                "trays".to_owned(),
-                Value::Array(
-                    trays
-                        .iter()
-                        .map(MaterialTrayPatch::value_without_null_fields)
-                        .collect(),
-                ),
-            );
-        }
-        Value::Object(object_without_null_fields(object))
+        object_without_null_fields(object)
     }
 }
 
 impl MaterialTrayPatch {
-    pub(super) fn value_with_null_fields(&self) -> Value {
-        let mut object = self.fields.clone();
-        insert_optional_string(&mut object, "tray_id", self.tray_id.as_deref());
-        Value::Object(object)
+    pub(super) fn fields_with_nulls(&self) -> Map<String, Value> {
+        self.fields.clone()
     }
 
-    pub(super) fn value_without_null_fields(&self) -> Value {
-        let mut object = self.fields.clone();
-        insert_optional_string(&mut object, "tray_id", self.tray_id.as_deref());
-        Value::Object(object_without_null_fields(object))
+    pub(super) fn fields_without_nulls(&self) -> Map<String, Value> {
+        object_without_null_fields(self.fields.clone())
     }
 }
 
@@ -113,18 +95,12 @@ impl MaterialExternalSpoolPatch {
         Some((self.external_id.clone()?, self.tray_id.clone()?))
     }
 
-    pub(super) fn value_with_null_fields(&self) -> Value {
-        let mut object = self.fields.clone();
-        insert_optional_string(&mut object, "external_id", self.external_id.as_deref());
-        insert_optional_string(&mut object, "tray_id", self.tray_id.as_deref());
-        Value::Object(object)
+    pub(super) fn fields_with_nulls(&self) -> Map<String, Value> {
+        self.fields.clone()
     }
 
-    pub(super) fn value_without_null_fields(&self) -> Value {
-        let mut object = self.fields.clone();
-        insert_optional_string(&mut object, "external_id", self.external_id.as_deref());
-        insert_optional_string(&mut object, "tray_id", self.tray_id.as_deref());
-        Value::Object(object_without_null_fields(object))
+    pub(super) fn fields_without_nulls(&self) -> Map<String, Value> {
+        object_without_null_fields(self.fields.clone())
     }
 }
 
@@ -234,12 +210,6 @@ where
         Value::Null => Presence::Null,
         value => Presence::Value(filter_sensitive(&value)),
     })
-}
-
-fn insert_optional_string(object: &mut Map<String, Value>, key: &str, value: Option<&str>) {
-    if let Some(value) = value {
-        object.insert(key.to_owned(), Value::String(value.to_owned()));
-    }
 }
 
 fn object_without_null_fields(object: Map<String, Value>) -> Map<String, Value> {
