@@ -1,8 +1,11 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use pandar_core::{CommandRecord, Printer, PrinterNozzleTemperature, TenantId};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Number, Value};
 use tokio::sync::{Mutex, broadcast};
 
 use crate::{
@@ -48,6 +51,17 @@ pub struct PrinterEventMaterials {
     pub external_spools: Value,
     pub active_tray: Option<Value>,
     pub observed_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+enum PrinterEventMaterialJson {
+    Object(BTreeMap<String, PrinterEventMaterialJson>),
+    Array(Vec<PrinterEventMaterialJson>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -119,16 +133,29 @@ impl From<CommandRecord> for PrinterEventCommand {
 }
 
 fn scrub_material_json(value: Value) -> Value {
-    match value {
-        Value::Array(values) => Value::Array(values.into_iter().map(scrub_material_json).collect()),
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .filter_map(|(key, value)| {
-                    (!credential_key(&key)).then(|| (key, scrub_material_json(value)))
-                })
-                .collect(),
-        ),
-        value => value,
+    serde_json::from_value::<PrinterEventMaterialJson>(value)
+        .expect("printer material JSON is representable")
+        .scrubbed()
+        .into_value()
+}
+
+impl PrinterEventMaterialJson {
+    fn scrubbed(self) -> Self {
+        match self {
+            Self::Array(values) => Self::Array(values.into_iter().map(Self::scrubbed).collect()),
+            Self::Object(map) => Self::Object(
+                map.into_iter()
+                    .filter_map(|(key, value)| {
+                        (!credential_key(&key)).then(|| (key, value.scrubbed()))
+                    })
+                    .collect(),
+            ),
+            value => value,
+        }
+    }
+
+    fn into_value(self) -> Value {
+        serde_json::to_value(self).expect("printer material JSON is serializable")
     }
 }
 
