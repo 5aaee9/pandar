@@ -1,11 +1,16 @@
-use serde_json::json;
-
 use super::*;
 use crate::machine::MachineSnapshot;
 
+mod fixtures;
+
+use fixtures::*;
+
 #[test]
 fn report_maps_to_snapshot_uses_configured_model() {
-    let report = json!({"print": {"gcode_state": "RUNNING"}});
+    let report = report_with_print(SnapshotPrintFixture {
+        gcode_state: Some(ScalarFixture::Text("RUNNING")),
+        ..Default::default()
+    });
 
     assert_eq!(
         snapshot_from_report(&endpoint(), &report),
@@ -28,10 +33,12 @@ fn report_maps_to_snapshot_uses_configured_model() {
 
 #[test]
 fn report_maps_chamber_light_state_to_snapshot() {
-    let report = json!({
-        "print": {
-            "lights_report": [{"node": "chamber_light", "mode": "on"}]
-        }
+    let report = report_with_print(SnapshotPrintFixture {
+        lights_report: vec![LightReportFixture {
+            node: "chamber_light",
+            mode: "on",
+        }],
+        ..Default::default()
     });
 
     assert_eq!(
@@ -46,24 +53,30 @@ fn report_maps_to_snapshot_without_configured_model() {
     endpoint.model = None;
 
     assert_eq!(
-        snapshot_from_report(&endpoint, &json!({"print": {"gcode_state": "RUNNING"}})).model,
+        snapshot_from_report(
+            &endpoint,
+            &report_with_print(SnapshotPrintFixture {
+                gcode_state: Some(ScalarFixture::Text("RUNNING")),
+                ..Default::default()
+            })
+        )
+        .model,
         None,
     );
 }
 
 #[test]
 fn report_maps_temperatures_to_snapshot() {
-    let report = json!({
-        "print": {
-            "gcode_state": "RUNNING",
-            "nozzle_temper": 41,
-            "nozzle_target_temper": 220,
-            "nozzle_temper2": 42,
-            "nozzle_target_temper2": 230,
-            "bed_temper": 60,
-            "bed_target_temper": 65,
-            "chamber_temper": 32
-        }
+    let report = report_with_print(SnapshotPrintFixture {
+        gcode_state: Some(ScalarFixture::Text("RUNNING")),
+        nozzle_temper: Some(41),
+        nozzle_target_temper: Some(220),
+        nozzle_temper2: Some(42),
+        nozzle_target_temper2: Some(230),
+        bed_temper: Some(60),
+        bed_target_temper: Some(65),
+        chamber_temper: Some(32),
+        ..Default::default()
     });
 
     let snapshot = snapshot_from_report(&endpoint(), &report);
@@ -89,33 +102,50 @@ fn report_maps_temperatures_to_snapshot() {
 
 #[test]
 fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
-    let report = json!({
-        "print": {
-            "gcode_state": "RUNNING",
-            "device": {
-                "bed_temp": (65 << 16) | 60,
-                "ctc": {
-                    "state": 1,
-                    "info": {
-                        "temp": (45 << 16) | 32
-                    }
+    let report = report_with_print(SnapshotPrintFixture {
+        gcode_state: Some(ScalarFixture::Text("RUNNING")),
+        device: Some(DeviceFixture {
+            bed_temp: Some((65 << 16) | 60),
+            ctc: Some(CtcFixture {
+                state: 1,
+                info: TemperatureInfoFixture {
+                    temp: (45 << 16) | 32,
                 },
-                "extruder": {
-                    "state": 0x0012,
-                    "info": [
-                        {"id": 0, "info": 8, "temp": (220 << 16) | 27},
-                        {"id": 1, "info": 8, "temp": (215 << 16) | 22}
-                    ]
-                },
-                "nozzle": {
-                    "exist": 3,
-                    "info": [
-                        {"id": 0, "diameter": 0.4, "type": "XS01", "stat": 0},
-                        {"id": 1, "diameter": 0.6, "type": "XS00", "stat": 0}
-                    ]
-                }
-            }
-        }
+            }),
+            extruder: Some(ExtruderFixture {
+                state: 0x0012,
+                info: vec![
+                    ExtruderInfoFixture {
+                        id: 0,
+                        info: Some(8),
+                        temp: (220 << 16) | 27,
+                    },
+                    ExtruderInfoFixture {
+                        id: 1,
+                        info: Some(8),
+                        temp: (215 << 16) | 22,
+                    },
+                ],
+            }),
+            nozzle: Some(NozzleFixture {
+                exist: 3,
+                info: vec![
+                    NozzleInfoFixture {
+                        id: 0,
+                        diameter: 0.4,
+                        kind: "XS01",
+                        stat: 0,
+                    },
+                    NozzleInfoFixture {
+                        id: 1,
+                        diameter: 0.6,
+                        kind: "XS00",
+                        stat: 0,
+                    },
+                ],
+            }),
+        }),
+        ..Default::default()
     });
 
     let snapshot = snapshot_from_report(&endpoint(), &report);
@@ -162,18 +192,15 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
 
 #[test]
 fn report_maps_bambu_studio_v2_active_right_nozzle_to_snapshot() {
-    let report = json!({
-        "print": {
-            "device": {
-                "extruder": {
-                    "state": 0x0002,
-                    "info": [
-                        {"id": 0, "temp": 27},
-                        {"id": 1, "temp": 22}
-                    ]
-                }
-            }
-        }
+    let report = report_with_print(SnapshotPrintFixture {
+        device: Some(DeviceFixture {
+            extruder: Some(ExtruderFixture {
+                state: 0x0002,
+                info: extruder_temperatures(27, 22),
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
     });
 
     let snapshot = snapshot_from_report(&endpoint(), &report);
@@ -183,18 +210,15 @@ fn report_maps_bambu_studio_v2_active_right_nozzle_to_snapshot() {
 
 #[test]
 fn report_ignores_bambu_studio_v2_target_nozzle_for_active_snapshot() {
-    let report = json!({
-        "print": {
-            "device": {
-                "extruder": {
-                    "state": 0x0102,
-                    "info": [
-                        {"id": 0, "temp": 27},
-                        {"id": 1, "temp": 22}
-                    ]
-                }
-            }
-        }
+    let report = report_with_print(SnapshotPrintFixture {
+        device: Some(DeviceFixture {
+            extruder: Some(ExtruderFixture {
+                state: 0x0102,
+                info: extruder_temperatures(27, 22),
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
     });
 
     let snapshot = snapshot_from_report(&endpoint(), &report);
@@ -204,28 +228,41 @@ fn report_ignores_bambu_studio_v2_target_nozzle_for_active_snapshot() {
 
 #[test]
 fn report_state_falls_back_to_print_state() {
-    let report = json!({"print": {"state": "READY"}});
+    let report = report_with_print(SnapshotPrintFixture {
+        state: Some(ScalarFixture::Text("READY")),
+        ..Default::default()
+    });
 
     assert_eq!(snapshot_from_report(&endpoint(), &report).state, "READY");
 }
 
 #[test]
 fn report_state_falls_back_to_root_state() {
-    let report = json!({"state": "IDLE"});
+    let report = value(SnapshotReportFixture {
+        state: Some(ScalarFixture::Text("IDLE")),
+        ..Default::default()
+    });
 
     assert_eq!(snapshot_from_report(&endpoint(), &report).state, "IDLE");
 }
 
 #[test]
 fn report_state_skips_non_string_candidates() {
-    let report = json!({"print": {"gcode_state": 123, "state": "READY"}});
+    let report = report_with_print(SnapshotPrintFixture {
+        gcode_state: Some(ScalarFixture::Number(123)),
+        state: Some(ScalarFixture::Text("READY")),
+        ..Default::default()
+    });
 
     assert_eq!(snapshot_from_report(&endpoint(), &report).state, "READY");
 }
 
 #[test]
 fn report_state_defaults_to_unknown() {
-    let report = json!({"print": {"gcode_state": 123}});
+    let report = report_with_print(SnapshotPrintFixture {
+        gcode_state: Some(ScalarFixture::Number(123)),
+        ..Default::default()
+    });
 
     assert_eq!(snapshot_from_report(&endpoint(), &report).state, "unknown");
 }
@@ -236,7 +273,7 @@ fn report_name_defaults_to_serial() {
     endpoint.name = None;
 
     assert_eq!(
-        snapshot_from_report(&endpoint, &json!({})).name,
+        snapshot_from_report(&endpoint, &value(SnapshotReportFixture::default())).name,
         "01S00EXAMPLE"
     );
 }
