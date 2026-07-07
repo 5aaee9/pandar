@@ -228,7 +228,7 @@ where
                 .next_report(report_timeout)
                 .await
                 .context("wait for MQTT get_version report")?;
-            if let Some(report) = parse_get_version_report(&report) {
+            if let Some(report) = parse_get_version_report(report) {
                 return model_from_get_version_report(report);
             }
         }
@@ -256,12 +256,18 @@ struct GetVersionModule {
     product_name: Option<String>,
 }
 
-fn parse_get_version_report(report: &Value) -> Option<GetVersionReport> {
-    let report = serde_json::from_value::<GetVersionReport>(report.clone()).ok()?;
-    if report.info.as_ref()?.command.as_deref() == Some("get_version") {
+fn parse_get_version_report(report: Value) -> Option<GetVersionReport> {
+    let report = serde_json::from_value::<GetVersionReport>(report).ok()?;
+    if report.is_get_version() {
         Some(report)
     } else {
         None
+    }
+}
+
+impl GetVersionReport {
+    fn is_get_version(&self) -> bool {
+        self.info.as_ref().and_then(|info| info.command.as_deref()) == Some("get_version")
     }
 }
 
