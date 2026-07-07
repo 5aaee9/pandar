@@ -6,12 +6,12 @@ pub mod installer;
 mod local_webserver;
 mod studio_status;
 
-use serde::Serialize;
-use serde_json::Value;
+use serde::{Serialize, de::DeserializeOwned};
 
 use gcode::{PrinterOperation, operation_json_from_gcode};
 use http::{
-    PrintSubmissionBody, get_json, plugin_printer_operation_url, post_json, post_multipart_print,
+    AmsMapping, AmsMapping2, AmsMappingInfo, PrintSubmissionBody, get_json,
+    plugin_printer_operation_url, post_json, post_multipart_print,
 };
 
 pub const PLUGIN_NAME: &str = "pandar-network-plugin";
@@ -182,9 +182,10 @@ pub extern "C" fn pandar_plugin_submit_print(
     if artifact_len == 0 {
         return invalid_input("artifact_empty");
     }
-    let ams_mapping = parse_optional_json(ams_mapping_ptr, ams_mapping_len);
-    let ams_mapping2 = parse_optional_json(ams_mapping2_ptr, ams_mapping2_len);
-    let ams_mapping_info = parse_optional_json(ams_mapping_info_ptr, ams_mapping_info_len);
+    let ams_mapping = parse_optional_json::<AmsMapping>(ams_mapping_ptr, ams_mapping_len);
+    let ams_mapping2 = parse_optional_json::<AmsMapping2>(ams_mapping2_ptr, ams_mapping2_len);
+    let ams_mapping_info =
+        parse_optional_json::<AmsMappingInfo>(ams_mapping_info_ptr, ams_mapping_info_len);
 
     post_multipart_print(
         &format!("{hub_url}/api/v1/plugin/prints"),
@@ -350,7 +351,7 @@ fn read_utf8(ptr: *const u8, len: usize) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn parse_optional_json(ptr: *const u8, len: usize) -> Option<Value> {
+fn parse_optional_json<T: DeserializeOwned>(ptr: *const u8, len: usize) -> Option<T> {
     let value = read_utf8(ptr, len)?;
     if value.trim().is_empty() {
         return None;

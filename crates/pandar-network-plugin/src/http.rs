@@ -1,6 +1,7 @@
 use futures_util::TryStreamExt;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::Number;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use super::{
@@ -80,9 +81,39 @@ pub(super) struct PrintSubmissionBody {
     pub(super) use_ams: bool,
     pub(super) flow_cali: bool,
     pub(super) timelapse: bool,
-    pub(super) ams_mapping: Option<Value>,
-    pub(super) ams_mapping2: Option<Value>,
-    pub(super) ams_mapping_info: Option<Value>,
+    pub(super) ams_mapping: Option<AmsMapping>,
+    pub(super) ams_mapping2: Option<AmsMapping2>,
+    pub(super) ams_mapping_info: Option<AmsMappingInfo>,
+}
+
+pub(super) type AmsMapping = Vec<i64>;
+pub(super) type AmsMapping2 = Vec<AmsMapping2Entry>;
+pub(super) type AmsMappingInfo = Vec<AmsMappingInfoEntry>;
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct AmsMapping2Entry {
+    ams_id: i64,
+    slot_id: i64,
+}
+
+#[derive(Deserialize, Serialize)]
+pub(super) struct AmsMappingInfoEntry {
+    #[serde(rename = "nozzleId")]
+    nozzle_id: i64,
+    #[serde(flatten)]
+    extra: BTreeMap<String, AmsMappingInfoValue>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(untagged)]
+enum AmsMappingInfoValue {
+    Object(BTreeMap<String, AmsMappingInfoValue>),
+    Array(Vec<AmsMappingInfoValue>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
 }
 
 enum PrintSubmissionError {
@@ -122,13 +153,13 @@ pub(super) fn post_multipart_print(
             .text("flow_cali", body.flow_cali.to_string())
             .text("timelapse", body.timelapse.to_string());
         if let Some(ams_mapping) = body.ams_mapping {
-            form = form.text("ams_mapping", ams_mapping.to_string());
+            form = form.text("ams_mapping", multipart_json_text(&ams_mapping));
         }
         if let Some(ams_mapping2) = body.ams_mapping2 {
-            form = form.text("ams_mapping2", ams_mapping2.to_string());
+            form = form.text("ams_mapping2", multipart_json_text(&ams_mapping2));
         }
         if let Some(ams_mapping_info) = body.ams_mapping_info {
-            form = form.text("ams_mapping_info", ams_mapping_info.to_string());
+            form = form.text("ams_mapping_info", multipart_json_text(&ams_mapping_info));
         }
         let request = reqwest::Client::new()
             .post(url)
@@ -143,6 +174,10 @@ pub(super) fn post_multipart_print(
         Err(PrintSubmissionError::LocalArtifact) => invalid_input("artifact_missing"),
         Err(PrintSubmissionError::Request) => network_error(),
     }
+}
+
+fn multipart_json_text(value: &impl Serialize) -> String {
+    serde_json::to_string(value).expect("multipart mapping payload is serializable")
 }
 
 fn response_result(response: reqwest::Response, kind: RequestKind) -> PluginHttpResult {
