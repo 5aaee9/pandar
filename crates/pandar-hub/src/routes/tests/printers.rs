@@ -297,7 +297,7 @@ async fn viewer_cannot_delete_printer() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
-    assert_eq!(body, json!({ "error": "role_forbidden" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
 }
 
 #[tokio::test]

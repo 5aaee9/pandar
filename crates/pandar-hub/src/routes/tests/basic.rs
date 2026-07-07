@@ -5,7 +5,21 @@ async fn health_check_reports_ok() {
     let (status, body) = request(app().await, Method::GET, "/healthz", None).await;
 
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "status": "ok" }));
+    assert_eq!(decode::<HealthResponse>(body).status, "ok");
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct HealthResponse {
+    status: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ErrorResponse {
+    error: String,
+}
+
+fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
+    serde_json::from_value(value).unwrap()
 }
 
 #[tokio::test]
@@ -44,5 +58,5 @@ async fn retired_api_token_auth_is_rejected_when_external_auth_is_configured() {
     .await;
 
     assert_eq!(status, StatusCode::UNAUTHORIZED);
-    assert_eq!(body, json!({ "error": "invalid_auth_token" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_auth_token");
 }

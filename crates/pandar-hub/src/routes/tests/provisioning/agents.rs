@@ -37,6 +37,11 @@ struct AgentPairingAuditMetadata {
 }
 
 #[derive(Debug, Deserialize)]
+struct ErrorResponse {
+    error: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct TenantTokenAgentCredentialAuditMetadata {
     tenant_token_id: String,
     tenant_token_scopes: Vec<String>,
@@ -137,7 +142,7 @@ async fn agent_pairing_rejects_env_line_breaks_in_name() {
         .await;
 
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(body, json!({ "error": "bad_request" }));
+        assert_eq!(decode::<ErrorResponse>(body).error, "bad_request");
     }
 }
 

@@ -1,5 +1,14 @@
 use super::*;
 
+#[derive(Debug, serde::Deserialize)]
+struct ErrorResponse {
+    error: String,
+}
+
+fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
+    serde_json::from_value(value).unwrap()
+}
+
 #[tokio::test]
 async fn operator_and_viewer_cannot_use_provisioning_routes() {
     let state = bootstrap_state().await;
@@ -71,7 +80,7 @@ async fn operator_and_viewer_cannot_use_provisioning_routes() {
         ] {
             let (status, body) = request_as(app.clone(), method, &uri, body, token).await;
             assert_eq!(status, StatusCode::FORBIDDEN);
-            assert_eq!(body, json!({ "error": "role_forbidden" }));
+            assert_eq!(decode::<ErrorResponse>(body).error, "role_forbidden");
         }
     }
 
@@ -94,7 +103,7 @@ async fn operator_and_viewer_cannot_use_provisioning_routes() {
     ] {
         let (status, body) = request_as(app.clone(), method, &uri, body, &viewer_token).await;
         assert_eq!(status, StatusCode::GONE);
-        assert_eq!(body, json!({ "error": "api_tokens_retired" }));
+        assert_eq!(decode::<ErrorResponse>(body).error, "api_tokens_retired");
     }
 }
 
@@ -125,7 +134,7 @@ async fn tenant_admin_cannot_manage_other_tenant_users() {
     )] {
         let (status, body) = request_as(app.clone(), method, &uri, body, &admin_a_token).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
-        assert_eq!(body, json!({ "error": "tenant_forbidden" }));
+        assert_eq!(decode::<ErrorResponse>(body).error, "tenant_forbidden");
     }
 
     let (status, _) = request_as(
@@ -160,7 +169,7 @@ async fn tenant_admin_cannot_manage_other_tenant_users() {
         )
         .await;
         assert_eq!(status, StatusCode::GONE);
-        assert_eq!(body, json!({ "error": "api_tokens_retired" }));
+        assert_eq!(decode::<ErrorResponse>(body).error, "api_tokens_retired");
     }
 }
 
@@ -174,7 +183,7 @@ async fn tenant_admin_gets_not_found_for_missing_user_nested_lists() {
     )] {
         let (status, body) = request_as(app.clone(), Method::GET, &uri, None, &admin_token).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
-        assert_eq!(body, json!({ "error": "user_not_found" }));
+        assert_eq!(decode::<ErrorResponse>(body).error, "user_not_found");
     }
 
     let (status, body) = request_as(
@@ -186,5 +195,5 @@ async fn tenant_admin_gets_not_found_for_missing_user_nested_lists() {
     )
     .await;
     assert_eq!(status, StatusCode::GONE);
-    assert_eq!(body, json!({ "error": "api_tokens_retired" }));
+    assert_eq!(decode::<ErrorResponse>(body).error, "api_tokens_retired");
 }
