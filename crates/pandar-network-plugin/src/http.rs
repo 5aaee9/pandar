@@ -1,4 +1,5 @@
 use futures_util::TryStreamExt;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -37,7 +38,7 @@ pub(super) fn get_json(
 pub(super) fn post_json(
     url: &str,
     token: Option<&str>,
-    body: Value,
+    body: impl Serialize,
     kind: RequestKind,
 ) -> PluginHttpResult {
     match runtime().block_on(async {
@@ -87,6 +88,11 @@ pub(super) struct PrintSubmissionBody {
 enum PrintSubmissionError {
     LocalArtifact,
     Request,
+}
+
+#[derive(Deserialize)]
+struct HubErrorBody {
+    error: Option<String>,
 }
 
 pub(super) fn post_multipart_print(
@@ -154,9 +160,9 @@ fn response_result(response: reqwest::Response, kind: RequestKind) -> PluginHttp
 }
 
 fn redact_hub_error(kind: RequestKind, http_code: u32, body: &str) -> String {
-    let hub_error = serde_json::from_str::<Value>(body)
+    let hub_error = serde_json::from_str::<HubErrorBody>(body)
         .ok()
-        .and_then(|body| body.get("error").and_then(Value::as_str).map(str::to_owned));
+        .and_then(|body| body.error);
     let error = match (http_code, hub_error.as_deref()) {
         (401, _) if matches!(kind, RequestKind::TicketExchange) => "invalid_plugin_ticket",
         (401, _) => "invalid_auth_token",

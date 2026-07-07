@@ -7,7 +7,8 @@ use std::{
 };
 
 use rust_embed::RustEmbed;
-use serde_json::{Value, json};
+use serde::Deserialize;
+use serde_json::json;
 use uuid::Uuid;
 
 use crate::{PluginHttpResult, result, stable_error_body};
@@ -36,6 +37,14 @@ struct LocalWebserverConfig {
     using_default_hub_server: bool,
     user_selected: bool,
     config_nonce: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateConfigRequest {
+    web_url: String,
+    hub_url: String,
+    config_nonce: Option<String>,
 }
 
 struct LocalWebserver {
@@ -241,26 +250,18 @@ fn update_config(
     {
         return local_json_response(400, stable_error_body("bad_request"));
     }
-    let Ok(body) = serde_json::from_str::<Value>(&request.body) else {
+    let Ok(body) = serde_json::from_str::<UpdateConfigRequest>(&request.body) else {
         return local_json_response(400, stable_error_body("invalid_target_server"));
     };
-    let Some(web_url) = body
-        .get("webUrl")
-        .and_then(Value::as_str)
-        .and_then(|value| normalize_target_url(value.to_owned()))
-    else {
+    let Some(web_url) = normalize_target_url(body.web_url) else {
         return local_json_response(400, stable_error_body("invalid_target_server"));
     };
-    let Some(hub_url) = body
-        .get("hubUrl")
-        .and_then(Value::as_str)
-        .and_then(|value| normalize_target_url(value.to_owned()))
-    else {
+    let Some(hub_url) = normalize_target_url(body.hub_url) else {
         return local_json_response(400, stable_error_body("invalid_target_server"));
     };
 
     let mut config = config.lock().expect("local webserver config");
-    if body.get("configNonce").and_then(Value::as_str) != Some(config.config_nonce.as_str()) {
+    if body.config_nonce.as_deref() != Some(config.config_nonce.as_str()) {
         return local_json_response(400, stable_error_body("bad_request"));
     }
     config.web_url = web_url;

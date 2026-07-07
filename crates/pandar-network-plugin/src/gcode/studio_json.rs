@@ -1,98 +1,150 @@
-use serde_json::{Value, json};
+use serde::Deserialize;
 
-use super::valid_operation_json;
+use super::PrinterOperation;
 
-pub(super) fn parse_studio_json_operation(value: &Value) -> Option<Value> {
-    if let Some(system) = value.get("system") {
-        return match system.get("command")?.as_str()? {
-            "ledctrl" => parse_studio_ledctrl_operation(system),
-            _ => None,
+#[derive(Deserialize)]
+struct StudioMessage {
+    system: Option<StudioSystem>,
+    print: Option<StudioPrint>,
+}
+
+#[derive(Deserialize)]
+struct StudioSystem {
+    command: String,
+    led_node: Option<String>,
+    led_mode: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct StudioPrint {
+    command: String,
+    param: Option<StudioU64>,
+    extruder_index: Option<StudioU64>,
+    target_temp: Option<StudioU64>,
+    temp: Option<StudioU64>,
+    ctt_val: Option<StudioU64>,
+    ams_id: Option<StudioU64>,
+    slot_id: Option<StudioU64>,
+    target: Option<StudioU64>,
+    extruder_id: Option<StudioU64>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum StudioU64 {
+    Number(u64),
+    String(String),
+}
+
+pub(super) fn parse_studio_json_operation(message: &str) -> Option<PrinterOperation> {
+    serde_json::from_str::<StudioMessage>(message)
+        .ok()?
+        .operation()
+}
+
+impl StudioMessage {
+    fn operation(self) -> Option<PrinterOperation> {
+        if let Some(system) = self.system {
+            return system.operation();
+        }
+        self.print?.operation()
+    }
+}
+
+impl StudioSystem {
+    fn operation(self) -> Option<PrinterOperation> {
+        if self.command != "ledctrl" {
+            return None;
+        }
+        if !matches!(
+            self.led_node.as_deref(),
+            Some("chamber_light" | "chamber_light2")
+        ) {
+            return None;
+        }
+
+        let light_on = match self.led_mode.as_deref()? {
+            "on" => true,
+            "off" => false,
+            _ => return None,
         };
+        Some(PrinterOperation::SetChamberLight { light_on })
     }
-
-    parse_studio_print_operation(value.get("print")?)
 }
 
-fn parse_studio_ledctrl_operation(system: &Value) -> Option<Value> {
-    let node = system.get("led_node")?.as_str()?;
-    if !matches!(node, "chamber_light" | "chamber_light2") {
-        return None;
+impl StudioPrint {
+    fn operation(self) -> Option<PrinterOperation> {
+        let operation = match self.command.as_str() {
+            "pause" => PrinterOperation::Pause,
+            "resume" => PrinterOperation::Resume,
+            "stop" => PrinterOperation::Stop,
+            "print_speed" => PrinterOperation::SetPrintSpeed {
+                speed_mode: field_u64(&self.param)?,
+            },
+            "select_extruder" => PrinterOperation::SelectExtruder {
+                extruder_id: field_u64(&self.extruder_index)?,
+            },
+            "set_nozzle_temp" => PrinterOperation::SetHotendTemperature {
+                temperature_celsius: field_u64(&self.target_temp)?,
+                wait: Some(false),
+                extruder_id: Some(field_u64(&self.extruder_index)?),
+            },
+            "set_bed_temp" => PrinterOperation::SetBedTemperature {
+                temperature_celsius: field_u64(&self.temp)?,
+                wait: Some(false),
+            },
+            "set_ctt" => PrinterOperation::SetChamberTemperature {
+                temperature_celsius: field_u64(&self.ctt_val)?,
+                wait: Some(false),
+            },
+            "ams_get_rfid" => PrinterOperation::AmsRereadRfid {
+                ams_id: field_u64(&self.ams_id)?,
+                slot_id: field_u64(&self.slot_id)?,
+            },
+            "ams_change_filament" => self.ams_change_filament_operation()?,
+            _ => return None,
+        };
+        operation.is_valid().then_some(operation)
     }
 
-    let light_on = match system.get("led_mode")?.as_str()? {
-        "on" => true,
-        "off" => false,
-        _ => return None,
-    };
-    Some(json!({ "action": "set_chamber_light", "light_on": light_on }))
-}
+    fn ams_change_filament_operation(&self) -> Option<PrinterOperation> {
+        let ams_id = field_u64(&self.ams_id)?;
+        let slot_id = field_u64(&self.slot_id)?;
+        let target = field_u64(&self.target)?;
+        let extruder_id = optional_field_u64(&self.extruder_id);
+        if target == 255 && slot_id == 255 {
+            return Some(PrinterOperation::AmsUnloadFilament {
+                ams_id,
+                slot_id,
+                global_tray_id: None,
+                external_id: None,
+                extruder_id,
+            });
+        }
 
-fn parse_studio_print_operation(print: &Value) -> Option<Value> {
-    match print.get("command")?.as_str()? {
-        "pause" => Some(json!({ "action": "pause" })),
-        "resume" => Some(json!({ "action": "resume" })),
-        "stop" => Some(json!({ "action": "stop" })),
-        "print_speed" => Some(json!({
-            "action": "set_print_speed",
-            "speed_mode": parse_json_u64(print.get("param")?)?,
-        })),
-        "select_extruder" => Some(json!({
-            "action": "select_extruder",
-            "extruder_id": parse_json_u64(print.get("extruder_index")?)?,
-        })),
-        "set_nozzle_temp" => Some(json!({
-            "action": "set_hotend_temperature",
-            "temperature_celsius": parse_json_u64(print.get("target_temp")?)?,
-            "wait": false,
-            "extruder_id": parse_json_u64(print.get("extruder_index")?)?,
-        })),
-        "set_bed_temp" => Some(json!({
-            "action": "set_bed_temperature",
-            "temperature_celsius": parse_json_u64(print.get("temp")?)?,
-            "wait": false,
-        })),
-        "set_ctt" => Some(json!({
-            "action": "set_chamber_temperature",
-            "temperature_celsius": parse_json_u64(print.get("ctt_val")?)?,
-            "wait": false,
-        })),
-        "ams_get_rfid" => Some(json!({
-            "action": "ams_reread_rfid",
-            "ams_id": parse_json_u64(print.get("ams_id")?)?,
-            "slot_id": parse_json_u64(print.get("slot_id")?)?,
-        })),
-        "ams_change_filament" => parse_studio_ams_change_filament_operation(print),
-        _ => None,
+        Some(PrinterOperation::AmsLoadFilament {
+            ams_id,
+            slot_id,
+            global_tray_id: Some(target),
+            external_id: None,
+            extruder_id,
+        })
     }
-    .filter(valid_operation_json)
 }
 
-fn parse_studio_ams_change_filament_operation(print: &Value) -> Option<Value> {
-    let ams_id = parse_json_u64(print.get("ams_id")?)?;
-    let slot_id = parse_json_u64(print.get("slot_id")?)?;
-    let target = parse_json_u64(print.get("target")?)?;
-    let mut body = if target == 255 && slot_id == 255 {
-        serde_json::Map::from_iter([
-            ("action".to_owned(), json!("ams_unload_filament")),
-            ("ams_id".to_owned(), json!(ams_id)),
-            ("slot_id".to_owned(), json!(slot_id)),
-        ])
-    } else {
-        serde_json::Map::from_iter([
-            ("action".to_owned(), json!("ams_load_filament")),
-            ("ams_id".to_owned(), json!(ams_id)),
-            ("slot_id".to_owned(), json!(slot_id)),
-            ("global_tray_id".to_owned(), json!(target)),
-        ])
-    };
-    if let Some(extruder_id) = print.get("extruder_id").and_then(parse_json_u64) {
-        body.insert("extruder_id".to_owned(), json!(extruder_id));
+impl StudioU64 {
+    fn as_u64(&self) -> Option<u64> {
+        match self {
+            Self::Number(value) => Some(*value),
+            Self::String(value) => value.parse().ok(),
+        }
     }
-    Some(Value::Object(body))
 }
 
-fn parse_json_u64(value: &Value) -> Option<u64> {
-    value
-        .as_u64()
-        .or_else(|| value.as_str()?.parse::<u64>().ok())
+fn field_u64(value: &Option<StudioU64>) -> Option<u64> {
+    value.as_ref().and_then(StudioU64::as_u64)
+}
+
+fn optional_field_u64(value: &Option<StudioU64>) -> Option<u64> {
+    value.as_ref().and_then(StudioU64::as_u64)
 }

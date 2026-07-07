@@ -8,7 +8,7 @@ mod studio_status;
 
 use serde_json::{Value, json};
 
-use gcode::{operation_json_from_gcode, valid_operation_json};
+use gcode::{PrinterOperation, operation_json_from_gcode};
 use http::{
     PrintSubmissionBody, get_json, plugin_printer_operation_url, post_json, post_multipart_print,
 };
@@ -228,8 +228,7 @@ pub extern "C" fn pandar_plugin_submit_printer_operation(
         return invalid_input("invalid_printer_id");
     };
     let Some(operation) = read_utf8(operation_json_ptr, operation_json_len)
-        .and_then(|body| serde_json::from_str::<Value>(&body).ok())
-        .filter(valid_operation_json)
+        .and_then(|body| PrinterOperation::from_json(&body))
     else {
         return invalid_input("invalid_printer_operation");
     };
@@ -254,7 +253,11 @@ pub extern "C" fn pandar_plugin_operation_json_from_gcode(
         return invalid_input("unsupported_printer_operation");
     };
     match operation_json_from_gcode(&message) {
-        Some(operation) => result(0, 200, operation.to_string()),
+        Some(operation) => result(
+            0,
+            200,
+            serde_json::to_string(&operation).expect("printer operation is serializable"),
+        ),
         None => invalid_input("unsupported_printer_operation"),
     }
 }
