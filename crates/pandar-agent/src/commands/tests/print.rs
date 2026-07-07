@@ -7,11 +7,12 @@ use super::{assert_failure_contains, test_config};
 use crate::{
     commands::{
         ArtifactReader, FilesystemArtifactReader, ack_event, handle_command_with_gateway,
-        handle_command_with_reader, success_event,
+        handle_command_with_reader,
     },
     machine::{
-        BambuMachineGateway, MaterialRefreshResult, PrinterRefreshResult,
-        diagnostics::PrinterDiagnosticResult, discovery::PrinterDiscoveryResult,
+        BambuMachineGateway, MaterialRefreshResult, PrintProjectDispatchResult,
+        PrinterRefreshResult, diagnostics::PrinterDiagnosticResult,
+        discovery::PrinterDiscoveryResult,
     },
     protocol::agent::v1::{AgentEvent, HubCommand, PrintProjectFile, agent_event, hub_command},
 };
@@ -40,10 +41,7 @@ async fn print_project_file_reads_artifact_reader_and_emits_ack_success() {
         receiver.recv().await.unwrap(),
         ack_event(&config, &command_id)
     );
-    assert_eq!(
-        receiver.recv().await.unwrap(),
-        success_event(&config, &command_id)
-    );
+    assert_print_success(receiver.recv().await.unwrap(), &command_id);
     assert!(receiver.recv().await.is_none());
     assert_eq!(
         gateway.prints.lock().await.as_slice(),
@@ -227,10 +225,7 @@ async fn filesystem_artifact_reader_reads_relative_path_under_configured_root() 
         receiver.recv().await.unwrap(),
         ack_event(&config, &command_id)
     );
-    assert_eq!(
-        receiver.recv().await.unwrap(),
-        success_event(&config, &command_id)
-    );
+    assert_print_success(receiver.recv().await.unwrap(), &command_id);
     assert_eq!(
         gateway.prints.lock().await.as_slice(),
         &[RecordedPrint {
@@ -259,6 +254,7 @@ fn print_command(command_id: String, serial_number: &str, storage_path: &str) ->
             timelapse: true,
             ams_mapping_json: String::new(),
             ams_mapping2_json: String::new(),
+            ams_mapping_info_json: String::new(),
         })),
     }
 }
@@ -271,6 +267,31 @@ fn assert_rejected_ack_contains(event: AgentEvent, command_id: &str, needle: &st
             assert!(ack.error.contains(needle), "{}", ack.error);
         }
         other => panic!("expected command ack, got {other:?}"),
+    }
+}
+
+fn assert_print_success(event: AgentEvent, command_id: &str) {
+    match event.event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert_eq!(result.command_id, command_id);
+            assert!(result.success);
+            assert_eq!(result.error, "");
+            let value: serde_json::Value = serde_json::from_str(&result.result_json).unwrap();
+            assert_eq!(value["type"], "print_project_file");
+            assert_eq!(value["serial_number"], "SERIAL1");
+            assert_eq!(value["job_id"], "job-1");
+            assert_eq!(value["artifact_id"], "artifact-1");
+            assert_eq!(value["uploaded_path"], "plate.gcode.3mf");
+            assert_eq!(value["uploaded_url"], "ftp://plate.gcode.3mf");
+            assert_eq!(value["md5"], "900150983CD24FB0D6963F7D28E17F72");
+            assert_eq!(value["mqtt"]["topic"], "device/SERIAL1/request");
+            assert_eq!(value["mqtt"]["qos"], 0);
+            assert_eq!(
+                value["mqtt"]["payload"],
+                serde_json::json!({"print":{"command":"project_file"}})
+            );
+        }
+        other => panic!("expected command result, got {other:?}"),
     }
 }
 
@@ -412,12 +433,19 @@ impl BambuMachineGateway for FakePrintGateway {
         serial_number: &str,
         command: &PrintProjectFile,
         artifact: Vec<u8>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PrintProjectDispatchResult> {
         self.prints.lock().await.push(RecordedPrint {
             serial_number: serial_number.to_string(),
             job_id: command.job_id.clone(),
             artifact,
         });
-        Ok(())
+        Ok(PrintProjectDispatchResult {
+            topic: format!("device/{serial_number}/request"),
+            payload: serde_json::json!({"print":{"command":"project_file"}}),
+            qos: 0,
+            uploaded_path: "plate.gcode.3mf".to_string(),
+            uploaded_url: "ftp://plate.gcode.3mf".to_string(),
+            md5: "900150983CD24FB0D6963F7D28E17F72".to_string(),
+        })
     }
 }

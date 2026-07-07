@@ -11,6 +11,7 @@ pub(in crate::routes::jobs) struct MultipartPrintFields {
     pub(super) timelapse: Option<bool>,
     pub(super) ams_mapping: Option<Value>,
     pub(super) ams_mapping2: Option<Value>,
+    pub(super) ams_mapping_info: Option<Value>,
     pub(in crate::routes::jobs) file: Option<StagedUpload>,
 }
 

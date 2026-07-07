@@ -112,6 +112,7 @@ mod tests {
                 timelapse: true,
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
+                ams_mapping_info_json: None,
             })
             .await
             .unwrap();
@@ -171,6 +172,7 @@ mod tests {
             timelapse: true,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         };
         let payload_json = serde_json::to_string(&payload).unwrap();
         let crate::db::Database::Sqlite(pool) = state.database() else {

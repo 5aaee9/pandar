@@ -171,17 +171,26 @@ fn optional_job_id(value: &str) -> Result<Option<JobId>, Status> {
     let Some(value) = trim_optional(value.to_string()) else {
         return Ok(None);
     };
-    JobId::parse(&value)
-        .map(Some)
-        .map_err(|_| Status::invalid_argument("job_id must be a UUID"))
+    match JobId::parse(&value) {
+        Ok(job_id) => Ok(Some(job_id)),
+        Err(_) => {
+            tracing::debug!(job_id = %value, "ignoring non-Pandar printer report job_id");
+            Ok(None)
+        }
+    }
 }
 
 fn optional_uuid_string(value: &str, message: &'static str) -> Result<Option<String>, Status> {
     let Some(value) = trim_optional(value.to_string()) else {
         return Ok(None);
     };
-    uuid::Uuid::parse_str(&value).map_err(|_| Status::invalid_argument(message))?;
-    Ok(Some(value))
+    match uuid::Uuid::parse_str(&value) {
+        Ok(_) => Ok(Some(value)),
+        Err(_) => {
+            tracing::debug!(value = %value, %message, "ignoring non-Pandar print report identifier");
+            Ok(None)
+        }
+    }
 }
 
 fn trim_optional(value: String) -> Option<String> {

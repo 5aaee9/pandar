@@ -110,6 +110,8 @@ fn submit_print(hub_url: &[u8], token: &[u8], artifact_path: &[u8]) -> PluginHtt
         0,
         b"".as_ptr(),
         0,
+        b"".as_ptr(),
+        0,
     )
 }
 

@@ -145,6 +145,7 @@ async fn valid_agent_gets_403_for_same_tenant_artifact_assigned_to_another_agent
             timelapse: false,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         })
         .await
         .unwrap();
@@ -292,6 +293,7 @@ async fn artifact_fixture(state: &AppState) -> ArtifactFixture {
             timelapse: false,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         })
         .await
         .unwrap();

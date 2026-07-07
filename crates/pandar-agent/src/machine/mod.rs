@@ -33,7 +33,7 @@ use print::dispatch_print_project_file;
 use transfer::BambuMachineFileTransfer;
 pub use types::{
     BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot, MaterialRefreshResult,
-    PrinterOperationDispatchResult, PrinterRefreshResult,
+    PrintProjectDispatchResult, PrinterOperationDispatchResult, PrinterRefreshResult,
 };
 
 #[async_trait]
@@ -66,7 +66,7 @@ pub trait BambuMachineGateway: Send + Sync {
         serial_number: &str,
         command: &PrintProjectFile,
         artifact: Vec<u8>,
-    ) -> anyhow::Result<()>;
+    ) -> anyhow::Result<PrintProjectDispatchResult>;
     async fn operate_printer(
         &self,
         serial_number: &str,
@@ -187,7 +187,7 @@ where
         serial_number: &str,
         command: &PrintProjectFile,
         artifact: Vec<u8>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PrintProjectDispatchResult> {
         let Some((endpoint, mqtt, transfer)) = self
             .printers
             .iter()

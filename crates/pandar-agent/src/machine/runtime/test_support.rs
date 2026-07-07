@@ -181,7 +181,7 @@ where
         serial_number: &str,
         command: &PrintProjectFile,
         artifact: Vec<u8>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PrintProjectDispatchResult> {
         self.inner
             .lock()
             .await

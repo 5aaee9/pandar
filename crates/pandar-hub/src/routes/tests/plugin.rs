@@ -183,7 +183,7 @@ async fn plugin_no_auth_session_is_only_available_in_no_auth_mode() {
 
     let (status, body) = request_as(app, Method::GET, "/api/v1/plugin/printers", None, token).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "devices": [] }));
+    assert_eq!(body, json!({ "message": "success", "devices": [] }));
 
     let app = router(state().await);
     let (status, body) = request(app, Method::POST, "/api/v1/plugin/no-auth-session", None).await;
@@ -214,7 +214,7 @@ async fn plugin_routes_only_accept_plugin_studio_tokens() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "devices": [] }));
+    assert_eq!(body, json!({ "message": "success", "devices": [] }));
 
     for denied in [&all, &empty, &mixed] {
         let (status, body) = request_as(
@@ -323,6 +323,7 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
         request_as(app, Method::GET, "/api/v1/plugin/printers", None, &token).await;
 
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["message"], "success");
     assert!(body.get("printers").is_none());
     assert_eq!(body["devices"].as_array().unwrap().len(), 1);
     assert_eq!(body["devices"][0]["dev_id"], "studio-printer-1");

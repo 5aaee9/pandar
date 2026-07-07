@@ -43,6 +43,7 @@ pub(super) fn create_input_with_filename(
         timelapse: false,
         ams_mapping_json: None,
         ams_mapping2_json: None,
+        ams_mapping_info_json: None,
     }
 }
 

@@ -47,6 +47,7 @@ pub struct CreatePrintJob {
     pub timelapse: bool,
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
+    pub ams_mapping_info_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,6 +59,7 @@ pub struct DuplicatePrintJob {
     pub timelapse: Option<bool>,
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
+    pub ams_mapping_info_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -166,6 +168,7 @@ impl JobRepository {
             command_status: CommandStatus::Sent,
             job_status: JobStatus::Sent,
             error: None,
+            result_json: None,
             allowed_statuses: &[CommandStatus::Queued],
             action: "send",
         })
@@ -185,6 +188,7 @@ impl JobRepository {
             command_status: CommandStatus::Acknowledged,
             job_status: JobStatus::Acknowledged,
             error: None,
+            result_json: None,
             allowed_statuses: &[CommandStatus::Sent],
             action: "acknowledge",
         })
@@ -205,6 +209,7 @@ impl JobRepository {
             command_status: CommandStatus::Failed,
             job_status: JobStatus::Failed,
             error: Some(error),
+            result_json: None,
             allowed_statuses: &[CommandStatus::Sent, CommandStatus::Acknowledged],
             action: "fail",
         })
@@ -224,6 +229,28 @@ impl JobRepository {
             command_status: CommandStatus::Succeeded,
             job_status: JobStatus::Succeeded,
             error: None,
+            result_json: None,
+            allowed_statuses: &[CommandStatus::Sent, CommandStatus::Acknowledged],
+            action: "succeed",
+        })
+        .await
+    }
+
+    pub async fn mark_print_succeeded_with_result(
+        &self,
+        command_id: CommandId,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        result_json: Option<String>,
+    ) -> RepositoryResult<CommandRecord> {
+        self.transition_print_command(transitions::PrintCommandTransition {
+            command_id,
+            tenant_id,
+            agent_id,
+            command_status: CommandStatus::Succeeded,
+            job_status: JobStatus::Succeeded,
+            error: None,
+            result_json,
             allowed_statuses: &[CommandStatus::Sent, CommandStatus::Acknowledged],
             action: "succeed",
         })

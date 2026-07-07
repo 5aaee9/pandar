@@ -17,6 +17,7 @@ pub struct PrintProjectFilePayload {
     pub timelapse: bool,
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
+    pub ams_mapping_info_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

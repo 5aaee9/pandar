@@ -81,6 +81,7 @@ pub(super) struct PrintSubmissionBody {
     pub(super) timelapse: bool,
     pub(super) ams_mapping: Option<Value>,
     pub(super) ams_mapping2: Option<Value>,
+    pub(super) ams_mapping_info: Option<Value>,
 }
 
 enum PrintSubmissionError {
@@ -119,6 +120,9 @@ pub(super) fn post_multipart_print(
         }
         if let Some(ams_mapping2) = body.ams_mapping2 {
             form = form.text("ams_mapping2", ams_mapping2.to_string());
+        }
+        if let Some(ams_mapping_info) = body.ams_mapping_info {
+            form = form.text("ams_mapping_info", ams_mapping_info.to_string());
         }
         let request = reqwest::Client::new()
             .post(url)

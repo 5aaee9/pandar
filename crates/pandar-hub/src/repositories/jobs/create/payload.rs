@@ -24,6 +24,7 @@ pub(super) fn payload(
         timelapse: input.timelapse,
         ams_mapping_json: input.ams_mapping_json.clone(),
         ams_mapping2_json: input.ams_mapping2_json.clone(),
+        ams_mapping_info_json: input.ams_mapping_info_json.clone(),
     }
 }
 
@@ -47,6 +48,7 @@ pub(super) fn payload_from_existing_artifact(
         timelapse: input.timelapse,
         ams_mapping_json: input.ams_mapping_json.clone(),
         ams_mapping2_json: input.ams_mapping2_json.clone(),
+        ams_mapping_info_json: input.ams_mapping_info_json.clone(),
     }
 }
 

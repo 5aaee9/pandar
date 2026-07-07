@@ -16,7 +16,9 @@ use crate::{
 };
 
 mod payload;
+mod validation;
 use payload::{payload, payload_from_existing_artifact};
+use validation::validate_mapping_json;
 
 pub async fn create_print_job<C>(
     connection: &C,
@@ -27,6 +29,7 @@ where
 {
     validate_mapping_json(&input.ams_mapping_json, "ams_mapping_json")?;
     validate_mapping_json(&input.ams_mapping2_json, "ams_mapping2_json")?;
+    validate_mapping_json(&input.ams_mapping_info_json, "ams_mapping_info_json")?;
     let serial_number = printer_for_agent(connection, &input).await?;
     let now = pandar_core::created_at_now();
     let job_id = JobId::new();
@@ -69,6 +72,7 @@ pub struct NewPrintJobFromArtifact {
     timelapse: bool,
     ams_mapping_json: Option<String>,
     ams_mapping2_json: Option<String>,
+    ams_mapping_info_json: Option<String>,
 }
 
 impl NewPrintJobFromArtifact {
@@ -85,6 +89,7 @@ impl NewPrintJobFromArtifact {
             timelapse: None,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         });
         Self {
             tenant_id: source.job.tenant_id,
@@ -102,6 +107,9 @@ impl NewPrintJobFromArtifact {
             timelapse: overrides.timelapse.unwrap_or(source_payload.timelapse),
             ams_mapping_json: overrides.ams_mapping_json.or(source.job.ams_mapping_json),
             ams_mapping2_json: overrides.ams_mapping2_json.or(source.job.ams_mapping2_json),
+            ams_mapping_info_json: overrides
+                .ams_mapping_info_json
+                .or(source.job.ams_mapping_info_json),
         }
     }
 }
@@ -115,6 +123,7 @@ where
 {
     validate_mapping_json(&input.ams_mapping_json, "ams_mapping_json")?;
     validate_mapping_json(&input.ams_mapping2_json, "ams_mapping2_json")?;
+    validate_mapping_json(&input.ams_mapping_info_json, "ams_mapping_info_json")?;
     let serial_number = printer_for_existing_artifact(connection, &input).await?;
     let now = pandar_core::created_at_now();
     let job_id = JobId::new();
@@ -137,31 +146,6 @@ where
     .await?;
     insert_job_from_existing_artifact(connection, &input, job_id, command_id, &now).await?;
     build_job_from_existing_artifact(input, job_id, command_id, now)
-}
-
-fn validate_mapping_json(value: &Option<String>, field: &'static str) -> RepositoryResult<()> {
-    let Some(value) = value else {
-        return Ok(());
-    };
-    let len = match field {
-        "ams_mapping_json" => serde_json::from_str::<Vec<i32>>(value)
-            .with_context(|| format!("failed to validate {field}"))?
-            .len(),
-        "ams_mapping2_json" => {
-            let entries = serde_json::from_str::<
-                Vec<crate::repositories::jobs::print_reports::usage::Mapping2Entry>,
-            >(value)
-            .with_context(|| format!("failed to validate {field}"))?;
-            entries.len()
-        }
-        _ => unreachable!("validated mapping field should be known"),
-    };
-    if len > 32 {
-        return Err(RepositoryError::Database(anyhow::anyhow!(
-            "{field} must not contain more than 32 entries"
-        )));
-    }
-    Ok(())
 }
 
 async fn printer_for_agent<C>(connection: &C, input: &CreatePrintJob) -> RepositoryResult<String>
@@ -243,6 +227,7 @@ where
         print_status: Set(PrintStatus::Pending.as_str().to_owned()),
         ams_mapping_json: Set(input.ams_mapping_json.clone()),
         ams_mapping2_json: Set(input.ams_mapping2_json.clone()),
+        ams_mapping_info_json: Set(input.ams_mapping_info_json.clone()),
         ..Default::default()
     }
     .insert(connection)
@@ -275,6 +260,7 @@ where
         print_status: Set(PrintStatus::Pending.as_str().to_owned()),
         ams_mapping_json: Set(input.ams_mapping_json.clone()),
         ams_mapping2_json: Set(input.ams_mapping2_json.clone()),
+        ams_mapping_info_json: Set(input.ams_mapping_info_json.clone()),
         ..Default::default()
     }
     .insert(connection)
@@ -326,6 +312,7 @@ fn build_created_job(
             print_updated_at: None,
             ams_mapping_json: input.ams_mapping_json,
             ams_mapping2_json: input.ams_mapping2_json,
+            ams_mapping_info_json: input.ams_mapping_info_json,
             filament_usage: Vec::new(),
             created_at: now.clone(),
             updated_at: now,
@@ -378,6 +365,7 @@ fn build_job_from_existing_artifact(
             print_updated_at: None,
             ams_mapping_json: input.ams_mapping_json,
             ams_mapping2_json: input.ams_mapping2_json,
+            ams_mapping_info_json: input.ams_mapping_info_json,
             filament_usage: Vec::new(),
             created_at: now.clone(),
             updated_at: now,

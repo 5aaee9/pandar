@@ -180,16 +180,13 @@ impl BrtcSession {
             let end = (offset + chunk_size).min(bytes.len());
             let chunk = &bytes[offset..end];
             let last = end == bytes.len();
-            let chunk_request = json!({
-                "cmdtype": BRTC_FILE_UPLOAD_CMD,
-                "sequence": sequence,
-                "req": {
-                    "frag_id": fragment,
-                    "offset": offset,
-                    "size": chunk.len(),
-                    "file_md5": if last { digest_lower.as_str() } else { "" }
-                }
-            });
+            let chunk_request = brtc_upload_chunk_request(
+                sequence,
+                fragment,
+                offset,
+                chunk.len(),
+                last.then_some(digest_lower.as_str()),
+            );
             self.send_abi_json_with_binary(&chunk_request, chunk)
                 .await
                 .with_context(|| {
@@ -314,6 +311,29 @@ fn wrap_ctrl_json(value: &Value) -> anyhow::Result<String> {
     Ok(Value::Object(object).to_string())
 }
 
+fn brtc_upload_chunk_request(
+    sequence: u32,
+    fragment: u32,
+    offset: usize,
+    size: usize,
+    file_md5: Option<&str>,
+) -> Value {
+    let mut request = serde_json::Map::from_iter([
+        ("frag_id".to_owned(), json!(fragment)),
+        ("offset".to_owned(), json!(offset)),
+        ("size".to_owned(), json!(size)),
+    ]);
+    if let Some(file_md5) = file_md5 {
+        request.insert("file_md5".to_owned(), json!(file_md5));
+    }
+
+    json!({
+        "cmdtype": BRTC_FILE_UPLOAD_CMD,
+        "sequence": sequence,
+        "req": request
+    })
+}
+
 fn json_prefix_len(bytes: &[u8]) -> Option<usize> {
     if bytes.first().copied()? != b'{' {
         return None;
@@ -348,18 +368,5 @@ fn json_prefix_len(bytes: &[u8]) -> Option<usize> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn md5_helpers_match_bambu_case_usage() {
-        assert_eq!(md5_lower(b"abc"), "900150983cd24fb0d6963f7d28e17f72");
-        assert_eq!(md5_upper(b"abc"), "900150983CD24FB0D6963F7D28E17F72");
-    }
-
-    #[test]
-    fn json_prefix_stops_before_binary_separator() {
-        let body = br#"{"result":0}"#.iter().copied().chain(b"\n\nabc".iter().copied()).collect::<Vec<_>>();
-        assert_eq!(json_prefix_len(&body), Some(12));
-    }
-}
+#[path = "brtc_test.rs"]
+mod brtc_test;

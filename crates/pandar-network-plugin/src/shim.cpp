@@ -187,6 +187,7 @@ PluginHttpResult pandar_plugin_submit_print(
     bool,
     bool,
     const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t,
     const uint8_t*, std::size_t
 );
 PluginHttpResult pandar_plugin_submit_printer_operation(
@@ -1007,7 +1008,9 @@ PluginHttpResult rust_submit_print(const Agent* agent, const BBL::PrintParams& p
         reinterpret_cast<const uint8_t*>(params.ams_mapping.data()),
         params.ams_mapping.size(),
         reinterpret_cast<const uint8_t*>(params.ams_mapping2.data()),
-        params.ams_mapping2.size()
+        params.ams_mapping2.size(),
+        reinterpret_cast<const uint8_t*>(params.ams_mapping_info.data()),
+        params.ams_mapping_info.size()
     );
 }
 
@@ -1583,6 +1586,7 @@ PANDAR_ABI int bambu_network_report_consent(void*, std::string) {
 PANDAR_ABI int bambu_network_start_print(void* agent, BBL::PrintParams params, BBL::OnUpdateStatusFn update_fn, BBL::WasCancelledFn cancel_fn, BBL::OnWaitFn) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    trace_plugin_event(a, "start_print", params.dev_id);
     refresh_local_webserver_config(a);
     if (cancel_fn && cancel_fn()) return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
     if (a->token.empty() || params.dev_id.empty() || params.filename.empty()) {
@@ -1591,6 +1595,7 @@ PANDAR_ABI int bambu_network_start_print(void* agent, BBL::PrintParams params, B
     }
     auto result = rust_submit_print(a, params);
     std::string body = body_from_result(result);
+    trace_plugin_event(a, std::string("start_print result=") + std::to_string(result.status) + " http=" + std::to_string(result.http_code), params.dev_id);
     if (result.status != 0) {
         a->last_error = body;
         if (update_fn) update_fn(BBL::PrintingStageERROR, BBL::BAMBU_NETWORK_ERR_INVALID_RESULT, body);
@@ -1602,6 +1607,7 @@ PANDAR_ABI int bambu_network_start_print(void* agent, BBL::PrintParams params, B
 }
 
 PANDAR_ABI int bambu_network_start_local_print_with_record(void* agent, BBL::PrintParams params, BBL::OnUpdateStatusFn update_fn, BBL::WasCancelledFn cancel_fn, BBL::OnWaitFn wait_fn) {
+    if (auto* a = as_agent(agent)) trace_plugin_event(a, "start_local_print_with_record", params.dev_id);
     return bambu_network_start_print(agent, std::move(params), std::move(update_fn), std::move(cancel_fn), std::move(wait_fn));
 }
 
@@ -1614,6 +1620,7 @@ PANDAR_ABI int bambu_network_start_send_gcode_to_sdcard(void* agent, BBL::PrintP
 }
 
 PANDAR_ABI int bambu_network_start_local_print(void* agent, BBL::PrintParams params, BBL::OnUpdateStatusFn update_fn, BBL::WasCancelledFn cancel_fn) {
+    if (auto* a = as_agent(agent)) trace_plugin_event(a, "start_local_print", params.dev_id);
     return bambu_network_start_send_gcode_to_sdcard(agent, std::move(params), std::move(update_fn), std::move(cancel_fn), {});
 }
 

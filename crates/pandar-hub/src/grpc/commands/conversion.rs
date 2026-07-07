@@ -144,6 +144,11 @@ pub fn hub_command_from_record_with_options(
                     "ams_mapping2_json",
                     &command_id,
                 )?,
+                ams_mapping_info_json: mapping_payload_string(
+                    payload.ams_mapping_info_json.as_deref(),
+                    "ams_mapping_info_json",
+                    &command_id,
+                )?,
             })
         }
         kind => {

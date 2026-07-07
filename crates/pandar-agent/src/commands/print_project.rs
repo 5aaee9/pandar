@@ -10,7 +10,7 @@ use crate::{
 use super::{
     ArtifactReader,
     artifacts::{CommandArtifactReader, LegacyCommandArtifactReader, PrintCommandArtifactReader},
-    responses::{ack_event, failure_event, rejected_ack_event, success_event},
+    responses::{ack_event, failure_event, rejected_ack_event, success_event_with_result},
 };
 
 pub(super) async fn emit_print_project_file_events<G>(
@@ -97,9 +97,24 @@ where
     .await;
 
     match result {
-        Ok(()) => {
+        Ok(dispatch) => {
+            let result_json = serde_json::json!({
+                "type": "print_project_file",
+                "serial_number": command.serial_number,
+                "job_id": command.job_id,
+                "artifact_id": command.artifact_id,
+                "uploaded_path": dispatch.uploaded_path,
+                "uploaded_url": dispatch.uploaded_url,
+                "md5": dispatch.md5,
+                "mqtt": {
+                    "topic": dispatch.topic,
+                    "qos": dispatch.qos,
+                    "payload": dispatch.payload,
+                },
+            })
+            .to_string();
             sender
-                .send(success_event(config, command_id))
+                .send(success_event_with_result(config, command_id, result_json))
                 .await
                 .context("queue print-project-file command success")?;
         }

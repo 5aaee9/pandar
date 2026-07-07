@@ -83,6 +83,7 @@ fn studio_command_payloads_use_incrementing_studio_sequence_ids() {
                 timelapse: false,
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
+                ams_mapping_info_json: None,
             })
             .payload(),
             "print",
@@ -363,6 +364,7 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
         timelapse: false,
         ams_mapping_json: None,
         ams_mapping2_json: None,
+        ams_mapping_info_json: None,
     })
     .payload();
 
@@ -374,20 +376,34 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
                 "command": "project_file",
                 "sequence_id": sequence_id,
                 "param": "Metadata/plate_2.gcode",
+                "project_id": "0",
+                "profile_id": "0",
+                "task_id": "0",
+                "subtask_id": "0",
+                "subtask_name": "job",
                 "url": "ftp://job.3mf",
                 "file": "job.3mf",
-                "task_id": "task-1",
-                "subtask_id": "subtask-1",
-                "use_ams": true,
+                "md5": "",
+                "bed_type": "auto",
+                "bed_leveling": false,
                 "flow_cali": true,
-                "timelapse": false
+                "vibration_cali": false,
+                "layer_inspect": false,
+                "timelapse": false,
+                "use_ams": true,
+                "ams_mapping": [],
+                "ams_mapping2": [],
+                "auto_bed_leveling": 0,
+                "nozzle_offset_cali": 0,
+                "cfg": "0",
+                "extrude_cali_flag": 0
             }
         })
     );
 }
 
 #[test]
-fn project_file_payload_omits_mapping_keys_when_no_mapping_supplied() {
+fn project_file_payload_defaults_mapping_keys_when_no_mapping_supplied() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
         filename: "job.3mf".to_string(),
         url: None,
@@ -400,11 +416,12 @@ fn project_file_payload_omits_mapping_keys_when_no_mapping_supplied() {
         timelapse: false,
         ams_mapping_json: None,
         ams_mapping2_json: None,
+        ams_mapping_info_json: None,
     })
     .payload();
 
-    assert!(payload["print"].get("ams_mapping").is_none());
-    assert!(payload["print"].get("ams_mapping_2").is_none());
+    assert_eq!(payload["print"]["ams_mapping"], json!([]));
+    assert_eq!(payload["print"]["ams_mapping2"], json!([]));
     assert_eq!(payload["print"]["use_ams"], false);
 }
 
@@ -422,11 +439,12 @@ fn project_file_payload_includes_ams_mapping_only_when_supplied() {
         timelapse: false,
         ams_mapping_json: Some("[0,-1,4]".to_string()),
         ams_mapping2_json: None,
+        ams_mapping_info_json: None,
     })
     .payload();
 
     assert_eq!(payload["print"]["ams_mapping"], json!([0, -1, 4]));
-    assert!(payload["print"].get("ams_mapping_2").is_none());
+    assert_eq!(payload["print"]["ams_mapping2"], json!([]));
     assert_eq!(payload["print"]["use_ams"], true);
 }
 
@@ -444,12 +462,13 @@ fn project_file_payload_includes_ams_mapping2_only_when_supplied() {
         timelapse: false,
         ams_mapping_json: None,
         ams_mapping2_json: Some(r#"[{"ams_id":255,"slot_id":0}]"#.to_string()),
+        ams_mapping_info_json: None,
     })
     .payload();
 
-    assert!(payload["print"].get("ams_mapping").is_none());
+    assert_eq!(payload["print"]["ams_mapping"], json!([]));
     assert_eq!(
-        payload["print"]["ams_mapping_2"],
+        payload["print"]["ams_mapping2"],
         json!([{"ams_id": 255, "slot_id": 0}])
     );
 }
@@ -468,13 +487,18 @@ fn project_file_payload_includes_both_mapping_keys_when_supplied() {
         timelapse: false,
         ams_mapping_json: Some("[0,1]".to_string()),
         ams_mapping2_json: Some(r#"[{"ams_id":0,"slot_id":1}]"#.to_string()),
+        ams_mapping_info_json: Some(r#"[{"nozzleId":0},{"nozzleId":1}]"#.to_string()),
     })
     .payload();
 
     assert_eq!(payload["print"]["ams_mapping"], json!([0, 1]));
     assert_eq!(
-        payload["print"]["ams_mapping_2"],
+        payload["print"]["ams_mapping2"],
         json!([{"ams_id": 0, "slot_id": 1}])
+    );
+    assert_eq!(
+        payload["print"]["ams_mapping_info"],
+        json!([{"nozzleId": 0}, {"nozzleId": 1}])
     );
 }
 
@@ -492,6 +516,7 @@ fn project_file_payload_rewrites_flat_external_mapping_values() {
         timelapse: false,
         ams_mapping_json: Some("[254,255,15]".to_string()),
         ams_mapping2_json: None,
+        ams_mapping_info_json: None,
     })
     .payload();
 

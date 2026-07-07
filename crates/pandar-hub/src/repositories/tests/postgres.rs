@@ -339,6 +339,7 @@ async fn postgres_job_repository_behavior_when_configured() {
             timelapse: false,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         })
         .await
         .unwrap();
@@ -379,6 +380,7 @@ async fn postgres_job_repository_behavior_when_configured() {
             timelapse: false,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         })
         .await
         .unwrap_err();
@@ -431,6 +433,7 @@ async fn postgres_print_report_reconciliation_when_configured() {
             timelapse: false,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         })
         .await
         .unwrap();
@@ -498,6 +501,7 @@ async fn postgres_job_recovery_when_configured() {
             timelapse: false,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         })
         .await
         .unwrap();
@@ -546,6 +550,7 @@ async fn postgres_job_recovery_when_configured() {
             timelapse: false,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         })
         .await
         .unwrap();
@@ -603,6 +608,7 @@ async fn postgres_job_recovery_when_configured() {
                 timelapse: None,
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
+                ams_mapping_info_json: None,
             },
             crate::repositories::AuditActor {
                 actor_type: "system".to_owned(),
@@ -660,6 +666,7 @@ async fn postgres_job_metadata_round_trips_and_reuses_artifact_when_configured()
             timelapse: false,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         })
         .await
         .unwrap();
@@ -726,6 +733,7 @@ async fn postgres_job_metadata_round_trips_and_reuses_artifact_when_configured()
                 timelapse: None,
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
+                ams_mapping_info_json: None,
             },
             crate::repositories::AuditActor {
                 actor_type: "system".to_owned(),

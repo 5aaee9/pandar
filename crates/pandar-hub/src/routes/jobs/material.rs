@@ -8,6 +8,7 @@ use crate::{repositories::RepositoryError, routes::ApiError};
 pub struct JobMaterialResponse {
     ams_mapping: Option<Value>,
     ams_mapping2: Option<Value>,
+    ams_mapping_info: Option<Value>,
     filament_usage: Vec<JobFilamentUsageResponse>,
 }
 
@@ -38,6 +39,7 @@ pub fn mapping_json(value: Option<Value>, field: &'static str) -> Result<Option<
     let valid = match field {
         "ams_mapping" => valid_ams_mapping(&value),
         "ams_mapping2" => valid_ams_mapping2(&value),
+        "ams_mapping_info" => valid_ams_mapping_info(&value),
         _ => unreachable!("validated mapping field should be known"),
     };
     if !valid {
@@ -60,6 +62,11 @@ impl JobMaterialResponse {
                 &job.ams_mapping2_json,
                 "ams_mapping2_json",
                 valid_ams_mapping2,
+            )?,
+            ams_mapping_info: parse_persisted_mapping(
+                &job.ams_mapping_info_json,
+                "ams_mapping_info_json",
+                valid_ams_mapping_info,
             )?,
             filament_usage: job
                 .filament_usage
@@ -113,6 +120,23 @@ fn valid_ams_mapping2(value: &Value) -> bool {
                 return false;
             }
             true
+        })
+}
+
+fn valid_ams_mapping_info(value: &Value) -> bool {
+    let Some(entries) = value.as_array() else {
+        return false;
+    };
+    entries.len() <= 32
+        && entries.iter().all(|entry| {
+            let Some(object) = entry.as_object() else {
+                return false;
+            };
+            object
+                .get("nozzleId")
+                .and_then(Value::as_i64)
+                .and_then(|value| i32::try_from(value).ok())
+                .is_some()
         })
 }
 

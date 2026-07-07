@@ -228,17 +228,30 @@ async fn configured_print_project_file_uploads_and_publishes_project_file() {
                     "command": "project_file",
                     "sequence_id": sequence_id,
                     "param": "Metadata/plate_1.gcode",
+                    "project_id": "0",
+                    "profile_id": "0",
+                    "task_id": "0",
+                    "subtask_id": "0",
+                    "subtask_name": "plate",
                     "url": "ftp://plate.gcode.3mf",
                     "file": "plate.gcode.3mf",
                     "md5": "900150983CD24FB0D6963F7D28E17F72",
-                    "task_id": "job-1",
-                    "subtask_id": "artifact-1",
-                    "use_ams": true,
+                    "bed_type": "auto",
+                    "bed_leveling": false,
                     "flow_cali": false,
-                    "timelapse": true
+                    "vibration_cali": false,
+                    "layer_inspect": false,
+                    "timelapse": true,
+                    "use_ams": true,
+                    "ams_mapping": [],
+                    "ams_mapping2": [],
+                    "auto_bed_leveling": 0,
+                    "nozzle_offset_cali": 0,
+                    "cfg": "0",
+                    "extrude_cali_flag": 0
                 }
             }),
-            qos: BAMBU_MQTT_QOS,
+            qos: 0,
         }]
     );
 }
@@ -1102,6 +1115,7 @@ fn print_project_file() -> PrintProjectFile {
         timelapse: true,
         ams_mapping_json: String::new(),
         ams_mapping2_json: String::new(),
+        ams_mapping_info_json: String::new(),
     }
 }
 

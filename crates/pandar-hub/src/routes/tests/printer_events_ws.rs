@@ -574,6 +574,7 @@ async fn printer_events_websocket_receives_job_progress_from_grpc_stream() {
             timelapse: true,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         })
         .await
         .unwrap();

@@ -29,6 +29,7 @@ pub struct Model {
     pub print_updated_at: Option<String>,
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
+    pub ams_mapping_info_json: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

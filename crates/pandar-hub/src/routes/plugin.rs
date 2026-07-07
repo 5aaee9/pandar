@@ -204,6 +204,7 @@ pub(super) async fn list_printers(
 ) -> Result<Json<PluginPrinterListResponse>, ApiError> {
     let authenticated = auth::authorize_plugin_studio(&state, &headers).await?;
     Ok(Json(PluginPrinterListResponse {
+        message: "success",
         devices: plugin_printer_devices(&state, authenticated.token.tenant_id).await?,
     }))
 }

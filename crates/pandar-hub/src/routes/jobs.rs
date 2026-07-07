@@ -33,6 +33,7 @@ pub struct DuplicateJobRequest {
     timelapse: Option<bool>,
     ams_mapping: Option<Value>,
     ams_mapping2: Option<Value>,
+    ams_mapping_info: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,6 +211,10 @@ pub async fn duplicate(
                 timelapse: payload.timelapse,
                 ams_mapping_json: material::mapping_json(payload.ams_mapping, "ams_mapping")?,
                 ams_mapping2_json: material::mapping_json(payload.ams_mapping2, "ams_mapping2")?,
+                ams_mapping_info_json: material::mapping_json(
+                    payload.ams_mapping_info,
+                    "ams_mapping_info",
+                )?,
             },
             auth::audit_actor(&auth),
         )

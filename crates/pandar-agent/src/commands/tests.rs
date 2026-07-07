@@ -13,7 +13,8 @@ use super::*;
 use crate::{
     machine::{
         BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult,
-        NoopMachineGateway, PrinterOperation as MachinePrinterOperation, PrinterRefreshResult,
+        NoopMachineGateway, PrintProjectDispatchResult,
+        PrinterOperation as MachinePrinterOperation, PrinterRefreshResult,
         diagnostics::PrinterDiagnosticResult,
         discovery::{DiscoveredPrinter, PrinterDiscoveryResult},
         file_transfer::FakeMachineFileTransfer,
@@ -774,7 +775,7 @@ impl BambuMachineGateway for FakeGateway {
         _serial_number: &str,
         _command: &crate::protocol::agent::v1::PrintProjectFile,
         _artifact: Vec<u8>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PrintProjectDispatchResult> {
         unreachable!("refresh tests do not dispatch print commands")
     }
 
@@ -1242,7 +1243,7 @@ impl BambuMachineGateway for LinkGateway {
         _serial_number: &str,
         _command: &crate::protocol::agent::v1::PrintProjectFile,
         _artifact: Vec<u8>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PrintProjectDispatchResult> {
         unreachable!("link printer tests do not dispatch print commands")
     }
 
@@ -2414,7 +2415,7 @@ impl BambuMachineGateway for OperationGateway {
         _serial_number: &str,
         _command: &crate::protocol::agent::v1::PrintProjectFile,
         _artifact: Vec<u8>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PrintProjectDispatchResult> {
         unreachable!("printer operation tests do not dispatch print commands")
     }
 

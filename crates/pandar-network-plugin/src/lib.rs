@@ -152,6 +152,8 @@ pub extern "C" fn pandar_plugin_submit_print(
     ams_mapping_len: usize,
     ams_mapping2_ptr: *const u8,
     ams_mapping2_len: usize,
+    ams_mapping_info_ptr: *const u8,
+    ams_mapping_info_len: usize,
 ) -> PluginHttpResult {
     let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
         return invalid_input("invalid_hub_url");
@@ -180,6 +182,7 @@ pub extern "C" fn pandar_plugin_submit_print(
     }
     let ams_mapping = parse_optional_json(ams_mapping_ptr, ams_mapping_len);
     let ams_mapping2 = parse_optional_json(ams_mapping2_ptr, ams_mapping2_len);
+    let ams_mapping_info = parse_optional_json(ams_mapping_info_ptr, ams_mapping_info_len);
 
     post_multipart_print(
         &format!("{hub_url}/api/v1/plugin/prints"),
@@ -195,6 +198,7 @@ pub extern "C" fn pandar_plugin_submit_print(
             timelapse,
             ams_mapping,
             ams_mapping2,
+            ams_mapping_info,
         },
     )
 }

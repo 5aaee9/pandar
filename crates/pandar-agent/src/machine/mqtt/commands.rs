@@ -52,6 +52,7 @@ pub struct ProjectFileCommand {
     pub timelapse: bool,
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
+    pub ams_mapping_info_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -252,6 +253,14 @@ fn project_file_payload(command: &ProjectFileCommand) -> Value {
         "param".to_owned(),
         json!(format!("Metadata/plate_{}.gcode", command.plate_id)),
     );
+    print.insert("project_id".to_owned(), json!("0"));
+    print.insert("profile_id".to_owned(), json!("0"));
+    print.insert("task_id".to_owned(), json!("0"));
+    print.insert("subtask_id".to_owned(), json!("0"));
+    print.insert(
+        "subtask_name".to_owned(),
+        json!(project_file_subtask_name(&command.filename)),
+    );
     print.insert(
         "url".to_owned(),
         json!(
@@ -262,31 +271,64 @@ fn project_file_payload(command: &ProjectFileCommand) -> Value {
         ),
     );
     print.insert("file".to_owned(), json!(command.filename));
-    if let Some(md5) = &command.md5 {
-        print.insert("md5".to_owned(), json!(md5));
-    }
-    print.insert("task_id".to_owned(), json!(command.task_id));
-    print.insert("subtask_id".to_owned(), json!(command.subtask_id));
-    print.insert("use_ams".to_owned(), json!(command.use_ams));
+    print.insert(
+        "md5".to_owned(),
+        json!(command.md5.as_deref().unwrap_or("")),
+    );
+    print.insert("bed_type".to_owned(), json!("auto"));
+    print.insert("bed_leveling".to_owned(), json!(false));
     print.insert("flow_cali".to_owned(), json!(command.flow_cali));
+    print.insert("vibration_cali".to_owned(), json!(false));
+    print.insert("layer_inspect".to_owned(), json!(false));
     print.insert("timelapse".to_owned(), json!(command.timelapse));
-
-    if let Some(mapping) = command
-        .ams_mapping_json
-        .as_deref()
-        .and_then(project_file_ams_mapping)
-    {
-        print.insert("ams_mapping".to_owned(), mapping);
-    }
-    if let Some(mapping) = command
-        .ams_mapping2_json
+    print.insert("use_ams".to_owned(), json!(command.use_ams));
+    print.insert(
+        "ams_mapping".to_owned(),
+        command
+            .ams_mapping_json
+            .as_deref()
+            .and_then(project_file_ams_mapping)
+            .unwrap_or_else(|| json!([])),
+    );
+    print.insert(
+        "ams_mapping2".to_owned(),
+        command
+            .ams_mapping2_json
+            .as_deref()
+            .and_then(project_file_mapping_value)
+            .unwrap_or_else(|| json!([])),
+    );
+    if let Some(ams_mapping_info) = command
+        .ams_mapping_info_json
         .as_deref()
         .and_then(project_file_mapping_value)
     {
-        print.insert("ams_mapping_2".to_owned(), mapping);
+        print.insert("ams_mapping_info".to_owned(), ams_mapping_info);
     }
+    print.insert("auto_bed_leveling".to_owned(), json!(0));
+    print.insert("nozzle_offset_cali".to_owned(), json!(0));
+    print.insert("cfg".to_owned(), json!("0"));
+    print.insert("extrude_cali_flag".to_owned(), json!(0));
 
     json!({ "print": print })
+}
+
+fn project_file_subtask_name(filename: &str) -> String {
+    let base = filename
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(filename)
+        .trim();
+    let stem = base
+        .strip_suffix(".gcode.3mf")
+        .or_else(|| base.strip_suffix(".3mf"))
+        .unwrap_or(base)
+        .trim();
+    if stem.is_empty() {
+        "print".to_string()
+    } else {
+        stem.to_string()
+    }
 }
 
 fn project_file_ams_mapping(raw: &str) -> Option<Value> {

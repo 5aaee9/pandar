@@ -278,6 +278,7 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
                 timelapse: Some(true),
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
+                ams_mapping_info_json: None,
             },
             crate::repositories::AuditActor {
                 actor_type: "system".to_owned(),

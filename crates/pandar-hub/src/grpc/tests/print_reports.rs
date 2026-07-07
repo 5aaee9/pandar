@@ -64,23 +64,60 @@ async fn grpc_print_job_report_rejects_invalid_observed_at() {
 }
 
 #[tokio::test]
-async fn grpc_print_job_report_rejects_invalid_artifact_id() {
+async fn grpc_print_job_report_ignores_non_pandar_artifact_id() {
     let state = fixture_state().await;
     let (tenant_id, agent_id) = tenant_agent(&state).await;
     let (created, serial) = create_print_job(&state, tenant_id, agent_id, ARTIFACT_ID).await;
-    let (mut stream, sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+    let (_stream, sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
         .await
         .unwrap();
-    let _ = stream.next().await.unwrap().unwrap();
     let report = report(serial, created.job.id.to_string(), "not-a-uuid".to_string());
 
     sender
         .send(Ok(report_event(tenant_id, agent_id, report)))
         .await
         .unwrap();
-    let err = stream.next().await.unwrap().unwrap_err();
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
 
-    assert_eq!(err.code(), Code::InvalidArgument);
+    let job = state
+        .jobs()
+        .get_for_tenant(tenant_id, created.job.id)
+        .await
+        .unwrap()
+        .unwrap()
+        .job;
+    assert_eq!(job.print.status, PrintStatus::Running);
+    assert_eq!(job.print.progress_percent, Some(57));
+}
+
+#[tokio::test]
+async fn grpc_print_job_report_ignores_non_pandar_job_id() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let (created, serial) = create_print_job(&state, tenant_id, agent_id, ARTIFACT_ID).await;
+    let (_stream, sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+
+    sender
+        .send(Ok(report_event(
+            tenant_id,
+            agent_id,
+            report(serial, "0".to_string(), created.artifact.id),
+        )))
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+    let job = state
+        .jobs()
+        .get_for_tenant(tenant_id, created.job.id)
+        .await
+        .unwrap()
+        .unwrap()
+        .job;
+    assert_eq!(job.print.status, PrintStatus::Running);
+    assert_eq!(job.print.progress_percent, Some(57));
 }
 
 #[tokio::test]
@@ -235,6 +272,7 @@ async fn create_print_job(
             timelapse: true,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         })
         .await
         .unwrap();

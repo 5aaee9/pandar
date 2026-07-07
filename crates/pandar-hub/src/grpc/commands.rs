@@ -136,7 +136,12 @@ pub async fn handle_result_and_job(
         if command.kind == "print_project_file" {
             state
                 .jobs()
-                .mark_print_succeeded(command_id, tenant_id, agent_id)
+                .mark_print_succeeded_with_result(
+                    command_id,
+                    tenant_id,
+                    agent_id,
+                    optional_result_json(&command.kind, result_json, link_printer_access_code),
+                )
                 .await
                 .map_err(repository_status)?;
             Ok(None)

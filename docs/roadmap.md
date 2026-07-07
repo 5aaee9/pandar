@@ -17,6 +17,12 @@
 ## Completed
 
 - Matched Bambu Studio/open-bamboo-networking local print upload behavior by naming dispatched artifacts as `*.gcode.3mf`, prioritizing BRTC eMMC upload for supported printer families, falling back to FTPS on BRTC failure, and publishing `project_file` with the actual upload URL plus MD5.
+- Aligned Agent `project_file` MQTT dispatch with Bambu Studio/open-bamboo-networking's payload shape, including unconditional `ams_mapping2`, default print option fields, and Studio-compatible task metadata.
+- Matched Bambu Studio/open-bamboo-networking's MQTT QoS behavior for `project_file` dispatch by publishing print-start commands with QoS 0 instead of the generic control-command QoS.
+- Matched Bambu Studio/open-bamboo-networking's LAN print identity fields by sending `task_id` and `subtask_id` as `"0"` in printer-facing `project_file` commands instead of Pandar internal UUIDs.
+- Matched open-bamboo-networking's BRTC upload chunk ABI by omitting `file_md5` from non-final file chunks and sending it only on the final chunk, and persisted print dispatch upload/MQTT details in print-job command result JSON for real-printer debugging.
+- Forwarded Bambu Studio's `ams_mapping_info` through the networking plugin, Hub, gRPC, Agent, and printer MQTT `project_file` payload, and matched open-bamboo-networking's signed H2D-family payload behavior when a local Studio slicer key is available.
+- Kept Agent print-report streams alive when printers report non-Pandar job identifiers by ignoring invalid report `job_id` values instead of rejecting the whole reverse stream.
 - Added an Agent-authenticated printer connection hydration endpoint and Agent startup restore path so saved LAN printer host/access-code details survive Agent restarts when `PANDAR_PRINTERS` is empty.
 - Kept Bambu Studio's native Device page connected by having the Pandar networking plugin keep emitting Studio-style `push_status` heartbeats for selected/subscribed printers instead of sending only a one-shot connection snapshot.
 - Forwarded cached printer temperature and light telemetry through the Bambu Studio networking plugin `push_status` payload so Studio's native Device page can render current nozzle, bed, chamber, and lamp state.

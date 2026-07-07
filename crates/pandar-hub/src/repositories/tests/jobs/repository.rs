@@ -214,6 +214,7 @@ async fn job_repository_reprint_and_duplicate_reuse_artifact_metadata() {
                 timelapse: None,
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
+                ams_mapping_info_json: None,
             },
             test_audit_actor(),
         )

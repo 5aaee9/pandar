@@ -260,6 +260,7 @@ async fn printer_operation_success_does_not_mutate_physical_print_status() {
             timelapse: false,
             ams_mapping_json: None,
             ams_mapping2_json: None,
+            ams_mapping_info_json: None,
         })
         .await
         .unwrap();
@@ -343,6 +344,7 @@ async fn create_print_job_with_mappings(
             timelapse: true,
             ams_mapping_json,
             ams_mapping2_json,
+            ams_mapping_info_json: None,
         })
         .await
         .unwrap()

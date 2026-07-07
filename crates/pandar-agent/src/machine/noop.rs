@@ -2,8 +2,8 @@ use anyhow::bail;
 use async_trait::async_trait;
 
 use crate::machine::{
-    BambuMachineGateway, MaterialRefreshResult, PrinterDiscoveryResult, PrinterOperation,
-    PrinterOperationDispatchResult, PrinterRefreshResult,
+    BambuMachineGateway, MaterialRefreshResult, PrintProjectDispatchResult, PrinterDiscoveryResult,
+    PrinterOperation, PrinterOperationDispatchResult, PrinterRefreshResult,
     diagnostics::{DiagnosticCheck, DiagnosticStatus, PrinterDiagnosticResult},
     discovery,
 };
@@ -66,7 +66,7 @@ impl BambuMachineGateway for NoopMachineGateway {
         serial_number: &str,
         _command: &PrintProjectFile,
         _artifact: Vec<u8>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PrintProjectDispatchResult> {
         bail!("no Bambu printer configured for serial {serial_number}")
     }
 

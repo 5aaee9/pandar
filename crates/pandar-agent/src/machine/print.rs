@@ -2,14 +2,12 @@ use anyhow::{Context, bail};
 
 use crate::{
     machine::{
-        BambuMqttTransport, BambuPrinterEndpoint, MachineFileTransfer, TransferModeCache,
+        BambuMqttTransport, BambuPrinterEndpoint, MachineFileTransfer, PrintProjectDispatchResult,
+        TransferModeCache,
         brtc::md5_upper,
         compatibility::flow_calibration_supported,
         file_transfer::run_with_transfer_mode,
-        mqtt::{
-            BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, ProjectFileCommand,
-            PublishedMqttCommand,
-        },
+        mqtt::{BambuMqttCommand, BambuMqttTopics, ProjectFileCommand, PublishedMqttCommand},
     },
     protocol::agent::v1::PrintProjectFile,
 };
@@ -21,7 +19,7 @@ pub async fn dispatch_print_project_file<F, T>(
     cache: &TransferModeCache,
     command: &PrintProjectFile,
     artifact: &[u8],
-) -> anyhow::Result<()>
+) -> anyhow::Result<PrintProjectDispatchResult>
 where
     F: MachineFileTransfer + Send + Sync,
     T: BambuMqttTransport + Send + Sync,
@@ -42,26 +40,40 @@ where
     .with_context(|| format!("upload print artifact to {}", endpoint.serial))?;
 
     let topics = BambuMqttTopics::for_serial(&endpoint.serial);
+    let md5 = md5_upper(artifact);
+    let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        filename: uploaded.path.clone(),
+        url: Some(uploaded.url.clone()),
+        md5: Some(md5.clone()),
+        plate_id: command.plate_id,
+        task_id: command.job_id.clone(),
+        subtask_id: command.artifact_id.clone(),
+        use_ams: command.use_ams,
+        flow_cali: command.flow_cali,
+        timelapse: command.timelapse,
+        ams_mapping_json: non_empty_string(&command.ams_mapping_json),
+        ams_mapping2_json: non_empty_string(&command.ams_mapping2_json),
+        ams_mapping_info_json: non_empty_string(&command.ams_mapping_info_json),
+    })
+    .payload();
+    let payload =
+        crate::machine::mqtt::maybe_sign_project_file_payload(payload, endpoint.model.as_deref());
     mqtt.publish(PublishedMqttCommand {
-        topic: topics.request,
-        payload: BambuMqttCommand::ProjectFile(ProjectFileCommand {
-            filename: uploaded.path,
-            url: Some(uploaded.url),
-            md5: Some(md5_upper(artifact)),
-            plate_id: command.plate_id,
-            task_id: command.job_id.clone(),
-            subtask_id: command.artifact_id.clone(),
-            use_ams: command.use_ams,
-            flow_cali: command.flow_cali,
-            timelapse: command.timelapse,
-            ams_mapping_json: non_empty_string(&command.ams_mapping_json),
-            ams_mapping2_json: non_empty_string(&command.ams_mapping2_json),
-        })
-        .payload(),
-        qos: BAMBU_MQTT_QOS,
+        topic: topics.request.clone(),
+        payload: payload.clone(),
+        qos: 0,
     })
     .await
-    .with_context(|| format!("publish project_file to {}", endpoint.serial))
+    .with_context(|| format!("publish project_file to {}", endpoint.serial))?;
+
+    Ok(PrintProjectDispatchResult {
+        topic: topics.request,
+        payload,
+        qos: 0,
+        uploaded_path: uploaded.path,
+        uploaded_url: uploaded.url,
+        md5,
+    })
 }
 
 pub(crate) fn pick_remote_name(filename: &str) -> String {

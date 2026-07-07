@@ -14,6 +14,7 @@ pub struct PrintCommandTransition<'a> {
     pub command_status: CommandStatus,
     pub job_status: JobStatus,
     pub error: Option<String>,
+    pub result_json: Option<String>,
     pub allowed_statuses: &'a [CommandStatus],
     pub action: &'static str,
 }
@@ -53,6 +54,7 @@ where
         .set(commands::ActiveModel {
             status: Set(transition.command_status.as_str().to_owned()),
             error: Set(transition.error.clone()),
+            result_json: Set(transition.result_json.clone()),
             updated_at: Set(now),
             ..Default::default()
         })

@@ -30,6 +30,7 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
         plate_id,
         ams_mapping_json,
         ams_mapping2_json,
+        ams_mapping_info_json,
         use_ams,
         flow_cali,
         timelapse,
@@ -88,6 +89,7 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
                 timelapse,
                 ams_mapping_json,
                 ams_mapping2_json,
+                ams_mapping_info_json,
             },
             audit_actor,
         )
@@ -187,6 +189,9 @@ pub(super) async fn parse_multipart_print_fields(
             "ams_mapping2" => {
                 parse_json_field(&text).map(|value| fields.ams_mapping2 = Some(value))
             }
+            "ams_mapping_info" => {
+                parse_json_field(&text).map(|value| fields.ams_mapping_info = Some(value))
+            }
             _ => Ok(()),
         };
         if let Err(err) = parsed {
@@ -220,6 +225,7 @@ type PreparedPrintJob = (
     u32,
     Option<String>,
     Option<String>,
+    Option<String>,
     bool,
     bool,
     bool,
@@ -242,6 +248,8 @@ async fn prepare_print_job(
     let plate_id = super::validated_plate_id(required(parsed.plate_id)?)?;
     let ams_mapping_json = material::mapping_json(parsed.ams_mapping.clone(), "ams_mapping")?;
     let ams_mapping2_json = material::mapping_json(parsed.ams_mapping2.clone(), "ams_mapping2")?;
+    let ams_mapping_info_json =
+        material::mapping_json(parsed.ams_mapping_info.clone(), "ams_mapping_info")?;
     let use_ams = required(parsed.use_ams)?;
     let flow_cali = required(parsed.flow_cali)?;
     let timelapse = required(parsed.timelapse)?;
@@ -283,6 +291,7 @@ async fn prepare_print_job(
         plate_id,
         ams_mapping_json,
         ams_mapping2_json,
+        ams_mapping_info_json,
         use_ams,
         flow_cali,
         timelapse,

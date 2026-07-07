@@ -63,3 +63,13 @@ impl PrinterOperationDispatchResult {
         }
     }
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrintProjectDispatchResult {
+    pub topic: String,
+    pub payload: Value,
+    pub qos: u8,
+    pub uploaded_path: String,
+    pub uploaded_url: String,
+    pub md5: String,
+}

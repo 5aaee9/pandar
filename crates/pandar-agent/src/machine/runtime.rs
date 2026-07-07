@@ -8,8 +8,8 @@ use crate::{
     AgentConfig,
     machine::{
         BambuMachineGateway, BambuPrinterEndpoint, ConfiguredBambuMachineGateway, MachineSnapshot,
-        MaterialRefreshResult, PrinterOperation, PrinterOperationDispatchResult,
-        PrinterRefreshResult,
+        MaterialRefreshResult, PrintProjectDispatchResult, PrinterOperation,
+        PrinterOperationDispatchResult, PrinterRefreshResult,
         diagnostics::{redact_access_code, redact_known_access_codes},
         mqtt::{RumqttcBambuMqttTransport, forward_print_reports, refresh_printer},
         transfer::BambuMachineFileTransfer,
@@ -174,7 +174,7 @@ impl BambuMachineGateway for RuntimeBambuMachineGateway {
         serial_number: &str,
         command: &PrintProjectFile,
         artifact: Vec<u8>,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<PrintProjectDispatchResult> {
         self.inner
             .lock()
             .await

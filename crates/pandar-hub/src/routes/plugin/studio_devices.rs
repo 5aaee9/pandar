@@ -7,6 +7,7 @@ use crate::{AppState, printer_events::PrinterEventMaterials, routes::ApiError};
 
 #[derive(Debug, Serialize)]
 pub(crate) struct PluginPrinterListResponse {
+    pub(super) message: &'static str,
     pub(super) devices: Vec<PluginPrinterResponse>,
 }
 
