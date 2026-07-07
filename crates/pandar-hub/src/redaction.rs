@@ -1,3 +1,8 @@
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Number;
+
 pub fn redact_secrets(message: &str) -> String {
     message
         .lines()
@@ -21,10 +26,10 @@ pub fn redact_link_printer_result_json(result_json: &str, access_code: &str) -> 
         return redact_link_printer_result_json_without_secret(&redacted);
     }
 
-    match serde_json::from_str::<serde_json::Value>(&redacted) {
+    match serde_json::from_str::<RedactableJson>(&redacted) {
         Ok(mut value) => {
             if redact_json_string(&mut value, access_code) {
-                value.to_string()
+                value.to_json_string()
             } else {
                 redacted
             }
@@ -35,20 +40,20 @@ pub fn redact_link_printer_result_json(result_json: &str, access_code: &str) -> 
 
 pub fn redact_link_printer_result_json_without_secret(result_json: &str) -> String {
     let redacted = redact_result_json(result_json);
-    match serde_json::from_str::<serde_json::Value>(&redacted) {
+    match serde_json::from_str::<RedactableJson>(&redacted) {
         Ok(mut value) => {
             redact_all_json_strings(&mut value);
-            value.to_string()
+            value.to_json_string()
         }
         Err(_) => "[redacted]".to_owned(),
     }
 }
 
 pub fn redact_result_json(result_json: &str) -> String {
-    match serde_json::from_str::<serde_json::Value>(result_json) {
+    match serde_json::from_str::<RedactableJson>(result_json) {
         Ok(mut value) => {
             if redact_json_value(&mut value) {
-                value.to_string()
+                value.to_json_string()
             } else {
                 result_json.to_owned()
             }
@@ -57,13 +62,30 @@ pub fn redact_result_json(result_json: &str) -> String {
     }
 }
 
-fn redact_json_value(value: &mut serde_json::Value) -> bool {
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+enum RedactableJson {
+    Object(BTreeMap<String, RedactableJson>),
+    Array(Vec<RedactableJson>),
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
+}
+
+impl RedactableJson {
+    fn to_json_string(&self) -> String {
+        serde_json::to_string(self).expect("redacted JSON is serializable")
+    }
+}
+
+fn redact_json_value(value: &mut RedactableJson) -> bool {
     match value {
-        serde_json::Value::Object(object) => {
+        RedactableJson::Object(object) => {
             let mut changed = false;
             for (key, value) in object {
                 if is_credential_key(key) {
-                    *value = serde_json::Value::String("[redacted]".to_owned());
+                    *value = RedactableJson::String("[redacted]".to_owned());
                     changed = true;
                 } else {
                     changed |= redact_json_value(value);
@@ -71,7 +93,7 @@ fn redact_json_value(value: &mut serde_json::Value) -> bool {
             }
             changed
         }
-        serde_json::Value::Array(items) => {
+        RedactableJson::Array(items) => {
             let mut changed = false;
             for item in items {
                 changed |= redact_json_value(item);
@@ -82,20 +104,20 @@ fn redact_json_value(value: &mut serde_json::Value) -> bool {
     }
 }
 
-fn redact_json_string(value: &mut serde_json::Value, secret: &str) -> bool {
+fn redact_json_string(value: &mut RedactableJson, secret: &str) -> bool {
     match value {
-        serde_json::Value::String(value) if value.contains(secret) => {
+        RedactableJson::String(value) if value.contains(secret) => {
             *value = value.replace(secret, "[redacted]");
             true
         }
-        serde_json::Value::Number(number) => {
+        RedactableJson::Number(number) => {
             let matches_secret = number.to_string() == secret;
             if matches_secret {
-                *value = serde_json::Value::String("[redacted]".to_owned());
+                *value = RedactableJson::String("[redacted]".to_owned());
             }
             matches_secret
         }
-        serde_json::Value::Object(object) => {
+        RedactableJson::Object(object) => {
             let mut changed = false;
             let entries = std::mem::take(object);
             for (key, mut value) in entries {
@@ -110,7 +132,7 @@ fn redact_json_string(value: &mut serde_json::Value, secret: &str) -> bool {
             }
             changed
         }
-        serde_json::Value::Array(items) => {
+        RedactableJson::Array(items) => {
             let mut changed = false;
             for item in items {
                 changed |= redact_json_string(item, secret);
@@ -121,17 +143,17 @@ fn redact_json_string(value: &mut serde_json::Value, secret: &str) -> bool {
     }
 }
 
-fn redact_all_json_strings(value: &mut serde_json::Value) -> bool {
+fn redact_all_json_strings(value: &mut RedactableJson) -> bool {
     match value {
-        serde_json::Value::String(value) => {
+        RedactableJson::String(value) => {
             *value = "[redacted]".to_owned();
             true
         }
-        value @ serde_json::Value::Number(_) => {
-            *value = serde_json::Value::String("[redacted]".to_owned());
+        value @ RedactableJson::Number(_) => {
+            *value = RedactableJson::String("[redacted]".to_owned());
             true
         }
-        serde_json::Value::Object(object) => {
+        RedactableJson::Object(object) => {
             let mut changed = false;
             let entries = std::mem::take(object);
             for (index, (_, mut value)) in entries.into_iter().enumerate() {
@@ -141,7 +163,7 @@ fn redact_all_json_strings(value: &mut serde_json::Value) -> bool {
             }
             changed
         }
-        serde_json::Value::Array(items) => {
+        RedactableJson::Array(items) => {
             let mut changed = false;
             for item in items {
                 changed |= redact_all_json_strings(item);
