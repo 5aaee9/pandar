@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, sync::atomic::AtomicU32, time::Duration};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -25,15 +25,47 @@ fn endpoint() -> BambuPrinterEndpoint {
 }
 
 fn get_version_report(model: &str) -> serde_json::Value {
-    json!({
-        "info": {
-            "command": "get_version",
-            "module": [
-                {"name": "wifi", "product_name": "ignored"},
-                {"name": "ota", "sw_ver": "01.08.01.00", "product_name": model, "sn": "01S00EXAMPLE"}
-            ]
-        }
+    serde_json::to_value(TestGetVersionReport {
+        info: TestGetVersionInfo {
+            command: "get_version",
+            module: vec![
+                TestGetVersionModule {
+                    name: "wifi",
+                    sw_ver: None,
+                    product_name: "ignored",
+                    sn: None,
+                },
+                TestGetVersionModule {
+                    name: "ota",
+                    sw_ver: Some("01.08.01.00"),
+                    product_name: model,
+                    sn: Some("01S00EXAMPLE"),
+                },
+            ],
+        },
     })
+    .unwrap()
+}
+
+#[derive(Debug, Serialize)]
+struct TestGetVersionReport<'a> {
+    info: TestGetVersionInfo<'a>,
+}
+
+#[derive(Debug, Serialize)]
+struct TestGetVersionInfo<'a> {
+    command: &'static str,
+    module: Vec<TestGetVersionModule<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+struct TestGetVersionModule<'a> {
+    name: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sw_ver: Option<&'static str>,
+    product_name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sn: Option<&'static str>,
 }
 
 fn request_command(payload: serde_json::Value) -> PublishedMqttCommand {
