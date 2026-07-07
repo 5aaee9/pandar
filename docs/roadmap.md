@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Replaced Agent material report nozzle-list detection with a typed serde nozzle entry instead of storing the report entries as raw `Value`.
 - Replaced Hub material snapshot repository response fields with typed recursive serde material JSON instead of exposing persisted material state as raw `Value`.
 - Replaced Hub printer-event material response fields with a typed recursive serde enum so event material payloads scrub and serialize without exposing raw `Value` fields.
 - Replaced Agent BRTC upload chunk test expected payloads with typed serde structs instead of handwritten `json!` objects.

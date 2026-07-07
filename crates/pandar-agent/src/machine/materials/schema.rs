@@ -1,4 +1,6 @@
-use serde::Deserialize;
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, de::IgnoredAny};
 use serde_json::{Number, Value};
 
 #[derive(Debug, Default, Deserialize)]
@@ -20,7 +22,13 @@ pub(super) struct PrintMaterialsReport {
     #[serde(default)]
     pub(super) right_nozzle_temper: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) nozzles: Option<Vec<Value>>,
+    pub(super) nozzles: Option<Vec<NozzleReport>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct NozzleReport {
+    #[serde(flatten)]
+    _fields: BTreeMap<String, IgnoredAny>,
 }
 
 #[derive(Debug, Default, Deserialize)]
