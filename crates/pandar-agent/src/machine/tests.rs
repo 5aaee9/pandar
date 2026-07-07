@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, time::Duration};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -768,12 +768,32 @@ fn dynamic_sequence_id(payload: &Value) -> String {
 }
 
 fn dynamic_section_sequence_id(payload: &Value, section: &str) -> String {
-    let sections: BTreeMap<String, TestSequenceSection> =
-        serde_json::from_value(payload.clone()).unwrap();
-    let sequence_id = &sections.get(section).unwrap().sequence_id;
+    let envelope: TestSequenceEnvelope = serde_json::from_value(payload.clone()).unwrap();
+    let sequence_id = &envelope.section(section).sequence_id;
     assert_ne!(sequence_id, "0");
     assert!((20000..30000).contains(&sequence_id.parse::<u32>().unwrap()));
     sequence_id.to_string()
+}
+
+#[derive(Debug, Deserialize)]
+struct TestSequenceEnvelope {
+    info: Option<TestSequenceSection>,
+    pushing: Option<TestSequenceSection>,
+    print: Option<TestSequenceSection>,
+    system: Option<TestSequenceSection>,
+}
+
+impl TestSequenceEnvelope {
+    fn section(&self, section: &str) -> &TestSequenceSection {
+        match section {
+            "info" => self.info.as_ref(),
+            "pushing" => self.pushing.as_ref(),
+            "print" => self.print.as_ref(),
+            "system" => self.system.as_ref(),
+            _ => None,
+        }
+        .unwrap()
+    }
 }
 
 #[derive(Debug, Deserialize)]
