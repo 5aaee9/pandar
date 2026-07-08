@@ -127,8 +127,8 @@ fn runtime_reports(model: &str, state: &str) -> [serde_json::Value; 2] {
 }
 
 fn operation_report(value: impl Serialize) -> TestOperationReport {
-    let json = serde_json::to_string(&value).unwrap();
-    serde_json::from_str(&json).unwrap()
+    let value = serde_json::to_value(value).unwrap();
+    serde::Deserialize::deserialize(value).unwrap()
 }
 
 #[derive(Debug, Deserialize)]
@@ -780,8 +780,7 @@ fn decode_payload<T>(payload: &Value) -> T
 where
     T: for<'de> Deserialize<'de>,
 {
-    let json = serde_json::to_string(payload).unwrap();
-    serde_json::from_str(&json).unwrap()
+    T::deserialize(payload).unwrap()
 }
 
 #[derive(Debug, Deserialize)]

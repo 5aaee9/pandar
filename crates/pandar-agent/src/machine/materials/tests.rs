@@ -19,8 +19,8 @@ fn normalize_json(report: Value) -> Option<String> {
 }
 
 fn decode_patch(input: impl serde::Serialize) -> TestMaterialPatch {
-    let json = serde_json::to_string(&input).unwrap();
-    serde_json::from_str(&json).unwrap()
+    let value = serde_json::to_value(input).unwrap();
+    serde::Deserialize::deserialize(value).unwrap()
 }
 
 #[test]

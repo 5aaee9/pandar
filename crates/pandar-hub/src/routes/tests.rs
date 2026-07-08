@@ -127,8 +127,7 @@ fn json_body(input: impl Serialize) -> Value {
 }
 
 fn decode_json<T: DeserializeOwned>(value: Value) -> T {
-    let json = serde_json::to_string(&value).unwrap();
-    serde_json::from_str(&json).unwrap()
+    serde::Deserialize::deserialize(value).unwrap()
 }
 
 async fn raw_request_as(

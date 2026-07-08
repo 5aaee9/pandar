@@ -14,8 +14,8 @@ pub(super) fn external_spools(snapshot: &MaterialSnapshot) -> Vec<TestExternalSp
 }
 
 fn decode_material_json<T: DeserializeOwned>(value: &impl Serialize) -> T {
-    let json = serde_json::to_string(value).unwrap();
-    serde_json::from_str(&json).unwrap()
+    let value = serde_json::to_value(value).unwrap();
+    serde::Deserialize::deserialize(value).unwrap()
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

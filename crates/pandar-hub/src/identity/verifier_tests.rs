@@ -183,8 +183,8 @@ fn decode<T>(input: impl Serialize) -> T
 where
     T: for<'de> Deserialize<'de>,
 {
-    let json = serde_json::to_string(&input).unwrap();
-    serde_json::from_str(&json).unwrap()
+    let value = serde_json::to_value(input).unwrap();
+    T::deserialize(value).unwrap()
 }
 
 #[derive(Serialize)]

@@ -90,8 +90,7 @@ fn decode_payload<T>(payload: &serde_json::Value) -> T
 where
     T: for<'de> Deserialize<'de>,
 {
-    let json = serde_json::to_string(payload).unwrap();
-    serde_json::from_str(&json).unwrap()
+    T::deserialize(payload).unwrap()
 }
 
 #[derive(Debug, Deserialize)]

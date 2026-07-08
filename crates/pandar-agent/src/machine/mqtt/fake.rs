@@ -233,8 +233,7 @@ fn decode_payload<T>(payload: &Value) -> Option<T>
 where
     T: for<'de> Deserialize<'de>,
 {
-    let json = serde_json::to_string(payload).ok()?;
-    serde_json::from_str(&json).ok()
+    T::deserialize(payload).ok()
 }
 
 #[cfg(test)]
