@@ -68,6 +68,7 @@
 - Moved Agent print-progress and diagnostic report construction behind a typed `PrintReportEnvelope` input so raw MQTT `Value` parsing remains at the report boundary.
 - Replaced Agent printer-operation report payload conversion with direct typed `MachineJsonPayload` construction instead of serializing the parsed report envelope back through `serde_json::Value`.
 - Replaced Agent recursive machine JSON payload conversion with direct enum mapping instead of deserializing a `serde_json::Value` back into the same typed payload shape.
+- Replaced Agent MQTT typed report helper with direct serde deserialization from `serde_json::Value` instead of stringifying payloads before parsing typed structs.
 - Replaced Agent material scalar string formatting with direct typed enum formatting instead of constructing temporary `serde_json::Value` scalars.
 - Replaced Hub material merge state conversion with direct typed material JSON construction instead of serializing through `serde_json::Value` and deserializing it again.
 - Replaced Agent MQTT `project_file` command payload construction with a serializable struct instead of manually assembling a JSON object map.
