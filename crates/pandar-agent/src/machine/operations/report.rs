@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 use serde_json::{Number, Value};
 
-use crate::machine::{MachineJsonPayload, PrinterOperationMqttSummary};
+use crate::machine::{MachineJsonPayload, PrinterOperationMqttSummary, types::decode_json_payload};
 
 pub(super) struct OperationReport {
     envelope: OperationEnvelope,
@@ -55,8 +55,8 @@ enum SequenceId {
 }
 
 impl OperationReport {
-    pub(super) fn from_value(raw: Value) -> Option<Self> {
-        let envelope = serde_json::from_value(raw).ok()?;
+    pub(super) fn from_payload(raw: &Value) -> Option<Self> {
+        let envelope = decode_json_payload(raw)?;
         Some(Self { envelope })
     }
 

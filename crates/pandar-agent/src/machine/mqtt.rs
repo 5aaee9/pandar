@@ -41,6 +41,7 @@ pub use transport::{RumqttcBambuMqttTransport, bambu_lan_mqtt_options, bambu_lan
 use crate::machine::{
     BambuPrinterEndpoint, MaterialRefreshResult, PrinterRefreshResult,
     materials::{normalize_material_patch, parse_materials_report},
+    types::decode_json_payload,
 };
 
 pub const BAMBU_MQTT_PORT: u16 = 8883;
@@ -241,7 +242,7 @@ where
                 .next_report(report_timeout)
                 .await
                 .context("wait for MQTT get_version report")?;
-            if let Some(report) = parse_get_version_report(report) {
+            if let Some(report) = parse_get_version_report(&report) {
                 return model_from_get_version_report(report);
             }
         }
@@ -269,8 +270,8 @@ struct GetVersionModule {
     product_name: Option<String>,
 }
 
-fn parse_get_version_report(report: Value) -> Option<GetVersionReport> {
-    let report = serde_json::from_value::<GetVersionReport>(report).ok()?;
+fn parse_get_version_report(report: &Value) -> Option<GetVersionReport> {
+    let report = decode_json_payload::<GetVersionReport>(report)?;
     if report.is_get_version() {
         Some(report)
     } else {

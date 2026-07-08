@@ -400,7 +400,7 @@ fn get_version_payload_matches_reference() {
 fn get_version_report_extracts_trimmed_ota_model() {
     assert_eq!(
         model_from_get_version_report(
-            parse_get_version_report(get_version_report(" P2S ")).unwrap()
+            parse_get_version_report(&get_version_report(" P2S ")).unwrap()
         )
         .unwrap(),
         "P2S"
@@ -411,7 +411,7 @@ fn get_version_report_extracts_trimmed_ota_model() {
 fn get_version_report_rejects_missing_model() {
     let report = get_version_report_with_blank_model();
 
-    assert!(model_from_get_version_report(parse_get_version_report(report).unwrap()).is_err());
+    assert!(model_from_get_version_report(parse_get_version_report(&report).unwrap()).is_err());
 }
 
 #[test]

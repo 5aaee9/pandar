@@ -1,7 +1,9 @@
 use serde::Deserialize;
 use serde_json::{Number, Value};
 
-use crate::machine::{BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot};
+use crate::machine::{
+    BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot, types::decode_json_payload,
+};
 
 pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> MachineSnapshot {
     let report = parse_snapshot_report(report);
@@ -9,7 +11,7 @@ pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> 
 }
 
 pub(crate) fn parse_snapshot_report(report: &Value) -> Option<SnapshotReport> {
-    serde_json::from_value(report.clone()).ok()
+    decode_json_payload(report)
 }
 
 pub(crate) fn snapshot_from_parsed_report(

@@ -6,6 +6,7 @@ use crate::machine::mqtt::{
     BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, PublishedMqttCommand,
     chamber_light_commands_for_nodes,
 };
+use crate::machine::types::decode_json_payload;
 
 const BAMBU_STUDIO_CHAMBER_LIGHT_NODES: [&str; 2] = ["chamber_light", "chamber_light2"];
 
@@ -78,11 +79,11 @@ where
         .next_report(std::time::Duration::from_secs(5))
         .await
         .context("wait for chamber light status report")?;
-    Ok(parse_printer_report(report))
+    Ok(parse_printer_report(&report))
 }
 
-fn parse_printer_report(report: Value) -> Option<PrinterReport> {
-    serde_json::from_value(report).ok()
+fn parse_printer_report(report: &Value) -> Option<PrinterReport> {
+    decode_json_payload(report)
 }
 
 impl PrinterReport {

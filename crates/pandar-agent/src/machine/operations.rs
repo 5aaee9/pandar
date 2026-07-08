@@ -279,7 +279,7 @@ where
                 .next_report(std::time::Duration::from_secs(5))
                 .await
                 .context("wait for printer operation MQTT result")?;
-            let Some(report) = report::OperationReport::from_value(report) else {
+            let Some(report) = report::OperationReport::from_payload(&report) else {
                 continue;
             };
             let Some(sequence_id) = report.sequence_id() else {

@@ -9,13 +9,15 @@ use patch::*;
 use schema::*;
 use serde_json::{Number, Value};
 
+use super::types::decode_json_payload;
+
 struct NormalizedTrayPatch {
     tray_id: String,
     value: MaterialTrayPatch,
 }
 
 pub(crate) fn parse_materials_report(report: &Value) -> Option<MaterialsReport> {
-    serde_json::from_value(report.clone()).ok()
+    decode_json_payload(report)
 }
 
 pub(crate) fn normalize_material_patch<'a>(

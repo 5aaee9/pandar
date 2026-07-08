@@ -13,6 +13,7 @@ use crate::{
     machine::{
         BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult,
         materials::{normalize_material_patch, parse_materials_report},
+        types::decode_json_payload,
     },
     protocol::agent::v1::{
         AgentEvent, MachineDiagnostic, NozzleTemperature, PrintJobReport, PrinterMaterialsSnapshot,
@@ -47,7 +48,7 @@ pub fn print_report_from_report(
 }
 
 pub(crate) fn parse_print_report(report: &Value) -> Option<PrintReportEnvelope> {
-    serde_json::from_value(report.clone()).ok()
+    decode_json_payload(report)
 }
 
 pub(crate) fn print_report_from_parsed_report(
