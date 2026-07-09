@@ -118,9 +118,7 @@ function parseCompatibility(
   };
 }
 
-function parsePrinterLink(
-  value: unknown,
-): PrinterLinkResultData | null {
+function parsePrinterLink(value: unknown): PrinterLinkResultData | null {
   if (
     !isRecord(value) ||
     value.type !== "printer_link" ||

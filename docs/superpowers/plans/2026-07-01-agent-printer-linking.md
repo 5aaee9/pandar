@@ -48,6 +48,7 @@
 ### Task 1: Protocol And Hub Command Repository Primitives
 
 **Files:**
+
 - Modify: `proto/pandar/agent/v1/agent.proto`
 - Modify: `crates/pandar-hub/src/repositories/commands.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands/inserts.rs`
@@ -60,6 +61,7 @@
 - Test: `crates/pandar-hub/src/grpc/tests/commands.rs`
 
 **Interfaces:**
+
 - Produces: `LinkPrinterPayload { host, serial_number, access_code, name, model }`.
 - Produces: `RedactedLinkPrinterPayload { host, serial_number, access_code: "[redacted]", name, model }`.
 - Produces: `CommandRepository::create_link_printer_sent_with_audit(tenant_id, agent_id, payload, actor) -> RepositoryResult<CommandRecord>`.
@@ -541,6 +543,7 @@ Expected: both commands exit 0.
 ### Task 2: Hub Live Session Dispatch And HTTP Route
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/sessions.rs`
 - Modify: `crates/pandar-hub/src/grpc.rs`
 - Modify: `crates/pandar-hub/src/runtime.rs`
@@ -552,6 +555,7 @@ Expected: both commands exit 0.
 - Test: `crates/pandar-hub/src/grpc/tests/lifecycle.rs`
 
 **Interfaces:**
+
 - Consumes: Task 1 `LinkPrinterPayload`, redacted sent-row repository method, proto `HubCommand::LinkPrinter`.
 - Produces: `POST /api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer`.
 - Produces: `SessionRegistry::current_token`, `SessionRegistry::try_dispatch_live_command`, `SessionRegistry::pending_live_command_ids` that aggregates every local session's pending set, and pending cleanup helpers.
@@ -935,6 +939,7 @@ Expected: all exit 0.
 ### Task 3: Agent Runtime Gateway And Link Command Handling
 
 **Files:**
+
 - Create: `crates/pandar-agent/src/machine/runtime.rs`
 - Modify: `crates/pandar-agent/src/machine/mod.rs`
 - Modify: `crates/pandar-agent/src/commands.rs`
@@ -943,6 +948,7 @@ Expected: all exit 0.
 - Test: `crates/pandar-agent/src/machine/tests.rs`
 
 **Interfaces:**
+
 - Consumes: proto `LinkPrinter` from Task 1.
 - Produces: `BambuMachineGateway::link_printer(...)` default method and `RuntimeBambuMachineGateway` real implementation.
 - Produces: agent `CommandResult.result_json` for `{"type":"printer_link", ...}`.
@@ -1152,6 +1158,7 @@ Expected: all exit 0.
 ### Task 4: Frontend Link Form And Command Result Rendering
 
 **Files:**
+
 - Modify: `frontend/app/actions.ts`
 - Modify: `frontend/app/action-status.ts`
 - Modify: `frontend/app/command-result-parser.ts`
@@ -1164,6 +1171,7 @@ Expected: all exit 0.
 - Modify: `frontend/messages/zh.json`
 
 **Interfaces:**
+
 - Consumes: Hub `POST /link-printer` route and `printer_link` command result JSON.
 - Produces: `linkPrinter(formData)` server action.
 - Produces: `PrinterLinkResultData` union variant and result renderer.
@@ -1177,22 +1185,58 @@ Extend `frontend/app/agent-pairing-guidance.test.tsx` mock actions with `linkPri
 it("renders link-printer form between pairing guidance and linked agents", () => {
   renderAgentsView({
     agents: [
-      { id: "agent-online", tenant_id: tenant.id, name: "Online agent", status: "online", created_at: "2026-06-30T00:00:00Z" },
-      { id: "agent-offline", tenant_id: tenant.id, name: "Offline agent", status: "offline", created_at: "2026-06-30T00:00:00Z" },
+      {
+        id: "agent-online",
+        tenant_id: tenant.id,
+        name: "Online agent",
+        status: "online",
+        created_at: "2026-06-30T00:00:00Z",
+      },
+      {
+        id: "agent-offline",
+        tenant_id: tenant.id,
+        name: "Offline agent",
+        status: "offline",
+        created_at: "2026-06-30T00:00:00Z",
+      },
     ],
   });
 
-  const pairingHeading = screen.getByRole("heading", { name: "Pair a local agent" });
-  const linkHeading = screen.getByRole("heading", { name: "Link printer to agent" });
-  const linkedAgentsHeading = screen.getByRole("heading", { name: "Linked agents" });
+  const pairingHeading = screen.getByRole("heading", {
+    name: "Pair a local agent",
+  });
+  const linkHeading = screen.getByRole("heading", {
+    name: "Link printer to agent",
+  });
+  const linkedAgentsHeading = screen.getByRole("heading", {
+    name: "Linked agents",
+  });
 
-  expect(pairingHeading.compareDocumentPosition(linkHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(linkHeading.compareDocumentPosition(linkedAgentsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(
+    pairingHeading.compareDocumentPosition(linkHeading) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    linkHeading.compareDocumentPosition(linkedAgentsHeading) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   expect(screen.getByLabelText("Agent")).toHaveValue("agent-online");
-  expect(screen.getByLabelText("Host or IP address")).toHaveAttribute("name", "host");
-  expect(screen.getByLabelText("Serial number")).toHaveAttribute("name", "serial_number");
-  expect(screen.getByLabelText("Access code")).toHaveAttribute("type", "password");
-  expect(screen.getByRole("button", { name: "Link printer" })).toHaveAttribute("type", "submit");
+  expect(screen.getByLabelText("Host or IP address")).toHaveAttribute(
+    "name",
+    "host",
+  );
+  expect(screen.getByLabelText("Serial number")).toHaveAttribute(
+    "name",
+    "serial_number",
+  );
+  expect(screen.getByLabelText("Access code")).toHaveAttribute(
+    "type",
+    "password",
+  );
+  expect(screen.getByRole("button", { name: "Link printer" })).toHaveAttribute(
+    "type",
+    "submit",
+  );
 });
 ```
 
@@ -1277,7 +1321,10 @@ export type PrinterLinkResultData = {
   status: string;
 };
 
-export type CommandResultData = DiscoveryResultData | DiagnosticResultData | PrinterLinkResultData;
+export type CommandResultData =
+  | DiscoveryResultData
+  | DiagnosticResultData
+  | PrinterLinkResultData;
 ```
 
 In `command-result-parser.ts`, parse `printer_link` only when `serial_number`, `host`, and `status` are strings.
@@ -1313,7 +1360,10 @@ function PrinterLinkResult({ result }: { result: PrinterLinkResultData }) {
       <DetailLine label={t("colSerial")} value={result.serial_number} mono />
       <DetailLine label={t("colName")} value={result.name ?? "-"} />
       <DetailLine label={t("colModel")} value={result.model ?? "-"} />
-      <DetailLine label={t("colStatus")} value={<StatusBadge value={result.status} />} />
+      <DetailLine
+        label={t("colStatus")}
+        value={<StatusBadge value={result.status} />}
+      />
     </div>
   );
 }
@@ -1341,7 +1391,9 @@ Add a test in `action-status-toast.test.tsx`:
 
 ```ts
 expect(actionStatusTone("agent_not_connected")).toBe("error");
-expect(formatActionStatus("agent_not_connected", tStatus)).toBe("Agent is not connected to this Hub process");
+expect(formatActionStatus("agent_not_connected", tStatus)).toBe(
+  "Agent is not connected to this Hub process",
+);
 ```
 
 - [ ] **Step 8: Run focused frontend tests**
@@ -1365,11 +1417,13 @@ Expected: tests exit 0.
 ### Task 5: Documentation, Roadmap, And Integration Checks
 
 **Files:**
+
 - Modify: `docs/development.md`
 - Modify: `docs/roadmap.md`
 - Modify: `docs/architecture.md`
 
 **Interfaces:**
+
 - Consumes: implemented behavior from Tasks 1-4.
 - Produces: operator-facing runtime-link limitation docs, architecture boundary note, and roadmap completion entry.
 
@@ -1426,9 +1480,11 @@ Expected: all exit 0.
 ### Task 6: Full Verification And Final Review Prep
 
 **Files:**
+
 - No planned source edits unless verification exposes an issue.
 
 **Interfaces:**
+
 - Consumes: all implemented tasks.
 - Produces: clean verification evidence and final review package.
 

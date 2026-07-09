@@ -33,6 +33,7 @@ REST (Bearer auth; `tenant_id` is a UUID string):
 - `POST /api/v1/tenants/{tenant_id}/jobs/{job_id}/reprint` (empty body) → `CommandResponse`
 
 Control actions + exact key sets (extra keys rejected):
+
 - `pause` / `resume` / `stop` / `toggle_light` → `{"action":"<action>"}` (no other keys).
 - `set_chamber_light` → `{"action":"set_chamber_light","light_on":<bool>}`.
 - `set_print_speed` → (out of v1 scope).
@@ -131,6 +132,7 @@ README.md                (modify — add mobile/android pointer)
 ## Task 1: Gradle skeleton, version catalog, wrapper, manifest, theme resources
 
 **Files:**
+
 - Create: `mobile/android/.gitignore`
 - Create: `mobile/android/settings.gradle.kts`
 - Create: `mobile/android/build.gradle.kts`
@@ -151,6 +153,7 @@ README.md                (modify — add mobile/android pointer)
 - Modify: `/.gitignore` (root) — append Android Gradle local ignores (delegated to `mobile/android/.gitignore` instead; root untouched per AC9 except docs).
 
 **Interfaces:**
+
 - Produces: a buildable Gradle project skeleton with applicationId `zip.iptables.pandar.android`, the Compose/Material3/Retrofit/AppAuth/DataStore dependencies wired via the version catalog, JDK 17 toolchain, namespace `zip.iptables.pandar.android`.
 
 - [ ] **Step 1: Create `gradle/libs.versions.toml`** with versions + libraries: AGP 8.7.3, Kotlin 2.0.21, Compose Compiler plugin 2.0.21 (via `org.jetbrains.kotlin.plugin.compose`), Compose BOM 2024.10.01, Material3, Navigation-Compose 2.8.4, lifecycle-viewmodel-compose 2.8.7, activity-compose 1.9.3, coroutines 1.9.0, kotlinx-serialization 1.7.3 + plugin, retrofit 2.11.0 + retrofit2-kotlinx-serialization-converter 1.0.0, okhttp 4.12.0 (incl. logging-interceptor), datastore-preferences 1.1.1, appauth 0.11.1, browser 1.8.0. Declare bundles for `compose`, and `test` (junit 4.13.2, kotlinx-coroutines-test 1.9.0, okhttp mockwebserver 4.12.0, robolectric 4.13 — optional).
@@ -180,6 +183,7 @@ README.md                (modify — add mobile/android pointer)
 ## Task 2: Domain models, Severity, StatusMeta, Logger + unit tests (TDD anchor)
 
 **Files:**
+
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/domain/model/Severity.kt`
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/domain/status/StatusMeta.kt`
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/domain/model/Models.kt`
@@ -187,13 +191,14 @@ README.md                (modify — add mobile/android pointer)
 - Test: `app/src/test/kotlin/zip/iptables/pandar/android/domain/status/StatusMetaTest.kt`
 
 **Interfaces:**
+
 - Produces: `enum class Severity { CRITICAL, WARNING, SUCCESS, INFO }`; `data class StatusMeta(val severity: Severity, val label: String)`; `fun statusMeta(rawStatus: String): StatusMeta` (lowercases, maps per Global Constraints, unknown→INFO, label = prettified token: replace `_`/`-` with space, capitalize first letter). Domain models: `Printer`, `Job`, `Agent`, `Command`, `PrinterNozzleTemp`, `AmsUnit`, `AmsTray`, `ExternalSpool`, `ActiveTray`, `Materials`, `JobPrint`, `JobArtifact` (pure Kotlin data classes, nullable where the hub is nullable). Also `interface Logger { fun d(t: Throwable? = null, msg: () -> String); fun w(t: Throwable? = null, msg: () -> String); fun e(t: Throwable? = null, msg: () -> String) }` — a tiny abstraction used by later tasks (WS repo in Task 7, repository in Task 9). `Logger` is defined here so it is available before Task 7.
 
 - [ ] **Step 1: Write failing test `StatusMetaTest.kt`** with cases:
   - Each SUCCESS token (online, ok, succeeded, completed, running, printing, ready) → SUCCESS, label prettified ("RUNNING" → "Running").
   - Each WARNING token (warning, queued, sent, acknowledged, connecting, problem, degraded, pending) → WARNING.
   - Each CRITICAL token (failed, offline, unavailable, error, down) → CRITICAL.
-  - Unknown token ("flumbus", "", "  ") → INFO and never throws; "" → label "Unknown".
+  - Unknown token ("flumbus", "", " ") → INFO and never throws; "" → label "Unknown".
   - Case-insensitive ("OFFLINE" == "Offline" == "offline").
   - Label: "needs_attention" → "Needs attention".
 
@@ -216,6 +221,7 @@ README.md                (modify — add mobile/android pointer)
 ## Task 3: Network DTOs, decoders, and JSON-shape unit tests
 
 **Files:**
+
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/data/remote/Json.kt`
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/data/remote/dto/Dtos.kt`
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/data/remote/dto/PrinterMaterialsDto.kt`
@@ -225,6 +231,7 @@ README.md                (modify — add mobile/android pointer)
 - Test: `app/src/test/kotlin/zip/iptables/pandar/android/data/remote/dto/PrinterEventsDecoderTest.kt`
 
 **Interfaces:**
+
 - Produces: `@Serializable` DTOs mirroring hub JSON: `PrinterDto`, `PrinterListDto`, `AgentDto`, `AgentsListDto`, `JobDto`, `JobListDto`, `CommandResponseDto`, `PrinterEventCommandDto`, and the sealed `PrinterEventDto` annotated `@JsonClassDiscriminator("type")` (experimental, covered by the project-wide opt-in from Task 1 Step 6) with `@SerialName` variants `PrinterSnapshotEvent`, `JobProgressEvent`, `CommandResultEvent`. `PrinterMaterialsDto` + `AmsUnitDto`/`AmsTrayDto`/`ExternalSpoolDto`/`ActiveTrayDto` per spec §4.4 with all-optional fields. A `domain` extension/mapper `PrinterDto.toDomain(): Printer` etc.
 
 - [ ] **Step 1: Write `PrinterListDtoTest`** parsing a representative `{"printers":[{...full PrinterEventPrinter with materials...}]}` JSON (paste a realistic sample including null `model`, null `materials`, nozzle temps with null fields) into `PrinterListDto` and asserting the domain `Printer` fields. Include a case with `materials:null`.
@@ -247,10 +254,12 @@ README.md                (modify — add mobile/android pointer)
 ## Task 4: Control request body shapes + strict-parity unit tests
 
 **Files:**
+
 - Modify: `app/src/main/kotlin/zip/iptables/pandar/android/data/remote/dto/Dtos.kt` (add request bodies) — or new file `data/remote/dto/ControlRequests.kt`
 - Test: `app/src/test/kotlin/zip/iptables/pandar/android/data/remote/ControlsBodyShapeTest.kt`
 
 **Interfaces:**
+
 - Produces: `@Serializable` request bodies, one per implemented action, each a CONCRETE top-level class (NOT a sealed-interface/polymorphic hierarchy — see Task 5 serialization note). Each class declares `@SerialName("action") @EncodeDefault val action: String = "<literal>"` so the `action` key is always emitted regardless of the `Json` configuration, plus the per-action required fields and nullable optional fields with `@SerialName` snake_case names. Optional nullable fields are omitted from output via `explicitNulls=false`. Types: `PauseRequest`, `ResumeRequest`, `StopRequest`, `ToggleLightRequest`, `SetChamberLightRequest(on:Boolean)`, `SetHotendTemperatureRequest(temperatureCelsius:Int, wait:Boolean, extruderId:Int?=null)`, `SetBedTemperatureRequest(temperatureCelsius:Int, wait:Boolean)`, `SetChamberTemperatureRequest(temperatureCelsius:Int, wait:Boolean)`, `AmsRereadRfidRequest(amsId:Int, slotId:Int)`, `AmsLoadFilamentRequest(amsId:Int, slotId:Int, globalTrayId:Int?=null, externalId:String?=null, extruderId:Int?=null)`, `AmsUnloadFilamentRequest(amsId:Int, slotId:Int, globalTrayId:Int?=null, externalId:String?=null, extruderId:Int?=null)`. Field `@SerialName`s: `temperature_celsius`, `wait`, `extruder_id`, `light_on`, `ams_id`, `slot_id`, `global_tray_id`, `external_id`.
 
 - [ ] **Step 1: Write `ControlsBodyShapeTest`** using the SAME production `Json` instance the Retrofit converter uses (`appJson` from `data/remote/Json.kt`, created in Task 3), NOT a default `Json`. Each assertion checks the EXACT serialized JSON string: correct `action` literal, no extra keys, no `type` discriminator key, optional nulls omitted.
@@ -294,17 +303,20 @@ private val json = appJson  // the EXACT instance Retrofit uses for both encode 
 ## Task 5: ApiModule (Json, OkHttp, Retrofit), BearerAuthInterceptor, PandarApi interface
 
 **Files:**
+
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/data/remote/ApiModule.kt`
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/data/remote/BearerAuthInterceptor.kt`
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/data/remote/PandarApi.kt`
 
 **Interfaces:**
+
 - Consumes: `SettingsRepository.currentToken(): String?` via the `TokenProvider` interface (defined here in Task 5; `SettingsRepository` implements it in Task 6).
 - Produces: `interface TokenProvider { fun currentToken(): String? }`; `class BearerAuthInterceptor(private val tokenProvider: TokenProvider) : Interceptor` adds `Authorization: Bearer <token>` when token non-null; `object ApiModule` builds `OkHttpClient` (timeouts 30s connect/read/write, +interceptor + HttpLoggingInterceptor on debug) and `Retrofit` with the kotlinx-serialization converter built from the unified `appJson` (created in Task 3) — `appJson` is safe for BOTH directions: `ignoreUnknownKeys`/`isLenient` for response decoding and `encodeDefaults`/`explicitNulls=false` for request encoding. `interface PandarApi` with suspend endpoints matching the REST list above. The Retrofit `Json` converter must serialize the concrete request class, NOT a polymorphic base type (see serialization note).
 
 - [ ] **Step 1: Implement `TokenProvider`, `BearerAuthInterceptor`** (skips when token null → no-auth hub support).
 
 - [ ] **Step 2: Implement `PandarApi`** with ONE concrete-typed `@Body` parameter per control action so kotlinx.serialization serializes the concrete class directly (no sealed interface, no polymorphic discriminator). Use a single private backend method if desired, but expose them as separate interface methods:
+
 ```kotlin
 interface PandarApi {
   @GET("api/v1/tenants/{tenant}/printers")        suspend fun listPrinters(@Path("tenant") t:String): PrinterListDto
@@ -326,6 +338,7 @@ interface PandarApi {
   @POST("api/v1/tenants/{tenant}/jobs/{job}/reprint")       suspend fun reprint(@Path("tenant") t:String, @Path("job") j:String): CommandResponseDto
 }
 ```
+
 Serialization note: because each `@Body` is a concrete class, the kotlinx-serialization converter emits exactly that class's fields. The `no_polymorphic_discriminator_leaks` test in Task 4 guards this. (Retrofit allows multiple methods to share the same request line; the converter picks the serializer from the concrete `@Body` type.)
 
 - [ ] **Step 3: Implement `ApiModule`** — expose `okHttp(tokenProvider)`, `retrofit(baseUrl, client)` using the kotlinx-serialization-converter built from `appJson` (`appJson.asConverterFactory("application/json".toMediaType())`), and `pandarApi(...)`. Build base URL from the user hub URL (append `/`).
@@ -341,11 +354,13 @@ Serialization note: because each `@Body` is a concrete class, the kotlinx-serial
 > Ordered before the WebSocket repository because the WS repo consumes `SettingsRepository.tenantId`.
 
 **Files:**
+
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/data/settings/SettingsSnapshot.kt`
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/data/settings/SettingsRepository.kt`
 - Test: `app/src/test/kotlin/zip/iptables/pandar/android/data/settings/SettingsMappingTest.kt`
 
 **Interfaces:**
+
 - Consumes: `TokenProvider` (defined Task 5).
 - Produces: `data class SettingsSnapshot(hubBaseUrl:String?, tenantId:String?, oidcDiscoveryUrl:String?, oidcClientId:String?, oidcScopes:String?, oidcRedirectUri:String?, accessToken:String?, refreshToken:String?, tokenExpiresAtEpochMillis:Long?)`; `class SettingsRepository(context, scope): TokenProvider` with `val settings: Flow<SettingsSnapshot>`, a convenience `val tenantId: Flow<String?>` (derived from `settings.map { it.tenantId }` — consumed by Task 7 WS repo), `suspend fun update(transform:(SettingsSnapshot)->SettingsSnapshot)`, `override fun currentToken(): String?`, `suspend fun setTokens(access:String?, refresh:String?, expiresAtMillis:Long?)`, `suspend fun clearTokens()`. Implements `TokenProvider`.
 
@@ -364,9 +379,11 @@ Serialization note: because each `@Body` is a concrete class, the kotlinx-serial
 ## Task 7: PrinterEventsRepository (WebSocket) + auth-refresh interaction
 
 **Files:**
+
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/data/remote/ws/PrinterEventsRepository.kt`
 
 **Interfaces:**
+
 - Consumes: `OkHttpClient`, `appJson` (Task 3), `SettingsRepository.tenantId: Flow<String?>` (now available from Task 6) and `SettingsRepository.settings: Flow<SettingsSnapshot>` (for the current hub base URL), `TokenProvider` (Task 5/6), a `tokenRefresher: suspend () -> Boolean` (from AuthRepository Task 8), `Logger`.
 - Produces: `class PrinterEventsRepository` with `val events: SharedFlow<PrinterEventDto>` and `fun start(scope: CoroutineScope)`, `fun stop()`. Maintains connection state `StateFlow<LiveState>` where `enum LiveState { CONNECTED, CONNECTING, DISCONNECTED }`.
 
@@ -381,12 +398,14 @@ Serialization note: because each `@Body` is a concrete class, the kotlinx-serial
 ## Task 8: AuthRepository (AppAuth OIDC) + LoginViewModel + LoginScreen
 
 **Files:**
+
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/data/auth/AuthRepository.kt`
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/data/auth/AuthEvent.kt`
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/ui/login/LoginViewModel.kt`
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/ui/login/LoginScreen.kt`
 
 **Interfaces:**
+
 - Consumes: `SettingsSnapshot` (OIDC config), `SettingsRepository`, Android `Context` (for `AuthorizationServicesConfiguration` and CustomTabIntent), Activity result from the redirect.
 - Produces: `class AuthRepository(context, settings, coroutineScope)` with `val state: StateFlow<AuthState>` (`enum AuthState { SIGNED_OUT, SIGNING_IN, SIGNED_IN, NEEDS_CONFIG }`), `suspend fun signIn(): AuthIntent` (returns the Custom Tab intent + the auth request), `suspend fun handleAuthorizationResponse(intent: Intent)`, `suspend fun refresh(): Boolean`, `fun signOut()`. `AuthEvent` sealed for UI (`ShowToast`, `LaunchBrowser(intent)`).
 
@@ -403,12 +422,14 @@ Serialization note: because each `@Body` is a concrete class, the kotlinx-serial
 ## Task 9: PandarRepository (REST orchestration) + AppContainer + PandarApplication
 
 **Files:**
+
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/data/repository/PandarRepository.kt`
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/core/di/AppContainer.kt`
 - Create: `app/src/main/kotlin/zip/iptables/pandar/android/PandarApplication.kt`
 - Modify: `app/src/main/kotlin/zip/iptables/pandar/android/data/remote/ApiModule.kt` (wire AppContainer usage)
 
 **Interfaces:**
+
 - Produces: `class PandarRepository(api, settings, ws, logger: Logger)` (`Logger` interface already defined in Task 2) exposing `suspend fun printers(): List<Printer>`, `suspend fun printer(id): Printer`, `suspend fun agents(): List<Agent>`, `suspend fun jobs(): List<Job>`, one typed `suspend fun control(...)` method per concrete request class from Task 4 delegating to the matching `PandarApi` method (e.g. `suspend fun pause(tenant, printerId): Command`, `suspend fun setHotendTemperature(tenant, printerId, body: SetHotendTemperatureRequest): Command`, … — 12 methods total, each calling the same-named `PandarApi` method), `suspend fun retry(tenant, jobId): Command`, `suspend fun reprint(tenant, jobId): Command`, plus `val events: Flow<PrinterEventDto>`, `val liveState: StateFlow<LiveState>`, `val needsReauth: StateFlow<Boolean>`. `class AppContainer(context)` constructs everything lazily: `settings`, `auth`, `apiModule` (depends on settings base URL — rebuild on base-URL change), `ws`, `pandar`, plus a `Logger` implementation. `PandarApplication` implements `Application`, creates `container`, exposes it.
 
 - [ ] **Step 1: Implement `PandarRepository`, `AppContainer`, `PandarApplication`** (the `Logger` interface already exists from Task 2; here you add a concrete `AndroidLogger` implementation inside `AppContainer`). AppContainer must rebuild Retrofit when `hubBaseUrl` changes (observe settings; recreate api on change). Provide a `fun tokenProvider()` returning settings.
@@ -422,10 +443,12 @@ Serialization note: because each `@Body` is a concrete class, the kotlinx-serial
 ## Task 10: Theme (Color/Type/Theme) + reusable components (StatusPill, FormFields)
 
 **Files:**
+
 - Create: `ui/theme/Color.kt`, `ui/theme/Type.kt`, `ui/theme/Theme.kt`
 - Create: `ui/components/StatusPill.kt`, `ui/components/FormFields.kt`
 
 **Interfaces:**
+
 - Produces: Material3 `lightColorScheme`/`darkColorScheme` with neutral palette from DESIGN.md (background white/oklch(0.145), foreground inverse; primary near-black/white; surface white/dark; error red). `PandarTheme(darkTheme, dynamicColor=false, content)`. Type: default sans + a `MonoFontFamily` (`FontFamily.Monospace`) used by `MonoText`. `StatusPill(rawStatus)` renders icon+label colored by severity (icons: Success=check, Warning=warning, Critical=error, Info=info). `MonoText(text)` composable. `FormFields`: `LabeledTextField`, `PrimaryButton`.
 
 - [ ] **Step 1: Implement** the four files. StatusPill uses `MaterialTheme.colorScheme` semantic containers (e.g. for critical use a red-tinted container; pair with icon + label).
@@ -439,11 +462,13 @@ Serialization note: because each `@Body` is a concrete class, the kotlinx-serial
 ## Task 11: Navigation graph + MainActivity + Settings screen
 
 **Files:**
+
 - Create: `ui/navigation/PandarNavGraph.kt`
 - Create: `ui/settings/SettingsScreen.kt`, `ui/settings/SettingsViewModel.kt`
 - Create: `MainActivity.kt`
 
 **Interfaces:**
+
 - Produces: `PandarNavGraph(navController, container)` with routes `login`, `printers`, `printers/{printerId}`, `jobs`, `settings`. Bottom nav with Printers/Jobs/Settings. Start destination = printers if authenticated & configured, else login. `SettingsViewModel(container)` exposes `state: SettingsState` (current snapshot + auth state), `update{...}`, `signIn()`, `signOut()`. `MainActivity` sets Compose content + `PandarTheme`.
 
 - [ ] **Step 1: Implement `SettingsScreen`** — form fields bound to SettingsViewModel; Save button persists; Sign in/out buttons; shows identity when available.
@@ -459,9 +484,11 @@ Serialization note: because each `@Body` is a concrete class, the kotlinx-serial
 ## Task 12: Printers screen (dashboard) + PrinterCard + PrintersViewModel
 
 **Files:**
+
 - Create: `ui/printers/PrintersScreen.kt`, `ui/printers/PrintersViewModel.kt`, `ui/printers/PrinterCard.kt`
 
 **Interfaces:**
+
 - Consumes: `PandarRepository` (printers, agents, events).
 - Produces: `PrintersViewModel` exposing `state: PrintersUiState { loading, printers:List<Printer>, agents:List<Agent>, liveState, error }`. Loads via REST on init + fold WS `printer_snapshot` into the printers list (replace matching id) and `command_result` to nudge refresh. `PrintersScreen` renders a summary strip (total printers, online printers, connected agents) + LazyColumn of `PrinterCard`. Pull-to-refresh triggers REST reload + WS reconnect-if-down. Card tap navigates to `printers/{id}`.
 
@@ -480,9 +507,11 @@ Serialization note: because each `@Body` is a concrete class, the kotlinx-serial
 ## Task 13: Printer detail screen + ViewModel (controls)
 
 **Files:**
+
 - Create: `ui/printerdetail/PrinterDetailScreen.kt`, `ui/printerdetail/PrinterDetailViewModel.kt`
 
 **Interfaces:**
+
 - Consumes: `PandarRepository` (printer, control, events).
 - Produces: `PrinterDetailViewModel(printerId)` exposing `state` (printer, materials, command-in-flight, lastCommand status, error) and one intent function per control that builds the matching concrete request and calls the same-named `PandarRepository` control method: `pause()`, `resume()`, `stop()`, `toggleLight()`, `setChamberLight(on)`, `setHotend(temp, wait, extruderId?)`, `setBed(temp, wait)`, `setChamber(temp, wait)`, `amsReread(amsId, slotId)`, `amsLoad(request: AmsLoadFilamentRequest)`, `amsUnload(request: AmsUnloadFilamentRequest)`. The UI builds the load/unload request from the tray per spec §4.4: required `amsId`←`unit_id` (parsed Int) and `slotId`←`tray_id` (parsed Int); optional `globalTrayId`←`global_tray_id` (when present & parseable), `externalId`←`external_id` (external spools only, when present), `extruderId` only when the user explicitly selects one. Each surfaces `CommandResponseDto` status. WS `command_result` for the printer updates last-known status.
 
@@ -499,9 +528,11 @@ Serialization note: because each `@Body` is a concrete class, the kotlinx-serial
 ## Task 14: Jobs screen + ViewModel
 
 **Files:**
+
 - Create: `ui/jobs/JobsScreen.kt`, `ui/jobs/JobsViewModel.kt`
 
 **Interfaces:**
+
 - Consumes: `PandarRepository` (jobs, events, retry, reprint).
 - Produces: `JobsViewModel` exposing `state` (loading, jobs, error) and `retry(jobId)`, `reprint(jobId)`. Loads REST on init; folds WS `job_progress` into the list (replace matching id).
 
@@ -518,6 +549,7 @@ Serialization note: because each `@Body` is a concrete class, the kotlinx-serial
 ## Task 15: Docs + roadmap + README + root .gitignore
 
 **Files:**
+
 - Create: `docs/android.md`
 - Modify: `docs/roadmap.md` (append completed entry under the appropriate section)
 - Modify: `README.md` (add a `mobile/android` pointer in the Workspace section)

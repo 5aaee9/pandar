@@ -257,7 +257,10 @@ export type PrinterLinkResultData = {
   status: string;
 };
 
-export type CommandResultData = DiscoveryResultData | DiagnosticResultData | PrinterLinkResultData;
+export type CommandResultData =
+  | DiscoveryResultData
+  | DiagnosticResultData
+  | PrinterLinkResultData;
 
 export type ArtifactMetadata = {
   display_name: string;

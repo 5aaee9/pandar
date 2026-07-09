@@ -35,11 +35,12 @@ describe("linkPrinter", () => {
     vi.clearAllMocks();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ id: "command-1" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: "command-1" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
       ),
     );
   });
@@ -81,17 +82,18 @@ describe("createMobileTicket", () => {
     vi.clearAllMocks();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            ticket: "pandar_plugin_ticket_abc",
-            redirect_url: "zip.iptables.pandar.android:/auth/callback",
-          }),
-          {
-            status: 201,
-            headers: { "content-type": "application/json" },
-          },
-        ),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              ticket: "pandar_plugin_ticket_abc",
+              redirect_url: "zip.iptables.pandar.android:/auth/callback",
+            }),
+            {
+              status: 201,
+              headers: { "content-type": "application/json" },
+            },
+          ),
       ),
     );
   });
@@ -99,10 +101,7 @@ describe("createMobileTicket", () => {
   it("creates a mobile login ticket and redirects back to Android", async () => {
     const formData = new FormData();
     formData.set("tenant_id", "tenant-1");
-    formData.set(
-      "redirect_url",
-      "zip.iptables.pandar.android:/auth/callback",
-    );
+    formData.set("redirect_url", "zip.iptables.pandar.android:/auth/callback");
 
     await expect(createMobileTicket(formData)).rejects.toThrow(
       "NEXT_REDIRECT:zip.iptables.pandar.android:/auth/callback?ticket=pandar_plugin_ticket_abc&redirect_url=zip.iptables.pandar.android%3A%2Fauth%2Fcallback",
@@ -125,11 +124,12 @@ describe("updatePrinter", () => {
     vi.clearAllMocks();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ id: "printer-1" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: "printer-1" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
       ),
     );
   });
@@ -165,11 +165,12 @@ describe("refreshPrinterMaterials", () => {
     vi.clearAllMocks();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ id: "command-1" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: "command-1" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
       ),
     );
   });
@@ -195,11 +196,12 @@ describe("controlPrinter AMS operations", () => {
     vi.clearAllMocks();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ id: "command-1" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: "command-1" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
       ),
     );
   });
@@ -321,11 +323,12 @@ describe("deletePrinter", () => {
     vi.clearAllMocks();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ id: "printer-1" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: "printer-1" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
       ),
     );
   });
@@ -351,20 +354,41 @@ describe("job action redirects", () => {
     vi.clearAllMocks();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ id: "command-1" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: "command-1" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
       ),
     );
   });
 
   it.each([
-    ["refreshPrinters", refreshPrinters, [["agent_id", "agent-1"]], "refresh_queued"],
-    ["refreshAllAgents", refreshAllAgents, [["agent_id", "agent-1"]], "refresh_queued"],
-    ["retryDispatchJob", retryDispatchJob, [["job_id", "job-1"]], "retry_queued"],
-    ["retryDispatchJobs", retryDispatchJobs, [["job_id", "job-1"]], "retry_queued"],
+    [
+      "refreshPrinters",
+      refreshPrinters,
+      [["agent_id", "agent-1"]],
+      "refresh_queued",
+    ],
+    [
+      "refreshAllAgents",
+      refreshAllAgents,
+      [["agent_id", "agent-1"]],
+      "refresh_queued",
+    ],
+    [
+      "retryDispatchJob",
+      retryDispatchJob,
+      [["job_id", "job-1"]],
+      "retry_queued",
+    ],
+    [
+      "retryDispatchJobs",
+      retryDispatchJobs,
+      [["job_id", "job-1"]],
+      "retry_queued",
+    ],
     ["reprintJob", reprintJob, [["job_id", "job-1"]], "reprint_queued"],
     ["duplicateJob", duplicateJob, [["job_id", "job-1"]], "duplicate_queued"],
     [

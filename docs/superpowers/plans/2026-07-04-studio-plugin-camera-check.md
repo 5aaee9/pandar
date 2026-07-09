@@ -13,6 +13,7 @@
 ### Task 1: Add explicit FFmpeg executable lookup
 
 **Files:**
+
 - Modify: `crates/pandar-agent/src/machine/camera.rs`
 
 - [ ] Add a helper that returns `PANDAR_FFMPEG_PATH` when set and non-empty after trimming whitespace, and otherwise returns `ffmpeg`.
@@ -23,6 +24,7 @@
 ### Task 2: Preserve Studio light and camera plugin behavior
 
 **Files:**
+
 - Modify: `crates/pandar-network-plugin/src/gcode.rs`
 - Add: `crates/pandar-network-plugin/tests/operation_parser.rs`
 - Modify: `crates/pandar-network-plugin/tests/http_boundary.rs` only to move operation parser tests out if needed.
@@ -35,6 +37,7 @@
 ### Task 3: Runtime check in Bambu Studio
 
 **Files:**
+
 - Runtime only.
 
 - [ ] Install `target/debug/pandar_network_plugin.dll` with `pandar install-network-plugin --plugin-file`.
@@ -49,6 +52,7 @@
 ### Task 4: Documentation and final verification
 
 **Files:**
+
 - Modify: `docs/roadmap.md`
 
 - [ ] Add a completed roadmap entry for the Studio plugin runtime check and FFmpeg camera fix.

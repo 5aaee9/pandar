@@ -13,6 +13,7 @@
 ### Task 1: Lock Plugin Printer Response Shape
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/routes/plugin.rs`
 - Modify: `crates/pandar-hub/src/routes/tests/plugin.rs`
 - Modify: `docs/roadmap.md`

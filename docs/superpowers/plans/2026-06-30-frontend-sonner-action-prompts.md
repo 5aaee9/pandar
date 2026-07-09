@@ -43,6 +43,7 @@
 ### Task 1: Add Sonner Dependency and Root Toaster
 
 **Files:**
+
 - Modify: `frontend/package.json`
 - Modify: `package-lock.json`
 - Modify: `nix/pandar.nix`
@@ -50,6 +51,7 @@
 - Modify: `frontend/app/layout.tsx`
 
 **Interfaces:**
+
 - Produces: `Toaster` exported from `@/components/ui/sonner`.
 - Consumes: Sonner package exports `Toaster as Sonner` and `type ToasterProps`.
 
@@ -68,9 +70,9 @@ Expected: `frontend/package.json` gains a `sonner` dependency and root `package-
 Create `frontend/components/ui/sonner.tsx` with this shape:
 
 ```tsx
-'use client'
+"use client";
 
-import { Toaster as Sonner, type ToasterProps } from 'sonner'
+import { Toaster as Sonner, type ToasterProps } from "sonner";
 
 function Toaster({ ...props }: ToasterProps) {
   return (
@@ -80,18 +82,19 @@ function Toaster({ ...props }: ToasterProps) {
       richColors
       toastOptions={{
         classNames: {
-          toast: 'group toast rounded-md border border-slate-200 bg-white text-slate-950 shadow-lg',
-          description: 'text-slate-600',
-          actionButton: 'bg-slate-900 text-slate-50',
-          cancelButton: 'bg-slate-100 text-slate-900',
+          toast:
+            "group toast rounded-md border border-slate-200 bg-white text-slate-950 shadow-lg",
+          description: "text-slate-600",
+          actionButton: "bg-slate-900 text-slate-50",
+          cancelButton: "bg-slate-100 text-slate-900",
         },
       }}
       {...props}
     />
-  )
+  );
 }
 
-export { Toaster }
+export { Toaster };
 ```
 
 - [ ] **Step 3: Mount the root Toaster**
@@ -99,7 +102,7 @@ export { Toaster }
 Modify `frontend/app/layout.tsx` so it imports `Toaster` and renders it once inside `NextIntlClientProvider`:
 
 ```tsx
-import { Toaster } from '@/components/ui/sonner'
+import { Toaster } from "@/components/ui/sonner";
 ```
 
 and the provider body becomes:
@@ -142,6 +145,7 @@ Expected: The build reaches at least dependency/typechecking for the new wrapper
 ### Task 2: Implement Action Status Toast Consumption
 
 **Files:**
+
 - Create: `frontend/app/action-status-toast.tsx`
 - Create: `frontend/app/action-status-toast.test.tsx`
 - Modify: `frontend/app/dashboard-runtime.tsx`
@@ -149,6 +153,7 @@ Expected: The build reaches at least dependency/typechecking for the new wrapper
 - Modify: `frontend/messages/zh.json`
 
 **Interfaces:**
+
 - Produces: `ActionStatusToast({ status, onConsumed })` where `status?: string` and `onConsumed: (status: string) => void`.
 - Produces: `formatActionStatus(status: string, tStatus: StatusTranslator): string`.
 - Produces: `actionStatusTone(status: string): 'success' | 'warning' | 'error'`.
@@ -161,178 +166,231 @@ Expected: The build reaches at least dependency/typechecking for the new wrapper
 Create `frontend/app/action-status-toast.test.tsx` with tests covering these cases:
 
 ```tsx
-import { StrictMode, useState } from 'react'
-import { NextIntlClientProvider } from 'next-intl'
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi, afterEach } from 'vitest'
+import { StrictMode, useState } from "react";
+import { NextIntlClientProvider } from "next-intl";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi, afterEach } from "vitest";
 
-import en from '../messages/en.json'
-import { ActionStatusToast, actionStatusTone, formatActionStatus } from './action-status-toast'
-import { DashboardShellHeader } from './dashboard-shell-header'
-import type { DashboardQuery, DashboardView } from './dashboard-shell'
-import type { Tenant } from './dashboard-types'
-import { toast } from 'sonner'
+import en from "../messages/en.json";
+import {
+  ActionStatusToast,
+  actionStatusTone,
+  formatActionStatus,
+} from "./action-status-toast";
+import { DashboardShellHeader } from "./dashboard-shell-header";
+import type { DashboardQuery, DashboardView } from "./dashboard-shell";
+import type { Tenant } from "./dashboard-types";
+import { toast } from "sonner";
 
 // This test file lives in `frontend/app`, so `./dashboard-shell-header` is the correct relative path.
 
-vi.mock('sonner', () => ({
+vi.mock("sonner", () => ({
   toast: {
     success: vi.fn(),
     warning: vi.fn(),
     error: vi.fn(),
   },
-}))
+}));
 
-vi.mock('../components/ui/sidebar', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../components/ui/sidebar')>()
+vi.mock("../components/ui/sidebar", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../components/ui/sidebar")>();
   return {
     ...actual,
     SidebarTrigger: ({ className }: { className?: string }) => (
       <button aria-label="Toggle sidebar" className={className} type="button" />
     ),
-  }
-})
+  };
+});
 
 function renderWithMessages(children: React.ReactNode) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
       {children}
     </NextIntlClientProvider>,
-  )
+  );
 }
 
 function setUrl(path: string) {
-  window.history.pushState({}, '', path)
+  window.history.pushState({}, "", path);
 }
 
 function stubLocationAssign(assign: (url: string) => void) {
-  const originalWindow = window
+  const originalWindow = window;
   const location = {
     ...originalWindow.location,
     assign,
-  }
+  };
 
   vi.stubGlobal(
-    'window',
+    "window",
     new Proxy(originalWindow, {
       get(target, prop, receiver) {
-        if (prop === 'location') {
-          return location
+        if (prop === "location") {
+          return location;
         }
-        return Reflect.get(target, prop, receiver)
+        return Reflect.get(target, prop, receiver);
       },
     }),
-  )
+  );
 }
 
 afterEach(() => {
-  vi.clearAllMocks()
-  vi.unstubAllGlobals()
-  window.history.replaceState({}, '', '/')
-})
+  vi.clearAllMocks();
+  vi.unstubAllGlobals();
+  window.history.replaceState({}, "", "/");
+});
 
-describe('action status toast helpers', () => {
-  it('formats translated and fallback status messages', () => {
+describe("action status toast helpers", () => {
+  it("formats translated and fallback status messages", () => {
     const tStatus = Object.assign(
-      (key: string) => en.runtime.actionStatus[key as keyof typeof en.runtime.actionStatus],
+      (key: string) =>
+        en.runtime.actionStatus[key as keyof typeof en.runtime.actionStatus],
       { has: (key: string) => key in en.runtime.actionStatus },
-    )
+    );
 
-    expect(formatActionStatus('refresh_queued', tStatus)).toBe('Refresh queued')
-    expect(formatActionStatus('artifact_too_large', tStatus)).toBe('Artifact Too Large')
-  })
+    expect(formatActionStatus("refresh_queued", tStatus)).toBe(
+      "Refresh queued",
+    );
+    expect(formatActionStatus("artifact_too_large", tStatus)).toBe(
+      "Artifact Too Large",
+    );
+  });
 
-  it('classifies status tone deterministically', () => {
-    expect(actionStatusTone('refresh_queued')).toBe('success')
-    expect(actionStatusTone('refresh_partial')).toBe('warning')
-    expect(actionStatusTone('http_500')).toBe('error')
-    expect(actionStatusTone('artifact_too_large')).toBe('error')
-  })
-})
+  it("classifies status tone deterministically", () => {
+    expect(actionStatusTone("refresh_queued")).toBe("success");
+    expect(actionStatusTone("refresh_partial")).toBe("warning");
+    expect(actionStatusTone("http_500")).toBe("error");
+    expect(actionStatusTone("artifact_too_large")).toBe("error");
+  });
+});
 
-describe('ActionStatusToast', () => {
-  it('shows a success toast and clears only the status query parameter', async () => {
-    const onConsumed = vi.fn()
-    setUrl('/devices?tenant=t1&status=refresh_queued')
+describe("ActionStatusToast", () => {
+  it("shows a success toast and clears only the status query parameter", async () => {
+    const onConsumed = vi.fn();
+    setUrl("/devices?tenant=t1&status=refresh_queued");
 
-    renderWithMessages(<ActionStatusToast status="refresh_queued" onConsumed={onConsumed} />)
+    renderWithMessages(
+      <ActionStatusToast status="refresh_queued" onConsumed={onConsumed} />,
+    );
 
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Refresh queued'))
-    expect(onConsumed).toHaveBeenCalledWith('refresh_queued')
-    expect(window.location.pathname + window.location.search).toBe('/devices?tenant=t1')
-  })
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Refresh queued"),
+    );
+    expect(onConsumed).toHaveBeenCalledWith("refresh_queued");
+    expect(window.location.pathname + window.location.search).toBe(
+      "/devices?tenant=t1",
+    );
+  });
 
-  it('shows a warning toast and preserves tenant plus command query parameters', async () => {
-    const onConsumed = vi.fn()
-    setUrl('/devices?tenant=t1&command=c1&status=refresh_partial')
+  it("shows a warning toast and preserves tenant plus command query parameters", async () => {
+    const onConsumed = vi.fn();
+    setUrl("/devices?tenant=t1&command=c1&status=refresh_partial");
 
-    renderWithMessages(<ActionStatusToast status="refresh_partial" onConsumed={onConsumed} />)
+    renderWithMessages(
+      <ActionStatusToast status="refresh_partial" onConsumed={onConsumed} />,
+    );
 
-    await waitFor(() => expect(toast.warning).toHaveBeenCalledWith('Some refreshes could not be queued — review the list'))
-    expect(window.location.pathname + window.location.search).toBe('/devices?tenant=t1&command=c1')
-  })
+    await waitFor(() =>
+      expect(toast.warning).toHaveBeenCalledWith(
+        "Some refreshes could not be queued — review the list",
+      ),
+    );
+    expect(window.location.pathname + window.location.search).toBe(
+      "/devices?tenant=t1&command=c1",
+    );
+  });
 
-  it('shows an error toast for unexpected backend error codes', async () => {
-    const onConsumed = vi.fn()
-    setUrl('/devices?tenant=t1&status=artifact_too_large')
+  it("shows an error toast for unexpected backend error codes", async () => {
+    const onConsumed = vi.fn();
+    setUrl("/devices?tenant=t1&status=artifact_too_large");
 
-    renderWithMessages(<ActionStatusToast status="artifact_too_large" onConsumed={onConsumed} />)
+    renderWithMessages(
+      <ActionStatusToast status="artifact_too_large" onConsumed={onConsumed} />,
+    );
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Artifact Too Large'))
-  })
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Artifact Too Large"),
+    );
+  });
 
-  it('does not duplicate toasts under Strict Mode effect replay', async () => {
-    const onConsumed = vi.fn()
-    setUrl('/devices?tenant=t1&status=refresh_queued')
+  it("does not duplicate toasts under Strict Mode effect replay", async () => {
+    const onConsumed = vi.fn();
+    setUrl("/devices?tenant=t1&status=refresh_queued");
 
     renderWithMessages(
       <StrictMode>
         <ActionStatusToast status="refresh_queued" onConsumed={onConsumed} />
       </StrictMode>,
-    )
+    );
 
-    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1))
-  })
-})
+    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+  });
+});
 
 const tenants: Tenant[] = [
-  { id: 't1', slug: 'tenant-one', display_name: 'Tenant One', created_at: '2026-06-30T00:00:00Z' },
-  { id: 't2', slug: 'tenant-two', display_name: 'Tenant Two', created_at: '2026-06-30T00:00:00Z' },
-]
+  {
+    id: "t1",
+    slug: "tenant-one",
+    display_name: "Tenant One",
+    created_at: "2026-06-30T00:00:00Z",
+  },
+  {
+    id: "t2",
+    slug: "tenant-two",
+    display_name: "Tenant Two",
+    created_at: "2026-06-30T00:00:00Z",
+  },
+];
 
-function DashboardHeaderWithConsumedStatus({ actionStatus }: { actionStatus: string }) {
-  const [consumedStatus, setConsumedStatus] = useState<string | null>(null)
-  const pendingActionStatus = actionStatus && consumedStatus !== actionStatus ? actionStatus : undefined
+function DashboardHeaderWithConsumedStatus({
+  actionStatus,
+}: {
+  actionStatus: string;
+}) {
+  const [consumedStatus, setConsumedStatus] = useState<string | null>(null);
+  const pendingActionStatus =
+    actionStatus && consumedStatus !== actionStatus ? actionStatus : undefined;
   const query: DashboardQuery = {
-    tenant: 't1',
-    command: 'cmd1',
+    tenant: "t1",
+    command: "cmd1",
     status: pendingActionStatus,
-  }
-  const view: DashboardView = 'agents'
+  };
+  const view: DashboardView = "agents";
   return (
     <>
-      <ActionStatusToast status={pendingActionStatus} onConsumed={setConsumedStatus} />
-      <DashboardShellHeader query={query} selectedTenant={tenants[0]} tenants={tenants} view={view} />
+      <ActionStatusToast
+        status={pendingActionStatus}
+        onConsumed={setConsumedStatus}
+      />
+      <DashboardShellHeader
+        query={query}
+        selectedTenant={tenants[0]}
+        tenants={tenants}
+        view={view}
+      />
     </>
-  )
+  );
 }
 
-describe('consumed action status navigation', () => {
-  it('does not preserve consumed status when switching tenants', async () => {
-    const user = userEvent.setup()
-    const assign = vi.fn<(url: string) => void>()
-    stubLocationAssign(assign)
-    setUrl('/agents?tenant=t1&command=cmd1&status=refresh_queued')
+describe("consumed action status navigation", () => {
+  it("does not preserve consumed status when switching tenants", async () => {
+    const user = userEvent.setup();
+    const assign = vi.fn<(url: string) => void>();
+    stubLocationAssign(assign);
+    setUrl("/agents?tenant=t1&command=cmd1&status=refresh_queued");
 
-    renderWithMessages(<DashboardHeaderWithConsumedStatus actionStatus="refresh_queued" />)
-    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1))
+    renderWithMessages(
+      <DashboardHeaderWithConsumedStatus actionStatus="refresh_queued" />,
+    );
+    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
 
-    await user.selectOptions(screen.getByRole('combobox'), 't2')
+    await user.selectOptions(screen.getByRole("combobox"), "t2");
 
-    expect(assign).toHaveBeenCalledWith('/agents?tenant=t2&command=cmd1')
-  })
-})
+    expect(assign).toHaveBeenCalledWith("/agents?tenant=t2&command=cmd1");
+  });
+});
 ```
 
 - [ ] **Step 2: Run tests and verify they fail before implementation**
@@ -398,94 +456,94 @@ Modify `frontend/messages/zh.json` under `runtime.actionStatus` so it contains:
 Create `frontend/app/action-status-toast.tsx`:
 
 ```tsx
-'use client'
+"use client";
 
-import { useEffect, useRef } from 'react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 
 const knownPositiveActionStatuses = new Set([
-  'refresh_queued',
-  'refresh_partial',
-  'job_created',
-  'tenant_created',
-  'tenant_token_revoked',
-  'join_link_accepted',
-  'join_link_revoked',
-  'user_created',
-  'user_role_updated',
-  'identity_linked',
-  'retry_queued',
-  'retry_partial',
-  'reprint_queued',
-  'duplicate_queued',
-  'printer_control_queued',
-])
+  "refresh_queued",
+  "refresh_partial",
+  "job_created",
+  "tenant_created",
+  "tenant_token_revoked",
+  "join_link_accepted",
+  "join_link_revoked",
+  "user_created",
+  "user_role_updated",
+  "identity_linked",
+  "retry_queued",
+  "retry_partial",
+  "reprint_queued",
+  "duplicate_queued",
+  "printer_control_queued",
+]);
 
-type ActionStatusTone = 'success' | 'warning' | 'error'
+type ActionStatusTone = "success" | "warning" | "error";
 
 type StatusTranslator = {
-  (key: string): string
-  has(key: string): boolean
-}
+  (key: string): string;
+  has(key: string): boolean;
+};
 
 export function ActionStatusToast({
   status,
   onConsumed,
 }: {
-  status?: string
-  onConsumed: (status: string) => void
+  status?: string;
+  onConsumed: (status: string) => void;
 }) {
-  const tStatus = useTranslations('runtime.actionStatus')
-  const shownStatuses = useRef<Set<string>>(new Set())
+  const tStatus = useTranslations("runtime.actionStatus");
+  const shownStatuses = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!status || shownStatuses.current.has(status)) {
-      return
+      return;
     }
-    shownStatuses.current.add(status)
+    shownStatuses.current.add(status);
 
-    const message = formatActionStatus(status, tStatus)
-    const tone = actionStatusTone(status)
-    if (tone === 'warning') {
-      toast.warning(message)
-    } else if (tone === 'error') {
-      toast.error(message)
+    const message = formatActionStatus(status, tStatus);
+    const tone = actionStatusTone(status);
+    if (tone === "warning") {
+      toast.warning(message);
+    } else if (tone === "error") {
+      toast.error(message);
     } else {
-      toast.success(message)
+      toast.success(message);
     }
-    clearStatusQueryFromUrl()
-    onConsumed(status)
-  }, [status, tStatus, onConsumed])
+    clearStatusQueryFromUrl();
+    onConsumed(status);
+  }, [status, tStatus, onConsumed]);
 
-  return null
+  return null;
 }
 
 export function formatActionStatus(status: string, tStatus: StatusTranslator) {
   if (tStatus.has(status)) {
-    return tStatus(status)
+    return tStatus(status);
   }
   return status
-    .split('_')
+    .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
+    .join(" ");
 }
 
 export function actionStatusTone(status: string): ActionStatusTone {
-  if (status.includes('partial')) {
-    return 'warning'
+  if (status.includes("partial")) {
+    return "warning";
   }
-  if (status.startsWith('http_') || !knownPositiveActionStatuses.has(status)) {
-    return 'error'
+  if (status.startsWith("http_") || !knownPositiveActionStatuses.has(status)) {
+    return "error";
   }
-  return 'success'
+  return "success";
 }
 
 export function clearStatusQueryFromUrl() {
-  const url = new URL(window.location.href)
-  url.searchParams.delete('status')
-  const nextUrl = `${url.pathname}${url.search}${url.hash}`
-  window.history.replaceState(window.history.state, '', nextUrl)
+  const url = new URL(window.location.href);
+  url.searchParams.delete("status");
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState(window.history.state, "", nextUrl);
 }
 ```
 
@@ -496,13 +554,13 @@ Existing facts in `frontend/app/dashboard-runtime.tsx`: `DashboardRuntimeProps` 
 Modify `frontend/app/dashboard-runtime.tsx`:
 
 ```tsx
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 ```
 
 Add:
 
 ```tsx
-import { ActionStatusToast } from './action-status-toast'
+import { ActionStatusToast } from "./action-status-toast";
 ```
 
 Remove the local `formatActionStatus` function and the `const tStatus = useTranslations('runtime.actionStatus')` line.
@@ -510,11 +568,16 @@ Remove the local `formatActionStatus` function and the `const tStatus = useTrans
 Add consumed state near the other `useState` calls:
 
 ```tsx
-const [consumedActionStatus, setConsumedActionStatus] = useState<string | null>(null)
-const pendingActionStatus = actionStatus && consumedActionStatus !== actionStatus ? actionStatus : undefined
+const [consumedActionStatus, setConsumedActionStatus] = useState<string | null>(
+  null,
+);
+const pendingActionStatus =
+  actionStatus && consumedActionStatus !== actionStatus
+    ? actionStatus
+    : undefined;
 const consumeActionStatus = useCallback((status: string) => {
-  setConsumedActionStatus(status)
-}, [])
+  setConsumedActionStatus(status);
+}, []);
 ```
 
 Replace the existing `dashboardQuery` block with this complete block:
@@ -522,20 +585,23 @@ Replace the existing `dashboardQuery` block with this complete block:
 ```tsx
 const dashboardQuery: DashboardQuery = {
   tenant: selectedTenant?.id,
-  command: view === 'agents' ? selectedCommandId : undefined,
+  command: view === "agents" ? selectedCommandId : undefined,
   status: pendingActionStatus,
-}
+};
 ```
 
 Inside the `<main>` element, render the toast trigger before the errors block. The top of `<main>` should become:
 
 ```tsx
 <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
-  <ActionStatusToast status={pendingActionStatus} onConsumed={consumeActionStatus} />
+  <ActionStatusToast
+    status={pendingActionStatus}
+    onConsumed={consumeActionStatus}
+  />
 
   {errors.length > 0 ? (
     <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
-      {tErr('errorsIncomplete')} {errors.join('; ')}.
+      {tErr("errorsIncomplete")} {errors.join("; ")}.
     </div>
   ) : null}
 
@@ -568,11 +634,13 @@ Inside the `<main>` element, render the toast trigger before the errors block. T
 Delete this old inline cyan banner entirely:
 
 ```tsx
-{actionStatus ? (
-  <div className="rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-950">
-    {formatActionStatus(actionStatus, tStatus)}
-  </div>
-) : null}
+{
+  actionStatus ? (
+    <div className="rounded-md border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-950">
+      {formatActionStatus(actionStatus, tStatus)}
+    </div>
+  ) : null;
+}
 ```
 
 - [ ] **Step 7: Run focused tests**
@@ -590,9 +658,11 @@ Expected: PASS. If the Strict Mode test fails, keep the duplicate guard mount-sc
 ### Task 3: Update Docs and Verify
 
 **Files:**
+
 - Modify: `docs/roadmap.md`
 
 **Interfaces:**
+
 - Consumes: `runtime.actionStatus` lookup from `ActionStatusToast`.
 - Produces: roadmap documentation of the Sonner prompt migration.
 

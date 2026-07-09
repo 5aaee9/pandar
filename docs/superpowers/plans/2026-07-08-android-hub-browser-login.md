@@ -43,6 +43,7 @@
 ### Task 1: Hub Mobile Ticket API
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/repositories/auth/plugin_tickets.rs`
 - Modify: `crates/pandar-hub/src/repositories/auth/tenant_tokens.rs`
 - Modify: `crates/pandar-hub/src/routes/plugin.rs`
@@ -51,6 +52,7 @@
 - Test: `crates/pandar-hub/src/repositories/tests/tenant_tokens.rs`
 
 **Interfaces:**
+
 - Produces: `POST /api/v1/tenants/{tenant_id}/mobile/login-tickets`
 - Produces: `POST /api/v1/mobile/login-tickets/exchange`
 - Produces: exchange response `{ token, expires_at, profile: { user_id, user_name, tenant_id, tenant_name } }`
@@ -65,12 +67,14 @@
 ### Task 2: Frontend Mobile Sign-In
 
 **Files:**
+
 - Modify: `frontend/app/actions.ts`
 - Create: `frontend/app/mobile-sign-in/page.tsx`
 - Create: `frontend/app/mobile-sign-in/mobile-ticket-form.tsx`
 - Test: `frontend/app/actions.test.ts`
 
 **Interfaces:**
+
 - Consumes: `POST /api/v1/tenants/{tenant_id}/mobile/login-tickets`
 - Produces: browser redirect to `zip.iptables.pandar.android:/auth/callback?ticket=<ticket>&redirect_url=<callback>`
 
@@ -83,6 +87,7 @@
 ### Task 3: Android Browser Login
 
 **Files:**
+
 - Modify: `mobile/android/app/src/main/AndroidManifest.xml`
 - Modify: `mobile/android/app/src/main/kotlin/zip/iptables/pandar/android/data/remote/PandarApi.kt`
 - Add: `mobile/android/app/src/main/kotlin/zip/iptables/pandar/android/data/remote/dto/MobileAuthDto.kt`
@@ -95,6 +100,7 @@
 - Test: `mobile/android/app/src/test/kotlin/zip/iptables/pandar/android/data/settings/SettingsMappingTest.kt`
 
 **Interfaces:**
+
 - Consumes: `/api/v1/mobile/login-tickets/exchange`
 - Produces: Android callback handling for `zip.iptables.pandar.android:/auth/callback`
 
@@ -109,9 +115,11 @@
 ### Task 4: Verification And Documentation
 
 **Files:**
+
 - Modify: `docs/roadmap.md`
 
 **Interfaces:**
+
 - Consumes: completed Hub, frontend, and Android changes.
 - Produces: verified worktree with roadmap entry.
 

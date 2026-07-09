@@ -103,7 +103,12 @@ export async function deletePrinter(formData: FormData) {
       headers: await apiHeaders("application/json"),
     },
   );
-  redirect(statusUrl(tenantId, response.ok ? "printer_deleted" : await errorCode(response)));
+  redirect(
+    statusUrl(
+      tenantId,
+      response.ok ? "printer_deleted" : await errorCode(response),
+    ),
+  );
 }
 
 export async function updatePrinter(formData: FormData) {
@@ -220,10 +225,12 @@ export async function createTenantToken(
 ): Promise<SecretActionState> {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
-  const scopes = stringField(formData, "scopes").split(",").flatMap((scope) => {
-    const trimmed = scope.trim();
-    return trimmed ? [trimmed] : [];
-  });
+  const scopes = stringField(formData, "scopes")
+    .split(",")
+    .flatMap((scope) => {
+      const trimmed = scope.trim();
+      return trimmed ? [trimmed] : [];
+    });
   const response = await postJson(`/api/v1/tenants/${tenantId}/tenant-tokens`, {
     name: stringField(formData, "name"),
     scopes,
@@ -555,7 +562,9 @@ export async function controlPrinter(formData: FormData) {
     {
       action,
       speed_mode: speedMode ? Number(speedMode) : undefined,
-      temperature_celsius: temperatureCelsius ? Number(temperatureCelsius) : undefined,
+      temperature_celsius: temperatureCelsius
+        ? Number(temperatureCelsius)
+        : undefined,
       wait: wait ? wait === "true" || wait === "on" : undefined,
       ams_id: amsId ? Number(amsId) : undefined,
       slot_id: slotId ? Number(slotId) : undefined,
@@ -654,7 +663,11 @@ async function errorCode(response: Response) {
   }
 }
 
-function statusUrlForForm(formData: FormData, tenantId: string, status: string) {
+function statusUrlForForm(
+  formData: FormData,
+  tenantId: string,
+  status: string,
+) {
   return statusUrl(tenantId, status, stringField(formData, "return_to"));
 }
 

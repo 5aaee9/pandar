@@ -147,7 +147,9 @@ function formatTrayLabel(value: string | number | null | undefined): string {
   return value?.toString() ?? "-";
 }
 
-function parseSlotIndex(value: string | number | null | undefined): number | null {
+function parseSlotIndex(
+  value: string | number | null | undefined,
+): number | null {
   if (value === null || value === undefined || value === "") {
     return null;
   }

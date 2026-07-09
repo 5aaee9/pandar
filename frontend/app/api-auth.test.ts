@@ -44,7 +44,9 @@ describe("requireAuth", () => {
   });
 
   it("allows server-token actions without a browser auth cookie", async () => {
-    const { requireAuth } = await loadApiAuth({ APP_API_TOKEN: "server-token" });
+    const { requireAuth } = await loadApiAuth({
+      APP_API_TOKEN: "server-token",
+    });
 
     await expect(requireAuth()).resolves.toBeUndefined();
   });

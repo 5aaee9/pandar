@@ -53,6 +53,7 @@
 ### Task 1: Protocol And Agent Material Refresh
 
 **Files:**
+
 - Modify: `proto/pandar/agent/v1/agent.proto`
 - Modify: `crates/pandar-agent/src/machine/mqtt.rs`
 - Modify: `crates/pandar-agent/src/machine/mod.rs`
@@ -62,6 +63,7 @@
 - Test: `crates/pandar-agent/src/commands/tests.rs`
 
 **Interfaces:**
+
 - Produces proto `AgentEvent::PrinterMaterialsSnapshot(PrinterMaterialsSnapshot { serial, printer_id, printer_materials_json })`.
 - Produces proto `HubCommand::RefreshPrinterMaterials(RefreshPrinterMaterials { printer_id, serial_number })`.
 - Produces `PrinterRefreshResult { snapshot: MachineSnapshot, materials: Option<MaterialRefreshResult> }`.
@@ -391,6 +393,7 @@ Expected: all selected agent tests pass.
 ### Task 2: Hub Material Outcome And Material-Aware Events
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/repositories/materials.rs`
 - Modify: `crates/pandar-hub/src/repositories/materials/patch.rs`
 - Modify: `crates/pandar-hub/src/repositories/jobs/print_reports.rs`
@@ -406,6 +409,7 @@ Expected: all selected agent tests pass.
 - Test: `crates/pandar-hub/src/routes/tests/printer_events_ws.rs`
 
 **Interfaces:**
+
 - Produces `MaterialPatchOutcome::{Empty, Invalid { error }, Older, Unchanged(MaterialSnapshot), Changed(MaterialSnapshot)}`.
 - Produces a helper for building material-aware printer event DTOs from `Printer` plus latest `MaterialSnapshot`.
 - Produces `PrinterEvent::PrinterSnapshot { printer: Box<PrinterEventPrinter> }`, where `PrinterEventPrinter` serializes the same fields as `PrinterResponse`, including sanitized `materials`.
@@ -726,6 +730,7 @@ Expected: all selected Hub material/event tests pass.
 ### Task 3: Hub Material Refresh Command And Route
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/repositories/commands.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands/audit.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands/enqueue.rs`
@@ -739,6 +744,7 @@ Expected: all selected Hub material/event tests pass.
 - Test: `crates/pandar-hub/src/repositories/tests/postgres_commands.rs`
 
 **Interfaces:**
+
 - Produces `RefreshPrinterMaterialsPayload { printer_id: String, serial_number: String }`.
 - Produces repository enqueue method `enqueue_refresh_printer_materials_with_audit(tenant_id, printer_id, actor)` that resolves the owning agent.
 - Produces route `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/materials:refresh` requiring `Operator`.
@@ -825,7 +831,6 @@ async fn refresh_printer_materials_rejects_invalid_and_missing_printers() {
     assert_eq!(body["error"], "printer_not_found");
 }
 ```
-
 
 Add conversion test:
 
@@ -920,6 +925,7 @@ Expected: all selected command/route tests pass.
 ### Task 4: Frontend Inventory Action And Translations
 
 **Files:**
+
 - Modify: `frontend/app/actions.ts`
 - Modify: `frontend/app/action-status.ts`
 - Modify: `frontend/app/dashboard-inventory.tsx`
@@ -930,6 +936,7 @@ Expected: all selected command/route tests pass.
 - Modify: `frontend/messages/zh.json`
 
 **Interfaces:**
+
 - Produces server action `refreshPrinterMaterials(formData: FormData)`.
 - Produces inventory copy keys `inventory.refreshAms` and runtime status `materials_refresh_queued`.
 - Produces per-row form fields `tenant_id` and `printer_id` posting to the new server action.
@@ -946,7 +953,9 @@ it("posts refresh printer materials to the API and redirects to devices", async 
 
   fetchMock.mockResolvedValueOnce(jsonResponse({ id: "command-1" }));
 
-  await expect(refreshPrinterMaterials(form)).rejects.toMatchObject({ digest: expect.stringContaining("NEXT_REDIRECT") });
+  await expect(refreshPrinterMaterials(form)).rejects.toMatchObject({
+    digest: expect.stringContaining("NEXT_REDIRECT"),
+  });
 
   expect(fetchMock).toHaveBeenCalledWith(
     "http://localhost:8080/api/v1/tenants/tenant-1/printers/printer-1/materials:refresh",
@@ -995,7 +1004,12 @@ export async function refreshPrinterMaterials(formData: FormData) {
     `/api/v1/tenants/${tenantId}/printers/${printerId}/materials:refresh`,
     {},
   );
-  redirect(statusUrl(tenantId, response.ok ? "materials_refresh_queued" : await errorCode(response)));
+  redirect(
+    statusUrl(
+      tenantId,
+      response.ok ? "materials_refresh_queued" : await errorCode(response),
+    ),
+  );
 }
 ```
 
@@ -1005,8 +1019,11 @@ In `PrinterInventory`, import `refreshPrinterMaterials` and render a compact for
 <form action={refreshPrinterMaterials} className="mt-2">
   <input type="hidden" name="tenant_id" value={printer.tenant_id} />
   <input type="hidden" name="printer_id" value={printer.id} />
-  <button className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100" type="submit">
-    {t('refreshAms')}
+  <button
+    className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+    type="submit"
+  >
+    {t("refreshAms")}
   </button>
 </form>
 ```
@@ -1047,11 +1064,13 @@ Expected: selected tests and the full frontend Vitest suite pass.
 ### Task 5: Documentation, Formatting, And Focused Integration Checks
 
 **Files:**
+
 - Modify: `docs/roadmap.md`
 - Modify: `docs/development.md`
 - Review only: current diff across `proto/`, `crates/`, `frontend/`, `docs/`
 
 **Interfaces:**
+
 - Produces roadmap entry describing gRPC-backed Agent AMS refresh, `refresh_printers` material refresh, per-printer UI action, and material-aware live updates.
 - Produces development docs for the new per-printer material refresh HTTP route.
 

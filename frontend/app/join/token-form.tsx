@@ -32,10 +32,7 @@ export function JoinTokenForm({
           value={token}
         />
       </div>
-      <Button
-        className="justify-center"
-        type="submit"
-      >
+      <Button className="justify-center" type="submit">
         <LogIn className="size-4" />
         {t("joinSubmit")}
       </Button>

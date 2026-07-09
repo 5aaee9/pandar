@@ -54,6 +54,7 @@
 ### Task 1: Hub And Proto Link-Printer Contract
 
 **Files:**
+
 - Modify: `proto/pandar/agent/v1/agent.proto`
 - Modify: `crates/pandar-hub/src/repositories/commands.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands/audit.rs`
@@ -68,6 +69,7 @@
 - Test: `crates/pandar-hub/src/grpc/tests/lifecycle.rs`
 
 **Interfaces:**
+
 - Consumes: existing live-only link-printer route/session dispatch and pending-secret redaction.
 - Produces: `LinkPrinterPayload { printer_type: String, host: String, access_code: String, name: Option<String> }`.
 - Produces: `RedactedLinkPrinterPayload { printer_type: String, host: String, access_code: String, name: Option<String> }` where `access_code` is always `"[redacted]"`.
@@ -421,12 +423,14 @@ Expected: PASS. If generated protobuf code is stale, these commands should trigg
 ### Task 2: Agent Metadata Discovery And Completion Reporting
 
 **Files:**
+
 - Modify: `crates/pandar-agent/src/commands.rs`
 - Test: `crates/pandar-agent/src/lib.rs`
 - Test: `crates/pandar-agent/src/machine/runtime.rs`
 - Test: `crates/pandar-agent/src/commands/tests.rs`
 
 **Interfaces:**
+
 - Consumes: proto `LinkPrinter { host, access_code, name, printer_type }` from Task 1.
 - Consumes: `BambuMachineGateway::discover_printers(timeout_seconds) -> anyhow::Result<PrinterDiscoveryResult>`.
 - Consumes: `BambuMachineGateway::link_printer(endpoint, config, sender) -> anyhow::Result<MachineSnapshot>`.
@@ -906,6 +910,7 @@ Expected: PASS, with no command result or log containing `SECRET-LINK-CODE`.
 ### Task 3: Frontend Add-Printer Form And Server Action
 
 **Files:**
+
 - Modify: `frontend/app/link-printer-form.tsx`
 - Modify: `frontend/app/actions.ts`
 - Create: `frontend/app/actions.test.ts`
@@ -914,6 +919,7 @@ Expected: PASS, with no command result or log containing `SECRET-LINK-CODE`.
 - Modify: `frontend/messages/zh.json`
 
 **Interfaces:**
+
 - Consumes: Hub request shape from Task 1.
 - Produces: form fields `agent_id`, hidden `tenant_id`, `type`, `host`, `access_code`, and optional `name`.
 - Produces: `linkPrinter(formData)` POST body `{ type, host, access_code, name }` with no `serial_number` or `model` keys.
@@ -926,8 +932,14 @@ Update `frontend/app/agent-pairing-guidance.test.tsx` form assertions:
 ```tsx
 expect(screen.getByLabelText("Agent")).toHaveValue("agent-online");
 expect(screen.getByLabelText("Type")).toHaveValue("BambuLab");
-expect(screen.getByLabelText("Printer IPv4 address")).toHaveAttribute("name", "host");
-expect(screen.getByLabelText("Access code")).toHaveAttribute("name", "access_code");
+expect(screen.getByLabelText("Printer IPv4 address")).toHaveAttribute(
+  "name",
+  "host",
+);
+expect(screen.getByLabelText("Access code")).toHaveAttribute(
+  "name",
+  "access_code",
+);
 expect(screen.getByLabelText("Name")).toHaveAttribute("name", "name");
 expect(screen.queryByLabelText("Serial number")).not.toBeInTheDocument();
 expect(screen.queryByLabelText("Model")).not.toBeInTheDocument();
@@ -937,7 +949,11 @@ Update the no-tenant empty-state assertion because the existing English message 
 
 ```tsx
 expect(screen.getByText("Select a tenant to link a printer."));
-expect(screen.getByText("Choose a tenant from the header before submitting printer connection details."));
+expect(
+  screen.getByText(
+    "Choose a tenant from the header before submitting printer connection details.",
+  ),
+);
 expect(screen.getByText("No agents available for printer linking."));
 expect(screen.getByText("Pair an agent before linking a printer."));
 ```
@@ -945,66 +961,69 @@ expect(screen.getByText("Pair an agent before linking a printer."));
 Create `frontend/app/actions.test.ts`:
 
 ```ts
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { linkPrinter } from './actions'
+import { linkPrinter } from "./actions";
 
 const redirectMock = vi.fn((url: string) => {
-  throw new Error(`NEXT_REDIRECT:${url}`)
-})
+  throw new Error(`NEXT_REDIRECT:${url}`);
+});
 
-vi.mock('next/navigation', () => ({
+vi.mock("next/navigation", () => ({
   redirect: redirectMock,
-}))
+}));
 
-vi.mock('./api-auth', () => ({
+vi.mock("./api-auth", () => ({
   requireAuth: vi.fn(async () => undefined),
-  apiHeaders: vi.fn(async () => ({ 'content-type': 'application/json' })),
-}))
+  apiHeaders: vi.fn(async () => ({ "content-type": "application/json" })),
+}));
 
-describe('linkPrinter', () => {
+describe("linkPrinter", () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.clearAllMocks();
     vi.stubGlobal(
-      'fetch',
-      vi.fn(async () =>
-        new Response(JSON.stringify({ id: 'command-1' }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: "command-1" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
       ),
-    )
-  })
+    );
+  });
 
-  it('posts type, host, access code, and optional name without serial or model', async () => {
-    const formData = new FormData()
-    formData.set('tenant_id', 'tenant-1')
-    formData.set('agent_id', 'agent-1')
-    formData.set('type', 'BambuLab')
-    formData.set('host', '192.0.2.10')
-    formData.set('access_code', 'SECRET-LINK-CODE')
-    formData.set('name', 'Office X1C')
+  it("posts type, host, access code, and optional name without serial or model", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("agent_id", "agent-1");
+    formData.set("type", "BambuLab");
+    formData.set("host", "192.0.2.10");
+    formData.set("access_code", "SECRET-LINK-CODE");
+    formData.set("name", "Office X1C");
 
-    await expect(linkPrinter(formData)).rejects.toThrow('NEXT_REDIRECT:/agents?tenant=tenant-1&command=command-1')
+    await expect(linkPrinter(formData)).rejects.toThrow(
+      "NEXT_REDIRECT:/agents?tenant=tenant-1&command=command-1",
+    );
 
     expect(fetch).toHaveBeenCalledWith(
-      'http://localhost:8080/api/v1/tenants/tenant-1/agents/agent-1/link-printer',
+      "http://localhost:8080/api/v1/tenants/tenant-1/agents/agent-1/link-printer",
       expect.objectContaining({
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
-          type: 'BambuLab',
-          host: '192.0.2.10',
-          access_code: 'SECRET-LINK-CODE',
-          name: 'Office X1C',
+          type: "BambuLab",
+          host: "192.0.2.10",
+          access_code: "SECRET-LINK-CODE",
+          name: "Office X1C",
         }),
       }),
-    )
-    const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit
-    const body = JSON.parse(String(init.body)) as Record<string, unknown>
-    expect(body.serial_number).toBeUndefined()
-    expect(body.model).toBeUndefined()
-  })
-})
+    );
+    const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body.serial_number).toBeUndefined();
+    expect(body.model).toBeUndefined();
+  });
+});
 ```
 
 - [x] **Step 2: Run focused frontend tests and confirm the expected failure**
@@ -1023,14 +1042,14 @@ Change `frontend/app/link-printer-form.tsx` after the agent selector to add the 
 
 ```tsx
 <label className="flex flex-col gap-1 text-sm">
-  <span className="text-xs font-medium text-slate-500">{t('type')}</span>
+  <span className="text-xs font-medium text-slate-500">{t("type")}</span>
   <select
     className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
     defaultValue="BambuLab"
     name="type"
     required
   >
-    <option value="BambuLab">{t('typeBambuLab')}</option>
+    <option value="BambuLab">{t("typeBambuLab")}</option>
   </select>
 </label>
 ```
@@ -1114,10 +1133,12 @@ Expected: PASS.
 ### Task 4: Documentation And Verification Preparation
 
 **Files:**
+
 - Modify: `docs/development.md`
 - Modify: `docs/roadmap.md`
 
 **Interfaces:**
+
 - Consumes: implemented behavior from Tasks 1-3.
 - Produces: user/developer docs stating runtime add-printer now asks for type, IPv4 address, access code, and optional name, while agent discovery supplies serial/model after onboarding.
 - Produces: roadmap entry recording the completed add-printer simplification.
@@ -1178,6 +1199,7 @@ Expected: PASS. If a broad command is blocked by environment, capture the exact 
 ## Self-Review
 
 **Spec coverage:**
+
 - Form removes serial/model inputs and adds default `BambuLab` type selector: Task 3.
 - Server action posts type/host/access_code/name only: Task 3.
 - Hub request validation rejects legacy serial/model, invalid type, blank fields, and non-IPv4 host: Task 1.

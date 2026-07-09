@@ -32,6 +32,7 @@
 ### Task 1: Add Failing Dashboard Shell Tests
 
 **Files:**
+
 - Modify: `frontend/app/dashboard-shell.test.tsx`
 - Modify: `frontend/app/dashboard-runtime.test.tsx`
 - Modify: `frontend/app/actions.test.ts`
@@ -116,10 +117,10 @@ Update `renderRuntime` so tests can override view, action status, selected comma
 function renderRuntime(
   auth: AuthMetadata = noAuth,
   options: {
-    view?: "devices" | "jobs"
-    actionStatus?: string
-    selectedCommandId?: string
-    tenants?: Tenant[]
+    view?: "devices" | "jobs";
+    actionStatus?: string;
+    selectedCommandId?: string;
+    tenants?: Tenant[];
   } = {},
 ) {
   return render(
@@ -199,11 +200,12 @@ Add a helper:
 function okFetch() {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () =>
-      new Response(JSON.stringify({ id: "command-1" }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ id: "command-1" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
     ),
   );
 }
@@ -219,18 +221,30 @@ it.each([
   ["retryDispatchJobs", retryDispatchJobs, [["job_id", "job-1"]]],
   ["reprintJob", reprintJob, [["job_id", "job-1"]]],
   ["duplicateJob", duplicateJob, [["job_id", "job-1"]]],
-  ["controlPrinter", controlPrinter, [["printer_id", "printer-1"], ["action", "pause"]]],
-] as const)("redirects %s back to jobs when submitted from jobs", async (_name, action, fields) => {
-  okFetch();
-  const formData = new FormData();
-  formData.set("tenant_id", "tenant-1");
-  formData.set("return_to", "jobs");
-  for (const [name, value] of fields) {
-    formData.append(name, value);
-  }
+  [
+    "controlPrinter",
+    controlPrinter,
+    [
+      ["printer_id", "printer-1"],
+      ["action", "pause"],
+    ],
+  ],
+] as const)(
+  "redirects %s back to jobs when submitted from jobs",
+  async (_name, action, fields) => {
+    okFetch();
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("return_to", "jobs");
+    for (const [name, value] of fields) {
+      formData.append(name, value);
+    }
 
-  await expect(action(formData)).rejects.toThrow(/^NEXT_REDIRECT:\/jobs\?tenant=tenant-1&status=/);
-});
+    await expect(action(formData)).rejects.toThrow(
+      /^NEXT_REDIRECT:\/jobs\?tenant=tenant-1&status=/,
+    );
+  },
+);
 ```
 
 Keep the existing `refreshPrinterMaterials` test expecting `/devices?...`, and add one default recovery-action test:
@@ -270,11 +284,12 @@ describe("DispatchForm", () => {
     const onRedirect = vi.fn();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({}), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({}), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
       ),
     );
 
@@ -282,7 +297,9 @@ describe("DispatchForm", () => {
       <NextIntlClientProvider locale="en" messages={en}>
         <DispatchForm
           selectedTenant={{ id: "tenant-1" }}
-          printers={[{ id: "printer-1", name: "Printer One", serial_number: "SN1" }]}
+          printers={[
+            { id: "printer-1", name: "Printer One", serial_number: "SN1" },
+          ]}
           onRedirect={onRedirect}
         />
       </NextIntlClientProvider>,
@@ -298,7 +315,9 @@ describe("DispatchForm", () => {
     fireEvent.submit(form as HTMLFormElement);
 
     await waitFor(() =>
-      expect(onRedirect).toHaveBeenCalledWith("/jobs?tenant=tenant-1&status=job_created"),
+      expect(onRedirect).toHaveBeenCalledWith(
+        "/jobs?tenant=tenant-1&status=job_created",
+      ),
     );
   });
 });
@@ -342,10 +361,18 @@ it("keeps devices focused on overview and printer inventory", () => {
   );
 
   expect(screen.getByText("All systems nominal")).toBeVisible();
-  expect(screen.getByRole("heading", { name: "Printer inventory" })).toBeVisible();
-  expect(screen.queryByRole("heading", { name: "Print jobs" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: "Dispatch print job" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: "Recovery actions" })).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Printer inventory" }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("heading", { name: "Print jobs" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("heading", { name: "Dispatch print job" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("heading", { name: "Recovery actions" }),
+  ).not.toBeInTheDocument();
 });
 ```
 
@@ -387,9 +414,15 @@ it("renders job history, dispatch, and recovery on jobs", () => {
   );
 
   expect(screen.getByRole("heading", { name: "Print jobs" })).toBeVisible();
-  expect(screen.getByRole("heading", { name: "Dispatch print job" })).toBeVisible();
-  expect(screen.getByRole("heading", { name: "Recovery actions" })).toBeVisible();
-  expect(screen.queryByRole("heading", { name: "Printer inventory" })).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "Dispatch print job" }),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("heading", { name: "Recovery actions" }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("heading", { name: "Printer inventory" }),
+  ).not.toBeInTheDocument();
 });
 ```
 
@@ -408,6 +441,7 @@ Expected: failures mention `jobs` is not assignable, Jobs route/sidebar/content/
 ### Task 2: Implement Jobs Route and View Split
 
 **Files:**
+
 - Modify: `frontend/app/dashboard-shell.ts`
 - Modify: `frontend/components/app-sidebar.tsx`
 - Create: `frontend/app/jobs/page.tsx`
@@ -446,20 +480,20 @@ import {
   MonitorIcon,
   SettingsIcon,
   UsersIcon,
-} from "lucide-react"
+} from "lucide-react";
 ```
 
 ```tsx
 const navItems: Array<{
-  view: DashboardView
-  icon: React.ComponentType<{ className?: string }>
+  view: DashboardView;
+  icon: React.ComponentType<{ className?: string }>;
 }> = [
   { view: "devices", icon: MonitorIcon },
   { view: "jobs", icon: ClipboardListIcon },
   { view: "agents", icon: BotIcon },
   { view: "users", icon: UsersIcon },
   { view: "settings", icon: SettingsIcon },
-]
+];
 ```
 
 - [ ] **Step 3: Add the Jobs route page**
@@ -482,11 +516,11 @@ export default function JobsPage(props: DashboardPageProps) {
 In `frontend/app/dashboard-view-content.tsx`, update the dispatcher:
 
 ```tsx
-if (props.view === 'devices') {
-  return <DevicesView {...props} />
+if (props.view === "devices") {
+  return <DevicesView {...props} />;
 }
-if (props.view === 'jobs') {
-  return <JobsView {...props} />
+if (props.view === "jobs") {
+  return <JobsView {...props} />;
 }
 ```
 
@@ -515,9 +549,13 @@ function DevicesView({
         fleetEmpty={fleetEmpty}
       />
       <NeedsAttention items={attentionItems} selectedTenant={selectedTenant} />
-      <PrinterInventory selectedTenant={selectedTenant} printers={printers} agents={agents} />
+      <PrinterInventory
+        selectedTenant={selectedTenant}
+        printers={printers}
+        agents={agents}
+      />
     </>
-  )
+  );
 }
 ```
 
@@ -532,11 +570,21 @@ function JobsView({
 }: DashboardViewContentProps) {
   return (
     <>
-      <JobHistory selectedTenant={selectedTenant} jobs={jobs} printers={printers} agents={agents} />
+      <JobHistory
+        selectedTenant={selectedTenant}
+        jobs={jobs}
+        printers={printers}
+        agents={agents}
+      />
       <DispatchForm selectedTenant={selectedTenant} printers={printers} />
-      <RecoveryActions selectedTenant={selectedTenant} agents={agents} printers={printers} jobs={jobs} />
+      <RecoveryActions
+        selectedTenant={selectedTenant}
+        agents={agents}
+        printers={printers}
+        jobs={jobs}
+      />
     </>
-  )
+  );
 }
 ```
 
@@ -547,9 +595,9 @@ In `frontend/app/dashboard-runtime.tsx`, update the dashboard query:
 ```tsx
 const dashboardQuery: DashboardQuery = {
   tenant: selectedTenant?.id,
-  command: view === 'agents' ? selectedCommandId : undefined,
-  status: view === 'jobs' ? actionStatus : undefined,
-}
+  command: view === "agents" ? selectedCommandId : undefined,
+  status: view === "jobs" ? actionStatus : undefined,
+};
 ```
 
 - [ ] **Step 6: Redirect Jobs-page actions back to Jobs**
@@ -557,7 +605,11 @@ const dashboardQuery: DashboardQuery = {
 In `frontend/app/actions.ts`, add a return-view helper:
 
 ```ts
-function statusUrlForForm(formData: FormData, tenantId: string, status: string) {
+function statusUrlForForm(
+  formData: FormData,
+  tenantId: string,
+  status: string,
+) {
   return statusUrl(tenantId, status, stringField(formData, "return_to"));
 }
 
@@ -570,13 +622,13 @@ function statusUrl(tenantId: string, status: string, returnTo?: string) {
 Update these actions to redirect with `statusUrlForForm(formData, tenantId, ...)`:
 
 ```ts
-refreshPrinters
-refreshAllAgents
-retryDispatchJob
-retryDispatchJobs
-reprintJob
-duplicateJob
-controlPrinter
+refreshPrinters;
+refreshAllAgents;
+retryDispatchJob;
+retryDispatchJobs;
+reprintJob;
+duplicateJob;
+controlPrinter;
 ```
 
 Do not change `refreshPrinterMaterials`, tenant token/user/admin redirects, `agentsStatusUrl`, or `commandUrl`.
@@ -608,7 +660,7 @@ Then change the upload completion redirect:
 ```tsx
 onRedirect(
   `/jobs?tenant=${encodeURIComponent(selectedTenant.id)}&status=${encodeURIComponent(status)}`,
-)
+);
 ```
 
 - [ ] **Step 7: Add localized labels**
@@ -640,6 +692,7 @@ Expected: all focused dashboard, action, and dispatch form tests pass.
 ### Task 3: Docs and Full Verification
 
 **Files:**
+
 - Modify: `docs/roadmap.md`
 
 - [ ] **Step 1: Update roadmap**

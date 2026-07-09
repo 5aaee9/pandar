@@ -45,7 +45,7 @@ All verified against the current codebase:
   - `{type:"printer_snapshot", printer: PrinterEventPrinter}`
   - `{type:"job_progress", job: Job}`
   - `{type:"command_result", command: PrinterEventCommand}`
-  The stream is best-effort and does not replay history; initial state is always loaded via REST.
+    The stream is best-effort and does not replay history; initial state is always loaded via REST.
 - Auth: `Authorization: Bearer <jwt>` on every request (incl. WebSocket upgrade). The hub also supports `PANDAR_HUB_NO_AUTH=true` (no token needed); the app sends the token when configured and omits it when none is stored. On HTTP 401 the app attempts a single token refresh, then re-prompts sign-in.
 - `PrinterEventPrinter` fields used by the UI: `id, tenant_id, agent_id, serial_number, name, model, status, last_seen_at, created_at, nozzle_temperatures[], active_nozzle, bed_temperature_celsius, bed_target_temperature_celsius, chamber_temperature_celsius, chamber_light_on, materials{ams_units, external_spools, active_tray, observed_at}`. (`nozzle_temperatures[].{label?, current_celsius?, target_celsius?}`.)
 - Status → severity mapping (mirrors the `statusSeverity()` function in `frontend/app/dashboard-attention.ts` — note this is the pill-color function, distinct from `OFFLINE_PRINTER_STATUSES` which is only used for the offline-attention heuristic): failed/offline/unavailable/error/down → critical; warning/queued/sent/acknowledged/connecting/problem/degraded/pending → warning; online/ok/succeeded/completed/running/printing/ready → success; otherwise info. Unknown statuses never crash; they fall back to info and are still rendered as a pill with an icon + text label.

@@ -44,6 +44,7 @@
 ### Task 1: Hub Delete API And Repository
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/repositories/mod.rs`
 - Modify: `crates/pandar-hub/src/repositories/agents.rs`
 - Modify: `crates/pandar-hub/src/repositories/tests/phase1.rs`
@@ -53,6 +54,7 @@
 - Modify: `crates/pandar-hub/src/routes/tests/agents.rs`
 
 **Interfaces:**
+
 - Produces: `AgentRepository::delete_offline_with_audit(&self, tenant_id: TenantId, agent_id: AgentId, actor: AuditActor) -> RepositoryResult<Agent>`.
 - Produces: `RepositoryError::AgentOnline` mapped to `409 agent_online`.
 - Produces: `DELETE /api/v1/tenants/{tenant_id}/agents/{agent_id}` returning `AgentResponse`.
@@ -458,6 +460,7 @@ Expected: tests pass.
 ### Task 2: Frontend Delete Action
 
 **Files:**
+
 - Modify: `frontend/app/actions.ts`
 - Modify: `frontend/app/diagnostics-panel.tsx`
 - Modify: `frontend/app/action-status.ts`
@@ -467,6 +470,7 @@ Expected: tests pass.
 - Modify: `frontend/app/action-status-toast.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `DELETE /api/v1/tenants/{tenant_id}/agents/{agent_id}` from Task 1.
 - Produces: `deleteAgent(formData: FormData)` server action.
 - Produces: `agent_deleted` positive action status.
@@ -478,41 +482,45 @@ In `frontend/app/agent-pairing-guidance.test.tsx`, add `deleteAgent: vi.fn(),` t
 Add this test inside `describe("Agents view pairing guidance", ...)`:
 
 ```tsx
-  it("renders delete controls only for agents that are not online", () => {
-    renderAgentsView({
-      agents: [
-        {
-          id: "agent-offline",
-          tenant_id: tenant.id,
-          name: "Offline agent",
-          status: "offline",
-          created_at: "2026-06-30T00:00:00Z",
-        },
-        {
-          id: "agent-online",
-          tenant_id: tenant.id,
-          name: "Online agent",
-          status: "online",
-          created_at: "2026-06-30T00:00:00Z",
-        },
-      ],
-    });
-
-    expect(screen.getByRole("button", { name: "Delete Offline agent" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Online agent is online" })).toBeDisabled();
+it("renders delete controls only for agents that are not online", () => {
+  renderAgentsView({
+    agents: [
+      {
+        id: "agent-offline",
+        tenant_id: tenant.id,
+        name: "Offline agent",
+        status: "offline",
+        created_at: "2026-06-30T00:00:00Z",
+      },
+      {
+        id: "agent-online",
+        tenant_id: tenant.id,
+        name: "Online agent",
+        status: "online",
+        created_at: "2026-06-30T00:00:00Z",
+      },
+    ],
   });
+
+  expect(
+    screen.getByRole("button", { name: "Delete Offline agent" }),
+  ).toBeEnabled();
+  expect(
+    screen.getByRole("button", { name: "Online agent is online" }),
+  ).toBeDisabled();
+});
 ```
 
 In `frontend/app/action-status-toast.test.tsx`, update the first helper test:
 
 ```tsx
-    expect(formatActionStatus("agent_deleted", tStatus)).toBe("Agent deleted");
+expect(formatActionStatus("agent_deleted", tStatus)).toBe("Agent deleted");
 ```
 
 Update the tone test:
 
 ```tsx
-    expect(actionStatusTone("agent_deleted")).toBe("success");
+expect(actionStatusTone("agent_deleted")).toBe("success");
 ```
 
 - [ ] **Step 2: Run frontend tests and verify RED**
@@ -563,34 +571,38 @@ function agentsStatusUrl(tenantId: string, status: string) {
 In `frontend/app/diagnostics-panel.tsx`, update imports:
 
 ```ts
-import { deleteAgent, diagnosePrinter, discoverPrinters } from './actions'
-import { ConfirmForm } from './confirm-dialog'
+import { deleteAgent, diagnosePrinter, discoverPrinters } from "./actions";
+import { ConfirmForm } from "./confirm-dialog";
 ```
 
 Add the action header after the discovery header:
 
 ```tsx
-                <th className="px-4 py-2">{t('colActions')}</th>
+<th className="px-4 py-2">{t("colActions")}</th>
 ```
 
 Add this table cell after the discovery form cell inside each agent row:
 
 ```tsx
-                  <td className="px-4 py-3">
-                    <ConfirmForm
-                      action={deleteAgent}
-                      buttonClassName="h-9 rounded-md border border-red-300 px-3 text-sm font-medium text-red-700 disabled:border-slate-200 disabled:text-slate-400"
-                      buttonLabel={agent.status.toLowerCase() === 'online' ? t('deleteOnline', { name: agent.name }) : t('deleteAgent', { name: agent.name })}
-                      disabled={agent.status.toLowerCase() === 'online'}
-                      title={t('deleteTitle')}
-                      message={t('deleteMessage', { name: agent.name })}
-                      confirmLabel={t('deleteConfirm')}
-                      tone="danger"
-                    >
-                      <input name="tenant_id" type="hidden" value={selectedTenant.id} />
-                      <input name="agent_id" type="hidden" value={agent.id} />
-                    </ConfirmForm>
-                  </td>
+<td className="px-4 py-3">
+  <ConfirmForm
+    action={deleteAgent}
+    buttonClassName="h-9 rounded-md border border-red-300 px-3 text-sm font-medium text-red-700 disabled:border-slate-200 disabled:text-slate-400"
+    buttonLabel={
+      agent.status.toLowerCase() === "online"
+        ? t("deleteOnline", { name: agent.name })
+        : t("deleteAgent", { name: agent.name })
+    }
+    disabled={agent.status.toLowerCase() === "online"}
+    title={t("deleteTitle")}
+    message={t("deleteMessage", { name: agent.name })}
+    confirmLabel={t("deleteConfirm")}
+    tone="danger"
+  >
+    <input name="tenant_id" type="hidden" value={selectedTenant.id} />
+    <input name="agent_id" type="hidden" value={agent.id} />
+  </ConfirmForm>
+</td>
 ```
 
 - [ ] **Step 5: Add translations and positive status**
@@ -646,9 +658,11 @@ Expected: tests pass.
 ### Task 3: Roadmap And Verification
 
 **Files:**
+
 - Modify: `docs/roadmap.md`
 
 **Interfaces:**
+
 - Consumes: implemented backend and frontend behavior from Tasks 1 and 2.
 - Produces: roadmap entry documenting completed offline-agent deletion.
 

@@ -7,13 +7,13 @@ Bambu Studio starts with the Pandar networking plugin installed, and the plugin 
 The plugin shim returns the body from `GET /api/v1/plugin/printers` directly from `bambu_network_get_user_print_info`. The existing ABI probe success fixture uses the Bambu Studio shape:
 
 ```json
-{"devices":[{"dev_id":"printer-1","name":"Probe Printer"}]}
+{ "devices": [{ "dev_id": "printer-1", "name": "Probe Printer" }] }
 ```
 
 The Hub plugin route originally returned:
 
 ```json
-{"printers":[{"dev_id":"...","name":"..."}]}
+{ "printers": [{ "dev_id": "...", "name": "..." }] }
 ```
 
 After changing the top-level field to `devices`, runtime validation still showed an empty `My Device` list in Bambu Studio. The Bambu Studio parser in `reference/BambuStudio/src/slic3r/GUI/DeviceCore/DevManager.cpp` reads Studio-native device fields (`dev_name`, `dev_online`, `dev_model_name`, and `task_status`) rather than Pandar's plugin aliases (`name`, `online`, `model`, and `state`) when constructing `MachineObject` entries.

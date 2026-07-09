@@ -64,9 +64,10 @@ Single-module app (`:app`), no Hilt. A small `AppContainer` created in
 `PandarApplication` owns `SettingsRepository`, `AuthRepository`,
 `PrinterEventsRepository`, and `PandarRepository`, plus the Retrofit `PandarApi`
 which is rebuilt when the hub base URL changes. Networking uses OkHttp + Retrofit
-+ kotlinx.serialization (single `appJson` instance for both encode and decode);
-the WebSocket reuses the shared `OkHttpClient`. Status colors are always paired
-with an icon and text label — never color alone.
+
+- kotlinx.serialization (single `appJson` instance for both encode and decode);
+  the WebSocket reuses the shared `OkHttpClient`. Status colors are always paired
+  with an icon and text label — never color alone.
 
 Out of scope for v1: camera view, print dispatch / file upload, axis jog and
 print-speed control, admin/users/agents management, internationalization, and

@@ -33,8 +33,12 @@ export function PluginTicketForm({
   selectedTenant,
 }: PluginTicketFormProps) {
   const t = useTranslations("signIn");
-  const [studioCallbackUrl, setStudioCallbackUrl] = useState<string | null>(null);
-  const [customCallbackUrl, setCustomCallbackUrl] = useState<string | null>(null);
+  const [studioCallbackUrl, setStudioCallbackUrl] = useState<string | null>(
+    null,
+  );
+  const [customCallbackUrl, setCustomCallbackUrl] = useState<string | null>(
+    null,
+  );
   const [callbackSource, setCallbackSource] = useState<"default" | "studio">(
     "default",
   );
