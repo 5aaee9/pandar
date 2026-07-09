@@ -24,7 +24,7 @@ suppaftp.workspace = true
 tokio.workspace = true
 tokio-rustls.workspace = true
 tokio-stream.workspace = true
-tonic.workspace = true
+tonic = { workspace = true, features = ["tls-aws-lc", "tls-native-roots"] }
 tonic-prost.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
@@ -35,5 +35,6 @@ tonic-prost-build.workspace = true
 
 [dev-dependencies]
 clap.workspace = true
+rcgen.workspace = true
 tracing-core.workspace = true
 uuid.workspace = true

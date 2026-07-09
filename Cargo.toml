@@ -41,6 +41,7 @@ pandar-studio-dev-hook = { path = "crates/pandar-studio-dev-hook" }
 prost = "0.14"
 protoc-bin-vendored = "3.2.0"
 quick-xml = "0.40.1"
+rcgen = "0.14.8"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "multipart", "rustls"] }
 rsa = { version = "0.9.8", features = ["pem", "sha2"] }
 serde = { version = "1.0.228", features = ["derive"] }

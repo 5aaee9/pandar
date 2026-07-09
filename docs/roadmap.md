@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Enabled tonic TLS native-root support for `pandar-agent` gRPC client connections and added a local TLS gRPC regression test for the generated Agent control client.
 - Wrapped the Nix `pandar-agent` package with a default `PANDAR_FFMPEG_PATH` and ffmpeg runtime `PATH` entry so Agent-mediated camera streaming can spawn the fragmented MP4 transcoder on NixOS deployments.
 - Fixed GitHub Checks failure on the Nix quality checks job: gated the Windows-only `installs_and_restores_swscale_proxy` test in `pandar-studio-dev-hook` with `#[cfg(windows)]` (and its `use super::*` import) so it no longer panics on Linux CI under `--deny warnings`.
 - Fixed GitHub Checks failure on the Nix package checks (aarch64-linux) job: on `aarch64-unknown-linux-gnu` rustc links cdylibs with the system bfd linker and auto-emits an anonymous version script that conflicts with `pandar-network-plugin`'s build.rs export map ("anonymous version tag cannot be combined with other version tags"). Added an `aarch64-linux`-only `-C link-arg=-fuse-ld=lld` rustflag (plus the `lld` package in `nativeBuildInputs`) in `nix/pandar.nix`; lld merges the two version scripts and keeps the build.rs exports, matching x86_64-linux.
