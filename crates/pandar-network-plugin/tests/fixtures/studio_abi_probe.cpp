@@ -729,14 +729,14 @@ int main(int argc, char** argv) {
             return;
         }
         if (!contains(body, R"("ipcam")") || !contains(body, R"("local":"rtsps")")) return;
-        if (!contains(body, R"("nozzle_temper":28)") ||
-            !contains(body, R"("nozzle_target_temper":220)") ||
-            !contains(body, R"("nozzle_temper2":27)") ||
-            !contains(body, R"("nozzle_target_temper2":215)") ||
+        if (!contains(body, R"("nozzle_temper":27)") ||
+            !contains(body, R"("nozzle_target_temper":215)") ||
+            !contains(body, R"("nozzle_temper2":28)") ||
+            !contains(body, R"("nozzle_target_temper2":220)") ||
             !contains(body, R"("nozzle_type":"XS01")") ||
             !contains(body, R"("nozzle_diameter":0.4)") ||
             !contains(body, R"("nozzle":{"exist":3)") ||
-            !contains(body, R"("id":1,"diameter":0.4,"type":"XS01")") ||
+            !contains(body, R"("id":1,"diameter":0.4,"type":"XH05")") ||
             !contains(body, R"("id":0,"diameter":0.4,"type":"XS01")") ||
             !contains(body, R"("bed_temper":60)") ||
             !contains(body, R"("bed_target_temper":65)") ||
@@ -752,8 +752,7 @@ int main(int argc, char** argv) {
             !contains(body, R"("type":1)") ||
             !contains(body, R"("extruder")") ||
             !contains(body, R"("state":18)") ||
-            !contains(body, R"({"id":1,"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":1})") ||
-            !contains(body, R"({"id":0,"info":8,"temp":14090267,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0})") ||
+            !contains(body, R"({"id":0,"info":8,"temp":14090267,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0},{"id":1,"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":1})") ||
             !contains(body, R"("ams_exist_bits":"3")") ||
             !contains(body, R"("tray_exist_bits":"ff")") ||
             !contains(body, R"("tray_now":"3")") ||

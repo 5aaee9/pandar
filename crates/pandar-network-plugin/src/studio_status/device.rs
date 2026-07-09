@@ -13,8 +13,10 @@ pub(super) struct StudioTelemetry {
     support_chamber_temp_display: bool,
     bed_temper: JsonNumber,
     bed_target_temper: JsonNumber,
-    nozzle_type: &'static str,
+    nozzle_type: String,
     nozzle_diameter: f32,
+    nozzle_type2: String,
+    nozzle_diameter2: f32,
     nozzle_temper: JsonNumber,
     nozzle_target_temper: JsonNumber,
     nozzle_temper2: JsonNumber,
@@ -29,22 +31,22 @@ pub(super) struct StudioTelemetry {
 
 impl From<&PrinterStatus> for StudioTelemetry {
     fn from(printer: &PrinterStatus) -> Self {
-        let nozzle = printer.nozzle_temperatures.first();
-        let right_nozzle = printer.nozzle_temperatures.get(1);
+        let main_nozzle = studio_nozzle_by_id(&printer.nozzle_temperatures, 0);
+        let auxiliary_nozzle = studio_nozzle_by_id(&printer.nozzle_temperatures, 1);
         let bed_current = json_number_or_zero(text(&printer.bed_temperature_celsius));
         let bed_target = json_number_or_zero(text(&printer.bed_target_temperature_celsius));
         let chamber_current = json_number_or_zero(text(&printer.chamber_temperature_celsius));
         let nozzle_current = json_number_or_zero(
-            nozzle.map_or(String::new(), |nozzle| text(&nozzle.current_celsius)),
+            main_nozzle.map_or(String::new(), |nozzle| text(&nozzle.current_celsius)),
         );
         let nozzle_target = json_number_or_zero(
-            nozzle.map_or(String::new(), |nozzle| text(&nozzle.target_celsius)),
+            main_nozzle.map_or(String::new(), |nozzle| text(&nozzle.target_celsius)),
         );
-        let right_nozzle_current = json_number_or_zero(
-            right_nozzle.map_or(String::new(), |nozzle| text(&nozzle.current_celsius)),
+        let auxiliary_nozzle_current = json_number_or_zero(
+            auxiliary_nozzle.map_or(String::new(), |nozzle| text(&nozzle.current_celsius)),
         );
-        let right_nozzle_target = json_number_or_zero(
-            right_nozzle.map_or(String::new(), |nozzle| text(&nozzle.target_celsius)),
+        let auxiliary_nozzle_target = json_number_or_zero(
+            auxiliary_nozzle.map_or(String::new(), |nozzle| text(&nozzle.target_celsius)),
         );
         let light_mode = if printer.chamber_light_on {
             "on"
@@ -59,12 +61,14 @@ impl From<&PrinterStatus> for StudioTelemetry {
             support_chamber_temp_display: true,
             bed_temper: JsonNumber::new(&bed_current),
             bed_target_temper: JsonNumber::new(&bed_target),
-            nozzle_type: "XS01",
-            nozzle_diameter: 0.4,
+            nozzle_type: studio_nozzle_type(main_nozzle),
+            nozzle_diameter: studio_nozzle_diameter(main_nozzle),
+            nozzle_type2: studio_nozzle_type(auxiliary_nozzle),
+            nozzle_diameter2: studio_nozzle_diameter(auxiliary_nozzle),
             nozzle_temper: JsonNumber::new(&nozzle_current),
             nozzle_target_temper: JsonNumber::new(&nozzle_target),
-            nozzle_temper2: JsonNumber::new(&right_nozzle_current),
-            nozzle_target_temper2: JsonNumber::new(&right_nozzle_target),
+            nozzle_temper2: JsonNumber::new(&auxiliary_nozzle_current),
+            nozzle_target_temper2: JsonNumber::new(&auxiliary_nozzle_target),
             chamber_temper: JsonNumber::new(&chamber_current),
             lights_report: vec![LightReport {
                 node: "chamber_light",
@@ -140,24 +144,28 @@ impl NozzleDevice {
     fn new(nozzles: &[NozzleTemperature]) -> Self {
         let total = nozzles.len().max(1);
         let mut exist = 0;
-        let mut info = Vec::with_capacity(total);
+        let mut keyed_info = Vec::with_capacity(total);
         for index in 0..total {
             let label = nozzles
                 .get(index)
                 .map_or(String::new(), |nozzle| text(&nozzle.label));
             let id = studio_extruder_id(&label, index, total);
             exist |= 1_u32 << id;
-            info.push(NozzleInfo {
+            keyed_info.push((
                 id,
-                diameter: 0.4,
-                nozzle_type: "XS01",
-                stat: 0,
-            });
+                NozzleInfo {
+                    id,
+                    diameter: studio_nozzle_diameter(nozzles.get(index)),
+                    nozzle_type: studio_nozzle_type(nozzles.get(index)),
+                    stat: 0,
+                },
+            ));
         }
+        keyed_info.sort_by_key(|(id, _)| *id);
         Self {
             exist,
             state: 0,
-            info,
+            info: keyed_info.into_iter().map(|(_, info)| info).collect(),
         }
     }
 }
@@ -167,7 +175,7 @@ struct NozzleInfo {
     id: u32,
     diameter: f32,
     #[serde(rename = "type")]
-    nozzle_type: &'static str,
+    nozzle_type: String,
     stat: u8,
 }
 
@@ -181,7 +189,7 @@ impl ExtruderDevice {
     fn new(nozzles: &[NozzleTemperature], active_nozzle: &str) -> Self {
         let total = nozzles.len().max(1);
         let active_id = studio_active_extruder_id(nozzles, active_nozzle);
-        let mut info = Vec::with_capacity(total);
+        let mut keyed_info = Vec::with_capacity(total);
         for index in 0..total {
             let nozzle = nozzles.get(index);
             let label = nozzle.map_or(String::new(), |nozzle| text(&nozzle.label));
@@ -190,20 +198,24 @@ impl ExtruderDevice {
                 &nozzle.map_or(String::new(), |nozzle| text(&nozzle.current_celsius)),
                 &nozzle.map_or(String::new(), |nozzle| text(&nozzle.target_celsius)),
             );
-            info.push(ExtruderInfo {
+            keyed_info.push((
                 id,
-                info: 8,
-                temp,
-                spre: 65535,
-                snow: 65535,
-                star: 65535,
-                stat: 0,
-                hnow: id,
-            });
+                ExtruderInfo {
+                    id,
+                    info: 8,
+                    temp,
+                    spre: 65535,
+                    snow: 65535,
+                    star: 65535,
+                    stat: 0,
+                    hnow: id,
+                },
+            ));
         }
+        keyed_info.sort_by_key(|(id, _)| *id);
         Self {
             state: total | ((active_id as usize) << 4),
-            info,
+            info: keyed_info.into_iter().map(|(_, info)| info).collect(),
         }
     }
 }
@@ -224,24 +236,81 @@ fn studio_extruder_id(label: &str, index: usize, total: usize) -> u32 {
     if total <= 1 {
         return 0;
     }
-    if label.eq_ignore_ascii_case("L") {
-        return 1;
+    match label {
+        label if label.eq_ignore_ascii_case("R") => 0,
+        label if label.eq_ignore_ascii_case("L") => 1,
+        _ => {
+            if index == 0 {
+                1
+            } else {
+                0
+            }
+        }
     }
-    if label.eq_ignore_ascii_case("R") {
-        return 0;
-    }
-    if index == 0 { 1 } else { 0 }
 }
 
 fn studio_active_extruder_id(nozzles: &[NozzleTemperature], active_nozzle: &str) -> u32 {
     if nozzles.len() <= 1 {
         return 0;
     }
-    if active_nozzle.eq_ignore_ascii_case("L") {
-        return 1;
+    if let Some(index) = nozzles
+        .iter()
+        .position(|nozzle| text(&nozzle.label).eq_ignore_ascii_case(active_nozzle))
+    {
+        return studio_extruder_id(&text(&nozzles[index].label), index, nozzles.len());
     }
-    if active_nozzle.eq_ignore_ascii_case("R") {
-        return 0;
+    0
+}
+
+fn studio_nozzle_by_id(nozzles: &[NozzleTemperature], id: u32) -> Option<&NozzleTemperature> {
+    nozzles
+        .iter()
+        .enumerate()
+        .find(|(index, nozzle)| {
+            studio_extruder_id(&text(&nozzle.label), *index, nozzles.len()) == id
+        })
+        .map(|(_, nozzle)| nozzle)
+}
+
+fn studio_nozzle_type(nozzle: Option<&NozzleTemperature>) -> String {
+    let value = nozzle
+        .map_or(String::new(), |nozzle| text(&nozzle.nozzle_type))
+        .trim()
+        .to_owned();
+    if let Some(value) = studio_nozzle_code(&value) {
+        return value;
     }
-    studio_extruder_id(&text(&nozzles[0].label), 0, nozzles.len())
+    match value.as_str() {
+        "" => "XS01".to_owned(),
+        "Hardened steel" | "Hardened Steel" => "hardened_steel".to_owned(),
+        "Stainless steel" | "Stainless Steel" => "stainless_steel".to_owned(),
+        "Tungsten carbide" | "Tungsten Carbide" => "tungsten_carbide".to_owned(),
+        _ => value,
+    }
+}
+
+fn studio_nozzle_code(value: &str) -> Option<String> {
+    let mut chars = value.chars();
+    let _prefix = chars.next()?;
+    let flow = chars.next()?;
+    let material: String = chars.collect();
+    if material.len() != 2 {
+        return None;
+    }
+    if !matches!(flow, 'S' | 'H' | 'U' | 'E' | 'A' | 'X') {
+        return None;
+    }
+    if !matches!(material.as_str(), "00" | "01" | "05") {
+        return None;
+    }
+    Some(format!("X{flow}{material}"))
+}
+
+fn studio_nozzle_diameter(nozzle: Option<&NozzleTemperature>) -> f32 {
+    let value = nozzle
+        .map_or(String::new(), |nozzle| text(&nozzle.diameter_mm))
+        .trim()
+        .parse::<f32>()
+        .unwrap_or(0.4);
+    (value * 10.0).round() / 10.0
 }

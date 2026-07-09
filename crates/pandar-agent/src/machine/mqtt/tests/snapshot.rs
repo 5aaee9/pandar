@@ -139,7 +139,7 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
                     NozzleInfoFixture {
                         id: 1,
                         diameter: 0.6,
-                        kind: "XS00",
+                        kind: "XH00",
                         stat: 0,
                     },
                 ],
@@ -166,7 +166,7 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
     );
     assert_eq!(
         snapshot.nozzle_temperatures[0].nozzle_type.as_deref(),
-        Some("Stainless steel")
+        Some("XH00")
     );
     assert_eq!(snapshot.nozzle_temperatures[1].label.as_deref(), Some("R"));
     assert_eq!(
@@ -179,7 +179,7 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
     );
     assert_eq!(
         snapshot.nozzle_temperatures[1].nozzle_type.as_deref(),
-        Some("Hardened steel")
+        Some("XS01")
     );
     assert_eq!(snapshot.active_nozzle.as_deref(), Some("L"));
     assert_eq!(snapshot.bed_temperature_celsius.as_deref(), Some("60"));

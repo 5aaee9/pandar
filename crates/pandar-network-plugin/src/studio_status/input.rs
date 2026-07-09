@@ -28,6 +28,10 @@ pub(super) struct NozzleTemperature {
     pub(super) current_celsius: Option<Scalar>,
     #[serde(default)]
     pub(super) target_celsius: Option<Scalar>,
+    #[serde(default)]
+    pub(super) diameter_mm: Option<Scalar>,
+    #[serde(default)]
+    pub(super) nozzle_type: Option<Scalar>,
 }
 
 #[derive(Default, Deserialize)]

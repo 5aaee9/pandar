@@ -40,20 +40,27 @@ fn printer_telemetry_defaults_to_studio_safe_idle_shape() {
 #[test]
 fn printer_telemetry_maps_dual_nozzle_temperatures_and_active_tool() {
     let body = telemetry(
-        r#"{"dev_model_name":"N6","nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220"},{"label":"R","current_celsius":"27","target_celsius":"215"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true}"#,
+        r#"{"dev_model_name":"N6","nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220","diameter_mm":"0.4","nozzle_type":"XH05"},{"label":"R","current_celsius":"27","target_celsius":"215","diameter_mm":"0.6","nozzle_type":"XS01"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true}"#,
     );
 
     assert!(body.contains(r#""printer_type":"N6""#));
-    assert!(body.contains(r#""nozzle_temper":28"#));
-    assert!(body.contains(r#""nozzle_target_temper":220"#));
-    assert!(body.contains(r#""nozzle_temper2":27"#));
-    assert!(body.contains(r#""nozzle_target_temper2":215"#));
+    assert!(body.contains(r#""nozzle_temper":27"#));
+    assert!(body.contains(r#""nozzle_target_temper":215"#));
+    assert!(body.contains(r#""nozzle_temper2":28"#));
+    assert!(body.contains(r#""nozzle_target_temper2":220"#));
+    assert!(body.contains(r#""nozzle_type":"XS01""#));
+    assert!(body.contains(r#""nozzle_diameter":0.6"#));
+    assert!(body.contains(r#""nozzle_type2":"XH05""#));
+    assert!(body.contains(r#""nozzle_diameter2":0.4"#));
     assert!(body.contains(r#""bed_temp":4259900"#));
     assert!(body.contains(r#""ctc":{"state":1,"info":{"temp":32}}"#));
     assert!(body.contains(r#""nozzle":{"exist":3"#));
+    assert!(body.contains(r#"{"id":0,"diameter":0.6,"type":"XS01","stat":0}"#));
+    assert!(body.contains(r#"{"id":1,"diameter":0.4,"type":"XH05","stat":0}"#));
+    assert!(body.contains(r#"{"id":0,"diameter":0.6,"type":"XS01","stat":0},{"id":1,"diameter":0.4,"type":"XH05","stat":0}"#));
     assert!(body.contains(r#""extruder":{"state":18"#));
     assert!(body.contains(r#"{"id":1,"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":1}"#));
-    assert!(body.contains(r#"{"id":0,"info":8,"temp":14090267,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0}"#));
+    assert!(body.contains(r#"{"id":0,"info":8,"temp":14090267,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0},{"id":1,"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":1}"#));
     assert!(body.contains(r#""lights_report":[{"node":"chamber_light","mode":"on"}]"#));
 }
 

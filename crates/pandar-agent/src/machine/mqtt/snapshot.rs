@@ -308,12 +308,7 @@ fn nozzle_type_for_id(print: &SnapshotPrint, id: u64) -> Option<String> {
     if raw.is_empty() {
         return None;
     }
-    Some(match raw {
-        "hardened_steel" | "XS01" | "XH01" | "XU01" => "Hardened steel".to_owned(),
-        "stainless_steel" | "XS00" | "XH00" | "XU00" => "Stainless steel".to_owned(),
-        "tungsten_carbide" | "XS05" | "XH05" | "XU05" => "Tungsten carbide".to_owned(),
-        value => value.to_owned(),
-    })
+    Some(raw.to_owned())
 }
 
 fn nozzle_info_for_id(print: &SnapshotPrint, id: u64) -> Option<&NozzleInfo> {

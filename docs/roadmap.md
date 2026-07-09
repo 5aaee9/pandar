@@ -16,6 +16,8 @@
 
 ## Completed
 
+- Aligned Bambu Studio N6 Main/Aux nozzle ordering by preserving Bambu Studio's physical dual-nozzle id convention where the Hub's right/Main nozzle is id 0 and left/Deputy nozzle is id 1, sorting `device.nozzle.info` and `extruder.info` by Studio physical id so Sync info resolves the correct nozzle/extruder entries, and normalizing raw Bambu nozzle codes to Studio-friendly four-character codes so Sync info can distinguish High Flow from Standard by the encoded flow character.
+- Added legacy top-level Bambu Studio dual-nozzle metadata fields (`nozzle_type2` / `nozzle_diameter2`) alongside the V2 device block so Studio UI paths that still consult top-level nozzle metadata can display both Main and Auxiliary diameters.
 - Changed Agent camera streaming to open `ReverseCamera` only on an explicit Hub camera request over the existing control stream, eliminating the idle startup camera tunnel while keeping per-viewer close/replacement behavior.
 - Enabled tonic TLS native-root support for `pandar-agent` gRPC client connections and added a local TLS gRPC regression test for the generated Agent control client.
 - Wrapped the Nix `pandar-agent` package with a default `PANDAR_FFMPEG_PATH` and ffmpeg runtime `PATH` entry so Agent-mediated camera streaming can spawn the fragmented MP4 transcoder on NixOS deployments.
@@ -185,6 +187,7 @@
 - Added Bambu Studio JSON control parsing for native pause/resume/stop, speed, extruder, nozzle/bed/chamber temperature, AMS RFID/load/unload commands, and forwarded Hub AMS plus external-spool material snapshots into the plugin `push_status` payload.
 - Forwarded Bambu Studio native cloud-path printer controls from the networking plugin `send_message` ABI into Hub printer operations so Studio Device controls such as Lamp and hotend temperature mutate the real printer instead of only updating displayed state.
 - Emitted Studio-native nozzle metadata in networking plugin `push_status` device blocks so Bambu Studio send-job preflight sees valid nozzle type and diameter information.
+- Fixed Bambu Studio nozzle metadata sync by passing the Hub-reported per-nozzle type and diameter through the networking plugin's legacy `nozzle_type` / `nozzle_diameter` fields and V2 `device.nozzle.info` entries instead of hard-coding `XS01` / `0.4`.
 - Carried Bambu nozzle diameter/type metadata from Agent snapshots through Hub printer responses and displayed it in the Devices dual-nozzle switch details.
 - Moved Bambu Studio `push_status` telemetry, nozzle, AMS, and external-spool payload construction out of the C++ networking plugin shim into typed Rust serde structs, leaving `shim.cpp` focused on the Studio C++ ABI boundary.
 - Replaced networking plugin local config, Hub error, G-code, and Bambu Studio control-message JSON field assertions with typed serde request and operation structs/enums, keeping `Value` only for open-ended config or AMS mapping pass-through.
@@ -1001,6 +1004,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced Agent material normalization tests with direct typed patch decoding instead of converting normalized patches through `serde_json::Value`.
 - Added a shared Hub route-test typed JSON decoder and removed direct `serde_json::from_value` usage from Hub route tests.
 - Centralized Agent machine report decoding behind a typed serde helper and removed direct `serde_json::from_value` calls from Rust crates.
+- Aligned the Bambu Studio network plugin's dual-nozzle Studio mapping so Pandar `R` nozzle status maps to Studio Main id `0`, Pandar `L` maps to Deputy id `1`, and AMS/external material bindings follow Studio's 255 Main / 254 Deputy virtual-slot convention.
 
 Exit criteria:
 
