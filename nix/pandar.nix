@@ -75,7 +75,8 @@
       nativeBuildInputs = [
         pkgs.pkg-config
         pkgs.protobuf
-      ];
+      ]
+      ++ lib.optional (system == "aarch64-linux") pkgs.lld;
 
       buildInputs = [
         pkgs.openssl
@@ -94,12 +95,11 @@
         # linker and auto-generates an anonymous version script (with `local: *`)
         # that conflicts with pandar-network-plugin's build.rs export map
         # ("anonymous version tag cannot be combined with other version tags").
-        # Force the bundled lld: like x86_64-linux's default it does not emit an
-        # auto version script, so only build.rs's single export map remains.
-        # `+linker` keeps the system CRT (binaries link and run normally); the
-        # value is unstable on stable rustc, hence the bootstrap escape hatch.
-        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS = "-Z unstable-options -C link-self-contained=+linker";
-        RUSTC_BOOTSTRAP = "1";
+        # Route the final link through lld instead: it merges the two version
+        # scripts and keeps the build.rs exports (129 bambu_network_*/ft_*
+        # symbols), matching x86_64-linux's behavior. `lld` (added to
+        # nativeBuildInputs above) provides the `ld.lld` that -fuse-ld selects.
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS = "-C link-arg=-fuse-ld=lld";
       };
 
       cargoArtifacts = craneLib.buildDepsOnly (
