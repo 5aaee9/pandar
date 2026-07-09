@@ -326,6 +326,70 @@ async fn plugin_login_ticket_exchange_is_one_use_and_creates_plugin_token() {
 }
 
 #[tokio::test]
+async fn mobile_login_ticket_exchange_is_one_use_and_creates_tenant_token() {
+    let database = sqlite_database().await;
+    let tenants = TenantRepository::new(database.clone());
+    let auth = AuthRepository::new(database.clone());
+    let tenant = tenants
+        .create("mobile-login", "Mobile Login")
+        .await
+        .unwrap();
+    let admin = auth
+        .create_user(
+            tenant.id,
+            "mobile-admin@example.test",
+            "Mobile Admin",
+            crate::repositories::UserRole::TenantAdmin,
+        )
+        .await
+        .unwrap();
+    let ticket = auth
+        .create_mobile_login_ticket_with_audit(
+            tenant.id,
+            Some(admin.id.clone()),
+            "zip.iptables.pandar.android:/auth/callback",
+            future_rfc3339(),
+            crate::repositories::AuditActor::user(admin.id.clone()),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        ticket.ticket.redirect_url,
+        "zip.iptables.pandar.android:/auth/callback"
+    );
+
+    let exchanged = auth
+        .exchange_mobile_login_ticket(&ticket.plaintext_ticket)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(exchanged.redirect_url, ticket.ticket.redirect_url);
+    assert!(
+        exchanged
+            .tenant_token
+            .plaintext_token
+            .starts_with("pandar_mobile_")
+    );
+    assert_eq!(exchanged.tenant_token.token.tenant_id, tenant.id);
+    assert_eq!(
+        exchanged.tenant_token.token.created_by_user_id,
+        Some(admin.id)
+    );
+    assert_eq!(
+        exchanged.tenant_token.token.scopes,
+        vec![crate::repositories::TenantTokenScope::All]
+    );
+
+    assert!(
+        auth.exchange_mobile_login_ticket(&ticket.plaintext_ticket)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn plugin_login_ticket_exchange_rejects_expired_tickets() {
     let database = sqlite_database().await;
     let tenants = TenantRepository::new(database.clone());
@@ -369,6 +433,27 @@ async fn plugin_login_ticket_exchange_rejects_expired_tickets() {
         .unwrap()
         .unwrap();
     assert_eq!(stored_ticket.used_at, None);
+}
+
+#[tokio::test]
+async fn mobile_redirect_validation_allows_only_android_callback() {
+    let auth = AuthRepository::new(sqlite_database().await);
+    assert_eq!(
+        auth.validate_mobile_redirect_url("zip.iptables.pandar.android:/auth/callback")
+            .unwrap(),
+        "zip.iptables.pandar.android:/auth/callback"
+    );
+
+    for invalid in [
+        "zip.iptables.pandar.android:/oauth2redirect",
+        "zip.iptables.pandar.android://auth/callback",
+        "zip.iptables.pandar.android:/auth/callback?state=1",
+        "zip.iptables.pandar.android:/auth/callback#fragment",
+        "http://localhost:4100/callback",
+        "https://pandar.example/mobile",
+    ] {
+        assert!(auth.validate_mobile_redirect_url(invalid).is_err());
+    }
 }
 
 #[tokio::test]

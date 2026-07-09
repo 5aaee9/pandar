@@ -116,6 +116,37 @@ pub(super) async fn create_login_ticket(
     ))
 }
 
+pub(super) async fn create_mobile_login_ticket(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Path(tenant_id): axum::extract::Path<String>,
+    payload: Result<Json<CreateLoginTicketRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<LoginTicketResponse>), ApiError> {
+    let tenant_id = super::parse_tenant_id(&tenant_id)?;
+    let principal =
+        auth::authorize_plugin_login_ticket_creation(&state, &headers, tenant_id).await?;
+    let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
+    let created = state
+        .auth()
+        .create_mobile_login_ticket_with_audit(
+            tenant_id,
+            user_id(&principal),
+            payload.redirect_url,
+            plugin_login_ticket_expires_at()?,
+            auth::audit_actor(&principal),
+        )
+        .await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(LoginTicketResponse {
+            ticket: created.plaintext_ticket,
+            expires_at: created.ticket.expires_at,
+            redirect_url: created.ticket.redirect_url,
+        }),
+    ))
+}
+
 pub(super) async fn exchange_login_ticket(
     State(state): State<AppState>,
     payload: Result<Json<ExchangeLoginTicketRequest>, JsonRejection>,
@@ -146,6 +177,40 @@ pub(super) async fn exchange_login_ticket(
     Ok(Json(ExchangeLoginTicketResponse {
         token: exchanged.tenant_token.plaintext_token,
         expires_at: token.expires_at.expect("plugin token must have expiry"),
+        profile,
+    }))
+}
+
+pub(super) async fn exchange_mobile_login_ticket(
+    State(state): State<AppState>,
+    payload: Result<Json<ExchangeLoginTicketRequest>, JsonRejection>,
+) -> Result<Json<ExchangeLoginTicketResponse>, ApiError> {
+    let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
+    let exchanged = state
+        .auth()
+        .exchange_mobile_login_ticket(&payload.ticket)
+        .await
+        .map_err(plugin_ticket_error)?
+        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "invalid_plugin_ticket"))?;
+    let token = exchanged.tenant_token.token;
+    let tenant = state
+        .tenants()
+        .get(token.tenant_id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("tenant_not_found"))?;
+    let profile = PluginProfileResponse {
+        user_id: token
+            .created_by_user_id
+            .clone()
+            .unwrap_or_else(|| token.id.clone()),
+        user_name: token.name.clone(),
+        tenant_id: token.tenant_id.to_string(),
+        tenant_name: tenant.display_name,
+    };
+
+    Ok(Json(ExchangeLoginTicketResponse {
+        token: exchanged.tenant_token.plaintext_token,
+        expires_at: token.expires_at.expect("mobile token must have expiry"),
         profile,
     }))
 }

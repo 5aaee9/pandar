@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -300,7 +302,7 @@ private fun isActiveExternalTray(printer: Printer, externalId: String?, globalTr
 private fun ActiveLabel() {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
-            imageVector = androidx.compose.material.icons.Icons.Filled.CheckCircle,
+            imageVector = Icons.Filled.Check,
             contentDescription = "Active",
             modifier = Modifier.size(14.dp),
             tint = MaterialTheme.colorScheme.primary,

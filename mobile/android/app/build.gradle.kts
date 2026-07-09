@@ -19,9 +19,6 @@ android {
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
-        // AppAuth uses this manifest placeholder to register its redirect receiver for the
-        // custom scheme the app listens on.
-        manifestPlaceholders["appAuthRedirectScheme"] = "zip.iptables.pandar.android"
     }
 
     buildTypes {
@@ -81,8 +78,6 @@ dependencies {
     implementation(platform(libs.okhttp.bom))
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging.interceptor)
-
-    implementation(libs.appauth)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

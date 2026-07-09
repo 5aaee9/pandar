@@ -32,7 +32,7 @@ class TokenRefreshAuthenticator(
         }
         if (!refreshed) {
             // Refresh failed: discard tokens so AuthState flips to SIGNED_OUT and the
-            // sign-in gate reappears (only meaningful for OIDC-configured hubs).
+            // sign-in gate reappears.
             clearTokens()
             return null
         }

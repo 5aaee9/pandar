@@ -28,10 +28,10 @@ class AppContainer(context: Context) {
 
     val logger: Logger = AndroidLogger
 
-    val auth: AuthRepository = AuthRepository(appContext, settings, scope, logger)
-
     private val _apiState = MutableStateFlow<PandarApi?>(null)
     val apiState: StateFlow<PandarApi?> = _apiState.asStateFlow()
+
+    val auth: AuthRepository = AuthRepository(settings, { apiState.value }, scope, logger)
 
     val okHttpClient: OkHttpClient by lazy {
         ApiModule.okHttp(
@@ -41,6 +41,15 @@ class AppContainer(context: Context) {
             logger = logger,
         )
     }
+
+    val printerEvents: PrinterEventsRepository = PrinterEventsRepository(
+        client = okHttpClient,
+        hubBaseUrl = { settings.currentHubBaseUrl() },
+        tenantId = { settings.currentTenant() },
+        tokenProvider = { settings.currentToken() },
+        tokenRefresher = { auth.refresh() },
+        logger = logger,
+    )
 
     init {
         // Rebuild the Retrofit API whenever the hub base URL changes.
@@ -56,7 +65,6 @@ class AppContainer(context: Context) {
         }
         // When the live WebSocket signals that re-authentication is required (refresh failed),
         // discard tokens so AuthState flips to SIGNED_OUT and the sign-in gate reappears.
-        // Only meaningful for OIDC-configured hubs; for no-auth hubs there is no token to clear.
         scope.launch {
             printerEvents.needsReauth.collect { needsReauth ->
                 if (needsReauth && settings.currentToken() != null) {
@@ -71,15 +79,6 @@ class AppContainer(context: Context) {
         val httpUrl = trimmed?.toHttpUrlOrNull()
         _apiState.value = httpUrl?.let { ApiModule.pandarApi(it, okHttpClient) }
     }
-
-    val printerEvents: PrinterEventsRepository = PrinterEventsRepository(
-        client = okHttpClient,
-        hubBaseUrl = { settings.currentHubBaseUrl() },
-        tenantId = { settings.currentTenant() },
-        tokenProvider = { settings.currentToken() },
-        tokenRefresher = { auth.refresh() },
-        logger = logger,
-    )
 
     val pandar: PandarRepository = PandarRepository(
         apiProvider = { apiState.value ?: throw IllegalStateException("Hub base URL is not configured.") },

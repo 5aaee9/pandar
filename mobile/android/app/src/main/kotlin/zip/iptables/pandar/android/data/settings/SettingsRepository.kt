@@ -21,12 +21,7 @@ class SettingsRepository(
     private val stringKeys = mapOf(
         KEY_HUB_BASE_URL to stringPreferencesKey(KEY_HUB_BASE_URL),
         KEY_TENANT_ID to stringPreferencesKey(KEY_TENANT_ID),
-        KEY_OIDC_DISCOVERY_URL to stringPreferencesKey(KEY_OIDC_DISCOVERY_URL),
-        KEY_OIDC_CLIENT_ID to stringPreferencesKey(KEY_OIDC_CLIENT_ID),
-        KEY_OIDC_SCOPES to stringPreferencesKey(KEY_OIDC_SCOPES),
-        KEY_OIDC_REDIRECT_URI to stringPreferencesKey(KEY_OIDC_REDIRECT_URI),
         KEY_ACCESS_TOKEN to stringPreferencesKey(KEY_ACCESS_TOKEN),
-        KEY_REFRESH_TOKEN to stringPreferencesKey(KEY_REFRESH_TOKEN),
     )
     private val expiresAtKey = longPreferencesKey(KEY_TOKEN_EXPIRES_AT)
 
@@ -48,12 +43,7 @@ class SettingsRepository(
             val updated = transform(current)
             prefs.putOrRemove(stringKeys.getValue(KEY_HUB_BASE_URL), updated.hubBaseUrl)
             prefs.putOrRemove(stringKeys.getValue(KEY_TENANT_ID), updated.tenantId)
-            prefs.putOrRemove(stringKeys.getValue(KEY_OIDC_DISCOVERY_URL), updated.oidcDiscoveryUrl)
-            prefs.putOrRemove(stringKeys.getValue(KEY_OIDC_CLIENT_ID), updated.oidcClientId)
-            prefs.putOrRemove(stringKeys.getValue(KEY_OIDC_SCOPES), updated.oidcScopes)
-            prefs.putOrRemove(stringKeys.getValue(KEY_OIDC_REDIRECT_URI), updated.oidcRedirectUri)
             prefs.putOrRemove(stringKeys.getValue(KEY_ACCESS_TOKEN), updated.accessToken)
-            prefs.putOrRemove(stringKeys.getValue(KEY_REFRESH_TOKEN), updated.refreshToken)
             if (updated.tokenExpiresAtEpochMillis != null) {
                 prefs[expiresAtKey] = updated.tokenExpiresAtEpochMillis
             } else {
@@ -62,11 +52,19 @@ class SettingsRepository(
         }
     }
 
-    suspend fun setTokens(access: String?, refresh: String?, expiresAtMillis: Long?) {
-        update { it.copy(accessToken = access, refreshToken = refresh, tokenExpiresAtEpochMillis = expiresAtMillis) }
+    suspend fun setSession(tenantId: String, access: String, expiresAtMillis: Long?) {
+        update {
+            it.copy(
+                tenantId = tenantId,
+                accessToken = access,
+                tokenExpiresAtEpochMillis = expiresAtMillis,
+            )
+        }
     }
 
-    suspend fun clearTokens() = setTokens(null, null, null)
+    suspend fun clearTokens() {
+        update { it.copy(accessToken = null, tokenExpiresAtEpochMillis = null) }
+    }
 
     // Best-effort cache of the latest snapshot for synchronous token access from the
     // network interceptor. The OkHttp interceptor runs on non-suspend threads, so it

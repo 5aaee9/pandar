@@ -596,6 +596,28 @@ export async function createPluginTicket(formData: FormData) {
   redirect(url.toString());
 }
 
+export async function createMobileTicket(formData: FormData) {
+  const tenantId = stringField(formData, "tenant_id");
+  const redirectUrl = stringField(formData, "redirect_url");
+  const response = await postJson(
+    `/api/v1/tenants/${tenantId}/mobile/login-tickets`,
+    {
+      redirect_url: redirectUrl,
+    },
+  );
+  if (!response.ok) {
+    redirect(statusUrl(tenantId, await errorCode(response)));
+  }
+  const body = (await response.json()) as {
+    ticket: string;
+    redirect_url: string;
+  };
+  const url = new URL(body.redirect_url);
+  url.searchParams.set("ticket", body.ticket);
+  url.searchParams.set("redirect_url", body.redirect_url);
+  redirect(url.toString());
+}
+
 async function postJson(path: string, body: unknown) {
   return fetch(`${apiUrl}${path}`, {
     method: "POST",

@@ -8,6 +8,8 @@ use sea_orm::{
 use serde::Serialize;
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
+mod mobile;
+
 use crate::{
     entities::plugin_login_tickets,
     repositories::{
@@ -21,6 +23,7 @@ use crate::{
 
 const PLUGIN_LOGIN_TICKET_PREFIX: &str = "pandar_plugin_ticket_";
 const PLUGIN_TOKEN_SCOPE: &str = "plugin:studio";
+const MOBILE_TOKEN_SCOPE: &str = "*";
 const PLUGIN_TOKEN_TTL_DAYS: i64 = 30;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -51,6 +54,12 @@ pub struct PluginLoginTicketExchange {
 #[derive(Serialize)]
 struct PluginLoginTicketAuditMetadata<'a> {
     issued_tenant_token_id: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum LoginTicketTokenKind {
+    Plugin,
+    Mobile,
 }
 
 impl AuthRepository {
@@ -101,6 +110,23 @@ impl AuthRepository {
         &self,
         plaintext_ticket: &str,
     ) -> RepositoryResult<Option<PluginLoginTicketExchange>> {
+        self.exchange_login_ticket(plaintext_ticket, LoginTicketTokenKind::Plugin)
+            .await
+    }
+
+    pub async fn exchange_mobile_login_ticket(
+        &self,
+        plaintext_ticket: &str,
+    ) -> RepositoryResult<Option<PluginLoginTicketExchange>> {
+        self.exchange_login_ticket(plaintext_ticket, LoginTicketTokenKind::Mobile)
+            .await
+    }
+
+    async fn exchange_login_ticket(
+        &self,
+        plaintext_ticket: &str,
+        token_kind: LoginTicketTokenKind,
+    ) -> RepositoryResult<Option<PluginLoginTicketExchange>> {
         let ticket_hash = hash_token(plaintext_ticket);
         let connection = self.database.sea_orm_connection();
         let tx = connection
@@ -144,24 +170,52 @@ impl AuthRepository {
         let token_expires_at = (OffsetDateTime::now_utc() + Duration::days(PLUGIN_TOKEN_TTL_DAYS))
             .format(&Rfc3339)
             .context("failed to format plugin tenant token expiry")?;
-        let tenant_token = AuthRepository::create_plugin_token_from_ticket_tx(
-            &tx,
-            used_ticket.tenant_id,
-            "Bambu Studio plugin",
-            used_ticket.user_id.clone(),
-            token_expires_at,
-        )
-        .await?;
-        insert_audit_event_tx(
-            &tx,
-            &plugin_login_ticket_audit_event(
-                &used_ticket,
+        let tenant_token = match token_kind {
+            LoginTicketTokenKind::Plugin => {
+                AuthRepository::create_plugin_token_from_ticket_tx(
+                    &tx,
+                    used_ticket.tenant_id,
+                    "Bambu Studio plugin",
+                    used_ticket.user_id.clone(),
+                    token_expires_at,
+                )
+                .await?
+            }
+            LoginTicketTokenKind::Mobile => {
+                AuthRepository::create_mobile_token_from_ticket_tx(
+                    &tx,
+                    used_ticket.tenant_id,
+                    "Android app",
+                    used_ticket.user_id.clone(),
+                    token_expires_at,
+                )
+                .await?
+            }
+        };
+        let (event_name, actor) = match token_kind {
+            LoginTicketTokenKind::Plugin => (
                 "plugin_login_ticket.exchange",
                 AuditActor::plugin_token(
                     used_ticket.user_id.clone(),
                     tenant_token.token.id.clone(),
                     vec![PLUGIN_TOKEN_SCOPE],
                 ),
+            ),
+            LoginTicketTokenKind::Mobile => (
+                "mobile_login_ticket.exchange",
+                AuditActor::tenant_token(
+                    used_ticket.user_id.clone(),
+                    tenant_token.token.id.clone(),
+                    vec![MOBILE_TOKEN_SCOPE],
+                ),
+            ),
+        };
+        insert_audit_event_tx(
+            &tx,
+            &plugin_login_ticket_audit_event(
+                &used_ticket,
+                event_name,
+                actor,
                 Some(tenant_token.token.id.clone()),
             ),
         )

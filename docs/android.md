@@ -5,6 +5,8 @@ A Jetpack Compose + Material 3 Android client for `pandar-hub`. Located at
 
 See also the design spec:
 [`docs/superpowers/specs/2026-07-05-android-compose-app-design.md`](superpowers/specs/2026-07-05-android-compose-app-design.md).
+The Hub browser login update is described in
+[`docs/superpowers/specs/2026-07-08-android-hub-browser-login-design.md`](superpowers/specs/2026-07-08-android-hub-browser-login-design.md).
 
 ## Features (v1)
 
@@ -12,10 +14,9 @@ See also the design spec:
 - Per-printer detail: pause / resume / stop, chamber light, set hotend / bed /
   chamber temperature, AMS load / unload / reread RFID.
 - Jobs list with retry-dispatch and reprint.
-- OIDC sign-in (Authorization Code + PKCE) via AppAuth-Android; the obtained
-  access-token JWT is sent as `Authorization: Bearer` and verified by the hub
-  against its JWKS (issuer / audience / scope).
-- No-auth hubs are supported by leaving OIDC unconfigured.
+- Hub browser sign-in: the app opens `/mobile-sign-in`, receives a one-use
+  Android callback ticket, exchanges it with the hub, and sends the returned
+  tenant token as `Authorization: Bearer`.
 
 ## Build prerequisites
 
@@ -51,18 +52,11 @@ Open the app, go to **Settings**, and enter:
 - **Hub base URL** — the public `pandar-hub` base URL (for example
   `https://hub.example.com/`). Used for both REST and the
   `/api/v1/tenants/{tenant_id}/printer-events` WebSocket.
-- **Tenant ID** — the tenant UUID the app operates on.
-- **OIDC discovery URL** — the provider's
-  `.well-known/openid-configuration` URL.
-- **Client ID** — the OIDC client id configured for native/app use.
-- **Scopes** — comma-separated (for example `openid,profile`).
-- **Redirect URI** — defaults to `zip.iptables.pandar.android:/oauth2redirect`.
-  Register this exact redirect URI with the provider. The matching intent-filter
-  is declared in `AndroidManifest.xml` for
-  `net.openid.appauth.RedirectUriReceiverActivity`.
 
-Tap **Save**, then **Sign in**. For a hub running in `PANDAR_HUB_NO_AUTH=true`
-mode, leave the OIDC fields empty: the app sends no `Authorization` header.
+Tap **Save**, then **Sign in**. The browser opens the Hub's `/mobile-sign-in`
+page. After authentication and tenant selection, Hub redirects back to
+`zip.iptables.pandar.android:/auth/callback` with a one-use ticket that the app
+exchanges for its tenant token and tenant id.
 
 ## Architecture
 

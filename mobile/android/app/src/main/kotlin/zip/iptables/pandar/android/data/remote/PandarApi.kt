@@ -10,6 +10,8 @@ import zip.iptables.pandar.android.data.remote.dto.AmsRereadRfidRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsUnloadFilamentRequest
 import zip.iptables.pandar.android.data.remote.dto.CommandResponseDto
 import zip.iptables.pandar.android.data.remote.dto.JobListDto
+import zip.iptables.pandar.android.data.remote.dto.MobileTicketExchangeRequest
+import zip.iptables.pandar.android.data.remote.dto.MobileTicketExchangeResponse
 import zip.iptables.pandar.android.data.remote.dto.PauseRequest
 import zip.iptables.pandar.android.data.remote.dto.PrinterDto
 import zip.iptables.pandar.android.data.remote.dto.PrinterListDto
@@ -22,6 +24,9 @@ import zip.iptables.pandar.android.data.remote.dto.StopRequest
 import zip.iptables.pandar.android.data.remote.dto.ToggleLightRequest
 
 interface PandarApi {
+
+    @POST("api/v1/mobile/login-tickets/exchange")
+    suspend fun exchangeMobileLoginTicket(@Body body: MobileTicketExchangeRequest): MobileTicketExchangeResponse
 
     @GET("api/v1/tenants/{tenant}/printers")
     suspend fun listPrinters(@Path("tenant") tenant: String): PrinterListDto

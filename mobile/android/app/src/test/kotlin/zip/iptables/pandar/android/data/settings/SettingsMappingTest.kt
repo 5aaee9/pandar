@@ -19,11 +19,7 @@ class SettingsMappingTest {
             mapOf(
                 KEY_HUB_BASE_URL to "https://hub.example/",
                 KEY_TENANT_ID to "t-1",
-                KEY_OIDC_DISCOVERY_URL to "https://idp/.well-known/openid-configuration",
-                KEY_OIDC_CLIENT_ID to "cid",
-                KEY_OIDC_SCOPES to "openid,profile",
                 KEY_ACCESS_TOKEN to "AT",
-                KEY_REFRESH_TOKEN to "RT",
             ),
             tokenExpiresAt = 123456789L,
         )
@@ -31,13 +27,17 @@ class SettingsMappingTest {
         assertEquals("t-1", snapshot.tenantId)
         assertEquals("AT", snapshot.accessToken)
         assertEquals(123456789L, snapshot.tokenExpiresAtEpochMillis)
-        assertEquals(true, snapshot.hasOidcConfig)
+        assertEquals(true, snapshot.hasHubConfig)
     }
 
-    @Test fun scopes_round_trip() {
-        assertEquals(listOf("openid", "profile", "email"), scopesToList("openid, profile,email"))
-        assertEquals(emptyList<String>(), scopesToList(null))
-        assertEquals(emptyList<String>(), scopesToList(""))
-        assertEquals("openid,profile", listToScopes(listOf("openid", "profile")))
+    @Test fun hub_url_only_is_configured_before_login() {
+        val snapshot = settingsToSnapshot(
+            mapOf(KEY_HUB_BASE_URL to "https://hub.example/"),
+            tokenExpiresAt = null,
+        )
+
+        assertEquals(true, snapshot.hasHubConfig)
+        assertNull(snapshot.tenantId)
+        assertNull(snapshot.accessToken)
     }
 }

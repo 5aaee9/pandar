@@ -5,6 +5,7 @@ use sea_orm::{
     QueryOrder, TransactionTrait,
 };
 mod helpers;
+mod mobile;
 
 use helpers::{is_expired, tenant_token_audit_event, tenant_token_model};
 use serde::Serialize;
@@ -21,6 +22,7 @@ use crate::{
 
 const TENANT_TOKEN_PREFIX: &str = "pandar_tenant_";
 const PLUGIN_TOKEN_PREFIX: &str = "pandar_plugin_";
+const MOBILE_TOKEN_PREFIX: &str = "pandar_mobile_";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum TenantTokenScope {

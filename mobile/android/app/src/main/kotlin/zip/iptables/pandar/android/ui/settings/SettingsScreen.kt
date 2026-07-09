@@ -44,38 +44,6 @@ fun SettingsScreen(
                 onChange = { v -> onEdit { it.copy(hubBaseUrl = v) } },
                 placeholder = "https://hub.example.com/",
             )
-            LabeledTextField(
-                label = "Tenant ID",
-                value = state.snapshot.tenantId.orEmpty(),
-                onChange = { v -> onEdit { it.copy(tenantId = v) } },
-                placeholder = "00000000-0000-0000-0000-000000000000",
-            )
-
-            HorizontalDivider()
-            Text("OIDC provider", style = MaterialTheme.typography.titleMedium)
-            LabeledTextField(
-                label = "Discovery URL",
-                value = state.snapshot.oidcDiscoveryUrl.orEmpty(),
-                onChange = { v -> onEdit { it.copy(oidcDiscoveryUrl = v) } },
-                placeholder = "https://idp.example/.well-known/openid-configuration",
-            )
-            LabeledTextField(
-                label = "Client ID",
-                value = state.snapshot.oidcClientId.orEmpty(),
-                onChange = { v -> onEdit { it.copy(oidcClientId = v) } },
-            )
-            LabeledTextField(
-                label = "Scopes (comma-separated)",
-                value = state.snapshot.oidcScopes.orEmpty(),
-                onChange = { v -> onEdit { it.copy(oidcScopes = v) } },
-                placeholder = "openid,profile",
-            )
-            LabeledTextField(
-                label = "Redirect URI",
-                value = state.snapshot.oidcRedirectUri.orEmpty(),
-                onChange = { v -> onEdit { it.copy(oidcRedirectUri = v) } },
-                placeholder = "zip.iptables.pandar.android:/oauth2redirect",
-            )
 
             Spacer(Modifier.height(8.dp))
             PrimaryButton(
@@ -86,6 +54,9 @@ fun SettingsScreen(
 
             HorizontalDivider()
             Text("Account", style = MaterialTheme.typography.titleMedium)
+            state.snapshot.tenantId?.let { tenantId ->
+                Text("Tenant: $tenantId", style = MaterialTheme.typography.bodySmall)
+            }
             val subject = state.identitySubject
             val issuer = state.identityIssuer
             if (subject != null || issuer != null) {
@@ -99,7 +70,7 @@ fun SettingsScreen(
                     Text("Sign out")
                 }
                 AuthState.NEEDS_CONFIG -> Text(
-                    "Save a discovery URL and client ID, then sign in.",
+                    "Save the Hub URL, then sign in.",
                     style = MaterialTheme.typography.bodySmall,
                 )
                 else -> Button(onClick = onSignIn, modifier = Modifier.fillMaxWidth()) { Text("Sign in") }

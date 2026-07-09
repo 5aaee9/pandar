@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   controlPrinter,
+  createMobileTicket,
   deletePrinter,
   duplicateJob,
   linkPrinter,
@@ -72,6 +73,50 @@ describe("linkPrinter", () => {
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     expect(body.serial_number).toBeUndefined();
     expect(body.model).toBeUndefined();
+  });
+});
+
+describe("createMobileTicket", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            ticket: "pandar_plugin_ticket_abc",
+            redirect_url: "zip.iptables.pandar.android:/auth/callback",
+          }),
+          {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      ),
+    );
+  });
+
+  it("creates a mobile login ticket and redirects back to Android", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set(
+      "redirect_url",
+      "zip.iptables.pandar.android:/auth/callback",
+    );
+
+    await expect(createMobileTicket(formData)).rejects.toThrow(
+      "NEXT_REDIRECT:zip.iptables.pandar.android:/auth/callback?ticket=pandar_plugin_ticket_abc&redirect_url=zip.iptables.pandar.android%3A%2Fauth%2Fcallback",
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/tenants/tenant-1/mobile/login-tickets",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          redirect_url: "zip.iptables.pandar.android:/auth/callback",
+        }),
+      }),
+    );
   });
 });
 

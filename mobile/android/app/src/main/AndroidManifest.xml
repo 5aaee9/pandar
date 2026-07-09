@@ -23,11 +23,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="zip.iptables.pandar.android"
+                    android:path="/auth/callback" />
+            </intent-filter>
         </activity>
-
-        <!-- AppAuth's RedirectUriReceiverActivity is merged from the library manifest and
-             configured via the appAuthRedirectScheme manifest placeholder (see app/build.gradle.kts).
-             It receives the zip.iptables.pandar.android:/oauth2redirect callback. -->
     </application>
 
 </manifest>

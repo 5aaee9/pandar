@@ -111,8 +111,16 @@ pub fn router(state: AppState) -> Router {
             post(plugin::create_login_ticket),
         )
         .route(
+            "/api/v1/tenants/{tenant_id}/mobile/login-tickets",
+            post(plugin::create_mobile_login_ticket),
+        )
+        .route(
             "/api/v1/plugin/login-tickets/exchange",
             post(plugin::exchange_login_ticket),
+        )
+        .route(
+            "/api/v1/mobile/login-tickets/exchange",
+            post(plugin::exchange_mobile_login_ticket),
         )
         .route(
             "/api/v1/plugin/no-auth-session",

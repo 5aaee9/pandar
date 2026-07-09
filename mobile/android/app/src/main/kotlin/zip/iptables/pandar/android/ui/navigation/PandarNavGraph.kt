@@ -10,6 +10,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.Modifier
@@ -73,7 +74,7 @@ fun PandarNavGraph(mainVm: MainActivityViewModel) {
             return
         }
         AuthState.SIGNED_OUT, AuthState.SIGNING_IN -> {
-            val latestToast by mainVm.toasts.collectAsStateWithLifecycle(initial = null)
+            val latestToast by mainVm.toasts.collectAsState(initial = null)
             LoginScreen(
                 state = mainState.authState,
                 onSignIn = { mainVm.signIn() },

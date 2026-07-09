@@ -72,15 +72,4 @@ class MainActivityViewModel(private val container: AppContainer) : ViewModel() {
     fun handleAuthorizationResponse(intent: android.content.Intent) {
         viewModelScope.launch { container.auth.handleAuthorizationResponse(intent) }
     }
-
-    fun cancelSignIn() {
-        // Reset a stuck signing-in state back to signed-out (token-clear drives the auth repo's
-        // state derivation; if a token somehow exists we keep it).
-        if (container.auth.state.value == zip.iptables.pandar.android.data.auth.AuthState.SIGNING_IN) {
-            viewModelScope.launch {
-                // No token was obtained yet during sign-in; clearing is a safe no-op for no-auth.
-                container.auth.signOut()
-            }
-        }
-    }
 }

@@ -371,6 +371,90 @@ async fn plugin_login_ticket_exchange_is_unauthenticated_one_use_and_rejects_exp
 }
 
 #[tokio::test]
+async fn mobile_login_ticket_exchange_returns_tenant_token_for_android_callback() {
+    let state = state().await;
+    let app = router(external_auth_state(state.clone()));
+    let tenant = state
+        .tenants()
+        .create("mobile-exchange", "Mobile Exchange")
+        .await
+        .unwrap();
+    let viewer = external_auth_token_for_role(
+        &state,
+        tenant.id,
+        crate::repositories::UserRole::Viewer,
+        "mobile-exchange-viewer",
+    )
+    .await;
+
+    let (status, created) = request_as(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/tenants/{}/mobile/login-tickets", tenant.id),
+        plugin_login_ticket_body("zip.iptables.pandar.android:/auth/callback"),
+        &viewer,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let created = decode::<LoginTicketResponse>(created);
+    assert!(created.ticket.starts_with("pandar_plugin_ticket_"));
+    assert_eq!(
+        created.redirect_url,
+        "zip.iptables.pandar.android:/auth/callback"
+    );
+
+    let (status, exchanged) = request(
+        app.clone(),
+        Method::POST,
+        "/api/v1/mobile/login-tickets/exchange",
+        plugin_ticket_exchange_body(&created.ticket),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let exchanged = decode::<ExchangeLoginTicketResponse>(exchanged);
+    assert!(exchanged.token.starts_with("pandar_mobile_"));
+    assert_eq!(exchanged.profile.tenant_id, tenant.id.to_string());
+    assert_eq!(exchanged.profile.tenant_name, "Mobile Exchange");
+
+    let (status, _) = request_as(
+        app.clone(),
+        Method::GET,
+        &format!("/api/v1/tenants/{}/agents", tenant.id),
+        None,
+        &exchanged.token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, body) = request(
+        app.clone(),
+        Method::POST,
+        "/api/v1/mobile/login-tickets/exchange",
+        plugin_ticket_exchange_body(&created.ticket),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_plugin_ticket");
+
+    for redirect_url in [
+        "http://localhost:4100/callback",
+        "zip.iptables.pandar.android:/auth/callback?state=abc",
+        "zip.iptables.pandar.android:/oauth2redirect",
+    ] {
+        let (status, body) = request_as(
+            app.clone(),
+            Method::POST,
+            &format!("/api/v1/tenants/{}/mobile/login-tickets", tenant.id),
+            plugin_login_ticket_body(redirect_url),
+            &viewer,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(decode::<ErrorResponse>(body).error, "invalid_redirect_url");
+    }
+}
+
+#[tokio::test]
 async fn plugin_no_auth_session_is_only_available_in_no_auth_mode() {
     let no_auth_state = state().await.with_no_auth_for_tests(true);
     let app = router(no_auth_state.clone());
