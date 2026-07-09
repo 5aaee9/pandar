@@ -50,10 +50,10 @@ struct ProjectFile<'a> {
     command: &'static str,
     sequence_id: &'a str,
     param: &'static str,
-    project_id: &'static str,
+    project_id: &'a str,
     profile_id: &'static str,
-    task_id: &'static str,
-    subtask_id: &'static str,
+    task_id: &'a str,
+    subtask_id: &'a str,
     subtask_name: &'static str,
     url: &'static str,
     file: &'static str,
@@ -195,16 +195,16 @@ pub(super) fn expected_pushall_payload(sequence_id: &str) -> Value {
     })
 }
 
-pub(super) fn expected_project_file_payload(sequence_id: &str) -> Value {
+pub(super) fn expected_project_file_payload(sequence_id: &str, submission_id: &str) -> Value {
     value(ProjectFilePayload {
         print: ProjectFile {
             command: "project_file",
             sequence_id,
             param: "Metadata/plate_1.gcode",
-            project_id: "0",
+            project_id: submission_id,
             profile_id: "0",
-            task_id: "0",
-            subtask_id: "0",
+            task_id: submission_id,
+            subtask_id: submission_id,
             subtask_name: "plate",
             url: "ftp://plate.gcode.3mf",
             file: "plate.gcode.3mf",

@@ -296,11 +296,12 @@ async fn configured_print_project_file_uploads_and_publishes_project_file() {
     );
     let published = mqtt.published_commands().await;
     let sequence_id = dynamic_sequence_id(&published[0].payload);
+    let submission_id = dynamic_project_file_submission_id(&published[0].payload);
     assert_eq!(
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: expected_project_file_payload(&sequence_id),
+            payload: expected_project_file_payload(&sequence_id, &submission_id),
             qos: 0,
         }]
     );
@@ -768,6 +769,16 @@ fn dynamic_sequence_id(payload: &Value) -> String {
     dynamic_section_sequence_id(payload, "print")
 }
 
+fn dynamic_project_file_submission_id(payload: &Value) -> String {
+    let envelope: TestProjectFileEnvelope = decode_payload(payload);
+    let submission_id = envelope.print.project_id;
+    assert_ne!(submission_id, "0");
+    assert!((1..=2_147_483_647).contains(&submission_id.parse::<u32>().unwrap()));
+    assert_eq!(envelope.print.task_id, submission_id);
+    assert_eq!(envelope.print.subtask_id, submission_id);
+    submission_id
+}
+
 fn dynamic_section_sequence_id(payload: &Value, section: &str) -> String {
     let envelope: TestSequenceEnvelope = decode_payload(payload);
     let sequence_id = &envelope.section(section).sequence_id;
@@ -807,6 +818,18 @@ impl TestSequenceEnvelope {
 #[derive(Debug, Deserialize)]
 struct TestSequenceSection {
     sequence_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct TestProjectFileEnvelope {
+    print: TestProjectFileSection,
+}
+
+#[derive(Debug, Deserialize)]
+struct TestProjectFileSection {
+    project_id: String,
+    task_id: String,
+    subtask_id: String,
 }
 
 #[tokio::test]

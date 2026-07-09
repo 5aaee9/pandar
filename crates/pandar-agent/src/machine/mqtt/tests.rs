@@ -541,36 +541,34 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
     .payload();
 
     let sequence_id = studio_sequence_id(&payload, "print");
-    assert_eq!(
-        project_file_payload(&payload).print,
-        TestProjectFilePrint {
-            command: "project_file".to_owned(),
-            sequence_id,
-            param: "Metadata/plate_2.gcode".to_owned(),
-            project_id: "0".to_owned(),
-            profile_id: "0".to_owned(),
-            task_id: "0".to_owned(),
-            subtask_id: "0".to_owned(),
-            subtask_name: "job".to_owned(),
-            url: "ftp://job.3mf".to_owned(),
-            file: "job.3mf".to_owned(),
-            md5: String::new(),
-            bed_type: "auto".to_owned(),
-            bed_leveling: false,
-            flow_cali: true,
-            vibration_cali: false,
-            layer_inspect: false,
-            timelapse: false,
-            use_ams: true,
-            ams_mapping: Vec::new(),
-            ams_mapping2: Vec::new(),
-            ams_mapping_info: None,
-            auto_bed_leveling: 0,
-            nozzle_offset_cali: 0,
-            cfg: "0".to_owned(),
-            extrude_cali_flag: 0,
-        }
-    );
+    let print = project_file_payload(&payload).print;
+    assert_eq!(print.command, "project_file");
+    assert_eq!(print.sequence_id, sequence_id);
+    assert_eq!(print.param, "Metadata/plate_2.gcode");
+    assert_eq!(print.profile_id, "0");
+    assert_eq!(print.subtask_name, "job");
+    assert_eq!(print.url, "ftp://job.3mf");
+    assert_eq!(print.file, "job.3mf");
+    assert_eq!(print.md5, "");
+    assert_eq!(print.bed_type, "auto");
+    assert!(!print.bed_leveling);
+    assert!(print.flow_cali);
+    assert!(!print.vibration_cali);
+    assert!(!print.layer_inspect);
+    assert!(!print.timelapse);
+    assert!(print.use_ams);
+    assert_eq!(print.ams_mapping, Vec::<i64>::new());
+    assert_eq!(print.ams_mapping2, Vec::<TestAmsMapping2>::new());
+    assert_eq!(print.ams_mapping_info, None);
+    assert_eq!(print.auto_bed_leveling, 0);
+    assert_eq!(print.nozzle_offset_cali, 0);
+    assert_eq!(print.cfg, "0");
+    assert_eq!(print.extrude_cali_flag, 0);
+
+    let project_id = print.project_id.parse::<u32>().unwrap();
+    assert!((1..=2_147_483_647).contains(&project_id));
+    assert_eq!(print.task_id, print.project_id);
+    assert_eq!(print.subtask_id, print.project_id);
 }
 
 #[test]
@@ -949,6 +947,28 @@ fn print_report_from_report_extracts_progress_and_diagnostics() {
     );
     assert_eq!(progress.diagnostics[1].message, "fan speed is low");
     assert!(!progress.observed_at.is_empty());
+}
+
+#[test]
+fn print_report_diagnostic_payload_includes_raw_print_report() {
+    let report = serde_json::json!({
+        "print": {
+            "gcode_state": "FAILED",
+            "mc_percent": 0,
+            "print_error": 0,
+            "reason": "reject_nozzle_mismatch",
+            "result": "fail"
+        }
+    });
+
+    let progress = print_report_from_report(&endpoint(), &report);
+
+    assert_eq!(progress.diagnostics.len(), 1);
+    let payload = serde_json::to_value(&progress.diagnostics[0].payload).unwrap();
+    assert_eq!(payload["print_error"], 0);
+    assert_eq!(payload["raw_print"]["gcode_state"], "FAILED");
+    assert_eq!(payload["raw_print"]["reason"], "reject_nozzle_mismatch");
+    assert_eq!(payload["raw_print"]["result"], "fail");
 }
 
 #[test]

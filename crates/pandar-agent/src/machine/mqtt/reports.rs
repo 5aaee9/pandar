@@ -1,6 +1,6 @@
 mod schema;
 
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use anyhow::Context;
 use pandar_core::created_at_now;
@@ -42,6 +42,7 @@ pub fn print_report_from_report(
     print_report_from_parsed_report(
         endpoint,
         envelope.as_ref(),
+        raw_print_payload(report),
         observed_at,
         printer_materials_json,
     )
@@ -54,6 +55,7 @@ pub(crate) fn parse_print_report(report: &Value) -> Option<PrintReportEnvelope> 
 pub(crate) fn print_report_from_parsed_report(
     endpoint: &BambuPrinterEndpoint,
     envelope: Option<&PrintReportEnvelope>,
+    raw_print: Option<MachineReportDiagnosticPayload>,
     observed_at: String,
     printer_materials_json: String,
 ) -> PrintReportProgress {
@@ -69,11 +71,14 @@ pub(crate) fn print_report_from_parsed_report(
             severity: "error".to_owned(),
             code: None,
             message: print_error,
-            payload: print
-                .print_error
-                .as_ref()
-                .map(|value| value.payload())
-                .unwrap_or(MachineReportDiagnosticPayload::Null),
+            payload: print_error_payload(
+                print
+                    .print_error
+                    .as_ref()
+                    .map(|value| value.payload())
+                    .unwrap_or(MachineReportDiagnosticPayload::Null),
+                raw_print.clone(),
+            ),
         });
     }
     collect_hms_diagnostics(envelope, &mut diagnostics);
@@ -229,6 +234,7 @@ where
                 let progress = print_report_from_parsed_report(
                     endpoint,
                     print_report.as_ref(),
+                    raw_print_payload(&report),
                     observed_at,
                     printer_materials_json,
                 );
@@ -274,6 +280,42 @@ where
     }
 
     Ok(())
+}
+
+fn raw_print_payload(report: &Value) -> Option<MachineReportDiagnosticPayload> {
+    report.get("print").map(value_payload)
+}
+
+fn value_payload(value: &Value) -> MachineReportDiagnosticPayload {
+    match value {
+        Value::Object(object) => MachineReportDiagnosticPayload::Object(
+            object
+                .iter()
+                .map(|(key, value)| (key.clone(), value_payload(value)))
+                .collect(),
+        ),
+        Value::Array(values) => {
+            MachineReportDiagnosticPayload::Array(values.iter().map(value_payload).collect())
+        }
+        Value::String(value) => MachineReportDiagnosticPayload::String(value.clone()),
+        Value::Number(value) => MachineReportDiagnosticPayload::Number(value.clone()),
+        Value::Bool(value) => MachineReportDiagnosticPayload::Bool(*value),
+        Value::Null => MachineReportDiagnosticPayload::Null,
+    }
+}
+
+fn print_error_payload(
+    print_error: MachineReportDiagnosticPayload,
+    raw_print: Option<MachineReportDiagnosticPayload>,
+) -> MachineReportDiagnosticPayload {
+    let Some(raw_print) = raw_print else {
+        return print_error;
+    };
+
+    let mut fields = BTreeMap::new();
+    fields.insert("print_error".to_owned(), print_error);
+    fields.insert("raw_print".to_owned(), raw_print);
+    MachineReportDiagnosticPayload::Object(fields)
 }
 
 pub(super) fn trimmed_string(value: Option<&str>) -> Option<String> {

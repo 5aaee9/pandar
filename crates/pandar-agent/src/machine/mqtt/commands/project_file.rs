@@ -5,15 +5,16 @@ use crate::machine::mqtt::commands::payload::{
 
 pub(super) fn project_file_payload(command: &ProjectFileCommand) -> BambuMqttCommandPayload {
     let sequence_id = next_studio_sequence_id();
+    let submission_id = project_file_submission_id();
     let payload = ProjectFilePayload {
         print: ProjectFilePayloadPrint {
             command: "project_file",
             sequence_id: sequence_id.clone(),
             param: format!("Metadata/plate_{}.gcode", command.plate_id),
-            project_id: "0",
+            project_id: submission_id.clone(),
             profile_id: "0",
-            task_id: "0",
-            subtask_id: "0",
+            task_id: submission_id.clone(),
+            subtask_id: submission_id,
             subtask_name: project_file_subtask_name(&command.filename),
             url: command
                 .url
@@ -55,6 +56,15 @@ pub(super) fn project_file_payload(command: &ProjectFileCommand) -> BambuMqttCom
         ),
         sequence_id,
     )
+}
+
+fn project_file_submission_id() -> String {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(1);
+    let id = (millis % 2_147_483_647).max(1);
+    id.to_string()
 }
 
 fn project_file_subtask_name(filename: &str) -> String {

@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Preserved raw Bambu MQTT `print` report context inside Agent print-error diagnostic payloads so Hub `machine_events` retain the original rejection fields when a printer immediately reports `FAILED` after a `project_file` command.
 - Aligned Bambu Studio N6 Main/Aux nozzle ordering by preserving Bambu Studio's physical dual-nozzle id convention where the Hub's right/Main nozzle is id 0 and left/Deputy nozzle is id 1, sorting `device.nozzle.info` and `extruder.info` by Studio physical id so Sync info resolves the correct nozzle/extruder entries, and normalizing raw Bambu nozzle codes to Studio-friendly four-character codes so Sync info can distinguish High Flow from Standard by the encoded flow character.
 - Added legacy top-level Bambu Studio dual-nozzle metadata fields (`nozzle_type2` / `nozzle_diameter2`) alongside the V2 device block so Studio UI paths that still consult top-level nozzle metadata can display both Main and Auxiliary diameters.
 - Changed Agent camera streaming to open `ReverseCamera` only on an explicit Hub camera request over the existing control stream, eliminating the idle startup camera tunnel while keeping per-viewer close/replacement behavior.
@@ -1005,6 +1006,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Added a shared Hub route-test typed JSON decoder and removed direct `serde_json::from_value` usage from Hub route tests.
 - Centralized Agent machine report decoding behind a typed serde helper and removed direct `serde_json::from_value` calls from Rust crates.
 - Aligned the Bambu Studio network plugin's dual-nozzle Studio mapping so Pandar `R` nozzle status maps to Studio Main id `0`, Pandar `L` maps to Deputy id `1`, and AMS/external material bindings follow Studio's 255 Main / 254 Deputy virtual-slot convention.
+- Aligned Agent project-file dispatch identities with Bambu Studio/Bambuddy behavior by generating a fresh non-zero int32-range `project_id`/`task_id`/`subtask_id` per submission instead of sending `"0"`.
 
 Exit criteria:
 
