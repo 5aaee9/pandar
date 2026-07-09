@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use anyhow::Context;
 use tokio::{sync::mpsc, task::JoinHandle};
-use tokio_stream::{Stream, StreamExt};
-use tonic::Status;
+use tokio_stream::{StreamExt, wrappers::ReceiverStream};
+use tonic::Request;
 
 use crate::{
     AgentConfig,
@@ -13,7 +13,8 @@ use crate::{
     },
     protocol::agent::v1::{
         AgentCameraChunk, AgentCameraClosed, AgentCameraEvent, AgentCameraHello, CameraStreamMode,
-        HubCameraCommand, agent_camera_event, hub_camera_command,
+        HubCameraCommand, agent_camera_event, agent_control_client::AgentControlClient,
+        hub_camera_command,
     },
 };
 
@@ -27,58 +28,146 @@ pub fn camera_hello_event(config: &AgentConfig) -> AgentCameraEvent {
     )
 }
 
-pub async fn handle_camera_command_stream_with_gateway<G, S>(
+pub async fn handle_control_camera_command<G>(
     config: &AgentConfig,
     gateway: &G,
-    sender: &mpsc::Sender<AgentCameraEvent>,
-    mut commands: S,
+    streams: &mut HashMap<String, JoinHandle<()>>,
+    command: HubCameraCommand,
 ) -> anyhow::Result<()>
 where
     G: BambuMachineGateway,
-    S: Stream<Item = Result<HubCameraCommand, Status>> + Unpin,
 {
-    let mut streams: HashMap<String, JoinHandle<()>> = HashMap::new();
-    while let Some(command) = commands
-        .next()
-        .await
-        .transpose()
-        .context("read hub camera command from reverse stream")?
-    {
-        match command.command {
-            Some(hub_camera_command::Command::Open(open)) => {
-                if let Some(task) = streams.remove(&command.stream_id) {
-                    task.abort();
-                }
-                let stream_id = command.stream_id.clone();
-                let endpoint = match gateway.camera_endpoint(&open.serial_number).await {
-                    Ok(endpoint) => endpoint,
-                    Err(err) => {
-                        let error = gateway.redact_error(&format!("{err:#}"));
-                        send_camera_closed(config, sender, &stream_id, false, error).await;
-                        continue;
-                    }
-                };
-                let task = spawn_camera_stream(
-                    config.clone(),
-                    stream_id.clone(),
-                    endpoint,
-                    CameraStreamMode::try_from(open.mode).unwrap_or(CameraStreamMode::Mjpeg),
-                    sender.clone(),
-                );
-                streams.insert(stream_id, task);
+    match command.command {
+        Some(hub_camera_command::Command::Open(open)) => {
+            if let Some(task) = streams.remove(&command.stream_id) {
+                task.abort();
             }
-            Some(hub_camera_command::Command::Close(_)) => {
-                if let Some(task) = streams.remove(&command.stream_id) {
-                    task.abort();
+            let stream_id = command.stream_id.clone();
+            let mode = CameraStreamMode::try_from(open.mode).unwrap_or(CameraStreamMode::Mjpeg);
+            let task = match gateway.camera_endpoint(&open.serial_number).await {
+                Ok(endpoint) => {
+                    spawn_reverse_camera_stream(config.clone(), stream_id.clone(), endpoint, mode)
                 }
-            }
-            None => {}
+                Err(err) => {
+                    let error = gateway.redact_error(&format!("{err:#}"));
+                    spawn_reverse_camera_closed(config.clone(), stream_id.clone(), false, error)
+                }
+            };
+            streams.insert(stream_id, task);
         }
+        Some(hub_camera_command::Command::Close(_)) => {
+            if let Some(task) = streams.remove(&command.stream_id) {
+                task.abort();
+            }
+        }
+        None => {}
     }
 
-    for (_, task) in streams {
-        task.abort();
+    Ok(())
+}
+
+fn spawn_reverse_camera_stream(
+    config: AgentConfig,
+    stream_id: String,
+    endpoint: crate::machine::BambuPrinterEndpoint,
+    mode: CameraStreamMode,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        if let Err(err) = reverse_camera_stream(config, stream_id, endpoint, mode).await {
+            tracing::warn!(error = %format!("{err:#}"), "on-demand camera stream failed");
+        }
+    })
+}
+
+async fn reverse_camera_stream(
+    config: AgentConfig,
+    stream_id: String,
+    endpoint: crate::machine::BambuPrinterEndpoint,
+    mode: CameraStreamMode,
+) -> anyhow::Result<()> {
+    let mut client = AgentControlClient::connect(config.hub_grpc_url.clone())
+        .await
+        .with_context(|| {
+            format!(
+                "connect on-demand camera stream to hub gRPC at {}",
+                config.hub_grpc_url
+            )
+        })?;
+    let (sender, receiver) = mpsc::channel(16);
+    sender
+        .send(camera_hello_event(&config))
+        .await
+        .context("queue agent camera hello event")?;
+    let mut response = client
+        .reverse_camera(Request::new(ReceiverStream::new(receiver)))
+        .await
+        .context("open reverse agent camera stream")?
+        .into_inner();
+    let mut task = spawn_camera_stream(config, stream_id.clone(), endpoint, mode, sender);
+
+    loop {
+        tokio::select! {
+            result = &mut task => {
+                result.context("join camera stream task")?;
+                return Ok(());
+            }
+            command = response.next() => {
+                let Some(command) = command
+                    .transpose()
+                    .context("read hub camera command from reverse stream")?
+                else {
+                    task.abort();
+                    return Ok(());
+                };
+                if command.stream_id == stream_id
+                    && matches!(command.command, Some(hub_camera_command::Command::Close(_)))
+                {
+                    task.abort();
+                    return Ok(());
+                }
+            }
+        }
     }
+}
+
+fn spawn_reverse_camera_closed(
+    config: AgentConfig,
+    stream_id: String,
+    success: bool,
+    error: String,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        if let Err(err) = reverse_camera_closed(config, stream_id, success, error).await {
+            tracing::warn!(error = %format!("{err:#}"), "on-demand camera close event failed");
+        }
+    })
+}
+
+async fn reverse_camera_closed(
+    config: AgentConfig,
+    stream_id: String,
+    success: bool,
+    error: String,
+) -> anyhow::Result<()> {
+    let mut client = AgentControlClient::connect(config.hub_grpc_url.clone())
+        .await
+        .with_context(|| {
+            format!(
+                "connect on-demand camera close event to hub gRPC at {}",
+                config.hub_grpc_url
+            )
+        })?;
+    let (sender, receiver) = mpsc::channel(2);
+    sender
+        .send(camera_hello_event(&config))
+        .await
+        .context("queue agent camera hello event")?;
+    send_camera_closed(&config, &sender, &stream_id, success, error).await;
+    drop(sender);
+    client
+        .reverse_camera(Request::new(ReceiverStream::new(receiver)))
+        .await
+        .context("open reverse agent camera stream for close event")?;
     Ok(())
 }
 

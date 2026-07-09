@@ -1,10 +1,25 @@
+use std::{
+    pin::Pin,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+
 use super::*;
 use crate::machine::{
     BambuMachineGateway, discovery::DiscoveredPrinter, file_transfer::FakeMachineFileTransfer,
     mqtt::FakeMqttTransport, runtime::test_support::TestRuntimeBambuMachineGateway,
 };
-use crate::protocol::agent::v1::{HubCommand, LinkPrinter, hub_command};
+use crate::protocol::agent::v1::{
+    AgentCameraEvent, AgentEvent, HubCameraCommand, HubCommand, LinkPrinter,
+    agent_control_server::{AgentControl, AgentControlServer},
+    hub_command,
+};
 use serde::Serialize;
+use tokio::net::TcpListener;
+use tokio_stream::wrappers::TcpListenerStream;
+use tonic::{Request, Response, Status};
 
 mod startup;
 mod tls;
@@ -148,6 +163,37 @@ async fn ended_command_stream_preserves_runtime_linked_printer_for_reconnect() {
     assert_eq!(snapshots.len(), 1);
     assert_eq!(snapshots[0].snapshot.serial, "SERIAL123");
     assert_eq!(snapshots[0].snapshot.state, "IDLE");
+}
+
+#[tokio::test]
+async fn run_once_does_not_open_camera_stream_before_camera_command() {
+    let reverse_camera_called = Arc::new(AtomicBool::new(false));
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let service = TestAgentControlService {
+        reverse_camera_called: reverse_camera_called.clone(),
+    };
+    tokio::spawn(async move {
+        tonic::transport::Server::builder()
+            .add_service(AgentControlServer::new(service))
+            .serve_with_incoming(TcpListenerStream::new(listener))
+            .await
+            .unwrap();
+    });
+    let config = AgentConfig {
+        hub_grpc_url: format!("http://127.0.0.1:{}", address.port()),
+        ..test_config()
+    };
+    let gateway = crate::machine::runtime::RuntimeBambuMachineGateway::new(
+        config.clone(),
+        Vec::new(),
+        Duration::from_secs(1),
+    );
+
+    let outcome = run_once(config, &gateway).await.unwrap();
+
+    assert_eq!(outcome, RunOutcome::ConnectedThenEnded);
+    assert!(!reverse_camera_called.load(Ordering::SeqCst));
 }
 
 #[test]
@@ -300,4 +346,33 @@ fn received_success_result(events: &mut mpsc::Receiver<AgentEvent>) -> bool {
         }
     }
     received_success
+}
+
+struct TestAgentControlService {
+    reverse_camera_called: Arc<AtomicBool>,
+}
+
+#[tonic::async_trait]
+impl AgentControl for TestAgentControlService {
+    type ReverseConnectStream =
+        Pin<Box<dyn tokio_stream::Stream<Item = Result<HubCommand, Status>> + Send>>;
+    type ReverseCameraStream =
+        Pin<Box<dyn tokio_stream::Stream<Item = Result<HubCameraCommand, Status>> + Send>>;
+
+    async fn reverse_connect(
+        &self,
+        request: Request<tonic::Streaming<AgentEvent>>,
+    ) -> Result<Response<Self::ReverseConnectStream>, Status> {
+        let mut inbound = request.into_inner();
+        let _ = inbound.message().await?;
+        Ok(Response::new(Box::pin(tokio_stream::empty())))
+    }
+
+    async fn reverse_camera(
+        &self,
+        _request: Request<tonic::Streaming<AgentCameraEvent>>,
+    ) -> Result<Response<Self::ReverseCameraStream>, Status> {
+        self.reverse_camera_called.store(true, Ordering::SeqCst);
+        Ok(Response::new(Box::pin(tokio_stream::empty())))
+    }
 }

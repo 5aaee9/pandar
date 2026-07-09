@@ -113,6 +113,7 @@ message HubCommand {
     PrinterOperation printer_operation = 14;
     LinkPrinter link_printer = 15;
     RefreshPrinterMaterials refresh_printer_materials = 16;
+    HubCameraCommand camera_stream = 17;
   }
 }
 

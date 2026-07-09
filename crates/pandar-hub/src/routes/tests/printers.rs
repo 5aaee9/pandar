@@ -241,10 +241,24 @@ async fn printer_camera_stream_opens_agent_camera_tunnel() {
         .await
         .unwrap()
         .unwrap();
+    let (wake_sender, _wake_receiver) = tokio::sync::mpsc::channel(1);
+    let (close_sender, _close_receiver) = tokio::sync::mpsc::channel(1);
     let (command_sender, mut command_receiver) = tokio::sync::mpsc::channel(1);
     state
-        .camera_sessions()
-        .register(tenant_id, agent_id, command_sender)
+        .sessions()
+        .register(crate::sessions::AgentSession {
+            token: crate::sessions::SessionToken::new(),
+            tenant_id,
+            agent_id,
+            name: "garage".to_owned(),
+            version: "test".to_owned(),
+            connected_at: pandar_core::created_at_now(),
+            last_heartbeat_at: pandar_core::created_at_now(),
+            wake_sender,
+            close_sender,
+            command_sender,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
+        })
         .await;
 
     let response = raw_request_as(
@@ -267,11 +281,14 @@ async fn printer_camera_stream_opens_agent_camera_tunnel() {
     );
     let command = command_receiver.recv().await.unwrap().unwrap();
     match command.command.unwrap() {
-        hub_camera_command::Command::Open(open) => {
-            assert_eq!(open.serial_number, printer.serial_number);
-            assert_eq!(open.mode, CameraStreamMode::FragmentedMp4 as i32);
-        }
-        other => panic!("expected open camera stream command, got {other:?}"),
+        hub_command::Command::CameraStream(command) => match command.command.unwrap() {
+            hub_camera_command::Command::Open(open) => {
+                assert_eq!(open.serial_number, printer.serial_number);
+                assert_eq!(open.mode, CameraStreamMode::FragmentedMp4 as i32);
+            }
+            other => panic!("expected open camera stream command, got {other:?}"),
+        },
+        other => panic!("expected camera stream command, got {other:?}"),
     }
 }
 

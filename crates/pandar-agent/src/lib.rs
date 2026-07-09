@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::Context;
 use clap::Parser;
 use pandar_core::created_at_now;
@@ -14,12 +16,12 @@ pub mod machine;
 pub mod protocol;
 mod startup;
 
-use camera_control::{camera_hello_event, handle_camera_command_stream_with_gateway};
+use camera_control::handle_control_camera_command;
 use commands::handle_command_with_gateway;
 use machine::{BambuMachineGateway, runtime::RuntimeBambuMachineGateway};
 use protocol::agent::v1::{
     AgentEvent, AgentHeartbeat, AgentHello, HubCommand, agent_control_client::AgentControlClient,
-    agent_event,
+    agent_event, hub_command,
 };
 use startup::startup_printers;
 
@@ -228,33 +230,16 @@ async fn run_once(
     let mut client = AgentControlClient::connect(config.hub_grpc_url.clone())
         .await
         .with_context(|| format!("connect to hub gRPC at {}", config.hub_grpc_url))?;
-    let mut camera_client = AgentControlClient::connect(config.hub_grpc_url.clone())
-        .await
-        .with_context(|| {
-            format!(
-                "connect camera stream to hub gRPC at {}",
-                config.hub_grpc_url
-            )
-        })?;
     let (sender, receiver) = mpsc::channel(16);
-    let (camera_sender, camera_receiver) = mpsc::channel(16);
     sender
         .send(hello_event(&config))
         .await
         .context("queue agent hello event")?;
-    camera_sender
-        .send(camera_hello_event(&config))
-        .await
-        .context("queue agent camera hello event")?;
 
     let response = client
         .reverse_connect(Request::new(ReceiverStream::new(receiver)))
         .await
         .context("open reverse agent control stream")?;
-    let camera_response = camera_client
-        .reverse_camera(Request::new(ReceiverStream::new(camera_receiver)))
-        .await
-        .context("open reverse agent camera stream")?;
 
     let heartbeat_sender = sender.clone();
     let heartbeat_config = config.clone();
@@ -273,18 +258,7 @@ async fn run_once(
 
     gateway.start_initial_report_forwarders(&sender).await;
 
-    tokio::select! {
-        result = handle_command_stream_with_gateway(&config, gateway, &sender, response.into_inner()) => result,
-        result = handle_camera_command_stream_with_gateway(
-            &config,
-            gateway,
-            &camera_sender,
-            camera_response.into_inner(),
-        ) => {
-            result?;
-            Ok(RunOutcome::ConnectedThenEnded)
-        }
-    }
+    handle_command_stream_with_gateway(&config, gateway, &sender, response.into_inner()).await
 }
 
 async fn handle_command_stream_with_gateway<G, S>(
@@ -297,13 +271,23 @@ where
     G: BambuMachineGateway,
     S: Stream<Item = Result<HubCommand, Status>> + Unpin,
 {
+    let mut camera_streams = HashMap::new();
     while let Some(command) = commands
         .next()
         .await
         .transpose()
         .context("read hub command from reverse stream")?
     {
+        if let Some(hub_command::Command::CameraStream(camera_command)) = command.command {
+            handle_control_camera_command(config, gateway, &mut camera_streams, camera_command)
+                .await?;
+            continue;
+        }
         handle_command_with_gateway(config, gateway, sender, command).await?;
+    }
+
+    for (_, task) in camera_streams {
+        task.abort();
     }
 
     Ok(RunOutcome::ConnectedThenEnded)

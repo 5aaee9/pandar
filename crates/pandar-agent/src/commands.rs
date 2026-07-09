@@ -129,6 +129,7 @@ where
         Some(hub_command::Command::LinkPrinter(link)) => {
             emit_link_printer_events(config, gateway, sender, &command.command_id, link).await
         }
+        Some(hub_command::Command::CameraStream(_)) => Ok(()),
         None => Ok(()),
     }
 }

@@ -30,9 +30,16 @@ pub(crate) async fn printer_camera_stream(
         return Err(ApiError::not_found("printer_not_found"));
     };
 
+    let Some(command_sender) = state
+        .sessions()
+        .transient_command_sender(tenant_id, printer.agent_id)
+        .await
+    else {
+        return Err(camera_open_error(CameraOpenError::AgentOffline));
+    };
     let stream = state
         .camera_sessions()
-        .open_stream(tenant_id, printer.agent_id, printer.serial_number)
+        .open_stream(printer.agent_id, printer.serial_number, command_sender)
         .await
         .map_err(camera_open_error)?;
 

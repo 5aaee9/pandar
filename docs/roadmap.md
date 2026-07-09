@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Changed Agent camera streaming to open `ReverseCamera` only on an explicit Hub camera request over the existing control stream, eliminating the idle startup camera tunnel while keeping per-viewer close/replacement behavior.
 - Enabled tonic TLS native-root support for `pandar-agent` gRPC client connections and added a local TLS gRPC regression test for the generated Agent control client.
 - Wrapped the Nix `pandar-agent` package with a default `PANDAR_FFMPEG_PATH` and ffmpeg runtime `PATH` entry so Agent-mediated camera streaming can spawn the fragmented MP4 transcoder on NixOS deployments.
 - Fixed Agent camera connection persistence: printer telemetry snapshots no longer erase saved `host`/`access_code` values when the Agent reports only status data, and the NixOS module now exposes `services.pandar.agent.hubApiUrl` for `PANDAR_HUB_API_URL` so restarted Agents can reload saved printer connections.

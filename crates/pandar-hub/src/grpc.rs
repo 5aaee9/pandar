@@ -166,14 +166,10 @@ impl AgentControlService {
             return Err(Status::unauthenticated("invalid agent credential"));
         }
 
-        let (command_sender, command_receiver) = mpsc::channel(16);
-        let token = self
-            .state
-            .camera_sessions()
-            .register(tenant_id, agent_id, command_sender)
-            .await;
+        let (keepalive_sender, command_receiver) = mpsc::channel(1);
         let state = self.state.clone();
         tokio::spawn(async move {
+            let _keepalive_sender = keepalive_sender;
             while let Some(event) = inbound.next().await {
                 match event {
                     Ok(event) => handle_camera_event(&state, event).await,
@@ -183,10 +179,6 @@ impl AgentControlService {
                     }
                 }
             }
-            state
-                .camera_sessions()
-                .unregister_if_current(agent_id, token)
-                .await;
         });
 
         Ok(Box::pin(ReceiverStream::new(command_receiver)))

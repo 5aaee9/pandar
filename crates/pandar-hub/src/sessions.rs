@@ -19,6 +19,8 @@ use crate::repositories::{AgentRepository, RepositoryError, RepositoryResult};
 #[cfg(test)]
 use pandar_core::AgentStatus;
 
+mod transient;
+
 #[derive(Debug, Clone)]
 pub struct SessionRegistry {
     sessions: Arc<Mutex<HashMap<AgentId, AgentSession>>>,
