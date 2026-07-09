@@ -119,7 +119,13 @@
         );
 
       pandar-hub = buildRustPackage "pandar-hub" "-p pandar-hub --bin pandar-hub";
-      pandar-agent = buildRustPackage "pandar-agent" "-p pandar-agent --bin pandar-agent";
+      pandar-agent-unwrapped = buildRustPackage "pandar-agent-unwrapped" "-p pandar-agent --bin pandar-agent";
+      pandar-agent = pkgs.runCommand "pandar-agent-0.1.0" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
+        mkdir -p "$out/bin"
+        makeWrapper ${pandar-agent-unwrapped}/bin/pandar-agent "$out/bin/pandar-agent" \
+          --set-default PANDAR_FFMPEG_PATH ${lib.getExe pkgs.ffmpeg} \
+          --prefix PATH : ${lib.makeBinPath [ pkgs.ffmpeg ]}
+      '';
       pandar-cli = buildRustPackage "pandar-cli" "-p pandar-app --bin pandar";
       pandar-network-plugin = buildRustPackage "pandar-network-plugin" "-p pandar-network-plugin";
 
@@ -396,6 +402,8 @@
           test "${serviceHub.serviceConfig.ExecStart}" = "${pandar-hub}/bin/pandar-hub"
           test "${serviceWeb.serviceConfig.ExecStart}" = "${pandar-web}/bin/pandar-web"
           test "${serviceAgent.serviceConfig.ExecStart}" = "${pandar-agent}/bin/pandar-agent"
+          grep -F 'PANDAR_FFMPEG_PATH' "${serviceAgent.serviceConfig.ExecStart}"
+          grep -F '${lib.getExe pkgs.ffmpeg}' "${serviceAgent.serviceConfig.ExecStart}"
           test "${authService.serviceConfig.ExecStart}" = "${pandar-auth}/bin/pandar-auth"
           test "${authService.serviceConfig.ExecStartPre}" = "${pandar-auth}/bin/pandar-auth-migrate"
           test "${serviceNatsEnabled}" = "1"
