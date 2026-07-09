@@ -168,6 +168,12 @@ in
           description = "Hub gRPC URL passed through PANDAR_HUB_GRPC_URL.";
         };
 
+        hubApiUrl = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "Hub HTTP API URL passed through PANDAR_HUB_API_URL for saved printer connections and artifact downloads.";
+        };
+
         name = lib.mkOption {
           type = lib.types.str;
           default = "local-agent";
@@ -472,6 +478,9 @@ in
         }
         // lib.optionalAttrs (cfg.agent.credential != null) {
           PANDAR_AGENT_CREDENTIAL = cfg.agent.credential;
+        }
+        // lib.optionalAttrs (cfg.agent.hubApiUrl != null) {
+          PANDAR_HUB_API_URL = cfg.agent.hubApiUrl;
         }
         // cfg.agent.extraEnvironment;
 

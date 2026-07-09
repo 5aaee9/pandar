@@ -29,8 +29,8 @@ pub(crate) async fn upsert_snapshot(
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
-                     host = excluded.host,
-                     access_code = excluded.access_code,
+                     host = COALESCE(excluded.host, printers.host),
+                     access_code = COALESCE(excluded.access_code, printers.access_code),
                      model = excluded.model,
                      status = excluded.status,
                      last_seen_at = excluded.last_seen_at,
@@ -74,8 +74,8 @@ pub(crate) async fn upsert_snapshot(
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11, $12, $13, $14, $15, $16)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
-                     host = excluded.host,
-                     access_code = excluded.access_code,
+                     host = COALESCE(excluded.host, printers.host),
+                     access_code = COALESCE(excluded.access_code, printers.access_code),
                      model = excluded.model,
                      status = excluded.status,
                      last_seen_at = excluded.last_seen_at,

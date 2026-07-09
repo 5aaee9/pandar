@@ -29,6 +29,20 @@ fn snapshot(
     }
 }
 
+fn telemetry_snapshot_without_connection(
+    serial_number: &str,
+    name: &str,
+    model: Option<&str>,
+    status: &str,
+    observed_at: &str,
+) -> PrinterSnapshotUpsert {
+    PrinterSnapshotUpsert {
+        host: None,
+        access_code: None,
+        ..snapshot(serial_number, name, model, status, observed_at)
+    }
+}
+
 #[tokio::test]
 async fn printer_repository_upserts_and_lists_for_tenant() {
     let (_, tenants, agents, printers, _, _) = repositories().await;
@@ -139,6 +153,47 @@ async fn printer_repository_updates_connection_details() {
             .unwrap(),
         updated
     );
+}
+
+#[tokio::test]
+async fn printer_repository_snapshot_without_connection_preserves_saved_connection() {
+    let (_, tenants, agents, printers, _, _) = repositories().await;
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+
+    printers
+        .upsert_snapshot(
+            tenant.id,
+            agent.id,
+            snapshot(
+                "SN-001",
+                "Printer",
+                Some("X1C"),
+                "idle",
+                "2026-06-21T00:00:00Z",
+            ),
+        )
+        .await
+        .unwrap();
+    let updated = printers
+        .upsert_snapshot(
+            tenant.id,
+            agent.id,
+            telemetry_snapshot_without_connection(
+                "SN-001",
+                "Printer",
+                Some("X1 Carbon"),
+                "printing",
+                "2026-06-21T00:05:00Z",
+            ),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(updated.host.as_deref(), Some("192.0.2.10"));
+    assert_eq!(updated.access_code.as_deref(), Some("test-access-code"));
+    assert_eq!(updated.model.as_deref(), Some("X1 Carbon"));
+    assert_eq!(updated.status, "printing");
 }
 
 #[tokio::test]

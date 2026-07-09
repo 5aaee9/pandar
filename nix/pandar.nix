@@ -321,6 +321,7 @@
                 };
                 services.pandar.agent = {
                   enable = true;
+                  hubApiUrl = "http://127.0.0.1:8080";
                   agentId = "00000000-0000-0000-0000-000000000001";
                   tenantId = "00000000-0000-0000-0000-000000000002";
                   credential = "test-agent-credential";
@@ -412,6 +413,7 @@
           test "${serviceHub.environment.PANDAR_NATS_SUBJECT}" = "pandar.test.control"
           test "${serviceWeb.environment.APP_API_URL}" = "http://127.0.0.1:8080"
           test "${serviceAgent.environment.PANDAR_HUB_GRPC_URL}" = "http://127.0.0.1:50051"
+          test "${serviceAgent.environment.PANDAR_HUB_API_URL}" = "http://127.0.0.1:8080"
           test "${externalNatsEnabled}" = "0"
           test "${externalHub.environment.PANDAR_CONTROL_PLANE}" = "nats"
           test "${externalHub.environment.PANDAR_NATS_URL}" = "nats://broker.example:4222"
