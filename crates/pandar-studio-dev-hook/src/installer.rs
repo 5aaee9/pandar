@@ -116,8 +116,10 @@ fn default_studio_dir() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
     use super::*;
 
+    #[cfg(windows)]
     #[test]
     fn installs_and_restores_swscale_proxy() {
         let temp = tempfile::tempdir().expect("tempdir");

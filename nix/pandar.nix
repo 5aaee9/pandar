@@ -88,6 +88,18 @@
         SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
         NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
         inherit nativeBuildInputs buildInputs;
+      }
+      // lib.optionalAttrs (system == "aarch64-linux") {
+        # On aarch64-unknown-linux-gnu, rustc links cdylibs with the system bfd
+        # linker and auto-generates an anonymous version script (with `local: *`)
+        # that conflicts with pandar-network-plugin's build.rs export map
+        # ("anonymous version tag cannot be combined with other version tags").
+        # Force the bundled lld: like x86_64-linux's default it does not emit an
+        # auto version script, so only build.rs's single export map remains.
+        # `+linker` keeps the system CRT (binaries link and run normally); the
+        # value is unstable on stable rustc, hence the bootstrap escape hatch.
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS = "-Z unstable-options -C link-self-contained=+linker";
+        RUSTC_BOOTSTRAP = "1";
       };
 
       cargoArtifacts = craneLib.buildDepsOnly (
