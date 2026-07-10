@@ -7,6 +7,7 @@ use std::{
     net::{TcpListener, TcpStream},
     path::PathBuf,
     process::{Command, Output, Stdio},
+    sync::Mutex,
     thread,
     time::{Duration, Instant},
 };
@@ -16,8 +17,17 @@ use support::{
 };
 
 const MOCK_HUB_TIMEOUT: Duration = Duration::from_secs(5);
-const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
-const PRINTERS_RESPONSE: &str = r##"{"devices":[{"dev_id":"studio-serial-1","pandar_printer_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","dev_model_name":"N6","nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220","diameter_mm":"0.4","nozzle_type":"HH05"},{"label":"R","current_celsius":"27","target_celsius":"215","diameter_mm":"0.4","nozzle_type":"HS01"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true,"materials":{"ams_units":[{"unit_id":"0","humidity":25,"humidity_level":3,"temperature_celsius":28.5,"toolhead":"R","trays":[{"tray_id":"0","global_tray_id":0,"type":"PETG-CF","filament_id":"GFG50","color":"000000FF","remaining_estimate":"-1"},{"tray_id":"1","global_tray_id":1,"type":"PLA","filament_id":"GFA00","color":"C12E1FFF","remaining_estimate":"100"},{"tray_id":"2","global_tray_id":2,"type":"PETG","filament_id":"GFG00","color":"FCE300FF","remaining_estimate":"36"},{"tray_id":"3","global_tray_id":3,"type":"PLA","filament_id":"GFL99","color":"FFF144FF","remaining_estimate":"-1"}]},{"unit_id":"1","humidity":28,"humidity_level":3,"temperature_celsius":28.1,"toolhead":"L","trays":[{"tray_id":"0","global_tray_id":4,"type":"PLA","filament_id":"GFA00","color":"000000FF","remaining_estimate":"55"},{"tray_id":"1","global_tray_id":5,"type":"ABS","filament_id":"GFB00","color":"46A8F9FF","remaining_estimate":"-1"},{"tray_id":"2","global_tray_id":6,"type":"ABS","filament_id":"GFB00","color":"057748FF","remaining_estimate":"-1"},{"tray_id":"3","global_tray_id":7,"type":"PLA-CF","filament_id":"GFA50","color":"69398EFF","remaining_estimate":"85"}]}],"external_spools":[{"external_id":"254","tray_id":"0","type":"PETG","filament_id":"GFG00","color":"11223344","toolhead":"L"},{"external_id":"255","tray_id":"1","type":"PLA","filament_id":"GFL99","color":"46A8F9FF","toolhead":"R"}],"active_tray":{"kind":"ams","ams_id":"0","tray_id":"3","global_tray_id":3},"observed_at":"2026-06-20T00:01:00Z"}}]}"##;
+const PROBE_TIMEOUT: Duration = Duration::from_secs(25);
+static PROBE_LOCK: Mutex<()> = Mutex::new(());
+const PRINTERS_RESPONSE: &str = r##"{"message":"success","devices":[{"dev_id":"studio-serial-1","dev_name":"Probe Printer","pandar_printer_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","dev_model_name":"N6","model":"N6","dev_online":true,"online":true,"task_status":"RUNNING","state":"RUNNING","gcode_state":"RUNNING","mc_percent":37,"mc_remaining_time":52,"layer_num":12,"total_layer_num":120,"task_id":"task-42","subtask_id":"subtask-42","gcode_file":"drawer-organizer.gcode","subtask_name":"drawer-organizer","hms":[{"attr":134152704,"code":32785}],"nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220","diameter_mm":"0.4","nozzle_type":"HH05"},{"label":"R","current_celsius":"27","target_celsius":"215","diameter_mm":"0.4","nozzle_type":"HS01"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true,"materials":{"ams_units":[{"unit_id":"0","humidity":25,"humidity_level":3,"temperature_celsius":28.5,"toolhead":"R","trays":[{"tray_id":"0","global_tray_id":0,"type":"PETG-CF","filament_id":"GFG50","color":"000000FF","remaining_estimate":"-1"},{"tray_id":"1","global_tray_id":1,"type":"PLA","filament_id":"GFA00","color":"C12E1FFF","remaining_estimate":"100"},{"tray_id":"2","global_tray_id":2,"type":"PETG","filament_id":"GFG00","color":"FCE300FF","remaining_estimate":"36"},{"tray_id":"3","global_tray_id":3,"type":"PLA","filament_id":"GFL99","color":"FFF144FF","remaining_estimate":"-1"}]},{"unit_id":"1","humidity":28,"humidity_level":3,"temperature_celsius":28.1,"toolhead":"L","trays":[{"tray_id":"0","global_tray_id":4,"type":"PLA","filament_id":"GFA00","color":"000000FF","remaining_estimate":"55"},{"tray_id":"1","global_tray_id":5,"type":"ABS","filament_id":"GFB00","color":"46A8F9FF","remaining_estimate":"-1"},{"tray_id":"2","global_tray_id":6,"type":"ABS","filament_id":"GFB00","color":"057748FF","remaining_estimate":"-1"},{"tray_id":"3","global_tray_id":7,"type":"PLA-CF","filament_id":"GFA50","color":"69398EFF","remaining_estimate":"85"}]}],"external_spools":[{"external_id":"254","tray_id":"0","type":"PETG","filament_id":"GFG00","color":"11223344","toolhead":"L"},{"external_id":"255","tray_id":"1","type":"PLA","filament_id":"GFL99","color":"46A8F9FF","toolhead":"R"}],"active_tray":{"kind":"ams","ams_id":"0","tray_id":"3","global_tray_id":3},"observed_at":"2026-06-20T00:01:00Z"}}]}"##;
+
+fn printers_response_with_progress(progress: u8) -> String {
+    PRINTERS_RESPONSE.replacen(
+        r#""mc_percent":37"#,
+        &format!(r#""mc_percent":{progress}"#),
+        1,
+    )
+}
 
 fn target_dir() -> PathBuf {
     let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -236,11 +246,14 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                 ("POST", "/api/v1/plugin/login-tickets/exchange", false),
                 ("GET", "/api/v1/plugin/printers", true),
                 ("GET", "/api/v1/plugin/printers", true),
-                ("GET", "/api/v1/plugin/jobs", true),
                 ("POST", "/api/v1/plugin/prints", true),
+                ("GET", "/api/v1/plugin/printers", true),
+                ("GET", "/api/v1/plugin/printers", true),
                 ("POST", "/api/v1/plugin/printers/printer-1/operations", true),
                 ("POST", "/api/v1/plugin/printers/printer-1/operations", true),
+                ("GET", "/api/v1/plugin/printers", true),
                 ("POST", "/api/v1/plugin/printers/printer-1/operations", true),
+                ("GET", "/api/v1/plugin/printers", true),
             ];
             for (index, (method, path, bearer)) in expected.into_iter().enumerate() {
                 let mut stream = accept_with_timeout(&listener);
@@ -264,10 +277,13 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         "HTTP/1.1 200 OK",
                         r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
                     ),
-                    3 => write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE),
+                    3 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        &printers_response_with_progress(36),
+                    ),
                     4 => write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE),
-                    5 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"tasks":[]}"#),
-                    6 => {
+                    5 => {
                         let body = request_body(&request);
                         assert_multipart_print_request(&request);
                         assert!(
@@ -291,7 +307,8 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         assert_multipart_file_part(&request, "probe.3mf", &artifact);
                         write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"job_id":"job-1"}"#);
                     }
-                    7 => {
+                    6 | 7 => write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE),
+                    8 => {
                         assert_operation_body_eq(
                             &request,
                             TestOperation::SetChamberLight { light_on: false },
@@ -302,7 +319,7 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                             r#"{"command_id":"cmd-light","status":"queued"}"#,
                         );
                     }
-                    8 => {
+                    9 => {
                         assert_operation_body_eq(
                             &request,
                             TestOperation::SetHotendTemperature {
@@ -317,7 +334,8 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                             r#"{"command_id":"cmd-hotend","status":"queued"}"#,
                         );
                     }
-                    9 => {
+                    10 => write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE),
+                    11 => {
                         assert_operation_body_eq(
                             &request,
                             TestOperation::Home {
@@ -334,6 +352,7 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                             r#"{"command_id":"cmd-1","status":"queued"}"#,
                         );
                     }
+                    12 => write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE),
                     _ => unreachable!(),
                 }
             }
@@ -344,8 +363,8 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                 ("POST", "/api/v1/plugin/no-auth-session", None),
                 ("GET", "/api/v1/plugin/printers", Some("probe-token")),
                 ("GET", "/api/v1/plugin/printers", Some("probe-token")),
-                ("GET", "/api/v1/plugin/jobs", Some("probe-token")),
                 ("POST", "/api/v1/plugin/prints", Some("probe-token")),
+                ("GET", "/api/v1/plugin/printers", Some("probe-token")),
                 (
                     "POST",
                     "/api/v1/plugin/printers/printer-1/operations",
@@ -356,11 +375,13 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                     "/api/v1/plugin/printers/printer-1/operations",
                     Some("probe-token"),
                 ),
+                ("GET", "/api/v1/plugin/printers", Some("probe-token")),
                 (
                     "POST",
                     "/api/v1/plugin/printers/printer-1/operations",
                     Some("probe-token"),
                 ),
+                ("GET", "/api/v1/plugin/printers", Some("probe-token")),
             ];
             for (index, (method, path, bearer_token)) in expected.into_iter().enumerate() {
                 let mut stream = accept_with_timeout(&listener);
@@ -380,8 +401,7 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
                     ),
                     2 | 3 => write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE),
-                    4 => write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"tasks":[]}"#),
-                    5 => {
+                    4 => {
                         let body = request_body(&request);
                         assert_multipart_print_request(&request);
                         assert!(
@@ -398,6 +418,11 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         assert_multipart_file_part(&request, "probe.3mf", &artifact);
                         write_response(&mut stream, "HTTP/1.1 200 OK", r#"{"job_id":"job-1"}"#);
                     }
+                    5 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 200 OK",
+                        r#"{"message":"success","devices":["#,
+                    ),
                     6 => {
                         assert_operation_body_eq(
                             &request,
@@ -424,7 +449,8 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                             r#"{"command_id":"cmd-hotend","status":"queued"}"#,
                         );
                     }
-                    8 => {
+                    8 => write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE),
+                    9 => {
                         assert_operation_body_eq(
                             &request,
                             TestOperation::Home {
@@ -441,6 +467,7 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                             r#"{"command_id":"cmd-1","status":"queued"}"#,
                         );
                     }
+                    10 => write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE),
                     _ => unreachable!(),
                 }
             }
@@ -453,6 +480,8 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                 ("POST", "/api/v1/plugin/no-auth-session", false),
                 ("GET", "/api/v1/plugin/printers", true),
                 ("POST", "/api/v1/plugin/prints", true),
+                ("GET", "/api/v1/plugin/printers", true),
+                ("GET", "/api/v1/plugin/printers", true),
             ];
             for (index, (method, path, bearer)) in expected.into_iter().enumerate() {
                 let mut stream = accept_with_timeout(&listener);
@@ -490,6 +519,16 @@ fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                         &mut stream,
                         "HTTP/1.1 403 Forbidden",
                         r#"{"error":"raw-forbidden-message","path":"/tmp/secret.3mf"}"#,
+                    ),
+                    6 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 503 Service Unavailable",
+                        r#"{"error":"raw-refresh-message","token":"secret"}"#,
+                    ),
+                    7 => write_response(
+                        &mut stream,
+                        "HTTP/1.1 503 Service Unavailable",
+                        r#"{"error":"raw-heartbeat-message","token":"secret"}"#,
                     ),
                     _ => unreachable!(),
                 }
@@ -534,6 +573,9 @@ fn wait_for_probe(mut command: Command) -> ProbeRun {
 }
 
 fn run_probe(mode: MockMode, mode_arg: &str) -> Option<(String, String)> {
+    let _probe_guard = PROBE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let probe = compile_probe(mode_arg)?;
     let library = build_plugin();
     let artifact = target_dir().join(format!(
@@ -618,13 +660,20 @@ fn probe_exercises_studio_abi_success_path() {
 }
 
 #[test]
-fn probe_refreshes_stale_no_auth_session_when_listing_printers() {
+fn probe_refreshes_stale_session_and_preserves_cache_on_invalid_status_refresh() {
     let Some((stdout, stderr)) = run_probe(MockMode::StaleTokenRefresh, "stale-token-refresh")
     else {
         return;
     };
 
-    assert!(stderr.is_empty(), "probe stderr was not empty: {stderr}");
+    assert!(
+        stderr.contains("validate Hub printer status refresh response"),
+        "probe did not record the invalid status refresh: {stderr}"
+    );
+    assert!(
+        !stderr.contains("token") && !stderr.contains(r#""devices""#),
+        "status refresh diagnostic leaked response data: {stderr}"
+    );
     assert_json_field(&stdout, "ok", "true");
     assert_json_field(&stdout, "printer_rc", "0");
     assert_json_field(&stdout, "restored_login", "true");

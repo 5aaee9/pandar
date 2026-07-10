@@ -1,7 +1,27 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Default, Deserialize)]
 pub(super) struct PrinterStatus {
+    #[serde(default)]
+    pub(super) gcode_state: Option<String>,
+    #[serde(default)]
+    pub(super) mc_percent: Option<u8>,
+    #[serde(default)]
+    pub(super) mc_remaining_time: Option<u32>,
+    #[serde(default)]
+    pub(super) layer_num: Option<u32>,
+    #[serde(default)]
+    pub(super) total_layer_num: Option<u32>,
+    #[serde(default)]
+    pub(super) task_id: Option<String>,
+    #[serde(default)]
+    pub(super) subtask_id: Option<String>,
+    #[serde(default)]
+    pub(super) gcode_file: Option<String>,
+    #[serde(default)]
+    pub(super) subtask_name: Option<String>,
+    #[serde(default)]
+    pub(super) hms: Vec<PrinterHms>,
     #[serde(default)]
     pub(super) dev_model_name: Option<Scalar>,
     #[serde(default)]
@@ -15,9 +35,15 @@ pub(super) struct PrinterStatus {
     #[serde(default)]
     pub(super) chamber_temperature_celsius: Option<Scalar>,
     #[serde(default)]
-    pub(super) chamber_light_on: bool,
+    pub(super) chamber_light_on: Option<bool>,
     #[serde(default)]
     pub(super) materials: Option<Materials>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub(super) struct PrinterHms {
+    pub(super) attr: u32,
+    pub(super) code: u32,
 }
 
 #[derive(Default, Deserialize)]

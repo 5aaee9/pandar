@@ -9,6 +9,7 @@ mod postgres;
 mod postgres_commands;
 mod postgres_persistence;
 mod printer_event_tickets;
+mod printer_live_status;
 mod printers;
 mod tenant_tokens;
 

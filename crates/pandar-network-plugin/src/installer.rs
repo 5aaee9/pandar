@@ -93,9 +93,9 @@ fn patch_bambu_studio_config(path: &Path) -> anyhow::Result<()> {
         .with_context(|| format!("parse config JSON {}", path.display()))?;
 
     config.app.installed_networking = "1".to_owned();
-    config.app.update_network_plugin = "false".to_owned();
+    config.app.update_network_plugin = Some(BambuStudioConfigValue::Bool(false));
     if cfg!(any(target_os = "windows", target_os = "macos")) {
-        config.app.ignore_module_cert = Some("1".to_owned());
+        config.app.ignore_module_cert = Some(BambuStudioConfigValue::Bool(true));
     }
 
     let backup_path = path.with_extension("conf.pandar-bak");
@@ -125,10 +125,10 @@ struct BambuStudioConfig {
 struct BambuStudioAppConfig {
     #[serde(default)]
     installed_networking: String,
-    #[serde(default)]
-    update_network_plugin: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    ignore_module_cert: Option<String>,
+    update_network_plugin: Option<BambuStudioConfigValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ignore_module_cert: Option<BambuStudioConfigValue>,
     #[serde(flatten)]
     extra: BTreeMap<String, BambuStudioConfigValue>,
 }
@@ -163,8 +163,8 @@ mod tests {
     #[derive(Debug, Deserialize)]
     struct TestBambuStudioAppConfig {
         installed_networking: String,
-        update_network_plugin: String,
-        ignore_module_cert: Option<String>,
+        update_network_plugin: bool,
+        ignore_module_cert: Option<bool>,
     }
 
     #[test]
@@ -217,11 +217,38 @@ mod tests {
         )
         .expect("parse patched config");
         assert_eq!(config.app.installed_networking, "1");
-        assert_eq!(config.app.update_network_plugin, "false");
+        assert!(!config.app.update_network_plugin);
         if cfg!(any(target_os = "windows", target_os = "macos")) {
-            assert_eq!(config.app.ignore_module_cert.as_deref(), Some("1"));
+            assert_eq!(config.app.ignore_module_cert, Some(true));
         } else {
             assert_eq!(config.app.ignore_module_cert, None);
+        }
+    }
+
+    #[test]
+    fn patches_mixed_network_plugin_flag_types() {
+        let temp = tempfile::tempdir().expect("create temp dir");
+        let config_path = temp.path().join("BambuStudio.conf");
+        fs::write(
+            &config_path,
+            r#"{"app":{"installed_networking":"0","update_network_plugin":false,"ignore_module_cert":"1"}}"#,
+        )
+        .expect("write config");
+
+        patch_bambu_studio_config(&config_path).expect("patch config");
+
+        let patched = fs::read_to_string(config_path).expect("read config");
+        let config: serde_json::Value = serde_json::from_str(
+            patched
+                .trim_end()
+                .trim_end_matches("# MD5 checksum 00000000000000000000000000000000"),
+        )
+        .expect("parse patched config");
+        assert_eq!(config["app"]["update_network_plugin"], false);
+        if cfg!(any(target_os = "windows", target_os = "macos")) {
+            assert_eq!(config["app"]["ignore_module_cert"], true);
+        } else {
+            assert_eq!(config["app"]["ignore_module_cert"], "1");
         }
     }
 }

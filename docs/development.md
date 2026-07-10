@@ -151,7 +151,7 @@ Implemented login flow:
 Plugin URL configuration uses this precedence:
 
 - Frontend URL: `PANDAR_PLUGIN_FRONTEND_URL`, then `APP_BASE_URL`, then `http://localhost:3000`.
-- Hub URL: `PANDAR_PLUGIN_HUB_URL`, then `APP_API_URL`, then `http://localhost:8080`.
+- Hub URL: `PANDAR_PLUGIN_HUB_URL`, then `APP_API_URL`, then `http://127.0.0.1:8080`.
 
 The local `/config` endpoint stores an in-process target-server override. Later hub-facing ABI calls refresh only the hub URL from that local config; the existing Next.js `/plugin-sign-in` flow remains responsible for authentication and ticket creation.
 

@@ -4,9 +4,11 @@ use tonic::Code;
 use super::*;
 use crate::{
     printer_events::PrinterEvent,
-    protocol::agent::v1::{MachineDiagnostic, PrintJobReport},
+    protocol::agent::v1::{MachineDiagnostic, PrintJobReport, PrinterHmsItem},
     repositories::{CreatePrintJob, test_helpers::insert_printer_fixture},
 };
+
+mod live_status;
 
 #[tokio::test]
 async fn grpc_print_job_report_updates_job_print_state() {
@@ -296,6 +298,11 @@ fn report(serial: String, job_id: String, artifact_id: String) -> PrintJobReport
         has_current_layer: true,
         total_layers: 12,
         has_total_layers: true,
+        hms: vec![PrinterHmsItem {
+            attr: 0x0102_0304,
+            code: 0x0506_0708,
+        }],
+        has_hms: true,
         diagnostics: vec![MachineDiagnostic {
             kind: "hms".to_string(),
             severity: "warning".to_string(),

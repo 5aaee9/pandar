@@ -5,6 +5,7 @@ use requests::{
 };
 use serde::{Deserialize, Serialize, de::IgnoredAny};
 
+mod live_status;
 mod requests;
 
 #[derive(Debug, Deserialize)]
@@ -48,6 +49,16 @@ struct PluginPrinterResponse {
     online: bool,
     task_status: String,
     state: String,
+    gcode_state: Option<String>,
+    mc_percent: Option<u8>,
+    mc_remaining_time: Option<u32>,
+    layer_num: Option<u32>,
+    total_layer_num: Option<u32>,
+    task_id: Option<String>,
+    subtask_id: Option<String>,
+    gcode_file: Option<String>,
+    subtask_name: Option<String>,
+    hms: Vec<PluginPrinterHmsResponse>,
     pandar_printer_id: String,
     nozzle_temperatures: Vec<PluginNozzleTemperatureResponse>,
     active_nozzle: Option<String>,
@@ -55,7 +66,13 @@ struct PluginPrinterResponse {
     bed_target_temperature_celsius: Option<String>,
     chamber_temperature_celsius: Option<String>,
     chamber_light_on: Option<bool>,
-    materials: PluginMaterialsResponse,
+    materials: Option<PluginMaterialsResponse>,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+struct PluginPrinterHmsResponse {
+    attr: u32,
+    code: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -655,6 +672,7 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
     assert!(device.online);
     assert_eq!(device.task_status, "IDLE");
     assert_eq!(device.state, "IDLE");
+    assert_eq!(device.gcode_state, None);
     assert_eq!(device.pandar_printer_id, printer.id);
     assert_eq!(
         device.nozzle_temperatures[0].current_celsius.as_deref(),
@@ -677,9 +695,10 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
     assert_eq!(device.bed_target_temperature_celsius.as_deref(), Some("65"));
     assert_eq!(device.chamber_temperature_celsius.as_deref(), Some("32"));
     assert_eq!(device.chamber_light_on, Some(true));
-    assert_eq!(device.materials.ams_units[0].unit_id, "0");
-    assert_eq!(device.materials.external_spools[0].external_id, "254");
-    assert_eq!(device.materials.active_tray.global_tray_id, 0);
+    let materials = device.materials.as_ref().unwrap();
+    assert_eq!(materials.ams_units[0].unit_id, "0");
+    assert_eq!(materials.external_spools[0].external_id, "254");
+    assert_eq!(materials.active_tray.global_tray_id, 0);
 }
 
 #[tokio::test]

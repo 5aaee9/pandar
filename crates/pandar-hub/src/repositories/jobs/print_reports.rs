@@ -1,10 +1,16 @@
 use anyhow::Context;
 use pandar_core::{AgentId, JobId, TenantId};
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, TransactionTrait};
+use sea_orm::{
+    ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, QueryFilter,
+    SqliteTransactionMode, TransactionOptions, TransactionTrait,
+};
 
 use crate::{
     db::Database,
-    repositories::{JobWithArtifact, MaterialPatchOutcome, RepositoryError, RepositoryResult},
+    repositories::{
+        JobWithArtifact, MaterialPatchOutcome, PrinterHms, RepositoryError, RepositoryResult,
+        printers::{PrinterLiveStatusPatch, update_live_status},
+    },
 };
 
 mod correlation;
@@ -22,6 +28,7 @@ pub struct ApplyPrintReport {
     pub tenant_id: TenantId,
     pub agent_id: AgentId,
     pub serial: String,
+    pub task_id: Option<String>,
     pub job_id: Option<JobId>,
     pub artifact_id: Option<String>,
     pub subtask_id: Option<String>,
@@ -32,6 +39,7 @@ pub struct ApplyPrintReport {
     pub remaining_time_minutes: Option<u32>,
     pub current_layer: Option<u32>,
     pub total_layers: Option<u32>,
+    pub hms: Option<Vec<PrinterHms>>,
     pub diagnostics: Vec<PrintReportDiagnostic>,
     pub printer_materials_json: String,
     pub observed_at: String,
@@ -59,16 +67,27 @@ pub async fn apply_print_report(
     database: &Database,
     input: ApplyPrintReport,
 ) -> RepositoryResult<AppliedPrintReport> {
-    let connection = database.sea_orm_connection();
-    let tx = connection
-        .begin()
-        .await
-        .context("failed to begin print report transaction")?;
+    let tx = begin_print_report_transaction(database).await?;
     let applied = apply_print_report_tx(&tx, input).await?;
     tx.commit()
         .await
         .context("failed to commit print report transaction")?;
     Ok(applied)
+}
+
+async fn begin_print_report_transaction(
+    database: &Database,
+) -> RepositoryResult<DatabaseTransaction> {
+    let connection = database.sea_orm_connection();
+    connection
+        .begin_with_options(TransactionOptions {
+            sqlite_transaction_mode: matches!(database, Database::Sqlite(_))
+                .then_some(SqliteTransactionMode::Immediate),
+            ..Default::default()
+        })
+        .await
+        .context("failed to begin print report transaction")
+        .map_err(Into::into)
 }
 
 async fn apply_print_report_tx<C>(
@@ -87,6 +106,24 @@ where
             inserted_printer_events: false,
         });
     };
+    update_live_status(
+        transaction,
+        &printer.id,
+        PrinterLiveStatusPatch {
+            task_id: input.task_id.clone(),
+            subtask_id: input.subtask_id.clone(),
+            progress_percent: input.percent,
+            remaining_time_minutes: input.remaining_time_minutes,
+            current_layer: input.current_layer,
+            total_layers: input.total_layers,
+            gcode_file: input.gcode_file.clone(),
+            subtask_name: input.subtask_name.clone(),
+            gcode_state: input.gcode_state.clone(),
+            hms: input.hms.clone(),
+            observed_at: input.observed_at.clone(),
+        },
+    )
+    .await?;
     let material_outcome = crate::repositories::materials::upsert_from_patch_outcome_in_connection(
         transaction,
         crate::repositories::MaterialPatchInput {
@@ -152,4 +189,42 @@ where
         inserted_job_events,
         inserted_printer_events: false,
     })
+}
+
+#[cfg(test)]
+mod transaction_tests {
+    use super::begin_print_report_transaction;
+    use crate::db::{Database, DatabaseConfig};
+
+    #[tokio::test]
+    async fn sqlite_print_report_transaction_reserves_writer_before_queries() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let database_url = format!(
+            "sqlite://{}",
+            temp_dir.path().join("print-report.sqlite").display()
+        );
+        let config = DatabaseConfig::from_url(database_url).unwrap();
+        let database = Database::connect(&config).await.unwrap();
+        database.migrate().await.unwrap();
+
+        let transaction = begin_print_report_transaction(&database).await.unwrap();
+        let Database::Sqlite(pool) = &database else {
+            panic!("expected SQLite database")
+        };
+        let mut competing = pool.acquire().await.unwrap();
+        sqlx::query("PRAGMA busy_timeout = 1")
+            .execute(&mut *competing)
+            .await
+            .unwrap();
+
+        let competing_begin = sqlx::query("BEGIN IMMEDIATE")
+            .execute(&mut *competing)
+            .await;
+
+        assert!(
+            competing_begin.is_err(),
+            "print report transaction must reserve the SQLite writer lock before its first read"
+        );
+        transaction.rollback().await.unwrap();
+    }
 }

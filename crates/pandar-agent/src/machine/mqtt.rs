@@ -2,6 +2,7 @@ use std::time::Duration;
 
 mod commands;
 mod fake;
+mod hms;
 mod reports;
 mod signing;
 mod snapshot;
@@ -25,6 +26,7 @@ pub use commands::{
 };
 #[cfg(test)]
 pub(crate) use fake::FakeMqttTransport;
+pub use hms::MachineHmsItem;
 pub use reports::{
     forward_print_reports, print_job_report_event, print_report_from_report,
     printer_materials_snapshot_event,

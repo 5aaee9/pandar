@@ -15,6 +15,11 @@ use crate::{
     },
 };
 
+mod live_status;
+
+pub use live_status::{PrinterHms, PrinterLiveStatus, PrinterWithLiveStatus};
+pub(crate) use live_status::{PrinterLiveStatusPatch, update_in_connection as update_live_status};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrinterSnapshotUpsert {
     pub serial_number: String,
@@ -84,6 +89,27 @@ impl PrinterRepository {
             .context("failed to list printers")?
             .into_iter()
             .map(printer_from_model)
+            .collect()
+    }
+
+    pub async fn list_with_live_status_for_tenant(
+        &self,
+        tenant_id: TenantId,
+    ) -> RepositoryResult<Vec<PrinterWithLiveStatus>> {
+        let connection = self.database.sea_orm_connection();
+        if !tenant_exists(&connection, tenant_id).await? {
+            return Err(RepositoryError::MissingTenant);
+        }
+
+        printers::Entity::find()
+            .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
+            .order_by_asc(printers::Column::CreatedAt)
+            .order_by_asc(printers::Column::Id)
+            .all(&connection)
+            .await
+            .context("failed to list printers with live status")?
+            .into_iter()
+            .map(live_status::from_model)
             .collect()
     }
 

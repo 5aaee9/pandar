@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use pandar_core::{PrinterNozzleTemperature, TenantId};
 use serde::Serialize;
 
-use crate::{AppState, printer_events::PrinterEventMaterials, routes::ApiError};
+use crate::{
+    AppState, printer_events::PrinterEventMaterials, repositories::PrinterHms, routes::ApiError,
+};
 
 #[derive(Debug, Serialize)]
 pub(crate) struct PluginPrinterListResponse {
@@ -24,6 +26,16 @@ pub(super) struct PluginPrinterResponse {
     online: bool,
     task_status: String,
     state: String,
+    gcode_state: Option<String>,
+    mc_percent: Option<u8>,
+    mc_remaining_time: Option<u32>,
+    layer_num: Option<u32>,
+    total_layer_num: Option<u32>,
+    task_id: Option<String>,
+    subtask_id: Option<String>,
+    gcode_file: Option<String>,
+    subtask_name: Option<String>,
+    hms: Vec<PrinterHms>,
     pandar_printer_id: String,
     nozzle_temperatures: Vec<PrinterNozzleTemperature>,
     active_nozzle: Option<String>,
@@ -53,10 +65,12 @@ pub(super) async fn plugin_printer_devices(
 
     Ok(state
         .printers()
-        .list_for_tenant(tenant_id)
+        .list_with_live_status_for_tenant(tenant_id)
         .await?
         .into_iter()
-        .map(|printer| {
+        .map(|printer_with_live_status| {
+            let printer = printer_with_live_status.printer;
+            let live_status = printer_with_live_status.live_status;
             let online = studio_online_from_status(&printer.status);
             let studio_model_name = printer.model.as_deref().map(studio_model_id);
             PluginPrinterResponse {
@@ -71,6 +85,16 @@ pub(super) async fn plugin_printer_devices(
                 online,
                 task_status: printer.status.clone(),
                 state: printer.status,
+                gcode_state: live_status.gcode_state,
+                mc_percent: live_status.progress_percent,
+                mc_remaining_time: live_status.remaining_time_minutes,
+                layer_num: live_status.current_layer,
+                total_layer_num: live_status.total_layers,
+                task_id: live_status.task_id,
+                subtask_id: live_status.subtask_id,
+                gcode_file: live_status.gcode_file,
+                subtask_name: live_status.subtask_name,
+                hms: live_status.hms,
                 nozzle_temperatures: printer.nozzle_temperatures,
                 active_nozzle: printer.active_nozzle,
                 bed_temperature_celsius: printer.bed_temperature_celsius,

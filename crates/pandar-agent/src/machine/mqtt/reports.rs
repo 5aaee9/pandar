@@ -16,8 +16,8 @@ use crate::{
         types::decode_json_payload,
     },
     protocol::agent::v1::{
-        AgentEvent, MachineDiagnostic, NozzleTemperature, PrintJobReport, PrinterMaterialsSnapshot,
-        PrinterSnapshot, agent_event,
+        AgentEvent, MachineDiagnostic, NozzleTemperature, PrintJobReport, PrinterHmsItem,
+        PrinterMaterialsSnapshot, PrinterSnapshot, agent_event,
     },
 };
 
@@ -95,6 +95,10 @@ pub(crate) fn print_report_from_parsed_report(
         total_layers: bounded_u32(print.total_layer_num.as_ref(), 0, 100_000),
         gcode_file: trimmed_string(print.gcode_file.as_deref()),
         subtask_name: trimmed_string(print.subtask_name.as_deref()),
+        hms: print
+            .hms
+            .as_ref()
+            .and_then(|items| items.iter().map(|item| item.machine()).collect()),
         diagnostics,
         observed_at,
         printer_materials_json,
@@ -102,6 +106,17 @@ pub(crate) fn print_report_from_parsed_report(
 }
 
 pub fn print_job_report_event(config: &AgentConfig, progress: PrintReportProgress) -> AgentEvent {
+    let has_hms = progress.hms.is_some();
+    let hms = progress
+        .hms
+        .unwrap_or_default()
+        .into_iter()
+        .map(|item| PrinterHmsItem {
+            attr: item.attr,
+            code: item.code,
+        })
+        .collect();
+
     AgentEvent {
         agent_id: config.agent_id.clone(),
         tenant_id: config.tenant_id.clone(),
@@ -136,6 +151,8 @@ pub fn print_job_report_event(config: &AgentConfig, progress: PrintReportProgres
                 .collect(),
             observed_at: progress.observed_at,
             printer_materials_json: progress.printer_materials_json,
+            hms,
+            has_hms,
         })),
     }
 }
@@ -350,21 +367,15 @@ fn collect_hms_diagnostics(
     envelope: &PrintReportEnvelope,
     diagnostics: &mut Vec<MachineReportDiagnostic>,
 ) {
+    if let Some(hms) = &envelope.print.hms {
+        diagnostics.extend(hms.iter().filter_map(|item| item.diagnostic()));
+    }
+
     for fields in [&envelope.fields, &envelope.print.fields] {
         for value in hms_values(fields) {
             let mut objects = Vec::new();
             value.collect_objects(&mut objects);
-            for object in objects {
-                if let (Some(code), Some(message)) = (object.code(), object.message()) {
-                    diagnostics.push(MachineReportDiagnostic {
-                        kind: "hms".to_owned(),
-                        severity: "warning".to_owned(),
-                        code: Some(code),
-                        message,
-                        payload: object.payload(),
-                    });
-                }
-            }
+            diagnostics.extend(objects.into_iter().filter_map(|object| object.diagnostic()));
         }
     }
 }

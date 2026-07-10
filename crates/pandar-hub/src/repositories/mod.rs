@@ -36,7 +36,9 @@ pub use materials::{
 pub use printer_event_tickets::{
     IssuedPrinterEventTicket, PrinterEventTicketConsumeResult, PrinterEventTicketRepository,
 };
-pub use printers::{PrinterRepository, PrinterSnapshotUpsert};
+pub use printers::{
+    PrinterHms, PrinterLiveStatus, PrinterRepository, PrinterSnapshotUpsert, PrinterWithLiveStatus,
+};
 pub use tenants::TenantRepository;
 
 use thiserror::Error;

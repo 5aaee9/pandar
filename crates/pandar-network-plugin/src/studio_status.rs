@@ -1,7 +1,10 @@
 mod device;
 mod input;
+mod list;
 mod materials;
 mod scalar;
+
+pub(super) use list::validate_printer_list;
 
 use device::StudioTelemetry;
 use input::PrinterStatus;

@@ -21,6 +21,16 @@ pub struct Model {
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
+    pub print_gcode_state: Option<String>,
+    pub print_task_id: Option<String>,
+    pub print_subtask_id: Option<String>,
+    pub print_progress_percent: Option<i64>,
+    pub print_remaining_time_minutes: Option<i64>,
+    pub print_current_layer: Option<i64>,
+    pub print_total_layers: Option<i64>,
+    pub print_gcode_file: Option<String>,
+    pub print_subtask_name: Option<String>,
+    pub hms_json: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

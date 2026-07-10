@@ -93,6 +93,13 @@ message PrintJobReport {
   repeated MachineDiagnostic diagnostics = 16;
   string observed_at = 17;
   string printer_materials_json = 18;
+  repeated PrinterHmsItem hms = 19;
+  bool has_hms = 20;
+}
+
+message PrinterHmsItem {
+  uint32 attr = 1;
+  uint32 code = 2;
 }
 
 message MachineDiagnostic {

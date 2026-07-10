@@ -445,10 +445,12 @@ fn report_input(
     artifact_id: Option<String>,
     gcode_state: &str,
 ) -> crate::repositories::ApplyPrintReport {
+    let task_id = job_id.as_ref().map(ToString::to_string);
     crate::repositories::ApplyPrintReport {
         tenant_id,
         agent_id,
         serial: format!("serial-{printer_id}"),
+        task_id,
         job_id,
         artifact_id,
         subtask_id: None,
@@ -459,6 +461,7 @@ fn report_input(
         remaining_time_minutes: Some(60),
         current_layer: Some(3),
         total_layers: Some(9),
+        hms: None,
         diagnostics: Vec::new(),
         printer_materials_json: String::new(),
         observed_at: "2026-06-22T00:00:00Z".to_string(),

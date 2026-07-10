@@ -175,7 +175,17 @@ struct PluginHttpResult {
 PluginHttpResult pandar_plugin_exchange_ticket(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_create_no_auth_session(const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_get_printers(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
-PluginHttpResult pandar_plugin_get_jobs(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
+void* pandar_plugin_printer_refresh_session_create(
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t
+);
+int32_t pandar_plugin_printer_refresh_session_update(
+    void*,
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t
+);
+PluginHttpResult pandar_plugin_printer_refresh(void*);
+void pandar_plugin_printer_refresh_session_destroy(void*);
 PluginHttpResult pandar_plugin_submit_print(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t,
@@ -223,15 +233,19 @@ struct Agent {
     std::string user_name;
     std::string avatar;
     std::string profile_json;
-    std::string hub_url = "http://localhost:8080";
+    std::string hub_url = "http://127.0.0.1:8080";
     std::string frontend_url = "http://localhost:3000";
     std::string last_error;
+    void* printer_refresh_session = nullptr;
+    mutable std::mutex trace_mutex;
     mutable std::mutex status_mutex;
     std::map<std::string, std::pair<std::string, std::string>> printer_connections;
     std::map<std::string, std::string> pandar_printer_ids;
     std::map<std::string, std::string> printer_models;
     std::map<std::string, std::string> printer_telemetry;
-    std::set<std::string> subscribed_devices;
+    std::set<std::string> cloud_subscribed_devices;
+    std::set<std::string> cloud_initialized_devices;
+    std::map<std::string, std::chrono::steady_clock::time_point> cloud_connection_notifications;
     BBL::OnPrinterConnectedFn on_printer_connected;
     BBL::OnServerConnectedFn on_server_connected;
     BBL::OnLocalConnectedFn on_local_connect;
@@ -239,6 +253,7 @@ struct Agent {
     BBL::OnMessageFn on_local_message;
     std::thread status_thread;
     std::atomic<bool> status_thread_stop = false;
+    std::atomic<std::uint64_t> printer_status_epoch = 0;
     bool connected = false;
     bool hub_configured = false;
     bool frontend_configured = false;
@@ -250,8 +265,12 @@ Agent* as_agent(void* raw) {
 
 void trace_plugin_event(const Agent* agent, const std::string& message) {
     if (!agent) return;
-    auto base = !agent->config_dir.empty() ? std::filesystem::path(agent->config_dir)
-                                           : std::filesystem::path(agent->log_dir);
+    std::filesystem::path base;
+    {
+        std::lock_guard<std::mutex> lock(agent->trace_mutex);
+        base = !agent->config_dir.empty() ? std::filesystem::path(agent->config_dir)
+                                          : std::filesystem::path(agent->log_dir);
+    }
     if (base.empty()) return;
     std::error_code ec;
     std::filesystem::create_directories(base, ec);
@@ -266,19 +285,33 @@ void trace_plugin_event(const Agent* agent, const std::string& event, const std:
 std::string body_from_result(PluginHttpResult result);
 void refresh_local_webserver_config(Agent* agent);
 PluginHttpResult rust_get_printers(const Agent* agent);
-PluginHttpResult get_printers_with_token_refresh(Agent* agent);
+PluginHttpResult get_printers_with_token_refresh(Agent* agent, std::uint64_t& request_epoch);
+void sync_printer_refresh_session(Agent* agent);
 
 bool has_hub(const Agent* agent) {
     return agent && !agent->hub_url.empty();
 }
 
 void clear_login_state(Agent* agent) {
+    agent->printer_status_epoch.fetch_add(1);
     agent->token.clear();
     agent->user_id.clear();
     agent->user_name.clear();
     agent->avatar.clear();
     agent->profile_json.clear();
+    {
+        std::lock_guard<std::mutex> lock(agent->status_mutex);
+        agent->selected_machine.clear();
+        agent->printer_connections.clear();
+        agent->pandar_printer_ids.clear();
+        agent->printer_models.clear();
+        agent->printer_telemetry.clear();
+        agent->cloud_subscribed_devices.clear();
+        agent->cloud_initialized_devices.clear();
+        agent->cloud_connection_notifications.clear();
+    }
     agent->connected = false;
+    sync_printer_refresh_session(agent);
 }
 
 std::filesystem::path persisted_login_path(const Agent* agent) {
@@ -415,29 +448,63 @@ std::vector<std::string> objects_from_array(const std::string& json, const char*
     return objects;
 }
 
-void remember_printer_connections(Agent* agent, const std::string& body) {
-    if (!agent) return;
-    std::lock_guard<std::mutex> lock(agent->status_mutex);
-    agent->printer_connections.clear();
-    agent->pandar_printer_ids.clear();
-    agent->printer_models.clear();
-    agent->printer_telemetry.clear();
+bool remember_printer_connections(
+    Agent* agent,
+    const std::string& body,
+    std::uint64_t expected_epoch
+) {
+    if (!agent) return false;
+    std::map<std::string, std::pair<std::string, std::string>> printer_connections;
+    std::map<std::string, std::string> pandar_printer_ids;
+    std::map<std::string, std::string> printer_models;
+    std::map<std::string, std::string> printer_telemetry;
+    std::set<std::string> discovered_devices;
     for (const auto& printer : objects_from_array(body, "devices")) {
         const auto dev_id = field_from_json(printer, "dev_id");
         if (dev_id.empty()) continue;
-        agent->printer_connections[dev_id] = {
+        printer_connections[dev_id] = {
             field_from_json(printer, "dev_ip"),
             field_from_json(printer, "dev_access_code"),
         };
         if (const auto pandar_id = field_from_json(printer, "pandar_printer_id"); !pandar_id.empty()) {
-            agent->pandar_printer_ids[dev_id] = pandar_id;
+            pandar_printer_ids[dev_id] = pandar_id;
         }
         if (const auto model = field_from_json(printer, "dev_model_name"); !model.empty()) {
-            agent->printer_models[dev_id] = model;
+            printer_models[dev_id] = model;
         }
-        agent->printer_telemetry[dev_id] = printer_telemetry_from_json(printer);
-        agent->subscribed_devices.insert(dev_id);
+        printer_telemetry[dev_id] = printer_telemetry_from_json(printer);
+        discovered_devices.insert(dev_id);
     }
+    {
+        std::lock_guard<std::mutex> lock(agent->status_mutex);
+        if (agent->printer_status_epoch.load() != expected_epoch) {
+            return false;
+        }
+        agent->printer_connections.swap(printer_connections);
+        agent->pandar_printer_ids.swap(pandar_printer_ids);
+        agent->printer_models.swap(printer_models);
+        agent->printer_telemetry.swap(printer_telemetry);
+        agent->cloud_subscribed_devices.insert(discovered_devices.begin(), discovered_devices.end());
+    }
+    return true;
+}
+
+bool refresh_printer_status_cache(Agent* agent) {
+    if (!agent || !agent->printer_refresh_session) return false;
+    const auto epoch = agent->printer_status_epoch.load();
+    auto result = pandar_plugin_printer_refresh(agent->printer_refresh_session);
+    const auto status = result.status;
+    const auto http_code = result.http_code;
+    auto body = body_from_result(result);
+    if (status != 0) {
+        trace_plugin_event(
+            agent,
+            "printer status refresh failed status=" + std::to_string(status) +
+                " http_code=" + std::to_string(http_code) + " body=" + body
+        );
+        return false;
+    }
+    return remember_printer_connections(agent, body, epoch);
 }
 
 std::pair<std::string, std::string> printer_connection_for(const Agent* agent, const std::string& dev_id) {
@@ -472,7 +539,7 @@ std::string first_known_printer_id(Agent* agent) {
     if (!agent) return {};
     std::lock_guard<std::mutex> lock(agent->status_mutex);
     if (!agent->printer_connections.empty()) return agent->printer_connections.begin()->first;
-    if (!agent->subscribed_devices.empty()) return *agent->subscribed_devices.begin();
+    if (!agent->cloud_subscribed_devices.empty()) return *agent->cloud_subscribed_devices.begin();
     return {};
 }
 
@@ -486,10 +553,10 @@ std::string ensure_selected_machine(Agent* agent) {
     auto selected = first_known_printer_id(agent);
     if (selected.empty() && !agent->token.empty()) {
         refresh_local_webserver_config(agent);
-        auto result = get_printers_with_token_refresh(agent);
+        std::uint64_t request_epoch = 0;
+        auto result = get_printers_with_token_refresh(agent, request_epoch);
         auto body = body_from_result(result);
-        if (result.status == 0) {
-            remember_printer_connections(agent, body);
+        if (result.status == 0 && remember_printer_connections(agent, body, request_epoch)) {
             selected = first_known_printer_id(agent);
         }
     }
@@ -497,7 +564,7 @@ std::string ensure_selected_machine(Agent* agent) {
     if (!selected.empty()) {
         std::lock_guard<std::mutex> lock(agent->status_mutex);
         if (agent->selected_machine.empty()) agent->selected_machine = selected;
-        agent->subscribed_devices.insert(selected);
+        agent->cloud_subscribed_devices.insert(selected);
         return agent->selected_machine;
     }
     return {};
@@ -542,9 +609,9 @@ std::string printer_push_status_report(const Agent* agent, const std::string& de
     const auto [host, access_code] = printer_connection_for(agent, dev_id);
     const auto rtsp_url = "rtsps://bblp:" + access_code + "@" + host + "/streaming/live/1";
     const auto ip = studio_ip_integer(host);
-    return std::string(R"({"print":{"command":"push_status","msg":0,"gcode_state":"IDLE","mc_percent":0,"mc_remaining_time":0,"cfg":"","fun":"","aux":"","stat":"",)")
+    return std::string(R"({"print":{"command":"push_status","msg":0,)")
         + printer_telemetry_for(agent, dev_id) +
-        R"(,"wifi_signal":"100%","sdcard":true,"ipcam":{"ipcam_dev":"1","liveview":{"local":"rtsps","remote":"none"},"rtsp_url":)" +
+        R"(,"cfg":"","fun":"","aux":"","stat":"","wifi_signal":"100%","sdcard":true,"ipcam":{"ipcam_dev":"1","liveview":{"local":"rtsps","remote":"none"},"rtsp_url":)" +
         escape_json(rtsp_url) + R"(},"net":{"info":[{"ip":)" + std::to_string(ip) + R"(}]}}})";
 }
 
@@ -580,15 +647,29 @@ std::string printer_alive_report(const Agent* agent, const std::string& dev_id) 
         R"(,"dev_signal":"100%","connect_type":"lan","bind_state":"free","sec_link":"secure","ssdp_version":"1"})";
 }
 
-void emit_printer_connected_signal(Agent* agent, const std::string& dev_id) {
+void emit_cloud_printer_connected_signal(Agent* agent, const std::string& dev_id) {
     if (!agent || dev_id.empty()) return;
+    const auto normalized_dev_id = studio_dev_id(dev_id);
+    const auto now = std::chrono::steady_clock::now();
     BBL::OnPrinterConnectedFn on_printer_connected;
     {
         std::lock_guard<std::mutex> lock(agent->status_mutex);
+        if (!agent->on_printer_connected ||
+            agent->cloud_initialized_devices.find(normalized_dev_id) !=
+                agent->cloud_initialized_devices.end()) {
+            return;
+        }
+        if (const auto notification = agent->cloud_connection_notifications.find(normalized_dev_id);
+            notification != agent->cloud_connection_notifications.end() &&
+            now - notification->second < std::chrono::seconds(1)) {
+            return;
+        }
+        agent->cloud_connection_notifications[normalized_dev_id] = now;
         on_printer_connected = agent->on_printer_connected;
     }
-    trace_plugin_event(agent, std::string("printer_connected callback=") + (on_printer_connected ? "1" : "0"), dev_id);
-    if (on_printer_connected) on_printer_connected(dev_id);
+    const auto topic = std::string("tunnel/") + normalized_dev_id;
+    trace_plugin_event(agent, "printer_connected callback=1", topic);
+    on_printer_connected(topic);
 }
 
 void emit_printer_connected_status(Agent* agent, const std::string& dev_id) {
@@ -607,19 +688,21 @@ void emit_printer_connected_status(Agent* agent, const std::string& dev_id) {
         std::string("push_status callbacks dev_id=") + dev_id +
             " cloud=" + (on_message ? "1" : "0") +
             " local=" + (on_local_message ? "1" : "0"));
-    if (on_message) on_message(dev_id, report);
-    if (on_local_message) on_local_message(dev_id, report);
-}
-
-void emit_printer_connected_statuses(Agent* agent, const std::vector<std::string>& dev_ids) {
-    for (const auto& dev_id : dev_ids) {
-        emit_printer_connected_status(agent, dev_id);
+    if (on_message) {
+        on_message(dev_id, report);
+    } else if (on_local_message) {
+        on_local_message(dev_id, report);
     }
 }
 
-void emit_printer_connected_signals(Agent* agent, const std::vector<std::string>& dev_ids) {
+void emit_cloud_printer_connected_status(Agent* agent, const std::string& dev_id) {
+    emit_cloud_printer_connected_signal(agent, dev_id);
+    emit_printer_connected_status(agent, dev_id);
+}
+
+void emit_cloud_printer_connected_statuses(Agent* agent, const std::vector<std::string>& dev_ids) {
     for (const auto& dev_id : dev_ids) {
-        emit_printer_connected_signal(agent, dev_id);
+        emit_cloud_printer_connected_status(agent, dev_id);
     }
 }
 
@@ -637,20 +720,18 @@ void emit_local_connect(Agent* agent, const std::string& dev_id) {
     if (on_local_connect) on_local_connect(0, dev_id, printer_alive_report(agent, dev_id));
 }
 
-void emit_local_connects(Agent* agent, const std::vector<std::string>& dev_ids) {
-    for (const auto& dev_id : dev_ids) {
-        emit_local_connect(agent, dev_id);
-    }
-}
-
 std::vector<std::string> status_heartbeat_targets(Agent* agent) {
     std::set<std::string> targets;
     {
         std::lock_guard<std::mutex> lock(agent->status_mutex);
-        targets = agent->subscribed_devices;
-        if (!agent->selected_machine.empty()) targets.insert(agent->selected_machine);
+        targets = agent->cloud_subscribed_devices;
     }
     return {targets.begin(), targets.end()};
+}
+
+bool has_status_heartbeat_listener(Agent* agent) {
+    std::lock_guard<std::mutex> lock(agent->status_mutex);
+    return static_cast<bool>(agent->on_message) || static_cast<bool>(agent->on_local_message);
 }
 
 void start_status_heartbeat(Agent* agent) {
@@ -661,7 +742,10 @@ void start_status_heartbeat(Agent* agent) {
             std::this_thread::sleep_for(std::chrono::seconds(2));
             if (agent->status_thread_stop.load()) break;
             auto targets = status_heartbeat_targets(agent);
-            emit_printer_connected_statuses(agent, targets);
+            if (!targets.empty() && has_status_heartbeat_listener(agent)) {
+                refresh_printer_status_cache(agent);
+            }
+            emit_cloud_printer_connected_statuses(agent, targets);
         }
     });
 }
@@ -715,6 +799,7 @@ void apply_profile_json(Agent* agent, const std::string& json) {
     if (const auto v = field_from_json(json, "user_id"); !v.empty()) agent->user_id = v;
     if (const auto v = field_from_json(json, "user_name"); !v.empty()) agent->user_name = v;
     if (const auto v = field_from_json(json, "tenant_name"); !v.empty() && agent->user_name.empty()) agent->user_name = v;
+    sync_printer_refresh_session(agent);
 }
 
 void persist_login_state(Agent* agent) {
@@ -792,6 +877,17 @@ std::string body_from_result(PluginHttpResult result) {
     return body;
 }
 
+void sync_printer_refresh_session(Agent* agent) {
+    if (!agent || !agent->printer_refresh_session) return;
+    pandar_plugin_printer_refresh_session_update(
+        agent->printer_refresh_session,
+        reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
+        agent->hub_url.size(),
+        reinterpret_cast<const uint8_t*>(agent->token.data()),
+        agent->token.size()
+    );
+}
+
 PluginHttpResult rust_exchange_ticket(const Agent* agent, const std::string& ticket) {
     return pandar_plugin_exchange_ticket(
         reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
@@ -829,20 +925,12 @@ void refresh_local_webserver_config(Agent* agent) {
             clear_login_state(agent);
         }
         agent->hub_url = hub_url;
+        sync_printer_refresh_session(agent);
     }
 }
 
 PluginHttpResult rust_get_printers(const Agent* agent) {
     return pandar_plugin_get_printers(
-        reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
-        agent->hub_url.size(),
-        reinterpret_cast<const uint8_t*>(agent->token.data()),
-        agent->token.size()
-    );
-}
-
-PluginHttpResult rust_get_jobs(const Agent* agent) {
-    return pandar_plugin_get_jobs(
         reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
         agent->hub_url.size(),
         reinterpret_cast<const uint8_t*>(agent->token.data()),
@@ -944,11 +1032,15 @@ bool refresh_no_auth_session(Agent* agent) {
     return !agent->token.empty();
 }
 
-PluginHttpResult get_printers_with_token_refresh(Agent* agent) {
+PluginHttpResult get_printers_with_token_refresh(Agent* agent, std::uint64_t& request_epoch) {
+    request_epoch = agent->printer_status_epoch.load();
     auto result = rust_get_printers(agent);
     if (result_needs_token_refresh(result)) {
         body_from_result(result);
-        if (refresh_no_auth_session(agent)) result = rust_get_printers(agent);
+        if (refresh_no_auth_session(agent)) {
+            request_epoch = agent->printer_status_epoch.load();
+            result = rust_get_printers(agent);
+        }
     }
     return result;
 }
@@ -1068,12 +1160,18 @@ PANDAR_ABI bool bambu_network_check_debug_consistent(bool) {
 
 PANDAR_ABI void* bambu_network_create_agent(std::string log_dir) {
     auto* agent = new Agent(std::move(log_dir));
-    auto [hub_url, hub_configured] = env_or_default("PANDAR_PLUGIN_HUB_URL", "APP_API_URL", "http://localhost:8080");
+    auto [hub_url, hub_configured] = env_or_default("PANDAR_PLUGIN_HUB_URL", "APP_API_URL", "http://127.0.0.1:8080");
     auto [frontend_url, frontend_configured] = env_or_default("PANDAR_PLUGIN_FRONTEND_URL", "APP_BASE_URL", "http://localhost:3000");
     agent->hub_url = std::move(hub_url);
     agent->frontend_url = std::move(frontend_url);
     agent->hub_configured = hub_configured;
     agent->frontend_configured = frontend_configured;
+    agent->printer_refresh_session = pandar_plugin_printer_refresh_session_create(
+        reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
+        agent->hub_url.size(),
+        reinterpret_cast<const uint8_t*>(agent->token.data()),
+        agent->token.size()
+    );
     start_status_heartbeat(agent);
     return agent;
 }
@@ -1081,6 +1179,7 @@ PANDAR_ABI void* bambu_network_create_agent(std::string log_dir) {
 PANDAR_ABI int bambu_network_destroy_agent(void* agent) {
     auto* a = as_agent(agent);
     stop_status_heartbeat(a);
+    if (a) pandar_plugin_printer_refresh_session_destroy(a->printer_refresh_session);
     delete a;
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
@@ -1092,7 +1191,10 @@ PANDAR_ABI int bambu_network_init_log(void*) {
 PANDAR_ABI int bambu_network_set_config_dir(void* agent, std::string config_dir) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
-    a->config_dir = std::move(config_dir);
+    {
+        std::lock_guard<std::mutex> lock(a->trace_mutex);
+        a->config_dir = std::move(config_dir);
+    }
     load_persisted_login(a);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
@@ -1184,6 +1286,12 @@ PANDAR_ABI int bambu_network_set_on_local_connect_fn(void* agent, BBL::OnLocalCo
 PANDAR_ABI int bambu_network_connect_server(void* agent) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    if (a->connected && has_hub(a) && a->last_error.empty()) return BBL::BAMBU_NETWORK_SUCCESS;
+    {
+        std::lock_guard<std::mutex> lock(a->status_mutex);
+        a->cloud_initialized_devices.clear();
+        a->cloud_connection_notifications.clear();
+    }
     a->connected = has_hub(a);
     if (a->connected) a->last_error.clear();
     BBL::OnServerConnectedFn on_server_connected;
@@ -1203,16 +1311,15 @@ PANDAR_ABI bool bambu_network_is_server_connected(void* agent) {
 }
 
 PANDAR_ABI int bambu_network_refresh_connection(void* agent) {
+    auto* a = as_agent(agent);
+    if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    if (a->connected && has_hub(a) && a->last_error.empty()) return BBL::BAMBU_NETWORK_SUCCESS;
     return bambu_network_connect_server(agent);
 }
 
 PANDAR_ABI int bambu_network_start_subscribe(void* agent, std::string) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
-    auto targets = status_heartbeat_targets(a);
-    emit_printer_connected_signals(a, targets);
-    emit_local_connects(a, targets);
-    emit_printer_connected_statuses(a, targets);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
@@ -1226,11 +1333,10 @@ PANDAR_ABI int bambu_network_add_subscribe(void* agent, std::vector<std::string>
     {
         std::lock_guard<std::mutex> lock(a->status_mutex);
         for (const auto& dev_id : dev_ids) {
-            if (!dev_id.empty()) a->subscribed_devices.insert(studio_dev_id(dev_id));
+            if (!dev_id.empty()) a->cloud_subscribed_devices.insert(studio_dev_id(dev_id));
         }
     }
-    emit_printer_connected_signals(a, dev_ids);
-    emit_printer_connected_statuses(a, dev_ids);
+    emit_cloud_printer_connected_statuses(a, dev_ids);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
@@ -1239,7 +1345,10 @@ PANDAR_ABI int bambu_network_del_subscribe(void* agent, std::vector<std::string>
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     std::lock_guard<std::mutex> lock(a->status_mutex);
     for (const auto& dev_id : dev_ids) {
-        a->subscribed_devices.erase(studio_dev_id(dev_id));
+        const auto normalized_dev_id = studio_dev_id(dev_id);
+        a->cloud_subscribed_devices.erase(normalized_dev_id);
+        a->cloud_initialized_devices.erase(normalized_dev_id);
+        a->cloud_connection_notifications.erase(normalized_dev_id);
     }
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
@@ -1252,7 +1361,14 @@ PANDAR_ABI int bambu_network_send_message(void* agent, std::string dev_id, std::
     trace_plugin_event(a, "send_message", dev_id);
     if (dev_id.empty()) dev_id = ensure_selected_machine(a);
     if (dev_id.empty()) return BBL::BAMBU_NETWORK_SUCCESS;
-    if (message.find("get_version") != std::string::npos) {
+    const auto is_get_version = message.find("get_version") != std::string::npos;
+    if (is_get_version) {
+        std::lock_guard<std::mutex> lock(a->status_mutex);
+        const auto normalized_dev_id = studio_dev_id(dev_id);
+        a->cloud_initialized_devices.insert(normalized_dev_id);
+        a->cloud_connection_notifications.erase(normalized_dev_id);
+    }
+    if (is_get_version) {
         BBL::OnMessageFn on_message;
         BBL::OnMessageFn on_local_message;
         {
@@ -1262,12 +1378,16 @@ PANDAR_ABI int bambu_network_send_message(void* agent, std::string dev_id, std::
         }
         const auto version = printer_version_report(a, dev_id, field_from_json(message, "sequence_id"));
         trace_plugin_event(a, "get_version_response", dev_id);
-        if (on_message) on_message(dev_id, version);
-        if (on_local_message) on_local_message(dev_id, version);
+        if (on_message) {
+            on_message(dev_id, version);
+        } else if (on_local_message) {
+            on_local_message(dev_id, version);
+        }
     }
-    if (message.find("pushall") != std::string::npos ||
-        message.find("get_version") != std::string::npos) {
-        emit_printer_connected_status(a, dev_id);
+    const auto is_pushall = message.find("pushall") != std::string::npos;
+    if (is_pushall) refresh_printer_status_cache(a);
+    if (is_pushall || is_get_version) {
+        emit_cloud_printer_connected_status(a, dev_id);
     }
     auto parsed = rust_operation_json_from_gcode(message);
     std::string operation_json = body_from_result(parsed);
@@ -1285,7 +1405,6 @@ PANDAR_ABI int bambu_network_connect_printer(void* agent, std::string dev_id, st
     {
         std::lock_guard<std::mutex> lock(a->status_mutex);
         a->selected_machine = dev_id;
-        a->subscribed_devices.insert(studio_dev_id(dev_id));
         on_printer_connected = a->on_printer_connected;
     }
     if (on_printer_connected) on_printer_connected(dev_id);
@@ -1353,7 +1472,10 @@ PANDAR_ABI int bambu_network_user_logout(void* agent, bool) {
 PANDAR_ABI int bambu_network_get_my_profile(void* agent, std::string token, unsigned int* http_code, std::string* http_body) {
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
-    if (!token.empty()) a->token = std::move(token);
+    if (!token.empty()) {
+        a->token = std::move(token);
+        sync_printer_refresh_session(a);
+    }
     if (a->profile_json.empty()) {
         if (http_code) *http_code = 401;
         if (http_body) *http_body = R"({"error":"profile_unavailable"})";
@@ -1400,14 +1522,8 @@ PANDAR_ABI int bambu_network_set_user_selected_machine(void* agent, std::string 
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     trace_plugin_event(a, std::string("set_user_selected_machine dev_id=") + dev_id);
-    {
-        std::lock_guard<std::mutex> lock(a->status_mutex);
-        a->selected_machine = dev_id;
-        if (!dev_id.empty()) a->subscribed_devices.insert(studio_dev_id(dev_id));
-    }
-    emit_printer_connected_signal(a, dev_id);
-    emit_local_connect(a, dev_id);
-    emit_printer_connected_status(a, dev_id);
+    std::lock_guard<std::mutex> lock(a->status_mutex);
+    a->selected_machine = std::move(dev_id);
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
@@ -1540,10 +1656,16 @@ PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http
         if (http_body) *http_body = R"({"error":"invalid_auth_token"})";
         return BBL::BAMBU_NETWORK_ERR_GET_USER_PRINTINFO_FAILED;
     }
-    auto result = get_printers_with_token_refresh(a);
+    std::uint64_t request_epoch = 0;
+    auto result = get_printers_with_token_refresh(a, request_epoch);
     if (http_code) *http_code = result.http_code;
     auto body = body_from_result(result);
-    if (result.status == 0) remember_printer_connections(a, body);
+    if (result.status == 0 && !remember_printer_connections(a, body, request_epoch)) {
+        trace_plugin_event(a, "get_user_print_info discarded after login change");
+        if (http_code) *http_code = 401;
+        if (http_body) *http_body = R"({"error":"invalid_auth_token"})";
+        return BBL::BAMBU_NETWORK_ERR_GET_USER_PRINTINFO_FAILED;
+    }
     trace_plugin_event(a, std::string("get_user_print_info status=") + std::to_string(result.status));
     if (http_body) *http_body = body;
     if (result.status != 0) return BBL::BAMBU_NETWORK_ERR_GET_USER_PRINTINFO_FAILED;
@@ -1551,16 +1673,8 @@ PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http
 }
 
 PANDAR_ABI int bambu_network_get_user_tasks(void* agent, BBL::TaskQueryParams, std::string* http_body) {
-    auto* a = as_agent(agent);
-    if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
-    refresh_local_webserver_config(a);
-    if (a->token.empty()) {
-        if (http_body) *http_body = R"({"error":"invalid_auth_token"})";
-        return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
-    }
-    auto result = rust_get_jobs(a);
-    if (http_body) *http_body = body_from_result(result);
-    if (result.status != 0) return BBL::BAMBU_NETWORK_ERR_GET_USER_PRINTINFO_FAILED;
+    if (!as_agent(agent)) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    if (http_body) *http_body = R"({"total":0,"hits":[]})";
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 

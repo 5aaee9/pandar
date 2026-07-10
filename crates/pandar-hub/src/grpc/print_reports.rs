@@ -8,7 +8,7 @@ use crate::{
     metrics::PrintReportMetric,
     printer_events::{PrinterEvent, printer_event_printer},
     protocol::agent::v1::PrintJobReport,
-    repositories::{ApplyPrintReport, MaterialPatchOutcome, PrintReportDiagnostic},
+    repositories::{ApplyPrintReport, MaterialPatchOutcome, PrintReportDiagnostic, PrinterHms},
     routes::jobs::JobResponse,
 };
 
@@ -117,6 +117,7 @@ fn apply_input(
     let serial = required(&report.serial, "serial must not be blank")?;
     let observed_at = required(&report.observed_at, "observed_at must not be blank")?;
     validate_rfc3339(&observed_at)?;
+    let task_id = trim_optional(report.job_id.clone());
     let job_id = optional_job_id(&report.job_id)?;
     let artifact_id = optional_uuid_string(&report.artifact_id, "artifact_id must be a UUID")?;
     let diagnostics = report
@@ -129,6 +130,7 @@ fn apply_input(
         tenant_id,
         agent_id,
         serial,
+        task_id,
         job_id,
         artifact_id,
         subtask_id: trim_optional(report.subtask_id),
@@ -152,6 +154,16 @@ fn apply_input(
             .has_total_layers
             .then_some(report.total_layers)
             .filter(|value| *value <= 100_000),
+        hms: report.has_hms.then(|| {
+            report
+                .hms
+                .into_iter()
+                .map(|item| PrinterHms {
+                    attr: item.attr,
+                    code: item.code,
+                })
+                .collect()
+        }),
         diagnostics,
         printer_materials_json: report.printer_materials_json,
         observed_at,

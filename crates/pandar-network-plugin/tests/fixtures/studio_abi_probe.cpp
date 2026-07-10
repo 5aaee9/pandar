@@ -462,6 +462,8 @@ int main(int argc, char** argv) {
     using set_local_connect_fn = int (*)(void*, BBL::OnLocalConnectedFn);
     using set_message_fn = int (*)(void*, BBL::OnMessageFn);
     using connect_server_fn = int (*)(void*);
+    using is_server_connected_fn = bool (*)(void*);
+    using refresh_connection_fn = int (*)(void*);
     using update_cert_fn = int (*)(void*);
     using camera_url_fn = int (*)(void*, std::string, std::function<void(std::string)>);
     using logout_fn = int (*)(void*, bool);
@@ -492,7 +494,10 @@ int main(int argc, char** argv) {
     auto set_server_connected = lib.sym<set_server_connected_fn>("bambu_network_set_on_server_connected_fn");
     auto set_local_connect = lib.sym<set_local_connect_fn>("bambu_network_set_on_local_connect_fn");
     auto set_message = lib.sym<set_message_fn>("bambu_network_set_on_message_fn");
+    auto set_local_message = lib.sym<set_message_fn>("bambu_network_set_on_local_message_fn");
     auto connect_server = lib.sym<connect_server_fn>("bambu_network_connect_server");
+    auto is_server_connected = lib.sym<is_server_connected_fn>("bambu_network_is_server_connected");
+    auto refresh_connection = lib.sym<refresh_connection_fn>("bambu_network_refresh_connection");
     auto update_cert = lib.sym<update_cert_fn>("bambu_network_update_cert");
     auto get_camera_url = lib.sym<camera_url_fn>("bambu_network_get_camera_url");
     auto user_logout = lib.sym<logout_fn>("bambu_network_user_logout");
@@ -637,6 +642,9 @@ int main(int argc, char** argv) {
     if (!failure_mode) {
         out.tasks_rc = get_tasks(agent, query, &tasks_body);
         if (out.tasks_rc != 0) fail(agent, destroy_agent, "task listing failed");
+        if (!contains(tasks_body, R"("total":0)") || !contains(tasks_body, R"("hits":[])")) {
+            fail(agent, destroy_agent, "task listing did not return a Studio-compatible empty page");
+        }
     } else {
         out.tasks_rc = -1;
     }
@@ -684,30 +692,55 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "SD-card print did not return stable unsupported callback");
     }
 
-    if (set_printer_connected(agent, [&out](std::string dev_id) {
-        out.direct_connect_callback = dev_id == "studio-serial-1";
-    }) != 0) {
-        fail(agent, destroy_agent, "printer connected callback registration failed");
-    }
-    bool server_connected_callback = false;
-    if (set_server_connected(agent, [&server_connected_callback](int status, int reason) {
-        server_connected_callback = status == 0 && reason == 0;
+    const auto abi_thread_id = std::this_thread::get_id();
+    std::atomic<int> synchronous_printer_connected_callbacks{0};
+    std::atomic<int> cloud_printer_connected_callbacks{0};
+    std::atomic<int> server_connected_callbacks{0};
+    if (set_server_connected(agent, [&server_connected_callbacks](int status, int reason) {
+        if (status == 0 && reason == 0) ++server_connected_callbacks;
     }) != 0) {
         fail(agent, destroy_agent, "server connected callback registration failed");
     }
-    if (connect_server(agent) != 0 || !server_connected_callback) {
+    if (connect_server(agent) != 0 || server_connected_callbacks.load() != 1) {
         fail(agent, destroy_agent, "server connect did not report Studio connection success");
+    }
+    if (connect_server(agent) != 0 || server_connected_callbacks.load() != 1) {
+        fail(agent, destroy_agent, "server connect repeated the unchanged connection callback");
+    }
+    if (refresh_connection(agent) != 0 || server_connected_callbacks.load() != 1) {
+        fail(agent, destroy_agent, "connection refresh repeated the unchanged server connection callback");
+    }
+    if (!is_server_connected(agent) || send_printer(agent, "studio-serial-1", "M999", 0, 0) == 0) {
+        fail(agent, destroy_agent, "invalid printer operation did not mark the connection unhealthy");
+    }
+    if (is_server_connected(agent)) {
+        fail(agent, destroy_agent, "connection stayed healthy after recording an operation error");
+    }
+    if (refresh_connection(agent) != 0 || server_connected_callbacks.load() != 2 || !is_server_connected(agent)) {
+        fail(agent, destroy_agent, "connection refresh did not recover from the recorded operation error");
+    }
+    if (refresh_connection(agent) != 0 || server_connected_callbacks.load() != 2) {
+        fail(agent, destroy_agent, "healthy connection refresh repeated the recovery callback");
     }
     if (update_cert(agent) != 0) {
         fail(agent, destroy_agent, "certificate update should be a no-op success");
     }
-    if (set_local_connect(agent, [&out](int status, std::string dev_id, std::string body) {
-        out.local_connect_callback = status == 0 && dev_id == "studio-serial-1" && contains(body, R"("dev_type":"N6")");
+    std::atomic<int> synchronous_local_connect_callbacks{0};
+    if (set_local_connect(agent, [&out, &synchronous_local_connect_callbacks, abi_thread_id](int status, std::string dev_id, std::string body) {
+        if (status == 0 && dev_id == "studio-serial-1" && contains(body, R"("dev_type":"N6")")) {
+            out.local_connect_callback = true;
+            if (std::this_thread::get_id() == abi_thread_id) {
+                ++synchronous_local_connect_callbacks;
+            }
+        }
     }) != 0) {
         fail(agent, destroy_agent, "local connect callback registration failed");
     }
     std::atomic<int> message_count{0};
-    if (set_message(agent, [&out, &message_count, agent, destroy_agent, failure_mode](std::string dev_id, std::string body) {
+    std::atomic<int> local_message_count{0};
+    std::atomic<int> synchronous_message_callbacks{0};
+    if (set_message(agent, [&out, &message_count, &synchronous_message_callbacks, abi_thread_id, agent, destroy_agent, failure_mode](std::string dev_id, std::string body) {
+        if (std::this_thread::get_id() == abi_thread_id) ++synchronous_message_callbacks;
         if (dev_id == "studio-serial-1" && contains(body, R"("command":"get_version")")) {
             if (failure_mode) {
                 out.version_callback = true;
@@ -729,7 +762,22 @@ int main(int argc, char** argv) {
             return;
         }
         if (!contains(body, R"("ipcam")") || !contains(body, R"("local":"rtsps")")) return;
-        if (!contains(body, R"("nozzle_temper":27)") ||
+        if (contains(body, R"("gcode_state":"IDLE")") ||
+            contains(body, R"("mc_percent":0)") ||
+            contains(body, R"("mc_remaining_time":0)") ||
+            !contains(body, R"("gcode_state":"RUNNING")") ||
+            !contains(body, R"("mc_percent":37)") ||
+            !contains(body, R"("mc_remaining_time":52)") ||
+            !contains(body, R"("layer_num":12)") ||
+            !contains(body, R"("total_layer_num":120)") ||
+            !contains(body, R"("task_id":"task-42")") ||
+            !contains(body, R"("project_id":"0")") ||
+            !contains(body, R"("profile_id":"0")") ||
+            !contains(body, R"("subtask_id":"subtask-42")") ||
+            !contains(body, R"("gcode_file":"drawer-organizer.gcode")") ||
+            !contains(body, R"("subtask_name":"drawer-organizer")") ||
+            !contains(body, R"("hms":[{"attr":134152704,"code":32785}])") ||
+            !contains(body, R"("nozzle_temper":27)") ||
             !contains(body, R"("nozzle_target_temper":215)") ||
             !contains(body, R"("nozzle_temper2":28)") ||
             !contains(body, R"("nozzle_target_temper2":220)") ||
@@ -752,7 +800,7 @@ int main(int argc, char** argv) {
             !contains(body, R"("type":1)") ||
             !contains(body, R"("extruder")") ||
             !contains(body, R"("state":18)") ||
-            !contains(body, R"({"id":0,"info":8,"temp":14090267,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0},{"id":1,"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":1})") ||
+            !contains(body, R"({"id":0,"filam_bak":[],"info":8,"temp":14090267,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0},{"id":1,"filam_bak":[],"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":1})") ||
             !contains(body, R"("ams_exist_bits":"3")") ||
             !contains(body, R"("tray_exist_bits":"ff")") ||
             !contains(body, R"("tray_now":"3")") ||
@@ -784,13 +832,61 @@ int main(int argc, char** argv) {
     }) != 0) {
         fail(agent, destroy_agent, "message callback registration failed");
     }
+    if (set_printer_connected(agent, [&out, &cloud_printer_connected_callbacks, &synchronous_printer_connected_callbacks, abi_thread_id](std::string dev_id) {
+        if (dev_id == "tunnel/studio-serial-1") {
+            ++cloud_printer_connected_callbacks;
+        }
+        if (dev_id == "studio-serial-1") {
+            out.direct_connect_callback = true;
+            if (std::this_thread::get_id() == abi_thread_id) {
+                ++synchronous_printer_connected_callbacks;
+            }
+        }
+    }) != 0) {
+        fail(agent, destroy_agent, "printer connected callback registration failed");
+    }
+
+    const auto before_selected_messages = synchronous_message_callbacks.load();
+    const auto before_selected_connections = synchronous_printer_connected_callbacks.load();
+    const auto before_selected_local_connections = synchronous_local_connect_callbacks.load();
+    if (set_selected_machine(agent, "studio-selected-only") != 0 ||
+        get_selected_machine(agent) != "studio-selected-only" ||
+        set_selected_machine(agent, "studio-serial-1") != 0 ||
+        get_selected_machine(agent) != "studio-serial-1") {
+        fail(agent, destroy_agent, "selected cloud printer failed");
+    }
+    out.selected_machine_messages = synchronous_message_callbacks.load() - before_selected_messages;
+    if (out.selected_machine_messages != 0 ||
+        synchronous_printer_connected_callbacks.load() != before_selected_connections ||
+        synchronous_local_connect_callbacks.load() != before_selected_local_connections) {
+        fail(agent, destroy_agent, "selected cloud printer emitted connection or status callbacks");
+    }
 
     int before_messages = message_count.load();
-    if (send_cloud(agent, "studio-serial-1", R"({"pushing":{"command":"pushall","sequence_id":"20000","version":1,"push_target":1}})", 0, 0) != 0) {
-        fail(agent, destroy_agent, "cloud pushall request failed");
+    if (failure_mode) {
+        if (send_cloud(agent, "studio-serial-1", R"({"pushing":{"command":"pushall","sequence_id":"20000","version":1,"push_target":1}})", 0, 0) != 0 ||
+            cloud_printer_connected_callbacks.load() != 1 || message_count.load() == before_messages) {
+            fail(agent, destroy_agent, "explicit failed cloud push did not emit its tunnel connection and status");
+        }
+    } else {
+        const auto first_cloud_report_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+        while ((cloud_printer_connected_callbacks.load() == 0 || message_count.load() == before_messages) &&
+               std::chrono::steady_clock::now() < first_cloud_report_deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        if (cloud_printer_connected_callbacks.load() != 1 || message_count.load() == before_messages) {
+            fail(agent, destroy_agent, "implicit cloud subscription did not emit its first tunnel connection and status");
+        }
     }
-    if (message_count.load() == before_messages) {
-        fail(agent, destroy_agent, "cloud pushall request did not emit Studio push status");
+    const int expected_cloud_connection_callbacks = !failure_mode && !stale_token_mode ? 2 : 1;
+    if (expected_cloud_connection_callbacks == 2) {
+        const auto retry_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+        while (cloud_printer_connected_callbacks.load() < 2 && std::chrono::steady_clock::now() < retry_deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        if (cloud_printer_connected_callbacks.load() != 2) {
+            fail(agent, destroy_agent, "unacknowledged cloud connection notification was not retried");
+        }
     }
     if (send_cloud(agent, "studio-serial-1", R"({"info":{"command":"get_version","sequence_id":"20001"}})", 0, 0) != 0) {
         fail(agent, destroy_agent, "cloud get_version request failed");
@@ -804,28 +900,19 @@ int main(int argc, char** argv) {
     if (!failure_mode && send_cloud(agent, "studio-serial-1", R"({"print":{"command":"set_nozzle_temp","extruder_index":1,"target_temp":245,"sequence_id":"20003"}})", 0, 0) != 0) {
         fail(agent, destroy_agent, "cloud printer nozzle temperature control failed");
     }
-    before_messages = message_count.load();
+    const auto before_start_subscribe_messages = synchronous_message_callbacks.load();
     if (start_subscribe(agent, "app") != 0) {
         fail(agent, destroy_agent, "cloud printer module subscription failed");
     }
-    out.subscribe_messages = message_count.load() - before_messages;
-    if (!failure_mode && out.subscribe_messages == 0) {
-        fail(agent, destroy_agent, "module subscription did not emit Studio push status for listed printers");
-    }
-    before_messages = message_count.load();
-    if (set_selected_machine(agent, "studio-serial-1") != 0) {
-        fail(agent, destroy_agent, "selected cloud printer failed");
-    }
-    out.selected_machine_messages = message_count.load() - before_messages;
-    if (!failure_mode && out.selected_machine_messages == 0) {
-        fail(agent, destroy_agent, "selected cloud printer did not emit Studio push status");
+    if (synchronous_message_callbacks.load() != before_start_subscribe_messages) {
+        fail(agent, destroy_agent, "module focus subscription emitted a printer status callback");
     }
     before_messages = message_count.load();
     if (add_subscribe(agent, {"studio-serial-1"}) != 0) {
         fail(agent, destroy_agent, "cloud printer subscription failed");
     }
     const auto add_subscribe_messages = message_count.load() - before_messages;
-    out.subscribe_messages += add_subscribe_messages;
+    out.subscribe_messages = add_subscribe_messages;
     if (!failure_mode && add_subscribe_messages == 0) {
         fail(agent, destroy_agent, "cloud printer subscription did not emit Studio push status");
     }
@@ -837,6 +924,9 @@ int main(int argc, char** argv) {
     out.heartbeat_messages = message_count.load() - before_messages;
     if (!failure_mode && out.heartbeat_messages == 0) {
         fail(agent, destroy_agent, "cloud printer subscription did not keep Studio push status alive");
+    }
+    if (cloud_printer_connected_callbacks.load() != expected_cloud_connection_callbacks) {
+        fail(agent, destroy_agent, "cloud printer connection callback repeated after later status pushes");
     }
     before_messages = message_count.load();
     out.direct_connect_rc = connect_printer(agent, "studio-serial-1", "127.0.0.1", "user", "pass", false);
@@ -890,10 +980,55 @@ int main(int argc, char** argv) {
     ft_job_release(job);
     ft_tunnel_release(tunnel);
 
+    if (!failure_mode) {
+        if (set_local_message(agent, [&local_message_count](std::string dev_id, std::string body) {
+            if (dev_id == "studio-serial-1" && contains(body, R"("command":"push_status")")) {
+                ++local_message_count;
+            }
+        }) != 0) {
+            fail(agent, destroy_agent, "local message callback registration failed");
+        }
+        const auto cloud_messages_before_pushall = message_count.load();
+        const auto local_messages_before_pushall = local_message_count.load();
+        if (send_cloud(agent, "studio-serial-1", R"({"pushing":{"command":"pushall","sequence_id":"20004","version":1,"push_target":1}})", 0, 0) != 0) {
+            fail(agent, destroy_agent, "local-preferred pushall request failed");
+        }
+        if (message_count.load() == cloud_messages_before_pushall) {
+            fail(agent, destroy_agent, "push status did not use the registered cloud message callback");
+        }
+        if (local_message_count.load() != local_messages_before_pushall) {
+            fail(agent, destroy_agent, "push status duplicated one Hub update through the local callback");
+        }
+    }
+
     if (user_logout(agent, true) != 0) fail(agent, destroy_agent, "logout failed");
+    if (!get_selected_machine(agent).empty()) {
+        fail(agent, destroy_agent, "logout retained the previous account printer selection");
+    }
     out.logout_command = build_logout_cmd(agent);
     if (!contains(out.logout_command, "studio_useroffline")) {
         fail(agent, destroy_agent, "logout envelope lacked studio_useroffline");
+    }
+
+    if (!failure_mode && !stale_token_mode) {
+        void* lan_agent = create_agent("probe-lan-only");
+        if (!lan_agent) fail(agent, destroy_agent, "LAN-only agent creation failed");
+        std::atomic<int> lan_tunnel_callbacks{0};
+        std::atomic<int> lan_direct_callbacks{0};
+        if (set_printer_connected(lan_agent, [&lan_tunnel_callbacks, &lan_direct_callbacks](std::string dev_id) {
+            if (dev_id == "tunnel/lan-only") ++lan_tunnel_callbacks;
+            if (dev_id == "lan-only") ++lan_direct_callbacks;
+        }) != 0 ||
+            connect_printer(lan_agent, "lan-only", "127.0.0.1", "user", "pass", false) != 0) {
+            destroy_agent(lan_agent);
+            fail(agent, destroy_agent, "LAN-only printer connection failed");
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+        if (lan_direct_callbacks.load() != 1 || lan_tunnel_callbacks.load() != 0) {
+            destroy_agent(lan_agent);
+            fail(agent, destroy_agent, "LAN-only printer was reclassified as a cloud tunnel");
+        }
+        destroy_agent(lan_agent);
     }
     destroy_agent(agent);
     print_json(out);

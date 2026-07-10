@@ -194,7 +194,7 @@ fn response_result(response: reqwest::Response, kind: RequestKind) -> PluginHttp
     }
 }
 
-fn redact_hub_error(kind: RequestKind, http_code: u32, body: &str) -> String {
+pub(super) fn redact_hub_error(kind: RequestKind, http_code: u32, body: &str) -> String {
     let hub_error = serde_json::from_str::<HubErrorBody>(body)
         .ok()
         .and_then(|body| body.error);

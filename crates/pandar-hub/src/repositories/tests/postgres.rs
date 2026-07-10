@@ -421,3 +421,13 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
         vec![updated]
     );
 }
+
+#[tokio::test]
+async fn postgres_print_reports_merge_printer_live_status_without_a_job_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    super::printer_live_status::exercise_printer_live_status(database).await;
+}

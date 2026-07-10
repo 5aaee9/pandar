@@ -59,10 +59,12 @@ pub(super) fn report_input(
     artifact_id: Option<String>,
     gcode_state: &str,
 ) -> ApplyPrintReport {
+    let task_id = job_id.as_ref().map(ToString::to_string);
     ApplyPrintReport {
         tenant_id,
         agent_id,
         serial: format!("serial-{printer_id}"),
+        task_id,
         job_id,
         artifact_id,
         subtask_id: None,
@@ -73,6 +75,7 @@ pub(super) fn report_input(
         remaining_time_minutes: Some(60),
         current_layer: Some(3),
         total_layers: Some(9),
+        hms: None,
         diagnostics: Vec::new(),
         printer_materials_json: String::new(),
         observed_at: OBSERVED_AT.to_string(),

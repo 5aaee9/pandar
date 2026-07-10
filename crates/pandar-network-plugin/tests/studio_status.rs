@@ -28,12 +28,21 @@ fn telemetry(printer: &str) -> String {
 fn printer_telemetry_defaults_to_studio_safe_idle_shape() {
     let body = telemetry("{}");
 
+    assert!(body.contains(r#""gcode_state":"IDLE""#));
+    assert!(body.contains(r#""mc_percent":0"#));
+    assert!(body.contains(r#""mc_remaining_time":0"#));
+    assert!(body.contains(r#""layer_num":0"#));
+    assert!(body.contains(r#""total_layer_num":0"#));
+    assert!(body.contains(r#""project_id":"0""#));
+    assert!(body.contains(r#""profile_id":"0""#));
+    assert!(body.contains(r#""subtask_id":"0""#));
+    assert!(body.contains(r#""hms":[]"#));
     assert!(body.contains(r#""printer_type":"C11""#));
     assert!(body.contains(r#""bed_temper":0"#));
     assert!(body.contains(
         r#""nozzle":{"exist":1,"state":0,"info":[{"id":0,"diameter":0.4,"type":"XS01","stat":0}]}"#
     ));
-    assert!(body.contains(r#""extruder":{"state":1,"info":[{"id":0,"info":8,"temp":0,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0}]}"#));
+    assert!(body.contains(r#""extruder":{"state":1,"info":[{"id":0,"filam_bak":[],"info":8,"temp":0,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0}]}"#));
     assert!(body.contains(r#","ams":{"ams":[]}"#));
 }
 
@@ -59,8 +68,8 @@ fn printer_telemetry_maps_dual_nozzle_temperatures_and_active_tool() {
     assert!(body.contains(r#"{"id":1,"diameter":0.4,"type":"XH05","stat":0}"#));
     assert!(body.contains(r#"{"id":0,"diameter":0.6,"type":"XS01","stat":0},{"id":1,"diameter":0.4,"type":"XH05","stat":0}"#));
     assert!(body.contains(r#""extruder":{"state":18"#));
-    assert!(body.contains(r#"{"id":1,"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":1}"#));
-    assert!(body.contains(r#"{"id":0,"info":8,"temp":14090267,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0},{"id":1,"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":1}"#));
+    assert!(body.contains(r#"{"id":1,"filam_bak":[],"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":1}"#));
+    assert!(body.contains(r#"{"id":0,"filam_bak":[],"info":8,"temp":14090267,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":0},{"id":1,"filam_bak":[],"info":8,"temp":14417948,"spre":65535,"snow":65535,"star":65535,"stat":0,"hnow":1}"#));
     assert!(body.contains(r#""lights_report":[{"node":"chamber_light","mode":"on"}]"#));
 }
 
@@ -84,4 +93,36 @@ fn printer_telemetry_maps_ams_and_external_materials() {
     assert!(body.contains(r#""vir_slot":[{"id":"254""#));
     assert!(body.contains(r#""id":"255""#));
     assert!(body.contains(r#""tray_type":"PETG""#));
+}
+
+#[test]
+fn printer_telemetry_maps_live_print_progress_and_hms() {
+    let body = telemetry(
+        r#"{"gcode_state":"RUNNING","mc_percent":37,"mc_remaining_time":52,"layer_num":12,"total_layer_num":120,"task_id":"task-42","subtask_id":"subtask-42","gcode_file":"drawer-organizer.gcode","subtask_name":"drawer-organizer","hms":[{"attr":134152704,"code":32785}]}"#,
+    );
+
+    assert!(body.contains(r#""gcode_state":"RUNNING""#));
+    assert!(body.contains(r#""mc_percent":37"#));
+    assert!(body.contains(r#""mc_remaining_time":52"#));
+    assert!(body.contains(r#""layer_num":12"#));
+    assert!(body.contains(r#""total_layer_num":120"#));
+    assert!(body.contains(r#""task_id":"task-42""#));
+    assert!(body.contains(r#""project_id":"0""#));
+    assert!(body.contains(r#""profile_id":"0""#));
+    assert!(body.contains(r#""subtask_id":"subtask-42""#));
+    assert!(body.contains(r#""gcode_file":"drawer-organizer.gcode""#));
+    assert!(body.contains(r#""subtask_name":"drawer-organizer""#));
+    assert!(body.contains(r#""hms":[{"attr":134152704,"code":32785}]"#));
+}
+
+#[test]
+fn nullable_chamber_light_does_not_discard_live_print_status() {
+    let body = telemetry(
+        r#"{"gcode_state":"RUNNING","mc_percent":37,"hms":[{"attr":134152704,"code":32785}],"chamber_light_on":null}"#,
+    );
+
+    assert!(body.contains(r#""gcode_state":"RUNNING""#));
+    assert!(body.contains(r#""mc_percent":37"#));
+    assert!(body.contains(r#""hms":[{"attr":134152704,"code":32785}]"#));
+    assert!(body.contains(r#""lights_report":[{"node":"chamber_light","mode":"off"}]"#));
 }

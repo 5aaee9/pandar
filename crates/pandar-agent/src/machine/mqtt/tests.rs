@@ -12,6 +12,7 @@ use crate::{
 };
 
 mod fixtures;
+mod hms;
 mod snapshot;
 mod tls;
 
@@ -1009,6 +1010,7 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
         total_layers: None,
         gcode_file: None,
         subtask_name: None,
+        hms: None,
         diagnostics: Vec::new(),
         observed_at: "2026-06-22T00:00:00Z".to_owned(),
         printer_materials_json: String::new(),
@@ -1027,6 +1029,8 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
         has_current_layer,
         total_layers,
         has_total_layers,
+        hms,
+        has_hms,
         printer_materials_json,
         ..
     })) = event.event
@@ -1041,6 +1045,8 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
     assert!(has_current_layer);
     assert_eq!(total_layers, 0);
     assert!(!has_total_layers);
+    assert!(hms.is_empty());
+    assert!(!has_hms);
     assert!(printer_materials_json.is_empty());
 }
 

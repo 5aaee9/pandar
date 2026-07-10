@@ -1022,6 +1022,8 @@ fn print_report_event(
             has_current_layer: true,
             total_layers: 8,
             has_total_layers: true,
+            hms: Vec::new(),
+            has_hms: false,
             diagnostics: Vec::new(),
             printer_materials_json: String::new(),
             observed_at: "2026-06-22T10:00:00Z".to_string(),

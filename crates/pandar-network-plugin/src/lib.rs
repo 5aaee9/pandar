@@ -4,7 +4,13 @@ mod gcode;
 mod http;
 pub mod installer;
 mod local_webserver;
+mod printer_refresh;
 mod studio_status;
+
+pub use printer_refresh::{
+    pandar_plugin_printer_refresh, pandar_plugin_printer_refresh_session_create,
+    pandar_plugin_printer_refresh_session_destroy, pandar_plugin_printer_refresh_session_update,
+};
 
 use serde::{Serialize, de::DeserializeOwned};
 

@@ -120,6 +120,9 @@
 - Added an Agent-authenticated printer connection hydration endpoint and Agent startup restore path so saved LAN printer host/access-code details survive Agent restarts when `PANDAR_PRINTERS` is empty.
 - Kept Bambu Studio's native Device page connected by having the Pandar networking plugin keep emitting Studio-style `push_status` heartbeats for selected/subscribed printers instead of sending only a one-shot connection snapshot.
 - Forwarded cached printer temperature and light telemetry through the Bambu Studio networking plugin `push_status` payload so Studio's native Device page can render current nozzle, bed, chamber, and lamp state.
+- Parsed Bambu's native numeric HMS entries (`attr` / `code`) as typed Agent data, preserved present-empty versus absent snapshots across gRPC, and stored current printer HMS for both SQLite and PostgreSQL.
+- Persisted field-merged live print state on the printer before Pandar job correlation so external or otherwise unmatched prints still expose progress, remaining minutes, layers, task metadata, and HMS through the Studio plugin API.
+- Replaced the networking plugin's hard-coded idle progress with typed Rust `push_status` fields and refreshed its Hub cache before Studio `pushall` replies and two-second heartbeats, while retaining the last good status when refresh fails.
 - Added a Bambu Studio plugin no-auth session path for trusted local Hub development and persisted the plugin token/profile under the Studio config directory so Studio restarts restore Pandar login state without repeating sign-in.
 - Allowed Edit printer to update Hub-local printer metadata without requiring a live Agent session, while blank LAN IP/access-code fields preserve existing connection details.
 - Fixed the Bambu Studio plugin printer list response so Studio receives top-level `devices` with its native `dev_name` / `dev_online` / `dev_model_name` / `task_status` fields instead of Pandar's tenant API `printers` shape, and allowed trusted local no-auth plugin sign-in to create the Studio plugin token.
@@ -975,6 +978,13 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced remaining Hub plugin print metadata, plugin-token audit metadata, and audit-events route assertions with typed serde structs instead of direct `Value` field indexing.
 - Replaced Hub plugin multipart print-created response assertions with typed serde structs instead of direct `Value` field indexing.
 - Replaced Bambu Studio network-plugin installer config patching with typed serde config structs while preserving unknown config fields through flatten maps.
+- Fixed the Bambu Studio network-plugin installer to accept Studio's mixed string/boolean plugin flags and write boolean flags back in Studio's native JSON form.
+- Prevented Bambu Studio UI hangs by returning an immediate Studio-shaped empty task page from its synchronous `get_user_tasks` ABI instead of performing Hub HTTP on the UI thread, and stopped duplicating each Hub status through both cloud and local callbacks.
+- Preserved Studio HMS and print progress when optional Hub telemetry such as `chamber_light_on` is JSON `null`, defaulting only that missing light state instead of rejecting the entire printer status.
+- Prevented Bambu Studio 2.7.1.62 from crashing while parsing Pandar extruder status by always emitting `filam_bak`, and stopped unchanged connection refreshes and selected-machine updates from replaying the server/printer/status callback loop.
+- Restored Bambu Studio's single-machine cloud initialization by emitting `tunnel/<device>` before cloud status, retrying at heartbeat cadence until Studio requests `get_version`, and then suppressing later notifications while keeping focus subscriptions side-effect-free.
+- Changed the Studio plugin's local Hub default to `127.0.0.1` so IPv6-first `localhost` resolution cannot consume the bounded heartbeat refresh timeout before reaching an IPv4-only Hub listener.
+- Changed SQLite print-report persistence to reserve its writer transaction before reading, preventing Studio token-auth writes from invalidating the report snapshot and disconnecting the Agent with `database is locked`.
 - Replaced the shared Hub route-test tenant fixture helper's response id extraction with typed serde deserialization instead of direct `Value` field indexing.
 - Replaced BRTC control JSON wrapping with a typed flattened serde wrapper and changed fixed redaction test assertions to typed map deserialization.
 - Replaced Hub job-create invalid material mapping test case splitting with explicit typed test cases instead of extracting fields from temporary `Value` objects.

@@ -112,6 +112,7 @@ pub struct PrintReportProgress {
     pub total_layers: Option<u32>,
     pub gcode_file: Option<String>,
     pub subtask_name: Option<String>,
+    pub hms: Option<Vec<super::MachineHmsItem>>,
     pub diagnostics: Vec<MachineReportDiagnostic>,
     pub observed_at: String,
     pub printer_materials_json: String,

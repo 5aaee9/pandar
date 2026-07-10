@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 
-use super::super::MachineReportDiagnosticPayload;
+use super::super::{MachineHmsItem, MachineReportDiagnostic, MachineReportDiagnosticPayload};
 
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct PrintReportEnvelope {
@@ -35,6 +35,8 @@ pub(super) struct PrintReportSection {
     pub(super) subtask_name: Option<String>,
     #[serde(default)]
     pub(super) print_error: Option<DiagnosticValue>,
+    #[serde(default)]
+    pub(super) hms: Option<Vec<PrintHmsItem>>,
     #[serde(flatten)]
     pub(super) fields: BTreeMap<String, HmsValue>,
 }
@@ -60,6 +62,22 @@ pub(super) enum HmsValue {
     Array(Vec<HmsValue>),
     Object(DiagnosticObject),
     Other(ReportJson),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(super) enum PrintHmsItem {
+    Machine(MachineHmsItem),
+    Legacy(LegacyHmsDiagnostic),
+    Unknown(ReportJson),
+}
+
+#[derive(Debug, Deserialize)]
+pub(super) struct LegacyHmsDiagnostic {
+    code: String,
+    message: String,
+    #[serde(flatten)]
+    extra: BTreeMap<String, ReportJson>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,7 +146,85 @@ impl HmsValue {
     }
 }
 
+impl PrintHmsItem {
+    pub(super) fn machine(&self) -> Option<MachineHmsItem> {
+        match self {
+            Self::Machine(item) => Some(*item),
+            Self::Legacy(_) | Self::Unknown(_) => None,
+        }
+    }
+
+    pub(super) fn diagnostic(&self) -> Option<MachineReportDiagnostic> {
+        match self {
+            Self::Machine(item) => {
+                let payload = BTreeMap::from([
+                    (
+                        "attr".to_owned(),
+                        MachineReportDiagnosticPayload::Number(Number::from(item.attr)),
+                    ),
+                    (
+                        "code".to_owned(),
+                        MachineReportDiagnosticPayload::Number(Number::from(item.code)),
+                    ),
+                ]);
+                Some(MachineReportDiagnostic {
+                    kind: "hms".to_owned(),
+                    severity: "warning".to_owned(),
+                    code: Some(format!("{:04X}", item.code)),
+                    message: String::new(),
+                    payload: MachineReportDiagnosticPayload::Object(payload),
+                })
+            }
+            Self::Legacy(legacy) => legacy.diagnostic(),
+            Self::Unknown(value) => {
+                let _ = value;
+                None
+            }
+        }
+    }
+}
+
+impl LegacyHmsDiagnostic {
+    fn diagnostic(&self) -> Option<MachineReportDiagnostic> {
+        let code = trimmed_string(Some(&self.code))?;
+        let message = trimmed_string(Some(&self.message))?;
+        let mut payload = BTreeMap::from([
+            (
+                "code".to_owned(),
+                MachineReportDiagnosticPayload::String(self.code.clone()),
+            ),
+            (
+                "message".to_owned(),
+                MachineReportDiagnosticPayload::String(self.message.clone()),
+            ),
+        ]);
+        payload.extend(self.extra.iter().map(|(key, value)| {
+            (
+                key.clone(),
+                MachineReportDiagnosticPayload::from(value.clone()),
+            )
+        }));
+        Some(MachineReportDiagnostic {
+            kind: "hms".to_owned(),
+            severity: "warning".to_owned(),
+            code: Some(code),
+            message,
+            payload: MachineReportDiagnosticPayload::Object(payload),
+        })
+    }
+}
+
 impl DiagnosticObject {
+    pub(super) fn diagnostic(&self) -> Option<MachineReportDiagnostic> {
+        Some(MachineReportDiagnostic {
+            kind: "hms".to_owned(),
+            severity: "warning".to_owned(),
+            code: Some(self.code()?),
+            message: self.message()?,
+            payload: self.payload(),
+        })
+    }
+
     pub(super) fn payload(&self) -> MachineReportDiagnosticPayload {
         let mut fields = BTreeMap::new();
         insert_optional_string(&mut fields, "code", self.code.as_deref());

@@ -8,6 +8,18 @@ use super::{
 
 #[derive(Serialize)]
 pub(super) struct StudioTelemetry {
+    gcode_state: String,
+    mc_percent: u8,
+    mc_remaining_time: u32,
+    layer_num: u32,
+    total_layer_num: u32,
+    task_id: String,
+    project_id: &'static str,
+    profile_id: &'static str,
+    subtask_id: String,
+    gcode_file: String,
+    subtask_name: String,
+    hms: Vec<super::input::PrinterHms>,
     printer_type: String,
     support_chamber: bool,
     support_chamber_temp_display: bool,
@@ -48,13 +60,28 @@ impl From<&PrinterStatus> for StudioTelemetry {
         let auxiliary_nozzle_target = json_number_or_zero(
             auxiliary_nozzle.map_or(String::new(), |nozzle| text(&nozzle.target_celsius)),
         );
-        let light_mode = if printer.chamber_light_on {
+        let light_mode = if printer.chamber_light_on.unwrap_or_default() {
             "on"
         } else {
             "off"
         };
 
         Self {
+            gcode_state: printer
+                .gcode_state
+                .clone()
+                .unwrap_or_else(|| "IDLE".to_owned()),
+            mc_percent: printer.mc_percent.unwrap_or_default(),
+            mc_remaining_time: printer.mc_remaining_time.unwrap_or_default(),
+            layer_num: printer.layer_num.unwrap_or_default(),
+            total_layer_num: printer.total_layer_num.unwrap_or_default(),
+            task_id: printer.task_id.clone().unwrap_or_else(|| "0".to_owned()),
+            project_id: "0",
+            profile_id: "0",
+            subtask_id: printer.subtask_id.clone().unwrap_or_else(|| "0".to_owned()),
+            gcode_file: printer.gcode_file.clone().unwrap_or_default(),
+            subtask_name: printer.subtask_name.clone().unwrap_or_default(),
+            hms: printer.hms.clone(),
             printer_type: text_if_present(&printer.dev_model_name)
                 .unwrap_or_else(|| "C11".to_string()),
             support_chamber: true,
@@ -202,6 +229,7 @@ impl ExtruderDevice {
                 id,
                 ExtruderInfo {
                     id,
+                    filam_bak: Vec::new(),
                     info: 8,
                     temp,
                     spre: 65535,
@@ -223,6 +251,7 @@ impl ExtruderDevice {
 #[derive(Serialize)]
 struct ExtruderInfo {
     id: u32,
+    filam_bak: Vec<u32>,
     info: u8,
     temp: u32,
     spre: u16,
