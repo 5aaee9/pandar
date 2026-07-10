@@ -30,6 +30,8 @@ struct FakeMqttTransportState {
     last_material_report: Option<Value>,
     echo_operation_reports: bool,
     failed_led_node: Option<String>,
+    subscribe_attempts: usize,
+    subscribe_failures: usize,
 }
 
 #[cfg(test)]
@@ -79,6 +81,15 @@ impl FakeMqttTransport {
         }
     }
 
+    pub fn with_subscribe_failures(subscribe_failures: usize) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(FakeMqttTransportState {
+                subscribe_failures,
+                ..Default::default()
+            })),
+        }
+    }
+
     pub fn with_reports_and_operation_reports_failed_led_node(
         reports: impl IntoIterator<Item = Value>,
         led_node: &str,
@@ -97,6 +108,10 @@ impl FakeMqttTransport {
         self.state.lock().await.subscriptions.clone()
     }
 
+    pub async fn subscribe_attempts(&self) -> usize {
+        self.state.lock().await.subscribe_attempts
+    }
+
     pub async fn published_commands(&self) -> Vec<PublishedMqttCommand> {
         self.state.lock().await.published_commands.clone()
     }
@@ -106,11 +121,12 @@ impl FakeMqttTransport {
 #[async_trait]
 impl BambuMqttTransport for FakeMqttTransport {
     async fn subscribe(&self, topic: &str) -> anyhow::Result<()> {
-        self.state
-            .lock()
-            .await
-            .subscriptions
-            .push(topic.to_string());
+        let mut state = self.state.lock().await;
+        state.subscribe_attempts += 1;
+        if state.subscribe_attempts <= state.subscribe_failures {
+            bail!("fake subscribe failure");
+        }
+        state.subscriptions.push(topic.to_string());
         Ok(())
     }
 

@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Mutex as StdMutex, time::Duration};
 
 use anyhow::Context;
 use async_trait::async_trait;
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::{sync::mpsc, task::JoinHandle, time::sleep};
 
 use crate::{
     AgentConfig,
@@ -24,6 +24,8 @@ pub struct RuntimeBambuMachineGateway {
     config: AgentConfig,
     report_timeout: Duration,
 }
+
+const REPORT_FORWARD_RETRY_DELAY: Duration = Duration::from_secs(5);
 
 impl RuntimeBambuMachineGateway {
     pub fn new(
@@ -96,24 +98,50 @@ impl RuntimeBambuMachineGateway {
     ) -> JoinHandle<()> {
         let config = self.config.clone();
         let report_timeout = self.report_timeout;
-        tokio::spawn(async move {
-            if let Err(err) =
-                forward_print_reports(&config, &transport, &endpoint, report_timeout, &sender).await
-            {
-                let error = redact_access_code(&format!("{err:#}"), &endpoint.access_code);
-                tracing::warn!(
-                    serial = %endpoint.serial,
-                    error = %error,
-                    "printer report forwarding ended"
-                );
-            }
-        })
+        tokio::spawn(forward_print_reports_with_retry(
+            config,
+            transport,
+            endpoint,
+            report_timeout,
+            sender,
+            REPORT_FORWARD_RETRY_DELAY,
+        ))
     }
 
     fn record_access_code(&self, endpoint: &BambuPrinterEndpoint) {
         let mut access_codes = self.redaction_access_codes.lock().unwrap();
         access_codes.retain(|access_code| access_code != &endpoint.access_code);
         access_codes.push(endpoint.access_code.clone());
+    }
+}
+
+pub(crate) async fn forward_print_reports_with_retry<T>(
+    config: AgentConfig,
+    transport: T,
+    endpoint: BambuPrinterEndpoint,
+    report_timeout: Duration,
+    sender: mpsc::Sender<AgentEvent>,
+    retry_delay: Duration,
+) where
+    T: crate::machine::mqtt::BambuMqttTransport + Send + Sync,
+{
+    loop {
+        match forward_print_reports(&config, &transport, &endpoint, report_timeout, &sender).await {
+            Ok(()) => return,
+            Err(err) => {
+                let error = redact_access_code(&format!("{err:#}"), &endpoint.access_code);
+                tracing::warn!(
+                    serial = %endpoint.serial,
+                    error = %error,
+                    "printer report forwarding failed; retrying"
+                );
+            }
+        }
+
+        tokio::select! {
+            _ = sender.closed() => return,
+            _ = sleep(retry_delay) => {}
+        }
     }
 }
 

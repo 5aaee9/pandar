@@ -1132,6 +1132,29 @@ mod runtime {
     use super::*;
 
     #[tokio::test]
+    async fn report_forwarder_retries_initial_subscribe_failure() {
+        let transport = FakeMqttTransport::with_subscribe_failures(1);
+        let (sender, _receiver) = mpsc::channel(1);
+        let task = tokio::spawn(crate::machine::runtime::forward_print_reports_with_retry(
+            test_config(),
+            transport.clone(),
+            runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+            Duration::from_secs(1),
+            sender,
+            Duration::from_millis(1),
+        ));
+
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while transport.subscribe_attempts().await < 2 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        task.abort();
+    }
+
+    #[tokio::test]
     async fn empty_runtime_gateway_refresh_printers_returns_empty() {
         let gateway = TestRuntimeBambuMachineGateway::new(
             Vec::<(

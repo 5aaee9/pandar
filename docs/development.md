@@ -57,6 +57,7 @@ Runtime Bambu machine communication:
 - MQTT username `bblp`, password set to the printer access code.
 - Report topic `device/{serial}/report`.
 - Request topic `device/{serial}/request`.
+- For printers whose MQTT certificate common name differs from their inventory serial, the certificate identity replaces `{serial}` only at the MQTT transport boundary.
 - Refresh sends `info.get_version` before `pushing.pushall` and fails closed when the model cannot be discovered.
 - Machine file transfer through implicit FTPS on port `990`.
 - Protected data mode first, with model-specific clear-data fallback where required.

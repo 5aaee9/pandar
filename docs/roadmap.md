@@ -1008,6 +1008,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Aligned the Bambu Studio network plugin's dual-nozzle Studio mapping so Pandar `R` nozzle status maps to Studio Main id `0`, Pandar `L` maps to Deputy id `1`, and AMS/external material bindings follow Studio's 255 Main / 254 Deputy virtual-slot convention.
 - Aligned Agent project-file dispatch identities with Bambu Studio/Bambuddy behavior by generating a fresh non-zero int32-range `project_id`/`task_id`/`subtask_id` per submission instead of sending `"0"`.
 - Added Bambu LAN X.509 v1 certificate compatibility for MQTT, FTPS, and BRTC while preserving TLS handshake signature verification, with local handshake regressions for valid and mismatched keys.
+- Resolved X2D MQTT topic identity from the printer certificate common name while preserving its distinct inventory serial in Hub data, with retrying background report subscription.
 
 Exit criteria:
 

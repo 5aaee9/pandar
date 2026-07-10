@@ -10,7 +10,27 @@ use rustls::{
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
-use super::bambu_lan_tls_config;
+use super::{
+    bambu_lan_tls_config,
+    transport::{bambu_mqtt_serial_from_certificate, mqtt_topic_for_serial},
+};
+
+#[test]
+fn mqtt_topic_uses_certificate_common_name_without_changing_inventory_serial() {
+    let certificate =
+        CertificateDer::from_pem_slice(include_bytes!("tls/bambu-v1-cert.pem")).unwrap();
+    let mqtt_serial = bambu_mqtt_serial_from_certificate(&certificate).unwrap();
+
+    assert_eq!(mqtt_serial, "test-bambu-v1");
+    assert_eq!(
+        mqtt_topic_for_serial(
+            "20P6BJ633100174",
+            &mqtt_serial,
+            "device/20P6BJ633100174/report",
+        ),
+        "device/test-bambu-v1/report"
+    );
+}
 
 #[tokio::test]
 async fn lan_tls_accepts_bambu_x509_v1_certificates() {
