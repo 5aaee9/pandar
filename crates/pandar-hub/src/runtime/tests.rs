@@ -10,6 +10,9 @@ use super::*;
 use crate::repositories::{AuditActor, LinkPrinterPayload};
 use crate::sessions::{AgentSession, SessionToken};
 
+mod control_plane_close;
+mod print_error;
+
 #[tokio::test]
 async fn runtime_expiry_tick_marks_stale_agent_offline() {
     let state = AppState::sqlite_for_tests().await.unwrap();
@@ -40,7 +43,9 @@ async fn runtime_expiry_tick_marks_stale_agent_offline() {
             wake_sender,
             close_sender,
             command_sender: mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -109,11 +114,13 @@ async fn runtime_stale_link_printer_cleanup_skips_pending_live_commands() {
             wake_sender: mpsc::channel(1).0,
             close_sender: mpsc::channel(1).0,
             command_sender,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: pending,
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
-    let failed = fail_stale_link_printer_commands_with_timeout(
+    let failed = fail_stale_live_commands_with_timeout(
         &state,
         "2026-07-01T00:06:00Z",
         Duration::from_secs(300),
@@ -155,7 +162,7 @@ fn runtime_stale_link_printer_cleanup_log_redacts_access_code() {
     let err = anyhow::anyhow!("database failed with access_code=SECRET-LINK-CODE")
         .context("failed to sweep link printer commands");
 
-    log_stale_link_printer_cleanup_error(&err);
+    log_stale_live_command_cleanup_error(&err);
     drop(_guard);
 
     assert!(!logs.to_string().contains("SECRET-LINK-CODE"));
@@ -296,7 +303,9 @@ async fn register_test_session(
             wake_sender,
             close_sender,
             command_sender: mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
     (wake_receiver, close_receiver)

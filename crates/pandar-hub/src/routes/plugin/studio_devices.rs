@@ -35,6 +35,10 @@ pub(super) struct PluginPrinterResponse {
     subtask_id: Option<String>,
     gcode_file: Option<String>,
     subtask_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    print_error: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    job_id: Option<String>,
     hms: Vec<PrinterHms>,
     pandar_printer_id: String,
     nozzle_temperatures: Vec<PrinterNozzleTemperature>,
@@ -94,6 +98,8 @@ pub(super) async fn plugin_printer_devices(
                 subtask_id: live_status.subtask_id,
                 gcode_file: live_status.gcode_file,
                 subtask_name: live_status.subtask_name,
+                print_error: live_status.print_error,
+                job_id: live_status.printer_job_id,
                 hms: live_status.hms,
                 nozzle_temperatures: printer.nozzle_temperatures,
                 active_nozzle: printer.active_nozzle,

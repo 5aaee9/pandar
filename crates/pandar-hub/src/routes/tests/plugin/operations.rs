@@ -1,0 +1,347 @@
+use std::{collections::HashSet, sync::Arc, time::Duration};
+
+use pandar_core::{AgentId, CommandId, CommandStatus, TenantId};
+use sea_orm::EntityTrait;
+use serde::Deserialize;
+use tokio::sync::{Mutex, mpsc};
+
+use super::*;
+use crate::{
+    protocol::agent::v1::{
+        AgentCapability, PrintErrorAction as ProtoPrintErrorAction, hub_command, printer_operation,
+    },
+    repositories::{PrintErrorAction, PrinterOperationKind, PrinterOperationPayload},
+    sessions::{AgentSession, SessionToken, empty_pending_live_commands},
+};
+
+mod ownership;
+mod validation;
+
+#[derive(Debug, Deserialize)]
+struct OperationResponse {
+    command_id: String,
+    status: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct OperationErrorResponse {
+    error: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct PrintErrorAuditMetadata {
+    agent_id: String,
+    serial_number: String,
+    action: String,
+    error_action: PrintErrorAction,
+    print_error: u32,
+    printer_job_id: String,
+    sequence_id: u64,
+    tenant_token_id: String,
+    tenant_token_scopes: Vec<String>,
+}
+
+#[tokio::test]
+async fn plugin_print_error_dispatches_all_actions_as_sent_tag_25_commands_without_wake() {
+    let fixture = operation_fixture("plugin-native-actions").await;
+    let _control_plane = start_control_plane(fixture.state.clone()).await;
+    let (wake_sender, mut wake_receiver) = mpsc::channel(1);
+    let (command_sender, mut command_receiver) = mpsc::channel(4);
+    register_session(
+        &fixture,
+        wake_sender,
+        command_sender,
+        [AgentCapability::HandlePrintError],
+    )
+    .await;
+
+    for (action, expected) in [
+        ("resume", ProtoPrintErrorAction::Resume),
+        ("ignore", ProtoPrintErrorAction::Ignore),
+        ("stop", ProtoPrintErrorAction::Stop),
+    ] {
+        let (status, body) = request_as(
+            fixture.app.clone(),
+            Method::POST,
+            &fixture.uri,
+            Some(native_body(action)),
+            &fixture.token,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let response = decode::<OperationResponse>(body);
+        assert_eq!(response.status, "sent");
+        let command_id = CommandId::parse(&response.command_id).unwrap();
+        let persisted = fixture
+            .state
+            .commands()
+            .get_for_tenant(fixture.tenant_id, command_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(persisted.status, CommandStatus::Sent);
+        let payload: PrinterOperationPayload =
+            serde_json::from_str(&persisted.payload_json).unwrap();
+        assert_eq!(
+            payload.operation,
+            PrinterOperationKind::HandlePrintError {
+                error_action: match action {
+                    "resume" => PrintErrorAction::Resume,
+                    "ignore" => PrintErrorAction::Ignore,
+                    "stop" => PrintErrorAction::Stop,
+                    _ => unreachable!(),
+                },
+                print_error: 83_918_929,
+                printer_job_id: "job-7".to_owned(),
+                sequence_id: 20_042,
+            }
+        );
+
+        let emitted = command_receiver.recv().await.unwrap().unwrap();
+        let Some(hub_command::Command::PrinterOperation(operation)) = emitted.command else {
+            panic!("expected printer operation command");
+        };
+        let Some(printer_operation::Operation::HandlePrintError(operation)) = operation.operation
+        else {
+            panic!("expected handle print error operation");
+        };
+        assert_eq!(operation.error_action, expected as i32);
+        assert_eq!(operation.print_error, 83_918_929);
+        assert_eq!(operation.printer_job_id, "job-7");
+        assert_eq!(operation.sequence_id, 20_042);
+    }
+
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), wake_receiver.recv())
+            .await
+            .is_err(),
+        "live printer error operations must not wake the durable pump"
+    );
+    let events = fixture
+        .state
+        .audit_events()
+        .list_for_tenant(fixture.tenant_id)
+        .await
+        .unwrap();
+    let native_events = events
+        .iter()
+        .filter(|event| event.action == "printer.dispatch_control")
+        .collect::<Vec<_>>();
+    assert_eq!(native_events.len(), 3);
+    for (event, expected_action) in native_events.iter().zip(["resume", "ignore", "stop"]) {
+        let metadata: PrintErrorAuditMetadata = serde_json::from_str(&event.metadata_json).unwrap();
+        assert_eq!(metadata.agent_id, fixture.agent_id.to_string());
+        assert_eq!(
+            metadata.serial_number,
+            format!("serial-{}", fixture.printer_id)
+        );
+        assert_eq!(metadata.action, "handle_print_error");
+        assert_eq!(
+            metadata.error_action,
+            match expected_action {
+                "resume" => PrintErrorAction::Resume,
+                "ignore" => PrintErrorAction::Ignore,
+                "stop" => PrintErrorAction::Stop,
+                _ => unreachable!(),
+            }
+        );
+        assert_eq!(metadata.print_error, 83_918_929);
+        assert_eq!(metadata.printer_job_id, "job-7");
+        assert_eq!(metadata.sequence_id, 20_042);
+        assert_eq!(metadata.tenant_token_scopes, ["plugin:studio"]);
+    }
+}
+
+#[tokio::test]
+async fn plugin_print_error_rejects_offline_and_incapable_agents_before_insert() {
+    let fixture = operation_fixture("plugin-native-unavailable").await;
+
+    assert_unavailable(&fixture).await;
+    let (wake_sender, _) = mpsc::channel(1);
+    let (command_sender, _command_receiver) = mpsc::channel(1);
+    register_session(&fixture, wake_sender, command_sender, []).await;
+    assert_unavailable(&fixture).await;
+
+    assert_eq!(fixture.state.commands().count().await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn plugin_print_error_marks_committed_command_failed_when_live_dispatch_fails() {
+    let fixture = operation_fixture("plugin-native-dispatch-failure").await;
+    let (wake_sender, _) = mpsc::channel(1);
+    let (command_sender, command_receiver) = mpsc::channel(1);
+    drop(command_receiver);
+    register_session(
+        &fixture,
+        wake_sender,
+        command_sender,
+        [AgentCapability::HandlePrintError],
+    )
+    .await;
+
+    let (status, body) = request_as(
+        fixture.app.clone(),
+        Method::POST,
+        &fixture.uri,
+        Some(native_body("resume")),
+        &fixture.token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        decode::<OperationErrorResponse>(body).error,
+        "printer_operation_unavailable"
+    );
+    let model = crate::entities::commands::Entity::find()
+        .one(&fixture.state.database().sea_orm_connection())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(model.status, "failed");
+    assert!(model.error.as_deref().unwrap().contains("ChannelClosed"));
+    assert!(
+        fixture
+            .state
+            .audit_events()
+            .list_for_tenant(fixture.tenant_id)
+            .await
+            .unwrap()
+            .iter()
+            .any(|event| event.action == "printer.dispatch_control")
+    );
+}
+
+#[tokio::test]
+async fn plugin_ordinary_operation_remains_queued_and_wakes_agent() {
+    let fixture = operation_fixture("plugin-ordinary-operation").await;
+    let _control_plane = start_control_plane(fixture.state.clone()).await;
+    let (wake_sender, mut wake_receiver) = mpsc::channel(1);
+    let (command_sender, mut command_receiver) = mpsc::channel(1);
+    register_session(&fixture, wake_sender, command_sender, []).await;
+
+    let (status, body) = request_as(
+        fixture.app.clone(),
+        Method::POST,
+        &fixture.uri,
+        Some(serde_json::json!({ "action": "pause" })),
+        &fixture.token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(decode::<OperationResponse>(body).status, "queued");
+    tokio::time::timeout(Duration::from_secs(1), wake_receiver.recv())
+        .await
+        .expect("ordinary operation should wake agent")
+        .expect("wake channel should stay open");
+    assert!(command_receiver.try_recv().is_err());
+}
+
+struct OperationFixture {
+    state: AppState,
+    app: Router,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    printer_id: String,
+    token: String,
+    uri: String,
+}
+
+async fn operation_fixture(slug: &str) -> OperationFixture {
+    let state = state().await;
+    let app = router(state.clone());
+    let tenant = state.tenants().create(slug, slug).await.unwrap();
+    let agent = state.agents().create(tenant.id, "agent").await.unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        state.database(),
+        tenant.id,
+        agent.id,
+        Some("A1"),
+    )
+    .await
+    .unwrap();
+    let token = plugin_studio_tenant_token(&state, &tenant.id.to_string(), slug).await;
+    let uri = format!("/api/v1/plugin/printers/{printer_id}/operations");
+    OperationFixture {
+        state,
+        app,
+        tenant_id: tenant.id,
+        agent_id: agent.id,
+        printer_id,
+        token,
+        uri,
+    }
+}
+
+async fn register_session(
+    fixture: &OperationFixture,
+    wake_sender: mpsc::Sender<()>,
+    command_sender: mpsc::Sender<Result<crate::protocol::agent::v1::HubCommand, tonic::Status>>,
+    capabilities: impl IntoIterator<Item = AgentCapability>,
+) {
+    register_session_for_agent(
+        fixture,
+        fixture.agent_id,
+        wake_sender,
+        command_sender,
+        capabilities,
+    )
+    .await;
+}
+
+async fn register_session_for_agent(
+    fixture: &OperationFixture,
+    agent_id: AgentId,
+    wake_sender: mpsc::Sender<()>,
+    command_sender: mpsc::Sender<Result<crate::protocol::agent::v1::HubCommand, tonic::Status>>,
+    capabilities: impl IntoIterator<Item = AgentCapability>,
+) {
+    fixture
+        .state
+        .sessions()
+        .register(AgentSession {
+            token: SessionToken::new(),
+            tenant_id: fixture.tenant_id,
+            agent_id,
+            name: "agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: pandar_core::created_at_now(),
+            last_heartbeat_at: pandar_core::created_at_now(),
+            wake_sender,
+            close_sender: mpsc::channel(1).0,
+            command_sender,
+            capabilities: capabilities.into_iter().collect::<HashSet<_>>(),
+            pending_live_commands: empty_pending_live_commands(),
+            live_command_transition: Arc::new(Mutex::new(())),
+        })
+        .await;
+}
+
+async fn assert_unavailable(fixture: &OperationFixture) {
+    let (status, body) = request_as(
+        fixture.app.clone(),
+        Method::POST,
+        &fixture.uri,
+        Some(native_body("resume")),
+        &fixture.token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        decode::<OperationErrorResponse>(body).error,
+        "printer_operation_unavailable"
+    );
+}
+
+fn native_body(error_action: &str) -> Value {
+    serde_json::json!({
+        "action": "handle_print_error",
+        "error_action": error_action,
+        "print_error": 83_918_929,
+        "printer_job_id": "job-7",
+        "sequence_id": 20_042
+    })
+}

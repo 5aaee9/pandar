@@ -2,6 +2,7 @@ mod device;
 mod input;
 mod list;
 mod materials;
+mod request;
 mod scalar;
 
 pub(super) use list::validate_printer_list;
@@ -18,4 +19,8 @@ pub fn printer_telemetry_fragment(printer_json: &str) -> String {
         .and_then(|value| value.strip_suffix('}'))
         .unwrap_or(&object)
         .to_string()
+}
+
+pub(super) fn classify_status_request(message: &str) -> (i32, String) {
+    request::classify_status_request(message)
 }

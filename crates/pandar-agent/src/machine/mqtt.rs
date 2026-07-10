@@ -3,6 +3,7 @@ use std::time::Duration;
 mod commands;
 mod fake;
 mod hms;
+mod report_payload;
 mod reports;
 mod signing;
 mod snapshot;
@@ -21,12 +22,14 @@ pub(crate) use commands::chamber_light_commands_for_nodes;
 pub(crate) use commands::next_studio_sequence_id_from;
 pub use commands::{
     AmsFilamentCommand, AmsSlotCommand, BambuMqttCommand, BambuMqttTopics, GcodeLineCommand,
-    MachineReportDiagnostic, MachineReportDiagnosticPayload, PrintReportProgress, PrintSpeed,
-    ProjectFileCommand, SetNozzleTemperatureCommand,
+    HandlePrintErrorCommand, MachineReportDiagnostic, MachineReportDiagnosticPayload,
+    PrintErrorAction, PrintReportProgress, PrintSpeed, ProjectFileCommand,
+    SetNozzleTemperatureCommand,
 };
 #[cfg(test)]
 pub(crate) use fake::FakeMqttTransport;
 pub use hms::MachineHmsItem;
+pub(crate) use report_payload::decode_mqtt_report_payload;
 pub use reports::{
     forward_print_reports, print_job_report_event, print_report_from_report,
     printer_materials_snapshot_event,
@@ -49,6 +52,7 @@ use crate::machine::{
 pub const BAMBU_MQTT_PORT: u16 = 8883;
 pub const BAMBU_MQTT_USERNAME: &str = "bblp";
 pub const BAMBU_MQTT_QOS: u8 = 1;
+pub const BAMBU_MQTT_RETAIN: bool = false;
 const BAMBU_MQTT_MAX_PACKET_SIZE: usize = 256 * 1024;
 
 #[derive(Debug, Clone, PartialEq)]

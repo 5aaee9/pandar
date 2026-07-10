@@ -1,13 +1,16 @@
+use anyhow::Context;
 use futures_util::TryStreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::{collections::BTreeMap, io::Write, path::PathBuf};
 
 use super::{
     PluginHttpResult, RequestKind, invalid_input, network_error, normalize_hub_url, read_utf8,
     result, runtime, stable_error_body,
 };
+
+#[cfg(test)]
+mod tests;
 
 pub(super) fn get_json(
     hub_url_ptr: *const u8,
@@ -42,6 +45,18 @@ pub(super) fn post_json(
     body: impl Serialize,
     kind: RequestKind,
 ) -> PluginHttpResult {
+    let stderr = std::io::stderr();
+    let mut writer = stderr.lock();
+    post_json_with_writer(url, token, body, kind, &mut writer)
+}
+
+pub(super) fn post_json_with_writer<W: Write>(
+    url: &str,
+    token: Option<&str>,
+    body: impl Serialize,
+    kind: RequestKind,
+    writer: &mut W,
+) -> PluginHttpResult {
     match runtime().block_on(async {
         let request = reqwest::Client::new().post(url).json(&body);
         let request = if let Some(token) = token {
@@ -49,11 +64,39 @@ pub(super) fn post_json(
         } else {
             request
         };
-        request.send().await
+        match kind {
+            RequestKind::PrinterOperation => request
+                .send()
+                .await
+                .map_err(reqwest::Error::without_url)
+                .context("POST plugin printer operation request"),
+            _ => request
+                .send()
+                .await
+                .map_err(reqwest::Error::without_url)
+                .context(post_request_context(kind)),
+        }
     }) {
         Ok(response) => response_result(response, kind),
-        Err(_) => network_error(),
+        Err(error) => {
+            write_network_error(writer, &error);
+            network_error()
+        }
     }
+}
+
+fn post_request_context(kind: RequestKind) -> &'static str {
+    match kind {
+        RequestKind::TicketExchange => "POST plugin authentication request",
+        RequestKind::PrinterLookup => "POST plugin printer lookup request",
+        RequestKind::JobLookup => "POST plugin job lookup request",
+        RequestKind::PrintSubmission => "POST plugin print submission request",
+        RequestKind::PrinterOperation => "POST plugin printer operation request",
+    }
+}
+
+fn write_network_error(writer: &mut impl Write, error: &anyhow::Error) {
+    let _ = writeln!(writer, "pandar network plugin request failed: {error:#}");
 }
 
 pub(super) fn plugin_printer_operation_url(

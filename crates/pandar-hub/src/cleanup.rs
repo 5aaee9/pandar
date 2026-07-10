@@ -221,7 +221,7 @@ async fn artifact_bytes(database: &Database, binds: &[&str]) -> anyhow::Result<i
     scalar(
         database,
         &format!(
-            "SELECT COALESCE(SUM(size_bytes), 0) FROM job_artifacts WHERE id IN ({ARTIFACT_SELECTION_SQL})"
+            "SELECT CAST(COALESCE(SUM(size_bytes), 0) AS BIGINT) FROM job_artifacts WHERE id IN ({ARTIFACT_SELECTION_SQL})"
         ),
         binds,
     )

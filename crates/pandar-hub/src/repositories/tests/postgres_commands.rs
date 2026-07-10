@@ -1,6 +1,8 @@
 use pandar_core::{AgentId, AgentStatus, CommandId, CommandStatus};
 use serde::Deserialize;
 
+mod print_error;
+
 use super::*;
 use crate::repositories::tests::postgres::postgres_database;
 use crate::repositories::{
@@ -412,7 +414,7 @@ async fn postgres_link_printer_command_behavior_when_configured() {
     set_command_updated_at(&database, old_unowned.id, "2026-07-01T00:00:00Z").await;
 
     let failed = commands
-        .fail_stale_unowned_link_printer_commands(
+        .fail_stale_unowned_live_commands(
             "2026-07-01T00:06:00Z",
             std::time::Duration::from_secs(300),
             &[old_owned.id],

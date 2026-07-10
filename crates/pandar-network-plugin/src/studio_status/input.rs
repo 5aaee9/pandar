@@ -15,6 +15,10 @@ pub(super) struct PrinterStatus {
     #[serde(default)]
     pub(super) task_id: Option<String>,
     #[serde(default)]
+    pub(super) print_error: Option<u32>,
+    #[serde(default)]
+    pub(super) job_id: Option<String>,
+    #[serde(default)]
     pub(super) subtask_id: Option<String>,
     #[serde(default)]
     pub(super) gcode_file: Option<String>,

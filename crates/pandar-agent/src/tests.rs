@@ -12,7 +12,7 @@ use crate::machine::{
     mqtt::FakeMqttTransport, runtime::test_support::TestRuntimeBambuMachineGateway,
 };
 use crate::protocol::agent::v1::{
-    AgentCameraEvent, AgentEvent, HubCameraCommand, HubCommand, LinkPrinter,
+    AgentCameraEvent, AgentCapability, AgentEvent, HubCameraCommand, HubCommand, LinkPrinter,
     agent_control_server::{AgentControl, AgentControlServer},
     hub_command,
 };
@@ -94,7 +94,7 @@ fn startup_summary_names_hub_and_agent() {
 }
 
 #[test]
-fn hello_event_has_agent_identity_and_version() {
+fn hello_event_has_agent_identity_version_and_exact_capability() {
     let config = test_config();
 
     let event = hello_event(&config);
@@ -108,6 +108,7 @@ fn hello_event_has_agent_identity_and_version() {
             name: "garage".to_owned(),
             version: "9.8.7".to_owned(),
             credential: "pandar_ac_test".to_owned(),
+            capabilities: vec![AgentCapability::HandlePrintError as i32],
         }))
     );
 }

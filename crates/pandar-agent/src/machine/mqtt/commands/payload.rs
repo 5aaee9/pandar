@@ -44,6 +44,15 @@ pub(super) struct BasicPrintCommand {
 }
 
 #[derive(Serialize)]
+pub(super) struct PrintErrorCommand<'a> {
+    pub(super) command: &'static str,
+    pub(super) err: String,
+    pub(super) job_id: &'a str,
+    pub(super) param: &'static str,
+    pub(super) sequence_id: String,
+}
+
+#[derive(Serialize)]
 pub(super) struct PrintSpeedCommand {
     pub(super) command: &'static str,
     pub(super) param: String,

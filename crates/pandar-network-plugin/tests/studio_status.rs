@@ -24,6 +24,34 @@ fn telemetry(printer: &str) -> String {
     body(result)
 }
 
+fn telemetry_json(printer: &str) -> serde_json::Value {
+    serde_json::from_str(&format!("{{{}}}", telemetry(printer))).unwrap()
+}
+
+#[test]
+fn studio_status_emits_native_print_error_and_job_id() {
+    let telemetry = telemetry_json(r#"{"print_error":83918929,"job_id":"job-7"}"#);
+
+    assert_eq!(telemetry["print_error"], serde_json::json!(83_918_929));
+    assert_eq!(telemetry["job_id"], serde_json::json!("job-7"));
+}
+
+#[test]
+fn studio_status_preserves_explicit_clear_and_empty_job_id() {
+    let telemetry = telemetry_json(r#"{"print_error":0,"job_id":""}"#);
+
+    assert_eq!(telemetry["print_error"], serde_json::json!(0));
+    assert_eq!(telemetry["job_id"], serde_json::json!(""));
+}
+
+#[test]
+fn studio_status_omits_unknown_native_error_fields() {
+    let telemetry = telemetry_json("{}");
+
+    assert!(telemetry.get("print_error").is_none());
+    assert!(telemetry.get("job_id").is_none());
+}
+
 #[test]
 fn printer_telemetry_defaults_to_studio_safe_idle_shape() {
     let body = telemetry("{}");

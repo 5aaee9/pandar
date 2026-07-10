@@ -207,6 +207,7 @@ PluginHttpResult pandar_plugin_submit_printer_operation(
     const uint8_t*, std::size_t
 );
 PluginHttpResult pandar_plugin_operation_json_from_gcode(const uint8_t*, std::size_t);
+PluginHttpResult pandar_plugin_classify_status_request(const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_printer_telemetry_json(const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_start_local_webserver(
     const uint8_t*, std::size_t,
@@ -219,6 +220,13 @@ void pandar_plugin_free(void*, std::size_t);
 void pandar_plugin_free_with_capacity(void*, std::size_t, std::size_t);
 }
 
+enum class MessageTunnel { Cloud, Local };
+
+constexpr int32_t kParseOperation = 0;
+constexpr int32_t kParseInvalidNative = 2;
+constexpr int32_t kStatusRequestGetVersion = 1;
+constexpr int32_t kStatusRequestPushAll = 2;
+
 struct Agent {
     explicit Agent(std::string log_dir_value) : log_dir(std::move(log_dir_value)) {}
 
@@ -228,6 +236,7 @@ struct Agent {
     std::string cert_filename;
     std::string country_code;
     std::string selected_machine;
+    std::string active_local_device;
     std::string token;
     std::string user_id;
     std::string user_name;
@@ -458,7 +467,6 @@ bool remember_printer_connections(
     std::map<std::string, std::string> pandar_printer_ids;
     std::map<std::string, std::string> printer_models;
     std::map<std::string, std::string> printer_telemetry;
-    std::set<std::string> discovered_devices;
     for (const auto& printer : objects_from_array(body, "devices")) {
         const auto dev_id = field_from_json(printer, "dev_id");
         if (dev_id.empty()) continue;
@@ -473,7 +481,6 @@ bool remember_printer_connections(
             printer_models[dev_id] = model;
         }
         printer_telemetry[dev_id] = printer_telemetry_from_json(printer);
-        discovered_devices.insert(dev_id);
     }
     {
         std::lock_guard<std::mutex> lock(agent->status_mutex);
@@ -484,7 +491,6 @@ bool remember_printer_connections(
         agent->pandar_printer_ids.swap(pandar_printer_ids);
         agent->printer_models.swap(printer_models);
         agent->printer_telemetry.swap(printer_telemetry);
-        agent->cloud_subscribed_devices.insert(discovered_devices.begin(), discovered_devices.end());
     }
     return true;
 }
@@ -672,32 +678,46 @@ void emit_cloud_printer_connected_signal(Agent* agent, const std::string& dev_id
     on_printer_connected(topic);
 }
 
-void emit_printer_connected_status(Agent* agent, const std::string& dev_id) {
+void emit_printer_status(Agent* agent, const std::string& dev_id, MessageTunnel tunnel) {
     if (!agent || dev_id.empty()) return;
     const auto report = printer_push_status_report(agent, dev_id);
     trace_plugin_event(agent, "push_status", dev_id);
-    BBL::OnMessageFn on_message;
-    BBL::OnMessageFn on_local_message;
+    BBL::OnMessageFn callback;
     {
         std::lock_guard<std::mutex> lock(agent->status_mutex);
-        on_message = agent->on_message;
-        on_local_message = agent->on_local_message;
+        callback = tunnel == MessageTunnel::Cloud ? agent->on_message : agent->on_local_message;
     }
     trace_plugin_event(
         agent,
         std::string("push_status callbacks dev_id=") + dev_id +
-            " cloud=" + (on_message ? "1" : "0") +
-            " local=" + (on_local_message ? "1" : "0"));
-    if (on_message) {
-        on_message(dev_id, report);
-    } else if (on_local_message) {
-        on_local_message(dev_id, report);
+            " tunnel=" + (tunnel == MessageTunnel::Cloud ? "cloud" : "local") +
+            " callback=" + (callback ? "1" : "0"));
+    if (callback) callback(dev_id, report);
+}
+
+void emit_printer_version(
+    Agent* agent,
+    const std::string& dev_id,
+    const std::string& sequence_id,
+    MessageTunnel tunnel
+) {
+    if (!agent || dev_id.empty()) return;
+    BBL::OnMessageFn callback;
+    {
+        std::lock_guard<std::mutex> lock(agent->status_mutex);
+        callback = tunnel == MessageTunnel::Cloud ? agent->on_message : agent->on_local_message;
     }
+    trace_plugin_event(
+        agent,
+        std::string("get_version_response dev_id=") + dev_id +
+            " tunnel=" + (tunnel == MessageTunnel::Cloud ? "cloud" : "local") +
+            " callback=" + (callback ? "1" : "0"));
+    if (callback) callback(dev_id, printer_version_report(agent, dev_id, sequence_id));
 }
 
 void emit_cloud_printer_connected_status(Agent* agent, const std::string& dev_id) {
     emit_cloud_printer_connected_signal(agent, dev_id);
-    emit_printer_connected_status(agent, dev_id);
+    emit_printer_status(agent, dev_id, MessageTunnel::Cloud);
 }
 
 void emit_cloud_printer_connected_statuses(Agent* agent, const std::vector<std::string>& dev_ids) {
@@ -720,18 +740,66 @@ void emit_local_connect(Agent* agent, const std::string& dev_id) {
     if (on_local_connect) on_local_connect(0, dev_id, printer_alive_report(agent, dev_id));
 }
 
-std::vector<std::string> status_heartbeat_targets(Agent* agent) {
-    std::set<std::string> targets;
+bool handle_status_request(
+    Agent* agent,
+    const std::string& dev_id,
+    const std::string& message,
+    MessageTunnel tunnel
+) {
+    auto request = pandar_plugin_classify_status_request(
+        reinterpret_cast<const uint8_t*>(message.data()),
+        message.size()
+    );
+    const auto request_kind = request.status;
+    const auto sequence_id = body_from_result(request);
+    if (request_kind == kStatusRequestGetVersion) {
+        if (tunnel == MessageTunnel::Cloud) {
+            std::lock_guard<std::mutex> lock(agent->status_mutex);
+            const auto normalized_dev_id = studio_dev_id(dev_id);
+            agent->cloud_initialized_devices.insert(normalized_dev_id);
+            agent->cloud_connection_notifications.erase(normalized_dev_id);
+        }
+        emit_printer_version(
+            agent,
+            dev_id,
+            sequence_id,
+            tunnel
+        );
+        return true;
+    }
+    if (request_kind == kStatusRequestPushAll) {
+        refresh_printer_status_cache(agent);
+        if (tunnel == MessageTunnel::Cloud) {
+            emit_cloud_printer_connected_signal(agent, dev_id);
+        }
+        emit_printer_status(agent, dev_id, tunnel);
+        return true;
+    }
+    return false;
+}
+
+struct StatusHeartbeatTargets {
+    std::vector<std::string> cloud;
+    std::string local;
+};
+
+StatusHeartbeatTargets status_heartbeat_targets(Agent* agent) {
+    StatusHeartbeatTargets targets;
     {
         std::lock_guard<std::mutex> lock(agent->status_mutex);
-        targets = agent->cloud_subscribed_devices;
+        targets.cloud.assign(
+            agent->cloud_subscribed_devices.begin(),
+            agent->cloud_subscribed_devices.end()
+        );
+        targets.local = agent->active_local_device;
     }
-    return {targets.begin(), targets.end()};
+    return targets;
 }
 
 bool has_status_heartbeat_listener(Agent* agent) {
     std::lock_guard<std::mutex> lock(agent->status_mutex);
-    return static_cast<bool>(agent->on_message) || static_cast<bool>(agent->on_local_message);
+    return (!agent->cloud_subscribed_devices.empty() && static_cast<bool>(agent->on_message)) ||
+        (!agent->active_local_device.empty() && static_cast<bool>(agent->on_local_message));
 }
 
 void start_status_heartbeat(Agent* agent) {
@@ -741,11 +809,14 @@ void start_status_heartbeat(Agent* agent) {
         while (!agent->status_thread_stop.load()) {
             std::this_thread::sleep_for(std::chrono::seconds(2));
             if (agent->status_thread_stop.load()) break;
-            auto targets = status_heartbeat_targets(agent);
-            if (!targets.empty() && has_status_heartbeat_listener(agent)) {
+            if (has_status_heartbeat_listener(agent)) {
                 refresh_printer_status_cache(agent);
             }
-            emit_cloud_printer_connected_statuses(agent, targets);
+            auto targets = status_heartbeat_targets(agent);
+            emit_cloud_printer_connected_statuses(agent, targets.cloud);
+            if (!targets.local.empty()) {
+                emit_printer_status(agent, targets.local, MessageTunnel::Local);
+            }
         }
     });
 }
@@ -1361,38 +1432,17 @@ PANDAR_ABI int bambu_network_send_message(void* agent, std::string dev_id, std::
     trace_plugin_event(a, "send_message", dev_id);
     if (dev_id.empty()) dev_id = ensure_selected_machine(a);
     if (dev_id.empty()) return BBL::BAMBU_NETWORK_SUCCESS;
-    const auto is_get_version = message.find("get_version") != std::string::npos;
-    if (is_get_version) {
-        std::lock_guard<std::mutex> lock(a->status_mutex);
-        const auto normalized_dev_id = studio_dev_id(dev_id);
-        a->cloud_initialized_devices.insert(normalized_dev_id);
-        a->cloud_connection_notifications.erase(normalized_dev_id);
-    }
-    if (is_get_version) {
-        BBL::OnMessageFn on_message;
-        BBL::OnMessageFn on_local_message;
-        {
-            std::lock_guard<std::mutex> lock(a->status_mutex);
-            on_message = a->on_message;
-            on_local_message = a->on_local_message;
-        }
-        const auto version = printer_version_report(a, dev_id, field_from_json(message, "sequence_id"));
-        trace_plugin_event(a, "get_version_response", dev_id);
-        if (on_message) {
-            on_message(dev_id, version);
-        } else if (on_local_message) {
-            on_local_message(dev_id, version);
-        }
-    }
-    const auto is_pushall = message.find("pushall") != std::string::npos;
-    if (is_pushall) refresh_printer_status_cache(a);
-    if (is_pushall || is_get_version) {
-        emit_cloud_printer_connected_status(a, dev_id);
+    if (handle_status_request(a, dev_id, message, MessageTunnel::Cloud)) {
+        return BBL::BAMBU_NETWORK_SUCCESS;
     }
     auto parsed = rust_operation_json_from_gcode(message);
     std::string operation_json = body_from_result(parsed);
-    if (parsed.status == 0) {
+    if (parsed.status == kParseOperation) {
         return submit_printer_operation_json(a, dev_id, operation_json);
+    }
+    if (parsed.status == kParseInvalidNative) {
+        a->last_error = operation_json;
+        return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
     }
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
@@ -1401,20 +1451,20 @@ PANDAR_ABI int bambu_network_connect_printer(void* agent, std::string dev_id, st
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     if (dev_id.empty()) return BBL::BAMBU_NETWORK_ERR_CONNECT_FAILED;
-    BBL::OnPrinterConnectedFn on_printer_connected;
     {
         std::lock_guard<std::mutex> lock(a->status_mutex);
-        a->selected_machine = dev_id;
-        on_printer_connected = a->on_printer_connected;
+        a->active_local_device = studio_dev_id(dev_id);
     }
-    if (on_printer_connected) on_printer_connected(dev_id);
-    emit_local_connect(a, dev_id);
-    emit_printer_connected_status(a, dev_id);
+    emit_local_connect(a, studio_dev_id(dev_id));
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
 PANDAR_ABI int bambu_network_disconnect_printer(void* agent) {
-    return as_agent(agent) ? BBL::BAMBU_NETWORK_SUCCESS : BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    auto* a = as_agent(agent);
+    if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    std::lock_guard<std::mutex> lock(a->status_mutex);
+    a->active_local_device.clear();
+    return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
 PANDAR_ABI int bambu_network_send_message_to_printer(void* agent, std::string dev_id, std::string message, int, int) {
@@ -1422,9 +1472,13 @@ PANDAR_ABI int bambu_network_send_message_to_printer(void* agent, std::string de
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     trace_plugin_event(a, "send_message_to_printer", dev_id);
 
+    if (handle_status_request(a, dev_id, message, MessageTunnel::Local)) {
+        return BBL::BAMBU_NETWORK_SUCCESS;
+    }
+
     auto parsed = rust_operation_json_from_gcode(message);
     std::string operation_json = body_from_result(parsed);
-    if (parsed.status != 0) {
+    if (parsed.status != kParseOperation) {
         a->last_error = operation_json;
         return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
     }

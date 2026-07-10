@@ -14,6 +14,10 @@ pub(super) struct StudioTelemetry {
     layer_num: u32,
     total_layer_num: u32,
     task_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    print_error: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    job_id: Option<String>,
     project_id: &'static str,
     profile_id: &'static str,
     subtask_id: String,
@@ -76,6 +80,8 @@ impl From<&PrinterStatus> for StudioTelemetry {
             layer_num: printer.layer_num.unwrap_or_default(),
             total_layer_num: printer.total_layer_num.unwrap_or_default(),
             task_id: printer.task_id.clone().unwrap_or_else(|| "0".to_owned()),
+            print_error: printer.print_error,
+            job_id: printer.job_id.clone(),
             project_id: "0",
             profile_id: "0",
             subtask_id: printer.subtask_id.clone().unwrap_or_else(|| "0".to_owned()),

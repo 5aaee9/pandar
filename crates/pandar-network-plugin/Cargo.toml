@@ -25,4 +25,5 @@ tokio.workspace = true
 tokio-util.workspace = true
 
 [dev-dependencies]
+cc = "1.2.47"
 tempfile.workspace = true

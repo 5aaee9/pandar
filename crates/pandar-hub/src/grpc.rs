@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{pin::Pin, sync::Arc};
 
 use pandar_core::{AgentId, AgentStatus, TenantId};
 use tokio::sync::mpsc;
@@ -20,11 +20,15 @@ use crate::{
     grpc::commands::repository_status,
     grpc::outbound::spawn_outbound_pump,
     protocol::agent::v1::{
-        AgentCameraEvent, AgentCameraHello, AgentEvent, AgentHello, HubCameraCommand, HubCommand,
-        agent_camera_event, agent_control_server::AgentControl, agent_event,
+        AgentCameraEvent, AgentCameraHello, AgentCapability, AgentEvent, AgentHello,
+        HubCameraCommand, HubCommand, agent_camera_event, agent_control_server::AgentControl,
+        agent_event,
     },
     repositories::hash_secret,
-    sessions::{AgentSession, SessionToken, empty_pending_live_commands},
+    sessions::{
+        AgentSession, SessionToken, empty_pending_live_commands,
+        live_commands::fail_pending_live_commands,
+    },
 };
 
 pub mod commands;
@@ -93,7 +97,13 @@ impl AgentControlService {
         let (close_sender, close_receiver) = mpsc::channel(1);
         let (command_sender, command_receiver) = mpsc::channel(16);
         let token = SessionToken::new();
-        self.state
+        let capabilities = hello
+            .capabilities
+            .into_iter()
+            .filter_map(|value| AgentCapability::try_from(value).ok())
+            .collect();
+        let replaced = self
+            .state
             .sessions()
             .register(AgentSession {
                 token,
@@ -106,9 +116,21 @@ impl AgentControlService {
                 wake_sender,
                 close_sender,
                 command_sender: command_sender.clone(),
+                capabilities,
                 pending_live_commands: empty_pending_live_commands(),
+                live_command_transition: Arc::new(tokio::sync::Mutex::new(())),
             })
             .await;
+        if let Some(session) = replaced {
+            fail_pending_live_commands(
+                &self.state,
+                tenant_id,
+                agent_id,
+                session,
+                "agent session replaced before printer operation completed",
+            )
+            .await;
+        }
 
         let (status_sender, status_receiver) = mpsc::channel(1);
         spawn_inbound_handler(

@@ -14,7 +14,7 @@ pub use printer_refresh::{
 
 use serde::{Serialize, de::DeserializeOwned};
 
-use gcode::{PrinterOperation, operation_json_from_gcode};
+use gcode::{PrinterOperation, StudioOperationParse, operation_json_from_gcode};
 use http::{
     AmsMapping, AmsMapping2, AmsMappingInfo, PrintSubmissionBody, get_json,
     plugin_printer_operation_url, post_json, post_multipart_print,
@@ -252,22 +252,32 @@ pub extern "C" fn pandar_plugin_submit_printer_operation(
     )
 }
 
+/// Stable parser statuses: 0 is an operation with HTTP 200; 1 is unsupported with HTTP 400;
+/// 2 is an invalid native candidate with HTTP 400. Both error statuses use the same body.
 #[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_operation_json_from_gcode(
     message_ptr: *const u8,
     message_len: usize,
 ) -> PluginHttpResult {
-    let Some(message) = read_utf8(message_ptr, message_len) else {
-        return invalid_input("unsupported_printer_operation");
-    };
-    match operation_json_from_gcode(&message) {
-        Some(operation) => result(
-            0,
-            200,
-            serde_json::to_string(&operation).expect("printer operation is serializable"),
-        ),
-        None => invalid_input("unsupported_printer_operation"),
-    }
+    read_utf8(message_ptr, message_len)
+        .map_or(StudioOperationParse::Unsupported, |message| {
+            operation_json_from_gcode(&message)
+        })
+        .into_http_result()
+}
+
+/// Stable status-request kinds: 0 is not a status request, 1 is `info.get_version`,
+/// and 2 is `pushing.pushall`. The body is the typed request sequence string.
+#[unsafe(no_mangle)]
+pub extern "C" fn pandar_plugin_classify_status_request(
+    message_ptr: *const u8,
+    message_len: usize,
+) -> PluginHttpResult {
+    let (kind, sequence_id) = read_utf8(message_ptr, message_len)
+        .map_or((0, String::new()), |message| {
+            studio_status::classify_status_request(&message)
+        });
+    result(kind, 200, sequence_id)
 }
 
 #[unsafe(no_mangle)]

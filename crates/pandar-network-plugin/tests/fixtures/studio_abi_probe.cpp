@@ -7,6 +7,7 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -111,6 +112,7 @@ namespace {
 
 constexpr int kFtOk = 0;
 constexpr int kFtEio = -3;
+constexpr int kBambuInvalidResult = -19;
 
 std::string escape_json(const std::string& value) {
     std::string out;
@@ -347,6 +349,30 @@ struct ProbeResult {
     std::string update_body;
     std::string sdcard_update_body;
     bool restored_login = false;
+    int cloud_version_messages = 0;
+    int cloud_status_messages = 0;
+    int local_version_messages = 0;
+    int local_status_messages = 0;
+    int printer_connected_callbacks = 0;
+    int local_connect_callbacks = 0;
+    int operation_posts = 0;
+    bool status_requests_zero_posts = false;
+    bool status_request_lookalikes_exact = false;
+    bool native_actions_exact = false;
+    bool cloud_unsupported_exact = false;
+    bool local_unsupported_exact = false;
+    bool cloud_invalid_native_exact = false;
+    bool local_invalid_native_exact = false;
+    bool cloud_requests_exact = false;
+    bool lan_connect_exact = false;
+    bool local_requests_exact = false;
+    bool callback_tunnels_exact = false;
+    bool local_only_refresh_exact = false;
+    bool local_replacement_exact = false;
+    bool disconnect_exact = false;
+    bool same_serial_exact = false;
+    std::string cloud_status_body;
+    std::string local_status_body;
 };
 
 [[noreturn]] void fail(void* agent, int (*destroy_agent)(void*), const std::string& message) {
@@ -405,6 +431,30 @@ void print_json(const ProbeResult& result) {
         << ",\"update_body\":" << escape_json(result.update_body)
         << ",\"sdcard_update_body\":" << escape_json(result.sdcard_update_body)
         << ",\"restored_login\":" << (result.restored_login ? "true" : "false")
+        << ",\"cloud_version_messages\":" << result.cloud_version_messages
+        << ",\"cloud_status_messages\":" << result.cloud_status_messages
+        << ",\"local_version_messages\":" << result.local_version_messages
+        << ",\"local_status_messages\":" << result.local_status_messages
+        << ",\"printer_connected_callbacks\":" << result.printer_connected_callbacks
+        << ",\"local_connect_callbacks\":" << result.local_connect_callbacks
+        << ",\"operation_posts\":" << result.operation_posts
+        << ",\"status_requests_zero_posts\":" << (result.status_requests_zero_posts ? "true" : "false")
+        << ",\"status_request_lookalikes_exact\":" << (result.status_request_lookalikes_exact ? "true" : "false")
+        << ",\"native_actions_exact\":" << (result.native_actions_exact ? "true" : "false")
+        << ",\"cloud_unsupported_exact\":" << (result.cloud_unsupported_exact ? "true" : "false")
+        << ",\"local_unsupported_exact\":" << (result.local_unsupported_exact ? "true" : "false")
+        << ",\"cloud_invalid_native_exact\":" << (result.cloud_invalid_native_exact ? "true" : "false")
+        << ",\"local_invalid_native_exact\":" << (result.local_invalid_native_exact ? "true" : "false")
+        << ",\"cloud_requests_exact\":" << (result.cloud_requests_exact ? "true" : "false")
+        << ",\"lan_connect_exact\":" << (result.lan_connect_exact ? "true" : "false")
+        << ",\"local_requests_exact\":" << (result.local_requests_exact ? "true" : "false")
+        << ",\"callback_tunnels_exact\":" << (result.callback_tunnels_exact ? "true" : "false")
+        << ",\"local_only_refresh_exact\":" << (result.local_only_refresh_exact ? "true" : "false")
+        << ",\"local_replacement_exact\":" << (result.local_replacement_exact ? "true" : "false")
+        << ",\"disconnect_exact\":" << (result.disconnect_exact ? "true" : "false")
+        << ",\"same_serial_exact\":" << (result.same_serial_exact ? "true" : "false")
+        << ",\"cloud_status_body\":" << escape_json(result.cloud_status_body)
+        << ",\"local_status_body\":" << escape_json(result.local_status_body)
         << "}\n";
 }
 
@@ -418,18 +468,80 @@ void ft_result_cb(void* user, ft_job_result result) {
     *out = result.ec;
 }
 
+struct TunnelCapture {
+    std::atomic<int> version_messages{0};
+    std::atomic<int> status_messages{0};
+    std::mutex mutex;
+    std::map<std::string, int> version_by_device;
+    std::map<std::string, int> status_by_device;
+    std::map<std::string, std::string> status_body_by_device;
+};
+
+void capture_tunnel_message(TunnelCapture& capture, const std::string& dev_id, const std::string& body) {
+    const bool is_version = contains(body, R"("command":"get_version")");
+    const bool is_status = contains(body, R"("command":"push_status")");
+    if (!is_version && !is_status) return;
+    std::lock_guard<std::mutex> lock(capture.mutex);
+    if (is_version) {
+        ++capture.version_messages;
+        ++capture.version_by_device[dev_id];
+    }
+    if (is_status) {
+        ++capture.status_messages;
+        ++capture.status_by_device[dev_id];
+        capture.status_body_by_device[dev_id] = body;
+    }
+}
+
+int status_count(TunnelCapture& capture, const std::string& dev_id) {
+    std::lock_guard<std::mutex> lock(capture.mutex);
+    return capture.status_by_device[dev_id];
+}
+
+int version_count(TunnelCapture& capture, const std::string& dev_id) {
+    std::lock_guard<std::mutex> lock(capture.mutex);
+    return capture.version_by_device[dev_id];
+}
+
+std::string status_body(TunnelCapture& capture, const std::string& dev_id) {
+    std::lock_guard<std::mutex> lock(capture.mutex);
+    return capture.status_body_by_device[dev_id];
+}
+
+bool wait_until(const std::function<bool()>& ready) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(3500);
+    while (!ready() && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    }
+    return ready();
+}
+
+int hub_operation_count() {
+    const char* hub_url = std::getenv("PANDAR_PLUGIN_HUB_URL");
+    if (!hub_url || hub_url[0] == '\0') return -1;
+    const auto response = http_request(
+        hub_url,
+        "GET /probe-operation-count HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+    );
+    const auto body = http_body(response);
+    const auto marker = body.find(R"("count":)");
+    if (marker == std::string::npos) return -1;
+    return std::stoi(body.substr(marker + 8));
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc < 3) {
-        std::cerr << "usage: studio_abi_probe <plugin-library> <artifact-path> [success|failure|stale-token-refresh]\n";
+    if (argc < 5) {
+        std::cerr << "usage: studio_abi_probe <plugin-library> <artifact-path> <mode> <config-dir>\n";
         return 2;
     }
-    const std::string mode = argc >= 4 ? argv[3] : "success";
+    const std::string mode = argv[3];
     const bool failure_mode = mode == "failure";
     const bool stale_token_mode = mode == "stale-token-refresh";
-    if (!failure_mode && !stale_token_mode && mode != "success") {
-        std::cerr << "mode must be success, failure, or stale-token-refresh\n";
+    const bool native_print_error_mode = mode == "native-print-error";
+    if (!failure_mode && !stale_token_mode && !native_print_error_mode && mode != "success") {
+        std::cerr << "mode must be success, failure, stale-token-refresh, or native-print-error\n";
         return 2;
     }
 
@@ -452,11 +564,13 @@ int main(int argc, char** argv) {
     using start_print_fn = int (*)(void*, BBL::PrintParams, BBL::OnUpdateStatusFn, BBL::WasCancelledFn, BBL::OnWaitFn);
     using start_sdcard_fn = int (*)(void*, BBL::PrintParams, BBL::OnUpdateStatusFn, BBL::WasCancelledFn, BBL::OnWaitFn);
     using connect_printer_fn = int (*)(void*, std::string, std::string, std::string, std::string, bool);
+    using disconnect_printer_fn = int (*)(void*);
     using send_cloud_fn = int (*)(void*, std::string, std::string, int, int);
     using send_printer_fn = int (*)(void*, std::string, std::string, int, int);
     using selected_machine_fn = int (*)(void*, std::string);
     using start_subscribe_fn = int (*)(void*, std::string);
     using add_subscribe_fn = int (*)(void*, std::vector<std::string>);
+    using del_subscribe_fn = int (*)(void*, std::vector<std::string>);
     using set_printer_connected_fn = int (*)(void*, BBL::OnPrinterConnectedFn);
     using set_server_connected_fn = int (*)(void*, BBL::OnServerConnectedFn);
     using set_local_connect_fn = int (*)(void*, BBL::OnLocalConnectedFn);
@@ -485,11 +599,13 @@ int main(int argc, char** argv) {
     auto start_print = lib.sym<start_print_fn>("bambu_network_start_print");
     auto start_sdcard_print = lib.sym<start_sdcard_fn>("bambu_network_start_send_gcode_to_sdcard");
     auto connect_printer = lib.sym<connect_printer_fn>("bambu_network_connect_printer");
+    auto disconnect_printer = lib.sym<disconnect_printer_fn>("bambu_network_disconnect_printer");
     auto send_cloud = lib.sym<send_cloud_fn>("bambu_network_send_message");
     auto send_printer = lib.sym<send_printer_fn>("bambu_network_send_message_to_printer");
     auto set_selected_machine = lib.sym<selected_machine_fn>("bambu_network_set_user_selected_machine");
     auto start_subscribe = lib.sym<start_subscribe_fn>("bambu_network_start_subscribe");
     auto add_subscribe = lib.sym<add_subscribe_fn>("bambu_network_add_subscribe");
+    auto del_subscribe = lib.sym<del_subscribe_fn>("bambu_network_del_subscribe");
     auto set_printer_connected = lib.sym<set_printer_connected_fn>("bambu_network_set_on_printer_connected_fn");
     auto set_server_connected = lib.sym<set_server_connected_fn>("bambu_network_set_on_server_connected_fn");
     auto set_local_connect = lib.sym<set_local_connect_fn>("bambu_network_set_on_local_connect_fn");
@@ -519,13 +635,7 @@ int main(int argc, char** argv) {
     ProbeResult out;
     void* agent = create_agent("probe-log");
     if (!agent) fail(agent, destroy_agent, "agent creation failed");
-    const std::string config_dir = std::string("probe-config-") + std::to_string(static_cast<long long>(
-#if defined(_WIN32)
-        GetCurrentProcessId()
-#else
-        getpid()
-#endif
-    ));
+    const std::string config_dir = argv[4];
     if (stale_token_mode) write_stale_login_state(config_dir);
     if (set_config_dir(agent, config_dir) != 0) fail(agent, destroy_agent, "set config dir failed");
 
@@ -613,6 +723,375 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "printer listing failed");
     } else if (get_selected_machine(agent) != "studio-serial-1") {
         fail(agent, destroy_agent, "printer listing did not seed Studio selected machine");
+    }
+
+    if (native_print_error_mode) {
+        if (connect_server(agent) != 0 || !is_server_connected(agent)) {
+            fail(agent, destroy_agent, "native probe could not establish healthy server state");
+        }
+        TunnelCapture cloud;
+        TunnelCapture local;
+        std::atomic<int> printer_connected_callbacks{0};
+        std::atomic<int> local_connect_callbacks{0};
+        auto cloud_callback = [&cloud](std::string dev_id, std::string body) {
+            capture_tunnel_message(cloud, dev_id, body);
+        };
+        auto local_callback = [&local](std::string dev_id, std::string body) {
+            capture_tunnel_message(local, dev_id, body);
+        };
+        if (set_message(agent, cloud_callback) != 0 ||
+            set_local_message(agent, local_callback) != 0 ||
+            set_printer_connected(agent, [&printer_connected_callbacks](std::string) {
+                ++printer_connected_callbacks;
+            }) != 0 ||
+            set_local_connect(agent, [&local_connect_callbacks](int status, std::string, std::string) {
+                if (status == 0) ++local_connect_callbacks;
+            }) != 0) {
+            fail(agent, destroy_agent, "native callback registration failed");
+        }
+
+        del_subscribe(agent, {"studio-serial-2", "studio-serial-3"});
+        add_subscribe(agent, {"studio-serial-1"});
+
+        const int cloud_version_before = cloud.version_messages.load();
+        const int cloud_status_before = cloud.status_messages.load();
+        const int local_version_before = local.version_messages.load();
+        const int local_status_before = local.status_messages.load();
+        const int cloud_version_rc = send_cloud(
+            agent,
+            "studio-serial-1",
+            R"({"info":{"command":"get_version","sequence_id":"30001"}})",
+            0,
+            0
+        );
+        const bool cloud_version_exact =
+            cloud_version_rc == 0 &&
+            cloud.version_messages.load() == cloud_version_before + 1 &&
+            cloud.status_messages.load() == cloud_status_before &&
+            local.version_messages.load() == local_version_before &&
+            local.status_messages.load() == local_status_before;
+
+        const int cloud_status_request_before = cloud.status_messages.load();
+        const int cloud_version_after_get = cloud.version_messages.load();
+        const int cloud_push_rc = send_cloud(
+            agent,
+            "studio-serial-1",
+            R"({"pushing":{"command":"pushall","sequence_id":"30002","version":1,"push_target":1}})",
+            0,
+            0
+        );
+        const bool cloud_push_exact =
+            cloud_push_rc == 0 &&
+            cloud.status_messages.load() == cloud_status_request_before + 1 &&
+            cloud.version_messages.load() == cloud_version_after_get &&
+            local.version_messages.load() == local_version_before &&
+            local.status_messages.load() == local_status_before;
+        const int cloud_heartbeat_before = status_count(cloud, "studio-serial-1");
+        const bool cloud_heartbeat = wait_until([&] {
+            return status_count(cloud, "studio-serial-1") > cloud_heartbeat_before;
+        });
+        out.cloud_requests_exact = cloud_version_exact && cloud_push_exact && cloud_heartbeat;
+
+        del_subscribe(agent, {"studio-serial-2"});
+        send_cloud(
+            agent,
+            "studio-serial-1",
+            R"({"pushing":{"command":"pushall","sequence_id":"30003","version":1,"push_target":1}})",
+            0,
+            0
+        );
+        const int local_cloud_before = status_count(cloud, "studio-serial-2");
+        const std::string selected_before_local = get_selected_machine(agent);
+        const int printer_connected_before = printer_connected_callbacks.load();
+        const int local_connect_before = local_connect_callbacks.load();
+        const int cloud_messages_before_connect =
+            cloud.version_messages.load() + cloud.status_messages.load();
+        const int local_messages_before_connect =
+            local.version_messages.load() + local.status_messages.load();
+        const int local_connect_rc = connect_printer(
+            agent,
+            "studio-serial-2",
+            "127.0.0.1",
+            "user",
+            "pass",
+            false
+        );
+        out.lan_connect_exact =
+            local_connect_rc == 0 &&
+            local_connect_callbacks.load() == local_connect_before + 1 &&
+            printer_connected_callbacks.load() == printer_connected_before &&
+            cloud.version_messages.load() + cloud.status_messages.load() == cloud_messages_before_connect &&
+            local.version_messages.load() + local.status_messages.load() == local_messages_before_connect &&
+            get_selected_machine(agent) == selected_before_local;
+        set_selected_machine(agent, selected_before_local);
+
+        const int operation_posts_before = hub_operation_count();
+        const int local_version_request_before = version_count(local, "studio-serial-2");
+        const int local_status_request_before = status_count(local, "studio-serial-2");
+        const int cloud_messages_before_local_requests =
+            cloud.version_messages.load() + cloud.status_messages.load();
+        const int local_version_rc = send_printer(
+            agent,
+            "studio-serial-2",
+            R"({"info":{"command":"get_version","sequence_id":"30004"}})",
+            0,
+            0
+        );
+        const bool local_version_exact =
+            local_version_rc == 0 &&
+            version_count(local, "studio-serial-2") == local_version_request_before + 1 &&
+            status_count(local, "studio-serial-2") == local_status_request_before &&
+            cloud.version_messages.load() + cloud.status_messages.load() == cloud_messages_before_local_requests;
+        const int local_version_after_get = version_count(local, "studio-serial-2");
+        const int local_push_rc = send_printer(
+            agent,
+            "studio-serial-2",
+            R"({"pushing":{"command":"pushall","sequence_id":"30005","version":1,"push_target":1}})",
+            0,
+            0
+        );
+        const bool local_push_exact =
+            local_push_rc == 0 &&
+            status_count(local, "studio-serial-2") == local_status_request_before + 1 &&
+            version_count(local, "studio-serial-2") == local_version_after_get &&
+            cloud.version_messages.load() + cloud.status_messages.load() == cloud_messages_before_local_requests;
+        const int local_heartbeat_before = status_count(local, "studio-serial-2");
+        const bool local_heartbeat = wait_until([&] {
+            return status_count(local, "studio-serial-2") > local_heartbeat_before;
+        });
+        const bool local_stayed_out_of_cloud =
+            status_count(cloud, "studio-serial-2") == local_cloud_before;
+        const int operation_posts_after = hub_operation_count();
+        out.local_requests_exact =
+            local_version_exact &&
+            local_push_exact &&
+            local_heartbeat &&
+            operation_posts_before == operation_posts_after;
+        out.local_only_refresh_exact = local_heartbeat && local_stayed_out_of_cloud;
+        out.local_status_body = status_body(local, "studio-serial-2");
+
+        out.status_requests_zero_posts = hub_operation_count() == 0;
+        const std::vector<std::string> cloud_native_actions = {
+            R"({"print":{"command":"resume","err":"83918929","job_id":"cloud-resume-get_version-pushall","param":"reserve","sequence_id":"20042"}})",
+            R"({"print":{"command":"ignore","err":"83918929","job_id":"cloud-ignore-get_version-pushall","param":"reserve","sequence_id":"20043"}})",
+            R"({"print":{"command":"stop","err":"83918929","job_id":"cloud-stop-get_version-pushall","param":"reserve","sequence_id":"20044"}})",
+        };
+        const std::vector<std::string> local_native_actions = {
+            R"({"print":{"command":"resume","err":"83918929","job_id":"local-resume-get_version-pushall","param":"reserve","sequence_id":"20045"}})",
+            R"({"print":{"command":"ignore","err":"83918929","job_id":"local-ignore-get_version-pushall","param":"reserve","sequence_id":"20046"}})",
+            R"({"print":{"command":"stop","err":"83918929","job_id":"local-stop-get_version-pushall","param":"reserve","sequence_id":"20047"}})",
+        };
+        auto valid_actions_exact = [&](auto send, const std::string& dev_id, const std::vector<std::string>& messages) {
+            bool exact = true;
+            for (const auto& native_message : messages) {
+                const int before = hub_operation_count();
+                const bool connected_before = is_server_connected(agent);
+                const int rc = send(agent, dev_id, native_message, 1, 0);
+                const int after = hub_operation_count();
+                exact = exact && before >= 0 && connected_before && rc == 0 &&
+                    after == before + 1 && is_server_connected(agent);
+            }
+            return exact;
+        };
+        out.native_actions_exact =
+            valid_actions_exact(send_cloud, "studio-serial-1", cloud_native_actions) &&
+            valid_actions_exact(send_printer, "studio-serial-2", local_native_actions);
+
+        const std::vector<std::string> status_lookalikes = {
+            R"({"pushing":{"command":"not_pushall","sequence_id":"30008"}})",
+            R"({"info":{"command":"not_get_version","sequence_id":"30009"}})",
+        };
+        auto cloud_lookalikes_exact = [&] {
+            bool exact = true;
+            for (const auto& message : status_lookalikes) {
+                const int before_posts = hub_operation_count();
+                const int before_versions = version_count(cloud, "studio-status-lookalike");
+                const int before_statuses = status_count(cloud, "studio-status-lookalike");
+                const bool connected_before = is_server_connected(agent);
+                const int rc = send_cloud(agent, "studio-status-lookalike", message, 1, 0);
+                exact = exact && before_posts >= 0 && connected_before && rc == 0 &&
+                    hub_operation_count() == before_posts && is_server_connected(agent) &&
+                    version_count(cloud, "studio-status-lookalike") == before_versions &&
+                    status_count(cloud, "studio-status-lookalike") == before_statuses;
+            }
+            return exact;
+        };
+        auto local_lookalikes_exact = [&] {
+            bool exact = true;
+            for (const auto& message : status_lookalikes) {
+                const int before_posts = hub_operation_count();
+                const int before_versions = version_count(local, "studio-status-lookalike");
+                const int before_statuses = status_count(local, "studio-status-lookalike");
+                const bool connected_before = is_server_connected(agent);
+                const int rc = send_printer(agent, "studio-status-lookalike", message, 1, 0);
+                const bool unhealthy = !is_server_connected(agent);
+                const bool recovered = refresh_connection(agent) == 0 && is_server_connected(agent);
+                exact = exact && before_posts >= 0 && connected_before &&
+                    rc == kBambuInvalidResult && hub_operation_count() == before_posts &&
+                    version_count(local, "studio-status-lookalike") == before_versions &&
+                    status_count(local, "studio-status-lookalike") == before_statuses &&
+                    unhealthy && recovered;
+            }
+            return exact;
+        };
+        out.status_request_lookalikes_exact =
+            cloud_lookalikes_exact() && local_lookalikes_exact();
+
+        int before_outcome = hub_operation_count();
+        const bool cloud_unsupported_connected_before = is_server_connected(agent);
+        const int cloud_unsupported_rc = send_cloud(
+            agent,
+            "studio-serial-1",
+            R"({"print":{"command":"unrelated"}})",
+            1,
+            0
+        );
+        out.cloud_unsupported_exact =
+            before_outcome >= 0 && cloud_unsupported_connected_before &&
+            cloud_unsupported_rc == 0 && hub_operation_count() == before_outcome &&
+            is_server_connected(agent);
+
+        before_outcome = hub_operation_count();
+        const bool local_unsupported_connected_before = is_server_connected(agent);
+        const int local_unsupported_rc = send_printer(
+            agent,
+            "studio-serial-2",
+            R"({"print":{"command":"unrelated"}})",
+            1,
+            0
+        );
+        const bool local_unsupported_unhealthy = !is_server_connected(agent);
+        const bool local_unsupported_recovered =
+            refresh_connection(agent) == 0 && is_server_connected(agent);
+        out.local_unsupported_exact =
+            before_outcome >= 0 && local_unsupported_connected_before &&
+            local_unsupported_rc == kBambuInvalidResult &&
+            hub_operation_count() == before_outcome && local_unsupported_unhealthy &&
+            local_unsupported_recovered;
+
+        const std::string invalid_native =
+            R"({"print":{"command":"resume","err":"0","job_id":"","param":"reserve","sequence_id":"20048"}})";
+        before_outcome = hub_operation_count();
+        const bool cloud_invalid_connected_before = is_server_connected(agent);
+        const int cloud_invalid_rc = send_cloud(
+            agent,
+            "studio-serial-1",
+            invalid_native,
+            1,
+            0
+        );
+        const bool cloud_invalid_unhealthy = !is_server_connected(agent);
+        const bool cloud_invalid_recovered =
+            refresh_connection(agent) == 0 && is_server_connected(agent);
+        out.cloud_invalid_native_exact =
+            before_outcome >= 0 && cloud_invalid_connected_before &&
+            cloud_invalid_rc == kBambuInvalidResult &&
+            hub_operation_count() == before_outcome && cloud_invalid_unhealthy &&
+            cloud_invalid_recovered;
+
+        before_outcome = hub_operation_count();
+        const bool local_invalid_connected_before = is_server_connected(agent);
+        const int local_invalid_rc = send_printer(
+            agent,
+            "studio-serial-2",
+            invalid_native,
+            1,
+            0
+        );
+        const bool local_invalid_unhealthy = !is_server_connected(agent);
+        const bool local_invalid_recovered =
+            refresh_connection(agent) == 0 && is_server_connected(agent);
+        out.local_invalid_native_exact =
+            before_outcome >= 0 && local_invalid_connected_before &&
+            local_invalid_rc == kBambuInvalidResult &&
+            hub_operation_count() == before_outcome && local_invalid_unhealthy &&
+            local_invalid_recovered;
+
+        const int local_messages_before_missing_cloud =
+            local.version_messages.load() + local.status_messages.load();
+        set_message(agent, {});
+        const int missing_cloud_rc = send_cloud(
+            agent,
+            "studio-serial-1",
+            R"({"info":{"command":"get_version","sequence_id":"30006"}})",
+            0,
+            0
+        );
+        const bool missing_cloud_did_not_fallback =
+            missing_cloud_rc == 0 &&
+            local.version_messages.load() + local.status_messages.load() == local_messages_before_missing_cloud;
+        set_message(agent, cloud_callback);
+
+        const int cloud_messages_before_missing_local =
+            cloud.version_messages.load() + cloud.status_messages.load();
+        set_local_message(agent, {});
+        const int missing_local_rc = send_printer(
+            agent,
+            "studio-serial-2",
+            R"({"info":{"command":"get_version","sequence_id":"30007"}})",
+            0,
+            0
+        );
+        const bool missing_local_did_not_fallback =
+            missing_local_rc == 0 &&
+            cloud.version_messages.load() + cloud.status_messages.load() == cloud_messages_before_missing_local;
+        set_local_message(agent, local_callback);
+        out.callback_tunnels_exact =
+            missing_cloud_did_not_fallback && missing_local_did_not_fallback;
+
+        const int local2_before_replacement = status_count(local, "studio-serial-2");
+        const int local3_before_replacement = status_count(local, "studio-serial-3");
+        const int replacement_connect_before = local_connect_callbacks.load();
+        const std::string selected_before_replacement = get_selected_machine(agent);
+        const int replacement_rc = connect_printer(
+            agent,
+            "studio-serial-3",
+            "127.0.0.1",
+            "user",
+            "pass",
+            false
+        );
+        const bool replacement_heartbeat = wait_until([&] {
+            return status_count(local, "studio-serial-3") > local3_before_replacement;
+        });
+        out.local_replacement_exact =
+            replacement_rc == 0 &&
+            local_connect_callbacks.load() == replacement_connect_before + 1 &&
+            get_selected_machine(agent) == selected_before_replacement &&
+            replacement_heartbeat &&
+            status_count(local, "studio-serial-2") == local2_before_replacement;
+        set_selected_machine(agent, selected_before_replacement);
+
+        add_subscribe(agent, {"studio-serial-3"});
+        const int same_cloud_before = status_count(cloud, "studio-serial-3");
+        const int same_local_before = status_count(local, "studio-serial-3");
+        out.same_serial_exact = wait_until([&] {
+            return status_count(cloud, "studio-serial-3") > same_cloud_before &&
+                status_count(local, "studio-serial-3") > same_local_before;
+        });
+
+        const int disconnect_local_before = status_count(local, "studio-serial-3");
+        const int disconnect_cloud_before = status_count(cloud, "studio-serial-1");
+        const int disconnect_rc = disconnect_printer(agent);
+        const bool cloud_advanced_after_disconnect = wait_until([&] {
+            return status_count(cloud, "studio-serial-1") > disconnect_cloud_before;
+        });
+        out.disconnect_exact =
+            disconnect_rc == 0 &&
+            cloud_advanced_after_disconnect &&
+            status_count(local, "studio-serial-3") == disconnect_local_before;
+
+        out.cloud_version_messages = cloud.version_messages.load();
+        out.cloud_status_messages = cloud.status_messages.load();
+        out.local_version_messages = local.version_messages.load();
+        out.local_status_messages = local.status_messages.load();
+        out.printer_connected_callbacks = printer_connected_callbacks.load();
+        out.local_connect_callbacks = local_connect_callbacks.load();
+        out.operation_posts = hub_operation_count();
+        out.cloud_status_body = status_body(cloud, "studio-serial-1");
+        destroy_agent(agent);
+        print_json(out);
+        return 0;
     }
 
     if (!failure_mode) {
@@ -929,11 +1408,19 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "cloud printer connection callback repeated after later status pushes");
     }
     before_messages = message_count.load();
+    const auto selected_before_direct_connect = get_selected_machine(agent);
+    const auto direct_cloud_callbacks_before = cloud_printer_connected_callbacks.load();
     out.direct_connect_rc = connect_printer(agent, "studio-serial-1", "127.0.0.1", "user", "pass", false);
     out.connect_messages = message_count.load() - before_messages;
     out.direct_message_rc = send_printer(agent, "studio-serial-1", "G28 X", 0, 0);
-    if (!failure_mode && (out.direct_connect_rc != 0 || !out.direct_connect_callback || !out.local_connect_callback || !out.message_callback || out.connect_messages == 0)) {
-        fail(agent, destroy_agent, "direct printer connect did not report Studio connection success");
+    if (!failure_mode &&
+        (out.direct_connect_rc != 0 ||
+         out.direct_connect_callback ||
+         !out.local_connect_callback ||
+         out.connect_messages != 0 ||
+         cloud_printer_connected_callbacks.load() != direct_cloud_callbacks_before ||
+         get_selected_machine(agent) != selected_before_direct_connect)) {
+        fail(agent, destroy_agent, "direct printer connect did not preserve the LAN callback split");
     }
     if (failure_mode) {
         if (out.direct_message_rc == 0) {
@@ -1011,20 +1498,28 @@ int main(int argc, char** argv) {
     }
 
     if (!failure_mode && !stale_token_mode) {
-        void* lan_agent = create_agent("probe-lan-only");
+        void* lan_agent = create_agent("");
         if (!lan_agent) fail(agent, destroy_agent, "LAN-only agent creation failed");
         std::atomic<int> lan_tunnel_callbacks{0};
         std::atomic<int> lan_direct_callbacks{0};
-        if (set_printer_connected(lan_agent, [&lan_tunnel_callbacks, &lan_direct_callbacks](std::string dev_id) {
+        std::atomic<int> lan_local_callbacks{0};
+        const auto lan_config_dir = (std::filesystem::path(config_dir) / "lan-only").string();
+        if (set_config_dir(lan_agent, lan_config_dir) != 0 ||
+            set_printer_connected(lan_agent, [&lan_tunnel_callbacks, &lan_direct_callbacks](std::string dev_id) {
             if (dev_id == "tunnel/lan-only") ++lan_tunnel_callbacks;
             if (dev_id == "lan-only") ++lan_direct_callbacks;
         }) != 0 ||
+            set_local_connect(lan_agent, [&lan_local_callbacks](int status, std::string dev_id, std::string) {
+                if (status == 0 && dev_id == "lan-only") ++lan_local_callbacks;
+            }) != 0 ||
             connect_printer(lan_agent, "lan-only", "127.0.0.1", "user", "pass", false) != 0) {
             destroy_agent(lan_agent);
             fail(agent, destroy_agent, "LAN-only printer connection failed");
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(2500));
-        if (lan_direct_callbacks.load() != 1 || lan_tunnel_callbacks.load() != 0) {
+        if (lan_direct_callbacks.load() != 0 ||
+            lan_tunnel_callbacks.load() != 0 ||
+            lan_local_callbacks.load() != 1) {
             destroy_agent(lan_agent);
             fail(agent, destroy_agent, "LAN-only printer was reclassified as a cloud tunnel");
         }

@@ -4,6 +4,7 @@ use tonic::Status;
 mod conversion;
 pub use conversion::{
     CommandConversionOptions, hub_command_from_record, hub_command_from_record_with_options,
+    live_printer_operation_hub_command,
 };
 
 use crate::{

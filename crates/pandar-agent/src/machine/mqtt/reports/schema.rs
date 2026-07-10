@@ -17,6 +17,8 @@ pub(crate) struct PrintReportEnvelope {
 pub(super) struct PrintReportSection {
     #[serde(default)]
     pub(super) task_id: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_printer_job_id")]
+    pub(super) job_id: Option<String>,
     #[serde(default)]
     pub(super) subtask_id: Option<String>,
     #[serde(default)]
@@ -34,7 +36,7 @@ pub(super) struct PrintReportSection {
     #[serde(default)]
     pub(super) subtask_name: Option<String>,
     #[serde(default)]
-    pub(super) print_error: Option<DiagnosticValue>,
+    pub(super) print_error: Option<PrintErrorValue>,
     #[serde(default)]
     pub(super) hms: Option<Vec<PrintHmsItem>>,
     #[serde(flatten)]
@@ -46,6 +48,13 @@ pub(super) struct PrintReportSection {
 pub(super) enum NumericValue {
     Number(Number),
     String(String),
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(super) enum PrintErrorValue {
+    Number(Number),
+    Diagnostic(DiagnosticValue),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,6 +135,29 @@ impl DiagnosticValue {
             Self::Object(object) => object.payload(),
             Self::String(value) => MachineReportDiagnosticPayload::String(value.clone()),
             Self::Other(value) => MachineReportDiagnosticPayload::from(value.clone()),
+        }
+    }
+}
+
+impl PrintErrorValue {
+    pub(super) fn state(&self) -> Option<u32> {
+        match self {
+            Self::Number(number) => studio_print_error(number),
+            Self::Diagnostic(_) => None,
+        }
+    }
+
+    pub(super) fn diagnostic(&self) -> Option<&DiagnosticValue> {
+        match self {
+            Self::Diagnostic(value)
+                if matches!(
+                    value,
+                    DiagnosticValue::Object(_) | DiagnosticValue::String(_)
+                ) =>
+            {
+                Some(value)
+            }
+            Self::Number(_) | Self::Diagnostic(_) => None,
         }
     }
 }
@@ -305,4 +337,46 @@ fn json_text(value: &impl Serialize) -> Option<String> {
     serde_json::to_string(value)
         .ok()
         .filter(|message| !message.is_empty())
+}
+
+fn studio_print_error(number: &serde_json::Number) -> Option<u32> {
+    if let Some(value) = number.as_i64() {
+        return i32::try_from(value).ok().map(|value| value.max(0) as u32);
+    }
+    if let Some(value) = number.as_u64() {
+        return i32::try_from(value).ok().map(|value| value as u32);
+    }
+    let value = number.as_f64()?;
+    (value.is_finite() && value >= i32::MIN as f64 && value <= i32::MAX as f64)
+        .then(|| value.trunc().max(0.0) as u32)
+}
+
+fn studio_printer_job_id(value: &ReportJson) -> String {
+    match value {
+        ReportJson::String(value) => value.clone(),
+        ReportJson::Number(number) if number.as_i64().is_some() => {
+            number.as_i64().expect("checked above").to_string()
+        }
+        ReportJson::Number(number) if number.as_u64().is_some() => {
+            i64::try_from(number.as_u64().expect("checked above"))
+                .map(|value| value.to_string())
+                .unwrap_or_default()
+        }
+        ReportJson::Number(number) => number
+            .as_f64()
+            .filter(|value| value.is_finite())
+            .filter(|value| *value >= -9_223_372_036_854_775_808.0)
+            .filter(|value| *value < 9_223_372_036_854_775_808.0)
+            .map(|value| (value.trunc() as i64).to_string())
+            .unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
+fn deserialize_printer_job_id<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = ReportJson::deserialize(deserializer)?;
+    Ok(Some(studio_printer_job_id(&value)))
 }

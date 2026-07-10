@@ -10,6 +10,7 @@ pub(super) fn printer_operation_action(operation: &MachinePrinterOperation) -> &
         MachinePrinterOperation::Pause => "pause",
         MachinePrinterOperation::Resume => "resume",
         MachinePrinterOperation::Stop => "stop",
+        MachinePrinterOperation::HandlePrintError { .. } => "handle_print_error",
         MachinePrinterOperation::ToggleLight => "toggle_light",
         MachinePrinterOperation::SetChamberLight(_) => "set_chamber_light",
         MachinePrinterOperation::SetPrintSpeed(_) => "set_print_speed",
@@ -186,6 +187,7 @@ impl OperationResultFields {
             MachinePrinterOperation::Pause
             | MachinePrinterOperation::Resume
             | MachinePrinterOperation::Stop
+            | MachinePrinterOperation::HandlePrintError { .. }
             | MachinePrinterOperation::ToggleLight => Self::default(),
         }
     }

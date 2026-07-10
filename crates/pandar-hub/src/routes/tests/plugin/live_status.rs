@@ -35,6 +35,18 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
         .await
         .unwrap();
 
+    let (status, body) = request_as(
+        app.clone(),
+        Method::GET,
+        "/api/v1/plugin/printers",
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body["devices"][0].get("print_error").is_none());
+    assert!(body["devices"][0].get("job_id").is_none());
+
     state
         .jobs()
         .apply_print_report(crate::repositories::ApplyPrintReport {
@@ -43,6 +55,8 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
             serial: "studio-live-printer".to_string(),
             task_id: Some("mqtt-task-9001".to_string()),
             job_id: None,
+            print_error: Some(83_918_929),
+            printer_job_id: Some("studio-job".to_string()),
             artifact_id: None,
             subtask_id: Some("subtask-12".to_string()),
             gcode_file: Some("external.gcode.3mf".to_string()),
@@ -72,6 +86,8 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["devices"][0]["print_error"], 83_918_929);
+    assert_eq!(body["devices"][0]["job_id"], "studio-job");
     let body = decode::<PluginPrinterListResponse>(body);
     let device = &body.devices[0];
     assert_eq!(device.gcode_state.as_deref(), Some("RUNNING"));
@@ -99,6 +115,8 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
             serial: "studio-live-printer".to_string(),
             task_id: None,
             job_id: None,
+            print_error: None,
+            printer_job_id: None,
             artifact_id: None,
             subtask_id: None,
             gcode_file: None,
@@ -125,6 +143,8 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
     )
     .await;
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["devices"][0]["print_error"], 83_918_929);
+    assert_eq!(body["devices"][0]["job_id"], "studio-job");
     let device = decode::<PluginPrinterListResponse>(body)
         .devices
         .pop()
@@ -152,9 +172,17 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
     .await
     .unwrap();
 
-    let (status, body) =
-        request_as(app, Method::GET, "/api/v1/plugin/printers", None, &token).await;
+    let (status, body) = request_as(
+        app.clone(),
+        Method::GET,
+        "/api/v1/plugin/printers",
+        None,
+        &token,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["devices"][0]["print_error"], 83_918_929);
+    assert_eq!(body["devices"][0]["job_id"], "studio-job");
     let device = decode::<PluginPrinterListResponse>(body)
         .devices
         .pop()
@@ -163,4 +191,40 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
     assert_eq!(device.task_status, "unknown");
     assert_eq!(device.state, "unknown");
     assert!(!device.online);
+
+    state
+        .jobs()
+        .apply_print_report(crate::repositories::ApplyPrintReport {
+            tenant_id: tenant.id,
+            agent_id: agent.id,
+            serial: "studio-live-printer".to_string(),
+            task_id: None,
+            job_id: None,
+            print_error: None,
+            printer_job_id: Some(" \t ".to_string()),
+            artifact_id: None,
+            subtask_id: None,
+            gcode_file: None,
+            subtask_name: None,
+            gcode_state: None,
+            percent: None,
+            remaining_time_minutes: None,
+            current_layer: None,
+            total_layers: None,
+            hms: None,
+            diagnostics: Vec::new(),
+            printer_materials_json: String::new(),
+            observed_at: "2026-07-09T10:02:00Z".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let (status, body) =
+        request_as(app, Method::GET, "/api/v1/plugin/printers", None, &token).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["devices"][0]["print_error"], 83_918_929);
+    assert_eq!(
+        body["devices"][0]["job_id"].as_str().unwrap().as_bytes(),
+        b" \t "
+    );
 }

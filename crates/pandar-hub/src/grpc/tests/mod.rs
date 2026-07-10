@@ -509,5 +509,6 @@ fn hello(credential: &str) -> AgentHello {
         name: "agent".to_string(),
         version: "0.1.0".to_string(),
         credential: credential.to_string(),
+        capabilities: Vec::new(),
     }
 }

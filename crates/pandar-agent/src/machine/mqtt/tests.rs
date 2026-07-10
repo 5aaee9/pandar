@@ -13,6 +13,7 @@ use crate::{
 
 mod fixtures;
 mod hms;
+mod print_error;
 mod snapshot;
 mod tls;
 
@@ -957,7 +958,7 @@ fn print_report_diagnostic_payload_includes_raw_print_report() {
         "print": {
             "gcode_state": "FAILED",
             "mc_percent": 0,
-            "print_error": 0,
+            "print_error": "nozzle mismatch",
             "reason": "reject_nozzle_mismatch",
             "result": "fail"
         }
@@ -967,7 +968,7 @@ fn print_report_diagnostic_payload_includes_raw_print_report() {
 
     assert_eq!(progress.diagnostics.len(), 1);
     let payload = serde_json::to_value(&progress.diagnostics[0].payload).unwrap();
-    assert_eq!(payload["print_error"], 0);
+    assert_eq!(payload["print_error"], "nozzle mismatch");
     assert_eq!(payload["raw_print"]["gcode_state"], "FAILED");
     assert_eq!(payload["raw_print"]["reason"], "reject_nozzle_mismatch");
     assert_eq!(payload["raw_print"]["result"], "fail");
@@ -1001,6 +1002,8 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
     let progress = PrintReportProgress {
         serial: "01S00EXAMPLE".to_owned(),
         job_id: Some("job-123".to_owned()),
+        print_error: None,
+        printer_job_id: None,
         artifact_id: None,
         subtask_id: None,
         gcode_state: Some("RUNNING".to_owned()),

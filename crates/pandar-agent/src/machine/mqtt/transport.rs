@@ -22,8 +22,8 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 use crate::machine::BambuPrinterEndpoint;
 
 use super::{
-    BAMBU_MQTT_MAX_PACKET_SIZE, BAMBU_MQTT_PORT, BAMBU_MQTT_USERNAME, BambuMqttTransport,
-    PublishedMqttCommand,
+    BAMBU_MQTT_MAX_PACKET_SIZE, BAMBU_MQTT_PORT, BAMBU_MQTT_RETAIN, BAMBU_MQTT_USERNAME,
+    BambuMqttTransport, PublishedMqttCommand, decode_mqtt_report_payload,
 };
 
 pub struct RumqttcBambuMqttTransport {
@@ -252,7 +252,7 @@ impl BambuMqttTransport for RumqttcBambuMqttTransport {
         let payload =
             serde_json::to_vec(&command.payload).context("encode MQTT command payload")?;
         self.client
-            .publish(command.topic.clone(), qos, false, payload)
+            .publish(command.topic.clone(), qos, BAMBU_MQTT_RETAIN, payload)
             .await
             .with_context(|| format!("rumqttc publish {}", command.topic))
     }
@@ -263,8 +263,7 @@ impl BambuMqttTransport for RumqttcBambuMqttTransport {
             loop {
                 match event_loop.poll().await.context("poll rumqttc event loop")? {
                     Event::Incoming(Packet::Publish(publish)) => {
-                        return serde_json::from_slice(publish.payload.as_ref())
-                            .context("decode MQTT report payload as JSON");
+                        return decode_mqtt_report_payload(publish.payload.as_ref());
                     }
                     _ => continue,
                 }

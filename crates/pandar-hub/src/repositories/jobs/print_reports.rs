@@ -30,6 +30,8 @@ pub struct ApplyPrintReport {
     pub serial: String,
     pub task_id: Option<String>,
     pub job_id: Option<JobId>,
+    pub print_error: Option<u32>,
+    pub printer_job_id: Option<String>,
     pub artifact_id: Option<String>,
     pub subtask_id: Option<String>,
     pub gcode_file: Option<String>,
@@ -112,6 +114,8 @@ where
         PrinterLiveStatusPatch {
             task_id: input.task_id.clone(),
             subtask_id: input.subtask_id.clone(),
+            print_error: input.print_error,
+            printer_job_id: input.printer_job_id.clone(),
             progress_percent: input.percent,
             remaining_time_minutes: input.remaining_time_minutes,
             current_layer: input.current_layer,

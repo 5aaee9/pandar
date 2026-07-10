@@ -1,22 +1,60 @@
-pub(super) use operation::PrinterOperation;
+pub(super) use operation::{PrintErrorAction, PrinterOperation};
 
 mod operation;
 mod studio_json;
 
+use crate::{PluginHttpResult, result, stable_error_body};
 use operation::{Axis, AxisMovement};
 
-pub(super) fn operation_json_from_gcode(message: &str) -> Option<PrinterOperation> {
-    if let Some(operation) = studio_json::parse_studio_json_operation(message) {
-        return Some(operation);
+const PARSE_OPERATION: i32 = 0;
+const PARSE_UNSUPPORTED: i32 = 1;
+const PARSE_INVALID_NATIVE: i32 = 2;
+
+pub(crate) enum StudioOperationParse {
+    Operation(PrinterOperation),
+    Unsupported,
+    InvalidNativeCandidate,
+}
+
+pub(super) fn operation_json_from_gcode(message: &str) -> StudioOperationParse {
+    match studio_json::parse_studio_json_operation(message) {
+        StudioOperationParse::Unsupported => {}
+        parsed => return parsed,
     }
 
     let commands = gcode_commands(message);
-    match commands.as_slice() {
+    let operation = match commands.as_slice() {
         [command] => parse_single_command_operation(command),
         [relative, movement] if relative.eq_ignore_ascii_case("G91") => {
             parse_move_axes_operation(movement)
         }
         _ => None,
+    };
+    operation.map_or(
+        StudioOperationParse::Unsupported,
+        StudioOperationParse::Operation,
+    )
+}
+
+impl StudioOperationParse {
+    pub(super) fn into_http_result(self) -> PluginHttpResult {
+        match self {
+            Self::Operation(operation) => result(
+                PARSE_OPERATION,
+                200,
+                serde_json::to_string(&operation).expect("printer operation is serializable"),
+            ),
+            Self::Unsupported => result(
+                PARSE_UNSUPPORTED,
+                400,
+                stable_error_body("unsupported_printer_operation"),
+            ),
+            Self::InvalidNativeCandidate => result(
+                PARSE_INVALID_NATIVE,
+                400,
+                stable_error_body("unsupported_printer_operation"),
+            ),
+        }
     }
 }
 

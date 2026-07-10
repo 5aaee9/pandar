@@ -135,6 +135,12 @@ Important boundaries:
 - The plugin does not store Bambu printer access codes.
 - Bambu LAN MQTT and machine file transfer remain agent-local.
 
+### Native print-error live operations
+
+Native Studio Resume/Ignore/Stop responses to a current printer error are live-only operations. Their Agent session and pending-owner state are process-local: a request received by a Hub replica that does not own the Agent stream returns `printer_operation_unavailable`, and another replica's stale cleanup cannot identify the owning replica's pending set. This action path therefore requires one active Hub process. HTTP/gRPC session affinity alone is insufficient, and NATS does not add cross-replica live-command forwarding or ownership-aware cleanup; both remain unsupported.
+
+Deploy this additive path in the order Agent → Hub with the nullable migration → network plugin. Roll it back in the order network plugin → Hub → Agent, and do not roll Hub or Agent back until every sent/pending command whose payload contains `operation.type:"handle_print_error"` has reached a terminal state. Leave the nullable printer columns in place during binary rollback.
+
 Implemented login flow:
 
 1. Bambu Studio opens the plugin-provided host plus `/sign-in`.

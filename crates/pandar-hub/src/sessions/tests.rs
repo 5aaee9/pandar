@@ -2,6 +2,8 @@ use super::*;
 use crate::AppState;
 use crate::protocol::agent::v1::{LinkPrinter, hub_command};
 
+mod print_error;
+
 fn test_session(
     tenant_id: TenantId,
     agent_id: AgentId,
@@ -21,7 +23,9 @@ fn test_session(
         wake_sender,
         close_sender,
         command_sender,
+        capabilities: std::collections::HashSet::new(),
         pending_live_commands: empty_pending_live_commands(),
+        live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
     }
 }
 
@@ -52,7 +56,9 @@ async fn sessions_register_touch_and_remove() {
             wake_sender,
             close_sender,
             command_sender: mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -89,7 +95,9 @@ async fn sessions_token_scoped_remove_preserves_replacement() {
             wake_sender: old_wake_sender,
             close_sender: old_close_sender,
             command_sender: mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
     registry
@@ -104,7 +112,9 @@ async fn sessions_token_scoped_remove_preserves_replacement() {
             wake_sender: new_wake_sender,
             close_sender: new_close_sender,
             command_sender: mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -138,14 +148,26 @@ async fn sessions_close_local_agent_removes_matching_session_only() {
             wake_sender,
             close_sender,
             command_sender: mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
-    registry.close_local_agent(other_tenant_id, agent_id).await;
+    assert!(
+        registry
+            .close_local_agent(other_tenant_id, agent_id)
+            .await
+            .is_none()
+    );
     assert!(registry.get(agent_id).await.is_some());
 
-    registry.close_local_agent(tenant_id, agent_id).await;
+    assert!(
+        registry
+            .close_local_agent(tenant_id, agent_id)
+            .await
+            .is_some()
+    );
     assert!(registry.get(agent_id).await.is_none());
     tokio::time::timeout(Duration::from_secs(1), close_receiver.recv())
         .await
@@ -176,7 +198,9 @@ async fn sessions_close_local_agent_is_not_blocked_by_in_flight_current_operatio
             wake_sender,
             close_sender,
             command_sender: mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -192,7 +216,12 @@ async fn sessions_close_local_agent_is_not_blocked_by_in_flight_current_operatio
     });
     operation_started_receiver.await.unwrap();
 
-    registry.close_local_agent(tenant_id, agent_id).await;
+    assert!(
+        registry
+            .close_local_agent(tenant_id, agent_id)
+            .await
+            .is_some()
+    );
 
     assert!(registry.get(agent_id).await.is_none());
     tokio::time::timeout(Duration::from_secs(1), close_receiver.recv())
@@ -370,7 +399,9 @@ async fn sessions_wake_local_agent_wakes_matching_online_agent() {
             wake_sender,
             close_sender,
             command_sender: mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -416,7 +447,9 @@ async fn sessions_expire_stale_marks_agent_offline() {
             wake_sender,
             close_sender,
             command_sender: mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 

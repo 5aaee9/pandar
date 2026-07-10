@@ -1,6 +1,6 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, de::IgnoredAny};
 
-use super::PrinterOperation;
+use super::{PrintErrorAction, PrinterOperation, StudioOperationParse};
 
 #[derive(Deserialize)]
 struct StudioMessage {
@@ -18,7 +18,14 @@ struct StudioSystem {
 #[derive(Deserialize)]
 struct StudioPrint {
     command: String,
-    param: Option<StudioU64>,
+    #[serde(default, deserialize_with = "deserialize_studio_field_presence")]
+    param: StudioFieldPresence,
+    #[serde(default, deserialize_with = "deserialize_studio_field_presence")]
+    err: StudioFieldPresence,
+    #[serde(default, deserialize_with = "deserialize_studio_field_presence")]
+    job_id: StudioFieldPresence,
+    #[serde(default, deserialize_with = "deserialize_studio_field_presence")]
+    sequence_id: StudioFieldPresence,
     extruder_index: Option<StudioU64>,
     target_temp: Option<StudioU64>,
     temp: Option<StudioU64>,
@@ -29,6 +36,23 @@ struct StudioPrint {
     extruder_id: Option<StudioU64>,
 }
 
+#[derive(Default)]
+enum StudioFieldPresence {
+    #[default]
+    Absent,
+    Present(StudioField),
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum StudioField {
+    String(String),
+    Unsigned(u64),
+    Signed(i64),
+    Float(f64),
+    Invalid(IgnoredAny),
+}
+
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum StudioU64 {
@@ -36,18 +60,30 @@ enum StudioU64 {
     String(String),
 }
 
-pub(super) fn parse_studio_json_operation(message: &str) -> Option<PrinterOperation> {
+fn deserialize_studio_field_presence<'de, D>(
+    deserializer: D,
+) -> Result<StudioFieldPresence, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    StudioField::deserialize(deserializer).map(StudioFieldPresence::Present)
+}
+
+pub(super) fn parse_studio_json_operation(message: &str) -> StudioOperationParse {
     serde_json::from_str::<StudioMessage>(message)
-        .ok()?
-        .operation()
+        .map_or(StudioOperationParse::Unsupported, StudioMessage::operation)
 }
 
 impl StudioMessage {
-    fn operation(self) -> Option<PrinterOperation> {
+    fn operation(self) -> StudioOperationParse {
         if let Some(system) = self.system {
-            return system.operation();
+            return system.operation().map_or(
+                StudioOperationParse::Unsupported,
+                StudioOperationParse::Operation,
+            );
         }
-        self.print?.operation()
+        self.print
+            .map_or(StudioOperationParse::Unsupported, StudioPrint::operation)
     }
 }
 
@@ -73,38 +109,85 @@ impl StudioSystem {
 }
 
 impl StudioPrint {
-    fn operation(self) -> Option<PrinterOperation> {
-        let operation = match self.command.as_str() {
-            "pause" => PrinterOperation::Pause,
-            "resume" => PrinterOperation::Resume,
-            "stop" => PrinterOperation::Stop,
-            "print_speed" => PrinterOperation::SetPrintSpeed {
-                speed_mode: field_u64(&self.param)?,
-            },
-            "select_extruder" => PrinterOperation::SelectExtruder {
+    fn operation(self) -> StudioOperationParse {
+        if let Some(action) = self.native_error_action()
+            && self.is_native_candidate(action)
+        {
+            return self.native_error_operation(action).map_or(
+                StudioOperationParse::InvalidNativeCandidate,
+                StudioOperationParse::Operation,
+            );
+        }
+
+        self.ordinary_operation()
+            .filter(PrinterOperation::is_valid)
+            .map_or(
+                StudioOperationParse::Unsupported,
+                StudioOperationParse::Operation,
+            )
+    }
+
+    fn native_error_action(&self) -> Option<PrintErrorAction> {
+        match self.command.as_str() {
+            "resume" => Some(PrintErrorAction::Resume),
+            "ignore" => Some(PrintErrorAction::Ignore),
+            "stop" => Some(PrintErrorAction::Stop),
+            _ => None,
+        }
+    }
+
+    fn is_native_candidate(&self, action: PrintErrorAction) -> bool {
+        action == PrintErrorAction::Ignore
+            || self.err.is_present()
+            || !self.param.is_absent_or_empty_string()
+    }
+
+    fn native_error_operation(&self, error_action: PrintErrorAction) -> Option<PrinterOperation> {
+        if self.param.as_string()? != "reserve" {
+            return None;
+        }
+        let print_error = self.err.as_string()?.parse::<u32>().ok()?;
+        let sequence_id = self.sequence_id.as_string()?.parse::<u64>().ok()?;
+        let operation = PrinterOperation::HandlePrintError {
+            error_action,
+            print_error,
+            printer_job_id: self.job_id.as_string()?.to_owned(),
+            sequence_id,
+        };
+        operation.is_valid().then_some(operation)
+    }
+
+    fn ordinary_operation(&self) -> Option<PrinterOperation> {
+        match self.command.as_str() {
+            "pause" => Some(PrinterOperation::Pause),
+            "resume" => Some(PrinterOperation::Resume),
+            "stop" => Some(PrinterOperation::Stop),
+            "print_speed" => Some(PrinterOperation::SetPrintSpeed {
+                speed_mode: self.param.as_u64()?,
+            }),
+            "select_extruder" => Some(PrinterOperation::SelectExtruder {
                 extruder_id: field_u64(&self.extruder_index)?,
-            },
-            "set_nozzle_temp" => PrinterOperation::SetHotendTemperature {
+            }),
+            "set_nozzle_temp" => Some(PrinterOperation::SetHotendTemperature {
                 temperature_celsius: field_u64(&self.target_temp)?,
                 wait: Some(false),
                 extruder_id: Some(field_u64(&self.extruder_index)?),
-            },
-            "set_bed_temp" => PrinterOperation::SetBedTemperature {
+            }),
+            "set_bed_temp" => Some(PrinterOperation::SetBedTemperature {
                 temperature_celsius: field_u64(&self.temp)?,
                 wait: Some(false),
-            },
-            "set_ctt" => PrinterOperation::SetChamberTemperature {
+            }),
+            "set_ctt" => Some(PrinterOperation::SetChamberTemperature {
                 temperature_celsius: field_u64(&self.ctt_val)?,
                 wait: Some(false),
-            },
-            "ams_get_rfid" => PrinterOperation::AmsRereadRfid {
+            }),
+            "ams_get_rfid" => Some(PrinterOperation::AmsRereadRfid {
                 ams_id: field_u64(&self.ams_id)?,
                 slot_id: field_u64(&self.slot_id)?,
-            },
-            "ams_change_filament" => self.ams_change_filament_operation()?,
-            _ => return None,
-        };
-        operation.is_valid().then_some(operation)
+            }),
+            "ams_change_filament" => self.ams_change_filament_operation(),
+            _ => None,
+        }
     }
 
     fn ams_change_filament_operation(&self) -> Option<PrinterOperation> {
@@ -129,6 +212,47 @@ impl StudioPrint {
             external_id: None,
             extruder_id,
         })
+    }
+}
+
+impl StudioFieldPresence {
+    fn is_present(&self) -> bool {
+        matches!(self, Self::Present(_))
+    }
+
+    fn is_absent_or_empty_string(&self) -> bool {
+        match self {
+            Self::Absent => true,
+            Self::Present(StudioField::String(value)) => value.is_empty(),
+            Self::Present(_) => false,
+        }
+    }
+
+    fn as_string(&self) -> Option<&str> {
+        match self {
+            Self::Present(StudioField::String(value)) => Some(value),
+            _ => None,
+        }
+    }
+
+    fn as_u64(&self) -> Option<u64> {
+        match self {
+            Self::Present(StudioField::Unsigned(value)) => Some(*value),
+            Self::Present(StudioField::String(value)) => value.parse().ok(),
+            Self::Present(StudioField::Signed(value)) => {
+                let _ = value;
+                None
+            }
+            Self::Present(StudioField::Float(value)) => {
+                let _ = value;
+                None
+            }
+            Self::Present(StudioField::Invalid(value)) => {
+                let _ = value;
+                None
+            }
+            Self::Absent => None,
+        }
     }
 }
 

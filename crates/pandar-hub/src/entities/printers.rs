@@ -30,6 +30,8 @@ pub struct Model {
     pub print_total_layers: Option<i64>,
     pub print_gcode_file: Option<String>,
     pub print_subtask_name: Option<String>,
+    pub print_error: Option<i32>,
+    pub print_job_id: Option<String>,
     pub hms_json: String,
 }
 

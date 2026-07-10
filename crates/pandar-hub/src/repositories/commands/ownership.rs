@@ -1,6 +1,6 @@
 use anyhow::Context;
 use pandar_core::{AgentId, TenantId};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
 
 use crate::{
     db::Database,
@@ -37,6 +37,29 @@ pub async fn verify_agent_owner(
     Ok(())
 }
 
+pub async fn verify_agent_owner_on<C>(
+    connection: &C,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+) -> RepositoryResult<()>
+where
+    C: ConnectionTrait,
+{
+    let persisted_tenant_id = agents::Entity::find_by_id(agent_id.to_string())
+        .one(connection)
+        .await
+        .context("failed to verify command agent ownership")?
+        .map(|agent| agent.tenant_id);
+
+    let Some(persisted_tenant_id) = persisted_tenant_id else {
+        return Err(RepositoryError::MissingAgent);
+    };
+    if persisted_tenant_id != tenant_id.to_string() {
+        return Err(RepositoryError::CommandOwnershipMismatch);
+    }
+    Ok(())
+}
+
 pub async fn printer_serial_for_agent(
     database: &Database,
     tenant_id: TenantId,
@@ -65,6 +88,37 @@ pub async fn printer_for_tenant(
         .await
         .context("failed to load command printer")?
         .ok_or(RepositoryError::MissingPrinter)?;
+
+    Ok(CommandPrinter {
+        id: printer.id,
+        agent_id: AgentId::parse(&printer.agent_id).map_err(|err| {
+            RepositoryError::Database(
+                anyhow::Error::new(err).context("failed to parse command printer agent id"),
+            )
+        })?,
+        serial_number: printer.serial_number,
+        model: printer.model,
+    })
+}
+
+pub async fn locked_printer_for_expected_agent<C>(
+    connection: &C,
+    tenant_id: TenantId,
+    printer_id: &str,
+    expected_agent_id: AgentId,
+) -> RepositoryResult<CommandPrinter>
+where
+    C: ConnectionTrait,
+{
+    let query = printers::Entity::find_by_id(printer_id)
+        .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
+        .filter(printers::Column::AgentId.eq(expected_agent_id.to_string()));
+    let printer = match connection.get_database_backend() {
+        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(connection).await,
+        _ => query.one(connection).await,
+    }
+    .context("failed to lock command printer ownership")?
+    .ok_or(RepositoryError::PrinterControlUnavailable)?;
 
     Ok(CommandPrinter {
         id: printer.id,

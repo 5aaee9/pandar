@@ -78,6 +78,7 @@ pub enum HubControlMessage {
     AgentClose {
         tenant_id: String,
         agent_id: String,
+        source_instance_id: String,
     },
     PrinterEvent {
         tenant_id: String,

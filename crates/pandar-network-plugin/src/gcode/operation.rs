@@ -8,12 +8,26 @@ const MAX_AMS_ID: u64 = 255;
 const MAX_AMS_SLOT_ID: u64 = 255;
 const MAX_U32: u64 = u32::MAX as u64;
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PrintErrorAction {
+    Resume,
+    Ignore,
+    Stop,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub(crate) enum PrinterOperation {
     Pause,
     Resume,
     Stop,
+    HandlePrintError {
+        error_action: PrintErrorAction,
+        print_error: u32,
+        printer_job_id: String,
+        sequence_id: u64,
+    },
     ToggleLight,
     SetChamberLight {
         light_on: bool,
@@ -100,6 +114,9 @@ impl PrinterOperation {
     pub(super) fn is_valid(&self) -> bool {
         match self {
             Self::Pause | Self::Resume | Self::Stop | Self::ToggleLight => true,
+            Self::HandlePrintError { print_error, .. } => {
+                (1..=i32::MAX as u32).contains(print_error)
+            }
             Self::SetChamberLight { .. } => true,
             Self::SetPrintSpeed { speed_mode } => (1..=4).contains(speed_mode),
             Self::SelectExtruder { extruder_id } => in_range(*extruder_id, 0, MAX_EXTRUDER_ID),

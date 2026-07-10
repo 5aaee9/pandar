@@ -218,7 +218,9 @@ async fn retry_dispatch_wakes_agent_on_sibling_instance() {
             wake_sender,
             close_sender,
             command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -295,7 +297,9 @@ async fn reprint_wakes_agent_on_sibling_instance() {
             wake_sender,
             close_sender,
             command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -359,7 +363,9 @@ async fn duplicate_and_print_wakes_agent_on_sibling_instance() {
             wake_sender,
             close_sender,
             command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -452,6 +458,8 @@ fn report_input(
         serial: format!("serial-{printer_id}"),
         task_id,
         job_id,
+        print_error: None,
+        printer_job_id: None,
         artifact_id,
         subtask_id: None,
         gcode_file: None,

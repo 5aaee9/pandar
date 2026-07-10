@@ -149,7 +149,7 @@ async fn invalid_heartbeat_timestamp_streams_invalid_argument() {
 }
 
 #[tokio::test]
-async fn stream_close_fails_only_closing_session_pending_live_commands() {
+async fn replacement_fails_only_replaced_session_pending_live_commands() {
     let state = fixture_state().await;
     let (tenant_id, agent_id) = tenant_agent(&state).await;
     let (mut old_stream, old_sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
@@ -187,18 +187,16 @@ async fn stream_close_fails_only_closing_session_pending_live_commands() {
         .await
         .unwrap();
 
-    drop(old_sender);
-    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-
+    let old_command = state
+        .commands()
+        .get_for_tenant(tenant_id, old_command)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(old_command.status, CommandStatus::Failed);
     assert_eq!(
-        state
-            .commands()
-            .get_for_tenant(tenant_id, old_command)
-            .await
-            .unwrap()
-            .unwrap()
-            .status,
-        CommandStatus::Sent
+        old_command.error.as_deref(),
+        Some("agent session replaced before printer operation completed")
     );
     assert_eq!(
         state
@@ -209,6 +207,13 @@ async fn stream_close_fails_only_closing_session_pending_live_commands() {
             .unwrap()
             .status,
         CommandStatus::Sent
+    );
+
+    drop(old_sender);
+    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    assert_eq!(
+        state.sessions().get(agent_id).await.unwrap().token,
+        new_token
     );
 }
 
@@ -246,7 +251,7 @@ async fn current_stream_close_fails_pending_live_commands() {
     assert_eq!(command.status, CommandStatus::Failed);
     assert_eq!(
         command.error.as_deref(),
-        Some("agent connection closed before printer link completed")
+        Some("agent connection closed before printer operation completed")
     );
 }
 

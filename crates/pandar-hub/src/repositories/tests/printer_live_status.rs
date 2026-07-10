@@ -24,6 +24,8 @@ pub(super) async fn exercise_printer_live_status(database: Database) {
             serial: serial.clone(),
             task_id: Some("external-task-42".to_string()),
             job_id: None,
+            print_error: Some(i32::MAX as u32),
+            printer_job_id: Some(String::new()),
             artifact_id: None,
             subtask_id: Some("external-subtask-7".to_string()),
             gcode_file: Some("external.3mf".to_string()),
@@ -69,6 +71,8 @@ pub(super) async fn exercise_printer_live_status(database: Database) {
     assert_eq!(persisted.live_status.remaining_time_minutes, Some(87));
     assert_eq!(persisted.live_status.current_layer, Some(12));
     assert_eq!(persisted.live_status.total_layers, Some(120));
+    assert_eq!(persisted.live_status.print_error, Some(i32::MAX as u32));
+    assert_eq!(persisted.live_status.printer_job_id.as_deref(), Some(""));
     assert_eq!(
         persisted.live_status.gcode_file.as_deref(),
         Some("external.3mf")
@@ -122,6 +126,8 @@ pub(super) async fn exercise_printer_live_status(database: Database) {
         serial: serial.clone(),
         task_id: None,
         job_id: None,
+        print_error: None,
+        printer_job_id: None,
         artifact_id: None,
         subtask_id: None,
         gcode_file: None,
@@ -148,8 +154,54 @@ pub(super) async fn exercise_printer_live_status(database: Database) {
     assert_eq!(preserved.printer.status, "unknown");
     assert_eq!(preserved.printer.last_seen_at, "2026-07-09T10:01:00Z");
     assert_eq!(preserved.live_status, persisted.live_status);
+    assert_eq!(preserved.live_status.print_error, Some(i32::MAX as u32));
+    assert_eq!(preserved.live_status.printer_job_id.as_deref(), Some(""));
 
     jobs.apply_print_report(ApplyPrintReport {
+        tenant_id: tenant.id,
+        agent_id: agent.id,
+        serial: serial.clone(),
+        task_id: None,
+        job_id: None,
+        print_error: None,
+        printer_job_id: Some(" \t ".to_string()),
+        artifact_id: None,
+        subtask_id: None,
+        gcode_file: None,
+        subtask_name: None,
+        gcode_state: None,
+        percent: None,
+        remaining_time_minutes: None,
+        current_layer: None,
+        total_layers: None,
+        hms: None,
+        diagnostics: Vec::new(),
+        printer_materials_json: String::new(),
+        observed_at: "2026-07-09T10:01:30Z".to_string(),
+    })
+    .await
+    .unwrap();
+
+    let whitespace = printers
+        .list_with_live_status_for_tenant(tenant.id)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(whitespace.live_status.print_error, Some(i32::MAX as u32));
+    assert_eq!(
+        whitespace
+            .live_status
+            .printer_job_id
+            .as_deref()
+            .unwrap()
+            .as_bytes(),
+        b" \t "
+    );
+
+    jobs.apply_print_report(ApplyPrintReport {
+        print_error: Some(0),
+        printer_job_id: Some("studio-job-2".to_string()),
         hms: Some(Vec::new()),
         observed_at: "2026-07-09T10:02:00Z".to_string(),
         ..ApplyPrintReport {
@@ -158,6 +210,8 @@ pub(super) async fn exercise_printer_live_status(database: Database) {
             serial,
             task_id: None,
             job_id: None,
+            print_error: None,
+            printer_job_id: None,
             artifact_id: None,
             subtask_id: None,
             gcode_file: None,
@@ -183,6 +237,11 @@ pub(super) async fn exercise_printer_live_status(database: Database) {
         .pop()
         .unwrap();
     assert_eq!(cleared.live_status.progress_percent, Some(42));
+    assert_eq!(cleared.live_status.print_error, Some(0));
+    assert_eq!(
+        cleared.live_status.printer_job_id.as_deref(),
+        Some("studio-job-2")
+    );
     assert!(cleared.live_status.hms.is_empty());
 }
 

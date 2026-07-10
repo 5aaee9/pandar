@@ -967,6 +967,7 @@ fn hello_event(tenant_id: TenantId, agent_id: AgentId) -> AgentEvent {
             name: "agent".to_string(),
             version: "0.1.0".to_string(),
             credential: TEST_AGENT_CREDENTIAL.to_string(),
+            capabilities: Vec::new(),
         })),
     }
 }
@@ -1027,6 +1028,7 @@ fn print_report_event(
             diagnostics: Vec::new(),
             printer_materials_json: String::new(),
             observed_at: "2026-06-22T10:00:00Z".to_string(),
+            ..Default::default()
         })),
     }
 }

@@ -22,10 +22,16 @@ message AgentEvent {
   }
 }
 
+enum AgentCapability {
+  AGENT_CAPABILITY_UNSPECIFIED = 0;
+  AGENT_CAPABILITY_HANDLE_PRINT_ERROR = 1;
+}
+
 message AgentHello {
   string name = 1;
   string version = 2;
   string credential = 3;
+  repeated AgentCapability capabilities = 4;
 }
 
 message AgentHeartbeat {
@@ -95,6 +101,10 @@ message PrintJobReport {
   string printer_materials_json = 18;
   repeated PrinterHmsItem hms = 19;
   bool has_hms = 20;
+  uint32 print_error = 21;
+  bool has_print_error = 22;
+  string printer_job_id = 23;
+  bool has_printer_job_id = 24;
 }
 
 message PrinterHmsItem {
@@ -168,6 +178,7 @@ message PrinterOperation {
     SetChamberTemperatureOperation set_chamber_temperature = 22;
     ToggleLightOperation toggle_light = 23;
     SetChamberLightOperation set_chamber_light = 24;
+    HandlePrintErrorOperation handle_print_error = 25;
   }
 }
 
@@ -223,6 +234,20 @@ message PauseOperation {}
 message ResumeOperation {}
 
 message StopOperation {}
+
+enum PrintErrorAction {
+  PRINT_ERROR_ACTION_UNSPECIFIED = 0;
+  PRINT_ERROR_ACTION_RESUME = 1;
+  PRINT_ERROR_ACTION_IGNORE = 2;
+  PRINT_ERROR_ACTION_STOP = 3;
+}
+
+message HandlePrintErrorOperation {
+  PrintErrorAction error_action = 1;
+  uint32 print_error = 2;
+  string printer_job_id = 3;
+  uint64 sequence_id = 4;
+}
 
 message ToggleLightOperation {}
 

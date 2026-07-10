@@ -132,6 +132,11 @@ fn apply_input(
         serial,
         task_id,
         job_id,
+        print_error: report
+            .has_print_error
+            .then_some(report.print_error)
+            .filter(|value| *value <= i32::MAX as u32),
+        printer_job_id: report.has_printer_job_id.then_some(report.printer_job_id),
         artifact_id,
         subtask_id: trim_optional(report.subtask_id),
         gcode_file: trim_optional(report.gcode_file),

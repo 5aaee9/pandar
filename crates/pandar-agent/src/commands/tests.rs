@@ -1,6 +1,7 @@
 mod artifacts;
 mod diagnostics;
 mod print;
+mod print_error;
 mod reports;
 
 use std::{sync::Arc, time::Duration};

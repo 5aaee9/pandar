@@ -11,7 +11,10 @@ use crate::{
     AppState,
     artifacts::metadata::ArtifactMetadata,
     repositories::{AuditActor, AuthenticatedPrincipal, RepositoryError, TenantTokenScope},
-    routes::{ApiError, auth, printer_operations::PrinterOperationRequest},
+    routes::{
+        ApiError, auth,
+        printer_operations::{PrinterOperationRequest, dispatch_plugin_printer_operation},
+    },
 };
 
 mod responses;
@@ -322,18 +325,14 @@ pub(super) async fn create_printer_operation(
 ) -> Result<Json<PluginPrinterOperationResponse>, ApiError> {
     let authenticated = auth::authorize_plugin_studio(&state, &headers).await?;
     let Json(payload) = payload.map_err(|_| ApiError::bad_request("invalid_printer_control"))?;
-    let operation = payload.into_operation()?;
-    let command = state
-        .commands()
-        .enqueue_printer_operation_with_audit(
-            authenticated.token.tenant_id,
-            &printer_id,
-            operation,
-            auth::plugin_audit_actor(&authenticated),
-        )
-        .await
-        .map_err(plugin_operation_error)?;
-    state.wake_agent(command.tenant_id, command.agent_id).await;
+    let command = dispatch_plugin_printer_operation(
+        &state,
+        authenticated.token.tenant_id,
+        &printer_id,
+        payload,
+        auth::plugin_audit_actor(&authenticated),
+    )
+    .await?;
 
     Ok(Json(PluginPrinterOperationResponse {
         command_id: command.id.to_string(),
@@ -355,15 +354,6 @@ fn plugin_ticket_error(err: RepositoryError) -> ApiError {
     match err {
         RepositoryError::MissingPluginLoginTicket => {
             ApiError::new(StatusCode::UNAUTHORIZED, "invalid_plugin_ticket")
-        }
-        other => other.into(),
-    }
-}
-
-fn plugin_operation_error(err: RepositoryError) -> ApiError {
-    match err {
-        RepositoryError::PrinterControlUnavailable => {
-            ApiError::bad_request("printer_operation_unavailable")
         }
         other => other.into(),
     }

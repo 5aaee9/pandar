@@ -1,20 +1,21 @@
-use pandar_core::CommandRecord;
+use pandar_core::{CommandId, CommandRecord};
 use tonic::Status;
 
 use crate::{
     material_mapping::{AmsMapping2Entry, AmsMappingInfoEntry, validate_mapping_len},
     protocol::agent::v1::{
         AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation, Axis,
-        AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
-        MoveAxesOperation, PauseOperation, PrintProjectFile, PrinterOperation,
-        RefreshPrinterMaterials, RefreshPrinters, ResumeOperation, SelectExtruderOperation,
-        SetBedTemperatureOperation, SetChamberLightOperation, SetChamberTemperatureOperation,
-        SetHotendTemperatureOperation, SetPrintSpeedOperation, StopOperation, ToggleLightOperation,
-        hub_command, printer_operation,
+        AxisMovement, DiagnosePrinter, DiscoverPrinters, HandlePrintErrorOperation, HomeOperation,
+        HubCommand, MoveAxesOperation, PauseOperation, PrintErrorAction as ProtoPrintErrorAction,
+        PrintProjectFile, PrinterOperation, RefreshPrinterMaterials, RefreshPrinters,
+        ResumeOperation, SelectExtruderOperation, SetBedTemperatureOperation,
+        SetChamberLightOperation, SetChamberTemperatureOperation, SetHotendTemperatureOperation,
+        SetPrintSpeedOperation, StopOperation, ToggleLightOperation, hub_command,
+        printer_operation,
     },
     repositories::{
-        DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, PrinterAxis,
-        PrinterAxisMovement, PrinterOperationKind, PrinterOperationPayload,
+        DiagnosePrinterPayload, DiscoverPrintersPayload, PrintErrorAction, PrintProjectFilePayload,
+        PrinterAxis, PrinterAxisMovement, PrinterOperationKind, PrinterOperationPayload,
         RefreshPrinterMaterialsPayload,
     },
 };
@@ -93,6 +94,20 @@ pub fn hub_command_from_record_with_options(
                     );
                     Status::internal("invalid printer operation command payload")
                 })?;
+            if matches!(
+                &payload.operation,
+                PrinterOperationKind::HandlePrintError { .. }
+            ) {
+                tracing::error!(
+                    command_id = %command.id,
+                    command_kind = %command.kind,
+                    operation = "handle_print_error",
+                    "live-only printer operation reached durable queued-command conversion"
+                );
+                return Err(Status::failed_precondition(
+                    "print error operation requires live dispatch",
+                ));
+            }
             hub_command::Command::PrinterOperation(PrinterOperation {
                 serial_number: payload.serial_number,
                 operation: Some(proto_printer_operation(payload.operation)),
@@ -164,11 +179,36 @@ pub fn hub_command_from_record_with_options(
     })
 }
 
+pub fn live_printer_operation_hub_command(
+    command_id: CommandId,
+    serial_number: String,
+    operation: PrinterOperationKind,
+) -> HubCommand {
+    HubCommand {
+        command_id: command_id.to_string(),
+        command: Some(hub_command::Command::PrinterOperation(PrinterOperation {
+            serial_number,
+            operation: Some(proto_printer_operation(operation)),
+        })),
+    }
+}
+
 fn proto_printer_operation(operation: PrinterOperationKind) -> printer_operation::Operation {
     match operation {
         PrinterOperationKind::Pause => printer_operation::Operation::Pause(PauseOperation {}),
         PrinterOperationKind::Resume => printer_operation::Operation::Resume(ResumeOperation {}),
         PrinterOperationKind::Stop => printer_operation::Operation::Stop(StopOperation {}),
+        PrinterOperationKind::HandlePrintError {
+            error_action,
+            print_error,
+            printer_job_id,
+            sequence_id,
+        } => printer_operation::Operation::HandlePrintError(HandlePrintErrorOperation {
+            error_action: proto_print_error_action(error_action) as i32,
+            print_error,
+            printer_job_id,
+            sequence_id,
+        }),
         PrinterOperationKind::ToggleLight => {
             printer_operation::Operation::ToggleLight(ToggleLightOperation {})
         }
@@ -245,6 +285,14 @@ fn proto_printer_operation(operation: PrinterOperationKind) -> printer_operation
             external_id: external_id.unwrap_or_default(),
             extruder_id,
         }),
+    }
+}
+
+fn proto_print_error_action(action: PrintErrorAction) -> ProtoPrintErrorAction {
+    match action {
+        PrintErrorAction::Resume => ProtoPrintErrorAction::Resume,
+        PrintErrorAction::Ignore => ProtoPrintErrorAction::Ignore,
+        PrintErrorAction::Stop => ProtoPrintErrorAction::Stop,
     }
 }
 

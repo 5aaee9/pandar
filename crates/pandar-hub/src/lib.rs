@@ -60,6 +60,7 @@ pub struct AppState {
     camera_sessions: CameraSessionRegistry,
     metrics: MetricsState,
     control_plane: cluster::ControlPlane,
+    instance_id: uuid::Uuid,
     #[cfg(test)]
     database_backend_override: Option<db::DatabaseBackend>,
 }
@@ -176,6 +177,7 @@ impl AppState {
             camera_sessions: CameraSessionRegistry::new(),
             metrics,
             control_plane,
+            instance_id: uuid::Uuid::new_v4(),
             #[cfg(test)]
             database_backend_override: None,
         }
@@ -281,6 +283,10 @@ impl AppState {
         &self.control_plane
     }
 
+    pub(crate) fn instance_id(&self) -> uuid::Uuid {
+        self.instance_id
+    }
+
     pub(crate) fn database_backend(&self) -> db::DatabaseBackend {
         #[cfg(test)]
         if let Some(backend) = self.database_backend_override {
@@ -305,29 +311,6 @@ impl AppState {
             self.metrics
                 .record_control_plane(ControlPlaneMetric::PublishFailed);
             tracing::error!(error = %format!("{err:#}"), "failed to publish agent wake control message");
-        } else {
-            self.metrics
-                .record_control_plane(ControlPlaneMetric::PublishOk);
-        }
-    }
-
-    pub async fn close_agent(
-        &self,
-        tenant_id: pandar_core::TenantId,
-        agent_id: pandar_core::AgentId,
-    ) {
-        self.sessions.close_local_agent(tenant_id, agent_id).await;
-        if let Err(err) = self
-            .control_plane
-            .publish(cluster::HubControlMessage::AgentClose {
-                tenant_id: tenant_id.to_string(),
-                agent_id: agent_id.to_string(),
-            })
-            .await
-        {
-            self.metrics
-                .record_control_plane(ControlPlaneMetric::PublishFailed);
-            tracing::error!(error = %format!("{err:#}"), "failed to publish agent close control message");
         } else {
             self.metrics
                 .record_control_plane(ControlPlaneMetric::PublishOk);

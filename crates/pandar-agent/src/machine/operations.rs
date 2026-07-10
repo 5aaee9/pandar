@@ -7,8 +7,8 @@ use super::{
     BambuPrinterEndpoint, PrinterOperationDispatchResult,
     mqtt::{
         AmsFilamentCommand, AmsSlotCommand, BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics,
-        BambuMqttTransport, GcodeLineCommand, PrintSpeed, PublishedMqttCommand,
-        SetNozzleTemperatureCommand,
+        BambuMqttTransport, GcodeLineCommand, HandlePrintErrorCommand, PrintErrorAction,
+        PrintSpeed, PublishedMqttCommand, SetNozzleTemperatureCommand,
     },
 };
 
@@ -17,6 +17,12 @@ pub enum PrinterOperation {
     Pause,
     Resume,
     Stop,
+    HandlePrintError {
+        error_action: PrintErrorAction,
+        print_error: u32,
+        printer_job_id: String,
+        sequence_id: u64,
+    },
     ToggleLight,
     SetChamberLight(bool),
     SetPrintSpeed(u8),
@@ -150,6 +156,19 @@ fn mqtt_command_for_printer_operation(
         PrinterOperation::Pause => Ok(BambuMqttCommand::PausePrint),
         PrinterOperation::Resume => Ok(BambuMqttCommand::ResumePrint),
         PrinterOperation::Stop => Ok(BambuMqttCommand::StopPrint),
+        PrinterOperation::HandlePrintError {
+            error_action,
+            print_error,
+            printer_job_id,
+            sequence_id,
+        } => Ok(BambuMqttCommand::HandlePrintError(
+            HandlePrintErrorCommand {
+                error_action,
+                print_error,
+                printer_job_id,
+                sequence_id,
+            },
+        )),
         PrinterOperation::ToggleLight => {
             unreachable!("toggle_light is handled before payload mapping")
         }

@@ -128,6 +128,7 @@ async fn nats_control_plane_subscribe_decodes_json_payloads() {
         serde_json::to_vec(&HubControlMessage::AgentClose {
             tenant_id: tenant_id.to_string(),
             agent_id: agent_id.to_string(),
+            source_instance_id: "hub-a".to_owned(),
         })
         .unwrap(),
     );
@@ -141,8 +142,10 @@ async fn nats_control_plane_subscribe_decodes_json_payloads() {
         HubControlMessage::AgentClose {
             tenant_id: decoded_tenant_id,
             agent_id: decoded_agent_id,
+            source_instance_id,
         } if decoded_tenant_id == tenant_id.to_string()
             && decoded_agent_id == agent_id.to_string()
+            && source_instance_id == "hub-a"
     ));
 }
 

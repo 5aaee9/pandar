@@ -8,6 +8,7 @@ use requests::{
 use serde::Deserialize;
 use tokio::sync::mpsc;
 
+mod print_error;
 mod requests;
 
 #[derive(Debug, Deserialize)]
@@ -198,7 +199,9 @@ async fn discover_printers_defaults_timeout_audits_and_wakes_agent() {
             wake_sender,
             close_sender,
             command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -309,7 +312,9 @@ async fn diagnose_printer_enqueues_redacted_payload_audits_and_wakes_agent() {
             wake_sender,
             close_sender,
             command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -369,7 +374,9 @@ async fn refresh_printers_wakes_agent_on_sibling_instance() {
             wake_sender,
             close_sender,
             command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -421,7 +428,9 @@ async fn discover_printers_wakes_agent_on_sibling_instance() {
             wake_sender,
             close_sender,
             command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -466,7 +475,9 @@ async fn diagnose_printer_wakes_agent_on_sibling_instance() {
             wake_sender,
             close_sender,
             command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -560,7 +571,9 @@ async fn printer_control_enqueues_audits_and_wakes_owning_agent() {
             wake_sender,
             close_sender,
             command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -678,7 +691,9 @@ async fn printer_control_wakes_owning_agent_not_sibling() {
             wake_sender: owner_wake_sender,
             close_sender: owner_close_sender,
             command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
     sibling
@@ -694,7 +709,9 @@ async fn printer_control_wakes_owning_agent_not_sibling() {
             wake_sender: other_wake_sender,
             close_sender: other_close_sender,
             command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 

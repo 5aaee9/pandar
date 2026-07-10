@@ -20,10 +20,12 @@ pub use auth::{
     PluginLoginTicketWithPlaintext, TenantToken, TenantTokenScope, TenantTokenWithPlaintext, User,
     UserIdentity, UserRole,
 };
+#[cfg(test)]
+pub(crate) use commands::printer_operation_ownership_pause;
 pub use commands::{
     CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload,
-    PrintProjectFilePayload, PrinterAxis, PrinterAxisMovement, PrinterOperationKind,
-    PrinterOperationPayload, RefreshPrinterMaterialsPayload,
+    PrintErrorAction, PrintProjectFilePayload, PrinterAxis, PrinterAxisMovement,
+    PrinterOperationKind, PrinterOperationPayload, RefreshPrinterMaterialsPayload,
 };
 pub use jobs::{
     AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, CreatePrintJob, DuplicatePrintJob,

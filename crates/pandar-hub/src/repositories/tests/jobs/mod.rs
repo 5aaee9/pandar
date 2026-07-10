@@ -66,6 +66,8 @@ pub(super) fn report_input(
         serial: format!("serial-{printer_id}"),
         task_id,
         job_id,
+        print_error: None,
+        printer_job_id: None,
         artifact_id,
         subtask_id: None,
         gcode_file: None,

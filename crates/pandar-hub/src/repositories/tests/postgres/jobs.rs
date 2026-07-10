@@ -141,6 +141,8 @@ async fn postgres_print_report_reconciliation_when_configured() {
         serial: format!("serial-{printer_id}"),
         task_id: Some(created.job.id.to_string()),
         job_id: Some(created.job.id),
+        print_error: None,
+        printer_job_id: None,
         artifact_id: None,
         subtask_id: None,
         gcode_file: Some("plate.3mf".to_string()),

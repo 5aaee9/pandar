@@ -4,11 +4,14 @@ use anyhow::Context;
 use futures_util::StreamExt;
 use tokio::{sync::oneshot, task::JoinHandle};
 
-use crate::{AppState, cluster::HubControlMessage, metrics::ControlPlaneMetric};
+use crate::{
+    AppState, cluster::HubControlMessage, metrics::ControlPlaneMetric,
+    sessions::live_commands::fail_pending_live_commands,
+};
 
 const STALE_SESSION_TIMEOUT: Duration = Duration::from_secs(45);
 const STALE_SESSION_SWEEP_INTERVAL: Duration = Duration::from_secs(15);
-const STALE_LINK_PRINTER_COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
+const STALE_LIVE_COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub fn spawn_session_expiry(state: AppState) -> JoinHandle<()> {
     tokio::spawn(async move {
@@ -19,8 +22,8 @@ pub fn spawn_session_expiry(state: AppState) -> JoinHandle<()> {
             if let Err(err) = expire_stale_sessions_once(&state, &now).await {
                 tracing::error!(error = %format!("{err:#}"), "failed to expire stale agent sessions");
             }
-            if let Err(err) = fail_stale_link_printer_commands_once(&state, &now).await {
-                log_stale_link_printer_cleanup_error(&err);
+            if let Err(err) = fail_stale_live_commands_once(&state, &now).await {
+                log_stale_live_command_cleanup_error(&err);
             }
         }
     })
@@ -97,12 +100,26 @@ async fn handle_control_message(state: &AppState, message: HubControlMessage) {
         HubControlMessage::AgentClose {
             tenant_id,
             agent_id,
+            source_instance_id,
         } => match crate::cluster::parse_agent_identity(&tenant_id, &agent_id) {
             Ok((tenant_id, agent_id)) => {
-                state
+                if source_instance_id == state.instance_id().to_string() {
+                    return;
+                }
+                if let Some(session) = state
                     .sessions()
                     .close_local_agent(tenant_id, agent_id)
                     .await
+                {
+                    fail_pending_live_commands(
+                        state,
+                        tenant_id,
+                        agent_id,
+                        session,
+                        "agent session closed before printer operation completed",
+                    )
+                    .await;
+                }
             }
             Err(err) => {
                 tracing::error!(error = %format!("{err:#}"), "failed to parse agent close control message")
@@ -129,22 +146,34 @@ async fn expire_stale_sessions_with_timeout(
     now: &str,
     timeout: Duration,
 ) -> anyhow::Result<usize> {
-    state
+    let expired = state
         .sessions()
         .expire_stale(now, timeout, state.agents())
         .await
-        .context("failed to expire stale agent sessions")
-        .map(|expired| expired.len())
+        .context("failed to expire stale agent sessions")?;
+    let expired_count = expired.len();
+    for session in expired {
+        let tenant_id = session.tenant_id;
+        let agent_id = session.agent_id;
+        fail_pending_live_commands(
+            state,
+            tenant_id,
+            agent_id,
+            session,
+            "agent session expired before printer operation completed",
+        )
+        .await;
+    }
+    Ok(expired_count)
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-async fn fail_stale_link_printer_commands_once(state: &AppState, now: &str) -> anyhow::Result<u64> {
-    fail_stale_link_printer_commands_with_timeout(state, now, STALE_LINK_PRINTER_COMMAND_TIMEOUT)
-        .await
+async fn fail_stale_live_commands_once(state: &AppState, now: &str) -> anyhow::Result<u64> {
+    fail_stale_live_commands_with_timeout(state, now, STALE_LIVE_COMMAND_TIMEOUT).await
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-async fn fail_stale_link_printer_commands_with_timeout(
+async fn fail_stale_live_commands_with_timeout(
     state: &AppState,
     now: &str,
     timeout: Duration,
@@ -152,15 +181,15 @@ async fn fail_stale_link_printer_commands_with_timeout(
     let pending = state.sessions().pending_live_command_ids().await;
     state
         .commands()
-        .fail_stale_unowned_link_printer_commands(now, timeout, &pending)
+        .fail_stale_unowned_live_commands(now, timeout, &pending)
         .await
-        .context("failed to fail stale unowned link printer commands")
+        .context("failed to fail stale unowned live commands")
 }
 
-fn log_stale_link_printer_cleanup_error(err: &anyhow::Error) {
+fn log_stale_live_command_cleanup_error(err: &anyhow::Error) {
     tracing::error!(
         error = %crate::redaction::redact_secrets(&format!("{err:#}")),
-        "failed to expire stale live printer link commands"
+        "failed to expire stale live commands"
     );
 }
 

@@ -5,10 +5,12 @@ use serde::Serialize;
 use serde_json::{Number, Value};
 
 pub(super) mod payload;
+mod print_error;
 mod project_file;
 mod sequence;
 
 use payload::*;
+pub use print_error::{HandlePrintErrorCommand, PrintErrorAction};
 use project_file::project_file_payload;
 use sequence::next_studio_sequence_id;
 #[cfg(test)]
@@ -103,6 +105,8 @@ pub(crate) struct BambuMqttCommandPayload {
 pub struct PrintReportProgress {
     pub serial: String,
     pub job_id: Option<String>,
+    pub print_error: Option<u32>,
+    pub printer_job_id: Option<String>,
     pub artifact_id: Option<String>,
     pub subtask_id: Option<String>,
     pub gcode_state: Option<String>,
@@ -154,6 +158,7 @@ pub enum BambuMqttCommand {
     AmsRereadRfid(AmsSlotCommand),
     AmsLoadFilament(AmsFilamentCommand),
     AmsUnloadFilament(AmsFilamentCommand),
+    HandlePrintError(HandlePrintErrorCommand),
     RawJson(Value),
     ProjectFile(ProjectFileCommand),
 }
@@ -179,6 +184,7 @@ impl BambuMqttCommand {
             Self::AmsRereadRfid(command) => ams_reread_rfid_payload(command),
             Self::AmsLoadFilament(command) => ams_load_filament_payload(command),
             Self::AmsUnloadFilament(command) => ams_unload_filament_payload(command),
+            Self::HandlePrintError(command) => print_error::print_error_payload(command),
             Self::RawJson(payload) => BambuMqttCommandPayload::without_sequence(payload.clone()),
             Self::ProjectFile(command) => project_file_payload(command),
         }

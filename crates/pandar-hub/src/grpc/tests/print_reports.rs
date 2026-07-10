@@ -312,6 +312,7 @@ fn report(serial: String, job_id: String, artifact_id: String) -> PrintJobReport
         }],
         printer_materials_json: String::new(),
         observed_at: "2026-06-22T10:00:00Z".to_string(),
+        ..Default::default()
     }
 }
 

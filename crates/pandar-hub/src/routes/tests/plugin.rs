@@ -6,6 +6,7 @@ use requests::{
 use serde::{Deserialize, Serialize, de::IgnoredAny};
 
 mod live_status;
+mod operations;
 mod requests;
 
 #[derive(Debug, Deserialize)]
@@ -890,7 +891,9 @@ async fn plugin_print_wakes_agent_on_sibling_instance() {
             wake_sender,
             close_sender,
             command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 

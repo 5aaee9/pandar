@@ -257,7 +257,9 @@ async fn printer_camera_stream_opens_agent_camera_tunnel() {
             wake_sender,
             close_sender,
             command_sender,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 
@@ -1129,7 +1131,9 @@ async fn register_route_test_session(
             wake_sender: mpsc::channel(1).0,
             close_sender: mpsc::channel(1).0,
             command_sender,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
 }
@@ -1153,7 +1157,9 @@ async fn register_route_test_session_with_wake(
             wake_sender,
             close_sender: mpsc::channel(1).0,
             command_sender: mpsc::channel(1).0,
+            capabilities: std::collections::HashSet::new(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })
         .await;
     wake_receiver

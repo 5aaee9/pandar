@@ -19,9 +19,12 @@ pub use types::{
 };
 
 pub use operations::{
-    PrinterAxis, PrinterAxisMovement, PrinterOperationKind, PrinterOperationPayload,
-    operation_audit_metadata, validate_printer_operation,
+    PrintErrorAction, PrinterAxis, PrinterAxisMovement, PrinterOperationKind,
+    PrinterOperationPayload, operation_audit_metadata, validate_printer_operation,
 };
+
+#[cfg(test)]
+pub(crate) use audit::ownership_pause as printer_operation_ownership_pause;
 
 use crate::{
     db::Database,
@@ -290,13 +293,13 @@ impl CommandRepository {
         .await
     }
 
-    pub async fn fail_stale_unowned_link_printer_commands(
+    pub async fn fail_stale_unowned_live_commands(
         &self,
         now: &str,
         timeout: std::time::Duration,
         owned_command_ids: &[CommandId],
     ) -> RepositoryResult<u64> {
-        transitions::fail_stale_unowned_link_printer_commands(
+        transitions::fail_stale_unowned_live_commands(
             &self.database,
             now,
             timeout,

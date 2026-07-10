@@ -8,9 +8,13 @@ use super::{
 use crate::{
     AgentConfig,
     commands::operation_results::{printer_operation_action, printer_operation_result_json},
-    machine::{PrinterAxis as MachinePrinterAxis, PrinterOperation as MachinePrinterOperation},
+    machine::{
+        PrinterAxis as MachinePrinterAxis, PrinterOperation as MachinePrinterOperation,
+        mqtt::PrintErrorAction as MachinePrintErrorAction,
+    },
     protocol::agent::v1::{
-        AgentEvent, Axis, PrinterOperation as ProtoPrinterOperation, printer_operation,
+        AgentEvent, Axis, PrintErrorAction as ProtoPrintErrorAction,
+        PrinterOperation as ProtoPrinterOperation, printer_operation,
     },
 };
 
@@ -242,6 +246,28 @@ fn parse_printer_operation(
                 external_id: (!operation.external_id.is_empty())
                     .then(|| operation.external_id.clone()),
                 extruder_id: operation.extruder_id,
+            })
+        }
+        Some(printer_operation::Operation::HandlePrintError(operation)) => {
+            let error_action = match ProtoPrintErrorAction::try_from(operation.error_action) {
+                Ok(ProtoPrintErrorAction::Resume) => MachinePrintErrorAction::Resume,
+                Ok(ProtoPrintErrorAction::Ignore) => MachinePrintErrorAction::Ignore,
+                Ok(ProtoPrintErrorAction::Stop) => MachinePrintErrorAction::Stop,
+                Ok(ProtoPrintErrorAction::Unspecified) | Err(_) => {
+                    anyhow::bail!("invalid printer operation error_action")
+                }
+            };
+            if !(1..=i32::MAX as u32).contains(&operation.print_error) {
+                anyhow::bail!(
+                    "invalid printer operation print_error; expected 1..={}",
+                    i32::MAX
+                );
+            }
+            Ok(MachinePrinterOperation::HandlePrintError {
+                error_action,
+                print_error: operation.print_error,
+                printer_job_id: operation.printer_job_id.clone(),
+                sequence_id: operation.sequence_id,
             })
         }
         None => anyhow::bail!("missing printer operation"),

@@ -25,6 +25,8 @@ pub struct PrinterLiveStatus {
     pub total_layers: Option<u32>,
     pub gcode_file: Option<String>,
     pub subtask_name: Option<String>,
+    pub print_error: Option<u32>,
+    pub printer_job_id: Option<String>,
     pub hms: Vec<PrinterHms>,
 }
 
@@ -44,6 +46,8 @@ pub(crate) struct PrinterLiveStatusPatch {
     pub total_layers: Option<u32>,
     pub gcode_file: Option<String>,
     pub subtask_name: Option<String>,
+    pub print_error: Option<u32>,
+    pub printer_job_id: Option<String>,
     pub gcode_state: Option<String>,
     pub hms: Option<Vec<PrinterHms>>,
     pub observed_at: String,
@@ -77,6 +81,12 @@ pub(super) fn from_model(model: printers::Model) -> RepositoryResult<PrinterWith
                 .context("failed to read printer total layers")?,
             gcode_file: model.print_gcode_file.clone(),
             subtask_name: model.print_subtask_name.clone(),
+            print_error: model
+                .print_error
+                .map(u32::try_from)
+                .transpose()
+                .context("failed to read printer print error")?,
+            printer_job_id: model.print_job_id.clone(),
             hms: serde_json::from_str(&model.hms_json).context("failed to read printer HMS")?,
         })
     })()
@@ -132,6 +142,16 @@ where
         .unwrap_or(NotSet);
     active.print_subtask_name = patch
         .subtask_name
+        .map(|value| Set(Some(value)))
+        .unwrap_or(NotSet);
+    active.print_error = match patch.print_error {
+        Some(value) => Set(Some(
+            i32::try_from(value).context("failed to persist printer print error")?,
+        )),
+        None => NotSet,
+    };
+    active.print_job_id = patch
+        .printer_job_id
         .map(|value| Set(Some(value)))
         .unwrap_or(NotSet);
     active.print_gcode_state = patch

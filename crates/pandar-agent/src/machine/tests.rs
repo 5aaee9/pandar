@@ -11,12 +11,16 @@ use crate::machine::{
     file_transfer::{
         FakeMachineFileTransfer, FileTransferRequest, TransferProtectionMode::ProtectedData,
     },
-    mqtt::{BAMBU_MQTT_QOS, BambuMqttTransport, FakeMqttTransport, PublishedMqttCommand},
+    mqtt::{
+        BAMBU_MQTT_QOS, BAMBU_MQTT_RETAIN, BambuMqttTransport, FakeMqttTransport, PrintErrorAction,
+        PublishedMqttCommand,
+    },
     print::pick_remote_name,
     runtime::test_support::{TestRuntimeBambuMachineGateway, assert_locked_for_a_moment},
 };
 
 mod fixtures;
+mod print_error;
 
 use fixtures::*;
 

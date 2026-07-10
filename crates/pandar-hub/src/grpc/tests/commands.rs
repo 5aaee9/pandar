@@ -25,6 +25,8 @@ use crate::{
     },
 };
 
+mod print_error;
+
 fn command_result_payload(
     success: bool,
     error: impl Into<String>,

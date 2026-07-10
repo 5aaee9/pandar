@@ -20,8 +20,8 @@ use camera_control::handle_control_camera_command;
 use commands::handle_command_with_gateway;
 use machine::{BambuMachineGateway, runtime::RuntimeBambuMachineGateway};
 use protocol::agent::v1::{
-    AgentEvent, AgentHeartbeat, AgentHello, HubCommand, agent_control_client::AgentControlClient,
-    agent_event, hub_command,
+    AgentCapability, AgentEvent, AgentHeartbeat, AgentHello, HubCommand,
+    agent_control_client::AgentControlClient, agent_event, hub_command,
 };
 use startup::startup_printers;
 
@@ -188,6 +188,7 @@ pub fn hello_event(config: &AgentConfig) -> AgentEvent {
             name: config.agent_name.clone(),
             version: config.agent_version.clone(),
             credential: config.agent_credential.clone(),
+            capabilities: vec![AgentCapability::HandlePrintError as i32],
         }),
     )
 }

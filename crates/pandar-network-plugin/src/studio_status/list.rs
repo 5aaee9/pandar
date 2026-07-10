@@ -44,6 +44,10 @@ struct Printer {
     _total_layer_num: Option<u32>,
     #[serde(rename = "task_id")]
     _task_id: Option<String>,
+    #[serde(rename = "print_error")]
+    _print_error: Option<u32>,
+    #[serde(rename = "job_id")]
+    _job_id: Option<String>,
     #[serde(rename = "subtask_id")]
     _subtask_id: Option<String>,
     #[serde(rename = "gcode_file")]
@@ -110,4 +114,67 @@ pub(crate) fn validate_printer_list(body: &str) -> anyhow::Result<()> {
         bail!("Hub plugin printer status response contained an empty device id");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_printer_list;
+
+    fn printer_list_with_fields(fields: serde_json::Value) -> String {
+        let mut printer = serde_json::json!({
+            "dev_id": "studio-serial-1",
+            "dev_name": "Probe Printer",
+            "name": "Probe Printer",
+            "dev_ip": "192.0.2.10",
+            "dev_access_code": "12345678",
+            "dev_model_name": "N6",
+            "model": "N6",
+            "dev_online": true,
+            "online": true,
+            "task_status": "RUNNING",
+            "state": "RUNNING",
+            "gcode_state": "RUNNING",
+            "mc_percent": 37,
+            "mc_remaining_time": 52,
+            "layer_num": 12,
+            "total_layer_num": 120,
+            "task_id": "task-42",
+            "subtask_id": "subtask-42",
+            "gcode_file": "drawer-organizer.gcode",
+            "subtask_name": "drawer-organizer",
+            "hms": [],
+            "pandar_printer_id": "printer-1",
+            "nozzle_temperatures": [],
+            "active_nozzle": null,
+            "bed_temperature_celsius": null,
+            "bed_target_temperature_celsius": null,
+            "chamber_temperature_celsius": null,
+            "chamber_light_on": null,
+            "materials": null
+        });
+        printer
+            .as_object_mut()
+            .expect("printer fixture is an object")
+            .extend(
+                fields
+                    .as_object()
+                    .expect("fields fixture is an object")
+                    .clone(),
+            );
+        serde_json::json!({"message": "success", "devices": [printer]}).to_string()
+    }
+
+    #[test]
+    fn studio_status_list_rejects_wrong_print_error_type() {
+        let body = printer_list_with_fields(serde_json::json!({"print_error": "83918929"}));
+
+        assert!(validate_printer_list(&body).is_err());
+    }
+
+    #[test]
+    fn studio_status_list_rejects_wrong_job_id_type() {
+        let body = printer_list_with_fields(serde_json::json!({"job_id": 42}));
+
+        assert!(validate_printer_list(&body).is_err());
+    }
 }

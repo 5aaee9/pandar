@@ -23,6 +23,10 @@ async fn grpc_print_job_report_preserves_raw_task_id_and_hms_presence() {
             gcode_state: "RUNNING".to_string(),
             percent: 42,
             has_percent: true,
+            print_error: 0,
+            has_print_error: true,
+            printer_job_id: String::new(),
+            has_printer_job_id: true,
             hms: vec![PrinterHmsItem {
                 attr: 0x0102_0304,
                 code: 0x0506_0708,
@@ -47,6 +51,8 @@ async fn grpc_print_job_report_preserves_raw_task_id_and_hms_presence() {
         Some("external-mqtt-task")
     );
     assert_eq!(current.live_status.progress_percent, Some(42));
+    assert_eq!(current.live_status.print_error, Some(0));
+    assert_eq!(current.live_status.printer_job_id.as_deref(), Some(""));
     assert_eq!(
         current.live_status.hms,
         vec![crate::repositories::PrinterHms {
@@ -61,7 +67,43 @@ async fn grpc_print_job_report_preserves_raw_task_id_and_hms_presence() {
         agent_id,
         PrintJobReport {
             serial: "serial".to_string(),
+            print_error: 83_918_929,
+            has_print_error: true,
+            printer_job_id: "studio-job-1".to_string(),
+            has_printer_job_id: true,
             observed_at: "2026-07-09T10:01:00Z".to_string(),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    let seeded = state
+        .printers()
+        .list_with_live_status_for_tenant(tenant_id)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(seeded.live_status.print_error, Some(83_918_929));
+    assert_eq!(
+        seeded.live_status.printer_job_id.as_deref(),
+        Some("studio-job-1")
+    );
+    assert_eq!(seeded.live_status.progress_percent, Some(42));
+
+    handle_print_report(
+        &state,
+        tenant_id,
+        agent_id,
+        PrintJobReport {
+            serial: "serial".to_string(),
+            print_error: 17,
+            has_print_error: false,
+            printer_job_id: "conflicting-job".to_string(),
+            has_printer_job_id: false,
+            percent: 64,
+            has_percent: true,
+            observed_at: "2026-07-09T10:02:00Z".to_string(),
             ..Default::default()
         },
     )
@@ -74,28 +116,42 @@ async fn grpc_print_job_report_preserves_raw_task_id_and_hms_presence() {
         .unwrap()
         .pop()
         .unwrap();
-    assert_eq!(preserved.live_status, current.live_status);
+    assert_eq!(preserved.live_status.print_error, Some(83_918_929));
+    assert_eq!(
+        preserved.live_status.printer_job_id.as_deref(),
+        Some("studio-job-1")
+    );
+    assert_eq!(preserved.live_status.progress_percent, Some(64));
 
     handle_print_report(
         &state,
         tenant_id,
         agent_id,
         PrintJobReport {
-            serial: "serial".to_string(),
+            serial: "serial".to_owned(),
+            print_error: u32::MAX,
+            has_print_error: true,
+            percent: 73,
+            has_percent: true,
             has_hms: true,
-            observed_at: "2026-07-09T10:02:00Z".to_string(),
+            observed_at: "2026-07-09T10:03:00Z".to_owned(),
             ..Default::default()
         },
     )
     .await
     .unwrap();
-    let cleared = state
+    let boundary = state
         .printers()
         .list_with_live_status_for_tenant(tenant_id)
         .await
         .unwrap()
         .pop()
         .unwrap();
-    assert_eq!(cleared.live_status.progress_percent, Some(42));
-    assert!(cleared.live_status.hms.is_empty());
+    assert_eq!(boundary.live_status.print_error, Some(83_918_929));
+    assert_eq!(boundary.live_status.progress_percent, Some(73));
+    assert_eq!(
+        boundary.live_status.printer_job_id.as_deref(),
+        Some("studio-job-1")
+    );
+    assert!(boundary.live_status.hms.is_empty());
 }

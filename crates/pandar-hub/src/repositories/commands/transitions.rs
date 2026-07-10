@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use anyhow::Context;
 use pandar_core::{AgentId, CommandId, CommandStatus, TenantId};
 use sea_orm::{ActiveValue::Set, ColumnTrait, Condition, EntityTrait, QueryFilter};
@@ -6,7 +8,10 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 use crate::{
     db::Database,
     entities::commands,
-    repositories::{RepositoryError, RepositoryResult},
+    repositories::{
+        PrinterOperationKind, PrinterOperationPayload, RepositoryError, RepositoryResult,
+        commands::rows::command_from_model,
+    },
 };
 
 pub struct StatusTransition<'a> {
@@ -69,54 +74,82 @@ pub async fn update_status_if_current(
     Ok(result.rows_affected == 1)
 }
 
-pub async fn fail_stale_unowned_link_printer_commands(
+pub async fn fail_stale_unowned_live_commands(
     database: &Database,
     now: &str,
     timeout: std::time::Duration,
     owned_command_ids: &[CommandId],
 ) -> RepositoryResult<u64> {
-    let timeout = time::Duration::try_from(timeout)
-        .context("failed to convert link printer command timeout")?;
+    let timeout =
+        time::Duration::try_from(timeout).context("failed to convert live command timeout")?;
     let cutoff = (OffsetDateTime::parse(now, &Rfc3339)
-        .context("failed to parse link printer command cleanup timestamp")?
+        .context("failed to parse live command cleanup timestamp")?
         - timeout)
         .format(&Rfc3339)
-        .context("failed to format link printer command cleanup cutoff")?;
-
-    let mut update = commands::Entity::update_many()
-        .set(commands::ActiveModel {
-            status: Set(CommandStatus::Failed.as_str().to_owned()),
-            error: Set(Some(
-                "printer link dispatch expired before completion".to_owned(),
-            )),
-            updated_at: Set(now.to_owned()),
-            ..Default::default()
-        })
-        .filter(commands::Column::Kind.eq("link_printer"))
+        .context("failed to format live command cleanup cutoff")?;
+    let owned_command_ids = owned_command_ids
+        .iter()
+        .map(ToString::to_string)
+        .collect::<HashSet<_>>();
+    let candidates = commands::Entity::find()
+        .filter(
+            Condition::any()
+                .add(commands::Column::Kind.eq("link_printer"))
+                .add(commands::Column::Kind.eq("printer_operation")),
+        )
         .filter(
             Condition::any()
                 .add(commands::Column::Status.eq(CommandStatus::Sent.as_str()))
                 .add(commands::Column::Status.eq(CommandStatus::Acknowledged.as_str())),
         )
-        .filter(commands::Column::UpdatedAt.lt(cutoff));
+        .filter(commands::Column::UpdatedAt.lt(cutoff))
+        .all(&database.sea_orm_connection())
+        .await
+        .context("failed to load stale live command candidates")?
+        .into_iter()
+        .map(command_from_model)
+        .collect::<RepositoryResult<Vec<_>>>()?;
 
-    if !owned_command_ids.is_empty() {
-        update = update.filter(
-            commands::Column::Id.is_not_in(
-                owned_command_ids
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>(),
-            ),
-        );
+    let mut failed = 0;
+    for command in candidates {
+        if owned_command_ids.contains(&command.id.to_string()) {
+            continue;
+        }
+        let error = match command.kind.as_str() {
+            "link_printer" => Some("printer link dispatch expired before completion"),
+            "printer_operation" => {
+                let payload: PrinterOperationPayload = serde_json::from_str(&command.payload_json)
+                    .context("failed to deserialize stale printer operation command payload")?;
+                matches!(
+                    payload.operation,
+                    PrinterOperationKind::HandlePrintError { .. }
+                )
+                .then_some("live printer operation owner unavailable before completion")
+            }
+            _ => unreachable!("candidate query limits live command kinds"),
+        };
+        let Some(error) = error else {
+            continue;
+        };
+        if update_status_if_current(
+            database,
+            StatusTransition {
+                command_id: command.id,
+                tenant_id: command.tenant_id,
+                agent_id: command.agent_id,
+                status: CommandStatus::Failed,
+                error: Some(error.to_owned()),
+                result_json: None,
+                allowed_statuses: &[CommandStatus::Sent, CommandStatus::Acknowledged],
+            },
+        )
+        .await?
+        {
+            failed += 1;
+        }
     }
 
-    let result = update
-        .exec(&database.sea_orm_connection())
-        .await
-        .context("failed to fail stale link printer commands")?;
-
-    Ok(result.rows_affected)
+    Ok(failed)
 }
 
 pub(super) fn invalid_transition(status: CommandStatus, action: &'static str) -> RepositoryError {

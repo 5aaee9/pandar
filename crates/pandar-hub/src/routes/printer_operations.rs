@@ -1,7 +1,16 @@
+mod live;
+mod request_field;
+
+use pandar_core::{CommandRecord, TenantId};
+use request_field::RequestField;
 use serde::Deserialize;
 
 use crate::{
-    repositories::{PrinterAxis, PrinterAxisMovement, PrinterOperationKind},
+    AppState,
+    repositories::{
+        AuditActor, PrintErrorAction, PrinterAxis, PrinterAxisMovement, PrinterOperationKind,
+        RepositoryError,
+    },
     routes::ApiError,
 };
 
@@ -10,47 +19,64 @@ use crate::{
 pub(super) struct PrinterOperationRequest {
     action: String,
     #[serde(default)]
-    speed_mode: Option<u8>,
+    speed_mode: RequestField<u8>,
     #[serde(default)]
-    axes: Vec<PrinterAxis>,
+    axes: RequestField<Vec<PrinterAxis>>,
     #[serde(default)]
-    movements: Vec<PrinterAxisMovement>,
+    movements: RequestField<Vec<PrinterAxisMovement>>,
     #[serde(default)]
-    feedrate_mm_per_min: Option<u32>,
+    feedrate_mm_per_min: RequestField<u32>,
     #[serde(default)]
-    temperature_celsius: Option<u16>,
+    temperature_celsius: RequestField<u16>,
     #[serde(default)]
-    wait: Option<bool>,
+    wait: RequestField<bool>,
     #[serde(default)]
-    ams_id: Option<u32>,
+    ams_id: RequestField<u32>,
     #[serde(default)]
-    slot_id: Option<u32>,
+    slot_id: RequestField<u32>,
     #[serde(default)]
-    global_tray_id: Option<u32>,
+    global_tray_id: RequestField<u32>,
     #[serde(default)]
-    external_id: Option<String>,
+    external_id: RequestField<String>,
     #[serde(default)]
-    extruder_id: Option<u32>,
+    extruder_id: RequestField<u32>,
     #[serde(default)]
-    light_on: Option<bool>,
+    light_on: RequestField<bool>,
+    #[serde(default)]
+    error_action: RequestField<PrintErrorAction>,
+    #[serde(default)]
+    print_error: RequestField<u32>,
+    #[serde(default)]
+    printer_job_id: RequestField<String>,
+    #[serde(default)]
+    sequence_id: RequestField<u64>,
+}
+
+pub(super) enum PluginPrinterOperation {
+    Queued(PrinterOperationKind),
+    Live(PrinterOperationKind),
 }
 
 impl PrinterOperationRequest {
     pub(super) fn into_operation(self) -> Result<PrinterOperationKind, ApiError> {
+        if !self.no_native_fields() {
+            return Err(invalid_printer_control());
+        }
+
         match self.action.as_str() {
             "pause" if self.no_operation_fields() => Ok(PrinterOperationKind::Pause),
             "resume" if self.no_operation_fields() => Ok(PrinterOperationKind::Resume),
             "stop" if self.no_operation_fields() => Ok(PrinterOperationKind::Stop),
             "toggle_light" if self.no_operation_fields() => Ok(PrinterOperationKind::ToggleLight),
             "set_chamber_light"
-                if self.speed_mode.is_none()
-                    && self.axes.is_empty()
-                    && self.movements.is_empty()
-                    && self.feedrate_mm_per_min.is_none()
-                    && self.temperature_celsius.is_none()
-                    && self.wait.is_none()
+                if self.speed_mode.is_missing()
+                    && self.axes.is_missing()
+                    && self.movements.is_missing()
+                    && self.feedrate_mm_per_min.is_missing()
+                    && self.temperature_celsius.is_missing()
+                    && self.wait.is_missing()
                     && self.no_material_fields()
-                    && self.extruder_id.is_none()
+                    && self.extruder_id.is_missing()
                     && self.light_on.is_some() =>
             {
                 Ok(PrinterOperationKind::SetChamberLight {
@@ -59,11 +85,11 @@ impl PrinterOperationRequest {
             }
             "set_print_speed"
                 if self.speed_mode.is_some()
-                    && self.axes.is_empty()
-                    && self.movements.is_empty()
-                    && self.feedrate_mm_per_min.is_none()
-                    && self.temperature_celsius.is_none()
-                    && self.wait.is_none()
+                    && self.axes.is_missing()
+                    && self.movements.is_missing()
+                    && self.feedrate_mm_per_min.is_missing()
+                    && self.temperature_celsius.is_missing()
+                    && self.wait.is_missing()
                     && self.no_ams_fields() =>
             {
                 Ok(PrinterOperationKind::SetPrintSpeed {
@@ -71,16 +97,16 @@ impl PrinterOperationRequest {
                 })
             }
             "select_extruder"
-                if self.speed_mode.is_none()
-                    && self.axes.is_empty()
-                    && self.movements.is_empty()
-                    && self.feedrate_mm_per_min.is_none()
-                    && self.temperature_celsius.is_none()
-                    && self.wait.is_none()
-                    && self.ams_id.is_none()
-                    && self.slot_id.is_none()
-                    && self.global_tray_id.is_none()
-                    && self.external_id.is_none()
+                if self.speed_mode.is_missing()
+                    && self.axes.is_missing()
+                    && self.movements.is_missing()
+                    && self.feedrate_mm_per_min.is_missing()
+                    && self.temperature_celsius.is_missing()
+                    && self.wait.is_missing()
+                    && self.ams_id.is_missing()
+                    && self.slot_id.is_missing()
+                    && self.global_tray_id.is_missing()
+                    && self.external_id.is_missing()
                     && self.extruder_id.is_some() =>
             {
                 Ok(PrinterOperationKind::SelectExtruder {
@@ -88,46 +114,48 @@ impl PrinterOperationRequest {
                 })
             }
             "home"
-                if self.speed_mode.is_none()
-                    && self.movements.is_empty()
-                    && self.feedrate_mm_per_min.is_none()
-                    && self.temperature_celsius.is_none()
-                    && self.wait.is_none()
+                if self.speed_mode.is_missing()
+                    && self.movements.is_missing()
+                    && self.feedrate_mm_per_min.is_missing()
+                    && self.temperature_celsius.is_missing()
+                    && self.wait.is_missing()
                     && self.no_ams_fields() =>
             {
-                Ok(PrinterOperationKind::Home { axes: self.axes })
+                Ok(PrinterOperationKind::Home {
+                    axes: self.axes.unwrap_or_default(),
+                })
             }
             "move_axes"
-                if self.speed_mode.is_none()
-                    && self.axes.is_empty()
-                    && self.temperature_celsius.is_none()
-                    && self.wait.is_none()
+                if self.speed_mode.is_missing()
+                    && self.axes.is_missing()
+                    && self.temperature_celsius.is_missing()
+                    && self.wait.is_missing()
                     && self.no_ams_fields() =>
             {
                 Ok(PrinterOperationKind::MoveAxes {
-                    movements: self.movements,
-                    feedrate_mm_per_min: self.feedrate_mm_per_min,
+                    movements: self.movements.unwrap_or_default(),
+                    feedrate_mm_per_min: self.feedrate_mm_per_min.into_option(),
                 })
             }
             "set_hotend_temperature"
-                if self.speed_mode.is_none()
-                    && self.axes.is_empty()
-                    && self.movements.is_empty()
-                    && self.feedrate_mm_per_min.is_none()
+                if self.speed_mode.is_missing()
+                    && self.axes.is_missing()
+                    && self.movements.is_missing()
+                    && self.feedrate_mm_per_min.is_missing()
                     && self.no_material_fields()
                     && self.temperature_celsius.is_some() =>
             {
                 Ok(PrinterOperationKind::SetHotendTemperature {
                     temperature_celsius: self.temperature_celsius.expect("checked above"),
                     wait: self.wait.unwrap_or(false),
-                    extruder_id: self.extruder_id,
+                    extruder_id: self.extruder_id.into_option(),
                 })
             }
             "set_bed_temperature"
-                if self.speed_mode.is_none()
-                    && self.axes.is_empty()
-                    && self.movements.is_empty()
-                    && self.feedrate_mm_per_min.is_none()
+                if self.speed_mode.is_missing()
+                    && self.axes.is_missing()
+                    && self.movements.is_missing()
+                    && self.feedrate_mm_per_min.is_missing()
                     && self.no_ams_fields()
                     && self.temperature_celsius.is_some() =>
             {
@@ -137,10 +165,10 @@ impl PrinterOperationRequest {
                 })
             }
             "set_chamber_temperature"
-                if self.speed_mode.is_none()
-                    && self.axes.is_empty()
-                    && self.movements.is_empty()
-                    && self.feedrate_mm_per_min.is_none()
+                if self.speed_mode.is_missing()
+                    && self.axes.is_missing()
+                    && self.movements.is_missing()
+                    && self.feedrate_mm_per_min.is_missing()
                     && self.no_ams_fields()
                     && self.temperature_celsius.is_some() =>
             {
@@ -150,17 +178,17 @@ impl PrinterOperationRequest {
                 })
             }
             "ams_reread_rfid"
-                if self.speed_mode.is_none()
-                    && self.axes.is_empty()
-                    && self.movements.is_empty()
-                    && self.feedrate_mm_per_min.is_none()
-                    && self.temperature_celsius.is_none()
-                    && self.wait.is_none()
+                if self.speed_mode.is_missing()
+                    && self.axes.is_missing()
+                    && self.movements.is_missing()
+                    && self.feedrate_mm_per_min.is_missing()
+                    && self.temperature_celsius.is_missing()
+                    && self.wait.is_missing()
                     && self.ams_id.is_some()
                     && self.slot_id.is_some()
-                    && self.global_tray_id.is_none()
-                    && self.external_id.is_none()
-                    && self.extruder_id.is_none() =>
+                    && self.global_tray_id.is_missing()
+                    && self.external_id.is_missing()
+                    && self.extruder_id.is_missing() =>
             {
                 Ok(PrinterOperationKind::AmsRereadRfid {
                     ams_id: self.ams_id.expect("checked above"),
@@ -168,64 +196,132 @@ impl PrinterOperationRequest {
                 })
             }
             "ams_load_filament"
-                if self.speed_mode.is_none()
-                    && self.axes.is_empty()
-                    && self.movements.is_empty()
-                    && self.feedrate_mm_per_min.is_none()
-                    && self.temperature_celsius.is_none()
-                    && self.wait.is_none()
+                if self.speed_mode.is_missing()
+                    && self.axes.is_missing()
+                    && self.movements.is_missing()
+                    && self.feedrate_mm_per_min.is_missing()
+                    && self.temperature_celsius.is_missing()
+                    && self.wait.is_missing()
                     && self.ams_id.is_some()
                     && self.slot_id.is_some() =>
             {
                 Ok(PrinterOperationKind::AmsLoadFilament {
                     ams_id: self.ams_id.expect("checked above"),
                     slot_id: self.slot_id.expect("checked above"),
-                    global_tray_id: self.global_tray_id,
-                    external_id: self.external_id,
-                    extruder_id: self.extruder_id,
+                    global_tray_id: self.global_tray_id.into_option(),
+                    external_id: self.external_id.into_option(),
+                    extruder_id: self.extruder_id.into_option(),
                 })
             }
             "ams_unload_filament"
-                if self.speed_mode.is_none()
-                    && self.axes.is_empty()
-                    && self.movements.is_empty()
-                    && self.feedrate_mm_per_min.is_none()
-                    && self.temperature_celsius.is_none()
-                    && self.wait.is_none()
+                if self.speed_mode.is_missing()
+                    && self.axes.is_missing()
+                    && self.movements.is_missing()
+                    && self.feedrate_mm_per_min.is_missing()
+                    && self.temperature_celsius.is_missing()
+                    && self.wait.is_missing()
                     && self.ams_id.is_some()
                     && self.slot_id.is_some() =>
             {
                 Ok(PrinterOperationKind::AmsUnloadFilament {
                     ams_id: self.ams_id.expect("checked above"),
                     slot_id: self.slot_id.expect("checked above"),
-                    global_tray_id: self.global_tray_id,
-                    external_id: self.external_id,
-                    extruder_id: self.extruder_id,
+                    global_tray_id: self.global_tray_id.into_option(),
+                    external_id: self.external_id.into_option(),
+                    extruder_id: self.extruder_id.into_option(),
                 })
             }
-            _ => Err(ApiError::bad_request("invalid_printer_control")),
+            _ => Err(invalid_printer_control()),
         }
     }
 
+    pub(super) fn into_plugin_operation(self) -> Result<PluginPrinterOperation, ApiError> {
+        if self.action != "handle_print_error" {
+            return self.into_operation().map(PluginPrinterOperation::Queued);
+        }
+        if !self.no_operation_fields() {
+            return Err(invalid_printer_control());
+        }
+        let (Some(error_action), Some(print_error), Some(printer_job_id), Some(sequence_id)) = (
+            self.error_action.into_option(),
+            self.print_error.into_option(),
+            self.printer_job_id.into_option(),
+            self.sequence_id.into_option(),
+        ) else {
+            return Err(invalid_printer_control());
+        };
+        let operation = PrinterOperationKind::HandlePrintError {
+            error_action,
+            print_error,
+            printer_job_id,
+            sequence_id,
+        };
+        if !(1..=i32::MAX as u32).contains(&print_error) {
+            return Err(invalid_printer_control());
+        }
+        Ok(PluginPrinterOperation::Live(operation))
+    }
+
     fn no_operation_fields(&self) -> bool {
-        self.speed_mode.is_none()
-            && self.axes.is_empty()
-            && self.movements.is_empty()
-            && self.feedrate_mm_per_min.is_none()
-            && self.temperature_celsius.is_none()
-            && self.wait.is_none()
+        self.speed_mode.is_missing()
+            && self.axes.is_missing()
+            && self.movements.is_missing()
+            && self.feedrate_mm_per_min.is_missing()
+            && self.temperature_celsius.is_missing()
+            && self.wait.is_missing()
             && self.no_ams_fields()
-            && self.light_on.is_none()
+            && self.light_on.is_missing()
     }
 
     fn no_ams_fields(&self) -> bool {
-        self.no_material_fields() && self.extruder_id.is_none() && self.light_on.is_none()
+        self.no_material_fields() && self.extruder_id.is_missing() && self.light_on.is_missing()
     }
 
     fn no_material_fields(&self) -> bool {
-        self.ams_id.is_none()
-            && self.slot_id.is_none()
-            && self.global_tray_id.is_none()
-            && self.external_id.is_none()
+        self.ams_id.is_missing()
+            && self.slot_id.is_missing()
+            && self.global_tray_id.is_missing()
+            && self.external_id.is_missing()
     }
+
+    fn no_native_fields(&self) -> bool {
+        self.error_action.is_missing()
+            && self.print_error.is_missing()
+            && self.printer_job_id.is_missing()
+            && self.sequence_id.is_missing()
+    }
+}
+
+pub(super) async fn dispatch_plugin_printer_operation(
+    state: &AppState,
+    tenant_id: TenantId,
+    printer_id: &str,
+    request: PrinterOperationRequest,
+    actor: AuditActor,
+) -> Result<CommandRecord, ApiError> {
+    match request.into_plugin_operation()? {
+        PluginPrinterOperation::Queued(operation) => {
+            let command = state
+                .commands()
+                .enqueue_printer_operation_with_audit(tenant_id, printer_id, operation, actor)
+                .await
+                .map_err(plugin_operation_error)?;
+            state.wake_agent(command.tenant_id, command.agent_id).await;
+            Ok(command)
+        }
+        PluginPrinterOperation::Live(operation) => {
+            live::dispatch(state, tenant_id, printer_id, operation, actor).await
+        }
+    }
+}
+
+fn plugin_operation_error(error: RepositoryError) -> ApiError {
+    match error {
+        RepositoryError::PrinterControlUnavailable => live::printer_operation_unavailable(),
+        other => other.into(),
+    }
+}
+
+fn invalid_printer_control() -> ApiError {
+    ApiError::bad_request("invalid_printer_control")
 }
