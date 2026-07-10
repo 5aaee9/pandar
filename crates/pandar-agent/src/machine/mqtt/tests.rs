@@ -13,6 +13,7 @@ use crate::{
 
 mod fixtures;
 mod snapshot;
+mod tls;
 
 use fixtures::*;
 

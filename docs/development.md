@@ -49,7 +49,7 @@ Reverse sessions require `PANDAR_AGENT_CREDENTIAL`. Tenant admins create or rota
 
 ## Machine Communication
 
-The agent-side MQTT boundary, `RefreshPrinters` gateway path, and machine file-transfer boundary are implemented from reference behavior. Bambu LAN MQTT uses printer-local TLS certificates, so the MQTT adapter uses a Bambu-specific rustls verifier policy instead of platform CA/hostname validation.
+The agent-side MQTT boundary, `RefreshPrinters` gateway path, and machine file-transfer boundary are implemented from reference behavior. Bambu LAN MQTT, FTPS, and BRTC use printer-local TLS certificates, including X.509 v1 certificates, so the agent uses a Bambu-specific verifier instead of platform CA/hostname validation while still verifying handshake signatures against the certificate public key.
 
 Runtime Bambu machine communication:
 

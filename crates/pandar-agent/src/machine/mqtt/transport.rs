@@ -6,12 +6,14 @@ use rumqttc::{
     AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS, TlsConfiguration, Transport,
 };
 use rustls::{
-    ClientConfig, DigitallySignedStruct, Error as TlsError, SignatureScheme,
+    CertificateError, ClientConfig, DigitallySignedStruct, Error as TlsError, PeerMisbehaved,
+    SignatureScheme,
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    pki_types::{CertificateDer, ServerName, UnixTime},
+    pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime},
 };
 use serde_json::Value;
 use tokio::sync::Mutex;
+use x509_parser::prelude::{FromDer, X509Certificate};
 
 use crate::machine::BambuPrinterEndpoint;
 
@@ -96,12 +98,26 @@ impl ServerCertVerifier for BambuLanCertificateVerifier {
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TlsError> {
         let provider = rustls::crypto::aws_lc_rs::default_provider();
-        rustls::crypto::verify_tls12_signature(
-            message,
-            cert,
-            dss,
-            &provider.signature_verification_algorithms,
-        )
+        let algorithms = provider
+            .signature_verification_algorithms
+            .mapping
+            .iter()
+            .find_map(|(scheme, algorithms)| (*scheme == dss.scheme).then_some(*algorithms))
+            .ok_or(TlsError::PeerMisbehaved(
+                PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme,
+            ))?;
+        let certificate = parse_bambu_certificate(cert)?;
+        let public_key = &certificate.public_key().subject_public_key.data;
+
+        algorithms
+            .iter()
+            .find_map(|algorithm| {
+                algorithm
+                    .verify_signature(public_key, message, dss.signature())
+                    .is_ok()
+                    .then_some(HandshakeSignatureValid::assertion())
+            })
+            .ok_or(TlsError::InvalidCertificate(CertificateError::BadSignature))
     }
 
     fn verify_tls13_signature(
@@ -111,9 +127,11 @@ impl ServerCertVerifier for BambuLanCertificateVerifier {
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, TlsError> {
         let provider = rustls::crypto::aws_lc_rs::default_provider();
-        rustls::crypto::verify_tls13_signature(
+        let certificate = parse_bambu_certificate(cert)?;
+        let public_key = SubjectPublicKeyInfoDer::from(certificate.public_key().raw);
+        rustls::crypto::verify_tls13_signature_with_raw_key(
             message,
-            cert,
+            &public_key,
             dss,
             &provider.signature_verification_algorithms,
         )
@@ -124,6 +142,17 @@ impl ServerCertVerifier for BambuLanCertificateVerifier {
             .signature_verification_algorithms
             .supported_schemes()
     }
+}
+
+fn parse_bambu_certificate<'a>(
+    certificate: &'a CertificateDer<'_>,
+) -> Result<X509Certificate<'a>, TlsError> {
+    let (remainder, certificate) = X509Certificate::from_der(certificate.as_ref())
+        .map_err(|_| TlsError::InvalidCertificate(CertificateError::BadEncoding))?;
+    if !remainder.is_empty() {
+        return Err(TlsError::InvalidCertificate(CertificateError::BadEncoding));
+    }
+    Ok(certificate)
 }
 
 #[async_trait]

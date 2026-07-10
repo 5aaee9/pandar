@@ -28,6 +28,7 @@ tonic = { workspace = true, features = ["tls-aws-lc", "tls-native-roots"] }
 tonic-prost.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+x509-parser.workspace = true
 
 [build-dependencies]
 protoc-bin-vendored.workspace = true

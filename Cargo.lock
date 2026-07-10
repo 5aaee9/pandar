@@ -2923,6 +2923,7 @@ dependencies = [
  "tracing-core",
  "tracing-subscriber",
  "uuid",
+ "x509-parser",
 ]
 
 [[package]]
