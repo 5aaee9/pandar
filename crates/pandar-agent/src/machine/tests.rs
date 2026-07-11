@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
+use pandar_core::BambuDeviceFeatures;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::{Mutex, Notify, mpsc};
@@ -18,7 +19,9 @@ use crate::machine::{
     print::pick_remote_name,
     runtime::test_support::{TestRuntimeBambuMachineGateway, assert_locked_for_a_moment},
 };
+use crate::protocol::agent::v1::{HubCommand, RefreshPrinters, agent_event, hub_command};
 
+mod axis_controls;
 mod fixtures;
 mod print_error;
 
@@ -67,6 +70,7 @@ fn runtime_state_report(state: &str) -> serde_json::Value {
     serde_json::to_value(TestRuntimeStateReport {
         print: TestRuntimePrintReport {
             state,
+            fun: None,
             ams: TestRuntimeAmsReport {
                 ams: [TestRuntimeAmsUnit {
                     id: "0",
@@ -77,6 +81,32 @@ fn runtime_state_report(state: &str) -> serde_json::Value {
                 }],
             },
         },
+    })
+    .unwrap()
+}
+
+fn runtime_feature_report(state: &str, fun: &'static str) -> serde_json::Value {
+    serde_json::to_value(TestRuntimeStateReport {
+        print: TestRuntimePrintReport {
+            state,
+            fun: Some(fun),
+            ams: TestRuntimeAmsReport {
+                ams: [TestRuntimeAmsUnit {
+                    id: "0",
+                    tray: [TestRuntimeAmsTray {
+                        id: "0",
+                        tray_type: "PLA",
+                    }],
+                }],
+            },
+        },
+    })
+    .unwrap()
+}
+
+fn runtime_fun_only_report(fun: &str) -> serde_json::Value {
+    serde_json::to_value(TestRuntimeFunOnlyReport {
+        print: TestRuntimeFunOnly { fun },
     })
     .unwrap()
 }
@@ -106,7 +136,19 @@ struct TestRuntimeStateReport<'a> {
 #[derive(Debug, Serialize)]
 struct TestRuntimePrintReport<'a> {
     state: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fun: Option<&'static str>,
     ams: TestRuntimeAmsReport,
+}
+
+#[derive(Debug, Serialize)]
+struct TestRuntimeFunOnlyReport<'a> {
+    print: TestRuntimeFunOnly<'a>,
+}
+
+#[derive(Debug, Serialize)]
+struct TestRuntimeFunOnly<'a> {
+    fun: &'a str,
 }
 
 #[derive(Debug, Serialize)]
@@ -219,6 +261,7 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
                 chamber_light_on: None,
+                device_features: None,
             },
             MachineSnapshot {
                 serial: "SERIAL2".to_string(),
@@ -233,6 +276,7 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
                 chamber_light_on: None,
+                device_features: None,
             },
         ]
     );
@@ -631,7 +675,7 @@ async fn configured_operate_printer_print_speed_mode_4_publishes_to_request_topi
 }
 
 #[tokio::test]
-async fn configured_operate_printer_home_publishes_bare_g28_for_axis_specific_request() {
+async fn configured_operate_printer_home_preserves_axis_specific_request() {
     let mqtt = FakeMqttTransport::default();
     let transfer = FakeMachineFileTransfer::default();
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
@@ -645,6 +689,7 @@ async fn configured_operate_printer_home_publishes_bare_g28_for_axis_specific_re
             "SERIAL1",
             PrinterOperation::Home {
                 axes: vec![PrinterAxis::X, PrinterAxis::Z],
+                required_feature: None,
             },
         )
         .await
@@ -656,7 +701,7 @@ async fn configured_operate_printer_home_publishes_bare_g28_for_axis_specific_re
         published,
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
-            payload: expected_print_command_payload("gcode_line", "G28", &sequence_id),
+            payload: expected_print_command_payload("gcode_line", "G28 X Z", &sequence_id),
             qos: BAMBU_MQTT_QOS,
         }]
     );
@@ -680,6 +725,7 @@ async fn configured_operate_printer_move_axes_publishes_relative_gcode_line() {
                 y_mm: None,
                 z_mm: Some(-0.5),
                 feedrate_mm_per_min: Some(3000.0),
+                required_feature: None,
             },
         )
         .await
@@ -693,7 +739,7 @@ async fn configured_operate_printer_move_axes_publishes_relative_gcode_line() {
             topic: "device/SERIAL1/request".to_string(),
             payload: expected_print_command_payload(
                 "gcode_line",
-                "G91\nG0 X10 Z-0.5 F3000\nG90",
+                "M211 S\nM211 X1 Y1 Z1\nM1002 push_ref_mode\nG91\nG1 X10 Z-0.5 F3000\nM1002 pop_ref_mode\nM211 R",
                 &sequence_id,
             ),
             qos: BAMBU_MQTT_QOS,
@@ -1135,6 +1181,401 @@ fn print_project_file() -> PrintProjectFile {
 mod runtime {
     use super::*;
 
+    const DEVICE_FEATURE_HIGH_BITS: u64 = 0x8000_0041_0000_0020;
+
+    #[tokio::test]
+    async fn device_features_session_startup_precedes_queued_command_and_refreshes_zero() {
+        let transport = FakeMqttTransport::with_reports([
+            runtime_feature_report("RUNNING", "8000004100000020"),
+            get_version_report("X1 Carbon"),
+            runtime_feature_report("READY", "0"),
+        ]);
+        let transfer = FakeMachineFileTransfer::default();
+        let gateway = std::sync::Arc::new(TestRuntimeBambuMachineGateway::new(
+            vec![(
+                runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+                transport.clone(),
+                transfer.clone(),
+            )],
+            transfer,
+            Duration::from_secs(1),
+        ));
+        let cache = gateway.device_feature_cache();
+        cache
+            .update(
+                "SERIAL1",
+                BambuDeviceFeatures::from_bits(DEVICE_FEATURE_HIGH_BITS),
+            )
+            .await;
+        let config = test_config();
+        let (sender, mut events) = mpsc::channel(16);
+        sender.send(crate::hello_event(&config)).await.unwrap();
+        let (commands_sender, commands_receiver) = mpsc::channel(1);
+        commands_sender
+            .send(Ok(HubCommand {
+                command_id: "refresh-after-features".to_owned(),
+                command: Some(hub_command::Command::RefreshPrinters(RefreshPrinters {})),
+            }))
+            .await
+            .unwrap();
+        let (command_release, released) = tokio::sync::oneshot::channel();
+
+        let task = tokio::spawn({
+            let gateway = std::sync::Arc::clone(&gateway);
+            let config = config.clone();
+            async move {
+                gateway.prepare_session(&config, &sender).await?;
+                released.await.expect("release queued Hub command");
+                crate::handle_command_stream_with_gateway(
+                    &config,
+                    gateway.as_ref(),
+                    &sender,
+                    tokio_stream::wrappers::ReceiverStream::new(commands_receiver),
+                )
+                .await
+            }
+        });
+
+        assert!(matches!(
+            events.recv().await.unwrap().event,
+            Some(agent_event::Event::Hello(_))
+        ));
+        assert_eq!(feature_event_bits(events.recv().await.unwrap()), None);
+        assert_eq!(
+            feature_event_bits(events.recv().await.unwrap()),
+            Some(DEVICE_FEATURE_HIGH_BITS)
+        );
+        assert_eq!(
+            cache.get("SERIAL1").await.unwrap().bits(),
+            DEVICE_FEATURE_HIGH_BITS
+        );
+        command_release.send(()).unwrap();
+        assert!(matches!(
+            events.recv().await.unwrap().event,
+            Some(agent_event::Event::CommandAck(_))
+        ));
+        let full_snapshot = events.recv().await.unwrap();
+        let Some(agent_event::Event::PrinterSnapshot(full_snapshot)) = full_snapshot.event else {
+            panic!("expected refreshed full printer snapshot");
+        };
+        assert_eq!(
+            full_snapshot.device_features.unwrap().bambu_fun_bits,
+            0,
+            "valid zero must overwrite the prior nonzero value"
+        );
+        assert!(matches!(
+            events.recv().await.unwrap().event,
+            Some(agent_event::Event::PrinterMaterialsSnapshot(_))
+        ));
+        assert!(matches!(
+            events.recv().await.unwrap().event,
+            Some(agent_event::Event::CommandResult(result)) if result.success
+        ));
+        assert_eq!(cache.get("SERIAL1").await.unwrap().bits(), 0);
+
+        let published = transport.published_commands().await;
+        assert_eq!(published[0].payload["pushing"]["command"], "pushall");
+        assert_eq!(published[1].payload["info"]["command"], "get_version");
+        assert_eq!(published[2].payload["pushing"]["command"], "pushall");
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn device_features_session_startup_aborts_stale_report_cache_writer() {
+        let transport = FakeMqttTransport::with_reports([runtime_fun_only_report("0")]);
+        let transfer = FakeMachineFileTransfer::default();
+        let gateway = std::sync::Arc::new(TestRuntimeBambuMachineGateway::new(
+            vec![(
+                runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+                transport,
+                transfer.clone(),
+            )],
+            transfer,
+            Duration::from_secs(1),
+        ));
+        let replacement_pause = gateway.pause_report_task_replacement().await;
+        let release = std::sync::Arc::new(Notify::new());
+        let cache = gateway.device_feature_cache();
+        let stale_finished = install_stale_report_cache_write(
+            &gateway.report_tasks,
+            cache.clone(),
+            "SERIAL1",
+            BambuDeviceFeatures::from_bits(DEVICE_FEATURE_HIGH_BITS),
+            std::sync::Arc::clone(&release),
+        )
+        .await;
+        let (sender, mut events) = mpsc::channel(4);
+
+        let prepare = tokio::spawn({
+            let gateway = std::sync::Arc::clone(&gateway);
+            async move { gateway.prepare_session(&test_config(), &sender).await }
+        });
+        replacement_pause.wait_until_blocked().await;
+        assert_eq!(feature_event_bits(events.recv().await.unwrap()), None);
+        assert_eq!(feature_event_bits(events.recv().await.unwrap()), Some(0));
+        release.notify_waiters();
+        tokio::task::yield_now().await;
+        replacement_pause.release();
+        prepare.await.unwrap().unwrap();
+
+        assert!(stale_finished.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(cache.get("SERIAL1").await.unwrap().bits(), 0);
+    }
+
+    #[tokio::test]
+    async fn device_features_report_reconnect_invalidates_before_accepting_new_value() {
+        let transport =
+            FakeMqttTransport::with_receive_failure_then_reports([runtime_fun_only_report(
+                "8000004100000020",
+            )]);
+        let cache = crate::machine::DeviceFeatureCache::default();
+        cache
+            .update("SERIAL1", BambuDeviceFeatures::from_bits(0x40))
+            .await;
+        let (sender, mut events) = mpsc::channel(4);
+        let task = tokio::spawn(crate::machine::runtime::forward_print_reports_with_retry(
+            test_config(),
+            transport.clone(),
+            runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+            Duration::from_secs(1),
+            sender,
+            Duration::from_millis(1),
+            cache.clone(),
+        ));
+
+        assert_eq!(feature_event_bits(events.recv().await.unwrap()), None);
+        assert_eq!(
+            feature_event_bits(events.recv().await.unwrap()),
+            Some(DEVICE_FEATURE_HIGH_BITS)
+        );
+        assert_eq!(
+            cache.get("SERIAL1").await.unwrap().bits(),
+            DEVICE_FEATURE_HIGH_BITS
+        );
+        assert_eq!(transport.subscribe_attempts().await, 2);
+        let published = transport.published_commands().await;
+        assert_eq!(published.len(), 2);
+        assert_eq!(published[0].payload["pushing"]["command"], "pushall");
+        assert_eq!(published[1].payload["pushing"]["command"], "pushall");
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn device_features_report_failure_invalidates_before_retry_delay() {
+        let transport = FakeMqttTransport::with_receive_failure_then_reports([]);
+        let cache = crate::machine::DeviceFeatureCache::default();
+        cache
+            .update(
+                "SERIAL1",
+                BambuDeviceFeatures::from_bits(DEVICE_FEATURE_HIGH_BITS),
+            )
+            .await;
+        let (sender, mut events) = mpsc::channel(2);
+        let task = tokio::spawn(crate::machine::runtime::forward_print_reports_with_retry(
+            test_config(),
+            transport.clone(),
+            runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+            Duration::from_secs(1),
+            sender,
+            Duration::from_secs(30),
+            cache.clone(),
+        ));
+
+        let event = tokio::time::timeout(Duration::from_millis(100), events.recv())
+            .await
+            .expect("failure should invalidate before the retry delay")
+            .unwrap();
+        assert_eq!(feature_event_bits(event), None);
+        assert_eq!(cache.get("SERIAL1").await, None);
+        assert_eq!(transport.subscribe_attempts().await, 1);
+        assert_eq!(transport.published_commands().await.len(), 1);
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn device_features_idle_timeout_does_not_invalidate_or_reprobe() {
+        let transport = FakeMqttTransport::with_timeout();
+        let cache = crate::machine::DeviceFeatureCache::default();
+        cache
+            .update(
+                "SERIAL1",
+                BambuDeviceFeatures::from_bits(DEVICE_FEATURE_HIGH_BITS),
+            )
+            .await;
+        let (sender, mut events) = mpsc::channel(2);
+        let task = tokio::spawn(crate::machine::runtime::forward_print_reports_with_retry(
+            test_config(),
+            transport.clone(),
+            runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+            Duration::from_millis(1),
+            sender,
+            Duration::from_millis(1),
+            cache.clone(),
+        ));
+
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while transport.published_commands().await.is_empty() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        for _ in 0..10 {
+            tokio::task::yield_now().await;
+        }
+
+        assert_eq!(transport.subscribe_attempts().await, 1);
+        assert_eq!(transport.published_commands().await.len(), 1);
+        assert_eq!(
+            cache.get("SERIAL1").await.unwrap().bits(),
+            DEVICE_FEATURE_HIGH_BITS
+        );
+        assert!(events.try_recv().is_err());
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn device_features_endpoint_replacement_invalidates_before_new_snapshot() {
+        let transfer = FakeMachineFileTransfer::default();
+        let gateway = std::sync::Arc::new(TestRuntimeBambuMachineGateway::new(
+            vec![(
+                runtime_endpoint("SERIAL1", "old office", "ACCESS-1"),
+                PausedMqttTransport::ready("X1 Carbon", "READY"),
+                transfer.clone(),
+            )],
+            transfer,
+            Duration::from_secs(1),
+        ));
+        let replacement = PausedMqttTransport::new_with_feature("0");
+        gateway.push_command_transport(replacement.clone()).await;
+        let replacement_pause = gateway.pause_report_task_replacement().await;
+        let cache = gateway.device_feature_cache();
+        cache
+            .update(
+                "SERIAL1",
+                BambuDeviceFeatures::from_bits(DEVICE_FEATURE_HIGH_BITS),
+            )
+            .await;
+        let stale_release = std::sync::Arc::new(Notify::new());
+        let stale_finished = install_stale_report_cache_write(
+            &gateway.report_tasks,
+            cache.clone(),
+            "SERIAL1",
+            BambuDeviceFeatures::from_bits(DEVICE_FEATURE_HIGH_BITS),
+            std::sync::Arc::clone(&stale_release),
+        )
+        .await;
+        let (sender, mut events) = mpsc::channel(4);
+        let config = test_config();
+        let link = tokio::spawn({
+            let gateway = std::sync::Arc::clone(&gateway);
+            async move {
+                gateway
+                    .link_printer(
+                        runtime_endpoint("SERIAL1", "new office", "ACCESS-2"),
+                        &config,
+                        &sender,
+                    )
+                    .await
+            }
+        });
+
+        replacement.wait_until_blocked().await;
+        assert_eq!(
+            cache.get("SERIAL1").await.unwrap().bits(),
+            DEVICE_FEATURE_HIGH_BITS
+        );
+        assert!(events.try_recv().is_err());
+
+        replacement.release();
+        replacement_pause.wait_until_blocked().await;
+        stale_release.notify_waiters();
+        tokio::task::yield_now().await;
+        replacement_pause.release();
+        let snapshot = link.await.unwrap().unwrap();
+        assert_eq!(feature_event_bits(events.recv().await.unwrap()), None);
+        assert!(stale_finished.load(std::sync::atomic::Ordering::SeqCst));
+        assert_eq!(snapshot.device_features.unwrap().bits(), 0);
+        assert_eq!(cache.get("SERIAL1").await.unwrap().bits(), 0);
+    }
+
+    #[tokio::test]
+    async fn device_features_invalid_refresh_keeps_cached_value() {
+        let transport = FakeMqttTransport::with_reports([
+            get_version_report("X1 Carbon"),
+            runtime_feature_report("RUNNING", "not-hex"),
+        ]);
+        let transfer = FakeMachineFileTransfer::default();
+        let gateway = TestRuntimeBambuMachineGateway::new(
+            vec![(
+                runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+                transport,
+                transfer.clone(),
+            )],
+            transfer,
+            Duration::from_secs(1),
+        );
+        let cache = gateway.device_feature_cache();
+        cache
+            .update(
+                "SERIAL1",
+                BambuDeviceFeatures::from_bits(DEVICE_FEATURE_HIGH_BITS),
+            )
+            .await;
+
+        let snapshot = gateway.refresh_printers().await.unwrap().remove(0).snapshot;
+
+        assert_eq!(snapshot.state, "RUNNING");
+        assert_eq!(snapshot.device_features, None);
+        assert_eq!(
+            cache.get("SERIAL1").await.unwrap().bits(),
+            DEVICE_FEATURE_HIGH_BITS
+        );
+    }
+
+    fn feature_event_bits(event: crate::protocol::agent::v1::AgentEvent) -> Option<u64> {
+        let Some(agent_event::Event::PrinterDeviceFeaturesSnapshot(snapshot)) = event.event else {
+            panic!("expected printer device features event, got {event:?}");
+        };
+        snapshot
+            .device_features
+            .map(|features| features.bambu_fun_bits)
+    }
+
+    struct StaleReportTaskFinished(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+    impl Drop for StaleReportTaskFinished {
+        fn drop(&mut self) {
+            self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    async fn install_stale_report_cache_write(
+        report_tasks: &tokio::sync::Mutex<
+            std::collections::HashMap<String, tokio::task::JoinHandle<()>>,
+        >,
+        cache: crate::machine::DeviceFeatureCache,
+        serial: &str,
+        value: BambuDeviceFeatures,
+        release: std::sync::Arc<Notify>,
+    ) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+        let serial = serial.to_owned();
+        let finished = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let task_finished = std::sync::Arc::clone(&finished);
+        let (started, running) = tokio::sync::oneshot::channel();
+        report_tasks.lock().await.insert(
+            serial.clone(),
+            tokio::spawn(async move {
+                let _finished = StaleReportTaskFinished(task_finished);
+                started.send(()).unwrap();
+                release.notified().await;
+                cache.update(&serial, value).await;
+            }),
+        );
+        running.await.unwrap();
+        finished
+    }
+
     #[tokio::test]
     async fn report_forwarder_retries_initial_subscribe_failure() {
         let transport = FakeMqttTransport::with_subscribe_failures(1);
@@ -1146,6 +1587,7 @@ mod runtime {
             Duration::from_secs(1),
             sender,
             Duration::from_millis(1),
+            crate::machine::DeviceFeatureCache::default(),
         ));
 
         tokio::time::timeout(Duration::from_secs(1), async {
@@ -1220,6 +1662,7 @@ mod runtime {
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
                 chamber_light_on: None,
+                device_features: None,
             }]
         );
     }
@@ -1278,6 +1721,7 @@ mod runtime {
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
                 chamber_light_on: None,
+                device_features: None,
             }]
         );
     }
@@ -1340,6 +1784,7 @@ mod runtime {
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
                 chamber_light_on: None,
+                device_features: None,
             }]
         );
     }
@@ -1490,6 +1935,7 @@ mod runtime {
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
                 chamber_light_on: None,
+                device_features: None,
             }]
         );
     }
@@ -1531,6 +1977,20 @@ mod runtime {
                         runtime_state_report(state),
                     ]),
                     pause_first_report: false,
+                }),
+            }
+        }
+
+        fn new_with_feature(fun: &'static str) -> Self {
+            Self {
+                state: std::sync::Arc::new(PausedMqttTransportState {
+                    blocked: Notify::new(),
+                    release: Notify::new(),
+                    reports: Mutex::new(vec![
+                        get_version_report("X1 Carbon"),
+                        runtime_feature_report("READY", fun),
+                    ]),
+                    pause_first_report: true,
                 }),
             }
         }

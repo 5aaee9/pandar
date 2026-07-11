@@ -19,6 +19,7 @@ message AgentEvent {
     CommandResult command_result = 14;
     PrintJobReport print_job_report = 15;
     PrinterMaterialsSnapshot printer_materials_snapshot = 16;
+    PrinterDeviceFeaturesSnapshot printer_device_features_snapshot = 17;
   }
 }
 
@@ -26,6 +27,7 @@ enum AgentCapability {
   AGENT_CAPABILITY_UNSPECIFIED = 0;
   AGENT_CAPABILITY_HANDLE_PRINT_ERROR = 1;
   AGENT_CAPABILITY_HANDLE_PRINT_ERROR_SEQUENCE_ZERO_PUBACK_ONLY = 2;
+  AGENT_CAPABILITY_REQUIRED_DEVICE_FEATURES = 3;
 }
 
 message AgentHello {
@@ -52,6 +54,22 @@ message PrinterSnapshot {
   optional bool chamber_light_on = 10;
   string host = 11;
   string access_code = 12;
+  PrinterDeviceFeatures device_features = 13;
+}
+
+message PrinterDeviceFeatures {
+  fixed64 bambu_fun_bits = 1;
+}
+
+message PrinterDeviceFeaturesSnapshot {
+  string serial = 1;
+  PrinterDeviceFeatures device_features = 2;
+}
+
+enum DeviceFeature {
+  DEVICE_FEATURE_UNSPECIFIED = 0;
+  DEVICE_FEATURE_BAMBU_MQTT_HOMING = 32;
+  DEVICE_FEATURE_BAMBU_MQTT_AXIS_CONTROL = 38;
 }
 
 message NozzleTemperature {
@@ -165,6 +183,7 @@ message DiagnosePrinter {
 
 message PrinterOperation {
   string serial_number = 1;
+  repeated DeviceFeature required_device_features = 2;
   oneof operation {
     PauseOperation pause = 10;
     ResumeOperation resume = 11;

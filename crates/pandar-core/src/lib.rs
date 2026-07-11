@@ -4,6 +4,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 pub mod agent;
 pub mod command;
 pub mod compatibility;
+pub mod device_features;
 pub mod ids;
 pub mod job;
 pub mod printer;
@@ -11,6 +12,7 @@ pub mod tenant;
 
 pub use agent::{Agent, AgentStatus};
 pub use command::{CommandRecord, CommandRecordParts, CommandStatus};
+pub use device_features::{BambuDeviceFeature, BambuDeviceFeatures, BambuDeviceFeaturesParseError};
 pub use ids::{AgentId, CommandId, JobId, TenantId};
 pub use job::{
     Job, JobArtifact, JobArtifactParts, JobFilamentUsage, JobParts, JobPrintState, JobStatus,

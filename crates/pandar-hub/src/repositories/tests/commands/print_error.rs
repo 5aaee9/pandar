@@ -171,7 +171,7 @@ async fn web_print_error_uses_server_state_and_shares_native_single_flight() {
         .enqueue_printer_operation_with_audit(
             tenant_id,
             &printer_id,
-            PrinterOperationKind::Pause,
+            PrinterOperationKind::Pause {},
             native_audit_actor(),
         )
         .await
@@ -313,7 +313,7 @@ async fn handle_print_error_stale_recovery_fails_only_unowned_typed_live_candida
         .enqueue_printer_operation_with_audit(
             tenant_id,
             &printer_id,
-            PrinterOperationKind::Pause,
+            PrinterOperationKind::Pause {},
             native_audit_actor(),
         )
         .await

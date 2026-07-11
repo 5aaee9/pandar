@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{AgentId, CoreError, TenantId, required};
+use crate::{AgentId, BambuDeviceFeatures, CoreError, TenantId, required};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Printer {
@@ -21,6 +21,10 @@ pub struct Printer {
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub bambu_device_features: Option<BambuDeviceFeatures>,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub bambu_device_features_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +46,8 @@ pub struct PrinterParts {
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
+    pub bambu_device_features: Option<BambuDeviceFeatures>,
+    pub bambu_device_features_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +84,8 @@ impl Printer {
             bed_target_temperature_celsius: parts.bed_target_temperature_celsius,
             chamber_temperature_celsius: parts.chamber_temperature_celsius,
             chamber_light_on: parts.chamber_light_on,
+            bambu_device_features: parts.bambu_device_features,
+            bambu_device_features_session_id: parts.bambu_device_features_session_id,
         })
     }
 }

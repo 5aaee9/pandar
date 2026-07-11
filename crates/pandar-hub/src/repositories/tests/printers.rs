@@ -346,3 +346,33 @@ async fn invalid_persisted_printer_status_is_reported_with_context() {
     assert!(matches!(err, RepositoryError::Database(_)));
     assert!(format!("{err:#}").contains("failed to rehydrate printer"));
 }
+
+#[tokio::test]
+async fn invalid_persisted_printer_device_features_are_reported_with_context() {
+    let (database, tenants, agents, printers, _, _) = repositories().await;
+    let tenant = tenants
+        .create("feature-context", "Feature Context")
+        .await
+        .unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)
+        .await
+        .unwrap();
+
+    let Database::Sqlite(pool) = &database else {
+        panic!("expected SQLite database");
+    };
+    sqlx::query("UPDATE printers SET bambu_fun_bits = 'not-hex' WHERE id = ?1")
+        .bind(&printer_id)
+        .execute(pool)
+        .await
+        .unwrap();
+
+    let err = printers
+        .get_for_tenant(tenant.id, &printer_id)
+        .await
+        .unwrap_err();
+    let chain = format!("{err:#}");
+    assert!(chain.contains("failed to rehydrate printer Bambu device features"));
+    assert!(chain.contains("device feature bitmap contains non-hexadecimal characters"));
+}

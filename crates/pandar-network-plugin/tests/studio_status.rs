@@ -53,6 +53,33 @@ fn studio_status_omits_unknown_native_error_fields() {
 }
 
 #[test]
+fn studio_status_preserves_fun_bitmap_exactly() {
+    let telemetry = telemetry_json(r#"{"fun":"8000004100000020"}"#);
+
+    assert_eq!(telemetry["fun"], serde_json::json!("8000004100000020"));
+}
+
+#[test]
+fn studio_status_defaults_missing_or_null_fun_without_discarding_telemetry() {
+    for fun in ["", r#","fun":null"#] {
+        let telemetry = telemetry_json(&format!(
+            r#"{{"gcode_state":"RUNNING","mc_percent":37,"bed_temperature_celsius":"60","hms":[{{"attr":134152704,"code":32785}}],"materials":{{"ams_units":[{{"unit_id":"0","trays":[{{"tray_id":"0","type":"PETG-CF"}}]}}]}}{fun}}}"#
+        ));
+
+        assert_eq!(telemetry["fun"], serde_json::json!("0"));
+        assert_eq!(telemetry["gcode_state"], serde_json::json!("RUNNING"));
+        assert_eq!(telemetry["mc_percent"], serde_json::json!(37));
+        assert_eq!(telemetry["bed_temper"], serde_json::json!(60));
+        assert_eq!(telemetry["hms"][0]["attr"], serde_json::json!(134_152_704));
+        assert_eq!(telemetry["hms"][0]["code"], serde_json::json!(32_785));
+        assert_eq!(
+            telemetry["ams"]["ams"][0]["tray"][0]["tray_type"],
+            serde_json::json!("PETG-CF")
+        );
+    }
+}
+
+#[test]
 fn printer_telemetry_defaults_to_studio_safe_idle_shape() {
     let body = telemetry("{}");
 

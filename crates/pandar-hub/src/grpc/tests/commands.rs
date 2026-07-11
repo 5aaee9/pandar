@@ -11,7 +11,7 @@ use tracing_subscriber::fmt::MakeWriter;
 
 use super::*;
 use crate::protocol::agent::v1::{
-    Axis, CommandAck, CommandResult, HubCommand, LinkPrinter, printer_operation,
+    Axis, CommandAck, CommandResult, DeviceFeature, HubCommand, LinkPrinter, printer_operation,
 };
 use crate::{
     grpc::commands::{
@@ -25,6 +25,7 @@ use crate::{
     },
 };
 
+mod device_features;
 mod print_error;
 
 fn command_result_payload(
@@ -269,7 +270,7 @@ async fn grpc_hub_command_from_record_maps_toggle_light_operation() {
     let payload = PrinterOperationPayload {
         printer_id: printer_id.clone(),
         serial_number: "SERIAL123".to_string(),
-        operation: PrinterOperationKind::ToggleLight,
+        operation: PrinterOperationKind::ToggleLight {},
     };
     let command = CommandRecord::from_parts(CommandRecordParts {
         id: CommandId::new(),
@@ -596,6 +597,7 @@ async fn grpc_hub_command_from_record_maps_printer_operation_home_axes() {
         serial_number: "SERIAL123".to_string(),
         operation: PrinterOperationKind::Home {
             axes: vec![PrinterAxis::X, PrinterAxis::Z],
+            required_device_features: Vec::new(),
         },
     };
     let command = CommandRecord::from_parts(CommandRecordParts {
@@ -627,6 +629,42 @@ async fn grpc_hub_command_from_record_maps_printer_operation_home_axes() {
         }
         other => panic!("expected printer operation command, got {other:?}"),
     }
+}
+
+#[test]
+fn required_device_features_convert_to_proto_enum_values() {
+    let command = CommandRecord::from_parts(CommandRecordParts {
+        id: CommandId::new(),
+        tenant_id: TenantId::new(),
+        agent_id: AgentId::new(),
+        printer_id: Some("printer-1".to_owned()),
+        kind: "printer_operation".to_owned(),
+        status: "queued".to_owned(),
+        payload_json: serde_json::json!({
+            "printer_id": "printer-1",
+            "serial_number": "SERIAL123",
+            "operation": {
+                "type": "home",
+                "axes": [],
+                "required_device_features": ["bambu_mqtt_homing"]
+            }
+        })
+        .to_string(),
+        result_json: None,
+        error: None,
+        created_at: "2026-01-01T00:00:00Z".to_owned(),
+        updated_at: "2026-01-01T00:00:00Z".to_owned(),
+    })
+    .unwrap();
+
+    let converted = hub_command_from_record(command).unwrap();
+    let Some(hub_command::Command::PrinterOperation(operation)) = converted.command else {
+        panic!("expected printer operation command");
+    };
+    assert_eq!(
+        operation.required_device_features,
+        [DeviceFeature::BambuMqttHoming as i32]
+    );
 }
 
 #[tokio::test]

@@ -80,6 +80,7 @@ fn studio_abi_probe_routes_native_status_through_explicit_tunnels() {
 
     let cloud: serde_json::Value = serde_json::from_str(&result.cloud_status_body).unwrap();
     let cloud = &cloud["print"];
+    assert_eq!(cloud["fun"], serde_json::json!("8000004100000020"));
     assert_eq!(cloud["print_error"], serde_json::json!(83_918_929));
     assert_eq!(cloud["job_id"], serde_json::json!("job-7"));
     assert_eq!(cloud["mc_percent"], serde_json::json!(37));
@@ -88,6 +89,7 @@ fn studio_abi_probe_routes_native_status_through_explicit_tunnels() {
 
     let local: serde_json::Value = serde_json::from_str(&result.local_status_body).unwrap();
     let local = &local["print"];
+    assert_eq!(local["fun"], serde_json::json!("8000004100000020"));
     assert_eq!(local["print_error"], serde_json::json!(0));
     assert_eq!(local["job_id"], serde_json::json!(""));
     assert_eq!(local["mc_percent"], serde_json::json!(37));

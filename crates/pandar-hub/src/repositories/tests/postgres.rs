@@ -1,4 +1,7 @@
+use std::str::FromStr;
+
 use serde::Serialize;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 
 use super::*;
 use crate::repositories::{
@@ -437,4 +440,61 @@ async fn postgres_print_reports_merge_printer_live_status_without_a_job_when_con
         "postgres-revision-race",
     )
     .await;
+}
+
+#[tokio::test]
+async fn printer_device_features_postgres_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    super::printer_device_features::exercise_printer_device_features(database).await;
+}
+
+#[tokio::test]
+async fn printer_device_features_postgres_migrates_legacy_rows_when_configured() {
+    let Some((database, admin, schema)) = isolated_postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    super::printer_device_features::exercise_legacy_device_features_migration(database.clone())
+        .await;
+    let Database::Postgres(pool) = database else {
+        panic!("expected PostgreSQL database");
+    };
+    pool.close().await;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP SCHEMA {schema} CASCADE")))
+        .execute(&admin)
+        .await
+        .unwrap();
+    admin.close().await;
+}
+
+async fn isolated_postgres_database() -> Option<(Database, sqlx::PgPool, String)> {
+    let url = match std::env::var("PANDAR_TEST_POSTGRES_URL") {
+        Ok(url) => url,
+        Err(_) => return None,
+    };
+    let admin = PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&url)
+        .await
+        .unwrap();
+    let schema = format!("pandar_device_features_{}", uuid::Uuid::new_v4().simple());
+    sqlx::raw_sql(sqlx::AssertSqlSafe(format!("CREATE SCHEMA {schema}")))
+        .execute(&admin)
+        .await
+        .unwrap();
+    let options = PgConnectOptions::from_str(&url)
+        .unwrap()
+        .options([("search_path", schema.as_str())]);
+    let pool = PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with(options)
+        .await
+        .unwrap();
+
+    Some((Database::Postgres(pool), admin, schema))
 }

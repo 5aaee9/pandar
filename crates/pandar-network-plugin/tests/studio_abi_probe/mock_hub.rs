@@ -8,7 +8,11 @@ mod synchronization;
 mod transport;
 
 use crate::support::{assert_multipart_file_part, assert_multipart_print_request, request_body};
-use operations::{TestOperation, assert_operation_body_eq};
+pub(super) use operations::required_device_feature_presence_matches;
+use operations::{
+    AxisFeatureOperation, TestOperation, assert_axis_feature_operation_body_eq,
+    assert_operation_body_eq,
+};
 use std::{
     net::{TcpListener, TcpStream},
     sync::{
@@ -21,7 +25,7 @@ use std::{
 use synchronization::{ProbeStart, start_gate};
 use transport::{assert_request, assert_request_with_token, read_request_until, write_response};
 
-const PRINTERS_RESPONSE: &str = r##"{"message":"success","devices":[{"dev_id":"studio-serial-1","dev_name":"Probe Printer","pandar_printer_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","dev_model_name":"N6","model":"N6","dev_online":true,"online":true,"task_status":"RUNNING","state":"RUNNING","gcode_state":"RUNNING","mc_percent":37,"mc_remaining_time":52,"layer_num":12,"total_layer_num":120,"task_id":"task-42","subtask_id":"subtask-42","gcode_file":"drawer-organizer.gcode","subtask_name":"drawer-organizer","hms":[{"attr":134152704,"code":32785}],"nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220","diameter_mm":"0.4","nozzle_type":"HH05"},{"label":"R","current_celsius":"27","target_celsius":"215","diameter_mm":"0.4","nozzle_type":"HS01"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true,"materials":{"ams_units":[{"unit_id":"0","humidity":25,"humidity_level":3,"temperature_celsius":28.5,"toolhead":"R","trays":[{"tray_id":"0","global_tray_id":0,"type":"PETG-CF","filament_id":"GFG50","color":"000000FF","remaining_estimate":"-1"},{"tray_id":"1","global_tray_id":1,"type":"PLA","filament_id":"GFA00","color":"C12E1FFF","remaining_estimate":"100"},{"tray_id":"2","global_tray_id":2,"type":"PETG","filament_id":"GFG00","color":"FCE300FF","remaining_estimate":"36"},{"tray_id":"3","global_tray_id":3,"type":"PLA","filament_id":"GFL99","color":"FFF144FF","remaining_estimate":"-1"}]},{"unit_id":"1","humidity":28,"humidity_level":3,"temperature_celsius":28.1,"toolhead":"L","trays":[{"tray_id":"0","global_tray_id":4,"type":"PLA","filament_id":"GFA00","color":"000000FF","remaining_estimate":"55"},{"tray_id":"1","global_tray_id":5,"type":"ABS","filament_id":"GFB00","color":"46A8F9FF","remaining_estimate":"-1"},{"tray_id":"2","global_tray_id":6,"type":"ABS","filament_id":"GFB00","color":"057748FF","remaining_estimate":"-1"},{"tray_id":"3","global_tray_id":7,"type":"PLA-CF","filament_id":"GFA50","color":"69398EFF","remaining_estimate":"85"}]}],"external_spools":[{"external_id":"254","tray_id":"0","type":"PETG","filament_id":"GFG00","color":"11223344","toolhead":"L"},{"external_id":"255","tray_id":"1","type":"PLA","filament_id":"GFL99","color":"46A8F9FF","toolhead":"R"}],"active_tray":{"kind":"ams","ams_id":"0","tray_id":"3","global_tray_id":3},"observed_at":"2026-06-20T00:01:00Z"}}]}"##;
+const PRINTERS_RESPONSE: &str = r##"{"message":"success","devices":[{"dev_id":"studio-serial-1","fun":"8000004100000020","dev_name":"Probe Printer","pandar_printer_id":"printer-1","name":"Probe Printer","dev_ip":"192.0.2.10","dev_access_code":"12345678","dev_model_name":"N6","model":"N6","dev_online":true,"online":true,"task_status":"RUNNING","state":"RUNNING","gcode_state":"RUNNING","mc_percent":37,"mc_remaining_time":52,"layer_num":12,"total_layer_num":120,"task_id":"task-42","subtask_id":"subtask-42","gcode_file":"drawer-organizer.gcode","subtask_name":"drawer-organizer","hms":[{"attr":134152704,"code":32785}],"nozzle_temperatures":[{"label":"L","current_celsius":"28","target_celsius":"220","diameter_mm":"0.4","nozzle_type":"HH05"},{"label":"R","current_celsius":"27","target_celsius":"215","diameter_mm":"0.4","nozzle_type":"HS01"}],"active_nozzle":"L","bed_temperature_celsius":"60","bed_target_temperature_celsius":"65","chamber_temperature_celsius":"32","chamber_light_on":true,"materials":{"ams_units":[{"unit_id":"0","humidity":25,"humidity_level":3,"temperature_celsius":28.5,"toolhead":"R","trays":[{"tray_id":"0","global_tray_id":0,"type":"PETG-CF","filament_id":"GFG50","color":"000000FF","remaining_estimate":"-1"},{"tray_id":"1","global_tray_id":1,"type":"PLA","filament_id":"GFA00","color":"C12E1FFF","remaining_estimate":"100"},{"tray_id":"2","global_tray_id":2,"type":"PETG","filament_id":"GFG00","color":"FCE300FF","remaining_estimate":"36"},{"tray_id":"3","global_tray_id":3,"type":"PLA","filament_id":"GFL99","color":"FFF144FF","remaining_estimate":"-1"}]},{"unit_id":"1","humidity":28,"humidity_level":3,"temperature_celsius":28.1,"toolhead":"L","trays":[{"tray_id":"0","global_tray_id":4,"type":"PLA","filament_id":"GFA00","color":"000000FF","remaining_estimate":"55"},{"tray_id":"1","global_tray_id":5,"type":"ABS","filament_id":"GFB00","color":"46A8F9FF","remaining_estimate":"-1"},{"tray_id":"2","global_tray_id":6,"type":"ABS","filament_id":"GFB00","color":"057748FF","remaining_estimate":"-1"},{"tray_id":"3","global_tray_id":7,"type":"PLA-CF","filament_id":"GFA50","color":"69398EFF","remaining_estimate":"85"}]}],"external_spools":[{"external_id":"254","tray_id":"0","type":"PETG","filament_id":"GFG00","color":"11223344","toolhead":"L"},{"external_id":"255","tray_id":"1","type":"PLA","filament_id":"GFL99","color":"46A8F9FF","toolhead":"R"}],"active_tray":{"kind":"ams","ams_id":"0","tray_id":"3","global_tray_id":3},"observed_at":"2026-06-20T00:01:00Z"}}]}"##;
 
 fn printers_response_with_progress(progress: u8) -> String {
     PRINTERS_RESPONSE.replacen(
@@ -49,6 +53,7 @@ pub(super) enum MockMode {
     Failure,
     StaleTokenRefresh,
     NativePrintError,
+    AxisFeatures,
 }
 
 pub(super) struct MockHub {
@@ -66,6 +71,58 @@ impl MockHub {
     pub(super) fn finish(self) -> thread::Result<()> {
         self.stop.store(true, Ordering::Release);
         self.handle.join()
+    }
+}
+
+fn serve_axis_features(listener: &TcpListener, stop: &AtomicBool, deadline: Instant) {
+    let mut operation_posts = 0_u32;
+    while !stop.load(Ordering::Acquire) {
+        let Some((mut stream, request)) =
+            read_request_until(listener, stop, deadline, "axis feature probe request")
+        else {
+            return;
+        };
+        let line = request.lines().next().unwrap_or_default();
+        if line == "POST /api/v1/plugin/no-auth-session HTTP/1.1" {
+            write_response(
+                &mut stream,
+                "HTTP/1.1 403 Forbidden",
+                r#"{"error":"no_auth_required"}"#,
+            );
+        } else if line == "POST /api/v1/plugin/login-tickets/exchange HTTP/1.1" {
+            write_response(
+                &mut stream,
+                "HTTP/1.1 200 OK",
+                r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
+            );
+        } else if line == "GET /api/v1/plugin/printers HTTP/1.1" {
+            write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
+        } else if line == "GET /probe-operation-count HTTP/1.1" {
+            write_response(
+                &mut stream,
+                "HTTP/1.1 200 OK",
+                &serde_json::json!({"count": operation_posts}).to_string(),
+            );
+        } else if line == "POST /api/v1/plugin/printers/printer-1/operations HTTP/1.1" {
+            let expected = match operation_posts {
+                0 | 4 => AxisFeatureOperation::modern_home(),
+                1 => AxisFeatureOperation::modern_move("x", 1.0),
+                2 | 6 => AxisFeatureOperation::legacy_home(),
+                3 => AxisFeatureOperation::legacy_move("x", 10.0, 3000),
+                5 => AxisFeatureOperation::modern_move("z", -10.0),
+                7 => AxisFeatureOperation::legacy_move("z", -1.0, 600),
+                _ => panic!("unexpected extra axis feature operation: {request}"),
+            };
+            assert_axis_feature_operation_body_eq(&request, expected);
+            operation_posts += 1;
+            write_response(
+                &mut stream,
+                "HTTP/1.1 202 Accepted",
+                r#"{"command_id":"axis-command","status":"sent"}"#,
+            );
+        } else {
+            panic!("unexpected axis feature probe request: {request}");
+        }
     }
 }
 
@@ -374,6 +431,9 @@ pub(super) fn spawn_mock_hub(mode: MockMode, artifact: Vec<u8>) -> MockHub {
                 }
             }
             MockMode::NativePrintError => native::serve(&listener, &thread_stop, deadline),
+            MockMode::AxisFeatures => {
+                serve_axis_features(&listener, &thread_stop, deadline);
+            }
         }
     });
     MockHub {

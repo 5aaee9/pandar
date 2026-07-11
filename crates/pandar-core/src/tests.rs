@@ -90,6 +90,8 @@ fn printer_from_parts_builds_valid_record() {
         bed_target_temperature_celsius: None,
         chamber_temperature_celsius: None,
         chamber_light_on: None,
+        bambu_device_features: Some(BambuDeviceFeatures::from_bits(0x8000_0041_0000_0020)),
+        bambu_device_features_session_id: Some("feature-session".to_owned()),
     })
     .unwrap();
 
@@ -100,6 +102,17 @@ fn printer_from_parts_builds_valid_record() {
     assert_eq!(printer.name, "garage");
     assert_eq!(printer.model, Some("A1 Mini".to_owned()));
     assert_eq!(printer.status, "online");
+    assert_eq!(
+        printer.bambu_device_features,
+        Some(BambuDeviceFeatures::from_bits(0x8000_0041_0000_0020))
+    );
+    assert_eq!(
+        printer.bambu_device_features_session_id.as_deref(),
+        Some("feature-session")
+    );
+    let serialized = serde_json::to_value(&printer).unwrap();
+    assert!(serialized.get("bambu_device_features").is_none());
+    assert!(serialized.get("bambu_device_features_session_id").is_none());
 }
 
 #[test]
@@ -123,6 +136,8 @@ fn printer_from_parts_validates_required_fields() {
             bed_target_temperature_celsius: None,
             chamber_temperature_celsius: None,
             chamber_light_on: None,
+            bambu_device_features: None,
+            bambu_device_features_session_id: None,
         })
     };
 
@@ -164,6 +179,8 @@ fn printer_from_parts_normalizes_blank_model() {
         bed_target_temperature_celsius: None,
         chamber_temperature_celsius: None,
         chamber_light_on: None,
+        bambu_device_features: None,
+        bambu_device_features_session_id: None,
     })
     .unwrap();
 

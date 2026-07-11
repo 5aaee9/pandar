@@ -20,6 +20,9 @@ pub async fn handle_snapshot(
     let name = required(&snapshot.name, "name must not be blank")?;
     let status = required(&snapshot.state, "state must not be blank")?;
     let model = trim_optional(snapshot.model);
+    let device_features = snapshot
+        .device_features
+        .map(|features| pandar_core::BambuDeviceFeatures::from_bits(features.bambu_fun_bits));
     let observed_at = pandar_core::created_at_now();
 
     let snapshot = PrinterSnapshotUpsert {
@@ -56,7 +59,13 @@ pub async fn handle_snapshot(
     }
     let printer = match state
         .printers()
-        .upsert_snapshot_if_current(tenant_id, agent_id, &token.persisted_id(), snapshot)
+        .upsert_snapshot_with_device_features_if_current(
+            tenant_id,
+            agent_id,
+            &token.persisted_id(),
+            snapshot,
+            device_features,
+        )
         .await
     {
         Ok(printer) => printer,

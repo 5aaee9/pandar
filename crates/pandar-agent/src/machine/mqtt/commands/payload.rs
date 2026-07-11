@@ -75,13 +75,6 @@ pub(super) struct SetNozzleTemperaturePayload {
 }
 
 #[derive(Serialize)]
-pub(super) struct GcodeLinePayload {
-    pub(super) command: &'static str,
-    pub(super) param: String,
-    pub(super) sequence_id: String,
-}
-
-#[derive(Serialize)]
 pub(super) struct AmsSlotPayload {
     pub(super) command: &'static str,
     pub(super) sequence_id: String,

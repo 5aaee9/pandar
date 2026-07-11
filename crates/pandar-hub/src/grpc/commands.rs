@@ -2,18 +2,22 @@ use pandar_core::{AgentId, CommandId, CommandRecord, TenantId};
 use tonic::Status;
 
 mod conversion;
+mod device_features;
 pub use conversion::{
     CommandConversionOptions, hub_command_from_record, hub_command_from_record_with_options,
     live_printer_operation_hub_command,
 };
-
-use crate::{
-    AppState,
-    protocol::agent::v1::{CommandResult, HubCommand},
-    repositories::RepositoryError,
+pub use device_features::RequiredDeviceFeature;
+#[cfg(test)]
+pub(crate) use device_features::pause as required_feature_dispatch_pause;
+pub(super) use device_features::{
+    SessionQueuedDispatch, dispatch_next_queued_for_session,
+    finalize_required_features_for_closing_session,
 };
 
-pub async fn mark_sent_and_job(
+use crate::{AppState, protocol::agent::v1::CommandResult, repositories::RepositoryError};
+
+async fn mark_sent_and_job(
     state: &AppState,
     command: CommandRecord,
     tenant_id: TenantId,
@@ -32,42 +36,6 @@ pub async fn mark_sent_and_job(
         .mark_sent(command.id, tenant_id, agent_id)
         .await
         .map_err(repository_status)
-}
-
-pub async fn next_hub_command_for_agent(
-    state: &AppState,
-    tenant_id: TenantId,
-    agent_id: AgentId,
-) -> Result<Option<HubCommand>, Status> {
-    next_hub_command_for_agent_with_options(
-        state,
-        tenant_id,
-        agent_id,
-        CommandConversionOptions {
-            require_artifact_download_path: state.artifact_storage().backend().requires_hub_fetch(),
-        },
-    )
-    .await
-}
-
-pub async fn next_hub_command_for_agent_with_options(
-    state: &AppState,
-    tenant_id: TenantId,
-    agent_id: AgentId,
-    options: CommandConversionOptions,
-) -> Result<Option<HubCommand>, Status> {
-    let Some(command) = state
-        .commands()
-        .next_queued_for_agent(tenant_id, agent_id)
-        .await
-        .map_err(repository_status)?
-    else {
-        return Ok(None);
-    };
-
-    let hub_command = hub_command_from_record_with_options(command.clone(), options)?;
-    mark_sent_and_job(state, command, tenant_id, agent_id).await?;
-    Ok(Some(hub_command))
 }
 
 pub async fn handle_ack_and_job(

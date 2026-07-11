@@ -9,6 +9,7 @@ mod phase1;
 mod postgres;
 mod postgres_commands;
 mod postgres_persistence;
+mod printer_device_features;
 mod printer_event_tickets;
 mod printer_live_status;
 mod printers;
@@ -17,9 +18,10 @@ mod tenant_tokens;
 use pandar_core::{AgentId, CommandId, TenantId};
 
 use super::{
-    AgentRepository, AuditEventRepository, AuthRepository, CommandRepository, JobRepository,
-    MaterialRepository, PrinterEventTicketConsumeResult, PrinterEventTicketRepository,
-    PrinterRepository, PrinterSnapshotUpsert, RepositoryError, TenantRepository,
+    AgentRepository, AuditEventRepository, AuthRepository, CommandRepository,
+    DeviceFeatureUpdateOutcome, JobRepository, MaterialRepository, PrinterEventTicketConsumeResult,
+    PrinterEventTicketRepository, PrinterRepository, PrinterSnapshotUpsert, RepositoryError,
+    TenantRepository,
 };
 use crate::db::{Database, DatabaseConfig};
 

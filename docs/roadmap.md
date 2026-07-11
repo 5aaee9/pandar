@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Added typed, full-width Bambu `print.fun` passthrough and feature-aware Bambu Studio Home/XYZ controls: unknown bits, bit 63, and valid zero survive Agent -> Hub -> plugin, while exact-session capability gates prevent stale modern commands from reaching an old or mismatched Agent. Bit 32 selects `back_to_center`, bit 38 selects strict `xyz_ctrl`, and legacy Studio home/movement semantics remain available without extra axis restrictions or direction inversion. This work has deterministic fake/loopback and compiled-ABI evidence only; no real printer was homed or moved.
 - Shipped the Web print monitor for Studio- and printer-originated tasks even when no Pandar Job exists: device cards now show the live task name, percentage, current/total layer, remaining time, finished-task details, and typed HMS diagnostics from enriched printer snapshots.
 - Added Pandar-owned build-plate mismatch recovery for the native supported model/action catalog. Hub revalidates the exact error occurrence, task/session marker, printer state, model, catalog guard, and Agent capability, while Web and Studio plugin operations share one native-recovery single-flight. Web sequence-zero dispatch uses a fresh MQTT connection and treats the matching QoS1 PUBACK only as transport confirmation; printer telemetry remains authoritative for whether recovery occurred.
 - Restored Bambu Studio's native printer-error flow from the reference direct-connection behavior: Agent preserves numeric `print_error` presence and the independent printer `job_id`, Hub persists and exposes both on SQLite/PostgreSQL, Studio telemetry keeps Printing Progress/HMS/AMS live, exact typed `get_version`/`pushall` handling unblocks Sync AMS Filament, and native Resume/Ignore/Stop actions emit the reference `param:"reserve"` MQTT payload instead of falling back to ordinary controls.
@@ -924,8 +925,9 @@ Goal: make customer-facing printer actions device-neutral so non-Bambu agents ca
 
 - Completed `PrinterOperation` protobuf dispatch for pause, resume, stop, chamber-light toggle, speed, home, relative axis movement, and hotend temperature.
 - Completed Hub persistence and audit of semantic `printer_operation` payloads; Hub validates ownership, compatibility, ranges, axes, and unknown fields without constructing Bambu MQTT JSON or G-code.
-- Completed Bambu agent translation for semantic operations, including bare `G28` for every home request, relative move `gcode_line`, chamber-light `ledctrl`, and `M104`/`M109` hotend commands.
-- Completed network plugin parsing of supported control G-code into semantic Hub operation requests; unsupported or ambiguous G-code returns stable plugin errors before network dispatch.
+- Completed typed `BambuDeviceFeatures` propagation for the complete unsigned `print.fun` bitmap, including unknown bits, bit 63, and valid zero, with nullable text columns in equivalent SQLite and PostgreSQL migrations. Hub advertises the real bitmap only for an exact current Agent observation session with capability 3 and otherwise sends Studio `"0"`.
+- Completed Bambu Agent translation for feature-aware semantic operations: bit 32 enables `back_to_center`, bit 38 enables `xyz_ctrl`, and feature-required commands fail closed without legacy downgrade. Requirement-free legacy translation preserves `G28`, `G28 X`, requested axis order, and the exact seven-line Studio movement envelope without a second Y/Z inversion.
+- Completed network plugin parsing of strict modern `back_to_center`/`xyz_ctrl` messages and bounded legacy `gcode_line` wrappers into semantic Hub operations; modern axes are uppercase X/Y/Z with numeric direction -1/1 and mode 0/1, while unsupported or ambiguous messages return stable plugin errors before network dispatch.
 - Real-printer probes for Phase 29 home/move/hotend are not recorded in this workspace.
 
 Exit criteria:

@@ -257,6 +257,161 @@ async fn plugin_ordinary_operation_remains_queued_and_wakes_agent() {
 }
 
 #[tokio::test]
+async fn required_device_features_accept_exact_modern_home_and_signed_moves() {
+    let fixture = operation_fixture("plugin-required-device-features-valid").await;
+    let cases = [
+        serde_json::json!({
+            "action": "home",
+            "axes": [],
+            "required_device_features": ["bambu_mqtt_homing"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [{"axis": "x", "delta_mm": -1.0}],
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [{"axis": "x", "delta_mm": 1.0}],
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [{"axis": "z", "delta_mm": -10.0}],
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [{"axis": "z", "delta_mm": 10.0}],
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+    ];
+
+    for request in cases {
+        let expected_features = request["required_device_features"].clone();
+        let (status, body) = request_as(
+            fixture.app.clone(),
+            Method::POST,
+            &fixture.uri,
+            Some(request),
+            &fixture.token,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let response = decode::<OperationResponse>(body);
+        let command = fixture
+            .state
+            .commands()
+            .get_for_tenant(
+                fixture.tenant_id,
+                CommandId::parse(&response.command_id).unwrap(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        let payload: Value = serde_json::from_str(&command.payload_json).unwrap();
+        assert_eq!(
+            payload["operation"]["required_device_features"],
+            expected_features
+        );
+    }
+
+    let events = fixture
+        .state
+        .audit_events()
+        .list_for_tenant(fixture.tenant_id)
+        .await
+        .unwrap();
+    let feature_lists = events
+        .iter()
+        .filter(|event| event.action == "printer.dispatch_control")
+        .map(|event| serde_json::from_str::<Value>(&event.metadata_json).unwrap())
+        .map(|metadata| metadata["required_device_features"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(feature_lists.len(), 5);
+    assert_eq!(feature_lists[0], serde_json::json!(["bambu_mqtt_homing"]));
+    assert!(
+        feature_lists[1..]
+            .iter()
+            .all(|features| *features == serde_json::json!(["bambu_mqtt_axis_control"]))
+    );
+}
+
+#[tokio::test]
+async fn required_device_features_reject_invalid_or_mismatched_semantics() {
+    let fixture = operation_fixture("plugin-required-device-features-invalid").await;
+    let cases = [
+        serde_json::json!({
+            "action": "home",
+            "axes": ["x"],
+            "required_device_features": ["bambu_mqtt_homing"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [
+                {"axis": "x", "delta_mm": 1.0},
+                {"axis": "y", "delta_mm": 1.0}
+            ],
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [{"axis": "x", "delta_mm": 2.0}],
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [{"axis": "x", "delta_mm": 10.0}],
+            "feedrate_mm_per_min": 6_000,
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+        serde_json::json!({
+            "action": "pause",
+            "required_device_features": ["bambu_mqtt_homing"]
+        }),
+        serde_json::json!({
+            "action": "home",
+            "axes": [],
+            "required_device_features": ["bambu_mqtt_homing", "bambu_mqtt_homing"]
+        }),
+        serde_json::json!({
+            "action": "home",
+            "axes": [],
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [{"axis": "x", "delta_mm": 1.0}],
+            "required_device_features": ["bambu_mqtt_homing"]
+        }),
+        serde_json::json!({
+            "action": "home",
+            "axes": [],
+            "required_device_features": ["unspecified"]
+        }),
+        serde_json::json!({
+            "action": "home",
+            "axes": [],
+            "required_device_features": ["unknown"]
+        }),
+    ];
+
+    for request in cases {
+        let (status, _) = request_as(
+            fixture.app.clone(),
+            Method::POST,
+            &fixture.uri,
+            Some(request),
+            &fixture.token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    assert_eq!(fixture.state.commands().count().await.unwrap(), 0);
+}
+
+#[tokio::test]
 async fn plugin_with_both_capabilities_preserves_the_studio_nonzero_sequence_path() {
     let fixture = operation_fixture("plugin-native-both-capabilities").await;
     let (wake_sender, _) = mpsc::channel(1);

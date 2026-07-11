@@ -1,7 +1,9 @@
 use crate::{
     AgentConfig,
     machine::{MachineSnapshot, MaterialRefreshResult},
-    protocol::agent::v1::{AgentEvent, CommandAck, CommandResult, PrinterSnapshot, agent_event},
+    protocol::agent::v1::{
+        AgentEvent, CommandAck, CommandResult, PrinterDeviceFeatures, PrinterSnapshot, agent_event,
+    },
 };
 
 use super::events::event;
@@ -113,6 +115,11 @@ pub(crate) fn printer_snapshot_event(
             chamber_temperature_celsius: snapshot.chamber_temperature_celsius.unwrap_or_default(),
             active_nozzle: snapshot.active_nozzle.unwrap_or_default(),
             chamber_light_on: snapshot.chamber_light_on,
+            device_features: snapshot
+                .device_features
+                .map(|features| PrinterDeviceFeatures {
+                    bambu_fun_bits: features.bits(),
+                }),
         }),
     )
 }

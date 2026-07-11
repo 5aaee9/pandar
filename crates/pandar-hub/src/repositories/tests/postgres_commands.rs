@@ -257,7 +257,7 @@ async fn postgres_printer_operation_enqueue_behavior_when_configured() {
         .enqueue_printer_operation_with_audit(
             tenant.id,
             &printer_id,
-            PrinterOperationKind::Pause,
+            PrinterOperationKind::Pause {},
             test_audit_actor(),
         )
         .await
@@ -271,7 +271,7 @@ async fn postgres_printer_operation_enqueue_behavior_when_configured() {
         PrinterOperationPayload {
             printer_id: printer_id.clone(),
             serial_number: format!("serial-{printer_id}"),
-            operation: PrinterOperationKind::Pause,
+            operation: PrinterOperationKind::Pause {},
         }
     );
     assert!(
@@ -295,13 +295,68 @@ async fn postgres_printer_operation_enqueue_behavior_when_configured() {
         .enqueue_printer_operation_with_audit(
             tenant.id,
             &unsupported_id,
-            PrinterOperationKind::Pause,
+            PrinterOperationKind::Pause {},
             test_audit_actor(),
         )
         .await
         .unwrap_err();
 
     assert!(matches!(err, RepositoryError::PrinterControlUnavailable));
+}
+
+#[tokio::test]
+async fn postgres_required_device_features_match_sqlite_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    let tenants = TenantRepository::new(database.clone());
+    let agents = AgentRepository::new(database.clone());
+    let commands = CommandRepository::new(database.clone());
+    let audit = AuditEventRepository::new(database.clone());
+    let tenant = tenants
+        .create("required-features", "Required Features")
+        .await
+        .unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        &database,
+        tenant.id,
+        agent.id,
+        Some("A1"),
+    )
+    .await
+    .unwrap();
+    let operation: PrinterOperationKind = serde_json::from_value(serde_json::json!({
+        "type": "move_axes",
+        "movements": [{"axis": "x", "delta_mm": -10.0}],
+        "feedrate_mm_per_min": null,
+        "required_device_features": ["bambu_mqtt_axis_control"]
+    }))
+    .unwrap();
+
+    let command = commands
+        .enqueue_printer_operation_with_audit(tenant.id, &printer_id, operation, test_audit_actor())
+        .await
+        .unwrap();
+    let payload: serde_json::Value = serde_json::from_str(&command.payload_json).unwrap();
+    assert_eq!(
+        payload["operation"]["required_device_features"],
+        serde_json::json!(["bambu_mqtt_axis_control"])
+    );
+    let event = audit
+        .list_for_tenant(tenant.id)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|event| event.action == "printer.dispatch_control")
+        .unwrap();
+    let metadata: serde_json::Value = serde_json::from_str(&event.metadata_json).unwrap();
+    assert_eq!(
+        metadata["required_device_features"],
+        serde_json::json!(["bambu_mqtt_axis_control"])
+    );
 }
 
 #[tokio::test]

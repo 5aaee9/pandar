@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use pandar_core::BambuDeviceFeatures;
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
 
@@ -26,6 +27,7 @@ pub struct MachineSnapshot {
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
+    pub device_features: Option<BambuDeviceFeatures>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

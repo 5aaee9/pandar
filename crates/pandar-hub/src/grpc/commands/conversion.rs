@@ -25,6 +25,27 @@ pub struct CommandConversionOptions {
     pub require_artifact_download_path: bool,
 }
 
+pub(super) fn persisted_printer_operation_payload(
+    command: &CommandRecord,
+) -> Result<Option<PrinterOperationPayload>, serde_json::Error> {
+    if command.kind != "printer_operation" {
+        return Ok(None);
+    }
+    serde_json::from_str(&command.payload_json).map(Some)
+}
+
+fn invalid_printer_operation_payload_status(
+    command: &CommandRecord,
+    err: serde_json::Error,
+) -> Status {
+    tracing::error!(
+        command_id = %command.id,
+        error = %format!("{err:#}"),
+        "failed to deserialize printer operation command payload"
+    );
+    Status::internal("invalid printer operation command payload")
+}
+
 pub fn hub_command_from_record(command: CommandRecord) -> Result<HubCommand, Status> {
     hub_command_from_record_with_options(
         command,
@@ -85,15 +106,9 @@ pub fn hub_command_from_record_with_options(
             })
         }
         "printer_operation" => {
-            let payload: PrinterOperationPayload = serde_json::from_str(&command.payload_json)
-                .map_err(|err| {
-                    tracing::error!(
-                        command_id = %command.id,
-                        error = %format!("{err:#}"),
-                        "failed to deserialize printer operation command payload"
-                    );
-                    Status::internal("invalid printer operation command payload")
-                })?;
+            let payload = persisted_printer_operation_payload(&command)
+                .map_err(|err| invalid_printer_operation_payload_status(&command, err))?
+                .expect("printer operation kind checked above");
             if matches!(
                 &payload.operation,
                 PrinterOperationKind::HandlePrintError { .. }
@@ -108,8 +123,15 @@ pub fn hub_command_from_record_with_options(
                     "print error operation requires live dispatch",
                 ));
             }
+            let required_device_features = payload
+                .operation
+                .required_device_features()
+                .iter()
+                .map(|feature| feature.proto_value())
+                .collect();
             hub_command::Command::PrinterOperation(PrinterOperation {
                 serial_number: payload.serial_number,
+                required_device_features,
                 operation: Some(proto_printer_operation(payload.operation)),
             })
         }
@@ -188,6 +210,7 @@ pub fn live_printer_operation_hub_command(
         command_id: command_id.to_string(),
         command: Some(hub_command::Command::PrinterOperation(PrinterOperation {
             serial_number,
+            required_device_features: Vec::new(),
             operation: Some(proto_printer_operation(operation)),
         })),
     }
@@ -195,9 +218,9 @@ pub fn live_printer_operation_hub_command(
 
 fn proto_printer_operation(operation: PrinterOperationKind) -> printer_operation::Operation {
     match operation {
-        PrinterOperationKind::Pause => printer_operation::Operation::Pause(PauseOperation {}),
-        PrinterOperationKind::Resume => printer_operation::Operation::Resume(ResumeOperation {}),
-        PrinterOperationKind::Stop => printer_operation::Operation::Stop(StopOperation {}),
+        PrinterOperationKind::Pause {} => printer_operation::Operation::Pause(PauseOperation {}),
+        PrinterOperationKind::Resume {} => printer_operation::Operation::Resume(ResumeOperation {}),
+        PrinterOperationKind::Stop {} => printer_operation::Operation::Stop(StopOperation {}),
         PrinterOperationKind::HandlePrintError {
             error_action,
             print_error,
@@ -209,7 +232,7 @@ fn proto_printer_operation(operation: PrinterOperationKind) -> printer_operation
             printer_job_id,
             sequence_id,
         }),
-        PrinterOperationKind::ToggleLight => {
+        PrinterOperationKind::ToggleLight {} => {
             printer_operation::Operation::ToggleLight(ToggleLightOperation {})
         }
         PrinterOperationKind::SetChamberLight { on } => {
@@ -223,12 +246,15 @@ fn proto_printer_operation(operation: PrinterOperationKind) -> printer_operation
         PrinterOperationKind::SelectExtruder { extruder_id } => {
             printer_operation::Operation::SelectExtruder(SelectExtruderOperation { extruder_id })
         }
-        PrinterOperationKind::Home { axes } => printer_operation::Operation::Home(HomeOperation {
-            axes: axes.into_iter().map(proto_axis).collect(),
-        }),
+        PrinterOperationKind::Home { axes, .. } => {
+            printer_operation::Operation::Home(HomeOperation {
+                axes: axes.into_iter().map(proto_axis).collect(),
+            })
+        }
         PrinterOperationKind::MoveAxes {
             movements,
             feedrate_mm_per_min,
+            ..
         } => printer_operation::Operation::MoveAxes(MoveAxesOperation {
             movements: movements.into_iter().map(proto_axis_movement).collect(),
             feedrate_mm_per_min: feedrate_mm_per_min.unwrap_or_default(),

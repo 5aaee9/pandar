@@ -20,6 +20,10 @@ fn assert_json_field(output: &str, field: &str, value: &str) {
     );
 }
 
+fn compiler_identity_is_allowed_for_target(compiler: &str, target_requires_msvc: bool) -> bool {
+    !target_requires_msvc || compiler.to_ascii_lowercase().contains("cl.exe")
+}
+
 #[test]
 fn probe_exercises_studio_abi_success_path() {
     let ProbeOutput { stdout, stderr, .. } = run_probe(MockMode::Success, "success");
@@ -45,6 +49,52 @@ fn probe_exercises_studio_abi_success_path() {
     assert_json_field(&stdout, "ft_start_job_rc", "0");
     assert_json_field(&stdout, "ft_job_result_ec", "-3");
     assert_json_field(&stdout, "ft_cancel_rc", "0");
+}
+
+#[test]
+fn studio_abi_probe_preserves_full_axis_feature_bitmap_and_submits_semantics_through_both_abis() {
+    assert!(compiler_identity_is_allowed_for_target("c++", false));
+    assert!(!compiler_identity_is_allowed_for_target("c++", true));
+    assert!(compiler_identity_is_allowed_for_target("cl.exe", true));
+    assert!(mock_hub::required_device_feature_presence_matches(
+        r#"{"action":"home","axes":[]}"#,
+        false,
+    ));
+    assert!(!mock_hub::required_device_feature_presence_matches(
+        r#"{"action":"home","axes":[],"required_device_features":null}"#,
+        false,
+    ));
+    assert!(mock_hub::required_device_feature_presence_matches(
+        r#"{"action":"home","axes":[],"required_device_features":["bambu_mqtt_homing"]}"#,
+        true,
+    ));
+
+    let ProbeOutput {
+        stdout,
+        stderr,
+        compiler,
+    } = run_probe(MockMode::AxisFeatures, "axis-features");
+
+    println!("Studio axis ABI probe compiler: {compiler}");
+    #[cfg(all(windows, target_env = "msvc"))]
+    assert!(
+        compiler_identity_is_allowed_for_target(&compiler, true),
+        "axis ABI probe must compile with MSVC cl.exe, got {compiler}"
+    );
+    assert!(
+        stderr.is_empty(),
+        "axis probe stderr was not empty: {stderr}"
+    );
+    let result: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(result["ok"], serde_json::json!(true));
+    assert_eq!(result["axis_features_exact"], serde_json::json!(true));
+    assert_eq!(result["operation_posts"], serde_json::json!(8));
+    let status: serde_json::Value =
+        serde_json::from_str(result["cloud_status_body"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        status["print"]["fun"],
+        serde_json::json!("8000004100000020")
+    );
 }
 
 #[test]

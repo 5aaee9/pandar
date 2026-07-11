@@ -1,5 +1,5 @@
 use anyhow::Context;
-use pandar_core::{AgentId, TenantId};
+use pandar_core::{AgentId, BambuDeviceFeatures, TenantId};
 use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseTransaction, Statement};
 
 use crate::repositories::{PrinterSnapshotUpsert, RepositoryResult};
@@ -12,7 +12,11 @@ pub(crate) async fn upsert_snapshot(
     agent_id: AgentId,
     printer_id: &str,
     snapshot: &PrinterSnapshotUpsert,
+    device_features: Option<BambuDeviceFeatures>,
+    device_features_session_id: Option<&str>,
 ) -> RepositoryResult<()> {
+    let bambu_fun_bits = device_features.map(BambuDeviceFeatures::to_hex);
+    let bambu_fun_session_id = device_features_session_id.map(str::to_owned);
     match transaction.get_database_backend() {
         DatabaseBackend::Sqlite => {
             let nozzle_temperatures_json = serde_json::to_string(&snapshot.nozzle_temperatures)
@@ -24,9 +28,10 @@ pub(crate) async fn upsert_snapshot(
                      id, tenant_id, agent_id, serial_number, host, access_code, name, model, status,
                      last_seen_at, created_at, nozzle_temperatures_json,
                      active_nozzle, bed_temperature_celsius, bed_target_temperature_celsius,
-                     chamber_temperature_celsius, chamber_light_on, state_revision
+                     chamber_temperature_celsius, chamber_light_on, bambu_fun_bits,
+                     bambu_fun_session_id, state_revision
                   )
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 1)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, 1)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
                      host = COALESCE(excluded.host, printers.host),
@@ -40,6 +45,11 @@ pub(crate) async fn upsert_snapshot(
                      bed_target_temperature_celsius = excluded.bed_target_temperature_celsius,
                      chamber_temperature_celsius = excluded.chamber_temperature_celsius,
                      chamber_light_on = excluded.chamber_light_on,
+                     bambu_fun_bits = COALESCE(excluded.bambu_fun_bits, printers.bambu_fun_bits),
+                     bambu_fun_session_id = CASE
+                         WHEN excluded.bambu_fun_bits IS NULL THEN printers.bambu_fun_session_id
+                         ELSE excluded.bambu_fun_session_id
+                     END,
                      state_revision = printers.state_revision + 1",
                     vec![
                         printer_id.to_owned().into(),
@@ -58,6 +68,8 @@ pub(crate) async fn upsert_snapshot(
                         snapshot.bed_target_temperature_celsius.clone().into(),
                         snapshot.chamber_temperature_celsius.clone().into(),
                         snapshot.chamber_light_on.into(),
+                        bambu_fun_bits.clone().into(),
+                        bambu_fun_session_id.clone().into(),
                     ],
                 ))
                 .await
@@ -73,9 +85,10 @@ pub(crate) async fn upsert_snapshot(
                      id, tenant_id, agent_id, serial_number, host, access_code, name, model, status,
                      last_seen_at, created_at, nozzle_temperatures_json,
                      active_nozzle, bed_temperature_celsius, bed_target_temperature_celsius,
-                     chamber_temperature_celsius, chamber_light_on, state_revision
+                     chamber_temperature_celsius, chamber_light_on, bambu_fun_bits,
+                     bambu_fun_session_id, state_revision
                   )
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11, $12, $13, $14, $15, $16, 1)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11, $12, $13, $14, $15, $16, $17, $18, 1)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
                      host = COALESCE(excluded.host, printers.host),
@@ -89,6 +102,11 @@ pub(crate) async fn upsert_snapshot(
                      bed_target_temperature_celsius = excluded.bed_target_temperature_celsius,
                      chamber_temperature_celsius = excluded.chamber_temperature_celsius,
                      chamber_light_on = excluded.chamber_light_on,
+                     bambu_fun_bits = COALESCE(excluded.bambu_fun_bits, printers.bambu_fun_bits),
+                     bambu_fun_session_id = CASE
+                         WHEN excluded.bambu_fun_bits IS NULL THEN printers.bambu_fun_session_id
+                         ELSE excluded.bambu_fun_session_id
+                     END,
                      state_revision = printers.state_revision + 1",
                     vec![
                         printer_id.to_owned().into(),
@@ -107,6 +125,8 @@ pub(crate) async fn upsert_snapshot(
                         snapshot.bed_target_temperature_celsius.clone().into(),
                         snapshot.chamber_temperature_celsius.clone().into(),
                         snapshot.chamber_light_on.into(),
+                        bambu_fun_bits.into(),
+                        bambu_fun_session_id.into(),
                     ],
                 ))
                 .await

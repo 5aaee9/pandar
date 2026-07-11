@@ -199,6 +199,84 @@ fn submit_printer_operation_accepts_latest_agent_operation_bodies() {
 }
 
 #[test]
+fn printer_operations_accept_modern_axis_feature_bodies() {
+    for operation in [
+        serde_json::json!({
+            "action": "home",
+            "axes": [],
+            "required_device_features": ["bambu_mqtt_homing"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [{"axis": "z", "delta_mm": -10.0}],
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+    ] {
+        let hub_url = one_shot_server(
+            "POST",
+            "/api/v1/plugin/printers/printer/operations",
+            Some("pandar_plugin_test_token"),
+            "HTTP/1.1 202 Accepted",
+            r#"{"command_id":"cmd","status":"queued"}"#,
+            None,
+        );
+        let operation_body = serde_json::to_vec(&operation).unwrap();
+        let result = submit_printer_operation(hub_url.as_bytes(), TOKEN, &operation_body);
+
+        assert_eq!(result.status, 0);
+        assert_eq!(result.http_code, 202);
+        assert_eq!(body(result), r#"{"command_id":"cmd","status":"queued"}"#);
+    }
+}
+
+#[test]
+fn printer_operations_reject_invalid_modern_axis_feature_bodies() {
+    for operation in [
+        serde_json::json!({
+            "action": "home",
+            "axes": ["x"],
+            "required_device_features": ["bambu_mqtt_homing"]
+        }),
+        serde_json::json!({
+            "action": "home",
+            "axes": [],
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [{"axis": "x", "delta_mm": 2.0}],
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [
+                {"axis": "x", "delta_mm": 1.0},
+                {"axis": "y", "delta_mm": 1.0}
+            ],
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [{"axis": "x", "delta_mm": 10.0}],
+            "feedrate_mm_per_min": 3000,
+            "required_device_features": ["bambu_mqtt_axis_control"]
+        }),
+        serde_json::json!({
+            "action": "move_axes",
+            "movements": [{"axis": "x", "delta_mm": 1.0}],
+            "required_device_features": ["bambu_mqtt_homing"]
+        }),
+    ] {
+        let operation_body = serde_json::to_vec(&operation).unwrap();
+        let result = submit_printer_operation(b"http://127.0.0.1:9", TOKEN, &operation_body);
+
+        assert_ne!(result.status, 0);
+        assert_eq!(result.http_code, 400);
+        assert_eq!(body(result), r#"{"error":"invalid_printer_operation"}"#);
+    }
+}
+
+#[test]
 fn submit_printer_operation_rejects_invalid_json_before_network() {
     let result = submit_printer_operation(b"http://127.0.0.1:9", TOKEN, b"not-json");
 

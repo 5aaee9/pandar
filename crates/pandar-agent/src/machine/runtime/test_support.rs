@@ -14,10 +14,11 @@ use crate::machine::{
 pub(crate) struct TestRuntimeBambuMachineGateway<T, F> {
     inner: tokio::sync::Mutex<ConfiguredBambuMachineGateway<T, F>>,
     discovered_printers: tokio::sync::Mutex<Vec<DiscoveredPrinter>>,
-    report_tasks: tokio::sync::Mutex<HashMap<String, JoinHandle<()>>>,
+    pub(crate) report_tasks: tokio::sync::Mutex<HashMap<String, JoinHandle<()>>>,
     command_transports: tokio::sync::Mutex<VecDeque<anyhow::Result<T>>>,
     report_preparation_errors: tokio::sync::Mutex<VecDeque<anyhow::Error>>,
     report_task_replacement_pause: tokio::sync::Mutex<Option<ReportTaskReplacementPause>>,
+    device_features: DeviceFeatureCache,
     redaction_access_codes: StdMutex<Vec<String>>,
     transfer: F,
     report_timeout: Duration,
@@ -58,6 +59,7 @@ where
             command_transports: tokio::sync::Mutex::new(VecDeque::new()),
             report_preparation_errors: tokio::sync::Mutex::new(VecDeque::new()),
             report_task_replacement_pause: tokio::sync::Mutex::new(None),
+            device_features: DeviceFeatureCache::default(),
             redaction_access_codes: StdMutex::new(redaction_access_codes),
             transfer,
             report_timeout,
@@ -91,6 +93,85 @@ where
         } else {
             0
         }
+    }
+
+    pub(crate) fn device_feature_cache(&self) -> DeviceFeatureCache {
+        self.device_features.clone()
+    }
+
+    pub(crate) async fn prepare_session(
+        &self,
+        config: &AgentConfig,
+        sender: &mpsc::Sender<AgentEvent>,
+    ) -> anyhow::Result<()> {
+        let tasks = self
+            .report_tasks
+            .lock()
+            .await
+            .drain()
+            .map(|(_, task)| task)
+            .collect::<Vec<_>>();
+        for task in tasks {
+            task.abort();
+            let _ = task.await;
+        }
+        let endpoints = self.inner.lock().await.endpoints();
+        for endpoint in &endpoints {
+            self.device_features.invalidate(&endpoint.serial).await;
+            sender
+                .send(crate::machine::mqtt::feature_event(
+                    config,
+                    endpoint.serial.clone(),
+                    None,
+                ))
+                .await
+                .with_context(|| {
+                    format!(
+                        "queue printer {} device feature invalidation",
+                        endpoint.serial
+                    )
+                })?;
+        }
+        for endpoint in &endpoints {
+            let observation = self
+                .inner
+                .lock()
+                .await
+                .probe_device_features(&endpoint.serial, &self.device_features)
+                .await;
+            match observation {
+                Ok(value) => sender
+                    .send(crate::machine::mqtt::feature_event(
+                        config,
+                        endpoint.serial.clone(),
+                        Some(value),
+                    ))
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "queue printer {} device feature observation",
+                            endpoint.serial
+                        )
+                    })?,
+                Err(error) => tracing::warn!(
+                    serial = %endpoint.serial,
+                    error = %format!("{error:#}"),
+                    "printer device feature probe failed"
+                ),
+            }
+        }
+        self.pause_before_report_task_replacement().await;
+        let mut tasks = self.report_tasks.lock().await;
+        for endpoint in endpoints {
+            if let Some(task) = tasks.remove(&endpoint.serial) {
+                task.abort();
+            }
+            tasks.insert(
+                endpoint.serial,
+                tokio::spawn(async { std::future::pending::<()>().await }),
+            );
+        }
+        Ok(())
     }
 
     async fn next_command_transport(&self) -> anyhow::Result<T> {
@@ -153,7 +234,15 @@ where
     }
 
     async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
-        self.inner.lock().await.refresh_printers().await
+        let results = self.inner.lock().await.refresh_printers().await?;
+        for result in &results {
+            if let Some(value) = result.snapshot.device_features {
+                self.device_features
+                    .update(&result.snapshot.serial, value)
+                    .await;
+            }
+        }
+        Ok(results)
     }
 
     async fn refresh_printer_materials(
@@ -204,8 +293,8 @@ where
     async fn link_printer(
         &self,
         endpoint: BambuPrinterEndpoint,
-        _config: &AgentConfig,
-        _sender: &mpsc::Sender<AgentEvent>,
+        config: &AgentConfig,
+        sender: &mpsc::Sender<AgentEvent>,
     ) -> anyhow::Result<MachineSnapshot> {
         let command_transport = self.next_command_transport().await?;
         let mut inner = self.inner.lock().await;
@@ -214,11 +303,31 @@ where
             .with_context(|| format!("validate runtime printer {}", endpoint.serial))?
             .snapshot;
         self.prepare_report_forwarding().await?;
-        inner.replace_printer(endpoint.clone(), command_transport, self.transfer.clone());
-        self.pause_before_report_task_replacement().await;
         if let Some(task) = self.report_tasks.lock().await.remove(&endpoint.serial) {
             task.abort();
+            let _ = task.await;
         }
+        self.device_features.invalidate(&endpoint.serial).await;
+        if !sender.is_closed() {
+            sender
+                .send(crate::machine::mqtt::feature_event(
+                    config,
+                    endpoint.serial.clone(),
+                    None,
+                ))
+                .await
+                .with_context(|| {
+                    format!(
+                        "queue printer {} device feature invalidation",
+                        endpoint.serial
+                    )
+                })?;
+        }
+        if let Some(value) = snapshot.device_features {
+            self.device_features.update(&endpoint.serial, value).await;
+        }
+        inner.replace_printer(endpoint.clone(), command_transport, self.transfer.clone());
+        self.pause_before_report_task_replacement().await;
         self.report_tasks.lock().await.insert(
             endpoint.serial.clone(),
             tokio::spawn(async { std::future::pending::<()>().await }),

@@ -41,11 +41,15 @@ pub(crate) enum PrinterOperation {
     Home {
         #[serde(skip_serializing_if = "Option::is_none")]
         axes: Option<Vec<Axis>>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        required_device_features: Vec<RequiredDeviceFeature>,
     },
     MoveAxes {
         movements: Vec<AxisMovement>,
         #[serde(skip_serializing_if = "Option::is_none")]
         feedrate_mm_per_min: Option<u64>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        required_device_features: Vec<RequiredDeviceFeature>,
     },
     SetHotendTemperature {
         temperature_celsius: u64,
@@ -98,6 +102,13 @@ pub(crate) enum Axis {
     Z,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum RequiredDeviceFeature {
+    BambuMqttHoming,
+    BambuMqttAxisControl,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub(crate) struct AxisMovement {
     pub(crate) axis: Axis,
@@ -120,14 +131,28 @@ impl PrinterOperation {
             Self::SetChamberLight { .. } => true,
             Self::SetPrintSpeed { speed_mode } => (1..=4).contains(speed_mode),
             Self::SelectExtruder { extruder_id } => in_range(*extruder_id, 0, MAX_EXTRUDER_ID),
-            Self::Home { .. } => true,
+            Self::Home {
+                axes,
+                required_device_features,
+            } => {
+                required_device_features.is_empty()
+                    || (axes.as_ref().is_some_and(Vec::is_empty)
+                        && required_device_features == &[RequiredDeviceFeature::BambuMqttHoming])
+            }
             Self::MoveAxes {
                 movements,
                 feedrate_mm_per_min,
+                required_device_features,
             } => {
                 !movements.is_empty()
                     && movements.iter().all(AxisMovement::is_valid)
                     && feedrate_mm_per_min.is_none_or(|feedrate| (1..=12_000).contains(&feedrate))
+                    && (required_device_features.is_empty()
+                        || (movements.len() == 1
+                            && feedrate_mm_per_min.is_none()
+                            && matches!(movements[0].delta_mm.abs(), 1.0 | 10.0)
+                            && required_device_features
+                                == &[RequiredDeviceFeature::BambuMqttAxisControl]))
             }
             Self::SetHotendTemperature {
                 temperature_celsius,

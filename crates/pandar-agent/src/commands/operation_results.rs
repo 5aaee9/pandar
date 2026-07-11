@@ -116,7 +116,7 @@ impl OperationResultFields {
                 extruder_id: Some(*extruder_id),
                 ..Self::default()
             },
-            MachinePrinterOperation::Home { axes } => Self {
+            MachinePrinterOperation::Home { axes, .. } => Self {
                 axes: Some(axes.iter().map(axis_name).collect()),
                 ..Self::default()
             },
@@ -125,6 +125,7 @@ impl OperationResultFields {
                 y_mm,
                 z_mm,
                 feedrate_mm_per_min,
+                ..
             } => Self {
                 x_mm: *x_mm,
                 y_mm: *y_mm,

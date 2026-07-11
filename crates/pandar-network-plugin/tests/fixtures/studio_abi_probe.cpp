@@ -371,6 +371,7 @@ struct ProbeResult {
     bool local_replacement_exact = false;
     bool disconnect_exact = false;
     bool same_serial_exact = false;
+    bool axis_features_exact = false;
     std::string cloud_status_body;
     std::string local_status_body;
 };
@@ -453,6 +454,7 @@ void print_json(const ProbeResult& result) {
         << ",\"local_replacement_exact\":" << (result.local_replacement_exact ? "true" : "false")
         << ",\"disconnect_exact\":" << (result.disconnect_exact ? "true" : "false")
         << ",\"same_serial_exact\":" << (result.same_serial_exact ? "true" : "false")
+        << ",\"axis_features_exact\":" << (result.axis_features_exact ? "true" : "false")
         << ",\"cloud_status_body\":" << escape_json(result.cloud_status_body)
         << ",\"local_status_body\":" << escape_json(result.local_status_body)
         << "}\n";
@@ -540,8 +542,9 @@ int main(int argc, char** argv) {
     const bool failure_mode = mode == "failure";
     const bool stale_token_mode = mode == "stale-token-refresh";
     const bool native_print_error_mode = mode == "native-print-error";
-    if (!failure_mode && !stale_token_mode && !native_print_error_mode && mode != "success") {
-        std::cerr << "mode must be success, failure, stale-token-refresh, or native-print-error\n";
+    const bool axis_features_mode = mode == "axis-features";
+    if (!failure_mode && !stale_token_mode && !native_print_error_mode && !axis_features_mode && mode != "success") {
+        std::cerr << "mode must be success, failure, stale-token-refresh, native-print-error, or axis-features\n";
         return 2;
     }
 
@@ -723,6 +726,71 @@ int main(int argc, char** argv) {
         fail(agent, destroy_agent, "printer listing failed");
     } else if (get_selected_machine(agent) != "studio-serial-1") {
         fail(agent, destroy_agent, "printer listing did not seed Studio selected machine");
+    }
+
+    if (axis_features_mode) {
+        if (connect_server(agent) != 0 || !is_server_connected(agent)) {
+            fail(agent, destroy_agent, "axis feature probe could not establish healthy server state");
+        }
+        TunnelCapture cloud;
+        TunnelCapture local;
+        if (set_message(agent, [&cloud](std::string dev_id, std::string body) {
+                capture_tunnel_message(cloud, dev_id, body);
+            }) != 0 ||
+            set_local_message(agent, [&local](std::string dev_id, std::string body) {
+                capture_tunnel_message(local, dev_id, body);
+            }) != 0) {
+            fail(agent, destroy_agent, "axis feature callback registration failed");
+        }
+        if (send_cloud(
+                agent,
+                "studio-serial-1",
+                R"({"pushing":{"command":"pushall","sequence_id":"31000","version":1,"push_target":1}})",
+                0,
+                0
+            ) != 0 ||
+            !wait_until([&] { return status_count(cloud, "studio-serial-1") > 0; })) {
+            fail(agent, destroy_agent, "axis feature push_status request failed");
+        }
+        out.cloud_status_body = status_body(cloud, "studio-serial-1");
+        if (!contains(out.cloud_status_body, R"("fun":"8000004100000020")")) {
+            fail(agent, destroy_agent, "Studio push_status did not preserve the full u64 fun bitmap");
+        }
+        if (connect_printer(agent, "studio-serial-1", "127.0.0.1", "user", "pass", false) != 0) {
+            fail(agent, destroy_agent, "axis feature local printer connect failed");
+        }
+
+        const std::vector<std::string> cloud_operations = {
+            R"({"print":{"command":"back_to_center","sequence_id":"31001"}})",
+            R"({"print":{"command":"xyz_ctrl","axis":"X","dir":1,"mode":0,"sequence_id":"31002"}})",
+            R"({"print":{"command":"gcode_line","param":"G28 X\n","sequence_id":"31003"}})",
+            R"({"print":{"command":"gcode_line","param":"M211 S\nM211 X1 Y1 Z1\nM1002 push_ref_mode\nG91\nG1 X10.0 F3000\nM1002 pop_ref_mode\nM211 R\n","sequence_id":"31004"}})",
+        };
+        const std::vector<std::string> local_operations = {
+            R"({"print":{"command":"back_to_center","sequence_id":"31005"}})",
+            R"({"print":{"command":"xyz_ctrl","axis":"Z","dir":-1,"mode":1,"sequence_id":"31006"}})",
+            R"({"print":{"command":"gcode_line","param":"G28 X\n","sequence_id":"31007"}})",
+            R"({"print":{"command":"gcode_line","param":"M211 S\nM211 X1 Y1 Z1\nM1002 push_ref_mode\nG91\nG1 Z-1.0 F600\nM1002 pop_ref_mode\nM211 R\n","sequence_id":"31008"}})",
+        };
+        auto submit_exact = [&](auto send, const std::vector<std::string>& messages) {
+            for (const auto& message : messages) {
+                const int before = hub_operation_count();
+                const int rc = send(agent, "studio-serial-1", message, 1, 0);
+                const int after = hub_operation_count();
+                if (before < 0 || rc != 0 || after != before + 1) return false;
+            }
+            return true;
+        };
+        out.axis_features_exact =
+            submit_exact(send_cloud, cloud_operations) &&
+            submit_exact(send_printer, local_operations);
+        out.operation_posts = hub_operation_count();
+        if (!out.axis_features_exact || out.operation_posts != 8) {
+            fail(agent, destroy_agent, "axis feature commands did not submit exact semantic operations");
+        }
+        destroy_agent(agent);
+        print_json(out);
+        return 0;
     }
 
     if (native_print_error_mode) {
@@ -1272,7 +1340,7 @@ int main(int argc, char** argv) {
             !contains(body, R"("support_chamber":true)") ||
             !contains(body, R"("support_chamber_temp_display":true)") ||
             !contains(body, R"("cfg":"")") ||
-            !contains(body, R"("fun":"")") ||
+            !contains(body, R"("fun":"8000004100000020")") ||
             !contains(body, R"("aux":"")") ||
             !contains(body, R"("stat":"")") ||
             !contains(body, R"("device")") ||

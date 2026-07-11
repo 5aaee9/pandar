@@ -14,18 +14,22 @@ use tokio::sync::mpsc;
 use crate::{
     AgentConfig,
     machine::{
-        BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult,
+        BambuPrinterEndpoint, DeviceFeatureCache, MachineSnapshot, MaterialRefreshResult,
         materials::{normalize_material_patch, parse_materials_report},
         types::decode_json_payload,
     },
     protocol::agent::v1::{
-        AgentEvent, NozzleTemperature, PrinterMaterialsSnapshot, PrinterSnapshot, agent_event,
+        AgentEvent, NozzleTemperature, PrinterDeviceFeatures, PrinterMaterialsSnapshot,
+        PrinterSnapshot, agent_event,
     },
 };
 
+use super::device_features::is_feature_only_report;
 use super::{
-    BambuMqttTopics, BambuMqttTransport, MachineReportDiagnostic, MachineReportDiagnosticPayload,
-    PrintReportProgress, parse_snapshot_report, snapshot_from_parsed_report,
+    BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, MachineReportDiagnostic,
+    MachineReportDiagnosticPayload, PrintReportProgress, PublishedMqttCommand,
+    device_feature_observation, feature_event, is_mqtt_report_idle_timeout, parse_snapshot_report,
+    snapshot_from_parsed_report,
 };
 
 pub fn print_report_from_report(
@@ -156,6 +160,11 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
             chamber_temperature_celsius: snapshot.chamber_temperature_celsius.unwrap_or_default(),
             active_nozzle: snapshot.active_nozzle.unwrap_or_default(),
             chamber_light_on: snapshot.chamber_light_on,
+            device_features: snapshot
+                .device_features
+                .map(|features| PrinterDeviceFeatures {
+                    bambu_fun_bits: features.bits(),
+                }),
         })),
     }
 }
@@ -174,6 +183,7 @@ pub async fn forward_print_reports<T>(
     endpoint: &BambuPrinterEndpoint,
     report_timeout: Duration,
     sender: &mpsc::Sender<AgentEvent>,
+    cache: &DeviceFeatureCache,
 ) -> anyhow::Result<()>
 where
     T: BambuMqttTransport + ?Sized,
@@ -183,6 +193,14 @@ where
         .subscribe(&topics.report)
         .await
         .with_context(|| format!("subscribe to report topic {}", topics.report))?;
+    transport
+        .publish(PublishedMqttCommand {
+            topic: topics.request.clone(),
+            payload: BambuMqttCommand::RequestPushAll.payload(),
+            qos: BAMBU_MQTT_QOS,
+        })
+        .await
+        .with_context(|| format!("publish pushall to request topic {}", topics.request))?;
 
     loop {
         if sender.is_closed() {
@@ -207,24 +225,51 @@ where
                     printer_materials_json,
                 );
                 let snapshot_report = parse_snapshot_report(&report);
-                let snapshot = snapshot_from_parsed_report(endpoint, snapshot_report.as_ref());
+                let device_features = match snapshot_report
+                    .as_ref()
+                    .map(|report| device_feature_observation(&endpoint.serial, report))
+                    .transpose()
+                {
+                    Ok(value) => value.flatten(),
+                    Err(error) => {
+                        tracing::warn!(
+                            serial = %endpoint.serial,
+                            error = %format!("{error:#}"),
+                            "invalid printer device feature observation"
+                        );
+                        None
+                    }
+                };
+                if let Some(value) = device_features {
+                    cache.update(&endpoint.serial, value).await;
+                }
+                let mut snapshot = snapshot_from_parsed_report(endpoint, snapshot_report.as_ref());
+                snapshot.device_features = device_features;
                 let snapshot_event = snapshot_has_temperature_telemetry(&snapshot)
                     .then(|| printer_snapshot_event(config, snapshot));
+                let feature_event = (snapshot_event.is_none() && device_features.is_some())
+                    .then(|| feature_event(config, endpoint.serial.clone(), device_features));
                 let materials =
                     (!progress.printer_materials_json.is_empty()).then(|| MaterialRefreshResult {
                         serial: progress.serial.clone(),
                         printer_id: None,
                         printer_materials_json: progress.printer_materials_json.clone(),
                     });
-                if sender
-                    .send(print_job_report_event(config, progress))
-                    .await
-                    .is_err()
+                if !is_feature_only_report(&report)
+                    && sender
+                        .send(print_job_report_event(config, progress))
+                        .await
+                        .is_err()
                 {
                     break;
                 }
                 if let Some(snapshot_event) = snapshot_event
                     && sender.send(snapshot_event).await.is_err()
+                {
+                    break;
+                }
+                if let Some(feature_event) = feature_event
+                    && sender.send(feature_event).await.is_err()
                 {
                     break;
                 }
@@ -237,12 +282,20 @@ where
                     break;
                 }
             }
-            Err(err) => {
+            Err(err) if is_mqtt_report_idle_timeout(&err) => {
                 tracing::warn!(
                     serial = %endpoint.serial,
                     error = %format!("{err:#}"),
                     "printer report receive failed"
                 );
+            }
+            Err(err) => {
+                return Err(err).with_context(|| {
+                    format!(
+                        "receive printer {} report from topic {}",
+                        endpoint.serial, topics.report
+                    )
+                });
             }
         }
     }

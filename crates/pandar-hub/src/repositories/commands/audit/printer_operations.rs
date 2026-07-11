@@ -82,6 +82,9 @@ pub(in crate::repositories::commands) async fn create_printer_operation_sent_wit
     actor: AuditActor,
 ) -> RepositoryResult<CommandRecord> {
     validate_printer_operation(&operation)?;
+    if !operation.required_device_features().is_empty() {
+        return Err(RepositoryError::InvalidPrinterControl);
+    }
 
     #[cfg(test)]
     ownership_pause::wait(printer_id).await;

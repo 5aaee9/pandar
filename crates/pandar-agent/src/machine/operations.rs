@@ -1,16 +1,22 @@
 use anyhow::Context;
+use pandar_core::{BambuDeviceFeature, BambuDeviceFeatures};
 
+mod axis;
 mod light;
 mod report;
 
 use super::{
-    BambuPrinterEndpoint, PrinterOperationDispatchResult,
+    BambuPrinterEndpoint, DeviceFeatureLease, PrinterOperationDispatchResult,
     mqtt::{
         AmsFilamentCommand, AmsSlotCommand, BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics,
         BambuMqttTransport, GcodeLineCommand, HandlePrintErrorCommand, PrintErrorAction,
         PrintSpeed, PublishedMqttCommand, SetNozzleTemperatureCommand,
     },
 };
+
+pub(crate) use axis::operate_printer_with_feature_selection;
+#[cfg(test)]
+pub(crate) use axis::pause as device_feature_dispatch_pause;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PrinterOperation {
@@ -29,12 +35,14 @@ pub enum PrinterOperation {
     SelectExtruder(u32),
     Home {
         axes: Vec<PrinterAxis>,
+        required_feature: Option<BambuDeviceFeature>,
     },
     MoveAxes {
         x_mm: Option<f64>,
         y_mm: Option<f64>,
         z_mm: Option<f64>,
         feedrate_mm_per_min: Option<f64>,
+        required_feature: Option<BambuDeviceFeature>,
     },
     SetHotendTemperature {
         temperature_celsius: u16,
@@ -69,6 +77,20 @@ pub enum PrinterOperation {
     },
 }
 
+impl PrinterOperation {
+    pub(crate) fn required_feature(&self) -> Option<BambuDeviceFeature> {
+        match self {
+            Self::Home {
+                required_feature, ..
+            }
+            | Self::MoveAxes {
+                required_feature, ..
+            } => *required_feature,
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrinterAxis {
     X,
@@ -80,6 +102,7 @@ pub(super) async fn dispatch_printer_operation<T>(
     endpoint: &BambuPrinterEndpoint,
     mqtt: &T,
     operation: PrinterOperation,
+    feature_lease: Option<DeviceFeatureLease>,
 ) -> anyhow::Result<PrinterOperationDispatchResult>
 where
     T: BambuMqttTransport + Send + Sync,
@@ -88,12 +111,18 @@ where
     mqtt.subscribe(&topics.report)
         .await
         .with_context(|| format!("subscribe to report topic {}", topics.report))?;
+    let observed_features = feature_lease.as_ref().and_then(DeviceFeatureLease::get);
     let commands = match operation {
         PrinterOperation::ToggleLight => light::chamber_light_commands(mqtt, &topics, None).await?,
         PrinterOperation::SetChamberLight(on) => {
             light::chamber_light_commands(mqtt, &topics, Some(on)).await?
         }
-        operation => vec![mqtt_command_for_printer_operation(operation)?],
+        operation => vec![
+            mqtt_command_for_printer_operation_with_features(operation, observed_features)
+                .with_context(|| {
+                    format!("select printer operation payload for {}", endpoint.serial)
+                })?,
+        ],
     };
     let command_payloads = commands
         .iter()
@@ -112,6 +141,7 @@ where
         .await
         .with_context(|| format!("publish printer operation to {}", endpoint.serial))?;
     }
+    drop(feature_lease);
 
     if sequence_ids.is_empty() {
         return Ok(PrinterOperationDispatchResult::dispatched());
@@ -152,6 +182,13 @@ where
 pub(super) fn mqtt_command_for_printer_operation(
     operation: PrinterOperation,
 ) -> anyhow::Result<BambuMqttCommand> {
+    mqtt_command_for_printer_operation_with_features(operation, None)
+}
+
+fn mqtt_command_for_printer_operation_with_features(
+    operation: PrinterOperation,
+    observed_features: Option<BambuDeviceFeatures>,
+) -> anyhow::Result<BambuMqttCommand> {
     match operation {
         PrinterOperation::Pause => Ok(BambuMqttCommand::PausePrint),
         PrinterOperation::Resume => Ok(BambuMqttCommand::ResumePrint),
@@ -181,21 +218,24 @@ pub(super) fn mqtt_command_for_printer_operation(
         PrinterOperation::SelectExtruder(extruder_id) => {
             Ok(BambuMqttCommand::SelectExtruder(extruder_id))
         }
-        PrinterOperation::Home { .. } => Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
-            lines: vec!["G28".to_string()],
-        })),
+        PrinterOperation::Home {
+            axes,
+            required_feature,
+        } => axis::home_command(axes, required_feature, observed_features),
         PrinterOperation::MoveAxes {
             x_mm,
             y_mm,
             z_mm,
             feedrate_mm_per_min,
-        } => Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
-            lines: vec![
-                "G91".to_string(),
-                move_axes_gcode_line(x_mm, y_mm, z_mm, feedrate_mm_per_min),
-                "G90".to_string(),
-            ],
-        })),
+            required_feature,
+        } => axis::move_axes_command(
+            x_mm,
+            y_mm,
+            z_mm,
+            feedrate_mm_per_min,
+            required_feature,
+            observed_features,
+        ),
         PrinterOperation::SetHotendTemperature {
             temperature_celsius,
             wait,
@@ -318,34 +358,4 @@ where
     })
     .await
     .context("wait for matching printer operation MQTT result")?
-}
-
-fn move_axes_gcode_line(
-    x_mm: Option<f64>,
-    y_mm: Option<f64>,
-    z_mm: Option<f64>,
-    feedrate_mm_per_min: Option<f64>,
-) -> String {
-    let mut line = String::from("G0");
-    if let Some(value) = x_mm {
-        line.push_str(&format!(" X{}", format_gcode_number(value)));
-    }
-    if let Some(value) = y_mm {
-        line.push_str(&format!(" Y{}", format_gcode_number(value)));
-    }
-    if let Some(value) = z_mm {
-        line.push_str(&format!(" Z{}", format_gcode_number(value)));
-    }
-    if let Some(value) = feedrate_mm_per_min {
-        line.push_str(&format!(" F{}", format_gcode_number(value)));
-    }
-    line
-}
-
-fn format_gcode_number(value: f64) -> String {
-    let formatted = format!("{value:.6}");
-    formatted
-        .trim_end_matches('0')
-        .trim_end_matches('.')
-        .to_string()
 }

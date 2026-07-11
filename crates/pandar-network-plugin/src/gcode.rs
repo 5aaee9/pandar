@@ -1,6 +1,7 @@
 pub(super) use operation::{PrintErrorAction, PrinterOperation};
 
 mod operation;
+mod studio_axis;
 mod studio_json;
 
 use crate::{PluginHttpResult, result, stable_error_body};
@@ -22,18 +23,39 @@ pub(super) fn operation_json_from_gcode(message: &str) -> StudioOperationParse {
         parsed => return parsed,
     }
 
+    parse_gcode_operation(message).map_or(
+        StudioOperationParse::Unsupported,
+        StudioOperationParse::Operation,
+    )
+}
+
+fn parse_gcode_operation(message: &str) -> Option<PrinterOperation> {
     let commands = gcode_commands(message);
-    let operation = match commands.as_slice() {
+    match commands.as_slice() {
         [command] => parse_single_command_operation(command),
         [relative, movement] if relative.eq_ignore_ascii_case("G91") => {
             parse_move_axes_operation(movement)
         }
+        [
+            soft_endstop,
+            axis_limits,
+            push_reference,
+            relative,
+            movement,
+            pop_reference,
+            restore,
+        ] if soft_endstop == "M211 S"
+            && axis_limits == "M211 X1 Y1 Z1"
+            && push_reference == "M1002 push_ref_mode"
+            && relative == "G91"
+            && movement.split_whitespace().next() == Some("G1")
+            && pop_reference == "M1002 pop_ref_mode"
+            && restore == "M211 R" =>
+        {
+            parse_move_axes_operation(movement)
+        }
         _ => None,
-    };
-    operation.map_or(
-        StudioOperationParse::Unsupported,
-        StudioOperationParse::Operation,
-    )
+    }
 }
 
 impl StudioOperationParse {
@@ -95,7 +117,10 @@ fn parse_home_operation(command: &str) -> Option<PrinterOperation> {
         };
         axes.push(axis);
     }
-    Some(PrinterOperation::Home { axes: Some(axes) })
+    Some(PrinterOperation::Home {
+        axes: Some(axes),
+        required_device_features: Vec::new(),
+    })
 }
 
 fn parse_hotend_operation(command: &str, wait: bool) -> Option<PrinterOperation> {
@@ -179,6 +204,7 @@ fn parse_move_axes_operation(command: &str) -> Option<PrinterOperation> {
             Some(value) => Some(parse_integer_gcode_value(value)?),
             None => None,
         },
+        required_device_features: Vec::new(),
     };
     operation.is_valid().then_some(operation)
 }

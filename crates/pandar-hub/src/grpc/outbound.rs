@@ -1,37 +1,70 @@
 use pandar_core::{AgentId, TenantId};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tonic::Status;
 
 use crate::{
-    AppState, grpc::commands::next_hub_command_for_agent, protocol::agent::v1::HubCommand,
+    AppState,
+    grpc::commands::{
+        CommandConversionOptions, SessionQueuedDispatch, dispatch_next_queued_for_session,
+    },
+    protocol::agent::v1::HubCommand,
+    sessions::SessionToken,
 };
+
+#[derive(Clone, Copy)]
+pub(super) struct OutboundSession {
+    pub tenant_id: TenantId,
+    pub agent_id: AgentId,
+    pub token: SessionToken,
+}
 
 pub(super) fn spawn_outbound_pump(
     state: AppState,
-    tenant_id: TenantId,
-    agent_id: AgentId,
+    session: OutboundSession,
     mut wake_receiver: mpsc::Receiver<()>,
     mut close_receiver: mpsc::Receiver<()>,
     mut status_receiver: mpsc::Receiver<Status>,
     command_sender: mpsc::Sender<Result<HubCommand, Status>>,
-) {
+) -> oneshot::Receiver<()> {
+    let (ready_sender, ready_receiver) = oneshot::channel();
     tokio::spawn(async move {
+        let mut ready_sender = Some(ready_sender);
+        let OutboundSession {
+            tenant_id,
+            agent_id,
+            token,
+        } = session;
         loop {
-            if !drain_commands(
+            let keep_running = drain_commands(
                 &state,
-                tenant_id,
-                agent_id,
+                session,
                 &mut close_receiver,
+                &mut status_receiver,
+                &mut ready_sender,
                 &command_sender,
             )
-            .await
-            {
+            .await;
+            if !keep_running {
                 break;
             }
             tokio::select! {
                 biased;
-                Some(()) = close_receiver.recv() => break,
+                _ = close_receiver.recv() => {
+                    finalize_closing_session(
+                        &state, tenant_id, agent_id, token,
+                    ).await;
+                    if let Ok(status) = status_receiver.try_recv() {
+                        let _ = command_sender.send(Err(status)).await;
+                    }
+                    break;
+                },
                 Some(status) = status_receiver.recv() => {
+                    let _ = status_receiver.recv().await;
+                    if !state.sessions().is_current(agent_id, token).await {
+                        finalize_closing_session(
+                            &state, tenant_id, agent_id, token,
+                        ).await;
+                    }
                     let _ = command_sender.send(Err(status)).await;
                     break;
                 }
@@ -40,29 +73,96 @@ pub(super) fn spawn_outbound_pump(
             }
         }
     });
+    ready_receiver
 }
 
 async fn drain_commands(
     state: &AppState,
-    tenant_id: TenantId,
-    agent_id: AgentId,
+    session: OutboundSession,
     close_receiver: &mut mpsc::Receiver<()>,
+    status_receiver: &mut mpsc::Receiver<Status>,
+    ready_sender: &mut Option<oneshot::Sender<()>>,
     command_sender: &mpsc::Sender<Result<HubCommand, Status>>,
 ) -> bool {
+    let OutboundSession {
+        tenant_id,
+        agent_id,
+        token,
+    } = session;
     loop {
-        let hub_command = match tokio::select! {
+        let dispatch = match tokio::select! {
             biased;
-            Some(()) = close_receiver.recv() => return false,
-            command = next_hub_command_for_agent(state, tenant_id, agent_id) => command,
+            _ = close_receiver.recv() => {
+                finalize_closing_session(
+                    state, tenant_id, agent_id, token,
+                ).await;
+                if let Ok(status) = status_receiver.try_recv() {
+                    signal_ready(ready_sender);
+                    return send_error(command_sender, status).await;
+                }
+                signal_ready(ready_sender);
+                return false;
+            },
+            dispatch = dispatch_next_queued_for_session(
+                state,
+                tenant_id,
+                agent_id,
+                token,
+                command_sender,
+                conversion_options(state),
+            ) => dispatch,
         } {
-            Ok(Some(command)) => command,
-            Ok(None) => return true,
-            Err(err) => return send_error(command_sender, err).await,
+            Ok(dispatch) => {
+                signal_ready(ready_sender);
+                dispatch
+            }
+            Err(err) => {
+                signal_ready(ready_sender);
+                return send_error(command_sender, err).await;
+            }
         };
-
-        if command_sender.send(Ok(hub_command)).await.is_err() {
-            return false;
+        match dispatch {
+            SessionQueuedDispatch::Sent | SessionQueuedDispatch::FailedAndContinue => {}
+            SessionQueuedDispatch::Empty => return true,
+            SessionQueuedDispatch::SessionEnded => {
+                if let Ok(status) = status_receiver.try_recv() {
+                    return send_error(command_sender, status).await;
+                }
+                return false;
+            }
+            SessionQueuedDispatch::ChannelClosed => return false,
         }
+    }
+}
+
+fn signal_ready(ready_sender: &mut Option<oneshot::Sender<()>>) {
+    if let Some(ready_sender) = ready_sender.take() {
+        let _ = ready_sender.send(());
+    }
+}
+
+async fn finalize_closing_session(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    token: SessionToken,
+) {
+    if let Err(status) = super::commands::finalize_required_features_for_closing_session(
+        state, tenant_id, agent_id, token,
+    )
+    .await
+    {
+        tracing::error!(
+            code = ?status.code(),
+            error = %status,
+            "failed to finalize queued command for closing agent session"
+        );
+    }
+}
+
+fn conversion_options(state: &AppState) -> CommandConversionOptions {
+    CommandConversionOptions {
+        require_artifact_download_path: state.artifact_storage().backend().requires_hub_fetch(),
     }
 }
 
@@ -76,10 +176,7 @@ async fn send_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        grpc::commands::{CommandConversionOptions, next_hub_command_for_agent_with_options},
-        repositories::PrintProjectFilePayload,
-    };
+    use crate::repositories::PrintProjectFilePayload;
     use pandar_core::{CommandStatus, JobStatus};
 
     #[tokio::test]
@@ -118,10 +215,14 @@ mod tests {
             .unwrap();
         replace_payload_without_download_path(&state, job.job.command_id).await;
 
-        let err = next_hub_command_for_agent_with_options(
+        let token = crate::grpc::register_test_session(&state, tenant.id, agent.id).await;
+        let (command_sender, _command_receiver) = mpsc::channel(1);
+        let err = dispatch_next_queued_for_session(
             &state,
             tenant.id,
             agent.id,
+            token,
+            &command_sender,
             CommandConversionOptions {
                 require_artifact_download_path: true,
             },

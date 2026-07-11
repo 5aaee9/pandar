@@ -8,6 +8,7 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use async_trait::async_trait;
+use pandar_core::{BambuDeviceFeature, BambuDeviceFeatures};
 use reports::{ams_ready_report, get_version_report};
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, sync::mpsc};
@@ -26,8 +27,8 @@ use crate::{
     },
     protocol::agent::v1::{
         AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation, Axis,
-        AxisMovement, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand, LinkPrinter,
-        MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
+        AxisMovement, DeviceFeature, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
+        LinkPrinter, MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
         RefreshPrinterMaterials, RefreshPrinters, SelectExtruderOperation,
         SetBedTemperatureOperation, SetChamberLightOperation, SetChamberTemperatureOperation,
         SetHotendTemperatureOperation, SetPrintSpeedOperation, ToggleLightOperation,
@@ -136,6 +137,22 @@ async fn refresh_printers_one_snapshot_emits_ack_snapshot_success() {
         success_event(&config, &command_id)
     );
     assert!(receiver.recv().await.is_none());
+}
+
+#[test]
+fn printer_snapshot_event_maps_device_features_exactly() {
+    let config = test_config();
+    let mut snapshot = snapshot("SERIAL1", "garage", Some("A1 Mini"), "READY");
+    snapshot.device_features = Some(BambuDeviceFeatures::from_bits(0x8000_0041_0000_0020));
+
+    let event = responses::printer_snapshot_event(&config, snapshot);
+    let Some(agent_event::Event::PrinterSnapshot(snapshot)) = event.event else {
+        panic!("expected printer snapshot event");
+    };
+    assert_eq!(
+        snapshot.device_features.unwrap().bambu_fun_bits,
+        0x8000_0041_0000_0020
+    );
 }
 
 #[tokio::test]
@@ -638,6 +655,7 @@ fn snapshot(serial: &str, name: &str, model: Option<&str>, state: &str) -> Machi
         bed_target_temperature_celsius: None,
         chamber_temperature_celsius: None,
         chamber_light_on: None,
+        device_features: None,
     }
 }
 
@@ -1767,6 +1785,212 @@ async fn printer_operation_invalid_move_bounds_reject_ack_without_dispatch() {
 }
 
 #[tokio::test]
+async fn printer_operation_required_features_reject_unknown_duplicate_and_mismatched_semantics() {
+    let home = || printer_operation::Operation::Home(HomeOperation { axes: Vec::new() });
+    let modern_move = || {
+        printer_operation::Operation::MoveAxes(MoveAxesOperation {
+            movements: vec![AxisMovement {
+                axis: Axis::X as i32,
+                delta_mm: 1.0,
+            }],
+            feedrate_mm_per_min: 0,
+        })
+    };
+    let cases = vec![
+        (
+            vec![DeviceFeature::Unspecified as i32],
+            home(),
+            "required device feature",
+        ),
+        (vec![999], home(), "required device feature"),
+        (
+            vec![DeviceFeature::BambuMqttHoming as i32],
+            modern_move(),
+            "required device feature",
+        ),
+        (
+            vec![DeviceFeature::BambuMqttAxisControl as i32],
+            home(),
+            "required device feature",
+        ),
+        (
+            vec![
+                DeviceFeature::BambuMqttHoming as i32,
+                DeviceFeature::BambuMqttHoming as i32,
+            ],
+            home(),
+            "required device feature",
+        ),
+        (
+            vec![DeviceFeature::BambuMqttHoming as i32],
+            printer_operation::Operation::Pause(PauseOperation {}),
+            "required device feature",
+        ),
+        (
+            vec![DeviceFeature::BambuMqttHoming as i32],
+            printer_operation::Operation::SetHotendTemperature(SetHotendTemperatureOperation {
+                temperature_celsius: 200,
+                wait: false,
+                extruder_id: None,
+            }),
+            "required device feature",
+        ),
+        (
+            vec![DeviceFeature::BambuMqttHoming as i32],
+            printer_operation::Operation::AmsRereadRfid(AmsRereadRfidOperation {
+                ams_id: 0,
+                slot_id: 0,
+            }),
+            "required device feature",
+        ),
+        (
+            vec![DeviceFeature::BambuMqttHoming as i32],
+            printer_operation::Operation::Home(HomeOperation {
+                axes: vec![Axis::X as i32],
+            }),
+            "required device feature",
+        ),
+        (
+            vec![DeviceFeature::BambuMqttAxisControl as i32],
+            printer_operation::Operation::MoveAxes(MoveAxesOperation {
+                movements: vec![AxisMovement {
+                    axis: Axis::X as i32,
+                    delta_mm: 2.0,
+                }],
+                feedrate_mm_per_min: 0,
+            }),
+            "required device feature",
+        ),
+        (
+            vec![DeviceFeature::BambuMqttAxisControl as i32],
+            printer_operation::Operation::MoveAxes(MoveAxesOperation {
+                movements: vec![
+                    AxisMovement {
+                        axis: Axis::X as i32,
+                        delta_mm: 1.0,
+                    },
+                    AxisMovement {
+                        axis: Axis::Y as i32,
+                        delta_mm: 1.0,
+                    },
+                ],
+                feedrate_mm_per_min: 0,
+            }),
+            "required device feature",
+        ),
+        (
+            vec![DeviceFeature::BambuMqttAxisControl as i32],
+            printer_operation::Operation::MoveAxes(MoveAxesOperation {
+                movements: vec![AxisMovement {
+                    axis: Axis::X as i32,
+                    delta_mm: 10.0,
+                }],
+                feedrate_mm_per_min: 3000,
+            }),
+            "required device feature",
+        ),
+    ];
+
+    for (required_features, operation, expected_error) in cases {
+        let config = test_config();
+        let command_id = uuid::Uuid::new_v4().to_string();
+        let gateway = OperationGateway::default();
+        let (sender, mut receiver) = mpsc::channel(2);
+        let command = printer_operation_command_with_required_features(
+            command_id.clone(),
+            "SERIAL1",
+            required_features,
+            Some(operation),
+        );
+
+        handle_command_with_gateway(&config, &gateway, &sender, command)
+            .await
+            .unwrap();
+        drop(sender);
+
+        match receiver.recv().await.unwrap().event.unwrap() {
+            agent_event::Event::CommandAck(ack) => {
+                assert_eq!(ack.command_id, command_id);
+                assert!(!ack.accepted, "unexpected accepted requirement: {ack:?}");
+                assert!(ack.error.contains(expected_error), "{}", ack.error);
+            }
+            other => panic!("expected rejected command ack, got {other:?}"),
+        }
+        assert!(receiver.recv().await.is_none());
+        assert!(gateway.operations().await.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn printer_operation_required_features_reach_gateway_as_typed_axis_semantics() {
+    let config = test_config();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(4);
+    let home_id = uuid::Uuid::new_v4().to_string();
+    let move_id = uuid::Uuid::new_v4().to_string();
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_operation_command_with_required_features(
+            home_id,
+            "SERIAL1",
+            vec![DeviceFeature::BambuMqttHoming as i32],
+            Some(printer_operation::Operation::Home(HomeOperation {
+                axes: Vec::new(),
+            })),
+        ),
+    )
+    .await
+    .unwrap();
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_operation_command_with_required_features(
+            move_id,
+            "SERIAL1",
+            vec![DeviceFeature::BambuMqttAxisControl as i32],
+            Some(printer_operation::Operation::MoveAxes(MoveAxesOperation {
+                movements: vec![AxisMovement {
+                    axis: Axis::Y as i32,
+                    delta_mm: -10.0,
+                }],
+                feedrate_mm_per_min: 0,
+            })),
+        ),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+    while receiver.recv().await.is_some() {}
+
+    assert_eq!(
+        gateway.operations().await,
+        vec![
+            (
+                "SERIAL1".to_string(),
+                MachinePrinterOperation::Home {
+                    axes: Vec::new(),
+                    required_feature: Some(BambuDeviceFeature::MqttHoming),
+                },
+            ),
+            (
+                "SERIAL1".to_string(),
+                MachinePrinterOperation::MoveAxes {
+                    x_mm: None,
+                    y_mm: Some(-10.0),
+                    z_mm: None,
+                    feedrate_mm_per_min: None,
+                    required_feature: Some(BambuDeviceFeature::MqttAxisControl),
+                },
+            ),
+        ]
+    );
+}
+
+#[tokio::test]
 async fn printer_operation_invalid_hotend_temperature_rejects_ack_without_dispatch() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
@@ -1978,6 +2202,7 @@ async fn printer_operation_move_axes_dispatches_typed_details() {
                 y_mm: None,
                 z_mm: Some(-0.5),
                 feedrate_mm_per_min: Some(3000.0),
+                required_feature: None,
             }
         )]
     );
@@ -2479,11 +2704,26 @@ fn printer_operation_command(
     serial_number: &str,
     operation: Option<printer_operation::Operation>,
 ) -> HubCommand {
+    printer_operation_command_with_required_features(
+        command_id,
+        serial_number,
+        Vec::new(),
+        operation,
+    )
+}
+
+fn printer_operation_command_with_required_features(
+    command_id: String,
+    serial_number: &str,
+    required_device_features: Vec<i32>,
+    operation: Option<printer_operation::Operation>,
+) -> HubCommand {
     HubCommand {
         command_id,
         command: Some(hub_command::Command::PrinterOperation(
             ProtoPrinterOperation {
                 serial_number: serial_number.to_owned(),
+                required_device_features,
                 operation,
             },
         )),

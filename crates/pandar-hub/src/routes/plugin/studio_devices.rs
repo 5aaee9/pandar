@@ -4,7 +4,8 @@ use pandar_core::{PrinterNozzleTemperature, TenantId};
 use serde::Serialize;
 
 use crate::{
-    AppState, printer_events::PrinterEventMaterials, repositories::PrinterHms, routes::ApiError,
+    AppState, printer_events::PrinterEventMaterials, protocol::agent::v1::AgentCapability,
+    repositories::PrinterHms, routes::ApiError,
 };
 
 #[derive(Debug, Serialize)]
@@ -16,6 +17,7 @@ pub(crate) struct PluginPrinterListResponse {
 #[derive(Debug, Serialize)]
 pub(super) struct PluginPrinterResponse {
     dev_id: String,
+    fun: String,
     dev_name: String,
     name: String,
     dev_ip: Option<String>,
@@ -67,51 +69,75 @@ pub(super) async fn plugin_printer_devices(
         })
         .collect::<HashMap<_, _>>();
 
-    Ok(state
+    let printers = state
         .printers()
         .list_with_live_status_for_tenant(tenant_id)
-        .await?
-        .into_iter()
-        .map(|printer_with_live_status| {
-            let printer = printer_with_live_status.printer;
-            let live_status = printer_with_live_status.live_status;
-            let online = studio_online_from_status(&printer.status);
-            let studio_model_name = printer.model.as_deref().map(studio_model_id);
-            PluginPrinterResponse {
-                dev_id: printer.serial_number.clone(),
-                dev_name: printer.name.clone(),
-                name: printer.name,
-                dev_ip: printer.host,
-                dev_access_code: printer.access_code,
-                dev_model_name: studio_model_name,
-                model: printer.model,
-                dev_online: online,
-                online,
-                task_status: printer.status.clone(),
-                state: printer.status,
-                gcode_state: live_status.gcode_state,
-                mc_percent: live_status.progress_percent,
-                mc_remaining_time: live_status.remaining_time_minutes,
-                layer_num: live_status.current_layer,
-                total_layer_num: live_status.total_layers,
-                task_id: live_status.task_id,
-                subtask_id: live_status.subtask_id,
-                gcode_file: live_status.gcode_file,
-                subtask_name: live_status.subtask_name,
-                print_error: live_status.print_error,
-                job_id: live_status.printer_job_id,
-                hms: live_status.hms,
-                nozzle_temperatures: printer.nozzle_temperatures,
-                active_nozzle: printer.active_nozzle,
-                bed_temperature_celsius: printer.bed_temperature_celsius,
-                bed_target_temperature_celsius: printer.bed_target_temperature_celsius,
-                chamber_temperature_celsius: printer.chamber_temperature_celsius,
-                chamber_light_on: printer.chamber_light_on,
-                materials: materials_by_printer_id.remove(&printer.id),
-                pandar_printer_id: printer.id,
+        .await?;
+    let mut devices = Vec::with_capacity(printers.len());
+    for printer_with_live_status in printers {
+        let printer = printer_with_live_status.printer;
+        let live_status = printer_with_live_status.live_status;
+        let online = studio_online_from_status(&printer.status);
+        let studio_model_name = printer.model.as_deref().map(studio_model_id);
+        let fun = match state
+            .sessions()
+            .current_token_for_capability(
+                tenant_id,
+                printer.agent_id,
+                AgentCapability::RequiredDeviceFeatures,
+            )
+            .await
+        {
+            Some(token) => {
+                let session_id = token.persisted_id();
+                if printer.bambu_device_features_session_id.as_deref() == Some(session_id.as_str())
+                {
+                    printer
+                        .bambu_device_features
+                        .map_or_else(|| "0".to_owned(), |features| features.to_hex())
+                } else {
+                    "0".to_owned()
+                }
             }
-        })
-        .collect())
+            None => "0".to_owned(),
+        };
+        devices.push(PluginPrinterResponse {
+            dev_id: printer.serial_number.clone(),
+            fun,
+            dev_name: printer.name.clone(),
+            name: printer.name,
+            dev_ip: printer.host,
+            dev_access_code: printer.access_code,
+            dev_model_name: studio_model_name,
+            model: printer.model,
+            dev_online: online,
+            online,
+            task_status: printer.status.clone(),
+            state: printer.status,
+            gcode_state: live_status.gcode_state,
+            mc_percent: live_status.progress_percent,
+            mc_remaining_time: live_status.remaining_time_minutes,
+            layer_num: live_status.current_layer,
+            total_layer_num: live_status.total_layers,
+            task_id: live_status.task_id,
+            subtask_id: live_status.subtask_id,
+            gcode_file: live_status.gcode_file,
+            subtask_name: live_status.subtask_name,
+            print_error: live_status.print_error,
+            job_id: live_status.printer_job_id,
+            hms: live_status.hms,
+            nozzle_temperatures: printer.nozzle_temperatures,
+            active_nozzle: printer.active_nozzle,
+            bed_temperature_celsius: printer.bed_temperature_celsius,
+            bed_target_temperature_celsius: printer.bed_target_temperature_celsius,
+            chamber_temperature_celsius: printer.chamber_temperature_celsius,
+            chamber_light_on: printer.chamber_light_on,
+            materials: materials_by_printer_id.remove(&printer.id),
+            pandar_printer_id: printer.id,
+        });
+    }
+
+    Ok(devices)
 }
 
 fn studio_online_from_status(status: &str) -> bool {

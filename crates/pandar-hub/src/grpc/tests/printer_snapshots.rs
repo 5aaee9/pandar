@@ -6,7 +6,7 @@ use tonic::Code;
 use super::*;
 use crate::{
     printer_events::{PrinterEvent, PrinterEventMaterialJson},
-    protocol::agent::v1::PrinterSnapshot,
+    protocol::agent::v1::{PrinterDeviceFeatures, PrinterDeviceFeaturesSnapshot, PrinterSnapshot},
     repositories::{MaterialPatchInput, test_helpers::insert_printer_fixture},
 };
 
@@ -36,6 +36,127 @@ async fn grpc_printer_snapshot_persists_printer_state() {
     assert_eq!(printers[0].model.as_deref(), Some("X1C"));
     assert_eq!(printers[0].status, "idle");
     assert!(printers[0].last_seen_at.ends_with('Z'));
+}
+
+#[tokio::test]
+async fn grpc_printer_device_features_preserve_presence_and_invalidate_session() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let token = register_test_session(&state, tenant_id, agent_id).await;
+    let mut full = snapshot("FEATURE-SERIAL", "Feature Printer", "X2D", "idle");
+    full.device_features = Some(PrinterDeviceFeatures {
+        bambu_fun_bits: 0x8000_0041_0000_0020,
+    });
+
+    handle_event(
+        &state,
+        tenant_id,
+        agent_id,
+        token,
+        snapshot_event(tenant_id, agent_id, full),
+    )
+    .await
+    .unwrap();
+    let printer = state
+        .printers()
+        .list_for_tenant(tenant_id)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(
+        printer.bambu_device_features,
+        Some(pandar_core::BambuDeviceFeatures::from_bits(
+            0x8000_0041_0000_0020
+        ))
+    );
+    assert_eq!(
+        printer.bambu_device_features_session_id,
+        Some(token.persisted_id())
+    );
+
+    handle_event(
+        &state,
+        tenant_id,
+        agent_id,
+        token,
+        snapshot_event(
+            tenant_id,
+            agent_id,
+            snapshot("FEATURE-SERIAL", "Feature Printer", "X2D", "printing"),
+        ),
+    )
+    .await
+    .unwrap();
+    let preserved = state
+        .printers()
+        .list_for_tenant(tenant_id)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(
+        preserved.bambu_device_features,
+        Some(pandar_core::BambuDeviceFeatures::from_bits(
+            0x8000_0041_0000_0020
+        ))
+    );
+    assert_eq!(
+        preserved.bambu_device_features_session_id,
+        Some(token.persisted_id())
+    );
+
+    handle_event(
+        &state,
+        tenant_id,
+        agent_id,
+        token,
+        device_features_event(
+            tenant_id,
+            agent_id,
+            "FEATURE-SERIAL",
+            Some(PrinterDeviceFeatures { bambu_fun_bits: 0 }),
+        ),
+    )
+    .await
+    .unwrap();
+    let zero = state
+        .printers()
+        .list_for_tenant(tenant_id)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(
+        zero.bambu_device_features,
+        Some(pandar_core::BambuDeviceFeatures::default())
+    );
+    assert_eq!(
+        zero.bambu_device_features_session_id,
+        Some(token.persisted_id())
+    );
+
+    handle_event(
+        &state,
+        tenant_id,
+        agent_id,
+        token,
+        device_features_event(tenant_id, agent_id, "FEATURE-SERIAL", None),
+    )
+    .await
+    .unwrap();
+    let invalidated = state
+        .printers()
+        .list_for_tenant(tenant_id)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(
+        invalidated.bambu_device_features,
+        Some(pandar_core::BambuDeviceFeatures::default())
+    );
+    assert_eq!(invalidated.bambu_device_features_session_id, None);
 }
 
 #[tokio::test]
@@ -364,6 +485,7 @@ pub(super) fn snapshot(serial: &str, name: &str, model: &str, state: &str) -> Pr
         bed_target_temperature_celsius: String::new(),
         chamber_temperature_celsius: String::new(),
         chamber_light_on: None,
+        device_features: None,
     }
 }
 
@@ -377,6 +499,25 @@ pub(super) fn snapshot_event(
         agent_id: agent_id.to_string(),
         event_id: "event".to_string(),
         event: Some(agent_event::Event::PrinterSnapshot(snapshot)),
+    }
+}
+
+fn device_features_event(
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    serial: &str,
+    device_features: Option<PrinterDeviceFeatures>,
+) -> AgentEvent {
+    AgentEvent {
+        tenant_id: tenant_id.to_string(),
+        agent_id: agent_id.to_string(),
+        event_id: "device-features-event".to_owned(),
+        event: Some(agent_event::Event::PrinterDeviceFeaturesSnapshot(
+            PrinterDeviceFeaturesSnapshot {
+                serial: serial.to_owned(),
+                device_features,
+            },
+        )),
     }
 }
 

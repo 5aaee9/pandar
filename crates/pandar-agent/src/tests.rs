@@ -111,6 +111,7 @@ fn hello_event_has_agent_identity_version_and_exact_capability() {
             capabilities: vec![
                 AgentCapability::HandlePrintError as i32,
                 AgentCapability::HandlePrintErrorSequenceZeroPubackOnly as i32,
+                AgentCapability::RequiredDeviceFeatures as i32,
             ],
         }))
     );

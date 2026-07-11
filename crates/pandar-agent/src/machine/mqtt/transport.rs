@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{fmt, sync::Arc, time::Duration};
 
 use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
@@ -25,6 +25,29 @@ use super::{
     BAMBU_MQTT_MAX_PACKET_SIZE, BAMBU_MQTT_PORT, BAMBU_MQTT_RETAIN, BAMBU_MQTT_USERNAME,
     BambuMqttTopics, BambuMqttTransport, PublishedMqttCommand, decode_mqtt_report_payload,
 };
+
+#[derive(Debug)]
+struct MqttReportIdleTimeout(Duration);
+
+impl fmt::Display for MqttReportIdleTimeout {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "timed out waiting for MQTT report after {:?}",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for MqttReportIdleTimeout {}
+
+pub(crate) fn mqtt_report_idle_timeout(timeout: Duration) -> anyhow::Error {
+    anyhow::Error::new(MqttReportIdleTimeout(timeout))
+}
+
+pub(crate) fn is_mqtt_report_idle_timeout(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<MqttReportIdleTimeout>().is_some()
+}
 
 pub struct RumqttcBambuMqttTransport {
     client: AsyncClient,
@@ -289,7 +312,7 @@ impl BambuMqttTransport for RumqttcBambuMqttTransport {
                 Err(err)
             }
             Err(_) => {
-                let err = anyhow!("timed out waiting for MQTT report after {report_timeout:?}");
+                let err = mqtt_report_idle_timeout(report_timeout);
                 warn_mqtt_report_receive_failed(&err);
                 Err(err)
             }

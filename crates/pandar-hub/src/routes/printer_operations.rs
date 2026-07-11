@@ -1,3 +1,4 @@
+mod device_features;
 mod live;
 pub(crate) mod plate_mismatch;
 mod request_field;
@@ -11,6 +12,7 @@ use serde::Deserialize;
 
 use crate::{
     AppState,
+    grpc::commands::RequiredDeviceFeature,
     repositories::{
         AuditActor, PrintErrorAction, PrinterAxis, PrinterAxisMovement, PrinterOperationKind,
         RepositoryError,
@@ -56,6 +58,8 @@ pub(super) struct PrinterOperationRequest {
     sequence_id: RequestField<u64>,
     #[serde(default)]
     error_generation: RequestField<u64>,
+    #[serde(default)]
+    required_device_features: RequestField<Vec<RequiredDeviceFeature>>,
 }
 
 pub(super) enum PluginPrinterOperation {
@@ -73,6 +77,7 @@ pub(super) enum TenantPrinterOperation {
 
 impl PrinterOperationRequest {
     pub(super) fn into_tenant_operation(self) -> Result<TenantPrinterOperation, ApiError> {
+        let required_device_features = device_features::from_request(&self)?;
         if self.action == "handle_print_error" {
             if !self.no_operation_fields() || !self.no_plugin_transport_fields() {
                 return Err(invalid_printer_control());
@@ -93,10 +98,12 @@ impl PrinterOperationRequest {
         }
 
         let operation: Result<PrinterOperationKind, ApiError> = match self.action.as_str() {
-            "pause" if self.no_operation_fields() => Ok(PrinterOperationKind::Pause),
-            "resume" if self.no_operation_fields() => Ok(PrinterOperationKind::Resume),
-            "stop" if self.no_operation_fields() => Ok(PrinterOperationKind::Stop),
-            "toggle_light" if self.no_operation_fields() => Ok(PrinterOperationKind::ToggleLight),
+            "pause" if self.no_operation_fields() => Ok(PrinterOperationKind::Pause {}),
+            "resume" if self.no_operation_fields() => Ok(PrinterOperationKind::Resume {}),
+            "stop" if self.no_operation_fields() => Ok(PrinterOperationKind::Stop {}),
+            "toggle_light" if self.no_operation_fields() => {
+                Ok(PrinterOperationKind::ToggleLight {})
+            }
             "set_chamber_light"
                 if self.speed_mode.is_missing()
                     && self.axes.is_missing()
@@ -152,6 +159,7 @@ impl PrinterOperationRequest {
             {
                 Ok(PrinterOperationKind::Home {
                     axes: self.axes.unwrap_or_default(),
+                    required_device_features,
                 })
             }
             "move_axes"
@@ -164,6 +172,7 @@ impl PrinterOperationRequest {
                 Ok(PrinterOperationKind::MoveAxes {
                     movements: self.movements.unwrap_or_default(),
                     feedrate_mm_per_min: self.feedrate_mm_per_min.into_option(),
+                    required_device_features,
                 })
             }
             "set_hotend_temperature"
@@ -279,6 +288,7 @@ impl PrinterOperationRequest {
                     }
                 });
         }
+        device_features::from_request(&self)?;
         if !self.no_operation_fields() || !self.error_generation.is_missing() {
             return Err(invalid_printer_control());
         }

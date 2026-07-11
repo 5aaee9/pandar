@@ -8,6 +8,7 @@ use super::{
 
 #[derive(Serialize)]
 pub(super) struct StudioTelemetry {
+    fun: String,
     gcode_state: String,
     mc_percent: u8,
     mc_remaining_time: u32,
@@ -71,6 +72,7 @@ impl From<&PrinterStatus> for StudioTelemetry {
         };
 
         Self {
+            fun: printer.fun.clone().unwrap_or_else(|| "0".to_owned()),
             gcode_state: printer
                 .gcode_state
                 .clone()

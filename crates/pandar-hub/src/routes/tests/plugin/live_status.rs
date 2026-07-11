@@ -174,6 +174,7 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
                 current_celsius: "42".to_string(),
                 ..Default::default()
             }],
+            device_features: None,
             ..Default::default()
         },
     )

@@ -27,7 +27,24 @@ fn report_maps_to_snapshot_uses_configured_model() {
             bed_target_temperature_celsius: None,
             chamber_temperature_celsius: None,
             chamber_light_on: None,
+            device_features: None,
         }
+    );
+}
+
+#[test]
+fn report_maps_device_features_to_full_snapshot() {
+    let report = report_with_print(SnapshotPrintFixture {
+        fun: Some("8000004100000020"),
+        ..Default::default()
+    });
+
+    assert_eq!(
+        snapshot_from_report(&endpoint(), &report)
+            .device_features
+            .expect("valid print.fun maps to the full snapshot")
+            .bits(),
+        0x8000_0041_0000_0020
     );
 }
 

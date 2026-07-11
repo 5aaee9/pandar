@@ -1,6 +1,10 @@
 use serde::{Deserialize, Deserializer, de::IgnoredAny};
 
-use super::{PrintErrorAction, PrinterOperation, StudioOperationParse};
+use super::{
+    PrintErrorAction, PrinterOperation, StudioOperationParse,
+    operation::{AxisMovement, RequiredDeviceFeature},
+    studio_axis::{StudioAxis, StudioDirection, StudioMoveMode},
+};
 
 #[derive(Deserialize)]
 struct StudioMessage {
@@ -34,6 +38,9 @@ struct StudioPrint {
     slot_id: Option<StudioU64>,
     target: Option<StudioU64>,
     extruder_id: Option<StudioU64>,
+    axis: Option<StudioAxis>,
+    dir: Option<StudioDirection>,
+    mode: Option<StudioMoveMode>,
 }
 
 #[derive(Default)]
@@ -162,6 +169,12 @@ impl StudioPrint {
             "pause" => Some(PrinterOperation::Pause),
             "resume" => Some(PrinterOperation::Resume),
             "stop" => Some(PrinterOperation::Stop),
+            "back_to_center" => Some(PrinterOperation::Home {
+                axes: Some(Vec::new()),
+                required_device_features: vec![RequiredDeviceFeature::BambuMqttHoming],
+            }),
+            "xyz_ctrl" => self.xyz_ctrl_operation(),
+            "gcode_line" => super::parse_gcode_operation(self.param.as_string()?),
             "print_speed" => Some(PrinterOperation::SetPrintSpeed {
                 speed_mode: self.param.as_u64()?,
             }),
@@ -188,6 +201,16 @@ impl StudioPrint {
             "ams_change_filament" => self.ams_change_filament_operation(),
             _ => None,
         }
+    }
+
+    fn xyz_ctrl_operation(&self) -> Option<PrinterOperation> {
+        let axis = self.axis?.operation_axis();
+        let delta_mm = self.dir?.sign() * self.mode?.distance_mm();
+        Some(PrinterOperation::MoveAxes {
+            movements: vec![AxisMovement { axis, delta_mm }],
+            feedrate_mm_per_min: None,
+            required_device_features: vec![RequiredDeviceFeature::BambuMqttAxisControl],
+        })
     }
 
     fn ams_change_filament_operation(&self) -> Option<PrinterOperation> {

@@ -10,7 +10,7 @@ use tokio::sync::Mutex;
 
 use crate::machine::materials::{normalize_material_patch, parse_materials_report};
 
-use super::{BambuMqttTransport, PublishedMqttCommand};
+use super::{BambuMqttTransport, PublishedMqttCommand, mqtt_report_idle_timeout};
 
 #[cfg(test)]
 #[derive(Debug, Clone, Default)]
@@ -32,6 +32,7 @@ struct FakeMqttTransportState {
     failed_led_node: Option<String>,
     subscribe_attempts: usize,
     subscribe_failures: usize,
+    receive_failures: usize,
 }
 
 #[cfg(test)]
@@ -49,6 +50,16 @@ impl FakeMqttTransport {
         Self {
             state: Arc::new(Mutex::new(FakeMqttTransportState {
                 timeout: true,
+                ..Default::default()
+            })),
+        }
+    }
+
+    pub fn with_receive_failure_then_reports(reports: impl IntoIterator<Item = Value>) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(FakeMqttTransportState {
+                reports: reports.into_iter().collect(),
+                receive_failures: 1,
                 ..Default::default()
             })),
         }
@@ -155,11 +166,15 @@ impl BambuMqttTransport for FakeMqttTransport {
         Ok(())
     }
 
-    async fn next_report(&self, _timeout: Duration) -> anyhow::Result<Value> {
+    async fn next_report(&self, timeout: Duration) -> anyhow::Result<Value> {
         {
             let mut state = self.state.lock().await;
+            if state.receive_failures > 0 {
+                state.receive_failures -= 1;
+                bail!("fake MQTT poll connection failed");
+            }
             if state.timeout {
-                bail!("timed out waiting for MQTT report");
+                return Err(mqtt_report_idle_timeout(timeout));
             }
             if let Some(report) = state.reports.pop_front() {
                 let is_material_report = parse_materials_report(&report)
@@ -172,7 +187,7 @@ impl BambuMqttTransport for FakeMqttTransport {
                 return Ok(report);
             }
             if !state.infinite_unrelated_reports {
-                bail!("timed out waiting for MQTT report");
+                return Err(mqtt_report_idle_timeout(timeout));
             }
         }
         tokio::time::sleep(Duration::from_millis(1)).await;

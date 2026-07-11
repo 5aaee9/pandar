@@ -1,10 +1,16 @@
+use pandar_core::{AgentId, CommandId, CommandRecord, CommandStatus, TenantId};
 use serde::{Deserialize, Serialize};
 
 mod audit;
 
 pub use audit::operation_audit_metadata;
 
-use crate::repositories::{RepositoryError, RepositoryResult};
+use crate::{
+    grpc::commands::RequiredDeviceFeature,
+    repositories::{CommandRepository, RepositoryError, RepositoryResult},
+};
+
+use super::transitions::CommandTransition;
 
 const MAX_MOVE_DELTA_MM: f64 = 50.0;
 const MIN_MOVE_FEEDRATE_MM_PER_MIN: u32 = 1;
@@ -56,18 +62,18 @@ pub struct PrinterAxisMovement {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PrinterOperationKind {
-    Pause,
-    Resume,
-    Stop,
+    Pause {},
+    Resume {},
+    Stop {},
     HandlePrintError {
         error_action: PrintErrorAction,
         print_error: u32,
         printer_job_id: String,
         sequence_id: u64,
     },
-    ToggleLight,
+    ToggleLight {},
     SetChamberLight {
         on: bool,
     },
@@ -80,11 +86,15 @@ pub enum PrinterOperationKind {
     Home {
         #[serde(default)]
         axes: Vec<PrinterAxis>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        required_device_features: Vec<RequiredDeviceFeature>,
     },
     MoveAxes {
         movements: Vec<PrinterAxisMovement>,
         #[serde(default)]
         feedrate_mm_per_min: Option<u32>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        required_device_features: Vec<RequiredDeviceFeature>,
     },
     SetHotendTemperature {
         temperature_celsius: u16,
@@ -122,11 +132,11 @@ pub enum PrinterOperationKind {
 impl PrinterOperationKind {
     pub fn action(&self) -> &'static str {
         match self {
-            Self::Pause => "pause",
-            Self::Resume => "resume",
-            Self::Stop => "stop",
+            Self::Pause {} => "pause",
+            Self::Resume {} => "resume",
+            Self::Stop {} => "stop",
             Self::HandlePrintError { .. } => "handle_print_error",
-            Self::ToggleLight => "toggle_light",
+            Self::ToggleLight {} => "toggle_light",
             Self::SetChamberLight { .. } => "set_chamber_light",
             Self::SetPrintSpeed { .. } => "set_print_speed",
             Self::SelectExtruder { .. } => "select_extruder",
@@ -140,14 +150,51 @@ impl PrinterOperationKind {
             Self::AmsUnloadFilament { .. } => "ams_unload_filament",
         }
     }
+
+    pub fn required_device_features(&self) -> &[RequiredDeviceFeature] {
+        match self {
+            Self::Home {
+                required_device_features,
+                ..
+            }
+            | Self::MoveAxes {
+                required_device_features,
+                ..
+            } => required_device_features,
+            _ => &[],
+        }
+    }
+
+    pub(crate) fn has_valid_required_device_features(&self) -> bool {
+        match self {
+            Self::Home {
+                axes,
+                required_device_features,
+            } if !required_device_features.is_empty() => {
+                axes.is_empty()
+                    && required_device_features == &[RequiredDeviceFeature::BambuMqttHoming]
+            }
+            Self::MoveAxes {
+                movements,
+                feedrate_mm_per_min,
+                required_device_features,
+            } if !required_device_features.is_empty() => {
+                movements.len() == 1
+                    && feedrate_mm_per_min.is_none()
+                    && matches!(movements[0].delta_mm.abs(), 1.0 | 10.0)
+                    && required_device_features == &[RequiredDeviceFeature::BambuMqttAxisControl]
+            }
+            _ => true,
+        }
+    }
 }
 
 pub fn validate_printer_operation(operation: &PrinterOperationKind) -> RepositoryResult<()> {
     match operation {
-        PrinterOperationKind::Pause
-        | PrinterOperationKind::Resume
-        | PrinterOperationKind::Stop
-        | PrinterOperationKind::ToggleLight
+        PrinterOperationKind::Pause {}
+        | PrinterOperationKind::Resume {}
+        | PrinterOperationKind::Stop {}
+        | PrinterOperationKind::ToggleLight {}
         | PrinterOperationKind::SetChamberLight { .. } => Ok(()),
         PrinterOperationKind::HandlePrintError { print_error, .. }
             if (1..=i32::MAX as u32).contains(print_error) =>
@@ -165,11 +212,22 @@ pub fn validate_printer_operation(operation: &PrinterOperationKind) -> Repositor
             Ok(())
         }
         PrinterOperationKind::SelectExtruder { .. } => Err(RepositoryError::InvalidPrinterControl),
-        PrinterOperationKind::Home { .. } => Ok(()),
+        PrinterOperationKind::Home { .. } if operation.has_valid_required_device_features() => {
+            Ok(())
+        }
+        PrinterOperationKind::Home { .. } => Err(RepositoryError::InvalidPrinterControl),
         PrinterOperationKind::MoveAxes {
             movements,
             feedrate_mm_per_min,
-        } => validate_move_axes(movements, *feedrate_mm_per_min),
+            ..
+        } => {
+            validate_move_axes(movements, *feedrate_mm_per_min)?;
+            if operation.has_valid_required_device_features() {
+                Ok(())
+            } else {
+                Err(RepositoryError::InvalidPrinterControl)
+            }
+        }
         PrinterOperationKind::SetHotendTemperature {
             temperature_celsius,
             extruder_id,
@@ -223,6 +281,27 @@ pub fn validate_printer_operation(operation: &PrinterOperationKind) -> Repositor
         | PrinterOperationKind::AmsUnloadFilament { .. } => {
             Err(RepositoryError::InvalidPrinterControl)
         }
+    }
+}
+
+impl CommandRepository {
+    pub(crate) async fn fail_queued_printer_operation(
+        &self,
+        command_id: CommandId,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        error: impl Into<String>,
+    ) -> RepositoryResult<CommandRecord> {
+        self.guard_transition(CommandTransition {
+            command_id,
+            tenant_id,
+            agent_id,
+            next_status: CommandStatus::Failed,
+            error: Some(error.into()),
+            allowed_statuses: &[CommandStatus::Queued],
+            action: "fail",
+        })
+        .await
     }
 }
 

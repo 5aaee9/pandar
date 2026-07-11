@@ -22,6 +22,27 @@ fn assert_operation_body_eq(result: PluginHttpResult, expected: TestOperation) {
     assert_eq!(actual, expected);
 }
 
+fn assert_operation_json_eq(result: PluginHttpResult, expected: serde_json::Value) {
+    assert_eq!(result.status, 0);
+    assert_eq!(result.http_code, 200);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&body(result)).unwrap(),
+        expected
+    );
+}
+
+fn studio_print_message(print: serde_json::Value) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({"print": print})).unwrap()
+}
+
+fn studio_gcode_line_message(gcode: &str) -> Vec<u8> {
+    studio_print_message(serde_json::json!({
+        "command": "gcode_line",
+        "param": gcode,
+        "sequence_id": "42"
+    }))
+}
+
 #[derive(Debug, Deserialize, PartialEq)]
 #[serde(tag = "action", rename_all = "snake_case")]
 enum TestOperation {
@@ -289,6 +310,163 @@ fn studio_message_parser_maps_print_commands_to_semantic_json() {
         assert_eq!(result.http_code, 200);
         assert_operation_body_eq(result, expected);
     }
+}
+
+#[test]
+fn operation_parser_maps_modern_studio_axis_commands_to_required_features() {
+    for (print, expected) in [
+        (
+            serde_json::json!({"command": "back_to_center", "sequence_id": "1"}),
+            serde_json::json!({
+                "action": "home",
+                "axes": [],
+                "required_device_features": ["bambu_mqtt_homing"]
+            }),
+        ),
+        (
+            serde_json::json!({"command": "xyz_ctrl", "axis": "X", "dir": 1, "mode": 0, "sequence_id": "2"}),
+            serde_json::json!({
+                "action": "move_axes",
+                "movements": [{"axis": "x", "delta_mm": 1.0}],
+                "required_device_features": ["bambu_mqtt_axis_control"]
+            }),
+        ),
+        (
+            serde_json::json!({"command": "xyz_ctrl", "axis": "Y", "dir": -1, "mode": 1, "sequence_id": "3"}),
+            serde_json::json!({
+                "action": "move_axes",
+                "movements": [{"axis": "y", "delta_mm": -10.0}],
+                "required_device_features": ["bambu_mqtt_axis_control"]
+            }),
+        ),
+        (
+            serde_json::json!({"command": "xyz_ctrl", "axis": "Z", "dir": 1, "mode": 1, "sequence_id": "4"}),
+            serde_json::json!({
+                "action": "move_axes",
+                "movements": [{"axis": "z", "delta_mm": 10.0}],
+                "required_device_features": ["bambu_mqtt_axis_control"]
+            }),
+        ),
+    ] {
+        let message = studio_print_message(print);
+        assert_operation_json_eq(operation_json(&message), expected);
+    }
+}
+
+#[test]
+fn operation_parser_rejects_invalid_modern_studio_axis_commands() {
+    for print in [
+        serde_json::json!({"command": "xyz_ctrl", "axis": "x", "dir": 1, "mode": 0}),
+        serde_json::json!({"command": "xyz_ctrl", "axis": "E", "dir": 1, "mode": 0}),
+        serde_json::json!({"command": "xyz_ctrl", "axis": "X", "dir": 0, "mode": 0}),
+        serde_json::json!({"command": "xyz_ctrl", "axis": "X", "dir": 2, "mode": 0}),
+        serde_json::json!({"command": "xyz_ctrl", "axis": "X", "dir": "1", "mode": 0}),
+        serde_json::json!({"command": "xyz_ctrl", "axis": "X", "dir": 1, "mode": 2}),
+        serde_json::json!({"command": "xyz_ctrl", "axis": "X", "dir": 1, "mode": "0"}),
+        serde_json::json!({"command": "xyz_ctrl", "dir": 1, "mode": 0}),
+        serde_json::json!({"command": "xyz_ctrl", "axis": "X", "mode": 0}),
+        serde_json::json!({"command": "xyz_ctrl", "axis": "X", "dir": 1}),
+    ] {
+        let message = studio_print_message(print);
+        let result = operation_json(&message);
+
+        assert_ne!(result.status, 0);
+        assert_eq!(result.http_code, 400);
+        assert_eq!(body(result), r#"{"error":"unsupported_printer_operation"}"#);
+    }
+}
+
+#[test]
+fn operation_parser_maps_legacy_studio_gcode_wrappers_without_required_features() {
+    for (gcode, expected) in [
+        ("G28\n", serde_json::json!({"action": "home", "axes": []})),
+        (
+            "G28 X\n",
+            serde_json::json!({"action": "home", "axes": ["x"]}),
+        ),
+        (
+            "G28 Z X Y\n",
+            serde_json::json!({"action": "home", "axes": ["z", "x", "y"]}),
+        ),
+        (
+            "M211 S\nM211 X1 Y1 Z1\nM1002 push_ref_mode\nG91\nG1 X10.0 F3000\nM1002 pop_ref_mode\nM211 R\n",
+            serde_json::json!({
+                "action": "move_axes",
+                "movements": [{"axis": "x", "delta_mm": 10.0}],
+                "feedrate_mm_per_min": 3000
+            }),
+        ),
+        (
+            "M211 S\nM211 X1 Y1 Z1\nM1002 push_ref_mode\nG91\nG1 Z-1.0 F600\nM1002 pop_ref_mode\nM211 R\n",
+            serde_json::json!({
+                "action": "move_axes",
+                "movements": [{"axis": "z", "delta_mm": -1.0}],
+                "feedrate_mm_per_min": 600
+            }),
+        ),
+    ] {
+        let message = studio_gcode_line_message(gcode);
+        assert_operation_json_eq(operation_json(&message), expected);
+    }
+}
+
+#[test]
+fn operation_parser_requires_the_exact_legacy_studio_axis_envelope() {
+    let envelope = [
+        "M211 S",
+        "M211 X1 Y1 Z1",
+        "M1002 push_ref_mode",
+        "G91",
+        "G1 X10.0 F3000",
+        "M1002 pop_ref_mode",
+        "M211 R",
+    ];
+    let altered = [
+        "M211 T",
+        "M211 X1 Y1 Z0",
+        "M1002 push_mode",
+        "G90",
+        "G0 X10.0 F3000",
+        "M1002 pop_mode",
+        "M211 S",
+    ];
+    let mut rejected = Vec::new();
+    for omitted in 0..envelope.len() {
+        rejected.push(
+            envelope
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| *index != omitted)
+                .map(|(_, line)| *line)
+                .collect::<Vec<_>>(),
+        );
+    }
+    for changed in 0..envelope.len() {
+        let mut commands = envelope.to_vec();
+        commands[changed] = altered[changed];
+        rejected.push(commands);
+    }
+    let mut reordered = envelope.to_vec();
+    reordered.swap(0, 1);
+    rejected.push(reordered);
+    let mut extra = envelope.to_vec();
+    extra.push("M400");
+    rejected.push(extra);
+
+    for commands in rejected {
+        let message = studio_gcode_line_message(&format!("{}\n", commands.join("\n")));
+        let result = operation_json(&message);
+
+        assert_ne!(result.status, 0, "unexpectedly accepted {commands:?}");
+        assert_eq!(result.http_code, 400);
+        assert_eq!(body(result), r#"{"error":"unsupported_printer_operation"}"#);
+    }
+
+    let recursive =
+        studio_gcode_line_message(r#"{"print":{"command":"gcode_line","param":"G28 X"}}"#);
+    let result = operation_json(&recursive);
+    assert_ne!(result.status, 0);
+    assert_eq!(result.http_code, 400);
 }
 
 #[test]

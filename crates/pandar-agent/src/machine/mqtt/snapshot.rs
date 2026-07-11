@@ -5,6 +5,8 @@ use crate::machine::{
     BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot, types::decode_json_payload,
 };
 
+use super::device_features::{FunField, deserialize_fun_field, device_feature_observation};
+
 pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> MachineSnapshot {
     let report = parse_snapshot_report(report);
     snapshot_from_parsed_report(endpoint, report.as_ref())
@@ -56,6 +58,9 @@ pub(crate) fn snapshot_from_parsed_report(
         )
         .or(packed_chamber_temperature),
         chamber_light_on: chamber_light_on_from_report(print),
+        device_features: report
+            .and_then(|report| device_feature_observation(&endpoint.serial, report).ok())
+            .flatten(),
     }
 }
 
@@ -64,11 +69,13 @@ pub(crate) struct SnapshotReport {
     #[serde(default)]
     state: Option<ScalarValue>,
     #[serde(default)]
-    print: Option<SnapshotPrint>,
+    pub(super) print: Option<SnapshotPrint>,
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct SnapshotPrint {
+pub(super) struct SnapshotPrint {
+    #[serde(default, deserialize_with = "deserialize_fun_field")]
+    pub(super) fun: FunField,
     #[serde(default)]
     gcode_state: Option<ScalarValue>,
     #[serde(default)]

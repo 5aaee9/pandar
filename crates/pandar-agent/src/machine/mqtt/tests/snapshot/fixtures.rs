@@ -12,6 +12,8 @@ pub(super) struct SnapshotReportFixture {
 #[derive(Default, Serialize)]
 pub(super) struct SnapshotPrintFixture {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) fun: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) gcode_state: Option<ScalarFixture>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) state: Option<ScalarFixture>,

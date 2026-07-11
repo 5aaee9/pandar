@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 mod commands;
+mod device_features;
 mod fake;
 mod hms;
 mod recovery;
@@ -27,6 +28,9 @@ pub use commands::{
     PrintErrorAction, PrintReportProgress, PrintSpeed, ProjectFileCommand,
     SetNozzleTemperatureCommand,
 };
+pub(crate) use device_features::{
+    device_feature_observation, feature_event, probe_device_features,
+};
 #[cfg(test)]
 pub(crate) use fake::FakeMqttTransport;
 pub use hms::MachineHmsItem;
@@ -39,8 +43,11 @@ pub use reports::{
 #[cfg(test)]
 pub(crate) use rumqttc::TlsConfiguration;
 pub use snapshot::snapshot_from_report;
-pub(crate) use snapshot::{parse_snapshot_report, snapshot_from_parsed_report};
+pub(crate) use snapshot::{SnapshotReport, parse_snapshot_report, snapshot_from_parsed_report};
 pub(crate) use transport::BambuLanCertificateVerifier;
+pub(crate) use transport::is_mqtt_report_idle_timeout;
+#[cfg(test)]
+pub(crate) use transport::mqtt_report_idle_timeout;
 #[cfg(test)]
 pub(crate) use transport::warn_mqtt_report_receive_failed;
 pub use transport::{RumqttcBambuMqttTransport, bambu_lan_mqtt_options, bambu_lan_tls_config};
@@ -108,6 +115,15 @@ where
             .await
             .context("wait for MQTT report")?;
         let snapshot_report = parse_snapshot_report(&report);
+        if let Some(snapshot_report) = snapshot_report.as_ref()
+            && let Err(error) = device_feature_observation(&endpoint.serial, snapshot_report)
+        {
+            tracing::warn!(
+                serial = %endpoint.serial,
+                error = %format!("{error:#}"),
+                "invalid printer device feature observation during refresh"
+            );
+        }
         let mut snapshot = snapshot_from_parsed_report(endpoint, snapshot_report.as_ref());
         snapshot.model = Some(discovered_model);
         let observed_at = created_at_now();

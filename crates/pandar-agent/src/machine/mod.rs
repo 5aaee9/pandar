@@ -1,6 +1,7 @@
 pub mod brtc;
 pub mod camera;
 pub mod compatibility;
+mod device_features;
 pub mod diagnostics;
 pub mod discovery;
 pub mod file_transfer;
@@ -22,6 +23,10 @@ use crate::{
 };
 use anyhow::bail;
 use async_trait::async_trait;
+pub use device_features::DeviceFeatureCache;
+pub(crate) use device_features::DeviceFeatureLease;
+#[cfg(test)]
+pub(crate) use device_features::transition_pause as device_feature_transition_pause;
 use diagnostics::PrinterDiagnosticResult;
 use discovery::{DiscoveredPrinter, PrinterDiscoveryResult};
 use file_transfer::{MachineFileTransfer, TransferModeCache};
@@ -221,7 +226,7 @@ where
             bail!("no configured Bambu printer matches serial {serial_number}");
         };
 
-        dispatch_printer_operation(endpoint, mqtt, operation).await
+        dispatch_printer_operation(endpoint, mqtt, operation, None).await
     }
 
     async fn camera_endpoint(&self, serial_number: &str) -> anyhow::Result<BambuPrinterEndpoint> {
@@ -253,6 +258,44 @@ impl<T, F> ConfiguredBambuMachineGateway<T, F> {
             .iter()
             .find(|(endpoint, _, _)| endpoint.serial == serial_number)
             .map(|(endpoint, _, _)| endpoint.clone())
+    }
+
+    pub(crate) async fn probe_device_features(
+        &self,
+        serial_number: &str,
+        cache: &DeviceFeatureCache,
+    ) -> anyhow::Result<pandar_core::BambuDeviceFeatures>
+    where
+        T: BambuMqttTransport,
+    {
+        let Some((endpoint, transport, _)) = self
+            .printers
+            .iter()
+            .find(|(endpoint, _, _)| endpoint.serial == serial_number)
+        else {
+            bail!("no configured Bambu printer matches serial {serial_number}");
+        };
+        mqtt::probe_device_features(transport, endpoint, self.report_timeout, cache).await
+    }
+
+    pub(crate) async fn operate_printer_with_device_feature_lease(
+        &self,
+        serial_number: &str,
+        operation: PrinterOperation,
+        lease: Option<DeviceFeatureLease>,
+    ) -> anyhow::Result<PrinterOperationDispatchResult>
+    where
+        T: BambuMqttTransport + Send + Sync,
+    {
+        let Some((endpoint, mqtt, _)) = self
+            .printers
+            .iter()
+            .find(|(endpoint, _, _)| endpoint.serial == serial_number)
+        else {
+            bail!("no configured Bambu printer matches serial {serial_number}");
+        };
+
+        dispatch_printer_operation(endpoint, mqtt, operation, lease).await
     }
 
     pub fn replace_printer(&mut self, endpoint: BambuPrinterEndpoint, mqtt: T, transfer: F) {

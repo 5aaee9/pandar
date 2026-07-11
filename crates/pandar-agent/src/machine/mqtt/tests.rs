@@ -11,6 +11,7 @@ use crate::{
     protocol::agent::v1::{PrintJobReport, agent_event},
 };
 
+mod device_features;
 mod fixtures;
 mod hms;
 mod print_error;
@@ -469,6 +470,48 @@ fn select_extruder_payload_matches_bambu_studio_reference() {
 }
 
 #[test]
+fn axis_controls_back_to_center_payload_is_typed_and_exact() {
+    let payload = BambuMqttCommand::BackToCenter.payload();
+    assert_eq!(
+        payload,
+        serde_json::json!({
+            "print": {
+                "command": "back_to_center",
+                "sequence_id": studio_sequence_id(&payload, "print"),
+            }
+        })
+    );
+}
+
+#[test]
+fn axis_controls_xyz_control_payload_uses_uppercase_axis_and_numeric_fields() {
+    for (axis, direction, mode, expected_axis) in [
+        (crate::machine::PrinterAxis::X, 1, 0, "X"),
+        (crate::machine::PrinterAxis::Y, -1, 1, "Y"),
+        (crate::machine::PrinterAxis::Z, 1, 1, "Z"),
+    ] {
+        let payload = BambuMqttCommand::XyzControl {
+            axis,
+            direction,
+            mode,
+        }
+        .payload();
+        assert_eq!(
+            payload,
+            serde_json::json!({
+                "print": {
+                    "command": "xyz_ctrl",
+                    "axis": expected_axis,
+                    "dir": direction,
+                    "mode": mode,
+                    "sequence_id": studio_sequence_id(&payload, "print"),
+                }
+            })
+        );
+    }
+}
+
+#[test]
 fn gcode_line_payload_preserves_single_home_line() {
     let payload = BambuMqttCommand::GcodeLine(GcodeLineCommand {
         lines: vec!["G28".to_string()],
@@ -481,12 +524,16 @@ fn gcode_line_payload_preserves_single_home_line() {
 }
 
 #[test]
-fn gcode_line_payload_joins_relative_move_lines() {
+fn gcode_line_payload_joins_studio_axis_move_envelope() {
     let payload = BambuMqttCommand::GcodeLine(GcodeLineCommand {
         lines: vec![
+            "M211 S".to_string(),
+            "M211 X1 Y1 Z1".to_string(),
+            "M1002 push_ref_mode".to_string(),
             "G91".to_string(),
-            "G0 X10 Z-0.5 F3000".to_string(),
-            "G90".to_string(),
+            "G1 X10 Z-0.5 F3000".to_string(),
+            "M1002 pop_ref_mode".to_string(),
+            "M211 R".to_string(),
         ],
     })
     .payload();
@@ -494,7 +541,7 @@ fn gcode_line_payload_joins_relative_move_lines() {
         payload,
         expected_print_command_payload(
             "gcode_line",
-            "G91\nG0 X10 Z-0.5 F3000\nG90",
+            "M211 S\nM211 X1 Y1 Z1\nM1002 push_ref_mode\nG91\nG1 X10 Z-0.5 F3000\nM1002 pop_ref_mode\nM211 R",
             &studio_sequence_id(&payload, "print")
         )
     );
@@ -745,6 +792,7 @@ async fn refresh_subscribes_publishes_and_maps_report() {
             bed_target_temperature_celsius: None,
             chamber_temperature_celsius: None,
             chamber_light_on: None,
+            device_features: None,
         }
     );
     assert_eq!(
@@ -1113,6 +1161,7 @@ async fn forward_print_reports_uses_transport_without_live_socket() {
                 &endpoint,
                 Duration::from_millis(1),
                 &sender,
+                &crate::machine::DeviceFeatureCache::default(),
             )
             .await
         }
@@ -1166,6 +1215,7 @@ async fn forward_print_reports_emits_printer_snapshot_with_temperatures() {
                 &endpoint,
                 Duration::from_millis(50),
                 &sender,
+                &crate::machine::DeviceFeatureCache::default(),
             )
             .await
             .unwrap();
@@ -1217,6 +1267,7 @@ async fn forward_print_reports_emits_material_snapshot_for_unsolicited_ams_repor
             &endpoint(),
             Duration::from_millis(50),
             &sender,
+            &crate::machine::DeviceFeatureCache::default(),
         )
         .await
         .unwrap();

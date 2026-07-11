@@ -191,6 +191,7 @@ pub fn hello_event(config: &AgentConfig) -> AgentEvent {
             capabilities: vec![
                 AgentCapability::HandlePrintError as i32,
                 AgentCapability::HandlePrintErrorSequenceZeroPubackOnly as i32,
+                AgentCapability::RequiredDeviceFeatures as i32,
             ],
         }),
     )
@@ -260,9 +261,16 @@ async fn run_once(
         }
     });
 
-    gateway.start_initial_report_forwarders(&sender).await;
-
-    handle_command_stream_with_gateway(&config, gateway, &sender, response.into_inner()).await
+    let outcome = async {
+        gateway
+            .prepare_session(&sender)
+            .await
+            .context("prepare runtime printer session")?;
+        handle_command_stream_with_gateway(&config, gateway, &sender, response.into_inner()).await
+    }
+    .await;
+    gateway.clear_session_sender(&sender).await;
+    outcome
 }
 
 async fn handle_command_stream_with_gateway<G, S>(

@@ -17,6 +17,8 @@ use crate::{
 use super::validate_rfc3339;
 
 mod commands;
+#[path = "printer_device_features.rs"]
+mod printer_device_features;
 
 #[cfg(test)]
 pub(super) use commands::{handle_ack, handle_result};
@@ -152,6 +154,12 @@ pub(super) async fn handle_event(
         }
         Some(agent_event::Event::PrinterMaterialsSnapshot(snapshot)) => {
             handle_materials_snapshot(state, tenant_id, agent_id, token, snapshot).await
+        }
+        Some(agent_event::Event::PrinterDeviceFeaturesSnapshot(snapshot)) => {
+            printer_device_features::handle_device_features_snapshot(
+                state, tenant_id, agent_id, token, snapshot,
+            )
+            .await
         }
         Some(agent_event::Event::Hello(_)) | None => Ok(()),
     }

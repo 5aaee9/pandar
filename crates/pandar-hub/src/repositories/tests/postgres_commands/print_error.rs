@@ -243,7 +243,7 @@ async fn postgres_handle_print_error_when_configured() {
         .enqueue_printer_operation_with_audit(
             tenant.id,
             &printer_id,
-            PrinterOperationKind::Pause,
+            PrinterOperationKind::Pause {},
             native_audit_actor(),
         )
         .await

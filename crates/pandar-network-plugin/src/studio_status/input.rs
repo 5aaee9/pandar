@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Default, Deserialize)]
 pub(super) struct PrinterStatus {
     #[serde(default)]
+    pub(super) fun: Option<String>,
+    #[serde(default)]
     pub(super) gcode_state: Option<String>,
     #[serde(default)]
     pub(super) mc_percent: Option<u8>,

@@ -269,7 +269,7 @@ async fn printer_operation_success_does_not_mutate_physical_print_status() {
         .enqueue_printer_operation_with_audit(
             tenant_id,
             &printer_id,
-            PrinterOperationKind::Stop,
+            PrinterOperationKind::Stop {},
             test_audit_actor(),
         )
         .await

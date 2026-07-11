@@ -4,11 +4,13 @@ use anyhow::bail;
 use serde::Serialize;
 use serde_json::{Number, Value};
 
+mod axis;
 pub(super) mod payload;
 mod print_error;
 mod project_file;
 mod sequence;
 
+pub use axis::GcodeLineCommand;
 use payload::*;
 pub use print_error::{HandlePrintErrorCommand, PrintErrorAction};
 use project_file::project_file_payload;
@@ -63,11 +65,6 @@ pub struct ProjectFileCommand {
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
     pub ams_mapping_info_json: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GcodeLineCommand {
-    pub lines: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -155,6 +152,12 @@ pub enum BambuMqttCommand {
     SetPrintSpeed(PrintSpeed),
     SelectExtruder(u32),
     SetNozzleTemperature(SetNozzleTemperatureCommand),
+    BackToCenter,
+    XyzControl {
+        axis: crate::machine::PrinterAxis,
+        direction: i8,
+        mode: u8,
+    },
     GcodeLine(GcodeLineCommand),
     AmsRereadRfid(AmsSlotCommand),
     AmsLoadFilament(AmsFilamentCommand),
@@ -181,7 +184,13 @@ impl BambuMqttCommand {
             Self::SetPrintSpeed(speed) => print_speed_payload(*speed),
             Self::SelectExtruder(extruder_id) => select_extruder_payload(*extruder_id),
             Self::SetNozzleTemperature(command) => set_nozzle_temperature_payload(command),
-            Self::GcodeLine(command) => gcode_line_payload(command),
+            Self::BackToCenter => axis::back_to_center_payload(),
+            Self::XyzControl {
+                axis,
+                direction,
+                mode,
+            } => axis::xyz_control_payload(*axis, *direction, *mode),
+            Self::GcodeLine(command) => axis::gcode_line_payload(command),
             Self::AmsRereadRfid(command) => ams_reread_rfid_payload(command),
             Self::AmsLoadFilament(command) => ams_load_filament_payload(command),
             Self::AmsUnloadFilament(command) => ams_unload_filament_payload(command),
@@ -288,20 +297,6 @@ fn set_nozzle_temperature_payload(
                 command: "set_nozzle_temp",
                 extruder_index: command.extruder_id,
                 target_temp: command.target_temp,
-                sequence_id: sequence_id.clone(),
-            },
-        }),
-        sequence_id,
-    )
-}
-
-fn gcode_line_payload(command: &GcodeLineCommand) -> BambuMqttCommandPayload {
-    let sequence_id = next_studio_sequence_id();
-    BambuMqttCommandPayload::with_sequence(
-        json_payload(PrintPayload {
-            print: GcodeLinePayload {
-                command: "gcode_line",
-                param: command.lines.join("\n"),
                 sequence_id: sequence_id.clone(),
             },
         }),

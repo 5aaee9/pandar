@@ -1,4 +1,5 @@
 use anyhow::Context;
+use pandar_core::BambuDeviceFeature;
 use tokio::sync::mpsc;
 
 use super::{
@@ -13,7 +14,7 @@ use crate::{
         mqtt::PrintErrorAction as MachinePrintErrorAction,
     },
     protocol::agent::v1::{
-        AgentEvent, Axis, PrintErrorAction as ProtoPrintErrorAction,
+        AgentEvent, Axis, DeviceFeature, PrintErrorAction as ProtoPrintErrorAction,
         PrinterOperation as ProtoPrinterOperation, printer_operation,
     },
 };
@@ -132,6 +133,16 @@ where
 fn parse_printer_operation(
     command: &ProtoPrinterOperation,
 ) -> anyhow::Result<MachinePrinterOperation> {
+    let required_feature = parse_required_device_feature(&command.required_device_features)?;
+    if required_feature.is_some()
+        && !matches!(
+            command.operation.as_ref(),
+            Some(printer_operation::Operation::Home(_))
+                | Some(printer_operation::Operation::MoveAxes(_))
+        )
+    {
+        anyhow::bail!("required device feature is only valid for home or move_axes");
+    }
     match command.operation.as_ref() {
         Some(printer_operation::Operation::Pause(_)) => Ok(MachinePrinterOperation::Pause),
         Some(printer_operation::Operation::Resume(_)) => Ok(MachinePrinterOperation::Resume),
@@ -165,7 +176,17 @@ fn parse_printer_operation(
                 .copied()
                 .map(parse_printer_axis)
                 .collect::<anyhow::Result<Vec<_>>>()?;
-            Ok(MachinePrinterOperation::Home { axes })
+            match required_feature {
+                None => {}
+                Some(BambuDeviceFeature::MqttHoming) if axes.is_empty() => {}
+                Some(_) => anyhow::bail!(
+                    "required device feature does not match empty-axis home semantics"
+                ),
+            }
+            Ok(MachinePrinterOperation::Home {
+                axes,
+                required_feature,
+            })
         }
         Some(printer_operation::Operation::MoveAxes(operation)) => {
             let mut x_mm = None;
@@ -184,11 +205,25 @@ fn parse_printer_operation(
                 anyhow::bail!("printer operation move_axes requires at least one axis");
             }
             let feedrate_mm_per_min = parse_move_feedrate(operation.feedrate_mm_per_min)?;
+            match required_feature {
+                None => {}
+                Some(BambuDeviceFeature::MqttAxisControl)
+                    if [x_mm, y_mm, z_mm].into_iter().flatten().count() == 1
+                        && feedrate_mm_per_min.is_none()
+                        && [x_mm, y_mm, z_mm]
+                            .into_iter()
+                            .flatten()
+                            .all(|delta| matches!(delta.abs(), 1.0 | 10.0)) => {}
+                Some(_) => anyhow::bail!(
+                    "required device feature does not match modern axis movement semantics"
+                ),
+            }
             Ok(MachinePrinterOperation::MoveAxes {
                 x_mm,
                 y_mm,
                 z_mm,
                 feedrate_mm_per_min,
+                required_feature,
             })
         }
         Some(printer_operation::Operation::SetHotendTemperature(operation)) => {
@@ -271,6 +306,21 @@ fn parse_printer_operation(
             })
         }
         None => anyhow::bail!("missing printer operation"),
+    }
+}
+
+fn parse_required_device_feature(values: &[i32]) -> anyhow::Result<Option<BambuDeviceFeature>> {
+    let value = match values {
+        [] => return Ok(None),
+        [value] => *value,
+        _ => anyhow::bail!("printer operation contains duplicate required device feature values"),
+    };
+    match DeviceFeature::try_from(value) {
+        Ok(DeviceFeature::BambuMqttHoming) => Ok(Some(BambuDeviceFeature::MqttHoming)),
+        Ok(DeviceFeature::BambuMqttAxisControl) => Ok(Some(BambuDeviceFeature::MqttAxisControl)),
+        Ok(DeviceFeature::Unspecified) | Err(_) => {
+            anyhow::bail!("invalid required device feature value {value}")
+        }
     }
 }
 

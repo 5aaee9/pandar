@@ -40,6 +40,7 @@ struct PluginPrinterListResponse {
 #[derive(Debug, Deserialize)]
 struct PluginPrinterResponse {
     dev_id: String,
+    fun: String,
     dev_name: String,
     name: String,
     dev_ip: Option<String>,
@@ -660,6 +661,7 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
     assert_eq!(body.devices.len(), 1);
     let device = &body.devices[0];
     assert_eq!(device.dev_id, "studio-printer-1");
+    assert_eq!(device.fun, "0");
     assert_eq!(device.dev_name, "Studio Printer");
     assert_eq!(device.name, "Studio Printer");
     assert_eq!(device.dev_ip.as_deref(), Some("192.0.2.10"));
@@ -700,6 +702,121 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
     assert_eq!(materials.ams_units[0].unit_id, "0");
     assert_eq!(materials.external_spools[0].external_id, "254");
     assert_eq!(materials.active_tray.global_tray_id, 0);
+}
+
+#[tokio::test]
+async fn plugin_printer_fun_requires_current_capable_observation_session() {
+    let state = state().await;
+    let app = router(state.clone());
+    let tenant = state
+        .tenants()
+        .create("plugin-device-features", "Plugin Device Features")
+        .await
+        .unwrap();
+    let token = plugin_studio_tenant_token(&state, &tenant.id.to_string(), "device-features").await;
+
+    let matching_agent =
+        feature_advertisement_printer(&state, tenant.id, "matching-agent", "FUN-MATCHING").await;
+    let matching_token = register_feature_session(&state, tenant.id, matching_agent, true).await;
+    set_device_features(
+        &state,
+        tenant.id,
+        matching_agent,
+        matching_token,
+        "FUN-MATCHING",
+        Some(pandar_core::BambuDeviceFeatures::from_bits(
+            0x8000_0041_0000_0020,
+        )),
+    )
+    .await;
+
+    let incapable_agent =
+        feature_advertisement_printer(&state, tenant.id, "incapable-agent", "FUN-INCAPABLE").await;
+    let incapable_token = register_feature_session(&state, tenant.id, incapable_agent, false).await;
+    set_device_features(
+        &state,
+        tenant.id,
+        incapable_agent,
+        incapable_token,
+        "FUN-INCAPABLE",
+        Some(pandar_core::BambuDeviceFeatures::from_bits(
+            0x8000_0041_0000_0020,
+        )),
+    )
+    .await;
+
+    let replaced_agent =
+        feature_advertisement_printer(&state, tenant.id, "replaced-agent", "FUN-REPLACED").await;
+    let old_token = register_feature_session(&state, tenant.id, replaced_agent, true).await;
+    set_device_features(
+        &state,
+        tenant.id,
+        replaced_agent,
+        old_token,
+        "FUN-REPLACED",
+        Some(pandar_core::BambuDeviceFeatures::from_bits(
+            0x8000_0041_0000_0020,
+        )),
+    )
+    .await;
+    register_feature_session(&state, tenant.id, replaced_agent, true).await;
+
+    let disconnected_agent =
+        feature_advertisement_printer(&state, tenant.id, "disconnected-agent", "FUN-DISCONNECTED")
+            .await;
+    let disconnected_token = crate::sessions::SessionToken::new();
+    claim_feature_session(&state, tenant.id, disconnected_agent, disconnected_token).await;
+    set_device_features(
+        &state,
+        tenant.id,
+        disconnected_agent,
+        disconnected_token,
+        "FUN-DISCONNECTED",
+        Some(pandar_core::BambuDeviceFeatures::from_bits(
+            0x8000_0041_0000_0020,
+        )),
+    )
+    .await;
+
+    let invalidated_agent =
+        feature_advertisement_printer(&state, tenant.id, "invalidated-agent", "FUN-INVALIDATED")
+            .await;
+    let invalidated_token =
+        register_feature_session(&state, tenant.id, invalidated_agent, true).await;
+    set_device_features(
+        &state,
+        tenant.id,
+        invalidated_agent,
+        invalidated_token,
+        "FUN-INVALIDATED",
+        Some(pandar_core::BambuDeviceFeatures::from_bits(
+            0x8000_0041_0000_0020,
+        )),
+    )
+    .await;
+    set_device_features(
+        &state,
+        tenant.id,
+        invalidated_agent,
+        invalidated_token,
+        "FUN-INVALIDATED",
+        None,
+    )
+    .await;
+
+    let (status, body) =
+        request_as(app, Method::GET, "/api/v1/plugin/printers", None, &token).await;
+    assert_eq!(status, StatusCode::OK);
+    let fun = decode::<PluginPrinterListResponse>(body)
+        .devices
+        .into_iter()
+        .map(|device| (device.dev_id, device.fun))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    assert_eq!(fun["FUN-MATCHING"], "8000004100000020");
+    assert_eq!(fun["FUN-INCAPABLE"], "0");
+    assert_eq!(fun["FUN-REPLACED"], "0");
+    assert_eq!(fun["FUN-DISCONNECTED"], "0");
+    assert_eq!(fun["FUN-INVALIDATED"], "0");
 }
 
 #[tokio::test]
@@ -1046,6 +1163,115 @@ async fn insert_audit_fixture(
     metadata: Value,
 ) {
     insert_raw_audit_fixture(state, tenant_id, action, created_at, &metadata.to_string()).await;
+}
+
+async fn feature_advertisement_printer(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_name: &str,
+    serial: &str,
+) -> pandar_core::AgentId {
+    let agent = state.agents().create(tenant_id, agent_name).await.unwrap();
+    state
+        .printers()
+        .upsert_snapshot(
+            tenant_id,
+            agent.id,
+            crate::repositories::PrinterSnapshotUpsert {
+                serial_number: serial.to_owned(),
+                host: Some("192.0.2.10".to_owned()),
+                access_code: Some("feature-access".to_owned()),
+                name: serial.to_owned(),
+                model: Some("X2D".to_owned()),
+                status: "idle".to_owned(),
+                observed_at: "2026-07-11T00:00:00Z".to_owned(),
+                nozzle_temperatures: Vec::new(),
+                active_nozzle: Some("L".to_owned()),
+                bed_temperature_celsius: Some("60".to_owned()),
+                bed_target_temperature_celsius: Some("65".to_owned()),
+                chamber_temperature_celsius: Some("32".to_owned()),
+                chamber_light_on: Some(true),
+            },
+        )
+        .await
+        .unwrap();
+    agent.id
+}
+
+async fn register_feature_session(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: pandar_core::AgentId,
+    capable: bool,
+) -> crate::sessions::SessionToken {
+    let token = crate::sessions::SessionToken::new();
+    claim_feature_session(state, tenant_id, agent_id, token).await;
+    let capabilities = capable
+        .then_some(crate::protocol::agent::v1::AgentCapability::RequiredDeviceFeatures)
+        .into_iter()
+        .collect();
+    state
+        .sessions()
+        .register(crate::sessions::AgentSession {
+            token,
+            tenant_id,
+            agent_id,
+            name: "agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: "2026-07-11T00:00:00Z".to_owned(),
+            last_heartbeat_at: "2026-07-11T00:00:00Z".to_owned(),
+            wake_sender: tokio::sync::mpsc::channel(1).0,
+            close_sender: tokio::sync::mpsc::channel(1).0,
+            command_sender: tokio::sync::mpsc::channel(1).0,
+            capabilities,
+            pending_live_commands: crate::sessions::empty_pending_live_commands(),
+            live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
+        })
+        .await;
+    token
+}
+
+async fn claim_feature_session(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: pandar_core::AgentId,
+    token: crate::sessions::SessionToken,
+) {
+    state
+        .agents()
+        .claim_online_session(
+            tenant_id,
+            agent_id,
+            &token.persisted_id(),
+            "test",
+            "2026-07-11T00:00:00Z",
+        )
+        .await
+        .unwrap();
+}
+
+async fn set_device_features(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: pandar_core::AgentId,
+    token: crate::sessions::SessionToken,
+    serial: &str,
+    features: Option<pandar_core::BambuDeviceFeatures>,
+) {
+    assert_eq!(
+        state
+            .printers()
+            .update_device_features_if_current(
+                tenant_id,
+                agent_id,
+                &token.persisted_id(),
+                serial,
+                features,
+            )
+            .await
+            .unwrap(),
+        crate::repositories::DeviceFeatureUpdateOutcome::Updated
+    );
 }
 
 async fn insert_raw_audit_fixture(

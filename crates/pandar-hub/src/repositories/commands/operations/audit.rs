@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use super::{PrintErrorAction, PrinterAxis, PrinterOperationKind};
+use crate::grpc::commands::RequiredDeviceFeature;
 use crate::repositories::audit::{AuditMetadata, audit_metadata};
 
 pub fn operation_audit_metadata(
@@ -43,10 +44,14 @@ enum OperationAuditFields {
     },
     Home {
         axes: Vec<&'static str>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        required_device_features: Vec<RequiredDeviceFeature>,
     },
     MoveAxes {
         movements: Vec<OperationAuditMovement>,
         feedrate_mm_per_min: Option<u32>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        required_device_features: Vec<RequiredDeviceFeature>,
     },
     HotendTemperature {
         temperature_celsius: u16,
@@ -99,12 +104,17 @@ impl OperationAuditFields {
             PrinterOperationKind::SelectExtruder { extruder_id } => Self::Extruder {
                 extruder_id: *extruder_id,
             },
-            PrinterOperationKind::Home { axes } => Self::Home {
+            PrinterOperationKind::Home {
+                axes,
+                required_device_features,
+            } => Self::Home {
                 axes: axis_names(axes),
+                required_device_features: required_device_features.clone(),
             },
             PrinterOperationKind::MoveAxes {
                 movements,
                 feedrate_mm_per_min,
+                required_device_features,
             } => Self::MoveAxes {
                 movements: movements
                     .iter()
@@ -114,6 +124,7 @@ impl OperationAuditFields {
                     })
                     .collect(),
                 feedrate_mm_per_min: *feedrate_mm_per_min,
+                required_device_features: required_device_features.clone(),
             },
             PrinterOperationKind::SetHotendTemperature {
                 temperature_celsius,
@@ -160,10 +171,10 @@ impl OperationAuditFields {
                 external_id: external_id.clone(),
                 extruder_id: *extruder_id,
             },
-            PrinterOperationKind::Pause
-            | PrinterOperationKind::Resume
-            | PrinterOperationKind::Stop
-            | PrinterOperationKind::ToggleLight => Self::Empty {},
+            PrinterOperationKind::Pause {}
+            | PrinterOperationKind::Resume {}
+            | PrinterOperationKind::Stop {}
+            | PrinterOperationKind::ToggleLight {} => Self::Empty {},
         }
     }
 }

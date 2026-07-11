@@ -1,5 +1,7 @@
 use anyhow::Context;
-use pandar_core::{AgentId, Printer, PrinterNozzleTemperature, PrinterParts, TenantId};
+use pandar_core::{
+    AgentId, BambuDeviceFeatures, Printer, PrinterNozzleTemperature, PrinterParts, TenantId,
+};
 use sea_orm::{
     ActiveValue::Set,
     ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, PaginatorTrait, QueryFilter,
@@ -20,9 +22,11 @@ use crate::{
     },
 };
 
+mod device_features;
 mod live_status;
 mod queries;
 
+pub use device_features::DeviceFeatureUpdateOutcome;
 pub use live_status::{PrinterHms, PrinterLiveStatus, PrinterWithLiveStatus};
 pub(crate) use live_status::{
     PrinterLiveStatusPatch, from_model as live_status_from_model, merge_live_report,
@@ -255,7 +259,8 @@ impl PrinterRepository {
             .begin()
             .await
             .context("failed to begin printer snapshot transaction")?;
-        let printer = upsert_snapshot_in_transaction(&tx, tenant_id, agent_id, snapshot).await?;
+        let printer =
+            upsert_snapshot_in_transaction(&tx, tenant_id, agent_id, snapshot, None, None).await?;
         tx.commit()
             .await
             .context("failed to commit printer snapshot transaction")?;
@@ -271,7 +276,8 @@ impl PrinterRepository {
     ) -> RepositoryResult<Printer> {
         let tx = begin_current_agent_transaction(&self.database, tenant_id, agent_id, session_id)
             .await?;
-        let printer = upsert_snapshot_in_transaction(&tx, tenant_id, agent_id, snapshot).await?;
+        let printer =
+            upsert_snapshot_in_transaction(&tx, tenant_id, agent_id, snapshot, None, None).await?;
         tx.commit()
             .await
             .context("failed to commit current-session printer snapshot transaction")?;
@@ -284,6 +290,8 @@ async fn upsert_snapshot_in_transaction(
     tenant_id: TenantId,
     agent_id: AgentId,
     snapshot: PrinterSnapshotUpsert,
+    device_features: Option<BambuDeviceFeatures>,
+    device_features_session_id: Option<&str>,
 ) -> RepositoryResult<Printer> {
     let query = printers::Entity::find()
         .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
@@ -296,8 +304,16 @@ async fn upsert_snapshot_in_transaction(
     let printer_id = current
         .map(|printer| printer.id)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    adapters::printers::upsert_snapshot(transaction, tenant_id, agent_id, &printer_id, &snapshot)
-        .await?;
+    adapters::printers::upsert_snapshot(
+        transaction,
+        tenant_id,
+        agent_id,
+        &printer_id,
+        &snapshot,
+        device_features,
+        device_features_session_id,
+    )
+    .await?;
     printers::Entity::find()
         .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
         .filter(printers::Column::SerialNumber.eq(&snapshot.serial_number))
@@ -361,6 +377,12 @@ fn printer_from_model(model: printers::Model) -> RepositoryResult<Printer> {
             bed_target_temperature_celsius: model.bed_target_temperature_celsius,
             chamber_temperature_celsius: model.chamber_temperature_celsius,
             chamber_light_on: model.chamber_light_on,
+            bambu_device_features: model
+                .bambu_fun_bits
+                .map(|value| BambuDeviceFeatures::from_hex(&value))
+                .transpose()
+                .context("failed to rehydrate printer Bambu device features")?,
+            bambu_device_features_session_id: model.bambu_fun_session_id,
         })
         .map_err(anyhow::Error::from)
     })()

@@ -18,7 +18,7 @@ use crate::protocol::agent::v1::CommandResult;
 use crate::{
     AppState,
     grpc::commands::repository_status,
-    grpc::outbound::spawn_outbound_pump,
+    grpc::outbound::{OutboundSession, spawn_outbound_pump},
     protocol::agent::v1::{
         AgentCameraEvent, AgentCameraHello, AgentCapability, AgentEvent, AgentHello,
         HubCameraCommand, HubCommand, agent_camera_event, agent_control_server::AgentControl,
@@ -150,15 +150,22 @@ impl AgentControlService {
             inbound,
             status_sender,
         );
-        spawn_outbound_pump(
+        let outbound_ready = spawn_outbound_pump(
             self.state.clone(),
-            tenant_id,
-            agent_id,
+            OutboundSession {
+                tenant_id,
+                agent_id,
+                token,
+            },
             wake_receiver,
             close_receiver,
             status_receiver,
             command_sender,
         );
+        outbound_ready.await.map_err(|err| {
+            tracing::error!(error = ?err, "agent outbound pump stopped before becoming ready");
+            Status::internal("failed to start agent outbound pump")
+        })?;
         Ok(Box::pin(ReceiverStream::new(command_receiver)))
     }
 
