@@ -46,6 +46,8 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
     assert_eq!(status, StatusCode::OK);
     assert!(body["devices"][0].get("print_error").is_none());
     assert!(body["devices"][0].get("job_id").is_none());
+    assert!(body["devices"][0].get("state_revision").is_none());
+    assert!(body["devices"][0].get("print").is_none());
 
     state
         .jobs()
@@ -57,6 +59,7 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
             job_id: None,
             print_error: Some(83_918_929),
             printer_job_id: Some("studio-job".to_string()),
+            job_attr: None,
             artifact_id: None,
             subtask_id: Some("subtask-12".to_string()),
             gcode_file: Some("external.gcode.3mf".to_string()),
@@ -88,6 +91,8 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["devices"][0]["print_error"], 83_918_929);
     assert_eq!(body["devices"][0]["job_id"], "studio-job");
+    assert!(body["devices"][0].get("state_revision").is_none());
+    assert!(body["devices"][0].get("print").is_none());
     let body = decode::<PluginPrinterListResponse>(body);
     let device = &body.devices[0];
     assert_eq!(device.gcode_state.as_deref(), Some("RUNNING"));
@@ -117,6 +122,7 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
             job_id: None,
             print_error: None,
             printer_job_id: None,
+            job_attr: None,
             artifact_id: None,
             subtask_id: None,
             gcode_file: None,
@@ -153,10 +159,12 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
     assert_eq!(device.task_id.as_deref(), Some("mqtt-task-9001"));
     assert!(device.hms.is_empty());
 
+    let session_token = crate::grpc::register_test_session(&state, tenant.id, agent.id).await;
     crate::grpc::printer_snapshots::handle_snapshot(
         &state,
         tenant.id,
         agent.id,
+        session_token,
         crate::protocol::agent::v1::PrinterSnapshot {
             serial: "studio-live-printer".to_string(),
             name: "Live Printer".to_string(),
@@ -202,6 +210,7 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
             job_id: None,
             print_error: None,
             printer_job_id: Some(" \t ".to_string()),
+            job_attr: None,
             artifact_id: None,
             subtask_id: None,
             gcode_file: None,

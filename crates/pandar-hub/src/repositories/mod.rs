@@ -9,7 +9,9 @@ pub(crate) mod printer_event_tickets;
 mod printers;
 mod tenants;
 
-pub use agents::{AGENT_CREDENTIAL_PREFIX, AgentRepository};
+#[cfg(test)]
+pub(crate) use agents::current_transaction_pause;
+pub use agents::{AGENT_CREDENTIAL_PREFIX, AgentRepository, begin_current_agent_transaction};
 pub use audit::{
     AuditActor, AuditEvent, AuditEventListQuery, AuditEventRepository, RecordAuditEvent,
 };
@@ -24,13 +26,15 @@ pub use auth::{
 pub(crate) use commands::printer_operation_ownership_pause;
 pub use commands::{
     CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload,
-    PrintErrorAction, PrintProjectFilePayload, PrinterAxis, PrinterAxisMovement,
-    PrinterOperationKind, PrinterOperationPayload, RefreshPrinterMaterialsPayload,
+    PersistedLivePrinterOperation, PrintErrorAction, PrintProjectFilePayload, PrinterAxis,
+    PrinterAxisMovement, PrinterOperationKind, PrinterOperationPayload,
+    RefreshPrinterMaterialsPayload, WebPrintErrorRecovery,
 };
 pub use jobs::{
     AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, CreatePrintJob, DuplicatePrintJob,
     JobRepository, JobWithArtifact, PrintReportDiagnostic,
 };
+pub(crate) use materials::CurrentMaterialPatchOutcome;
 pub use materials::{
     MaterialJsonValue, MaterialPatchInput, MaterialPatchOutcome, MaterialRepository,
     MaterialSnapshot,
@@ -85,6 +89,8 @@ pub enum RepositoryError {
     MissingAgent,
     #[error("agent is online")]
     AgentOnline,
+    #[error("agent session is no longer current")]
+    AgentSessionNotCurrent,
     #[error("printer not found")]
     MissingPrinter,
     #[error("command not found")]

@@ -1,6 +1,53 @@
 use super::*;
 
 #[tokio::test]
+async fn plugin_print_error_rejects_zero_sequence_before_insert() {
+    let fixture = operation_fixture("plugin-native-zero-sequence").await;
+    let (wake_sender, _) = mpsc::channel(1);
+    let (command_sender, mut command_receiver) = mpsc::channel(1);
+    register_session(
+        &fixture,
+        wake_sender,
+        command_sender,
+        [
+            AgentCapability::HandlePrintError,
+            AgentCapability::HandlePrintErrorSequenceZeroPubackOnly,
+        ],
+    )
+    .await;
+    let mut body = native_body("resume");
+    body.as_object_mut()
+        .unwrap()
+        .insert("sequence_id".to_owned(), serde_json::json!(0));
+
+    let (status, body) = request_as(
+        fixture.app.clone(),
+        Method::POST,
+        &fixture.uri,
+        Some(body),
+        &fixture.token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        decode::<OperationErrorResponse>(body).error,
+        "invalid_printer_control"
+    );
+    assert_eq!(fixture.state.commands().count().await.unwrap(), 0);
+    assert!(command_receiver.try_recv().is_err());
+    assert!(
+        fixture
+            .state
+            .audit_events()
+            .list_for_tenant(fixture.tenant_id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn plugin_print_error_rejects_present_null_ordinary_field_before_insert() {
     let fixture = operation_fixture("plugin-native-null-ordinary").await;
     let (wake_sender, _) = mpsc::channel(1);
@@ -116,6 +163,14 @@ async fn plugin_print_error_rejects_missing_extra_cross_and_invalid_fields_befor
             "print_error": 83_918_929,
             "printer_job_id": "job-7",
             "sequence_id": 20_042
+        }),
+        serde_json::json!({
+            "action": "handle_print_error",
+            "error_action": "resume",
+            "print_error": 83_918_929,
+            "printer_job_id": "job-7",
+            "sequence_id": 20_042,
+            "error_generation": 9
         }),
         serde_json::json!({
             "action": "handle_print_error",

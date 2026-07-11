@@ -8,7 +8,7 @@ use std::{
 use anyhow::Context;
 use pandar_core::{AgentId, TenantId};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
-use tokio::sync::{Mutex, mpsc};
+use tokio::sync::{Mutex, OwnedMutexGuard, mpsc};
 use tonic::Status;
 use uuid::Uuid;
 
@@ -20,15 +20,21 @@ use pandar_core::{AgentStatus, CommandId};
 
 pub(crate) mod live_commands;
 mod transient;
+mod transitions;
+
+#[cfg(test)]
+pub(crate) use transitions::pause as transition_pause;
 
 pub use live_commands::{
     LiveCommandClaim, LiveCommandClaimOutcome, LiveDispatchError, PendingLiveCommand,
     PendingLiveCommands, empty_pending_live_commands,
 };
+use transitions::AgentTransitions;
 
 #[derive(Debug, Clone)]
 pub struct SessionRegistry {
     sessions: Arc<Mutex<HashMap<AgentId, AgentSession>>>,
+    transitions: AgentTransitions,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +61,10 @@ impl SessionToken {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
+
+    pub fn persisted_id(self) -> String {
+        self.0.to_string()
+    }
 }
 
 impl Default for SessionToken {
@@ -67,7 +77,30 @@ impl SessionRegistry {
     pub fn new() -> Self {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            transitions: AgentTransitions::default(),
         }
+    }
+
+    pub async fn transition_lease(&self, agent_id: AgentId) -> OwnedMutexGuard<()> {
+        self.transitions.lease(agent_id).await
+    }
+
+    pub(crate) async fn transition_lease_for_session(
+        &self,
+        agent_id: AgentId,
+        token: SessionToken,
+    ) -> OwnedMutexGuard<()> {
+        #[cfg(not(test))]
+        let _ = token;
+        #[cfg(test)]
+        transition_pause::wait_before(token).await;
+        #[cfg(test)]
+        let lease = self.transitions.lease_observed(agent_id, token).await;
+        #[cfg(not(test))]
+        let lease = self.transition_lease(agent_id).await;
+        #[cfg(test)]
+        transition_pause::wait_after(token).await;
+        lease
     }
 
     pub async fn register(&self, session: AgentSession) -> Option<AgentSession> {
@@ -192,6 +225,7 @@ impl SessionRegistry {
         tenant_id: TenantId,
         agent_id: AgentId,
     ) -> Option<AgentSession> {
+        let _lease = self.transition_lease(agent_id).await;
         let removed = {
             let mut sessions = self.sessions.lock().await;
             if sessions
@@ -228,11 +262,33 @@ impl SessionRegistry {
 
         let mut expired = Vec::with_capacity(stale.len());
         for stale_session in stale {
+            let _lease = self
+                .transition_lease_for_session(stale_session.agent_id, stale_session.token)
+                .await;
+            let current = self
+                .sessions
+                .lock()
+                .await
+                .get(&stale_session.agent_id)
+                .cloned();
+            let Some(current) = current.filter(|session| {
+                session.token == stale_session.token
+                    && stale_before(&session.last_heartbeat_at, cutoff)
+            }) else {
+                continue;
+            };
+            agents
+                .mark_offline_if_current(
+                    current.tenant_id,
+                    current.agent_id,
+                    &current.token.persisted_id(),
+                    now,
+                )
+                .await?;
             if let Some(session) = self
-                .remove_if_current(stale_session.agent_id, stale_session.token)
+                .remove_if_current(current.agent_id, current.token)
                 .await
             {
-                agents.mark_offline(session.agent_id, now).await?;
                 expired.push(session);
             }
         }

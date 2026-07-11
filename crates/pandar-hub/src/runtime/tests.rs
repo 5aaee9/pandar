@@ -12,18 +12,21 @@ use crate::sessions::{AgentSession, SessionToken};
 
 mod control_plane_close;
 mod print_error;
+mod printer_event_epoch;
 
 #[tokio::test]
 async fn runtime_expiry_tick_marks_stale_agent_offline() {
     let state = AppState::sqlite_for_tests().await.unwrap();
     let tenant = state.tenants().create("acme", "Acme Labs").await.unwrap();
     let agent = state.agents().create(tenant.id, "agent").await.unwrap();
+    let token = SessionToken::new();
     state
         .agents()
-        .update_connection(
+        .claim_online_session(
+            tenant.id,
             agent.id,
-            AgentStatus::Online,
-            Some("0.1.0"),
+            &token.persisted_id(),
+            "0.1.0",
             "2026-06-20T00:00:00Z",
         )
         .await
@@ -33,7 +36,7 @@ async fn runtime_expiry_tick_marks_stale_agent_offline() {
     state
         .sessions()
         .register(AgentSession {
-            token: SessionToken::new(),
+            token,
             tenant_id: tenant.id,
             agent_id: agent.id,
             name: agent.name,

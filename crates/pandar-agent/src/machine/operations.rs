@@ -149,7 +149,7 @@ where
     }
 }
 
-fn mqtt_command_for_printer_operation(
+pub(super) fn mqtt_command_for_printer_operation(
     operation: PrinterOperation,
 ) -> anyhow::Result<BambuMqttCommand> {
     match operation {

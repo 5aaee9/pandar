@@ -69,6 +69,11 @@ which is rebuilt when the hub base URL changes. Networking uses OkHttp + Retrofi
   the WebSocket reuses the shared `OkHttpClient`. Status colors are always paired
   with an icon and text label — never color alone.
 
+The enriched printer snapshot remains additive for Android. The shared `appJson`
+decoder uses `ignoreUnknownKeys`, so new Web task/progress/HMS and recovery fields
+decode without changing the existing event variants. Android does not expose the
+Web build-plate recovery dialog or submit its recovery actions.
+
 Out of scope for v1: camera view, print dispatch / file upload, axis jog and
 print-speed control, admin/users/agents management, internationalization, and
 Keystore-backed encrypted token storage (tokens are stored in plain DataStore;

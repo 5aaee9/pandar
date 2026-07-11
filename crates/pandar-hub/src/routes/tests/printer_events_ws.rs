@@ -36,7 +36,7 @@ struct PrinterEventTicketResponse {
 #[serde(tag = "type")]
 enum WebSocketPrinterEvent {
     #[serde(rename = "printer_snapshot")]
-    PrinterSnapshot { printer: EventPrinter },
+    PrinterSnapshot { printer: Box<EventPrinter> },
     #[serde(rename = "job_progress")]
     JobProgress { job: EventJob },
 }
@@ -46,6 +46,40 @@ struct EventPrinter {
     tenant_id: String,
     agent_id: String,
     serial_number: String,
+    state_revision: u64,
+    print: EventPrint,
+}
+
+#[derive(Debug, Deserialize)]
+struct EventPrint {
+    task_generation: u64,
+    error_generation: u64,
+    hms: Vec<crate::repositories::PrinterHms>,
+    job_state: Option<u32>,
+    gcode_state: Option<String>,
+    task_id: Option<String>,
+    subtask_id: Option<String>,
+    progress_percent: Option<u8>,
+    remaining_time_minutes: Option<u32>,
+    current_layer: Option<u32>,
+    total_layers: Option<u32>,
+    gcode_file: Option<String>,
+    subtask_name: Option<String>,
+    print_error: Option<u32>,
+    printer_job_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+enum OldShapePrinterEvent {
+    #[serde(rename = "printer_snapshot")]
+    PrinterSnapshot { printer: OldShapePrinter },
+}
+
+#[derive(Debug, Deserialize)]
+struct OldShapePrinter {
+    id: String,
+    status: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -76,6 +110,69 @@ where
         Message::Text(text) => serde_json::from_str(&text).unwrap(),
         other => panic!("expected text websocket message, got {other:?}"),
     }
+}
+
+#[test]
+fn printer_event_rolling_decode_accepts_legacy_and_old_shape_ignores_enrichment() {
+    let legacy = serde_json::json!({
+        "type": "printer_snapshot",
+        "printer": {
+            "id": "printer-1",
+            "tenant_id": "00000000-0000-4000-8000-000000000001",
+            "agent_id": "00000000-0000-4000-8000-000000000002",
+            "serial_number": "SN-1",
+            "name": "Printer",
+            "model": null,
+            "status": "IDLE",
+            "last_seen_at": "2026-07-10T00:00:00Z",
+            "created_at": "2026-07-10T00:00:00Z",
+            "nozzle_temperatures": [],
+            "active_nozzle": null,
+            "bed_temperature_celsius": null,
+            "bed_target_temperature_celsius": null,
+            "chamber_temperature_celsius": null,
+            "chamber_light_on": null,
+            "materials": null
+        }
+    });
+    let decoded: crate::printer_events::PrinterEvent =
+        serde_json::from_value(legacy).expect("legacy snapshot should decode");
+    let crate::printer_events::PrinterEvent::PrinterSnapshot { printer } = decoded else {
+        panic!("expected legacy printer snapshot")
+    };
+    assert_eq!(printer.state_revision, None);
+    assert_eq!(printer.print, None);
+
+    let enriched = serde_json::json!({
+        "type": "printer_snapshot",
+        "printer": {
+            "id": "printer-1",
+            "status": "RUNNING",
+            "state_revision": 9,
+            "print": {
+                "task_generation": 2,
+                "error_generation": 3,
+                "hms": [],
+                "job_state": null,
+                "gcode_state": "RUNNING",
+                "task_id": null,
+                "subtask_id": null,
+                "progress_percent": null,
+                "remaining_time_minutes": null,
+                "current_layer": null,
+                "total_layers": null,
+                "gcode_file": null,
+                "subtask_name": null,
+                "print_error": null,
+                "printer_job_id": null
+            }
+        }
+    });
+    let old: OldShapePrinterEvent =
+        serde_json::from_value(enriched).expect("old shape should ignore additive fields");
+    let OldShapePrinterEvent::PrinterSnapshot { printer } = old;
+    assert_eq!(printer.id, "printer-1");
+    assert_eq!(printer.status, "RUNNING");
 }
 
 #[tokio::test]
@@ -372,6 +469,118 @@ async fn printer_events_websocket_accepts_browser_ticket_from_separate_sqlite_co
     .await
     .unwrap();
     drop(ws);
+}
+
+#[tokio::test]
+async fn printer_events_websocket_closes_immediately_when_process_epoch_changes() {
+    let state = state().await;
+    let tenant = state
+        .tenants()
+        .create("epoch-ws-acme", "Epoch WS Acme")
+        .await
+        .unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "epoch-ws-token",
+    )
+    .await;
+    let http_addr = serve_http(router(state.clone())).await;
+    let mut request = format!(
+        "ws://{http_addr}/api/v1/tenants/{}/printer-events",
+        tenant.id
+    )
+    .into_client_request()
+    .unwrap();
+    request
+        .headers_mut()
+        .insert("Authorization", format!("Bearer {token}").parse().unwrap());
+    let (mut ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+
+    state.printer_events().invalidate_epoch();
+
+    assert_socket_closed_without_text(&mut ws, "epoch change").await;
+}
+
+#[tokio::test]
+async fn epoch_change_after_serialization_closes_without_sending_stale_text() {
+    let (state, tenant, token, http_addr) = epoch_window_fixture("after-serialization").await;
+    let mut pause = crate::routes::printer_events::send_pause::install_after_serialization();
+    let mut ws = connect_printer_events(http_addr, tenant.id, &token).await;
+    state
+        .printer_events()
+        .publish_local(tenant.id, test_command_event("serialized"))
+        .await;
+    pause.wait_until_reached().await;
+
+    state.printer_events().invalidate_epoch();
+    pause.resume();
+
+    assert_socket_closed_without_text(&mut ws, "epoch change after serialization").await;
+}
+
+#[tokio::test]
+async fn epoch_change_cancels_a_blocked_websocket_flush() {
+    let (state, tenant, token, http_addr) = epoch_window_fixture("blocked-flush").await;
+    let mut pause = crate::routes::printer_events::send_pause::install_during_flush();
+    let mut ws = connect_printer_events(http_addr, tenant.id, &token).await;
+    state
+        .printer_events()
+        .publish_local(tenant.id, test_command_event("blocked"))
+        .await;
+    pause.wait_until_reached().await;
+
+    state.printer_events().invalidate_epoch();
+
+    assert_socket_closed_without_text(&mut ws, "epoch change during blocked flush").await;
+    pause.resume();
+}
+
+#[tokio::test]
+async fn printer_events_websocket_closes_immediately_when_tenant_receiver_lags() {
+    let event_hub = crate::printer_events::PrinterEventHub::with_capacity_for_tests(1);
+    let state = state()
+        .await
+        .with_printer_events_for_tests(event_hub.clone());
+    let tenant = state
+        .tenants()
+        .create("lagged-ws-acme", "Lagged WS Acme")
+        .await
+        .unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        "lagged-ws-token",
+    )
+    .await;
+    let http_addr = serve_http(router(state)).await;
+    let mut request = format!(
+        "ws://{http_addr}/api/v1/tenants/{}/printer-events",
+        tenant.id
+    )
+    .into_client_request()
+    .unwrap();
+    request
+        .headers_mut()
+        .insert("Authorization", format!("Bearer {token}").parse().unwrap());
+    let (mut ws, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+
+    event_hub
+        .publish_local_burst_for_tests(
+            tenant.id,
+            vec![test_command_event("first"), test_command_event("second")],
+        )
+        .await;
+
+    let next = tokio::time::timeout(std::time::Duration::from_secs(1), ws.next())
+        .await
+        .expect("lagged receiver must close the websocket without waiting for another event");
+    assert!(
+        !matches!(next, Some(Ok(Message::Text(_)))),
+        "lagged websocket must not resume from the newest buffered event"
+    );
 }
 
 #[tokio::test]
@@ -700,9 +909,36 @@ async fn printer_events_websocket_receives_event_from_sibling_instance() {
     let printer_id = insert_printer_fixture(state.database(), tenant.id, agent.id)
         .await
         .unwrap();
+    state
+        .jobs()
+        .apply_print_report(crate::repositories::ApplyPrintReport {
+            tenant_id: tenant.id,
+            agent_id: agent.id,
+            serial: format!("serial-{printer_id}"),
+            task_id: Some("external-task".to_owned()),
+            job_id: None,
+            print_error: Some(83_918_929),
+            printer_job_id: Some(String::new()),
+            job_attr: Some(0x21),
+            artifact_id: None,
+            subtask_id: None,
+            gcode_file: None,
+            subtask_name: None,
+            gcode_state: Some("RUNNING".to_owned()),
+            percent: Some(66),
+            remaining_time_minutes: None,
+            current_layer: None,
+            total_layers: None,
+            hms: Some(Vec::new()),
+            diagnostics: Vec::new(),
+            printer_materials_json: String::new(),
+            observed_at: "2026-07-10T00:00:00Z".to_owned(),
+        })
+        .await
+        .unwrap();
     let printer = state
         .printers()
-        .get_for_tenant(tenant.id, &printer_id)
+        .get_with_live_status_for_tenant(tenant.id, &printer_id)
         .await
         .unwrap()
         .unwrap();
@@ -737,6 +973,22 @@ async fn printer_events_websocket_receives_event_from_sibling_instance() {
         panic!("expected printer snapshot websocket event");
     };
     assert_eq!(printer.tenant_id, tenant.id.to_string());
+    assert!(printer.state_revision > 1);
+    assert_eq!(printer.print.task_generation, 1);
+    assert_eq!(printer.print.error_generation, 1);
+    assert_eq!(printer.print.job_state, Some(2));
+    assert_eq!(printer.print.gcode_state.as_deref(), Some("RUNNING"));
+    assert_eq!(printer.print.task_id.as_deref(), Some("external-task"));
+    assert_eq!(printer.print.subtask_id, None);
+    assert_eq!(printer.print.progress_percent, Some(66));
+    assert_eq!(printer.print.remaining_time_minutes, None);
+    assert_eq!(printer.print.current_layer, None);
+    assert_eq!(printer.print.total_layers, None);
+    assert_eq!(printer.print.gcode_file, None);
+    assert_eq!(printer.print.subtask_name, None);
+    assert_eq!(printer.print.print_error, Some(83_918_929));
+    assert_eq!(printer.print.printer_job_id.as_deref(), Some(""));
+    assert!(printer.print.hms.is_empty());
 }
 
 #[tokio::test]
@@ -762,7 +1014,7 @@ async fn printer_events_websocket_receives_one_event_from_publishing_instance() 
         .unwrap();
     let printer = state
         .printers()
-        .get_for_tenant(tenant.id, &printer_id)
+        .get_with_live_status_for_tenant(tenant.id, &printer_id)
         .await
         .unwrap()
         .unwrap();
@@ -826,7 +1078,7 @@ async fn printer_events_websocket_ignores_wrong_tenant_event_from_sibling_instan
         .unwrap();
     let printer = state
         .printers()
-        .get_for_tenant(other.id, &printer_id)
+        .get_with_live_status_for_tenant(other.id, &printer_id)
         .await
         .unwrap()
         .unwrap();
@@ -861,6 +1113,76 @@ async fn printer_events_websocket_ignores_wrong_tenant_event_from_sibling_instan
 
 fn test_audit_actor() -> crate::repositories::AuditActor {
     crate::repositories::AuditActor::tenant_token(None, "test-setup-token", vec!["*"])
+}
+
+fn test_command_event(id: &str) -> crate::printer_events::PrinterEvent {
+    crate::printer_events::PrinterEvent::CommandResult {
+        command: Box::new(crate::printer_events::PrinterEventCommand {
+            id: id.to_owned(),
+            tenant_id: "tenant".to_owned(),
+            agent_id: "agent".to_owned(),
+            printer_id: None,
+            kind: "test".to_owned(),
+            status: "succeeded".to_owned(),
+            payload_json: "{}".to_owned(),
+            error: None,
+            result_json: None,
+            created_at: "2026-07-10T00:00:00Z".to_owned(),
+            updated_at: "2026-07-10T00:00:00Z".to_owned(),
+        }),
+    }
+}
+
+async fn epoch_window_fixture(
+    suffix: &str,
+) -> (AppState, pandar_core::Tenant, String, std::net::SocketAddr) {
+    let state = state().await;
+    let tenant = state
+        .tenants()
+        .create(
+            &format!("epoch-window-{suffix}"),
+            &format!("Epoch Window {suffix}"),
+        )
+        .await
+        .unwrap();
+    let token = auth_token_for_role(
+        &state,
+        &tenant.id.to_string(),
+        crate::repositories::UserRole::Viewer,
+        &format!("epoch-window-{suffix}-token"),
+    )
+    .await;
+    let http_addr = serve_http(router(state.clone())).await;
+    (state, tenant, token, http_addr)
+}
+
+async fn connect_printer_events(
+    http_addr: std::net::SocketAddr,
+    tenant_id: TenantId,
+    token: &str,
+) -> impl tokio_stream::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin
+{
+    let mut request = format!("ws://{http_addr}/api/v1/tenants/{tenant_id}/printer-events")
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("Authorization", format!("Bearer {token}").parse().unwrap());
+    tokio_tungstenite::connect_async(request).await.unwrap().0
+}
+
+async fn assert_socket_closed_without_text<S>(socket: &mut S, reason: &str)
+where
+    S: tokio_stream::Stream<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin,
+{
+    let next = tokio::time::timeout(std::time::Duration::from_secs(1), socket.next())
+        .await
+        .unwrap_or_else(|_| panic!("{reason} must close the websocket promptly"));
+    match next {
+        None | Some(Ok(Message::Close(_))) | Some(Err(_)) => {}
+        Some(Ok(Message::Text(_))) => panic!("{reason} must not emit a stale text event"),
+        Some(Ok(other)) => panic!("{reason} returned unexpected websocket frame {other:?}"),
+    }
 }
 
 const JOB_PROGRESS_ARTIFACT_ID: &str = "22222222-2222-4222-8222-222222222222";

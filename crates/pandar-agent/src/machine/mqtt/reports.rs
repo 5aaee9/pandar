@@ -86,6 +86,7 @@ pub(crate) fn print_report_from_parsed_report(
     PrintReportProgress {
         serial: endpoint.serial.clone(),
         job_id: trimmed_string(print.task_id.as_deref()),
+        job_attr: bounded_u32(print.job_attr.as_ref(), 0, u32::MAX),
         print_error: print.print_error.as_ref().and_then(|value| value.state()),
         printer_job_id: print.job_id.clone(),
         artifact_id: subtask_id.clone(),

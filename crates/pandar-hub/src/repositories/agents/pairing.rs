@@ -48,6 +48,7 @@ impl AgentRepository {
             credential_hash: Set(Some(credential_hash)),
             credential_rotated_at: Set(Some(pandar_core::created_at_now())),
             credential_revoked_at: Set(None),
+            current_session_id: Set(None),
         }
         .insert(&tx)
         .await

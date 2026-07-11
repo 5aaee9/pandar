@@ -173,6 +173,14 @@ impl ControlPlane {
             kind: ControlPlaneKind::Nats,
         }
     }
+
+    #[cfg(test)]
+    pub(crate) fn for_tests(backend: Arc<dyn ControlPlaneBackend>) -> Self {
+        Self {
+            backend,
+            kind: ControlPlaneKind::InProcess,
+        }
+    }
 }
 
 #[cfg(test)]

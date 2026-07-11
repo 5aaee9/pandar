@@ -1,15 +1,16 @@
 use anyhow::Context;
 use pandar_core::{AgentId, JobId, TenantId};
-use sea_orm::{
-    ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, QueryFilter,
-    SqliteTransactionMode, TransactionOptions, TransactionTrait,
-};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
+#[cfg(test)]
+use sea_orm::{DatabaseTransaction, SqliteTransactionMode, TransactionOptions, TransactionTrait};
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     db::Database,
     repositories::{
-        JobWithArtifact, MaterialPatchOutcome, PrinterHms, RepositoryError, RepositoryResult,
-        printers::{PrinterLiveStatusPatch, update_live_status},
+        JobWithArtifact, MaterialPatchOutcome, PrinterHms, PrinterRepository,
+        PrinterWithLiveStatus, RepositoryError, RepositoryResult, begin_current_agent_transaction,
+        printers::{PrinterLiveStatusPatch, merge_live_report, persist_merged_live_status},
     },
 };
 
@@ -32,6 +33,7 @@ pub struct ApplyPrintReport {
     pub job_id: Option<JobId>,
     pub print_error: Option<u32>,
     pub printer_job_id: Option<String>,
+    pub job_attr: Option<u32>,
     pub artifact_id: Option<String>,
     pub subtask_id: Option<String>,
     pub gcode_file: Option<String>,
@@ -58,6 +60,9 @@ pub struct PrintReportDiagnostic {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppliedPrintReport {
+    pub printer_id: Option<String>,
+    pub printer: Option<PrinterWithLiveStatus>,
+    pub live_status_changed: bool,
     pub job: Option<JobWithArtifact>,
     pub material_outcome: MaterialPatchOutcome,
     pub changed: bool,
@@ -65,18 +70,41 @@ pub struct AppliedPrintReport {
     pub inserted_printer_events: bool,
 }
 
+#[cfg(test)]
 pub async fn apply_print_report(
     database: &Database,
     input: ApplyPrintReport,
 ) -> RepositoryResult<AppliedPrintReport> {
+    let tenant_id = input.tenant_id;
+    let received_at = hub_received_at()?;
     let tx = begin_print_report_transaction(database).await?;
-    let applied = apply_print_report_tx(&tx, input).await?;
+    let mut applied =
+        apply_print_report_tx(&tx, input, "repository-test-session", &received_at).await?;
     tx.commit()
         .await
         .context("failed to commit print report transaction")?;
+    reload_applied_printer(database, tenant_id, &mut applied).await?;
     Ok(applied)
 }
 
+pub async fn apply_current_print_report(
+    database: &Database,
+    session_id: &str,
+    input: ApplyPrintReport,
+) -> RepositoryResult<AppliedPrintReport> {
+    let tenant_id = input.tenant_id;
+    let received_at = hub_received_at()?;
+    let tx = begin_current_agent_transaction(database, input.tenant_id, input.agent_id, session_id)
+        .await?;
+    let mut applied = apply_print_report_tx(&tx, input, session_id, &received_at).await?;
+    tx.commit()
+        .await
+        .context("failed to commit current-session print report transaction")?;
+    reload_applied_printer(database, tenant_id, &mut applied).await?;
+    Ok(applied)
+}
+
+#[cfg(test)]
 async fn begin_print_report_transaction(
     database: &Database,
 ) -> RepositoryResult<DatabaseTransaction> {
@@ -95,12 +123,17 @@ async fn begin_print_report_transaction(
 async fn apply_print_report_tx<C>(
     transaction: &C,
     input: ApplyPrintReport,
+    session_id: &str,
+    received_at: &str,
 ) -> RepositoryResult<AppliedPrintReport>
 where
     C: ConnectionTrait,
 {
     let Some(printer) = printer_for_serial(transaction, &input).await? else {
         return Ok(AppliedPrintReport {
+            printer_id: None,
+            printer: None,
+            live_status_changed: false,
             job: None,
             material_outcome: MaterialPatchOutcome::Empty,
             changed: false,
@@ -108,14 +141,14 @@ where
             inserted_printer_events: false,
         });
     };
-    update_live_status(
-        transaction,
-        &printer.id,
-        PrinterLiveStatusPatch {
+    let merged = merge_live_report(
+        &printer.live_status,
+        &PrinterLiveStatusPatch {
             task_id: input.task_id.clone(),
             subtask_id: input.subtask_id.clone(),
             print_error: input.print_error,
             printer_job_id: input.printer_job_id.clone(),
+            job_attr: input.job_attr,
             progress_percent: input.percent,
             remaining_time_minutes: input.remaining_time_minutes,
             current_layer: input.current_layer,
@@ -126,8 +159,10 @@ where
             hms: input.hms.clone(),
             observed_at: input.observed_at.clone(),
         },
-    )
-    .await?;
+        session_id,
+        received_at,
+    );
+    persist_merged_live_status(transaction, &printer.id, &merged.state, &input.observed_at).await?;
     let material_outcome = crate::repositories::materials::upsert_from_patch_outcome_in_connection(
         transaction,
         crate::repositories::MaterialPatchInput {
@@ -143,6 +178,9 @@ where
     let Some(job) = job else {
         let inserted = insert_printer_events(transaction, &input, &printer).await?;
         return Ok(AppliedPrintReport {
+            printer_id: Some(printer.id.clone()),
+            printer: None,
+            live_status_changed: merged.live_status_changed,
             job: None,
             material_outcome,
             changed: false,
@@ -187,12 +225,35 @@ where
         false
     };
     Ok(AppliedPrintReport {
+        printer_id: Some(printer.id),
+        printer: None,
+        live_status_changed: merged.live_status_changed,
         job,
         material_outcome,
         changed: changed && wrote,
         inserted_job_events,
         inserted_printer_events: false,
     })
+}
+
+fn hub_received_at() -> RepositoryResult<String> {
+    OffsetDateTime::now_utc()
+        .format(&Rfc3339)
+        .context("failed to format print report Hub receive time")
+        .map_err(Into::into)
+}
+
+async fn reload_applied_printer(
+    database: &Database,
+    tenant_id: TenantId,
+    applied: &mut AppliedPrintReport,
+) -> RepositoryResult<()> {
+    if let Some(printer_id) = applied.printer_id.as_deref() {
+        applied.printer = PrinterRepository::new(database.clone())
+            .get_with_live_status_for_tenant(tenant_id, printer_id)
+            .await?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

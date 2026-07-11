@@ -177,6 +177,78 @@ fn absent_print_error_and_printer_job_id_remain_absent() {
 }
 
 #[test]
+fn job_attr_preserves_zero_nonzero_and_absence() {
+    let cases = [
+        (serde_json::json!({"print": {"job_attr": 0}}), Some(0)),
+        (serde_json::json!({"print": {"job_attr": 0x21}}), Some(0x21)),
+        (serde_json::json!({"print": {"mc_percent": 7}}), None),
+        (serde_json::json!({"print": {"job_attr": -1}}), None),
+        (serde_json::json!({"print": {"job_attr": "invalid"}}), None),
+    ];
+    for (report, expected) in cases {
+        let progress = print_report_from_report(&endpoint(), &report);
+        assert_eq!(progress.job_attr, expected);
+    }
+}
+
+#[test]
+fn invalid_job_attr_does_not_discard_other_valid_fields() {
+    let progress = print_report_from_report(
+        &endpoint(),
+        &serde_json::json!({"print": {"job_attr": "invalid", "mc_percent": 7}}),
+    );
+
+    assert_eq!(progress.job_attr, None);
+    assert_eq!(progress.percent, Some(7));
+}
+
+#[test]
+fn structured_job_attr_does_not_discard_valid_sibling_fields() {
+    for job_attr in [
+        serde_json::json!(true),
+        serde_json::json!([1, 2, 3]),
+        serde_json::json!({"unexpected": 1}),
+    ] {
+        let progress = print_report_from_report(
+            &endpoint(),
+            &serde_json::json!({
+                "print": {
+                    "job_attr": job_attr,
+                    "gcode_state": "RUNNING",
+                    "mc_percent": 37,
+                    "print_error": 0
+                }
+            }),
+        );
+
+        assert_eq!(
+            (
+                progress.job_attr,
+                progress.gcode_state.as_deref(),
+                progress.percent,
+                progress.print_error,
+            ),
+            (None, Some("RUNNING"), Some(37), Some(0))
+        );
+    }
+}
+
+#[test]
+fn job_attr_presence_round_trips_to_agent_report() {
+    let explicit_zero = print_job_report_event(&config(), progress_with_job_attr(Some(0)));
+    let absent = print_job_report_event(&config(), progress_with_job_attr(None));
+    let Some(agent_event::Event::PrintJobReport(explicit_zero)) = explicit_zero.event else {
+        panic!("expected print report");
+    };
+    let Some(agent_event::Event::PrintJobReport(absent)) = absent.event else {
+        panic!("expected print report");
+    };
+    assert!(explicit_zero.has_job_attr);
+    assert_eq!(explicit_zero.job_attr, 0);
+    assert!(!absent.has_job_attr);
+}
+
+#[test]
 fn null_printer_job_id_is_present_as_an_empty_string() {
     let progress =
         print_report_from_report(&endpoint(), &serde_json::json!({"print": {"job_id": null}}));
@@ -298,5 +370,28 @@ fn config() -> AgentConfig {
         agent_version: "9.8.7".to_owned(),
         printers: "[]".to_owned(),
         artifact_root: ".".into(),
+    }
+}
+
+fn progress_with_job_attr(job_attr: Option<u32>) -> PrintReportProgress {
+    PrintReportProgress {
+        serial: "01S00EXAMPLE".to_owned(),
+        job_id: None,
+        job_attr,
+        print_error: None,
+        printer_job_id: None,
+        artifact_id: None,
+        subtask_id: None,
+        gcode_state: None,
+        percent: None,
+        remaining_time_minutes: None,
+        current_layer: None,
+        total_layers: None,
+        gcode_file: None,
+        subtask_name: None,
+        hms: None,
+        diagnostics: Vec::new(),
+        observed_at: "2026-07-10T00:00:00Z".to_owned(),
+        printer_materials_json: String::new(),
     }
 }

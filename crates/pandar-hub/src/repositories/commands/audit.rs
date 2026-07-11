@@ -8,6 +8,7 @@ mod printer_operations;
 pub(super) use printer_operations::enqueue_printer_operation_with_audit;
 #[cfg(test)]
 pub(crate) use printer_operations::ownership_pause;
+pub use printer_operations::{PersistedLivePrinterOperation, WebPrintErrorRecovery};
 
 use crate::{
     db::Database,
@@ -299,7 +300,7 @@ fn audit_event(
     )
 }
 
-async fn get_command(
+pub(in crate::repositories::commands) async fn get_command(
     database: &Database,
     command_id: CommandId,
 ) -> RepositoryResult<Option<CommandRecord>> {

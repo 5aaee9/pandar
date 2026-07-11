@@ -37,7 +37,7 @@ pub async fn verify_agent_owner(
     Ok(())
 }
 
-pub async fn verify_agent_owner_on<C>(
+pub async fn lock_agent_owner_on<C>(
     connection: &C,
     tenant_id: TenantId,
     agent_id: AgentId,
@@ -45,16 +45,14 @@ pub async fn verify_agent_owner_on<C>(
 where
     C: ConnectionTrait,
 {
-    let persisted_tenant_id = agents::Entity::find_by_id(agent_id.to_string())
-        .one(connection)
-        .await
-        .context("failed to verify command agent ownership")?
-        .map(|agent| agent.tenant_id);
-
-    let Some(persisted_tenant_id) = persisted_tenant_id else {
-        return Err(RepositoryError::MissingAgent);
-    };
-    if persisted_tenant_id != tenant_id.to_string() {
+    let query = agents::Entity::find_by_id(agent_id.to_string());
+    let agent = match connection.get_database_backend() {
+        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(connection).await,
+        _ => query.one(connection).await,
+    }
+    .context("failed to lock command agent ownership")?
+    .ok_or(RepositoryError::MissingAgent)?;
+    if agent.tenant_id != tenant_id.to_string() {
         return Err(RepositoryError::CommandOwnershipMismatch);
     }
     Ok(())

@@ -19,6 +19,10 @@ use crate::{
     },
 };
 
+mod recovery;
+
+pub use recovery::{PersistedLivePrinterOperation, WebPrintErrorRecovery};
+
 impl CommandRepository {
     pub async fn create_printer_operation_sent_with_audit(
         &self,
@@ -86,10 +90,13 @@ pub(in crate::repositories::commands) async fn create_printer_operation_sent_wit
     let tx = begin_live_printer_operation_transaction(&connection)
         .await
         .context("failed to begin sent printer operation command audit transaction")?;
+    ownership::lock_agent_owner_on(&tx, tenant_id, expected_agent_id).await?;
     let printer =
         ownership::locked_printer_for_expected_agent(&tx, tenant_id, printer_id, expected_agent_id)
             .await?;
-    ownership::verify_agent_owner_on(&tx, tenant_id, expected_agent_id).await?;
+    if matches!(&operation, PrinterOperationKind::HandlePrintError { .. }) {
+        recovery::ensure_no_inflight_native_recovery(&tx, tenant_id, printer_id).await?;
+    }
     let command_id = persist_printer_operation_tx(
         &tx,
         tenant_id,

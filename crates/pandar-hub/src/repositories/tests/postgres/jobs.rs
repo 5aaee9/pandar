@@ -143,6 +143,7 @@ async fn postgres_print_report_reconciliation_when_configured() {
         job_id: Some(created.job.id),
         print_error: None,
         printer_job_id: None,
+        job_attr: None,
         artifact_id: None,
         subtask_id: None,
         gcode_file: Some("plate.3mf".to_string()),

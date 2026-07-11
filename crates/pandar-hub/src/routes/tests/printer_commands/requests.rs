@@ -10,6 +10,13 @@ struct DiscoverPrintersRequest<T> {
 struct EmptyRequest {}
 
 #[derive(Serialize)]
+struct WebPrintErrorRequest<'a> {
+    action: &'static str,
+    error_action: &'a str,
+    error_generation: u64,
+}
+
+#[derive(Serialize)]
 struct DiagnosePrinterRequest<'a> {
     serial_number: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -176,6 +183,14 @@ pub(super) fn printer_control_body(request: PrinterControlRequest<'_>) -> Option
 
 pub(super) fn printer_control_value(request: PrinterControlRequest<'_>) -> Value {
     value(request)
+}
+
+pub(super) fn web_print_error_body(error_action: &str, error_generation: u64) -> Option<Value> {
+    Some(value(WebPrintErrorRequest {
+        action: "handle_print_error",
+        error_action,
+        error_generation,
+    }))
 }
 
 pub(super) fn printer_discovery_result_json() -> String {

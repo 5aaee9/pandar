@@ -19,6 +19,8 @@ pub(super) struct PrintReportSection {
     pub(super) task_id: Option<String>,
     #[serde(default, deserialize_with = "deserialize_printer_job_id")]
     pub(super) job_id: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_job_attr")]
+    pub(super) job_attr: Option<NumericValue>,
     #[serde(default)]
     pub(super) subtask_id: Option<String>,
     #[serde(default)]
@@ -379,4 +381,18 @@ where
 {
     let value = ReportJson::deserialize(deserializer)?;
     Ok(Some(studio_printer_job_id(&value)))
+}
+
+fn deserialize_job_attr<'de, D>(deserializer: D) -> Result<Option<NumericValue>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = ReportJson::deserialize(deserializer)?;
+    Ok(match value {
+        ReportJson::Number(value) => Some(NumericValue::Number(value)),
+        ReportJson::String(value) => Some(NumericValue::String(value)),
+        ReportJson::Object(_) | ReportJson::Array(_) | ReportJson::Bool(_) | ReportJson::Null => {
+            None
+        }
+    })
 }

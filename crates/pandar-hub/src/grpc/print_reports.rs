@@ -10,12 +10,14 @@ use crate::{
     protocol::agent::v1::PrintJobReport,
     repositories::{ApplyPrintReport, MaterialPatchOutcome, PrintReportDiagnostic, PrinterHms},
     routes::jobs::JobResponse,
+    sessions::SessionToken,
 };
 
 pub async fn handle_print_report(
     state: &AppState,
     tenant_id: TenantId,
     agent_id: AgentId,
+    token: SessionToken,
     report: PrintJobReport,
 ) -> Result<(), Status> {
     let input = match apply_input(tenant_id, agent_id, report) {
@@ -29,13 +31,25 @@ pub async fn handle_print_report(
     };
     let report_serial = input.serial.clone();
     let has_material_patch = !input.printer_materials_json.trim().is_empty();
-    let applied = match state.jobs().apply_print_report(input).await {
+    let _lease = state
+        .sessions()
+        .transition_lease_for_session(agent_id, token)
+        .await;
+    if !state.sessions().is_current(agent_id, token).await {
+        return Ok(());
+    }
+    let applied = match state
+        .jobs()
+        .apply_current_print_report(&token.persisted_id(), input)
+        .await
+    {
         Ok(applied) => {
             state
                 .metrics()
                 .record_print_report(PrintReportMetric::Accepted);
             applied
         }
+        Err(crate::repositories::RepositoryError::AgentSessionNotCurrent) => return Ok(()),
         Err(err) => {
             state
                 .metrics()
@@ -55,32 +69,16 @@ pub async fn handle_print_report(
             )
             .await;
     }
-    match applied.material_outcome {
-        MaterialPatchOutcome::Changed(materials) => {
-            let Some(printer) = state
-                .printers()
-                .get_for_tenant(tenant_id, &materials.printer_id)
-                .await
-                .map_err(repository_status)?
-            else {
-                return Ok(());
-            };
-            state
-                .publish_printer_event(
-                    tenant_id,
-                    PrinterEvent::PrinterSnapshot {
-                        printer: Box::new(printer_event_printer(printer, Some(materials))),
-                    },
-                )
-                .await;
-        }
+    let material_changed = matches!(&applied.material_outcome, MaterialPatchOutcome::Changed(_));
+    match &applied.material_outcome {
+        MaterialPatchOutcome::Changed(_) => {}
         MaterialPatchOutcome::Invalid { error } => {
             tracing::warn!(
                 %tenant_id,
                 %agent_id,
                 serial = %report_serial,
                 reason = "invalid_patch",
-                error = %crate::redaction::redact_secrets(&error),
+                error = %crate::redaction::redact_secrets(error),
                 "ignored print report material patch"
             );
         }
@@ -105,6 +103,23 @@ pub async fn handle_print_report(
         MaterialPatchOutcome::Empty
         | MaterialPatchOutcome::Older
         | MaterialPatchOutcome::Unchanged(_) => {}
+    }
+    if (applied.live_status_changed || material_changed)
+        && let Some(printer) = applied.printer
+    {
+        let materials = state
+            .materials()
+            .latest_for_printer(tenant_id, &printer.printer.id)
+            .await
+            .map_err(repository_status)?;
+        state
+            .publish_printer_event(
+                tenant_id,
+                PrinterEvent::PrinterSnapshot {
+                    printer: Box::new(printer_event_printer(printer, materials)),
+                },
+            )
+            .await;
     }
     Ok(())
 }
@@ -137,6 +152,7 @@ fn apply_input(
             .then_some(report.print_error)
             .filter(|value| *value <= i32::MAX as u32),
         printer_job_id: report.has_printer_job_id.then_some(report.printer_job_id),
+        job_attr: report.has_job_attr.then_some(report.job_attr),
         artifact_id,
         subtask_id: trim_optional(report.subtask_id),
         gcode_file: trim_optional(report.gcode_file),

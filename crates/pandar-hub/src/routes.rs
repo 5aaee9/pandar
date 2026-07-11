@@ -27,7 +27,7 @@ mod join_links;
 mod onboarding;
 mod plugin;
 mod printer_events;
-mod printer_operations;
+pub(crate) mod printer_operations;
 mod printers;
 mod provisioning;
 mod status;

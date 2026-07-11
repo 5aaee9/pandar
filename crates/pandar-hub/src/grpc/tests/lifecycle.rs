@@ -30,6 +30,112 @@ async fn replacement_session_survives_old_stream_shutdown() {
         state.sessions().get(agent_id).await.unwrap().token,
         new_token
     );
+    let persisted = persisted_agent(&state, agent_id).await;
+    assert_eq!(persisted.status, AgentStatus::Online.as_str());
+    assert_eq!(persisted.current_session_id, Some(new_token.persisted_id()));
+}
+
+#[tokio::test]
+async fn old_disconnect_cannot_clear_replacement_session() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let old_token = register_test_session(&state, tenant_id, agent_id).await;
+    let replacement = register_test_session(&state, tenant_id, agent_id).await;
+
+    assert!(
+        disconnect_session(&state, tenant_id, agent_id, old_token)
+            .await
+            .is_none()
+    );
+
+    assert_eq!(
+        state.sessions().get(agent_id).await.unwrap().token,
+        replacement
+    );
+    let persisted = persisted_agent(&state, agent_id).await;
+    assert_eq!(persisted.status, AgentStatus::Online.as_str());
+    assert_eq!(
+        persisted.current_session_id,
+        Some(replacement.persisted_id())
+    );
+}
+
+#[tokio::test]
+async fn cross_process_disconnect_removes_local_stale_session_but_preserves_persisted_replacement()
+{
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let local_token = register_test_session(&state, tenant_id, agent_id).await;
+    let remote_token = SessionToken::new();
+    state
+        .agents()
+        .claim_online_session(
+            tenant_id,
+            agent_id,
+            &remote_token.persisted_id(),
+            "remote",
+            "2026-07-10T00:01:00Z",
+        )
+        .await
+        .unwrap();
+
+    let removed = disconnect_session(&state, tenant_id, agent_id, local_token).await;
+
+    assert_eq!(removed.unwrap().token, local_token);
+    assert!(state.sessions().get(agent_id).await.is_none());
+    let persisted = persisted_agent(&state, agent_id).await;
+    assert_eq!(persisted.status, AgentStatus::Online.as_str());
+    assert_eq!(
+        persisted.current_session_id,
+        Some(remote_token.persisted_id())
+    );
+}
+
+#[tokio::test]
+async fn current_disconnect_clears_exact_persisted_session() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let token = register_test_session(&state, tenant_id, agent_id).await;
+
+    let removed = disconnect_session(&state, tenant_id, agent_id, token).await;
+
+    assert_eq!(removed.unwrap().token, token);
+    assert!(state.sessions().get(agent_id).await.is_none());
+    let persisted = persisted_agent(&state, agent_id).await;
+    assert_eq!(persisted.status, AgentStatus::Offline.as_str());
+    assert_eq!(persisted.current_session_id, None);
+}
+
+#[tokio::test]
+async fn concurrent_registrations_serialize_persisted_claim_and_registry_install() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let token_a = SessionToken::new();
+    let token_b = SessionToken::new();
+    let mut paused = crate::sessions::transition_pause::install_after(token_a);
+
+    let state_a = state.clone();
+    let registration_a = tokio::spawn(async move {
+        register_test_session_with_token(&state_a, tenant_id, agent_id, token_a).await
+    });
+    paused.wait_until_reached().await;
+
+    let state_b = state.clone();
+    let mut waiting = crate::sessions::transition_pause::observe_waiting(token_b);
+    let registration_b = tokio::spawn(async move {
+        register_test_session_with_token(&state_b, tenant_id, agent_id, token_b).await
+    });
+    waiting.wait_until_reached().await;
+    assert!(!registration_b.is_finished());
+
+    paused.resume();
+    registration_a.await.unwrap();
+    registration_b.await.unwrap();
+
+    assert_eq!(state.sessions().get(agent_id).await.unwrap().token, token_b);
+    let persisted = persisted_agent(&state, agent_id).await;
+    assert_eq!(persisted.current_session_id, Some(token_b.persisted_id()));
+    assert_eq!(persisted.status, AgentStatus::Online.as_str());
 }
 
 #[tokio::test]
@@ -99,6 +205,87 @@ async fn old_stream_heartbeat_does_not_touch_replacement_session() {
     let current = state.sessions().get(agent_id).await.unwrap();
     assert_eq!(current.token, replacement.token);
     assert_eq!(current.last_heartbeat_at, replacement.last_heartbeat_at);
+}
+
+#[tokio::test]
+async fn replacement_session_blocks_old_heartbeat_commit() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let (_old_stream, _old_sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+    let old_token = state.sessions().get(agent_id).await.unwrap().token;
+    let mut paused = crate::sessions::transition_pause::install_before(old_token);
+
+    let old_state = state.clone();
+    let old_heartbeat = tokio::spawn(async move {
+        handle_event(
+            &old_state,
+            tenant_id,
+            agent_id,
+            old_token,
+            heartbeat_event(tenant_id, agent_id, "2026-07-10T00:10:00Z"),
+        )
+        .await
+    });
+    paused.wait_until_reached().await;
+
+    let replacement = register_test_session(&state, tenant_id, agent_id).await;
+    paused.resume();
+    old_heartbeat.await.unwrap().unwrap();
+
+    let persisted = persisted_agent(&state, agent_id).await;
+    assert_eq!(
+        persisted.current_session_id,
+        Some(replacement.persisted_id())
+    );
+    assert_eq!(
+        persisted.last_seen_at.as_deref(),
+        Some("2026-07-10T00:00:00Z")
+    );
+    assert_eq!(persisted.status, AgentStatus::Online.as_str());
+    let current = state.sessions().get(agent_id).await.unwrap();
+    assert_eq!(current.token, replacement);
+    assert_eq!(current.last_heartbeat_at, "2026-07-10T00:00:00Z");
+}
+
+#[tokio::test]
+async fn stale_expiry_cannot_clear_replacement_session() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let (_old_stream, _old_sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+    let old_token = state.sessions().get(agent_id).await.unwrap().token;
+    let mut paused = crate::sessions::transition_pause::install_before(old_token);
+
+    let expiry_state = state.clone();
+    let expiry = tokio::spawn(async move {
+        expiry_state
+            .sessions()
+            .expire_stale(
+                "2999-01-01T00:00:00Z",
+                std::time::Duration::ZERO,
+                expiry_state.agents(),
+            )
+            .await
+    });
+    paused.wait_until_reached().await;
+
+    let replacement = register_test_session(&state, tenant_id, agent_id).await;
+    paused.resume();
+    assert!(expiry.await.unwrap().unwrap().is_empty());
+
+    let persisted = persisted_agent(&state, agent_id).await;
+    assert_eq!(
+        persisted.current_session_id,
+        Some(replacement.persisted_id())
+    );
+    assert_eq!(persisted.status, AgentStatus::Online.as_str());
+    assert_eq!(
+        state.sessions().get(agent_id).await.unwrap().token,
+        replacement
+    );
 }
 
 #[tokio::test]

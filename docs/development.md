@@ -124,6 +124,16 @@ Phase 15 browser-safe live runtime updates:
 - The dashboard merges live printer snapshots and job progress without refresh, retries WebSocket connections after 1s, 2s, 5s, and 10s, and marks live status unavailable after 3 failed attempts while continuing to retry.
 - The dispatch form calls `POST /api/tenants/{tenantId}/artifact-metadata-preview` after a valid artifact is selected. Preview absence or failure does not disable dispatch. Job history and recovery rows display stored slicer metadata summaries returned by the hub.
 
+### Web print monitor and build-plate recovery
+
+The device view renders task/name, percentage, current/total layer, remaining time, and HMS diagnostics from the enriched printer snapshot. Its live path is socket-first, but the WebSocket is future-only: REST supplies the initial baseline and every reconnect/repair baseline. While the page scheduler is active, repairs run on a serialized 30-second start-to-start cadence. Each baseline has a hard 10-second full-body deadline that includes reading, decoding, and applying the response; events buffered during the fetch replay only when their revision is newer. `visibilitychange` to visible and `pageshow` trigger an immediate serialized repair. Failure clears enriched task/recovery state and marks the channel unavailable rather than presenting stale recovery controls. No wall-clock repair bound applies while the browser is suspended, timers are throttled, or the main thread is stalled.
+
+Build-plate mismatch actions use the native model/action catalog and guards. The browser submits only the action and server-issued occurrence generation; Hub transactionally revalidates generation, error marker, task state, model/catalog support, current Agent session, and capability. Web and Studio plugin native recovery share one printer-level single-flight. For Web recovery, Agent sends sequence ID `0` only on a fresh clean MQTT connection and waits for the matching QoS1 PUBACK. That PUBACK confirms transport only, not printer acceptance or physical recovery, so the mismatch stays visible until later printer telemetry clears it.
+
+Recovery remains limited to one active Hub process. NATS fanout and HTTP/gRPC session affinity do not provide the process-local live-command ownership and pending-dispatch cleanup needed for multi-Hub recovery.
+
+Deploy in this exact order: database migration, dual-capability Agents, all Hubs, confirmation that enriched revisions and the target Agent capability are active, then Web. Roll back by first disabling the Web/server recovery action, then draining every recovery command to a terminal state with no process-local pending dispatch, then rolling back Hub, and finally Agent if needed. Leave the additive database columns in place.
+
 ## Bambu Studio Network Plugin
 
 `crates/pandar-network-plugin` builds as a dynamic-library replacement scaffold for Bambu Studio's network plugin ABI. It uses `reference/open-bamboo-networking` for ABI coverage and `reference/BambuStudio` for caller behavior.

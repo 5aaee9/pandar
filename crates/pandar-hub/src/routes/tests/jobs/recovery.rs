@@ -460,6 +460,7 @@ fn report_input(
         job_id,
         print_error: None,
         printer_job_id: None,
+        job_attr: None,
         artifact_id,
         subtask_id: None,
         gcode_file: None,

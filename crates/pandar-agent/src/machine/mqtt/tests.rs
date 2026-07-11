@@ -14,6 +14,7 @@ use crate::{
 mod fixtures;
 mod hms;
 mod print_error;
+mod recovery;
 mod snapshot;
 mod tls;
 
@@ -1002,6 +1003,7 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
     let progress = PrintReportProgress {
         serial: "01S00EXAMPLE".to_owned(),
         job_id: Some("job-123".to_owned()),
+        job_attr: None,
         print_error: None,
         printer_job_id: None,
         artifact_id: None,

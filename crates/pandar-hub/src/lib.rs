@@ -332,6 +332,7 @@ impl AppState {
         {
             self.metrics
                 .record_control_plane(ControlPlaneMetric::PublishFailed);
+            self.printer_events.invalidate_epoch();
             tracing::error!(error = %format!("{err:#}"), "failed to publish printer event control message");
         } else {
             self.metrics

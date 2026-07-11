@@ -18,6 +18,7 @@ pub use types::{
     RefreshPrinterMaterialsPayload,
 };
 
+pub use audit::{PersistedLivePrinterOperation, WebPrintErrorRecovery};
 pub use operations::{
     PrintErrorAction, PrinterAxis, PrinterAxisMovement, PrinterOperationKind,
     PrinterOperationPayload, operation_audit_metadata, validate_printer_operation,

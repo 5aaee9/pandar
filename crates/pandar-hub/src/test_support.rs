@@ -75,6 +75,14 @@ impl AppState {
         self
     }
 
+    pub(crate) fn with_printer_events_for_tests(
+        mut self,
+        printer_events: crate::printer_events::PrinterEventHub,
+    ) -> Self {
+        self.printer_events = printer_events;
+        self
+    }
+
     pub(crate) fn with_database_backend_for_tests(mut self, backend: db::DatabaseBackend) -> Self {
         self.database_backend_override = Some(backend);
         self

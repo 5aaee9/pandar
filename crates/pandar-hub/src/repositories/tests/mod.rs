@@ -1,3 +1,4 @@
+mod agent_sessions;
 mod auth;
 mod cleanup;
 mod command_results;

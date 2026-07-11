@@ -105,6 +105,7 @@ pub(crate) struct BambuMqttCommandPayload {
 pub struct PrintReportProgress {
     pub serial: String,
     pub job_id: Option<String>,
+    pub job_attr: Option<u32>,
     pub print_error: Option<u32>,
     pub printer_job_id: Option<String>,
     pub artifact_id: Option<String>,

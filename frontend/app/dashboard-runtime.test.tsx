@@ -1,8 +1,9 @@
 import { NextIntlClientProvider } from "next-intl";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
+import zh from "../messages/zh.json";
 import { DashboardRuntime } from "./dashboard-runtime";
 import type { AuthMetadata, Tenant } from "./dashboard-types";
 import type { DashboardView } from "./dashboard-shell";
@@ -49,10 +50,14 @@ function renderRuntime(
     actionStatus?: string;
     selectedCommandId?: string;
     tenants?: Tenant[];
+    locale?: "en" | "zh";
   } = {},
 ) {
   return render(
-    <NextIntlClientProvider locale="en" messages={en}>
+    <NextIntlClientProvider
+      locale={options.locale ?? "en"}
+      messages={options.locale === "zh" ? zh : en}
+    >
       <DashboardRuntime
         apiUrl="http://localhost:8080"
         view={options.view ?? "devices"}
@@ -87,7 +92,15 @@ describe("DashboardRuntime live connection", () => {
 
   it("connects directly to printer events when hub auth is disabled", async () => {
     const urls: string[] = [];
-    vi.stubGlobal("fetch", vi.fn());
+    let socket: { onopen: (() => void) | null } | null = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ printers: [] }), {
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
     vi.stubGlobal(
       "WebSocket",
       class {
@@ -95,6 +108,7 @@ describe("DashboardRuntime live connection", () => {
 
         constructor(url: string) {
           urls.push(url);
+          socket = this;
         }
 
         close() {}
@@ -109,6 +123,18 @@ describe("DashboardRuntime live connection", () => {
       ]);
     });
     expect(fetch).not.toHaveBeenCalled();
+
+    act(() => socket?.onopen?.());
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/tenants/t1/printers",
+        expect.objectContaining({
+          cache: "no-store",
+          signal: expect.any(AbortSignal),
+        }),
+      ),
+    );
   });
 
   it("preserves action status when switching tenants from jobs", () => {
@@ -134,7 +160,11 @@ describe("DashboardRuntime live connection", () => {
   });
 
   it("shows a toast for printer operation command results", async () => {
-    let socket: { onmessage: ((message: { data: string }) => void) | null } | null = null;
+    const socket = {
+      current: null as {
+        onmessage: ((message: { data: string }) => void) | null;
+      } | null,
+    };
     vi.stubGlobal("fetch", vi.fn());
     vi.stubGlobal(
       "WebSocket",
@@ -143,7 +173,7 @@ describe("DashboardRuntime live connection", () => {
         onmessage: ((message: { data: string }) => void) | null = null;
 
         constructor() {
-          socket = this;
+          socket.current = this;
         }
 
         close() {}
@@ -152,8 +182,8 @@ describe("DashboardRuntime live connection", () => {
 
     renderRuntime();
 
-    await waitFor(() => expect(socket).not.toBeNull());
-    socket?.onmessage?.({
+    await waitFor(() => expect(socket.current).not.toBeNull());
+    socket.current?.onmessage?.({
       data: JSON.stringify({
         type: "command_result",
         command: {
@@ -183,4 +213,67 @@ describe("DashboardRuntime live connection", () => {
       }),
     );
   });
+
+  it.each([
+    ["en", "Recovery command sent; waiting for printer status confirmation"],
+    ["zh", "恢复指令已发送，等待打印机状态确认"],
+  ] as const)(
+    "shows the dedicated sequence-zero recovery toast in %s",
+    async (locale, message) => {
+      const socket = {
+        current: null as {
+          onmessage: ((message: { data: string }) => void) | null;
+        } | null,
+      };
+      vi.stubGlobal("fetch", vi.fn());
+      vi.stubGlobal(
+        "WebSocket",
+        class {
+          onmessage: ((message: { data: string }) => void) | null = null;
+
+          constructor() {
+            socket.current = this;
+          }
+
+          close() {}
+        },
+      );
+
+      renderRuntime(noAuth, { locale });
+      await waitFor(() => expect(socket.current).not.toBeNull());
+      act(() => {
+        socket.current?.onmessage?.({
+          data: JSON.stringify({
+            type: "command_result",
+            command: {
+              id: "cmd-recovery",
+              tenant_id: "t1",
+              agent_id: "a1",
+              printer_id: "p1",
+              kind: "printer_operation",
+              status: "succeeded",
+              payload_json: JSON.stringify({
+                printer_id: "p1",
+                serial_number: "20P123",
+                operation: {
+                  type: "handle_print_error",
+                  error_action: "resume",
+                  print_error: 83_918_929,
+                  printer_job_id: "native-job",
+                  sequence_id: 0,
+                },
+              }),
+              error: null,
+              result_json: JSON.stringify({ sequence_id: "0" }),
+              created_at: "2026-07-10T00:00:00Z",
+              updated_at: "2026-07-10T00:00:01Z",
+            },
+          }),
+        });
+      });
+
+      await waitFor(() => expect(toast.success).toHaveBeenCalledWith(message));
+      expect(toast.success).not.toHaveBeenCalledWith("Printer control completed", expect.anything());
+    },
+  );
 });

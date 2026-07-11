@@ -1,12 +1,13 @@
 use anyhow::Context;
 use pandar_core::{JobId, TenantId};
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     entities::{jobs, printers},
     repositories::{
-        JobWithArtifact, RepositoryResult, jobs::hydration::hydrate_jobs_with_artifacts,
+        JobWithArtifact, PrinterLiveStatus, RepositoryResult,
+        jobs::hydration::hydrate_jobs_with_artifacts, printers::live_status_from_model,
     },
 };
 
@@ -15,6 +16,7 @@ use super::ApplyPrintReport;
 #[derive(Debug, Clone)]
 pub(super) struct PrinterMatch {
     pub(super) id: String,
+    pub(super) live_status: PrinterLiveStatus,
 }
 
 pub(super) async fn printer_for_serial<C>(
@@ -24,15 +26,23 @@ pub(super) async fn printer_for_serial<C>(
 where
     C: ConnectionTrait,
 {
-    printers::Entity::find()
+    let query = printers::Entity::find()
         .filter(printers::Column::TenantId.eq(input.tenant_id.to_string()))
         .filter(printers::Column::AgentId.eq(input.agent_id.to_string()))
-        .filter(printers::Column::SerialNumber.eq(&input.serial))
-        .one(connection)
-        .await
-        .context("failed to resolve print report printer")
-        .map(|printer| printer.map(|printer| PrinterMatch { id: printer.id }))
-        .map_err(Into::into)
+        .filter(printers::Column::SerialNumber.eq(&input.serial));
+    match connection.get_database_backend() {
+        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(connection).await,
+        _ => query.one(connection).await,
+    }
+    .context("failed to resolve print report printer")?
+    .map(live_status_from_model)
+    .transpose()
+    .map(|printer| {
+        printer.map(|printer| PrinterMatch {
+            id: printer.printer.id,
+            live_status: printer.live_status,
+        })
+    })
 }
 
 pub(super) async fn correlate_job<C>(

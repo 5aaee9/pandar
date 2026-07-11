@@ -11,11 +11,16 @@ use crate::{
         MaterialRefreshResult, PrintProjectDispatchResult, PrinterOperation,
         PrinterOperationDispatchResult, PrinterRefreshResult,
         diagnostics::{redact_access_code, redact_known_access_codes},
-        mqtt::{RumqttcBambuMqttTransport, forward_print_reports, refresh_printer},
+        mqtt::{
+            RumqttcBambuMqttTransport, dispatch_sequence_zero_recovery, forward_print_reports,
+            refresh_printer,
+        },
         transfer::BambuMachineFileTransfer,
     },
     protocol::agent::v1::{AgentEvent, PrintProjectFile},
 };
+
+use super::operations::mqtt_command_for_printer_operation;
 
 pub struct RuntimeBambuMachineGateway {
     inner: tokio::sync::Mutex<ConfiguredBambuMachineGateway<RumqttcBambuMqttTransport>>,
@@ -215,6 +220,23 @@ impl BambuMachineGateway for RuntimeBambuMachineGateway {
         serial_number: &str,
         operation: PrinterOperation,
     ) -> anyhow::Result<PrinterOperationDispatchResult> {
+        if matches!(
+            &operation,
+            PrinterOperation::HandlePrintError { sequence_id: 0, .. }
+        ) {
+            let endpoint = {
+                self.inner
+                    .lock()
+                    .await
+                    .endpoint(serial_number)
+                    .with_context(|| {
+                        format!("no configured Bambu printer matches serial {serial_number}")
+                    })?
+            };
+            let command = mqtt_command_for_printer_operation(operation)?;
+            return dispatch_sequence_zero_recovery(&endpoint, command).await;
+        }
+
         self.inner
             .lock()
             .await

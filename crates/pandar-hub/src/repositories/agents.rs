@@ -6,11 +6,15 @@ use sea_orm::{
 };
 use serde::Serialize;
 
+mod connections;
 mod pairing;
 mod rows;
 
 use rows::{agent_credential_from_model, agent_from_model};
 
+pub use connections::begin_current_agent_transaction;
+#[cfg(test)]
+pub(crate) use connections::current_transaction_pause;
 pub use pairing::AGENT_CREDENTIAL_PREFIX;
 
 use crate::{
@@ -198,45 +202,6 @@ impl AgentRepository {
             .collect()
     }
 
-    pub async fn update_connection(
-        &self,
-        agent_id: AgentId,
-        status: AgentStatus,
-        version: Option<&str>,
-        last_seen_at: &str,
-    ) -> RepositoryResult<Agent> {
-        let connection = self.database.sea_orm_connection();
-        let Some(agent) = agents::Entity::find_by_id(agent_id.to_string())
-            .one(&connection)
-            .await
-            .context("failed to get agent before connection update")?
-        else {
-            return Err(RepositoryError::MissingAgent);
-        };
-
-        let mut active: agents::ActiveModel = agent.into();
-        active.status = Set(status.as_str().to_owned());
-        if let Some(version) = version {
-            active.version = Set(Some(version.to_owned()));
-        }
-        active.last_seen_at = Set(Some(last_seen_at.to_owned()));
-        active
-            .update(&connection)
-            .await
-            .context("failed to update agent connection")
-            .map_err(Into::into)
-            .and_then(agent_from_model)
-    }
-
-    pub async fn mark_offline(
-        &self,
-        agent_id: AgentId,
-        last_seen_at: &str,
-    ) -> RepositoryResult<Agent> {
-        self.update_connection(agent_id, AgentStatus::Offline, None, last_seen_at)
-            .await
-    }
-
     pub async fn count(&self) -> RepositoryResult<i64> {
         let count = agents::Entity::find()
             .count(&self.database.sea_orm_connection())
@@ -363,6 +328,7 @@ where
         credential_hash: Set(None),
         credential_rotated_at: Set(None),
         credential_revoked_at: Set(None),
+        current_session_id: Set(None),
     }
     .insert(connection)
     .await

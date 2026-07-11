@@ -1,5 +1,9 @@
 mod live;
+pub(crate) mod plate_mismatch;
 mod request_field;
+mod web_recovery;
+
+pub(super) use web_recovery::dispatch_tenant_printer_operation;
 
 use pandar_core::{CommandRecord, TenantId};
 use request_field::RequestField;
@@ -50,6 +54,8 @@ pub(super) struct PrinterOperationRequest {
     printer_job_id: RequestField<String>,
     #[serde(default)]
     sequence_id: RequestField<u64>,
+    #[serde(default)]
+    error_generation: RequestField<u64>,
 }
 
 pub(super) enum PluginPrinterOperation {
@@ -57,13 +63,36 @@ pub(super) enum PluginPrinterOperation {
     Live(PrinterOperationKind),
 }
 
+pub(super) enum TenantPrinterOperation {
+    Queued(PrinterOperationKind),
+    HandlePrintError {
+        error_action: PrintErrorAction,
+        error_generation: u64,
+    },
+}
+
 impl PrinterOperationRequest {
-    pub(super) fn into_operation(self) -> Result<PrinterOperationKind, ApiError> {
+    pub(super) fn into_tenant_operation(self) -> Result<TenantPrinterOperation, ApiError> {
+        if self.action == "handle_print_error" {
+            if !self.no_operation_fields() || !self.no_plugin_transport_fields() {
+                return Err(invalid_printer_control());
+            }
+            let (Some(error_action), Some(error_generation)) = (
+                self.error_action.into_option(),
+                self.error_generation.into_option(),
+            ) else {
+                return Err(invalid_printer_control());
+            };
+            return Ok(TenantPrinterOperation::HandlePrintError {
+                error_action,
+                error_generation,
+            });
+        }
         if !self.no_native_fields() {
             return Err(invalid_printer_control());
         }
 
-        match self.action.as_str() {
+        let operation: Result<PrinterOperationKind, ApiError> = match self.action.as_str() {
             "pause" if self.no_operation_fields() => Ok(PrinterOperationKind::Pause),
             "resume" if self.no_operation_fields() => Ok(PrinterOperationKind::Resume),
             "stop" if self.no_operation_fields() => Ok(PrinterOperationKind::Stop),
@@ -231,15 +260,26 @@ impl PrinterOperationRequest {
                     extruder_id: self.extruder_id.into_option(),
                 })
             }
-            _ => Err(invalid_printer_control()),
-        }
+            _ => return Err(invalid_printer_control()),
+        };
+        let operation = operation?;
+        Ok(TenantPrinterOperation::Queued(operation))
     }
 
     pub(super) fn into_plugin_operation(self) -> Result<PluginPrinterOperation, ApiError> {
         if self.action != "handle_print_error" {
-            return self.into_operation().map(PluginPrinterOperation::Queued);
+            return self
+                .into_tenant_operation()
+                .and_then(|operation| match operation {
+                    TenantPrinterOperation::Queued(operation) => {
+                        Ok(PluginPrinterOperation::Queued(operation))
+                    }
+                    TenantPrinterOperation::HandlePrintError { .. } => {
+                        Err(invalid_printer_control())
+                    }
+                });
         }
-        if !self.no_operation_fields() {
+        if !self.no_operation_fields() || !self.error_generation.is_missing() {
             return Err(invalid_printer_control());
         }
         let (Some(error_action), Some(print_error), Some(printer_job_id), Some(sequence_id)) = (
@@ -250,6 +290,9 @@ impl PrinterOperationRequest {
         ) else {
             return Err(invalid_printer_control());
         };
+        if sequence_id == 0 {
+            return Err(invalid_printer_control());
+        }
         let operation = PrinterOperationKind::HandlePrintError {
             error_action,
             print_error,
@@ -287,6 +330,13 @@ impl PrinterOperationRequest {
     fn no_native_fields(&self) -> bool {
         self.error_action.is_missing()
             && self.print_error.is_missing()
+            && self.printer_job_id.is_missing()
+            && self.sequence_id.is_missing()
+            && self.error_generation.is_missing()
+    }
+
+    fn no_plugin_transport_fields(&self) -> bool {
+        self.print_error.is_missing()
             && self.printer_job_id.is_missing()
             && self.sequence_id.is_missing()
     }

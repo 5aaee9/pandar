@@ -102,6 +102,77 @@ const printerWithMaterials: Printer = {
 };
 
 describe("PrinterInventory", () => {
+  it("renders enriched native print details in the existing card summary", () => {
+    const livePrinter: Printer = {
+      ...printerWithMaterials,
+      status: "RUNNING",
+      print: {
+        task_generation: 3,
+        error_generation: 0,
+        hms: [],
+        job_state: 0,
+        gcode_state: "RUNNING",
+        task_id: "task-1",
+        subtask_id: "subtask-1",
+        subtask_name: "Live Benchy",
+        gcode_file: "/cache/plate_1.gcode.3mf",
+        progress_percent: 37,
+        remaining_time_minutes: 65,
+        current_layer: 12,
+        total_layers: 100,
+        print_error: 0,
+        printer_job_id: "native-job",
+      },
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[livePrinter]} agents={[agent]} />,
+    );
+
+    const status = screen.getByTestId("printer-print-status");
+    expect(status).toHaveTextContent("Printing");
+    expect(status).toHaveTextContent("Live Benchy");
+    expect(status).toHaveTextContent("37%");
+    expect(status).toHaveTextContent("Layers 12/100");
+    expect(status).toHaveTextContent("Remaining 1h 5m");
+    expect(screen.getByRole("article", { name: "Office A1" })).toHaveTextContent("AMS-A");
+  });
+
+  it("renders a persistent inline mismatch warning on the affected card", () => {
+    const mismatchPrinter: Printer = {
+      ...printer,
+      status: "RUNNING",
+      serial_number: "20P123",
+      print: {
+        task_generation: 1,
+        error_generation: 9,
+        hms: [],
+        job_state: 0,
+        gcode_state: "PAUSE",
+        task_id: null,
+        subtask_id: null,
+        subtask_name: "Benchy",
+        gcode_file: null,
+        progress_percent: 42,
+        remaining_time_minutes: 10,
+        current_layer: 12,
+        total_layers: 100,
+        print_error: 83_918_929,
+        printer_job_id: "native-job",
+      },
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[mismatchPrinter]} agents={[agent]} />,
+    );
+
+    const card = screen.getByRole("article", { name: "Office A1" });
+    expect(within(card).getByText("Build plate mismatch")).toBeVisible();
+    expect(
+      within(card).getByRole("button", { name: "Review build plate mismatch for Office A1" }),
+    ).toBeVisible();
+  });
+
   it("renders inventory content without the tenant subtitle or reported count", () => {
     renderWithMessages(
       <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} />,

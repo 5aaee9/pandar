@@ -3,6 +3,7 @@ use std::time::Duration;
 mod commands;
 mod fake;
 mod hms;
+mod recovery;
 mod report_payload;
 mod reports;
 mod signing;
@@ -29,6 +30,7 @@ pub use commands::{
 #[cfg(test)]
 pub(crate) use fake::FakeMqttTransport;
 pub use hms::MachineHmsItem;
+pub(super) use recovery::dispatch_sequence_zero_recovery;
 pub(crate) use report_payload::decode_mqtt_report_payload;
 pub use reports::{
     forward_print_reports, print_job_report_event, print_report_from_report,

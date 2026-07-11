@@ -33,7 +33,7 @@ pub(in crate::routes) async fn update_printer(
     let (name, host, access_code) =
         payload.into_fields(printer.host.clone(), printer.access_code.clone())?;
 
-    let updated = state
+    state
         .printers()
         .update_details_with_audit(
             tenant_id,
@@ -44,6 +44,13 @@ pub(in crate::routes) async fn update_printer(
             auth::audit_actor(&auth),
         )
         .await?;
+    let Some(updated) = state
+        .printers()
+        .get_with_live_status_for_tenant(tenant_id, printer_id)
+        .await?
+    else {
+        return Err(ApiError::not_found("printer_not_found"));
+    };
     let materials = state
         .materials()
         .latest_for_printer(tenant_id, printer_id)

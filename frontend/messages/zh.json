@@ -46,7 +46,8 @@
     },
     "commandResult": {
       "printerControlCompleted": "打印机控制已完成",
-      "printerControlFailed": "打印机控制失败"
+      "printerControlFailed": "打印机控制失败",
+      "recoveryCommandSent": "恢复指令已发送，等待打印机状态确认"
     },
     "notification": {
       "liveTitle": "实时连接",
@@ -229,6 +230,25 @@
     "remainingNone": "剩余 -",
     "remainingMinutes": "剩余 {minutes} 分钟",
     "remainingHours": "剩余 {hours} 小时 {rest} 分钟"
+  },
+  "printMonitor": {
+    "statusLabel": "状态",
+    "printing": "打印中",
+    "paused": "已暂停",
+    "preparing": "准备中",
+    "slicing": "切片中",
+    "finished": "已完成",
+    "unknownTask": "未知打印任务",
+    "progress": "打印进度",
+    "mismatchTitle": "打印板不匹配",
+    "mismatchExplanation": "检测到打印板类型与切片 G-code 中不一致。请修改切片参数或者使用匹配的打印板。",
+    "reviewMismatch": "查看 {name} 的打印板不匹配问题",
+    "reviewAction": "查看",
+    "closeMismatch": "关闭打印板不匹配对话框",
+    "resumeAction": "问题已解决，继续",
+    "ignoreAction": "忽略此问题，继续",
+    "stopAction": "停止打印",
+    "printerOnly": "请在打印机屏幕上处理此错误。"
   },
   "nav": {
     "printers": "打印机",

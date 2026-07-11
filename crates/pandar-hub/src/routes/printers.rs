@@ -17,7 +17,10 @@ use crate::{
     AppState,
     printer_events::printer_event_printer,
     repositories::{DiagnosePrinterPayload, DiscoverPrintersPayload, UserRole},
-    routes::{ApiError, auth, printer_operations::PrinterOperationRequest},
+    routes::{
+        ApiError, auth,
+        printer_operations::{PrinterOperationRequest, dispatch_tenant_printer_operation},
+    },
     sessions::LiveDispatchError,
 };
 
@@ -83,11 +86,11 @@ pub(super) async fn list_printers(
         .collect::<HashMap<_, _>>();
     let printers = state
         .printers()
-        .list_for_tenant(tenant_id)
+        .list_with_live_status_for_tenant(tenant_id)
         .await?
         .into_iter()
         .map(|printer| {
-            let materials = materials.get(&printer.id).cloned();
+            let materials = materials.get(&printer.printer.id).cloned();
             printer_event_printer(printer, materials)
         })
         .collect();
@@ -105,7 +108,7 @@ pub(super) async fn get_printer(
     let printer_id = parse_printer_id(&printer_id)?;
     let Some(printer) = state
         .printers()
-        .get_for_tenant(tenant_id, printer_id)
+        .get_with_live_status_for_tenant(tenant_id, printer_id)
         .await?
     else {
         return Err(ApiError::not_found("printer_not_found"));
@@ -330,17 +333,14 @@ pub(super) async fn printer_control(
         auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
     let printer_id = parse_printer_id(&printer_id)?;
     let Json(payload) = payload.map_err(|_| ApiError::bad_request("invalid_printer_control"))?;
-    let operation = payload.into_operation()?;
-    let command = state
-        .commands()
-        .enqueue_printer_operation_with_audit(
-            tenant_id,
-            printer_id,
-            operation,
-            auth::audit_actor(&auth),
-        )
-        .await?;
-    state.wake_agent(tenant_id, command.agent_id).await;
+    let command = dispatch_tenant_printer_operation(
+        &state,
+        tenant_id,
+        printer_id,
+        payload,
+        auth::audit_actor(&auth),
+    )
+    .await?;
 
     Ok(Json(CommandResponse::from(command)))
 }

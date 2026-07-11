@@ -1,6 +1,14 @@
 use super::*;
 use crate::repositories::{ApplyPrintReport, PrinterHms};
 
+mod merge;
+pub(super) mod revisions;
+mod schema;
+
+pub(super) async fn exercise_web_print_monitor_schema(database: Database) {
+    schema::exercise_web_print_monitor_schema(database).await;
+}
+
 pub(super) async fn exercise_printer_live_status(database: Database) {
     let tenants = TenantRepository::new(database.clone());
     let agents = AgentRepository::new(database.clone());
@@ -26,6 +34,7 @@ pub(super) async fn exercise_printer_live_status(database: Database) {
             job_id: None,
             print_error: Some(i32::MAX as u32),
             printer_job_id: Some(String::new()),
+            job_attr: Some(0x21),
             artifact_id: None,
             subtask_id: Some("external-subtask-7".to_string()),
             gcode_file: Some("external.3mf".to_string()),
@@ -128,6 +137,7 @@ pub(super) async fn exercise_printer_live_status(database: Database) {
         job_id: None,
         print_error: None,
         printer_job_id: None,
+        job_attr: None,
         artifact_id: None,
         subtask_id: None,
         gcode_file: None,
@@ -165,6 +175,7 @@ pub(super) async fn exercise_printer_live_status(database: Database) {
         job_id: None,
         print_error: None,
         printer_job_id: Some(" \t ".to_string()),
+        job_attr: None,
         artifact_id: None,
         subtask_id: None,
         gcode_file: None,
@@ -212,6 +223,7 @@ pub(super) async fn exercise_printer_live_status(database: Database) {
             job_id: None,
             print_error: None,
             printer_job_id: None,
+            job_attr: None,
             artifact_id: None,
             subtask_id: None,
             gcode_file: None,

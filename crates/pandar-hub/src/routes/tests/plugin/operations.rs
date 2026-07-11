@@ -111,6 +111,12 @@ async fn plugin_print_error_dispatches_all_actions_as_sent_tag_25_commands_witho
         assert_eq!(operation.print_error, 83_918_929);
         assert_eq!(operation.printer_job_id, "job-7");
         assert_eq!(operation.sequence_id, 20_042);
+        fixture
+            .state
+            .commands()
+            .mark_succeeded(command_id, fixture.tenant_id, fixture.agent_id)
+            .await
+            .unwrap();
     }
 
     assert!(
@@ -162,6 +168,16 @@ async fn plugin_print_error_rejects_offline_and_incapable_agents_before_insert()
     let (wake_sender, _) = mpsc::channel(1);
     let (command_sender, _command_receiver) = mpsc::channel(1);
     register_session(&fixture, wake_sender, command_sender, []).await;
+    assert_unavailable(&fixture).await;
+    let (wake_sender, _) = mpsc::channel(1);
+    let (command_sender, _command_receiver) = mpsc::channel(1);
+    register_session(
+        &fixture,
+        wake_sender,
+        command_sender,
+        [AgentCapability::HandlePrintErrorSequenceZeroPubackOnly],
+    )
+    .await;
     assert_unavailable(&fixture).await;
 
     assert_eq!(fixture.state.commands().count().await.unwrap(), 0);
@@ -238,6 +254,104 @@ async fn plugin_ordinary_operation_remains_queued_and_wakes_agent() {
         .expect("ordinary operation should wake agent")
         .expect("wake channel should stay open");
     assert!(command_receiver.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn plugin_with_both_capabilities_preserves_the_studio_nonzero_sequence_path() {
+    let fixture = operation_fixture("plugin-native-both-capabilities").await;
+    let (wake_sender, _) = mpsc::channel(1);
+    let (command_sender, mut command_receiver) = mpsc::channel(1);
+    register_session(
+        &fixture,
+        wake_sender,
+        command_sender,
+        [
+            AgentCapability::HandlePrintError,
+            AgentCapability::HandlePrintErrorSequenceZeroPubackOnly,
+        ],
+    )
+    .await;
+
+    let (status, _) = request_as(
+        fixture.app.clone(),
+        Method::POST,
+        &fixture.uri,
+        Some(native_body("resume")),
+        &fixture.token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let emitted = command_receiver.recv().await.unwrap().unwrap();
+    let Some(hub_command::Command::PrinterOperation(operation)) = emitted.command else {
+        panic!("expected printer operation command");
+    };
+    let Some(printer_operation::Operation::HandlePrintError(operation)) = operation.operation
+    else {
+        panic!("expected handle print error operation");
+    };
+    assert_eq!(operation.sequence_id, 20_042);
+}
+
+#[tokio::test]
+async fn plugin_native_recovery_is_single_flight_and_terminal_commands_allow_retry() {
+    let fixture = operation_fixture("plugin-native-single-flight").await;
+    let (wake_sender, _) = mpsc::channel(1);
+    let (command_sender, _command_receiver) = mpsc::channel(4);
+    register_session(
+        &fixture,
+        wake_sender,
+        command_sender,
+        [AgentCapability::HandlePrintError],
+    )
+    .await;
+
+    let (status, body) = request_as(
+        fixture.app.clone(),
+        Method::POST,
+        &fixture.uri,
+        Some(native_body("resume")),
+        &fixture.token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let first = decode::<OperationResponse>(body);
+
+    let (status, body) = request_as(
+        fixture.app.clone(),
+        Method::POST,
+        &fixture.uri,
+        Some(native_body("ignore")),
+        &fixture.token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        decode::<OperationErrorResponse>(body).error,
+        "printer_operation_unavailable"
+    );
+    assert_eq!(fixture.state.commands().count().await.unwrap(), 1);
+
+    fixture
+        .state
+        .commands()
+        .mark_succeeded(
+            CommandId::parse(&first.command_id).unwrap(),
+            fixture.tenant_id,
+            fixture.agent_id,
+        )
+        .await
+        .unwrap();
+    let (status, _) = request_as(
+        fixture.app.clone(),
+        Method::POST,
+        &fixture.uri,
+        Some(native_body("stop")),
+        &fixture.token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(fixture.state.commands().count().await.unwrap(), 2);
 }
 
 struct OperationFixture {

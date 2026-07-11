@@ -1,0 +1,6 @@
+[[profile.default.overrides]]
+filter = "test(/postgres_commands::print_error/)"
+test-group = "postgres-print-error"
+
+[test-groups.postgres-print-error]
+max-threads = 1

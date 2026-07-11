@@ -38,6 +38,7 @@ import { NeedsAttention } from './needs-attention'
 import { RuntimeStatusPanel, TenantSettings } from './dashboard-runtime-sections'
 import { logoutHref, type DashboardView } from './dashboard-shell'
 import { EmptyState, SectionHeader } from './dashboard-ui'
+import { PrinterMismatchCoordinator } from './printer-mismatch-dialog'
 
 export type DashboardViewContentProps = {
   view: DashboardView
@@ -102,7 +103,12 @@ function DevicesView({
         tenantId={selectedTenant?.id}
       />
       <NeedsAttention items={attentionItems} selectedTenant={selectedTenant} />
-      <PrinterInventory selectedTenant={selectedTenant} printers={printers} agents={agents} />
+      <PrinterMismatchCoordinator
+        key={selectedTenant?.id ?? 'no-tenant'}
+        printers={printers}
+      >
+        <PrinterInventory selectedTenant={selectedTenant} printers={printers} agents={agents} />
+      </PrinterMismatchCoordinator>
     </>
   )
 }

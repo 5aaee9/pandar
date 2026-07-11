@@ -48,38 +48,46 @@ fn spawn_control_plane_inner(
     ready: Option<oneshot::Sender<anyhow::Result<()>>>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let mut stream = match state.control_plane().subscribe().await {
-            Ok(stream) => {
-                if let Some(ready) = ready {
-                    let _ = ready.send(Ok(()));
-                }
-                stream
-            }
-            Err(err) => {
-                let err = err.context("failed to subscribe to hub control plane");
-                if let Some(ready) = ready {
-                    let _ = ready.send(Err(err));
-                } else {
-                    tracing::error!(error = %format!("{err:#}"), "failed to subscribe to hub control plane");
-                }
-                return;
-            }
-        };
-        while let Some(message) = stream.next().await {
-            match message {
-                Ok(message) => {
-                    handle_control_message(&state, message).await;
-                    state
-                        .metrics()
-                        .record_control_plane(ControlPlaneMetric::ReceiveOk);
+        let mut ready = ready;
+        loop {
+            let mut stream = match state.control_plane().subscribe().await {
+                Ok(stream) => {
+                    if let Some(ready) = ready.take() {
+                        let _ = ready.send(Ok(()));
+                    }
+                    stream
                 }
                 Err(err) => {
-                    state
-                        .metrics()
-                        .record_control_plane(ControlPlaneMetric::ReceiveFailed);
-                    tracing::error!(error = %format!("{err:#}"), "failed to receive hub control message");
+                    let err = err.context("failed to subscribe to hub control plane");
+                    state.printer_events().invalidate_epoch();
+                    tracing::error!(error = %format!("{err:#}"), "failed to subscribe to hub control plane");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
+            while let Some(message) = stream.next().await {
+                match message {
+                    Ok(message) => {
+                        handle_control_message(&state, message).await;
+                        state
+                            .metrics()
+                            .record_control_plane(ControlPlaneMetric::ReceiveOk);
+                    }
+                    Err(err) => {
+                        state
+                            .metrics()
+                            .record_control_plane(ControlPlaneMetric::ReceiveFailed);
+                        state.printer_events().invalidate_epoch();
+                        tracing::error!(error = %format!("{err:#}"), "failed to receive hub control message");
+                    }
                 }
             }
+            state
+                .metrics()
+                .record_control_plane(ControlPlaneMetric::ReceiveFailed);
+            state.printer_events().invalidate_epoch();
+            tracing::error!("hub control plane subscription ended");
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     })
 }

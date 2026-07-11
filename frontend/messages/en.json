@@ -46,7 +46,8 @@
     },
     "commandResult": {
       "printerControlCompleted": "Printer control completed",
-      "printerControlFailed": "Printer control failed"
+      "printerControlFailed": "Printer control failed",
+      "recoveryCommandSent": "Recovery command sent; waiting for printer status confirmation"
     },
     "notification": {
       "liveTitle": "Live connection",
@@ -232,6 +233,25 @@
     "remainingNone": "Remaining -",
     "remainingMinutes": "Remaining {minutes}m",
     "remainingHours": "Remaining {hours}h {rest}m"
+  },
+  "printMonitor": {
+    "statusLabel": "Status",
+    "printing": "Printing",
+    "paused": "Paused",
+    "preparing": "Preparing",
+    "slicing": "Slicing",
+    "finished": "Finished",
+    "unknownTask": "Unknown print",
+    "progress": "Print progress",
+    "mismatchTitle": "Build plate mismatch",
+    "mismatchExplanation": "Detected build plate is not the same as the G-code file. Please adjust slicer settings or use the correct plate.",
+    "reviewMismatch": "Review build plate mismatch for {name}",
+    "reviewAction": "Review",
+    "closeMismatch": "Close mismatch dialog",
+    "resumeAction": "Problem Solved and Resume",
+    "ignoreAction": "Ignore this and Resume",
+    "stopAction": "Stop Printing",
+    "printerOnly": "Use the printer screen to resolve this error."
   },
   "nav": {
     "printers": "Printers",

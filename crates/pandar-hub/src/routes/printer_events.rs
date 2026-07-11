@@ -1,3 +1,5 @@
+use std::pin::Pin;
+
 use axum::{
     Json,
     extract::{
@@ -7,14 +9,83 @@ use axum::{
     http::{HeaderMap, Request, StatusCode, header::AUTHORIZATION},
     response::Response,
 };
+use futures_util::{Sink, future::poll_fn};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
     metrics::TicketMetric,
+    printer_events::PrinterEventEpochGate,
     repositories::{PrinterEventTicketConsumeResult, UserRole, generate_secret, hash_secret},
     routes::{ApiError, auth},
 };
+
+#[cfg(test)]
+pub(crate) mod send_pause;
+#[cfg(test)]
+mod send_tests;
+
+#[derive(Debug, Clone)]
+pub(crate) enum LinearizedSendOutcome {
+    Flushed,
+    EpochChanged,
+    EpochClosed(tokio::sync::watch::error::RecvError),
+}
+
+pub(crate) async fn linearized_send<S>(
+    sink: &mut S,
+    message: Message,
+    epoch: &mut tokio::sync::watch::Receiver<u64>,
+    gate: &PrinterEventEpochGate,
+) -> Result<LinearizedSendOutcome, S::Error>
+where
+    S: Sink<Message> + Unpin,
+{
+    {
+        let ready = poll_fn(|context| Pin::new(&mut *sink).poll_ready(context));
+        tokio::pin!(ready);
+        tokio::select! {
+            biased;
+
+            changed = epoch.changed() => {
+                return Ok(match changed {
+                    Ok(()) => LinearizedSendOutcome::EpochChanged,
+                    Err(err) => LinearizedSendOutcome::EpochClosed(err),
+                });
+            }
+            ready = &mut ready => ready?,
+        }
+    }
+
+    {
+        let _gate = gate.lock();
+        match epoch.has_changed() {
+            Ok(true) => return Ok(LinearizedSendOutcome::EpochChanged),
+            Ok(false) => {}
+            Err(err) => return Ok(LinearizedSendOutcome::EpochClosed(err)),
+        }
+        Pin::new(&mut *sink).start_send(message)?;
+    }
+
+    let flush = async {
+        #[cfg(test)]
+        send_pause::wait_during_flush().await;
+        poll_fn(|context| Pin::new(&mut *sink).poll_flush(context)).await
+    };
+    tokio::pin!(flush);
+    tokio::select! {
+        biased;
+
+        changed = epoch.changed() => Ok(match changed {
+            Ok(()) => LinearizedSendOutcome::EpochChanged,
+            Err(err) => LinearizedSendOutcome::EpochClosed(err),
+        }),
+        flushed = &mut flush => {
+            flushed?;
+            Ok(LinearizedSendOutcome::Flushed)
+        }
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub(super) struct PrinterEventQuery {
@@ -72,12 +143,16 @@ pub(super) async fn printer_events(
     state.printers().list_for_tenant(tenant_id).await?;
     let subscription = state.printer_events().track_subscription(tenant_id).await;
     let receiver = state.printer_events().subscribe(tenant_id).await;
+    let epoch = state.printer_events().subscribe_epoch();
+    let epoch_gate = state.printer_events().epoch_gate();
     let (mut parts, _) = request.into_parts();
     let upgrade = WebSocketUpgrade::from_request_parts(&mut parts, &state)
         .await
         .map_err(|_| ApiError::bad_request("websocket_upgrade_required"))?;
 
-    Ok(upgrade.on_upgrade(move |socket| forward_events(socket, receiver, subscription)))
+    Ok(upgrade.on_upgrade(move |socket| {
+        forward_events(socket, receiver, epoch, epoch_gate, subscription)
+    }))
 }
 
 pub(super) async fn create_printer_event_ticket(
@@ -106,17 +181,47 @@ pub(super) async fn create_printer_event_ticket(
 async fn forward_events(
     mut socket: WebSocket,
     mut receiver: tokio::sync::broadcast::Receiver<crate::printer_events::PrinterEvent>,
+    mut epoch: tokio::sync::watch::Receiver<u64>,
+    epoch_gate: PrinterEventEpochGate,
     _subscription: crate::metrics::SubscriptionGuard,
 ) {
     loop {
-        let event = match receiver.recv().await {
-            Ok(event) => event,
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
-                tracing::error!(skipped, "printer event websocket receiver lagged");
-                continue;
+        let event = tokio::select! {
+            biased;
+
+            changed = epoch.changed() => {
+                match changed {
+                    Ok(()) => tracing::warn!("printer event epoch changed; closing websocket"),
+                    Err(err) => tracing::error!(
+                        error = %format!("{err:#}"),
+                        "printer event epoch closed; closing websocket"
+                    ),
+                }
+                break;
             }
-            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            received = receiver.recv() => match received {
+                Ok(event) => event,
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                    tracing::error!(skipped, "printer event websocket receiver lagged");
+                    break;
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            },
         };
+        match epoch.has_changed() {
+            Ok(true) => {
+                tracing::warn!("printer event epoch changed before send; closing websocket");
+                break;
+            }
+            Ok(false) => {}
+            Err(err) => {
+                tracing::error!(
+                    error = %format!("{err:#}"),
+                    "printer event epoch closed before send; closing websocket"
+                );
+                break;
+            }
+        }
         let text = match serde_json::to_string(&event) {
             Ok(text) => text,
             Err(err) => {
@@ -124,9 +229,35 @@ async fn forward_events(
                 break;
             }
         };
-        if let Err(err) = socket.send(Message::Text(text.into())).await {
-            tracing::error!(error = %format!("{err:#}"), "failed to send printer event websocket message");
-            break;
+        #[cfg(test)]
+        send_pause::wait_after_serialization().await;
+        match linearized_send(
+            &mut socket,
+            Message::Text(text.into()),
+            &mut epoch,
+            &epoch_gate,
+        )
+        .await
+        {
+            Ok(LinearizedSendOutcome::Flushed) => {}
+            Ok(LinearizedSendOutcome::EpochChanged) => {
+                tracing::warn!("printer event epoch changed during send; closing websocket");
+                break;
+            }
+            Ok(LinearizedSendOutcome::EpochClosed(err)) => {
+                tracing::error!(
+                    error = %format!("{err:#}"),
+                    "printer event epoch closed during send; closing websocket"
+                );
+                break;
+            }
+            Err(err) => {
+                tracing::error!(
+                    error = %format!("{err:#}"),
+                    "failed to send printer event websocket message"
+                );
+                break;
+            }
         }
     }
 }

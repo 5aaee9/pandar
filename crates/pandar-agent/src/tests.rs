@@ -108,7 +108,10 @@ fn hello_event_has_agent_identity_version_and_exact_capability() {
             name: "garage".to_owned(),
             version: "9.8.7".to_owned(),
             credential: "pandar_ac_test".to_owned(),
-            capabilities: vec![AgentCapability::HandlePrintError as i32],
+            capabilities: vec![
+                AgentCapability::HandlePrintError as i32,
+                AgentCapability::HandlePrintErrorSequenceZeroPubackOnly as i32,
+            ],
         }))
     );
 }

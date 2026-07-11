@@ -23,7 +23,7 @@ use crate::machine::BambuPrinterEndpoint;
 
 use super::{
     BAMBU_MQTT_MAX_PACKET_SIZE, BAMBU_MQTT_PORT, BAMBU_MQTT_RETAIN, BAMBU_MQTT_USERNAME,
-    BambuMqttTransport, PublishedMqttCommand, decode_mqtt_report_payload,
+    BambuMqttTopics, BambuMqttTransport, PublishedMqttCommand, decode_mqtt_report_payload,
 };
 
 pub struct RumqttcBambuMqttTransport {
@@ -234,6 +234,17 @@ async fn resolve_bambu_mqtt_serial(host: &str) -> anyhow::Result<String> {
 
     bambu_mqtt_serial_from_certificate(certificate)
         .with_context(|| format!("resolve Bambu MQTT topic identity for {host}"))
+}
+
+pub(super) async fn resolved_request_topic(
+    endpoint: &BambuPrinterEndpoint,
+) -> anyhow::Result<String> {
+    let mqtt_serial = resolve_bambu_mqtt_serial(&endpoint.host).await?;
+    Ok(mqtt_topic_for_serial(
+        &endpoint.serial,
+        &mqtt_serial,
+        &BambuMqttTopics::for_serial(&endpoint.serial).request,
+    ))
 }
 
 #[async_trait]

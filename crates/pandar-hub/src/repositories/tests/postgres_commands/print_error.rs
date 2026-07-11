@@ -1,10 +1,14 @@
+use std::sync::Arc;
+
 use pandar_core::CommandStatus;
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait, IntoActiveModel};
 use serde::Deserialize;
+use tokio::sync::Barrier;
 
 use super::*;
 use crate::repositories::{
     AuditActor, PrintErrorAction, PrinterOperationKind, PrinterOperationPayload,
-    PrinterSnapshotUpsert, printer_operation_ownership_pause,
+    PrinterSnapshotUpsert, WebPrintErrorRecovery, printer_operation_ownership_pause,
 };
 
 #[tokio::test]
@@ -91,8 +95,6 @@ async fn postgres_handle_print_error_when_configured() {
     .await
     .unwrap();
     let serial_number = format!("serial-{printer_id}");
-    let mut sent = Vec::new();
-
     for (action, action_name, sequence_id) in [
         (PrintErrorAction::Resume, "resume", 20_042),
         (PrintErrorAction::Ignore, "ignore", 20_043),
@@ -132,7 +134,10 @@ async fn postgres_handle_print_error_when_configured() {
                 .operation,
             operation
         );
-        sent.push(command);
+        commands
+            .mark_succeeded(command.id, tenant.id, agent.id)
+            .await
+            .unwrap();
     }
 
     assert!(
@@ -197,8 +202,41 @@ async fn postgres_handle_print_error_when_configured() {
     }
     assert_eq!(commands.count().await.unwrap(), 3);
 
+    let old_owned_printer = additional_printer(&database, tenant.id, agent.id).await;
+    let old_owned = commands
+        .create_printer_operation_sent_with_audit(
+            tenant.id,
+            &old_owned_printer,
+            agent.id,
+            native_operation(PrintErrorAction::Resume, 83_918_929, 20_050),
+            native_audit_actor(),
+        )
+        .await
+        .unwrap();
+    let acknowledged_printer = additional_printer(&database, tenant.id, agent.id).await;
+    let acknowledged = commands
+        .create_printer_operation_sent_with_audit(
+            tenant.id,
+            &acknowledged_printer,
+            agent.id,
+            native_operation(PrintErrorAction::Ignore, 83_918_929, 20_051),
+            native_audit_actor(),
+        )
+        .await
+        .unwrap();
     commands
-        .mark_acknowledged(sent[1].id, tenant.id, agent.id)
+        .mark_acknowledged(acknowledged.id, tenant.id, agent.id)
+        .await
+        .unwrap();
+    let fresh_printer = additional_printer(&database, tenant.id, agent.id).await;
+    let fresh = commands
+        .create_printer_operation_sent_with_audit(
+            tenant.id,
+            &fresh_printer,
+            agent.id,
+            native_operation(PrintErrorAction::Stop, 83_918_929, 20_052),
+            native_audit_actor(),
+        )
         .await
         .unwrap();
     let ordinary = commands
@@ -223,27 +261,27 @@ async fn postgres_handle_print_error_when_configured() {
         )
         .await
         .unwrap();
-    for command_id in [sent[0].id, sent[1].id, ordinary.id, old_link.id] {
+    for command_id in [old_owned.id, acknowledged.id, ordinary.id, old_link.id] {
         set_command_updated_at(&database, command_id, "2026-07-01T00:00:00Z").await;
     }
-    set_command_updated_at(&database, sent[2].id, "2026-07-01T00:05:00Z").await;
+    set_command_updated_at(&database, fresh.id, "2026-07-01T00:05:00Z").await;
 
     let failed = commands
         .fail_stale_unowned_live_commands(
             "2026-07-01T00:06:00Z",
             std::time::Duration::from_secs(300),
-            &[sent[0].id],
+            &[old_owned.id],
         )
         .await
         .unwrap();
 
     assert_eq!(failed, 2);
     assert_eq!(
-        load(&commands, tenant.id, sent[0].id).await.status,
+        load(&commands, tenant.id, old_owned.id).await.status,
         CommandStatus::Sent
     );
     assert_eq!(
-        load(&commands, tenant.id, sent[2].id).await.status,
+        load(&commands, tenant.id, fresh.id).await.status,
         CommandStatus::Sent
     );
     assert_eq!(
@@ -251,7 +289,7 @@ async fn postgres_handle_print_error_when_configured() {
         CommandStatus::Sent
     );
     assert_eq!(
-        load(&commands, tenant.id, sent[1].id)
+        load(&commands, tenant.id, acknowledged.id)
             .await
             .error
             .as_deref(),
@@ -264,6 +302,279 @@ async fn postgres_handle_print_error_when_configured() {
             .as_deref(),
         Some("printer link dispatch expired before completion")
     );
+}
+
+#[tokio::test]
+async fn postgres_web_and_plugin_recovery_share_single_flight_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+    let tenants = TenantRepository::new(database.clone());
+    let agents = AgentRepository::new(database.clone());
+    let commands = CommandRepository::new(database.clone());
+    let tenant = tenants
+        .create("postgres-web-recovery", "Postgres Web Recovery")
+        .await
+        .unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let session_id = "postgres-web-recovery-session";
+    agents
+        .claim_online_session(
+            tenant.id,
+            agent.id,
+            session_id,
+            "test",
+            "2026-07-10T00:00:00Z",
+        )
+        .await
+        .unwrap();
+    let printer_id = additional_printer(&database, tenant.id, agent.id).await;
+    seed_web_recovery_state(&database, &printer_id, session_id, "20P123456789").await;
+
+    let (left, right) = tokio::join!(
+        commands.create_web_print_error_sent_with_audit(
+            tenant.id,
+            &printer_id,
+            web_recovery_input(PrintErrorAction::Resume, agent.id, session_id),
+            native_audit_actor(),
+        ),
+        commands.create_web_print_error_sent_with_audit(
+            tenant.id,
+            &printer_id,
+            web_recovery_input(PrintErrorAction::Ignore, agent.id, session_id),
+            native_audit_actor(),
+        ),
+    );
+    let first = match (left, right) {
+        (Ok(first), Err(RepositoryError::PrinterControlUnavailable))
+        | (Err(RepositoryError::PrinterControlUnavailable), Ok(first)) => first,
+        (left, right) => panic!("expected one PostgreSQL recovery winner: {left:?}, {right:?}"),
+    };
+    assert_eq!(commands.count().await.unwrap(), 1);
+    commands
+        .mark_succeeded(first.command.id, tenant.id, agent.id)
+        .await
+        .unwrap();
+
+    let plugin = commands
+        .create_printer_operation_sent_with_audit(
+            tenant.id,
+            &printer_id,
+            agent.id,
+            native_operation(PrintErrorAction::Stop, 83_918_929, 20_060),
+            native_audit_actor(),
+        )
+        .await
+        .unwrap();
+    let error = commands
+        .create_web_print_error_sent_with_audit(
+            tenant.id,
+            &printer_id,
+            web_recovery_input(PrintErrorAction::Stop, agent.id, session_id),
+            native_audit_actor(),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(error, RepositoryError::PrinterControlUnavailable));
+    commands
+        .mark_failed(plugin.id, tenant.id, agent.id, "terminal")
+        .await
+        .unwrap();
+    let retry = commands
+        .create_web_print_error_sent_with_audit(
+            tenant.id,
+            &printer_id,
+            web_recovery_input(PrintErrorAction::Stop, agent.id, session_id),
+            native_audit_actor(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(retry.command.status, CommandStatus::Sent);
+    commands
+        .mark_succeeded(retry.command.id, tenant.id, agent.id)
+        .await
+        .unwrap();
+
+    let web_first_printer = additional_printer(&database, tenant.id, agent.id).await;
+    seed_web_recovery_state(&database, &web_first_printer, session_id, "20PWEB123456").await;
+    let before_web_first = commands.count().await.unwrap();
+    let web_first = commands
+        .create_web_print_error_sent_with_audit(
+            tenant.id,
+            &web_first_printer,
+            web_recovery_input(PrintErrorAction::Resume, agent.id, session_id),
+            native_audit_actor(),
+        )
+        .await
+        .unwrap();
+    let error = commands
+        .create_printer_operation_sent_with_audit(
+            tenant.id,
+            &web_first_printer,
+            agent.id,
+            native_operation(PrintErrorAction::Ignore, 83_918_929, 20_061),
+            native_audit_actor(),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(error, RepositoryError::PrinterControlUnavailable));
+    assert_eq!(commands.count().await.unwrap(), before_web_first + 1);
+    commands
+        .mark_succeeded(web_first.command.id, tenant.id, agent.id)
+        .await
+        .unwrap();
+
+    let mixed_printer = additional_printer(&database, tenant.id, agent.id).await;
+    seed_web_recovery_state(&database, &mixed_printer, session_id, "20PMIX123456").await;
+    let before_mixed = commands.count().await.unwrap();
+    let barrier = Arc::new(Barrier::new(3));
+    let web = tokio::spawn({
+        let barrier = barrier.clone();
+        let commands = commands.clone();
+        let printer_id = mixed_printer.clone();
+        async move {
+            barrier.wait().await;
+            commands
+                .create_web_print_error_sent_with_audit(
+                    tenant.id,
+                    &printer_id,
+                    web_recovery_input(PrintErrorAction::Resume, agent.id, session_id),
+                    native_audit_actor(),
+                )
+                .await
+        }
+    });
+    let plugin = tokio::spawn({
+        let barrier = barrier.clone();
+        let commands = commands.clone();
+        let printer_id = mixed_printer.clone();
+        async move {
+            barrier.wait().await;
+            commands
+                .create_printer_operation_sent_with_audit(
+                    tenant.id,
+                    &printer_id,
+                    agent.id,
+                    native_operation(PrintErrorAction::Stop, 83_918_929, 20_062),
+                    native_audit_actor(),
+                )
+                .await
+        }
+    });
+    barrier.wait().await;
+    let web = web.await.unwrap();
+    let plugin = plugin.await.unwrap();
+    let winner_id = match (web, plugin) {
+        (Ok(web), Err(RepositoryError::PrinterControlUnavailable)) => web.command.id,
+        (Err(RepositoryError::PrinterControlUnavailable), Ok(plugin)) => plugin.id,
+        (web, plugin) => {
+            panic!("expected one mixed PostgreSQL recovery winner: {web:?}, {plugin:?}")
+        }
+    };
+    assert_eq!(commands.count().await.unwrap(), before_mixed + 1);
+    commands
+        .mark_succeeded(winner_id, tenant.id, agent.id)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn postgres_web_recovery_revalidates_ownership_and_session_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+    let tenants = TenantRepository::new(database.clone());
+    let agents = AgentRepository::new(database.clone());
+    let printers = PrinterRepository::new(database.clone());
+    let commands = CommandRepository::new(database.clone());
+    let tenant = tenants
+        .create("postgres-web-revalidation", "Postgres Web Revalidation")
+        .await
+        .unwrap();
+    let original = agents.create(tenant.id, "original").await.unwrap();
+    let replacement = agents.create(tenant.id, "replacement").await.unwrap();
+    let session_id = "postgres-web-revalidation-session";
+    agents
+        .claim_online_session(
+            tenant.id,
+            original.id,
+            session_id,
+            "test",
+            "2026-07-10T00:00:00Z",
+        )
+        .await
+        .unwrap();
+
+    let ownership_printer = additional_printer(&database, tenant.id, original.id).await;
+    let ownership_serial = "20POWN123456";
+    seed_web_recovery_state(&database, &ownership_printer, session_id, ownership_serial).await;
+    let pause = printer_operation_ownership_pause::install(&ownership_printer);
+    let recovery = tokio::spawn({
+        let commands = commands.clone();
+        let printer_id = ownership_printer.clone();
+        async move {
+            commands
+                .create_web_print_error_sent_with_audit(
+                    tenant.id,
+                    &printer_id,
+                    web_recovery_input(PrintErrorAction::Resume, original.id, session_id),
+                    native_audit_actor(),
+                )
+                .await
+        }
+    });
+    let resume = pause.wait_until_reached().await.unwrap();
+    printers
+        .upsert_snapshot(
+            tenant.id,
+            replacement.id,
+            reassigned_snapshot(ownership_serial.to_owned()),
+        )
+        .await
+        .unwrap();
+    resume.send(()).unwrap();
+    assert!(matches!(
+        recovery.await.unwrap().unwrap_err(),
+        RepositoryError::PrinterControlUnavailable
+    ));
+    assert_eq!(commands.count().await.unwrap(), 0);
+
+    let session_printer = additional_printer(&database, tenant.id, original.id).await;
+    seed_web_recovery_state(&database, &session_printer, session_id, "20PSES123456").await;
+    let pause = printer_operation_ownership_pause::install(&session_printer);
+    let recovery = tokio::spawn({
+        let commands = commands.clone();
+        let printer_id = session_printer.clone();
+        async move {
+            commands
+                .create_web_print_error_sent_with_audit(
+                    tenant.id,
+                    &printer_id,
+                    web_recovery_input(PrintErrorAction::Stop, original.id, session_id),
+                    native_audit_actor(),
+                )
+                .await
+        }
+    });
+    let resume = pause.wait_until_reached().await.unwrap();
+    agents
+        .claim_online_session(
+            tenant.id,
+            original.id,
+            "postgres-web-replacement-session",
+            "replacement",
+            "2026-07-10T00:00:01Z",
+        )
+        .await
+        .unwrap();
+    resume.send(()).unwrap();
+    assert!(matches!(
+        recovery.await.unwrap().unwrap_err(),
+        RepositoryError::PrinterControlUnavailable
+    ));
+    assert_eq!(commands.count().await.unwrap(), 0);
 }
 
 fn native_operation(
@@ -281,6 +592,60 @@ fn native_operation(
 
 fn native_audit_actor() -> AuditActor {
     AuditActor::tenant_token(None, "postgres-native-print-error", vec!["*"])
+}
+
+async fn additional_printer(
+    database: &crate::db::Database,
+    tenant_id: pandar_core::TenantId,
+    agent_id: pandar_core::AgentId,
+) -> String {
+    crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        database,
+        tenant_id,
+        agent_id,
+        Some("A1"),
+    )
+    .await
+    .unwrap()
+}
+
+fn web_recovery_input(
+    action: PrintErrorAction,
+    expected_agent_id: pandar_core::AgentId,
+    expected_session_id: &str,
+) -> WebPrintErrorRecovery {
+    WebPrintErrorRecovery {
+        action,
+        error_generation: 9,
+        expected_agent_id,
+        expected_session_id: expected_session_id.to_owned(),
+    }
+}
+
+async fn seed_web_recovery_state(
+    database: &crate::db::Database,
+    printer_id: &str,
+    session_id: &str,
+    serial_number: &str,
+) {
+    let printer = crate::entities::printers::Entity::find_by_id(printer_id)
+        .one(&database.sea_orm_connection())
+        .await
+        .unwrap()
+        .unwrap();
+    let mut active = printer.into_active_model();
+    active.serial_number = Set(serial_number.to_owned());
+    active.status = Set("RUNNING".to_owned());
+    active.print_task_generation = Set(9);
+    active.print_error_generation = Set(9);
+    active.print_job_attr = Set(Some(0x10));
+    active.print_error_task_generation = Set(Some(9));
+    active.print_error_session_id = Set(Some(session_id.to_owned()));
+    active.print_error_received_at = Set(Some("2026-07-10T00:00:00Z".to_owned()));
+    active.print_gcode_state = Set(Some("PAUSE".to_owned()));
+    active.print_error = Set(Some(83_918_929));
+    active.print_job_id = Set(Some("job-7".to_owned()));
+    active.update(&database.sea_orm_connection()).await.unwrap();
 }
 
 fn reassigned_snapshot(serial_number: String) -> PrinterSnapshotUpsert {

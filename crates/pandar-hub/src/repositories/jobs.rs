@@ -308,10 +308,19 @@ impl JobRepository {
             .expect("filament usage count should fit in i64"))
     }
 
-    pub async fn apply_print_report(
+    #[cfg(test)]
+    pub(crate) async fn apply_print_report(
         &self,
         input: ApplyPrintReport,
     ) -> RepositoryResult<AppliedPrintReport> {
         print_reports::apply_print_report(&self.database, input).await
+    }
+
+    pub async fn apply_current_print_report(
+        &self,
+        session_id: &str,
+        input: ApplyPrintReport,
+    ) -> RepositoryResult<AppliedPrintReport> {
+        print_reports::apply_current_print_report(&self.database, session_id, input).await
     }
 }

@@ -1,4 +1,4 @@
-use pandar_core::{AgentId, AgentStatus, TenantId};
+use pandar_core::{AgentId, TenantId};
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, StreamExt};
 use tonic::Status;
@@ -10,7 +10,8 @@ use crate::{
     grpc::printer_materials::handle_materials_snapshot,
     grpc::printer_snapshots::handle_snapshot,
     protocol::agent::v1::{AgentEvent, agent_event},
-    sessions::{SessionToken, live_commands::fail_pending_live_commands},
+    repositories::RepositoryError,
+    sessions::{AgentSession, SessionToken, live_commands::fail_pending_live_commands},
 };
 
 use super::validate_rfc3339;
@@ -49,7 +50,7 @@ pub(super) fn spawn_inbound_handler(
             }
         }
 
-        if let Some(session) = state.sessions().remove_if_current(agent_id, token).await {
+        if let Some(session) = disconnect_session(&state, tenant_id, agent_id, token).await {
             fail_pending_live_commands(
                 &state,
                 tenant_id,
@@ -60,6 +61,34 @@ pub(super) fn spawn_inbound_handler(
             .await;
         }
     });
+}
+
+pub(super) async fn disconnect_session(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    token: SessionToken,
+) -> Option<AgentSession> {
+    let _lease = state
+        .sessions()
+        .transition_lease_for_session(agent_id, token)
+        .await;
+    if !state.sessions().is_current(agent_id, token).await {
+        return None;
+    }
+    let now = pandar_core::created_at_now();
+    if let Err(err) = state
+        .agents()
+        .mark_offline_if_current(tenant_id, agent_id, &token.persisted_id(), &now)
+        .await
+    {
+        tracing::error!(
+            error = %format!("{err:#}"),
+            "failed to persist disconnected agent session"
+        );
+        return None;
+    }
+    state.sessions().remove_if_current(agent_id, token).await
 }
 
 pub(super) async fn handle_event(
@@ -82,18 +111,31 @@ pub(super) async fn handle_event(
     match event.event {
         Some(agent_event::Event::Heartbeat(heartbeat)) => {
             validate_rfc3339(&heartbeat.observed_at)?;
-            let Some(_) = state
+            let _lease = state
+                .sessions()
+                .transition_lease_for_session(agent_id, token)
+                .await;
+            if !state.sessions().is_current(agent_id, token).await {
+                return Ok(());
+            }
+            match state
+                .agents()
+                .heartbeat_if_current(
+                    tenant_id,
+                    agent_id,
+                    &token.persisted_id(),
+                    &heartbeat.observed_at,
+                )
+                .await
+            {
+                Ok(_) => {}
+                Err(RepositoryError::AgentSessionNotCurrent) => return Ok(()),
+                Err(err) => return Err(repository_status(err)),
+            }
+            state
                 .sessions()
                 .touch_heartbeat_if_current(agent_id, token, &heartbeat.observed_at)
-                .await
-            else {
-                return Ok(());
-            };
-            state
-                .agents()
-                .update_connection(agent_id, AgentStatus::Online, None, &heartbeat.observed_at)
-                .await
-                .map_err(repository_status)?;
+                .await;
             Ok(())
         }
         Some(agent_event::Event::CommandAck(ack)) => {
@@ -103,40 +145,13 @@ pub(super) async fn handle_event(
             handle_command_result(state, tenant_id, agent_id, token, result).await
         }
         Some(agent_event::Event::PrinterSnapshot(snapshot)) => {
-            match state
-                .sessions()
-                .while_current(agent_id, token, || {
-                    handle_snapshot(state, tenant_id, agent_id, snapshot)
-                })
-                .await
-            {
-                Some(result) => result,
-                None => Ok(()),
-            }
+            handle_snapshot(state, tenant_id, agent_id, token, snapshot).await
         }
         Some(agent_event::Event::PrintJobReport(report)) => {
-            match state
-                .sessions()
-                .while_current(agent_id, token, || {
-                    handle_print_report(state, tenant_id, agent_id, report)
-                })
-                .await
-            {
-                Some(result) => result,
-                None => Ok(()),
-            }
+            handle_print_report(state, tenant_id, agent_id, token, report).await
         }
         Some(agent_event::Event::PrinterMaterialsSnapshot(snapshot)) => {
-            match state
-                .sessions()
-                .while_current(agent_id, token, || {
-                    handle_materials_snapshot(state, tenant_id, agent_id, snapshot)
-                })
-                .await
-            {
-                Some(result) => result,
-                None => Ok(()),
-            }
+            handle_materials_snapshot(state, tenant_id, agent_id, token, snapshot).await
         }
         Some(agent_event::Event::Hello(_)) | None => Ok(()),
     }

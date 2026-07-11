@@ -22,6 +22,8 @@ pub fn print_job_report_event(config: &AgentConfig, progress: PrintReportProgres
     let print_error = progress.print_error.unwrap_or_default();
     let has_printer_job_id = progress.printer_job_id.is_some();
     let printer_job_id = progress.printer_job_id.unwrap_or_default();
+    let has_job_attr = progress.job_attr.is_some();
+    let job_attr = progress.job_attr.unwrap_or_default();
 
     AgentEvent {
         agent_id: config.agent_id.clone(),
@@ -63,6 +65,8 @@ pub fn print_job_report_event(config: &AgentConfig, progress: PrintReportProgres
             has_print_error,
             printer_job_id,
             has_printer_job_id,
+            job_attr,
+            has_job_attr,
         })),
     }
 }

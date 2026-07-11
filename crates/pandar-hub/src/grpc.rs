@@ -1,6 +1,6 @@
 use std::{pin::Pin, sync::Arc};
 
-use pandar_core::{AgentId, AgentStatus, TenantId};
+use pandar_core::{AgentId, TenantId};
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
 use tonic::{Request, Response, Status};
@@ -11,7 +11,7 @@ use crate::grpc::print_reports::handle_print_report;
 use crate::grpc::printer_snapshots::handle_snapshot;
 use inbound::spawn_inbound_handler;
 #[cfg(test)]
-use inbound::{handle_ack, handle_event, handle_result};
+use inbound::{disconnect_session, handle_ack, handle_event, handle_result};
 
 #[cfg(test)]
 use crate::protocol::agent::v1::CommandResult;
@@ -87,12 +87,6 @@ impl AgentControlService {
 
         let now = pandar_core::created_at_now();
         validate_rfc3339(&now)?;
-        self.state
-            .agents()
-            .update_connection(agent_id, AgentStatus::Online, Some(&hello.version), &now)
-            .await
-            .map_err(repository_status)?;
-
         let (wake_sender, wake_receiver) = mpsc::channel(16);
         let (close_sender, close_receiver) = mpsc::channel(1);
         let (command_sender, command_receiver) = mpsc::channel(16);
@@ -102,25 +96,40 @@ impl AgentControlService {
             .into_iter()
             .filter_map(|value| AgentCapability::try_from(value).ok())
             .collect();
-        let replaced = self
-            .state
-            .sessions()
-            .register(AgentSession {
-                token,
-                tenant_id,
-                agent_id,
-                name: hello.name,
-                version: hello.version,
-                connected_at: now.clone(),
-                last_heartbeat_at: now,
-                wake_sender,
-                close_sender,
-                command_sender: command_sender.clone(),
-                capabilities,
-                pending_live_commands: empty_pending_live_commands(),
-                live_command_transition: Arc::new(tokio::sync::Mutex::new(())),
-            })
-            .await;
+        let session = AgentSession {
+            token,
+            tenant_id,
+            agent_id,
+            name: hello.name,
+            version: hello.version,
+            connected_at: now.clone(),
+            last_heartbeat_at: now.clone(),
+            wake_sender,
+            close_sender,
+            command_sender: command_sender.clone(),
+            capabilities,
+            pending_live_commands: empty_pending_live_commands(),
+            live_command_transition: Arc::new(tokio::sync::Mutex::new(())),
+        };
+        let replaced = {
+            let _lease = self
+                .state
+                .sessions()
+                .transition_lease_for_session(agent_id, token)
+                .await;
+            self.state
+                .agents()
+                .claim_online_session(
+                    tenant_id,
+                    agent_id,
+                    &token.persisted_id(),
+                    &session.version,
+                    &now,
+                )
+                .await
+                .map_err(repository_status)?;
+            self.state.sessions().register(session).await
+        };
         if let Some(session) = replaced {
             fail_pending_live_commands(
                 &self.state,
@@ -286,4 +295,55 @@ fn validate_rfc3339(value: &str) -> Result<(), Status> {
     time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
         .map(|_| ())
         .map_err(|_| Status::invalid_argument("timestamp must be RFC3339"))
+}
+
+#[cfg(test)]
+pub(crate) async fn register_test_session(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+) -> SessionToken {
+    let token = SessionToken::new();
+    register_test_session_with_token(state, tenant_id, agent_id, token).await;
+    token
+}
+
+#[cfg(test)]
+pub(crate) async fn register_test_session_with_token(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    token: SessionToken,
+) {
+    let now = "2026-07-10T00:00:00Z";
+    let (wake_sender, _) = mpsc::channel(1);
+    let (close_sender, _) = mpsc::channel(1);
+    let (command_sender, _) = mpsc::channel(1);
+    let _lease = state
+        .sessions()
+        .transition_lease_for_session(agent_id, token)
+        .await;
+    state
+        .agents()
+        .claim_online_session(tenant_id, agent_id, &token.persisted_id(), "test", now)
+        .await
+        .unwrap();
+    state
+        .sessions()
+        .register(AgentSession {
+            token,
+            tenant_id,
+            agent_id,
+            name: "test agent".to_owned(),
+            version: "test".to_owned(),
+            connected_at: now.to_owned(),
+            last_heartbeat_at: now.to_owned(),
+            wake_sender,
+            close_sender,
+            command_sender,
+            capabilities: std::collections::HashSet::new(),
+            pending_live_commands: empty_pending_live_commands(),
+            live_command_transition: Arc::new(tokio::sync::Mutex::new(())),
+        })
+        .await;
 }

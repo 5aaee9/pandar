@@ -1,17 +1,19 @@
-use pandar_core::{AgentId, Printer, TenantId};
+use pandar_core::{AgentId, TenantId};
 use tonic::Status;
 
 use crate::{
     AppState,
     printer_events::{PrinterEvent, printer_event_printer},
     protocol::agent::v1::PrinterMaterialsSnapshot,
-    repositories::{MaterialPatchInput, MaterialPatchOutcome},
+    repositories::{CurrentMaterialPatchOutcome, MaterialPatchOutcome, RepositoryError},
+    sessions::SessionToken,
 };
 
 pub async fn handle_materials_snapshot(
     state: &AppState,
     tenant_id: TenantId,
     agent_id: AgentId,
+    token: SessionToken,
     snapshot: PrinterMaterialsSnapshot,
 ) -> Result<(), Status> {
     let serial = snapshot.serial.trim().to_owned();
@@ -38,43 +40,81 @@ pub async fn handle_materials_snapshot(
         );
         return Ok(());
     }
-    let Some(printer) = resolve_printer(state, tenant_id, agent_id, &serial, &printer_id).await?
-    else {
-        return Ok(());
-    };
-    if printer.serial_number != serial {
+    if !printer_id.is_empty() && uuid::Uuid::parse_str(&printer_id).is_err() {
         tracing::warn!(
             %tenant_id,
             %agent_id,
             serial = %serial,
-            printer_serial = %printer.serial_number,
-            printer_id = %printer.id,
-            reason = "serial_mismatch",
+            printer_id = %printer_id,
+            reason = "malformed_printer_id",
             "ignored material snapshot event"
         );
         return Ok(());
     }
-
-    let outcome = state
+    let _lease = state
+        .sessions()
+        .transition_lease_for_session(agent_id, token)
+        .await;
+    if !state.sessions().is_current(agent_id, token).await {
+        return Ok(());
+    }
+    let applied = state
         .materials()
-        .upsert_from_patch_outcome(MaterialPatchInput {
+        .apply_snapshot_if_current(
+            &token.persisted_id(),
             tenant_id,
             agent_id,
-            printer_id: printer.id.clone(),
-            serial_number: serial.clone(),
+            &printer_id,
+            serial.clone(),
             printer_materials_json,
-        })
-        .await
-        .map_err(super::commands::repository_status)?;
+        )
+        .await;
+    let applied = match applied {
+        Ok(applied) => applied,
+        Err(RepositoryError::AgentSessionNotCurrent) => return Ok(()),
+        Err(err) => return Err(super::commands::repository_status(err)),
+    };
+    let (printer_id, outcome) = match applied {
+        CurrentMaterialPatchOutcome::MissingPrinter => {
+            tracing::warn!(
+                %tenant_id,
+                %agent_id,
+                serial = %serial,
+                printer_id = %printer_id,
+                reason = "unknown_printer",
+                "ignored material snapshot event"
+            );
+            return Ok(());
+        }
+        CurrentMaterialPatchOutcome::SerialMismatch {
+            printer_id,
+            printer_serial,
+        } => {
+            tracing::warn!(
+                %tenant_id,
+                %agent_id,
+                serial = %serial,
+                printer_serial = %printer_serial,
+                printer_id = %printer_id,
+                reason = "serial_mismatch",
+                "ignored material snapshot event"
+            );
+            return Ok(());
+        }
+        CurrentMaterialPatchOutcome::Applied {
+            printer_id,
+            outcome,
+        } => (printer_id, *outcome),
+    };
 
-    let materials = match outcome {
-        MaterialPatchOutcome::Changed(materials) => materials,
+    match outcome {
+        MaterialPatchOutcome::Changed(_) => {}
         MaterialPatchOutcome::Invalid { error } => {
             tracing::warn!(
                 %tenant_id,
                 %agent_id,
                 serial = %serial,
-                printer_id = %printer.id,
+                printer_id = %printer_id,
                 reason = "invalid_patch",
                 error = %crate::redaction::redact_secrets(&error),
                 "ignored material snapshot event"
@@ -86,7 +126,7 @@ pub async fn handle_materials_snapshot(
                 %tenant_id,
                 %agent_id,
                 serial = %serial,
-                printer_id = %printer.id,
+                printer_id = %printer_id,
                 reason = "empty_patch",
                 "ignored material snapshot event"
             );
@@ -97,7 +137,7 @@ pub async fn handle_materials_snapshot(
                 %tenant_id,
                 %agent_id,
                 serial = %serial,
-                printer_id = %printer.id,
+                printer_id = %printer_id,
                 reason = "older_patch",
                 "ignored material snapshot event"
             );
@@ -108,7 +148,7 @@ pub async fn handle_materials_snapshot(
                 %tenant_id,
                 %agent_id,
                 serial = %serial,
-                printer_id = %printer.id,
+                printer_id = %printer_id,
                 reason = "unchanged_patch",
                 "ignored material snapshot event"
             );
@@ -116,81 +156,27 @@ pub async fn handle_materials_snapshot(
         }
     };
 
+    let Some(printer) = state
+        .printers()
+        .get_with_live_status_for_tenant(tenant_id, &printer_id)
+        .await
+        .map_err(super::commands::repository_status)?
+    else {
+        return Ok(());
+    };
+    let materials = state
+        .materials()
+        .latest_for_printer(tenant_id, &printer_id)
+        .await
+        .map_err(super::commands::repository_status)?;
+
     state
         .publish_printer_event(
             tenant_id,
             PrinterEvent::PrinterSnapshot {
-                printer: Box::new(printer_event_printer(printer, Some(materials))),
+                printer: Box::new(printer_event_printer(printer, materials)),
             },
         )
         .await;
     Ok(())
-}
-
-async fn resolve_printer(
-    state: &AppState,
-    tenant_id: TenantId,
-    agent_id: AgentId,
-    serial: &str,
-    printer_id: &str,
-) -> Result<Option<Printer>, Status> {
-    if !printer_id.is_empty() {
-        if uuid::Uuid::parse_str(printer_id).is_err() {
-            tracing::warn!(
-                %tenant_id,
-                %agent_id,
-                serial = %serial,
-                printer_id = %printer_id,
-                reason = "malformed_printer_id",
-                "ignored material snapshot event"
-            );
-            return Ok(None);
-        }
-        let Some(printer) = state
-            .printers()
-            .get_for_tenant(tenant_id, printer_id)
-            .await
-            .map_err(super::commands::repository_status)?
-        else {
-            tracing::warn!(
-                %tenant_id,
-                %agent_id,
-                serial = %serial,
-                printer_id = %printer_id,
-                reason = "unknown_printer",
-                "ignored material snapshot event"
-            );
-            return Ok(None);
-        };
-        if printer.agent_id != agent_id {
-            tracing::warn!(
-                %tenant_id,
-                %agent_id,
-                serial = %serial,
-                printer_id = %printer_id,
-                reason = "unknown_printer",
-                "ignored material snapshot event"
-            );
-            return Ok(None);
-        }
-        return Ok(Some(printer));
-    }
-
-    let printer = state
-        .printers()
-        .list_for_tenant(tenant_id)
-        .await
-        .map_err(super::commands::repository_status)?
-        .into_iter()
-        .find(|printer| printer.agent_id == agent_id && printer.serial_number == serial);
-    if printer.is_none() {
-        tracing::warn!(
-            %tenant_id,
-            %agent_id,
-            serial = %serial,
-            reason = "unknown_printer",
-            "ignored material snapshot event"
-        );
-    }
-    Ok(printer)
 }

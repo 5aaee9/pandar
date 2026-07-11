@@ -9,10 +9,12 @@ use pandar_core::{AgentId, TenantId};
 
 pub(super) async fn fixture_printer(state: &AppState) -> (TenantId, AgentId, String) {
     let (tenant_id, agent_id) = tenant_agent(state).await;
+    let token = register_test_session(state, tenant_id, agent_id).await;
     handle_snapshot(
         state,
         tenant_id,
         agent_id,
+        token,
         crate::grpc::tests::printer_snapshots::snapshot("serial", "Printer", "A1", "IDLE"),
     )
     .await
@@ -34,10 +36,12 @@ pub(super) async fn fixture_printer_for_other_tenant_and_agent(
 ) -> (TenantId, AgentId, String) {
     let tenant = state.tenants().create("beta", "Beta Labs").await.unwrap();
     let agent = paired_agent(state, tenant.id, "other-agent").await;
+    let token = register_test_session(state, tenant.id, agent.id).await;
     handle_snapshot(
         state,
         tenant.id,
         agent.id,
+        token,
         crate::grpc::tests::printer_snapshots::snapshot("serial", "Printer", "A1", "IDLE"),
     )
     .await
@@ -52,6 +56,10 @@ pub(super) async fn fixture_printer_for_other_tenant_and_agent(
         .unwrap()
         .id;
     (tenant.id, agent.id, printer_id)
+}
+
+pub(super) async fn current_token(state: &AppState, agent_id: AgentId) -> SessionToken {
+    state.sessions().get(agent_id).await.unwrap().token
 }
 
 pub(super) fn material_event(
@@ -99,6 +107,7 @@ async fn printer_materials_snapshot_event_local_failures_are_logged() {
     let state = fixture_state().await;
     let _control_plane = start_control_plane(state.clone()).await;
     let (tenant_id, agent_id, printer_id) = fixture_printer(&state).await;
+    let token = current_token(&state, agent_id).await;
     let missing_printer_id = uuid::Uuid::new_v4().to_string();
 
     let _guard = tracing::subscriber::set_default(subscriber);
@@ -136,7 +145,7 @@ async fn printer_materials_snapshot_event_local_failures_are_logged() {
                     .to_owned(),
         },
     ] {
-        handle_materials_snapshot(&state, tenant_id, agent_id, event)
+        handle_materials_snapshot(&state, tenant_id, agent_id, token, event)
             .await
             .unwrap();
     }
@@ -144,6 +153,7 @@ async fn printer_materials_snapshot_event_local_failures_are_logged() {
         &state,
         tenant_id,
         agent_id,
+        token,
         PrinterMaterialsSnapshot {
             serial: "serial".to_owned(),
             printer_id: printer_id.clone(),
@@ -156,6 +166,7 @@ async fn printer_materials_snapshot_event_local_failures_are_logged() {
         &state,
         tenant_id,
         agent_id,
+        token,
         PrinterMaterialsSnapshot {
             serial: "serial".to_owned(),
             printer_id: printer_id.clone(),
@@ -168,6 +179,7 @@ async fn printer_materials_snapshot_event_local_failures_are_logged() {
         &state,
         tenant_id,
         agent_id,
+        token,
         PrinterMaterialsSnapshot {
             serial: "serial".to_owned(),
             printer_id,

@@ -16,6 +16,8 @@
 
 ## Completed
 
+- Shipped the Web print monitor for Studio- and printer-originated tasks even when no Pandar Job exists: device cards now show the live task name, percentage, current/total layer, remaining time, finished-task details, and typed HMS diagnostics from enriched printer snapshots.
+- Added Pandar-owned build-plate mismatch recovery for the native supported model/action catalog. Hub revalidates the exact error occurrence, task/session marker, printer state, model, catalog guard, and Agent capability, while Web and Studio plugin operations share one native-recovery single-flight. Web sequence-zero dispatch uses a fresh MQTT connection and treats the matching QoS1 PUBACK only as transport confirmation; printer telemetry remains authoritative for whether recovery occurred.
 - Restored Bambu Studio's native printer-error flow from the reference direct-connection behavior: Agent preserves numeric `print_error` presence and the independent printer `job_id`, Hub persists and exposes both on SQLite/PostgreSQL, Studio telemetry keeps Printing Progress/HMS/AMS live, exact typed `get_version`/`pushall` handling unblocks Sync AMS Filament, and native Resume/Ignore/Stop actions emit the reference `param:"reserve"` MQTT payload instead of falling back to ordinary controls.
 - Bound native print-error actions to the exact capable Agent session, session token, and transactionally revalidated printer owner, with exact-session replacement/close/expiry cleanup. SQLite and real PostgreSQL race tests plus the mandatory compiled Studio ABI probe cover this path. Roll out additively as Agent → Hub/migration → plugin; roll back as plugin → Hub → Agent only after every sent/pending `operation.type:"handle_print_error"` command is terminal, leaving the nullable columns in place. A real-printer recovery-action click remains intentionally unperformed unless the operator explicitly authorizes it.
 - Preserved raw Bambu MQTT `print` report context inside Agent print-error diagnostic payloads so Hub `machine_events` retain the original rejection fields when a printer immediately reports `FAILED` after a `project_file` command.
@@ -1036,6 +1038,7 @@ Exit criteria:
 
 ## Immediate Next
 
+- Replace process-local native-recovery ownership with a durable or broker-mediated cross-Hub owner/lease and cleanup protocol, then validate multi-Hub Web recovery before lifting the single-active-Hub restriction.
 - Continue splitting oversized dedicated Rust test suites into smaller topic files while preserving shared fixtures and helpers.
 - Provide Bambu Studio installations and matching plugin artifacts, then run Phase 23 real compatibility testing on Linux, Windows, and macOS.
 - Produce a tag/release artifact, then validate it while running Phase 23 so Phase 24 can use the same platform evidence.

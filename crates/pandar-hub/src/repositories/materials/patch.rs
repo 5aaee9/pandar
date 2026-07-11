@@ -161,6 +161,7 @@ fn is_sensitive(value: &str) -> bool {
         .any(|needle| value.contains(needle))
 }
 
+#[cfg(test)]
 pub(super) fn sanitize_message(message: &str) -> String {
     ["access_code", "password", "passwd", "token", "auth"]
         .into_iter()

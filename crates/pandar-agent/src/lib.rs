@@ -188,7 +188,10 @@ pub fn hello_event(config: &AgentConfig) -> AgentEvent {
             name: config.agent_name.clone(),
             version: config.agent_version.clone(),
             credential: config.agent_credential.clone(),
-            capabilities: vec![AgentCapability::HandlePrintError as i32],
+            capabilities: vec![
+                AgentCapability::HandlePrintError as i32,
+                AgentCapability::HandlePrintErrorSequenceZeroPubackOnly as i32,
+            ],
         }),
     )
 }

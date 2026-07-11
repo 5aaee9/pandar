@@ -162,6 +162,39 @@ async fn live_print_error_result_waits_for_the_session_transition_and_removes_pe
     fixture.wait_for_pending(false).await;
 }
 
+#[tokio::test]
+async fn sequence_zero_puback_result_terminalizes_only_the_live_command() {
+    let fixture = live_fixture_for(
+        PrinterOperationKind::HandlePrintError {
+            error_action: PrintErrorAction::Resume,
+            print_error: 83_918_929,
+            printer_job_id: "job-7".to_owned(),
+            sequence_id: 0,
+        },
+        AgentCapability::HandlePrintErrorSequenceZeroPubackOnly,
+    )
+    .await;
+
+    fixture
+        .sender
+        .send(Ok(command_result_event(
+            fixture.tenant_id,
+            fixture.agent_id,
+            fixture.command.id,
+        )))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        fixture
+            .wait_for_status(CommandStatus::Succeeded)
+            .await
+            .status,
+        CommandStatus::Succeeded
+    );
+    fixture.wait_for_pending(false).await;
+}
+
 fn native_operation(error_action: PrintErrorAction) -> PrinterOperationKind {
     PrinterOperationKind::HandlePrintError {
         error_action,
@@ -221,6 +254,17 @@ impl LiveFixture {
 }
 
 async fn live_fixture() -> LiveFixture {
+    live_fixture_for(
+        native_operation(PrintErrorAction::Resume),
+        AgentCapability::HandlePrintError,
+    )
+    .await
+}
+
+async fn live_fixture_for(
+    operation: PrinterOperationKind,
+    capability: AgentCapability,
+) -> LiveFixture {
     let state = super::fixture_state().await;
     let (tenant_id, agent_id) = super::tenant_agent(&state).await;
     let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
@@ -231,7 +275,6 @@ async fn live_fixture() -> LiveFixture {
     )
     .await
     .unwrap();
-    let operation = native_operation(PrintErrorAction::Resume);
     let command = state
         .commands()
         .create_printer_operation_sent_with_audit(
@@ -243,10 +286,12 @@ async fn live_fixture() -> LiveFixture {
         )
         .await
         .unwrap();
-    let (mut stream, sender) =
-        super::connect_live(&state, vec![capable_hello_event(tenant_id, agent_id)])
-            .await
-            .unwrap();
+    let (mut stream, sender) = super::connect_live(
+        &state,
+        vec![hello_event_with_capability(tenant_id, agent_id, capability)],
+    )
+    .await
+    .unwrap();
     let session = state.sessions().get(agent_id).await.unwrap();
     let token = session.token;
     let pending = session.pending_live_commands;
@@ -256,7 +301,7 @@ async fn live_fixture() -> LiveFixture {
             tenant_id,
             agent_id,
             token,
-            AgentCapability::HandlePrintError,
+            capability,
             command.id,
             live_printer_operation_hub_command(
                 command.id,
@@ -283,11 +328,19 @@ async fn live_fixture() -> LiveFixture {
 }
 
 fn capable_hello_event(tenant_id: TenantId, agent_id: AgentId) -> AgentEvent {
+    hello_event_with_capability(tenant_id, agent_id, AgentCapability::HandlePrintError)
+}
+
+fn hello_event_with_capability(
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    capability: AgentCapability,
+) -> AgentEvent {
     let mut event = super::hello_event(tenant_id, agent_id);
     let Some(agent_event::Event::Hello(hello)) = event.event.as_mut() else {
         panic!("hello event");
     };
-    hello.capabilities = vec![AgentCapability::HandlePrintError as i32];
+    hello.capabilities = vec![capability as i32];
     event
 }
 

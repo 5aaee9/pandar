@@ -3,16 +3,16 @@ import type { Translator } from "./dashboard-runtime-helpers";
 export type PrintJobForFormatting = {
   print: {
     progress_percent: number | null;
-    remaining_time_minutes: number | null;
     current_layer: number | null;
     total_layers: number | null;
-    last_progress_percent: number | null;
-    last_layer: number | null;
+    last_progress_percent?: number | null;
+    last_layer?: number | null;
   };
 };
 
 export function formatProgress(job: PrintJobForFormatting) {
-  const percent = job.print.progress_percent ?? job.print.last_progress_percent;
+  const percent =
+    job.print.progress_percent ?? job.print.last_progress_percent ?? null;
   return percent === null ? "-" : `${percent}%`;
 }
 
@@ -42,7 +42,7 @@ export function formatLayers(
   job: PrintJobForFormatting,
   t: Translator = enJobFormat,
 ): string {
-  const current = job.print.current_layer ?? job.print.last_layer;
+  const current = job.print.current_layer ?? job.print.last_layer ?? null;
   if (current === null && job.print.total_layers === null) {
     return t("layersNone");
   }

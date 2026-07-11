@@ -248,6 +248,13 @@ impl<T, F> ConfiguredBambuMachineGateway<T, F> {
             .collect()
     }
 
+    pub fn endpoint(&self, serial_number: &str) -> Option<BambuPrinterEndpoint> {
+        self.printers
+            .iter()
+            .find(|(endpoint, _, _)| endpoint.serial == serial_number)
+            .map(|(endpoint, _, _)| endpoint.clone())
+    }
+
     pub fn replace_printer(&mut self, endpoint: BambuPrinterEndpoint, mqtt: T, transfer: F) {
         self.printers
             .retain(|(existing, _, _)| existing.serial != endpoint.serial);

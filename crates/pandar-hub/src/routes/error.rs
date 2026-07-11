@@ -114,6 +114,9 @@ impl From<RepositoryError> for ApiError {
             }
             RepositoryError::MissingAgent => Self::new(StatusCode::NOT_FOUND, "agent_not_found"),
             RepositoryError::AgentOnline => Self::new(StatusCode::CONFLICT, "agent_online"),
+            RepositoryError::AgentSessionNotCurrent => {
+                Self::new(StatusCode::CONFLICT, "agent_session_not_current")
+            }
             RepositoryError::MissingCommand => {
                 Self::new(StatusCode::NOT_FOUND, "command_not_found")
             }

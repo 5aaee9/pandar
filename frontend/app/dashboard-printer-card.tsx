@@ -31,6 +31,8 @@ import {
 } from './dashboard-printer-temperature-controls'
 import { StatusBadge } from './dashboard-ui'
 import { ConfirmDialog } from './confirm-dialog'
+import { PrinterMismatchWarning } from './printer-mismatch-dialog'
+import { PrinterPrintStatus } from './printer-print-status'
 export function PrinterCard({
   printer,
   agentName,
@@ -79,13 +81,17 @@ export function PrinterCard({
           <div className="flex size-11 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground">
             <BoxIcon className="size-5" />
           </div>
-          <div className="min-w-0">
-            <div className="text-xs font-medium text-muted-foreground">{t('statusLabel')}</div>
-            <div className="mt-0.5 text-sm font-medium text-foreground">{printer.status}</div>
+          <div className="min-w-0 flex-1">
+            <PrinterPrintStatus
+              coarseStatus={printer.status}
+              print={printer.print ?? null}
+            />
             <div className="mt-1 truncate text-xs text-muted-foreground">{materialDetail}</div>
           </div>
         </div>
       </div>
+
+      <PrinterMismatchWarning printer={printer} />
 
       <PrinterTemperatureControls printer={printer} />
 

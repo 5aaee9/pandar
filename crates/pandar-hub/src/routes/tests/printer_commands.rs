@@ -4,6 +4,7 @@ use requests::{
     PrinterControlRequest, diagnose_printer_body, diagnose_printer_with_access_code_body,
     discover_printers_body, discover_printers_timeout_string_body, empty_body, move_axis,
     printer_control_body, printer_control_value, printer_discovery_result_json,
+    web_print_error_body,
 };
 use serde::Deserialize;
 use tokio::sync::mpsc;
@@ -27,6 +28,7 @@ struct CommandResponse {
     agent_id: String,
     printer_id: Option<String>,
     kind: String,
+    status: String,
     payload_json: String,
     result_json: Option<String>,
 }

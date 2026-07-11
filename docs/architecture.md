@@ -92,6 +92,16 @@ Evidence from `reference/bambuddy/backend/app/services/bambu_mqtt.py`:
 
 Phase 5 deliberately stops at dispatch success. Later phases must keep command dispatch state and physical print state separate so a successful MQTT publish is never treated as a completed print.
 
+### Web Print Monitor And Build-Plate Recovery
+
+The Web client is a presentation and reconciliation boundary. It consumes enriched printer snapshots socket-first, uses REST for authoritative baselines and bounded repairs, and fails closed by clearing the enriched view and recovery controls when that state is unavailable.
+
+Hub owns recovery policy and occurrence identity. Under the locked printer row it validates the error generation and marker, current task/state, printer model and native action catalog, and exact Agent session/capability. Web and Bambu Studio plugin recovery share the same printer-level single-flight so their native operations cannot overlap.
+
+Agent owns only the Bambu transport primitive. Web recovery sequence ID `0` is recovery-only and runs over a fresh clean MQTT connection; a matching QoS1 PUBACK confirms delivery to the broker/printer transport, not application acceptance or physical recovery. Subsequent printer telemetry remains the only recovery confirmation.
+
+Native recovery ownership and pending dispatch remain process-local, so this path supports one active Hub only. NATS event fanout or HTTP/gRPC session affinity does not create cross-process ownership, dispatch forwarding, or cleanup and therefore does not remove that restriction.
+
 ### Discovery And Compatibility
 
 Evidence from `reference/bambuddy/backend/app/services/discovery.py`:

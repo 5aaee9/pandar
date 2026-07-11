@@ -25,6 +25,7 @@ message AgentEvent {
 enum AgentCapability {
   AGENT_CAPABILITY_UNSPECIFIED = 0;
   AGENT_CAPABILITY_HANDLE_PRINT_ERROR = 1;
+  AGENT_CAPABILITY_HANDLE_PRINT_ERROR_SEQUENCE_ZERO_PUBACK_ONLY = 2;
 }
 
 message AgentHello {
@@ -105,6 +106,8 @@ message PrintJobReport {
   bool has_print_error = 22;
   string printer_job_id = 23;
   bool has_printer_job_id = 24;
+  uint32 job_attr = 25;
+  bool has_job_attr = 26;
 }
 
 message PrinterHmsItem {

@@ -99,10 +99,124 @@ async fn stale_replaced_stream_snapshot_does_not_mutate_printer_state() {
 }
 
 #[tokio::test]
+async fn replacement_session_blocks_old_snapshot_commit() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let (_old_stream, _old_sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+    let old_token = state.sessions().get(agent_id).await.unwrap().token;
+    let mut paused = crate::sessions::transition_pause::install_before(old_token);
+
+    let old_state = state.clone();
+    let old_write = tokio::spawn(async move {
+        handle_event(
+            &old_state,
+            tenant_id,
+            agent_id,
+            old_token,
+            snapshot_event(
+                tenant_id,
+                agent_id,
+                snapshot("SN-RACE", "Stale Printer", "X1C", "printing"),
+            ),
+        )
+        .await
+    });
+    paused.wait_until_reached().await;
+
+    let (_replacement_stream, _replacement_sender) =
+        connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+            .await
+            .unwrap();
+    paused.resume();
+    old_write.await.unwrap().unwrap();
+
+    assert!(
+        state
+            .printers()
+            .list_for_tenant(tenant_id)
+            .await
+            .unwrap()
+            .is_empty(),
+        "the stale snapshot must be rejected before its database commit"
+    );
+    let current = state.sessions().get(agent_id).await.unwrap();
+    let persisted = persisted_agent(&state, agent_id).await;
+    assert_eq!(
+        persisted.current_session_id,
+        Some(current.token.persisted_id())
+    );
+    assert_eq!(persisted.status, AgentStatus::Online.as_str());
+}
+
+#[tokio::test]
+async fn replacement_waits_for_snapshot_that_already_owns_transition_lease() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let (_old_stream, _old_sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+    let old_token = state.sessions().get(agent_id).await.unwrap().token;
+    let mut paused = crate::sessions::transition_pause::install_after(old_token);
+
+    let old_state = state.clone();
+    let old_write = tokio::spawn(async move {
+        handle_event(
+            &old_state,
+            tenant_id,
+            agent_id,
+            old_token,
+            snapshot_event(
+                tenant_id,
+                agent_id,
+                snapshot("SN-LINEARIZED", "Linearized Printer", "X1C", "printing"),
+            ),
+        )
+        .await
+    });
+    paused.wait_until_reached().await;
+
+    let replacement_state = state.clone();
+    let replacement_token = SessionToken::new();
+    let mut waiting = crate::sessions::transition_pause::observe_waiting(replacement_token);
+    let replacement = tokio::spawn(async move {
+        register_test_session_with_token(
+            &replacement_state,
+            tenant_id,
+            agent_id,
+            replacement_token,
+        )
+        .await;
+        replacement_token
+    });
+    waiting.wait_until_reached().await;
+    assert!(
+        !replacement.is_finished(),
+        "replacement must wait for the already-linearized snapshot"
+    );
+
+    paused.resume();
+    old_write.await.unwrap().unwrap();
+    let replacement = replacement.await.unwrap();
+
+    let printers = state.printers().list_for_tenant(tenant_id).await.unwrap();
+    assert_eq!(printers.len(), 1);
+    assert_eq!(printers[0].serial_number, "SN-LINEARIZED");
+    assert_eq!(printers[0].status, "printing");
+    let persisted = persisted_agent(&state, agent_id).await;
+    assert_eq!(
+        persisted.current_session_id,
+        Some(replacement.persisted_id())
+    );
+}
+
+#[tokio::test]
 async fn printer_snapshot_event_includes_latest_materials() {
     let state = fixture_state().await;
     let _control_plane = start_control_plane(state.clone()).await;
     let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let token = register_test_session(&state, tenant_id, agent_id).await;
     let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
         .await
         .unwrap();
@@ -123,6 +237,7 @@ async fn printer_snapshot_event_includes_latest_materials() {
         &state,
         tenant_id,
         agent_id,
+        token,
         snapshot(&format!("serial-{printer_id}"), "Printer", "A1", "IDLE"),
     )
     .await
@@ -133,6 +248,12 @@ async fn printer_snapshot_event_includes_latest_materials() {
         panic!("expected printer snapshot")
     };
     assert_eq!(printer.id, printer_id);
+    assert!(printer.state_revision.is_some());
+    let print = printer.print.as_ref().expect("enriched print state");
+    assert_eq!(print.task_generation, 0);
+    assert_eq!(print.error_generation, 0);
+    assert_eq!(print.job_state, None);
+    assert!(print.hms.is_empty());
     let materials = printer.materials.unwrap();
     assert_eq!(
         materials.ams_units,
@@ -165,6 +286,7 @@ async fn printer_snapshot_event_includes_temperatures() {
     let state = fixture_state().await;
     let _control_plane = start_control_plane(state.clone()).await;
     let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let token = register_test_session(&state, tenant_id, agent_id).await;
     let mut receiver = state.printer_events().subscribe(tenant_id).await;
     let mut snapshot = snapshot("SN-TEMP", "Printer", "X2D", "IDLE");
     snapshot.nozzle_temperatures = vec![
@@ -189,7 +311,7 @@ async fn printer_snapshot_event_includes_temperatures() {
     snapshot.active_nozzle = "R".to_owned();
     snapshot.chamber_light_on = Some(true);
 
-    handle_snapshot(&state, tenant_id, agent_id, snapshot)
+    handle_snapshot(&state, tenant_id, agent_id, token, snapshot)
         .await
         .unwrap();
 

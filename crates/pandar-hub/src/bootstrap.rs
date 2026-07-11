@@ -1,6 +1,7 @@
 use anyhow::Context;
 use axum::http::{HeaderMap, StatusCode, header::AUTHORIZATION};
 use tokio::net::TcpListener;
+use tokio::task::JoinHandle;
 use tonic::transport::Server;
 
 use crate::{
@@ -68,11 +69,7 @@ pub async fn run_from_env() -> anyhow::Result<()> {
     tracing::info!(%bind_addr, "pandar-hub listening");
     tracing::info!(%grpc_bind_addr, "pandar-hub gRPC listening");
     let _session_expiry = runtime::spawn_session_expiry(state.clone());
-    let (_control_plane, control_plane_ready) = runtime::spawn_control_plane_ready(state.clone());
-    control_plane_ready
-        .await
-        .context("control plane subscriber stopped before reporting readiness")?
-        .context("failed to start control plane subscriber")?;
+    let _control_plane = start_control_plane(state.clone()).await?;
     let http = axum::serve(listener, routes::router(state.clone()));
     let grpc = Server::builder()
         .add_service(AgentControlServer::new(AgentControlService::new(state)))
@@ -87,3 +84,15 @@ pub async fn run_from_env() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+async fn start_control_plane(state: AppState) -> anyhow::Result<JoinHandle<()>> {
+    let (control_plane, control_plane_ready) = runtime::spawn_control_plane_ready(state);
+    control_plane_ready
+        .await
+        .context("control plane subscriber stopped before reporting readiness")?
+        .context("failed to start control plane subscriber")?;
+    Ok(control_plane)
+}
+
+#[cfg(test)]
+mod tests;

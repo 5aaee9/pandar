@@ -1,4 +1,5 @@
 use pandar_core::{AgentId, AgentStatus, CommandId, TenantId};
+use sea_orm::EntityTrait;
 use tokio::sync::mpsc;
 use tokio_stream::{StreamExt, iter, wrappers::ReceiverStream};
 use tonic::{Code, Status};
@@ -256,6 +257,17 @@ async fn grpc_heartbeat_updates_last_seen_and_session() {
             .last_heartbeat_at,
         "2026-06-20T00:02:00Z"
     );
+    let current = state.sessions().get(agent_id).await.unwrap();
+    let persisted = persisted_agent(&state, agent_id).await;
+    assert_eq!(persisted.status, AgentStatus::Online.as_str());
+    assert_eq!(
+        persisted.current_session_id,
+        Some(current.token.persisted_id())
+    );
+    assert_eq!(
+        persisted.last_seen_at.as_deref(),
+        Some("2026-06-20T00:02:00Z")
+    );
 }
 
 #[tokio::test]
@@ -408,6 +420,17 @@ pub(super) async fn sent_command(
         .await
         .unwrap();
     command.id
+}
+
+pub(super) async fn persisted_agent(
+    state: &AppState,
+    agent_id: AgentId,
+) -> crate::entities::agents::Model {
+    crate::entities::agents::Entity::find_by_id(agent_id.to_string())
+        .one(&state.database().sea_orm_connection())
+        .await
+        .unwrap()
+        .unwrap()
 }
 
 async fn connect(state: &AppState, events: Vec<AgentEvent>) -> Result<ResponseStream, Status> {

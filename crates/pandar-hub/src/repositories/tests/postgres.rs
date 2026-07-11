@@ -429,5 +429,12 @@ async fn postgres_print_reports_merge_printer_live_status_without_a_job_when_con
         return;
     };
 
-    super::printer_live_status::exercise_printer_live_status(database).await;
+    super::printer_live_status::exercise_web_print_monitor_schema(database.clone()).await;
+    super::printer_live_status::exercise_printer_live_status(database.clone()).await;
+    super::printer_live_status::revisions::exercise_atomic_revisions(database.clone()).await;
+    super::printer_live_status::revisions::exercise_concurrent_revision_writers(
+        database,
+        "postgres-revision-race",
+    )
+    .await;
 }

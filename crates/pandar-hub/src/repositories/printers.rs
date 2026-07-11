@@ -1,24 +1,33 @@
 use anyhow::Context;
 use pandar_core::{AgentId, Printer, PrinterNozzleTemperature, PrinterParts, TenantId};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel,
-    PaginatorTrait, QueryFilter, QueryOrder, TransactionTrait,
+    ActiveValue::Set,
+    ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, PaginatorTrait, QueryFilter,
+    QueryOrder, QuerySelect, TransactionTrait,
+    sea_query::{Expr, ExprTrait},
 };
 use serde::Serialize;
 
+#[cfg(test)]
+use crate::entities::agents;
 use crate::{
     db::Database,
-    entities::{agents, printers, tenants},
+    entities::{printers, tenants},
     repositories::{
         AuditActor, RepositoryError, RepositoryResult, adapters,
         audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
+        begin_current_agent_transaction,
     },
 };
 
 mod live_status;
+mod queries;
 
 pub use live_status::{PrinterHms, PrinterLiveStatus, PrinterWithLiveStatus};
-pub(crate) use live_status::{PrinterLiveStatusPatch, update_in_connection as update_live_status};
+pub(crate) use live_status::{
+    PrinterLiveStatusPatch, from_model as live_status_from_model, merge_live_report,
+    persist_merged_live_status,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrinterSnapshotUpsert {
@@ -92,27 +101,6 @@ impl PrinterRepository {
             .collect()
     }
 
-    pub async fn list_with_live_status_for_tenant(
-        &self,
-        tenant_id: TenantId,
-    ) -> RepositoryResult<Vec<PrinterWithLiveStatus>> {
-        let connection = self.database.sea_orm_connection();
-        if !tenant_exists(&connection, tenant_id).await? {
-            return Err(RepositoryError::MissingTenant);
-        }
-
-        printers::Entity::find()
-            .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
-            .order_by_asc(printers::Column::CreatedAt)
-            .order_by_asc(printers::Column::Id)
-            .all(&connection)
-            .await
-            .context("failed to list printers with live status")?
-            .into_iter()
-            .map(live_status::from_model)
-            .collect()
-    }
-
     pub async fn get_for_tenant(
         &self,
         tenant_id: TenantId,
@@ -132,22 +120,24 @@ impl PrinterRepository {
         tenant_id: TenantId,
         printer_id: &str,
         actor: AuditActor,
-    ) -> RepositoryResult<Printer> {
+    ) -> RepositoryResult<PrinterWithLiveStatus> {
         let connection = self.database.sea_orm_connection();
         let tx = connection
             .begin()
             .await
             .context("failed to begin printer delete audit transaction")?;
-        let Some(model) = printers::Entity::find_by_id(printer_id)
-            .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
-            .one(&tx)
-            .await
-            .context("failed to get printer before delete")?
-        else {
+        let query = printers::Entity::find_by_id(printer_id)
+            .filter(printers::Column::TenantId.eq(tenant_id.to_string()));
+        let model = match tx.get_database_backend() {
+            sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(&tx).await,
+            _ => query.one(&tx).await,
+        }
+        .context("failed to lock printer before delete")?;
+        let Some(model) = model else {
             return Err(RepositoryError::MissingPrinter);
         };
 
-        let printer = printer_from_model(model)?;
+        let printer = live_status_from_model(model)?;
         insert_audit_event_tx(
             &tx,
             &record_audit_event(
@@ -155,12 +145,12 @@ impl PrinterRepository {
                 actor,
                 "printer.delete",
                 "printer",
-                Some(printer.id.clone()),
+                Some(printer.printer.id.clone()),
                 audit_metadata(PrinterDeleteAuditMetadata {
-                    printer_name: &printer.name,
-                    serial_number: &printer.serial_number,
-                    agent_id: printer.agent_id.to_string(),
-                    previous_status: &printer.status,
+                    printer_name: &printer.printer.name,
+                    serial_number: &printer.printer.serial_number,
+                    agent_id: printer.printer.agent_id.to_string(),
+                    previous_status: &printer.printer.status,
                 }),
             ),
         )
@@ -201,14 +191,28 @@ impl PrinterRepository {
 
         let previous_name = model.name.clone();
         let previous_host = model.host.clone();
-        let mut active = model.into_active_model();
-        active.name = Set(name);
-        active.host = Set(Some(host));
-        active.access_code = Set(Some(access_code));
-        let model = active
-            .update(&tx)
+        printers::Entity::update_many()
+            .filter(printers::Column::Id.eq(printer_id))
+            .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
+            .set(printers::ActiveModel {
+                name: Set(name),
+                host: Set(Some(host)),
+                access_code: Set(Some(access_code)),
+                ..Default::default()
+            })
+            .col_expr(
+                printers::Column::StateRevision,
+                Expr::col(printers::Column::StateRevision).add(1),
+            )
+            .exec(&tx)
             .await
             .context("failed to update printer details")?;
+        let model = printers::Entity::find_by_id(printer_id)
+            .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
+            .one(&tx)
+            .await
+            .context("failed to reload printer details")?
+            .ok_or(RepositoryError::MissingPrinter)?;
         let printer = printer_from_model(model)?;
         insert_audit_event_tx(
             &tx,
@@ -236,7 +240,8 @@ impl PrinterRepository {
         Ok(printer)
     }
 
-    pub async fn upsert_snapshot(
+    #[cfg(test)]
+    pub(crate) async fn upsert_snapshot(
         &self,
         tenant_id: TenantId,
         agent_id: AgentId,
@@ -246,36 +251,61 @@ impl PrinterRepository {
         if !agent_belongs_to_tenant(&connection, tenant_id, agent_id).await? {
             return Err(RepositoryError::MissingAgent);
         }
-
-        let serial_number = snapshot.serial_number.clone();
-        adapters::printers::upsert_snapshot(
-            &self.database,
-            tenant_id,
-            agent_id,
-            &uuid::Uuid::new_v4().to_string(),
-            &snapshot,
-        )
-        .await?;
-
-        self.get_by_serial_for_tenant(tenant_id, &serial_number)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("printer snapshot missing after upsert").into())
+        let tx = connection
+            .begin()
+            .await
+            .context("failed to begin printer snapshot transaction")?;
+        let printer = upsert_snapshot_in_transaction(&tx, tenant_id, agent_id, snapshot).await?;
+        tx.commit()
+            .await
+            .context("failed to commit printer snapshot transaction")?;
+        Ok(printer)
     }
 
-    async fn get_by_serial_for_tenant(
+    pub async fn upsert_snapshot_if_current(
         &self,
         tenant_id: TenantId,
-        serial_number: &str,
-    ) -> RepositoryResult<Option<Printer>> {
-        printers::Entity::find()
-            .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
-            .filter(printers::Column::SerialNumber.eq(serial_number))
-            .one(&self.database.sea_orm_connection())
+        agent_id: AgentId,
+        session_id: &str,
+        snapshot: PrinterSnapshotUpsert,
+    ) -> RepositoryResult<Printer> {
+        let tx = begin_current_agent_transaction(&self.database, tenant_id, agent_id, session_id)
+            .await?;
+        let printer = upsert_snapshot_in_transaction(&tx, tenant_id, agent_id, snapshot).await?;
+        tx.commit()
             .await
-            .context("failed to get printer by serial number")?
-            .map(printer_from_model)
-            .transpose()
+            .context("failed to commit current-session printer snapshot transaction")?;
+        Ok(printer)
     }
+}
+
+async fn upsert_snapshot_in_transaction(
+    transaction: &DatabaseTransaction,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    snapshot: PrinterSnapshotUpsert,
+) -> RepositoryResult<Printer> {
+    let query = printers::Entity::find()
+        .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
+        .filter(printers::Column::SerialNumber.eq(&snapshot.serial_number));
+    let current = match transaction.get_database_backend() {
+        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(transaction).await,
+        _ => query.one(transaction).await,
+    }
+    .context("failed to lock printer snapshot row")?;
+    let printer_id = current
+        .map(|printer| printer.id)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    adapters::printers::upsert_snapshot(transaction, tenant_id, agent_id, &printer_id, &snapshot)
+        .await?;
+    printers::Entity::find()
+        .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
+        .filter(printers::Column::SerialNumber.eq(&snapshot.serial_number))
+        .one(transaction)
+        .await
+        .context("failed to reload printer snapshot")?
+        .ok_or_else(|| anyhow::anyhow!("printer snapshot missing after upsert").into())
+        .and_then(printer_from_model)
 }
 
 async fn tenant_exists<C>(connection: &C, tenant_id: TenantId) -> RepositoryResult<bool>
@@ -290,6 +320,7 @@ where
         .map_err(Into::into)
 }
 
+#[cfg(test)]
 async fn agent_belongs_to_tenant<C>(
     connection: &C,
     tenant_id: TenantId,

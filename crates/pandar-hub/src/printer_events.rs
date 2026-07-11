@@ -1,16 +1,16 @@
 use std::{
     collections::{BTreeMap, HashMap},
-    sync::Arc,
+    sync::{Arc, Mutex as StdMutex, MutexGuard},
 };
 
-use pandar_core::{CommandRecord, Printer, PrinterNozzleTemperature, TenantId};
+use pandar_core::{CommandRecord, PrinterNozzleTemperature, TenantId};
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
-use tokio::sync::{Mutex, broadcast};
+use tokio::sync::{Mutex, broadcast, watch};
 
 use crate::{
     metrics::{MetricsState, SubscriptionGuard},
-    repositories::{MaterialJsonValue, MaterialSnapshot},
+    repositories::{MaterialJsonValue, MaterialSnapshot, PrinterHms, PrinterWithLiveStatus},
     routes::jobs::JobResponse,
 };
 
@@ -43,6 +43,29 @@ pub struct PrinterEventPrinter {
     pub chamber_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
     pub materials: Option<PrinterEventMaterials>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state_revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub print: Option<PrinterEventPrint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrinterEventPrint {
+    pub task_generation: u64,
+    pub error_generation: u64,
+    pub job_state: Option<u32>,
+    pub gcode_state: Option<String>,
+    pub task_id: Option<String>,
+    pub subtask_id: Option<String>,
+    pub progress_percent: Option<u8>,
+    pub remaining_time_minutes: Option<u32>,
+    pub current_layer: Option<u32>,
+    pub total_layers: Option<u32>,
+    pub gcode_file: Option<String>,
+    pub subtask_name: Option<String>,
+    pub print_error: Option<u32>,
+    pub printer_job_id: Option<String>,
+    pub hms: Vec<PrinterHms>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -80,9 +103,12 @@ pub struct PrinterEventCommand {
 }
 
 pub fn printer_event_printer(
-    printer: Printer,
+    printer: PrinterWithLiveStatus,
     materials: Option<MaterialSnapshot>,
 ) -> PrinterEventPrinter {
+    let state_revision = printer.state_revision;
+    let live_status = printer.live_status;
+    let printer = printer.printer;
     PrinterEventPrinter {
         id: printer.id,
         tenant_id: printer.tenant_id.to_string(),
@@ -100,6 +126,24 @@ pub fn printer_event_printer(
         chamber_temperature_celsius: printer.chamber_temperature_celsius,
         chamber_light_on: printer.chamber_light_on,
         materials: materials.map(PrinterEventMaterials::from),
+        state_revision: Some(state_revision),
+        print: Some(PrinterEventPrint {
+            task_generation: live_status.task_generation,
+            error_generation: live_status.error_generation,
+            job_state: live_status.job_attr.map(|job_attr| (job_attr >> 4) & 0x0f),
+            gcode_state: live_status.gcode_state,
+            task_id: live_status.task_id,
+            subtask_id: live_status.subtask_id,
+            progress_percent: live_status.progress_percent,
+            remaining_time_minutes: live_status.remaining_time_minutes,
+            current_layer: live_status.current_layer,
+            total_layers: live_status.total_layers,
+            gcode_file: live_status.gcode_file,
+            subtask_name: live_status.subtask_name,
+            print_error: live_status.print_error,
+            printer_job_id: live_status.printer_job_id,
+            hms: live_status.hms,
+        }),
     }
 }
 
@@ -183,6 +227,20 @@ fn credential_key(key: &str) -> bool {
 pub struct PrinterEventHub {
     senders: Arc<Mutex<HashMap<String, broadcast::Sender<PrinterEvent>>>>,
     metrics: MetricsState,
+    epoch: watch::Sender<u64>,
+    epoch_gate: PrinterEventEpochGate,
+    capacity: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct PrinterEventEpochGate(Arc<StdMutex<()>>);
+
+impl PrinterEventEpochGate {
+    pub(crate) fn lock(&self) -> MutexGuard<'_, ()> {
+        self.0
+            .lock()
+            .expect("printer event epoch gate mutex should not be poisoned")
+    }
 }
 
 impl PrinterEventHub {
@@ -191,10 +249,22 @@ impl PrinterEventHub {
     }
 
     pub fn with_metrics(metrics: MetricsState) -> Self {
+        Self::with_metrics_and_capacity(metrics, 128)
+    }
+
+    fn with_metrics_and_capacity(metrics: MetricsState, capacity: usize) -> Self {
         Self {
             senders: Arc::new(Mutex::new(HashMap::new())),
             metrics,
+            epoch: watch::channel(0).0,
+            epoch_gate: PrinterEventEpochGate::default(),
+            capacity,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_capacity_for_tests(capacity: usize) -> Self {
+        Self::with_metrics_and_capacity(MetricsState::new(), capacity)
     }
 
     pub async fn subscribe(&self, tenant_id: TenantId) -> broadcast::Receiver<PrinterEvent> {
@@ -205,16 +275,42 @@ impl PrinterEventHub {
         self.metrics.subscription_started(tenant_id).await
     }
 
+    pub fn subscribe_epoch(&self) -> watch::Receiver<u64> {
+        self.epoch.subscribe()
+    }
+
+    pub(crate) fn epoch_gate(&self) -> PrinterEventEpochGate {
+        self.epoch_gate.clone()
+    }
+
+    pub fn invalidate_epoch(&self) {
+        let _gate = self.epoch_gate.lock();
+        self.epoch
+            .send_modify(|value| *value = value.wrapping_add(1));
+    }
+
     pub async fn publish_local(&self, tenant_id: TenantId, event: PrinterEvent) {
         let sender = self.sender(tenant_id).await;
         let _ = sender.send(event);
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn publish_local_burst_for_tests(
+        &self,
+        tenant_id: TenantId,
+        events: Vec<PrinterEvent>,
+    ) {
+        let sender = self.sender(tenant_id).await;
+        for event in events {
+            let _ = sender.send(event);
+        }
     }
 
     async fn sender(&self, tenant_id: TenantId) -> broadcast::Sender<PrinterEvent> {
         let mut senders = self.senders.lock().await;
         senders
             .entry(tenant_id.to_string())
-            .or_insert_with(|| broadcast::channel(128).0)
+            .or_insert_with(|| broadcast::channel(self.capacity).0)
             .clone()
     }
 }

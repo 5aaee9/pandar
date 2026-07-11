@@ -12,9 +12,9 @@ use crate::{
 
 #[tokio::test]
 async fn local_close_cleans_exact_removed_session_and_preserves_replacement() {
-    let (state, tenant_id, agent_id, printer_id) = fixture("local-close").await;
-    let old_command = native(&state, tenant_id, agent_id, &printer_id, 20_042).await;
-    let replacement_command = native(&state, tenant_id, agent_id, &printer_id, 20_043).await;
+    let (state, tenant_id, agent_id) = fixture("local-close").await;
+    let old_command = native(&state, tenant_id, agent_id, 20_042).await;
+    let replacement_command = native(&state, tenant_id, agent_id, 20_043).await;
     let mut old_session = register_pending_session(
         &state,
         tenant_id,
@@ -62,12 +62,12 @@ async fn local_close_cleans_exact_removed_session_and_preserves_replacement() {
 
 #[tokio::test]
 async fn cluster_close_cleans_exact_removed_session_and_preserves_replacement() {
-    let (state, tenant_id, agent_id, printer_id) = fixture("cluster-close").await;
+    let (state, tenant_id, agent_id) = fixture("cluster-close").await;
     let sibling = state.sibling_for_tests();
     let (control_plane, ready) = spawn_control_plane_ready(sibling.clone());
     ready.await.unwrap().unwrap();
-    let old_command = native(&state, tenant_id, agent_id, &printer_id, 20_042).await;
-    let replacement_command = native(&state, tenant_id, agent_id, &printer_id, 20_043).await;
+    let old_command = native(&state, tenant_id, agent_id, 20_042).await;
+    let replacement_command = native(&state, tenant_id, agent_id, 20_043).await;
     let mut old_session = register_pending_session(
         &sibling,
         tenant_id,
@@ -111,7 +111,7 @@ async fn cluster_close_cleans_exact_removed_session_and_preserves_replacement() 
 
 #[tokio::test]
 async fn stale_expiry_cleans_exact_removed_session_and_preserves_replacement() {
-    let (state, tenant_id, agent_id, printer_id) = fixture("stale-expiry").await;
+    let (state, tenant_id, agent_id) = fixture("stale-expiry").await;
     state
         .agents()
         .update_connection(
@@ -122,8 +122,8 @@ async fn stale_expiry_cleans_exact_removed_session_and_preserves_replacement() {
         )
         .await
         .unwrap();
-    let old_command = native(&state, tenant_id, agent_id, &printer_id, 20_042).await;
-    let replacement_command = native(&state, tenant_id, agent_id, &printer_id, 20_043).await;
+    let old_command = native(&state, tenant_id, agent_id, 20_042).await;
+    let replacement_command = native(&state, tenant_id, agent_id, 20_043).await;
     let old_session = register_pending_session(
         &state,
         tenant_id,
@@ -174,11 +174,11 @@ async fn stale_expiry_cleans_exact_removed_session_and_preserves_replacement() {
 
 #[tokio::test]
 async fn stale_recovery_uses_only_process_local_live_command_owners() {
-    let (state, tenant_id, agent_id, printer_id) = fixture("stale-recovery").await;
+    let (state, tenant_id, agent_id) = fixture("stale-recovery").await;
     let sibling = state.sibling_for_tests();
-    let local_owned = native(&state, tenant_id, agent_id, &printer_id, 20_042).await;
-    let sibling_owned = native(&state, tenant_id, agent_id, &printer_id, 20_043).await;
-    let unowned = native(&state, tenant_id, agent_id, &printer_id, 20_044).await;
+    let local_owned = native(&state, tenant_id, agent_id, 20_042).await;
+    let sibling_owned = native(&state, tenant_id, agent_id, 20_043).await;
+    let unowned = native(&state, tenant_id, agent_id, 20_044).await;
     for command_id in [local_owned.id, sibling_owned.id, unowned.id] {
         super::set_command_updated_at(&state, command_id, "2026-07-10T00:00:00Z").await;
     }
@@ -243,33 +243,32 @@ struct RegisteredSession {
     close_receiver: mpsc::Receiver<()>,
 }
 
-async fn fixture(slug: &str) -> (AppState, TenantId, AgentId, String) {
+async fn fixture(slug: &str) -> (AppState, TenantId, AgentId) {
     let state = AppState::sqlite_for_tests().await.unwrap();
     let tenant = state.tenants().create(slug, slug).await.unwrap();
     let agent = state.agents().create(tenant.id, "agent").await.unwrap();
-    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
-        state.database(),
-        tenant.id,
-        agent.id,
-        Some("A1"),
-    )
-    .await
-    .unwrap();
-    (state, tenant.id, agent.id, printer_id)
+    (state, tenant.id, agent.id)
 }
 
 async fn native(
     state: &AppState,
     tenant_id: TenantId,
     agent_id: AgentId,
-    printer_id: &str,
     sequence_id: u64,
 ) -> CommandRecord {
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        state.database(),
+        tenant_id,
+        agent_id,
+        Some("A1"),
+    )
+    .await
+    .unwrap();
     state
         .commands()
         .create_printer_operation_sent_with_audit(
             tenant_id,
-            printer_id,
+            &printer_id,
             agent_id,
             PrinterOperationKind::HandlePrintError {
                 error_action: PrintErrorAction::Resume,

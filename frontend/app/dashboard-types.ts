@@ -1,3 +1,5 @@
+import type { PrinterPrintState } from "./printer-live-types";
+
 export type Summary = {
   tenants: number;
   agents: number;
@@ -35,6 +37,8 @@ export type Printer = {
   chamber_temperature_celsius?: string | null;
   chamber_light_on?: boolean | null;
   materials: PrinterMaterials | null;
+  state_revision?: number;
+  print?: PrinterPrintState | null;
 };
 
 export type PrinterMaterials = {
