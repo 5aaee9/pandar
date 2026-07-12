@@ -23,6 +23,7 @@ pub(super) fn printer_operation_action(operation: &MachinePrinterOperation) -> &
         MachinePrinterOperation::AmsRereadRfid { .. } => "ams_reread_rfid",
         MachinePrinterOperation::AmsLoadFilament { .. } => "ams_load_filament",
         MachinePrinterOperation::AmsUnloadFilament { .. } => "ams_unload_filament",
+        MachinePrinterOperation::GcodeLine { .. } => "gcode_line",
     }
 }
 
@@ -189,7 +190,8 @@ impl OperationResultFields {
             | MachinePrinterOperation::Resume
             | MachinePrinterOperation::Stop
             | MachinePrinterOperation::HandlePrintError { .. }
-            | MachinePrinterOperation::ToggleLight => Self::default(),
+            | MachinePrinterOperation::ToggleLight
+            | MachinePrinterOperation::GcodeLine { .. } => Self::default(),
         }
     }
 }

@@ -26,6 +26,7 @@ use crate::{
 };
 
 mod device_features;
+mod gcode_line;
 mod print_error;
 
 fn command_result_payload(

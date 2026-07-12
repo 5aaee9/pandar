@@ -927,14 +927,17 @@ Goal: make customer-facing printer actions device-neutral so non-Bambu agents ca
 - Completed Hub persistence and audit of semantic `printer_operation` payloads; Hub validates ownership, compatibility, ranges, axes, and unknown fields without constructing Bambu MQTT JSON or G-code.
 - Completed typed `BambuDeviceFeatures` propagation for the complete unsigned `print.fun` bitmap, including unknown bits, bit 63, and valid zero, with nullable text columns in equivalent SQLite and PostgreSQL migrations. Hub advertises the real bitmap only for an exact current Agent observation session with capability 3 and otherwise sends Studio `"0"`.
 - Completed Bambu Agent translation for feature-aware semantic operations: bit 32 enables `back_to_center`, bit 38 enables `xyz_ctrl`, and feature-required commands fail closed without legacy downgrade. Requirement-free legacy translation preserves `G28`, `G28 X`, requested axis order, and the exact seven-line Studio movement envelope without a second Y/Z inversion.
-- Completed network plugin parsing of strict modern `back_to_center`/`xyz_ctrl` messages and bounded legacy `gcode_line` wrappers into semantic Hub operations; modern axes are uppercase X/Y/Z with numeric direction -1/1 and mode 0/1, while unsupported or ambiguous messages return stable plugin errors before network dispatch.
+- Completed network plugin parsing of strict modern `back_to_center`/`xyz_ctrl` messages and bounded legacy `gcode_line` wrappers into semantic Hub operations; modern axes are uppercase X/Y/Z with numeric direction -1/1 and mode 0/1.
+- Completed semantic-first typed Studio `gcode_line` passthrough: recognized Home, axis, and temperature commands remain semantic, while every other string `param` is preserved after JSON decoding, including empty or multiline strings, LF/CRLF, trailing spaces, final newlines, and final blank lines. Arbitrary unwrapped G-code remains unsupported.
+- Limited typed `gcode_line` submission to the authenticated plugin route; the tenant controls route rejects it, over-limit requests retain the existing 64 KiB HTTP 400 `invalid_printer_control` boundary, and exact-current-session Agent capability 4 gates dispatch without printer `fun`, fallback, or downgrade. Queued work may move to a capable replacement, while Hub marks work sent before gRPC delivery and never automatically requeues or replays it. No migration was required.
+- Recorded deterministic parser, HTTP, Hub/Agent lifecycle, and compiled Cloud/LAN ABI evidence only. `PANDAR_TEST_POSTGRES_URL` was unset, so real PostgreSQL verification was skipped; no live Studio run or live-printer movement, Homing, or passthrough G-code execution is claimed.
 - Real-printer probes for Phase 29 home/move/hotend are not recorded in this workspace.
 
 Exit criteria:
 
 - Hub sends `HubCommand::PrinterOperation` for customer controls.
 - Agent-local adapters own all device-specific command conversion.
-- Studio plugin live control messages never forward raw G-code to Hub.
+- Studio plugin live controls remain semantic-first. Only an authenticated typed `gcode_line` wrapper may forward its decoded string unchanged to Hub; this is not a raw MQTT tunnel, and tenant controls reject it.
 
 ## Phase 28: Reference-Backed Slicer Metadata
 

@@ -52,6 +52,9 @@ pub(super) enum AxisFeatureOperation {
         #[serde(default)]
         required_device_features: Option<Vec<String>>,
     },
+    GcodeLine {
+        param: String,
+    },
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -96,6 +99,12 @@ impl AxisFeatureOperation {
             required_device_features: None,
         }
     }
+
+    pub(super) fn gcode_line(param: &str) -> Self {
+        Self::GcodeLine {
+            param: param.to_owned(),
+        }
+    }
 }
 
 pub(super) fn assert_axis_feature_operation_body_eq(request: &str, expected: AxisFeatureOperation) {
@@ -109,6 +118,7 @@ pub(super) fn assert_axis_feature_operation_body_eq(request: &str, expected: Axi
             required_device_features,
             ..
         } => required_device_features.is_some(),
+        AxisFeatureOperation::GcodeLine { .. } => false,
     };
     assert!(
         required_device_feature_presence_matches(body, required_device_features_present),
@@ -116,11 +126,16 @@ pub(super) fn assert_axis_feature_operation_body_eq(request: &str, expected: Axi
     );
     let actual: AxisFeatureOperation = serde_json::from_str(body).unwrap();
     assert_eq!(actual, expected);
-    for raw_transport in ["G28", "M211", "xyz_ctrl", "back_to_center"] {
-        assert!(
-            !body.contains(raw_transport),
-            "operation request leaked raw Studio transport {raw_transport}: {body}"
-        );
+    if matches!(
+        expected,
+        AxisFeatureOperation::Home { .. } | AxisFeatureOperation::MoveAxes { .. }
+    ) {
+        for raw_transport in ["G28", "M211", "xyz_ctrl", "back_to_center"] {
+            assert!(
+                !body.contains(raw_transport),
+                "operation request leaked raw Studio transport {raw_transport}: {body}"
+            );
+        }
     }
 }
 

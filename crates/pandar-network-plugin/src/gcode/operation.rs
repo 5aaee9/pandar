@@ -22,6 +22,9 @@ pub(crate) enum PrinterOperation {
     Pause,
     Resume,
     Stop,
+    GcodeLine {
+        param: String,
+    },
     HandlePrintError {
         error_action: PrintErrorAction,
         print_error: u32,
@@ -125,6 +128,7 @@ impl PrinterOperation {
     pub(super) fn is_valid(&self) -> bool {
         match self {
             Self::Pause | Self::Resume | Self::Stop | Self::ToggleLight => true,
+            Self::GcodeLine { .. } => true,
             Self::HandlePrintError { print_error, .. } => {
                 (1..=i32::MAX as u32).contains(print_error)
             }

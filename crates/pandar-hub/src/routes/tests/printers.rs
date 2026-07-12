@@ -715,6 +715,42 @@ async fn printer_control_enqueues_ams_slot_operation() {
 }
 
 #[tokio::test]
+async fn tenant_printer_control_rejects_gcode_line_without_insert() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        state.database(),
+        tenant_id,
+        agent_id,
+        Some("A1"),
+    )
+    .await
+    .unwrap();
+
+    let (status, body) = request_as(
+        app,
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls"),
+        Some(serde_json::json!({
+            "action": "gcode_line",
+            "param": "M620 C1 \n",
+        })),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        decode::<ErrorResponse>(body).error,
+        "invalid_printer_control"
+    );
+    assert_eq!(state.commands().count().await.unwrap(), 0);
+}
+
+#[tokio::test]
 async fn printer_control_enqueues_select_extruder_operation() {
     let state = state().await;
     let app = router(state.clone());

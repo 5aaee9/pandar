@@ -254,7 +254,7 @@ fn studio_command_payloads_use_incrementing_studio_sequence_ids() {
         ),
         (
             BambuMqttCommand::GcodeLine(GcodeLineCommand {
-                lines: vec!["G28".to_string()],
+                param: "G28".to_string(),
             })
             .payload(),
             "print",
@@ -514,7 +514,7 @@ fn axis_controls_xyz_control_payload_uses_uppercase_axis_and_numeric_fields() {
 #[test]
 fn gcode_line_payload_preserves_single_home_line() {
     let payload = BambuMqttCommand::GcodeLine(GcodeLineCommand {
-        lines: vec!["G28".to_string()],
+        param: "G28".to_string(),
     })
     .payload();
     assert_eq!(
@@ -524,17 +524,9 @@ fn gcode_line_payload_preserves_single_home_line() {
 }
 
 #[test]
-fn gcode_line_payload_joins_studio_axis_move_envelope() {
+fn gcode_line_payload_preserves_studio_axis_move_envelope() {
     let payload = BambuMqttCommand::GcodeLine(GcodeLineCommand {
-        lines: vec![
-            "M211 S".to_string(),
-            "M211 X1 Y1 Z1".to_string(),
-            "M1002 push_ref_mode".to_string(),
-            "G91".to_string(),
-            "G1 X10 Z-0.5 F3000".to_string(),
-            "M1002 pop_ref_mode".to_string(),
-            "M211 R".to_string(),
-        ],
+        param: "M211 S\nM211 X1 Y1 Z1\nM1002 push_ref_mode\nG91\nG1 X10 Z-0.5 F3000\nM1002 pop_ref_mode\nM211 R".to_string(),
     })
     .payload();
     assert_eq!(
@@ -550,7 +542,7 @@ fn gcode_line_payload_joins_studio_axis_move_envelope() {
 #[test]
 fn gcode_line_payload_preserves_hotend_temperature_line() {
     let payload = BambuMqttCommand::GcodeLine(GcodeLineCommand {
-        lines: vec!["M104 S200".to_string()],
+        param: "M104 S200".to_string(),
     })
     .payload();
     assert_eq!(
@@ -561,6 +553,17 @@ fn gcode_line_payload_preserves_hotend_temperature_line() {
             &studio_sequence_id(&payload, "print")
         )
     );
+}
+
+#[test]
+fn gcode_line_payload_preserves_exact_param() {
+    let param = "M106 P1 S127 \r\n; keep  \n\n";
+    let payload = BambuMqttCommand::GcodeLine(GcodeLineCommand {
+        param: param.to_owned(),
+    })
+    .command_payload();
+
+    assert_eq!(payload.payload["print"]["param"], param);
 }
 
 #[test]

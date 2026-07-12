@@ -28,6 +28,7 @@ enum AgentCapability {
   AGENT_CAPABILITY_HANDLE_PRINT_ERROR = 1;
   AGENT_CAPABILITY_HANDLE_PRINT_ERROR_SEQUENCE_ZERO_PUBACK_ONLY = 2;
   AGENT_CAPABILITY_REQUIRED_DEVICE_FEATURES = 3;
+  AGENT_CAPABILITY_GCODE_LINE = 4;
 }
 
 message AgentHello {
@@ -201,7 +202,12 @@ message PrinterOperation {
     ToggleLightOperation toggle_light = 23;
     SetChamberLightOperation set_chamber_light = 24;
     HandlePrintErrorOperation handle_print_error = 25;
+    GcodeLineOperation gcode_line = 26;
   }
+}
+
+message GcodeLineOperation {
+  string param = 1;
 }
 
 message AgentCameraEvent {

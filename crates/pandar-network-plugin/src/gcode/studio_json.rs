@@ -174,7 +174,7 @@ impl StudioPrint {
                 required_device_features: vec![RequiredDeviceFeature::BambuMqttHoming],
             }),
             "xyz_ctrl" => self.xyz_ctrl_operation(),
-            "gcode_line" => super::parse_gcode_operation(self.param.as_string()?),
+            "gcode_line" => self.gcode_line_operation(),
             "print_speed" => Some(PrinterOperation::SetPrintSpeed {
                 speed_mode: self.param.as_u64()?,
             }),
@@ -201,6 +201,15 @@ impl StudioPrint {
             "ams_change_filament" => self.ams_change_filament_operation(),
             _ => None,
         }
+    }
+
+    fn gcode_line_operation(&self) -> Option<PrinterOperation> {
+        let param = self.param.as_string()?;
+        Some(
+            super::parse_gcode_operation(param).unwrap_or_else(|| PrinterOperation::GcodeLine {
+                param: param.to_owned(),
+            }),
+        )
     }
 
     fn xyz_ctrl_operation(&self) -> Option<PrinterOperation> {

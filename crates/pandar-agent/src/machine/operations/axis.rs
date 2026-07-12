@@ -139,7 +139,7 @@ pub(super) fn home_command(
 ) -> anyhow::Result<BambuMqttCommand> {
     match required_feature {
         None => Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
-            lines: vec![home_gcode_line(&axes)],
+            param: home_gcode_line(&axes),
         })),
         Some(BambuDeviceFeature::MqttHoming) if axes.is_empty() => {
             require_observed_feature(observed_features, BambuDeviceFeature::MqttHoming)?;
@@ -162,7 +162,7 @@ pub(super) fn move_axes_command(
 ) -> anyhow::Result<BambuMqttCommand> {
     match required_feature {
         None => Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
-            lines: legacy_move_lines(x_mm, y_mm, z_mm, feedrate_mm_per_min),
+            param: legacy_move_lines(x_mm, y_mm, z_mm, feedrate_mm_per_min).join("\n"),
         })),
         Some(BambuDeviceFeature::MqttAxisControl) => {
             let (axis, delta) = modern_axis_move(x_mm, y_mm, z_mm, feedrate_mm_per_min)?;

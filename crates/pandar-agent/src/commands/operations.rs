@@ -305,6 +305,11 @@ fn parse_printer_operation(
                 sequence_id: operation.sequence_id,
             })
         }
+        Some(printer_operation::Operation::GcodeLine(operation)) => {
+            Ok(MachinePrinterOperation::GcodeLine {
+                param: operation.param.clone(),
+            })
+        }
         None => anyhow::bail!("missing printer operation"),
     }
 }

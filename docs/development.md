@@ -99,7 +99,7 @@ Recovery APIs:
 
 Phase 29 live printer operations are dispatch-only operations for compatible printers. Pause, resume, stop, print-speed, home, relative movement, and hotend-temperature requests enqueue audited `printer_operation` commands; physical printer state changes remain report-derived.
 
-The Hub stores and forwards semantic operation JSON only. Bambu-specific MQTT and G-code conversion happens inside `pandar-agent`. The network plugin maps supported Studio `send_message_to_printer` G-code messages to semantic operation requests at `POST /api/v1/plugin/printers/{printer_id}/operations` and rejects unsupported G-code before contacting Hub.
+The Hub stores and forwards typed printer operations. Bambu-specific MQTT construction remains inside `pandar-agent`. The network plugin maps recognized Studio `send_message_to_printer` G-code to semantic operation requests and uses the authenticated plugin route's narrow typed `gcode_line` path for other string parameters; the normal tenant controls route does not expose that path.
 
 ## Frontend Runtime
 
@@ -156,6 +156,18 @@ With bit 32, an eligible full Home uses `back_to_center`. With bit 38, an eligib
 Roll out this protocol in the order Hub (including both database migrations and session gates) -> Agent -> network plugin. During rollback, first stop the plugin from creating new required-feature operations and drain or fail every queued or sent operation whose `required_device_features` list is non-empty. Only then roll back Agent and Hub; leave the additive nullable columns in place. Required operations tied to a replaced or mismatched session fail and are not sent to an older Agent.
 
 Local operator verification for this implementation recorded 1,063/1,063 workspace tests, 288 Agent tests, 656 Hub tests, 84 network-plugin tests, and two compiled Studio ABI probe tests. The protocol tests use deterministic fakes/loopback peers, and the compiled Windows ABI fixture uses MSVC. `PANDAR_TEST_POSTGRES_URL` was not configured, so the real PostgreSQL device-feature test was explicitly skipped; migration parity and SQLite behavior were still covered locally. No Home or XYZ movement was executed against a real printer, and this evidence must not be recorded as real Studio or hardware validation.
+
+### Typed Studio `gcode_line` passthrough
+
+For an actual typed Studio `gcode_line` wrapper, parsing remains semantic-first: recognized Home, axis, and temperature commands keep their existing semantic operation types. Every other string `param` is carried as typed `GcodeLine { param }` without normalization after JSON decoding. This includes empty strings, multiple lines, LF and CRLF, trailing spaces, final newlines, and final blank lines. Plain unwrapped G-code remains unsupported.
+
+Only `POST /api/v1/plugin/printers/{printer_id}/operations` with an authenticated Studio plugin credential accepts this typed operation; `POST /api/v1/tenants/{tenant_id}/printers/{printer_id}/controls` rejects it. The existing 64 KiB limit applies to the complete plugin JSON request, not only `param`; an over-limit request returns HTTP 400 `invalid_printer_control` and creates no command. Hub dispatches queued typed G-code only while the exact current Agent session advertises capability 4. Capability 4 is an Agent wire-compatibility bit, not printer `fun`, and there is no fallback or downgrade for an incapable Agent.
+
+The command uses the existing first-dispatch lifecycle: Hub changes `queued` to `sent` before writing to the gRPC channel. A capable replacement may claim work that is still queued, but disconnect, closed channel, missing acknowledgment, or missing result does not automatically requeue or replay a sent command.
+
+Roll out in the order Hub → Agent → network plugin. For rollback, first stop the plugin from creating new typed G-code operations, then drain or explicitly fail every queued and sent `GcodeLine` command to a terminal state before rolling back Agent or Hub. The feature has no database migration.
+
+Verification is local and deterministic: parser and plugin HTTP tests, compiled Cloud and LAN ABI calls against a loopback Hub, and Hub/Agent conversion and lifecycle tests. `PANDAR_TEST_POSTGRES_URL` was unset, so the real PostgreSQL round trip was skipped. No live Studio validation or live-printer movement, Homing, or passthrough G-code execution is claimed.
 
 ### Native print-error live operations
 

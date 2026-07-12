@@ -88,7 +88,7 @@ fn studio_abi_probe_preserves_full_axis_feature_bitmap_and_submits_semantics_thr
     let result: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
     assert_eq!(result["ok"], serde_json::json!(true));
     assert_eq!(result["axis_features_exact"], serde_json::json!(true));
-    assert_eq!(result["operation_posts"], serde_json::json!(8));
+    assert_eq!(result["operation_posts"], serde_json::json!(10));
     let status: serde_json::Value =
         serde_json::from_str(result["cloud_status_body"].as_str().unwrap()).unwrap();
     assert_eq!(

@@ -6,7 +6,7 @@ use super::{BambuMqttCommandPayload, next_studio_sequence_id, payload::json_payl
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GcodeLineCommand {
-    pub lines: Vec<String>,
+    pub param: String,
 }
 
 pub(super) fn back_to_center_payload() -> BambuMqttCommandPayload {
@@ -48,7 +48,7 @@ pub(super) fn gcode_line_payload(command: &GcodeLineCommand) -> BambuMqttCommand
         json_payload(AxisPrintPayload {
             print: GcodeLinePayload {
                 command: "gcode_line",
-                param: command.lines.join("\n"),
+                param: command.param.clone(),
                 sequence_id: sequence_id.clone(),
             },
         }),

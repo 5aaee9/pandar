@@ -73,6 +73,9 @@ pub enum PrinterOperationKind {
         printer_job_id: String,
         sequence_id: u64,
     },
+    GcodeLine {
+        param: String,
+    },
     ToggleLight {},
     SetChamberLight {
         on: bool,
@@ -136,6 +139,7 @@ impl PrinterOperationKind {
             Self::Resume {} => "resume",
             Self::Stop {} => "stop",
             Self::HandlePrintError { .. } => "handle_print_error",
+            Self::GcodeLine { .. } => "gcode_line",
             Self::ToggleLight {} => "toggle_light",
             Self::SetChamberLight { .. } => "set_chamber_light",
             Self::SetPrintSpeed { .. } => "set_print_speed",
@@ -195,7 +199,8 @@ pub fn validate_printer_operation(operation: &PrinterOperationKind) -> Repositor
         | PrinterOperationKind::Resume {}
         | PrinterOperationKind::Stop {}
         | PrinterOperationKind::ToggleLight {}
-        | PrinterOperationKind::SetChamberLight { .. } => Ok(()),
+        | PrinterOperationKind::SetChamberLight { .. }
+        | PrinterOperationKind::GcodeLine { .. } => Ok(()),
         PrinterOperationKind::HandlePrintError { print_error, .. }
             if (1..=i32::MAX as u32).contains(print_error) =>
         {

@@ -8,6 +8,9 @@ enum TestOperation {
     Home {
         axes: Vec<String>,
     },
+    GcodeLine {
+        param: String,
+    },
     SelectExtruder {
         extruder_id: u8,
     },
@@ -84,6 +87,15 @@ fn assert_native_print_error_request(request: &str) {
     );
 }
 
+fn assert_exact_gcode_line_request(request: &str) {
+    assert_eq!(
+        serde_json::from_str::<TestOperation>(request_body(request)).unwrap(),
+        TestOperation::GcodeLine {
+            param: "M620 C1 \r\n; keep trailing  \n\n".to_owned(),
+        }
+    );
+}
+
 #[test]
 fn submit_printer_operation_posts_semantic_body_to_plugin_endpoint() {
     let hub_url = one_shot_server(
@@ -96,6 +108,27 @@ fn submit_printer_operation_posts_semantic_body_to_plugin_endpoint() {
     );
     let operation_body = serde_json::to_vec(&TestOperation::Home {
         axes: vec!["x".to_owned()],
+    })
+    .unwrap();
+    let result = submit_printer_operation(hub_url.as_bytes(), TOKEN, operation_body.as_slice());
+
+    assert_eq!(result.status, 0);
+    assert_eq!(result.http_code, 202);
+    assert_eq!(body(result), r#"{"command_id":"cmd","status":"queued"}"#);
+}
+
+#[test]
+fn submit_printer_operation_posts_exact_gcode_line_body() {
+    let hub_url = one_shot_server(
+        "POST",
+        "/api/v1/plugin/printers/printer/operations",
+        Some("pandar_plugin_test_token"),
+        "HTTP/1.1 202 Accepted",
+        r#"{"command_id":"cmd","status":"queued"}"#,
+        Some(assert_exact_gcode_line_request),
+    );
+    let operation_body = serde_json::to_vec(&TestOperation::GcodeLine {
+        param: "M620 C1 \r\n; keep trailing  \n\n".to_owned(),
     })
     .unwrap();
     let result = submit_printer_operation(hub_url.as_bytes(), TOKEN, operation_body.as_slice());

@@ -192,6 +192,7 @@ pub fn hello_event(config: &AgentConfig) -> AgentEvent {
                 AgentCapability::HandlePrintError as i32,
                 AgentCapability::HandlePrintErrorSequenceZeroPubackOnly as i32,
                 AgentCapability::RequiredDeviceFeatures as i32,
+                AgentCapability::GcodeLine as i32,
             ],
         }),
     )

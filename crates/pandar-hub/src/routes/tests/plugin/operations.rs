@@ -161,6 +161,22 @@ async fn plugin_print_error_dispatches_all_actions_as_sent_tag_25_commands_witho
 }
 
 #[tokio::test]
+async fn plugin_printer_operation_rejects_string_param_on_handle_print_error_without_side_effects()
+{
+    assert_plugin_print_error_param_rejected(
+        "plugin-native-string-param",
+        serde_json::json!("M620 C1"),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn plugin_printer_operation_rejects_null_param_on_handle_print_error_without_side_effects() {
+    assert_plugin_print_error_param_rejected("plugin-native-null-param", serde_json::Value::Null)
+        .await;
+}
+
+#[tokio::test]
 async fn plugin_print_error_rejects_offline_and_incapable_agents_before_insert() {
     let fixture = operation_fixture("plugin-native-unavailable").await;
 
@@ -254,6 +270,164 @@ async fn plugin_ordinary_operation_remains_queued_and_wakes_agent() {
         .expect("ordinary operation should wake agent")
         .expect("wake channel should stay open");
     assert!(command_receiver.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn plugin_gcode_line_queues_and_persists_exact_and_empty_params() {
+    let fixture = operation_fixture("plugin-gcode-line-exact").await;
+
+    for (expected_count, param) in [(1, "M620 C1 \r\n; keep  \n"), (2, "")] {
+        let (status, body) = request_as(
+            fixture.app.clone(),
+            Method::POST,
+            &fixture.uri,
+            Some(serde_json::json!({
+                "action": "gcode_line",
+                "param": param,
+            })),
+            &fixture.token,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        let response = decode::<OperationResponse>(body);
+        assert_eq!(response.status, "queued");
+        let command = fixture
+            .state
+            .commands()
+            .get_for_tenant(
+                fixture.tenant_id,
+                CommandId::parse(&response.command_id).unwrap(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        let payload: PrinterOperationPayload = serde_json::from_str(&command.payload_json).unwrap();
+        assert_eq!(
+            payload.operation,
+            PrinterOperationKind::GcodeLine {
+                param: param.to_owned(),
+            }
+        );
+        assert_eq!(
+            fixture.state.commands().count().await.unwrap(),
+            expected_count
+        );
+    }
+}
+
+#[tokio::test]
+async fn plugin_gcode_line_rejects_non_string_missing_and_extra_fields_without_insert() {
+    let fixture = operation_fixture("plugin-gcode-line-invalid").await;
+    let mut cases = vec![
+        serde_json::json!({"action": "gcode_line"}),
+        serde_json::json!({"action": "gcode_line", "param": null}),
+        serde_json::json!({"action": "gcode_line", "param": true}),
+        serde_json::json!({"action": "gcode_line", "param": 1}),
+        serde_json::json!({"action": "gcode_line", "param": []}),
+        serde_json::json!({"action": "gcode_line", "param": {}}),
+        serde_json::json!({"action": "gcode_line", "param": "M620 C1", "unexpected": true}),
+    ];
+    for (field, value) in [
+        ("speed_mode", serde_json::json!(1)),
+        ("axes", serde_json::json!([])),
+        ("movements", serde_json::json!([])),
+        ("feedrate_mm_per_min", serde_json::json!(1)),
+        ("temperature_celsius", serde_json::json!(1)),
+        ("wait", serde_json::json!(false)),
+        ("ams_id", serde_json::json!(0)),
+        ("slot_id", serde_json::json!(0)),
+        ("global_tray_id", serde_json::json!(0)),
+        ("external_id", serde_json::json!("external")),
+        ("extruder_id", serde_json::json!(0)),
+        ("light_on", serde_json::json!(false)),
+        ("error_action", serde_json::json!("resume")),
+        ("print_error", serde_json::json!(1)),
+        ("printer_job_id", serde_json::json!("job")),
+        ("sequence_id", serde_json::json!(1)),
+        ("error_generation", serde_json::json!(1)),
+    ] {
+        let mut body = serde_json::json!({"action": "gcode_line", "param": "M620 C1"});
+        body.as_object_mut()
+            .unwrap()
+            .insert(field.to_owned(), value);
+        cases.push(body);
+    }
+    for required_device_features in [
+        serde_json::Value::Null,
+        serde_json::json!([]),
+        serde_json::json!(["bambu_mqtt_homing"]),
+        serde_json::json!(["bambu_mqtt_axis_control"]),
+        serde_json::json!(["unspecified"]),
+    ] {
+        cases.push(serde_json::json!({
+            "action": "gcode_line",
+            "param": "M620 C1",
+            "required_device_features": required_device_features,
+        }));
+    }
+
+    for request in cases {
+        let (status, body) = request_as(
+            fixture.app.clone(),
+            Method::POST,
+            &fixture.uri,
+            Some(request),
+            &fixture.token,
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            decode::<OperationErrorResponse>(body).error,
+            "invalid_printer_control"
+        );
+        assert_eq!(fixture.state.commands().count().await.unwrap(), 0);
+    }
+    assert!(
+        fixture
+            .state
+            .audit_events()
+            .list_for_tenant(fixture.tenant_id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn plugin_gcode_line_obeys_existing_router_body_limit_without_partial_insert() {
+    const ROUTER_BODY_LIMIT: usize = 64 * 1024;
+    let fixture = operation_fixture("plugin-gcode-line-body-limit").await;
+    let below = gcode_line_body_with_serialized_len(ROUTER_BODY_LIMIT - 1);
+    let above = gcode_line_body_with_serialized_len(ROUTER_BODY_LIMIT + 1);
+
+    let (status, body) = request_as(
+        fixture.app.clone(),
+        Method::POST,
+        &fixture.uri,
+        Some(below),
+        &fixture.token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(decode::<OperationResponse>(body).status, "queued");
+    assert_eq!(fixture.state.commands().count().await.unwrap(), 1);
+
+    let (status, body) = request_as(
+        fixture.app.clone(),
+        Method::POST,
+        &fixture.uri,
+        Some(above),
+        &fixture.token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        decode::<OperationErrorResponse>(body).error,
+        "invalid_printer_control"
+    );
+    assert_eq!(fixture.state.commands().count().await.unwrap(), 1);
 }
 
 #[tokio::test]
@@ -605,6 +779,49 @@ async fn assert_unavailable(fixture: &OperationFixture) {
     );
 }
 
+async fn assert_plugin_print_error_param_rejected(slug: &str, param: Value) {
+    let fixture = operation_fixture(slug).await;
+    let (wake_sender, _) = mpsc::channel(1);
+    let (command_sender, _command_receiver) = mpsc::channel(1);
+    register_session(
+        &fixture,
+        wake_sender,
+        command_sender,
+        [AgentCapability::HandlePrintError],
+    )
+    .await;
+    let mut request = native_body("resume");
+    request
+        .as_object_mut()
+        .unwrap()
+        .insert("param".to_owned(), param);
+
+    let (status, body) = request_as(
+        fixture.app.clone(),
+        Method::POST,
+        &fixture.uri,
+        Some(request),
+        &fixture.token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        decode::<OperationErrorResponse>(body).error,
+        "invalid_printer_control"
+    );
+    assert_eq!(fixture.state.commands().count().await.unwrap(), 0);
+    assert!(
+        fixture
+            .state
+            .audit_events()
+            .list_for_tenant(fixture.tenant_id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
 fn native_body(error_action: &str) -> Value {
     serde_json::json!({
         "action": "handle_print_error",
@@ -613,4 +830,15 @@ fn native_body(error_action: &str) -> Value {
         "printer_job_id": "job-7",
         "sequence_id": 20_042
     })
+}
+
+fn gcode_line_body_with_serialized_len(target_len: usize) -> Value {
+    let empty = serde_json::json!({"action": "gcode_line", "param": ""});
+    let overhead = empty.to_string().len();
+    let body = serde_json::json!({
+        "action": "gcode_line",
+        "param": "x".repeat(target_len - overhead),
+    });
+    assert_eq!(body.to_string().len(), target_len);
+    body
 }

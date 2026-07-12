@@ -75,6 +75,9 @@ pub enum PrinterOperation {
         external_id: Option<String>,
         extruder_id: Option<u32>,
     },
+    GcodeLine {
+        param: String,
+    },
 }
 
 impl PrinterOperation {
@@ -215,6 +218,9 @@ fn mqtt_command_for_printer_operation_with_features(
         PrinterOperation::SetPrintSpeed(mode) => {
             Ok(BambuMqttCommand::SetPrintSpeed(PrintSpeed::new(mode)?))
         }
+        PrinterOperation::GcodeLine { param } => {
+            Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand { param }))
+        }
         PrinterOperation::SelectExtruder(extruder_id) => {
             Ok(BambuMqttCommand::SelectExtruder(extruder_id))
         }
@@ -248,35 +254,36 @@ fn mqtt_command_for_printer_operation_with_features(
                 },
             )),
             None => Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
-                lines: vec![format!(
+                param: format!(
                     "{} S{}",
                     if wait { "M109" } else { "M104" },
                     temperature_celsius
-                )],
+                ),
             })),
         },
         PrinterOperation::SetBedTemperature {
             temperature_celsius,
             wait,
         } => Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
-            lines: vec![format!(
+            param: format!(
                 "{} S{}",
                 if wait { "M190" } else { "M140" },
                 temperature_celsius
-            )],
+            ),
         })),
         PrinterOperation::SetChamberTemperature {
             temperature_celsius,
             wait,
         } => Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
-            lines: if wait {
-                vec![
+            param: if wait {
+                [
                     "M106 P2 S255".to_string(),
                     format!("M191 S{}", temperature_celsius),
                     "M106 P2 S0".to_string(),
                 ]
+                .join("\n")
             } else {
-                vec![format!("M141 S{}", temperature_celsius)]
+                format!("M141 S{}", temperature_celsius)
             },
         })),
         PrinterOperation::AmsRereadRfid { ams_id, slot_id } => {

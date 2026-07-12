@@ -35,6 +35,18 @@ fn printers_response_with_progress(progress: u8) -> String {
     )
 }
 
+fn axis_printers_response() -> String {
+    let mut response: serde_json::Value = serde_json::from_str(PRINTERS_RESPONSE).unwrap();
+    let devices = response["devices"].as_array_mut().unwrap();
+    let mut second = devices[0].clone();
+    second["dev_id"] = serde_json::json!("studio-serial-2");
+    second["pandar_printer_id"] = serde_json::json!("printer-2");
+    second["dev_name"] = serde_json::json!("Probe Printer 2");
+    second["name"] = serde_json::json!("Probe Printer 2");
+    devices.push(second);
+    response.to_string()
+}
+
 fn next_request(
     listener: &TcpListener,
     stop: &AtomicBool,
@@ -96,21 +108,34 @@ fn serve_axis_features(listener: &TcpListener, stop: &AtomicBool, deadline: Inst
                 r#"{"token":"probe-token","profile":{"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"}}"#,
             );
         } else if line == "GET /api/v1/plugin/printers HTTP/1.1" {
-            write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
+            write_response(&mut stream, "HTTP/1.1 200 OK", &axis_printers_response());
         } else if line == "GET /probe-operation-count HTTP/1.1" {
             write_response(
                 &mut stream,
                 "HTTP/1.1 200 OK",
                 &serde_json::json!({"count": operation_posts}).to_string(),
             );
-        } else if line == "POST /api/v1/plugin/printers/printer-1/operations HTTP/1.1" {
+        } else if line == "POST /api/v1/plugin/printers/printer-1/operations HTTP/1.1"
+            || line == "POST /api/v1/plugin/printers/printer-2/operations HTTP/1.1"
+        {
+            let printer_id = if operation_posts < 5 {
+                "printer-1"
+            } else {
+                "printer-2"
+            };
+            assert_eq!(
+                line,
+                format!("POST /api/v1/plugin/printers/{printer_id}/operations HTTP/1.1")
+            );
             let expected = match operation_posts {
-                0 | 4 => AxisFeatureOperation::modern_home(),
+                0 | 5 => AxisFeatureOperation::modern_home(),
                 1 => AxisFeatureOperation::modern_move("x", 1.0),
-                2 | 6 => AxisFeatureOperation::legacy_home(),
+                2 | 7 => AxisFeatureOperation::legacy_home(),
                 3 => AxisFeatureOperation::legacy_move("x", 10.0, 3000),
-                5 => AxisFeatureOperation::modern_move("z", -10.0),
-                7 => AxisFeatureOperation::legacy_move("z", -1.0, 600),
+                4 => AxisFeatureOperation::gcode_line("M106 P1 S127 \n"),
+                6 => AxisFeatureOperation::modern_move("z", -10.0),
+                8 => AxisFeatureOperation::legacy_move("z", -1.0, 600),
+                9 => AxisFeatureOperation::gcode_line("M620 C1 \r\n; keep trailing  \n\n"),
                 _ => panic!("unexpected extra axis feature operation: {request}"),
             };
             assert_axis_feature_operation_body_eq(&request, expected);

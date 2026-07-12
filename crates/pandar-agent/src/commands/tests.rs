@@ -27,12 +27,12 @@ use crate::{
     },
     protocol::agent::v1::{
         AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation, Axis,
-        AxisMovement, DeviceFeature, DiagnosePrinter, DiscoverPrinters, HomeOperation, HubCommand,
-        LinkPrinter, MoveAxesOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
-        RefreshPrinterMaterials, RefreshPrinters, SelectExtruderOperation,
-        SetBedTemperatureOperation, SetChamberLightOperation, SetChamberTemperatureOperation,
-        SetHotendTemperatureOperation, SetPrintSpeedOperation, ToggleLightOperation,
-        printer_operation,
+        AxisMovement, DeviceFeature, DiagnosePrinter, DiscoverPrinters, GcodeLineOperation,
+        HomeOperation, HubCommand, LinkPrinter, MoveAxesOperation, PauseOperation,
+        PrinterOperation as ProtoPrinterOperation, RefreshPrinterMaterials, RefreshPrinters,
+        SelectExtruderOperation, SetBedTemperatureOperation, SetChamberLightOperation,
+        SetChamberTemperatureOperation, SetHotendTemperatureOperation, SetPrintSpeedOperation,
+        ToggleLightOperation, printer_operation,
     },
 };
 
@@ -1430,6 +1430,54 @@ async fn printer_operation_valid_emits_ack_and_success_with_result_json() {
     assert_eq!(
         gateway.operations().await,
         vec![("SERIAL1".to_string(), MachinePrinterOperation::Pause)]
+    );
+}
+
+#[tokio::test]
+async fn printer_operation_gcode_line_reaches_gateway_without_normalization() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(2);
+    let param = "M106 P1 S127 \r\n; keep  \n\n";
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_operation_command(
+            command_id.clone(),
+            "SERIAL1",
+            Some(printer_operation::Operation::GcodeLine(
+                GcodeLineOperation {
+                    param: param.to_owned(),
+                },
+            )),
+        ),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(result.success);
+            assert_eq!(operation_result(&result.result_json).action, "gcode_line");
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.operations().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::GcodeLine {
+                param: param.to_owned(),
+            },
+        )]
     );
 }
 

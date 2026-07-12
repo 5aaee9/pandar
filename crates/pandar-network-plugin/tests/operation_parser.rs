@@ -404,9 +404,87 @@ fn operation_parser_maps_legacy_studio_gcode_wrappers_without_required_features(
                 "feedrate_mm_per_min": 600
             }),
         ),
+        (
+            "M104 S210\n",
+            serde_json::json!({
+                "action": "set_hotend_temperature",
+                "temperature_celsius": 210,
+                "wait": false
+            }),
+        ),
+        (
+            "M109 S215\n",
+            serde_json::json!({
+                "action": "set_hotend_temperature",
+                "temperature_celsius": 215,
+                "wait": true
+            }),
+        ),
+        (
+            "M140 S60\n",
+            serde_json::json!({
+                "action": "set_bed_temperature",
+                "temperature_celsius": 60,
+                "wait": false
+            }),
+        ),
+        (
+            "M190 S65\n",
+            serde_json::json!({
+                "action": "set_bed_temperature",
+                "temperature_celsius": 65,
+                "wait": true
+            }),
+        ),
+        (
+            "M141 S45\n",
+            serde_json::json!({
+                "action": "set_chamber_temperature",
+                "temperature_celsius": 45,
+                "wait": false
+            }),
+        ),
+        (
+            "M191 S50\n",
+            serde_json::json!({
+                "action": "set_chamber_temperature",
+                "temperature_celsius": 50,
+                "wait": true
+            }),
+        ),
     ] {
         let message = studio_gcode_line_message(gcode);
         assert_operation_json_eq(operation_json(&message), expected);
+    }
+}
+
+#[test]
+fn operation_parser_falls_back_unknown_studio_gcode_line_exactly() {
+    for param in ["M106 P1 S127 \n", "M620 C1 \r\n; keep trailing  \n\n", ""] {
+        let result = operation_json(&studio_gcode_line_message(param));
+
+        assert_operation_json_eq(
+            result,
+            serde_json::json!({"action": "gcode_line", "param": param}),
+        );
+    }
+}
+
+#[test]
+fn operation_parser_rejects_non_string_studio_gcode_line_params() {
+    for print in [
+        serde_json::json!({"command": "gcode_line", "sequence_id": "42"}),
+        serde_json::json!({"command": "gcode_line", "param": null, "sequence_id": "42"}),
+        serde_json::json!({"command": "gcode_line", "param": true, "sequence_id": "42"}),
+        serde_json::json!({"command": "gcode_line", "param": 127, "sequence_id": "42"}),
+        serde_json::json!({"command": "gcode_line", "param": ["M106"], "sequence_id": "42"}),
+        serde_json::json!({"command": "gcode_line", "param": {"line": "M106"}, "sequence_id": "42"}),
+    ] {
+        let result = operation_json(&studio_print_message(print));
+
+        assert_ne!(result.status, 0);
+        assert_eq!(result.http_code, 400);
+        assert_eq!(body(result), r#"{"error":"unsupported_printer_operation"}"#);
     }
 }
 
@@ -454,19 +532,22 @@ fn operation_parser_requires_the_exact_legacy_studio_axis_envelope() {
     rejected.push(extra);
 
     for commands in rejected {
-        let message = studio_gcode_line_message(&format!("{}\n", commands.join("\n")));
+        let param = format!("{}\n", commands.join("\n"));
+        let message = studio_gcode_line_message(&param);
         let result = operation_json(&message);
 
-        assert_ne!(result.status, 0, "unexpectedly accepted {commands:?}");
-        assert_eq!(result.http_code, 400);
-        assert_eq!(body(result), r#"{"error":"unsupported_printer_operation"}"#);
+        assert_operation_json_eq(
+            result,
+            serde_json::json!({"action": "gcode_line", "param": param}),
+        );
     }
 
-    let recursive =
-        studio_gcode_line_message(r#"{"print":{"command":"gcode_line","param":"G28 X"}}"#);
-    let result = operation_json(&recursive);
-    assert_ne!(result.status, 0);
-    assert_eq!(result.http_code, 400);
+    let param = r#"{"print":{"command":"gcode_line","param":"G28 X"}}"#;
+    let recursive = studio_gcode_line_message(param);
+    assert_operation_json_eq(
+        operation_json(&recursive),
+        serde_json::json!({"action": "gcode_line", "param": param}),
+    );
 }
 
 #[test]
@@ -479,6 +560,7 @@ fn gcode_parser_rejects_unsupported_or_ambiguous_commands() {
         b"G91\nG0 X1 E2",
         b"G91\nG0 X1\nG90",
         b"G91\nG0 X1\nM104 S200",
+        b"M106 P1 S127",
     ] {
         let result = operation_json(message);
 

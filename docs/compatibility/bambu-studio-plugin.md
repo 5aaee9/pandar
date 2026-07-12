@@ -44,6 +44,16 @@ The local probes cover typed `BambuDeviceFeatures`, complete unsigned `print.fun
 
 No real printer received a Home or XYZ movement command during this verification, and no new Bambu Studio host run was performed. The Real Studio Evidence table above is therefore intentionally unchanged; hardware and real-Studio compatibility remain unverified until separately authorized and recorded with the required environment evidence.
 
+## Typed `gcode_line` Passthrough Evidence Boundary
+
+For a typed Studio `gcode_line` wrapper, the plugin first maps recognized Home, axis, and temperature G-code to the existing semantic operations. Every other string `param` becomes a typed `gcode_line` operation with the decoded string unchanged, including empty and multiline values, LF or CRLF line endings, trailing spaces, final newlines, and final blank lines. Arbitrary unwrapped G-code remains unsupported.
+
+Only the authenticated Studio plugin route can submit this operation; the normal tenant printer-control route rejects it. The complete plugin HTTP request remains subject to the existing 64 KiB body limit, and an over-limit body returns HTTP 400 `invalid_printer_control` without persistence. Hub sends queued typed G-code only when the exact current Agent session advertises Agent capability 4. This wire capability is independent of printer `fun`, and an incapable Agent receives no fallback or downgrade.
+
+Hub marks a queued command `sent` before writing it to the gRPC channel. A still-queued command may be handled by a capable replacement session, but Hub never automatically requeues or replays a `sent` command. Roll out in the order Hub → Agent → network plugin. To roll back, first stop the plugin from creating new typed G-code operations, then drain or explicitly fail all queued and sent `GcodeLine` commands to terminal states before rolling back Agent or Hub. No database migration is involved.
+
+Evidence is limited to deterministic local parser and HTTP tests, compiled Cloud and LAN ABI calls against a loopback Hub, and deterministic Hub/Agent conversion and command-lifecycle tests. `PANDAR_TEST_POSTGRES_URL` was unset, so the real PostgreSQL round trip was explicitly skipped. No new real Studio run occurred, and no live printer received movement, Homing, or passthrough G-code during this verification.
+
 ## Unsupported ABI Surfaces
 
 | Surface                                     | Status        | Reason                                                                                                           |

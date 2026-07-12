@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use tonic::Status;
 
 use super::{
-    CommandConversionOptions, conversion::persisted_printer_operation_payload,
+    CommandConversionOptions, agent_capabilities, conversion::persisted_printer_operation_payload,
     hub_command_from_record_with_options, mark_sent_and_job, repository_status,
 };
 use crate::{
@@ -87,7 +87,9 @@ pub(crate) async fn finalize_required_features_for_closing_session(
                     tenant_id,
                     agent_id,
                     &command,
-                    format!("persisted printer operation payload is invalid: {err:#}"),
+                    format!(
+                        "required device feature gate failed: persisted printer operation payload is invalid: {err:#}"
+                    ),
                 )
                 .await?;
                 continue;
@@ -101,7 +103,8 @@ pub(crate) async fn finalize_required_features_for_closing_session(
             tenant_id,
             agent_id,
             &command,
-            "exact agent session is no longer current".to_owned(),
+            "required device feature gate failed: exact agent session is no longer current"
+                .to_owned(),
         )
         .await?;
     }
@@ -150,22 +153,37 @@ pub(crate) async fn dispatch_next_queued_for_session(
                 tenant_id,
                 agent_id,
                 &command,
-                format!("persisted printer operation payload is invalid: {err:#}"),
+                format!(
+                    "required device feature gate failed: persisted printer operation payload is invalid: {err:#}"
+                ),
             )
             .await?;
             return Ok(SessionQueuedDispatch::FailedAndContinue);
         }
     };
-    let failure = required_feature_gate_failure(
+    let failure = agent_capabilities::queued_command_gate_failure(
         state,
         tenant_id,
         agent_id,
         token,
         current,
-        &command,
         operation.as_ref(),
     )
-    .await?;
+    .await;
+    let failure = match failure {
+        Some(failure) => Some(failure),
+        None => required_feature_gate_failure(
+            state,
+            tenant_id,
+            agent_id,
+            token,
+            current,
+            &command,
+            operation.as_ref(),
+        )
+        .await?
+        .map(|failure| format!("required device feature gate failed: {failure}")),
+    };
 
     #[cfg(test)]
     pause::wait(token, pause::Phase::AfterFeatureValidation).await;
@@ -287,12 +305,7 @@ async fn fail_queued_command(
 ) -> Result<(), Status> {
     state
         .commands()
-        .fail_queued_printer_operation(
-            command.id,
-            tenant_id,
-            agent_id,
-            format!("required device feature gate failed: {failure}"),
-        )
+        .fail_queued_printer_operation(command.id, tenant_id, agent_id, failure)
         .await
         .map_err(repository_status)?;
     Ok(())

@@ -1,4 +1,5 @@
 mod device_features;
+mod gcode_line;
 mod live;
 pub(crate) mod plate_mismatch;
 mod request_field;
@@ -24,6 +25,8 @@ use crate::{
 #[serde(deny_unknown_fields)]
 pub(super) struct PrinterOperationRequest {
     action: String,
+    #[serde(default)]
+    param: RequestField<String>,
     #[serde(default)]
     speed_mode: RequestField<u8>,
     #[serde(default)]
@@ -77,6 +80,9 @@ pub(super) enum TenantPrinterOperation {
 
 impl PrinterOperationRequest {
     pub(super) fn into_tenant_operation(self) -> Result<TenantPrinterOperation, ApiError> {
+        if !self.param.is_missing() {
+            return Err(invalid_printer_control());
+        }
         let required_device_features = device_features::from_request(&self)?;
         if self.action == "handle_print_error" {
             if !self.no_operation_fields() || !self.no_plugin_transport_fields() {
@@ -276,6 +282,12 @@ impl PrinterOperationRequest {
     }
 
     pub(super) fn into_plugin_operation(self) -> Result<PluginPrinterOperation, ApiError> {
+        if self.action == "gcode_line" {
+            return gcode_line::from_plugin_request(self);
+        }
+        if !self.param.is_missing() {
+            return Err(invalid_printer_control());
+        }
         if self.action != "handle_print_error" {
             return self
                 .into_tenant_operation()

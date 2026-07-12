@@ -1,6 +1,7 @@
 use pandar_core::{AgentId, CommandId, CommandRecord, TenantId};
 use tonic::Status;
 
+mod agent_capabilities;
 mod conversion;
 mod device_features;
 pub use conversion::{

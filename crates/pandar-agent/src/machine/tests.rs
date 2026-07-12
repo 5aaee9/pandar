@@ -675,6 +675,39 @@ async fn configured_operate_printer_print_speed_mode_4_publishes_to_request_topi
 }
 
 #[tokio::test]
+async fn configured_operate_printer_gcode_line_preserves_exact_param() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+    let param = "M106 P1 S127 \r\n; keep  \n\n";
+
+    gateway
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::GcodeLine {
+                param: param.to_owned(),
+            },
+        )
+        .await
+        .unwrap();
+
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
+    assert_eq!(
+        published,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: expected_print_command_payload("gcode_line", param, &sequence_id),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
 async fn configured_operate_printer_home_preserves_axis_specific_request() {
     let mqtt = FakeMqttTransport::default();
     let transfer = FakeMachineFileTransfer::default();
@@ -979,6 +1012,43 @@ async fn configured_operate_printer_chamber_temperature_publishes_reference_gcod
         vec![PublishedMqttCommand {
             topic: "device/SERIAL1/request".to_string(),
             payload: expected_print_command_payload("gcode_line", "M141 S45", &sequence_id),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_waiting_chamber_temperature_preserves_reference_gcode() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::SetChamberTemperature {
+                temperature_celsius: 45,
+                wait: true,
+            },
+        )
+        .await
+        .unwrap();
+
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
+    assert_eq!(
+        published,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: expected_print_command_payload(
+                "gcode_line",
+                "M106 P2 S255\nM191 S45\nM106 P2 S0",
+                &sequence_id,
+            ),
             qos: BAMBU_MQTT_QOS,
         }]
     );

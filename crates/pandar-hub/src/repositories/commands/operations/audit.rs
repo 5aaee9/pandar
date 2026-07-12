@@ -174,7 +174,8 @@ impl OperationAuditFields {
             PrinterOperationKind::Pause {}
             | PrinterOperationKind::Resume {}
             | PrinterOperationKind::Stop {}
-            | PrinterOperationKind::ToggleLight {} => Self::Empty {},
+            | PrinterOperationKind::ToggleLight {}
+            | PrinterOperationKind::GcodeLine { .. } => Self::Empty {},
         }
     }
 }
