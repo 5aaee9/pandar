@@ -78,3 +78,37 @@ data class AmsUnloadFilamentRequest(
     @SerialName("external_id") val externalId: String? = null,
     @SerialName("extruder_id") val extruderId: Int? = null,
 )
+
+@Serializable
+enum class PrinterAxis {
+    @SerialName("x") X,
+    @SerialName("y") Y,
+    @SerialName("z") Z,
+}
+
+@Serializable
+data class HomeRequest(
+    @SerialName("action") @EncodeDefault val action: String = "home",
+    @SerialName("axes") @EncodeDefault val axes: List<PrinterAxis> = emptyList(),
+)
+
+@Serializable
+data class AxisMovementRequest(
+    @SerialName("axis") val axis: PrinterAxis,
+    @SerialName("delta_mm") val deltaMm: Double,
+)
+
+@Serializable
+data class MoveAxesRequest(
+    @SerialName("action") @EncodeDefault val action: String = "move_axes",
+    @SerialName("movements") val movements: List<AxisMovementRequest>,
+    @SerialName("feedrate_mm_per_min") val feedrateMmPerMin: Int,
+)
+
+fun moveAxisRequest(axis: PrinterAxis, deltaMm: Double) = MoveAxesRequest(
+    movements = listOf(AxisMovementRequest(axis = axis, deltaMm = deltaMm)),
+    feedrateMmPerMin = when (axis) {
+        PrinterAxis.X, PrinterAxis.Y -> 3000
+        PrinterAxis.Z -> 900
+    },
+)

@@ -557,10 +557,22 @@ export async function controlPrinter(formData: FormData) {
   const temperatureCelsius = nullableField(formData, "temperature_celsius");
   const wait = nullableField(formData, "wait");
   const lightOn = nullableField(formData, "light_on");
+  const axis = nullableField(formData, "axis");
+  const deltaMm = nullableField(formData, "delta_mm");
+  const feedrateMmPerMin = nullableField(formData, "feedrate_mm_per_min");
   const response = await postJson(
     `/api/v1/tenants/${tenantId}/printers/${printerId}/controls`,
     {
       action,
+      axes: action === "home" ? [] : undefined,
+      movements:
+        action === "move_axes"
+          ? [{ axis: axis ?? "", delta_mm: Number(deltaMm) }]
+          : undefined,
+      feedrate_mm_per_min:
+        action === "move_axes" && feedrateMmPerMin
+          ? Number(feedrateMmPerMin)
+          : undefined,
       speed_mode: speedMode ? Number(speedMode) : undefined,
       temperature_celsius: temperatureCelsius
         ? Number(temperatureCelsius)

@@ -7,7 +7,9 @@ import org.junit.Test
 import zip.iptables.pandar.android.data.remote.dto.AmsLoadFilamentRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsRereadRfidRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsUnloadFilamentRequest
+import zip.iptables.pandar.android.data.remote.dto.HomeRequest
 import zip.iptables.pandar.android.data.remote.dto.PauseRequest
+import zip.iptables.pandar.android.data.remote.dto.PrinterAxis
 import zip.iptables.pandar.android.data.remote.dto.ResumeRequest
 import zip.iptables.pandar.android.data.remote.dto.SetBedTemperatureRequest
 import zip.iptables.pandar.android.data.remote.dto.SetChamberLightRequest
@@ -15,6 +17,7 @@ import zip.iptables.pandar.android.data.remote.dto.SetChamberTemperatureRequest
 import zip.iptables.pandar.android.data.remote.dto.SetHotendTemperatureRequest
 import zip.iptables.pandar.android.data.remote.dto.StopRequest
 import zip.iptables.pandar.android.data.remote.dto.ToggleLightRequest
+import zip.iptables.pandar.android.data.remote.dto.moveAxisRequest
 
 class ControlsBodyShapeTest {
 
@@ -34,6 +37,39 @@ class ControlsBodyShapeTest {
 
     @Test fun stop_is_minimal() =
         assertEquals("""{"action":"stop"}""", json.encodeToString(StopRequest()))
+
+    @Test fun home_all_axes_is_explicit() =
+        assertEquals(
+            """{"action":"home","axes":[]}""",
+            json.encodeToString(HomeRequest()),
+        )
+
+    @Test fun every_axis_sign_and_step_maps_to_the_exact_request() {
+        val cases = listOf(
+            Triple(PrinterAxis.X, -10.0, 3000),
+            Triple(PrinterAxis.X, -1.0, 3000),
+            Triple(PrinterAxis.X, 1.0, 3000),
+            Triple(PrinterAxis.X, 10.0, 3000),
+            Triple(PrinterAxis.Y, -10.0, 3000),
+            Triple(PrinterAxis.Y, -1.0, 3000),
+            Triple(PrinterAxis.Y, 1.0, 3000),
+            Triple(PrinterAxis.Y, 10.0, 3000),
+            Triple(PrinterAxis.Z, -10.0, 900),
+            Triple(PrinterAxis.Z, -1.0, 900),
+            Triple(PrinterAxis.Z, 1.0, 900),
+            Triple(PrinterAxis.Z, 10.0, 900),
+        )
+
+        cases.forEach { (axis, deltaMm, feedrate) ->
+            val encoded = json.encodeToString(moveAxisRequest(axis, deltaMm))
+            val expectedAxis = axis.name.lowercase()
+            assertEquals(
+                """{"action":"move_axes","movements":[{"axis":"$expectedAxis","delta_mm":$deltaMm}],"feedrate_mm_per_min":$feedrate}""",
+                encoded,
+            )
+            assertFalse(encoded.contains("required_device_features"))
+        }
+    }
 
     @Test fun toggle_light_is_minimal() =
         assertEquals("""{"action":"toggle_light"}""", json.encodeToString(ToggleLightRequest()))

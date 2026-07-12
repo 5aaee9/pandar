@@ -14,11 +14,13 @@ import zip.iptables.pandar.android.core.di.AppContainer
 import zip.iptables.pandar.android.data.remote.dto.AmsLoadFilamentRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsRereadRfidRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsUnloadFilamentRequest
+import zip.iptables.pandar.android.data.remote.dto.PrinterAxis
 import zip.iptables.pandar.android.data.remote.dto.PrinterEventDto
 import zip.iptables.pandar.android.data.remote.dto.SetBedTemperatureRequest
 import zip.iptables.pandar.android.data.remote.dto.SetChamberLightRequest
 import zip.iptables.pandar.android.data.remote.dto.SetChamberTemperatureRequest
 import zip.iptables.pandar.android.data.remote.dto.SetHotendTemperatureRequest
+import zip.iptables.pandar.android.data.remote.dto.moveAxisRequest
 import zip.iptables.pandar.android.data.remote.dto.toDomain
 import zip.iptables.pandar.android.domain.model.Command
 import zip.iptables.pandar.android.domain.model.Printer
@@ -102,6 +104,10 @@ class PrinterDetailViewModel(
     fun pause() = sendControl { container.pandar.pause(printerId) }
     fun resume() = sendControl { container.pandar.resume(printerId) }
     fun stop() = sendControl { container.pandar.stop(printerId) }
+    fun home() = sendControl { container.pandar.home(printerId) }
+    fun moveAxis(axis: PrinterAxis, deltaMm: Double) = sendControl {
+        container.pandar.moveAxes(printerId, moveAxisRequest(axis, deltaMm))
+    }
     fun toggleLight() = sendControl { container.pandar.toggleLight(printerId) }
     fun setChamberLight(on: Boolean) = sendControl {
         container.pandar.setChamberLight(printerId, on)

@@ -9,9 +9,11 @@ import zip.iptables.pandar.android.data.remote.dto.AmsLoadFilamentRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsRereadRfidRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsUnloadFilamentRequest
 import zip.iptables.pandar.android.data.remote.dto.CommandResponseDto
+import zip.iptables.pandar.android.data.remote.dto.HomeRequest
 import zip.iptables.pandar.android.data.remote.dto.JobListDto
 import zip.iptables.pandar.android.data.remote.dto.MobileTicketExchangeRequest
 import zip.iptables.pandar.android.data.remote.dto.MobileTicketExchangeResponse
+import zip.iptables.pandar.android.data.remote.dto.MoveAxesRequest
 import zip.iptables.pandar.android.data.remote.dto.PauseRequest
 import zip.iptables.pandar.android.data.remote.dto.PrinterDto
 import zip.iptables.pandar.android.data.remote.dto.PrinterListDto
@@ -59,6 +61,20 @@ interface PandarApi {
         @Path("tenant") tenant: String,
         @Path("printer") printer: String,
         @Body body: StopRequest = StopRequest(),
+    ): CommandResponseDto
+
+    @POST("api/v1/tenants/{tenant}/printers/{printer}/controls")
+    suspend fun home(
+        @Path("tenant") tenant: String,
+        @Path("printer") printer: String,
+        @Body body: HomeRequest = HomeRequest(),
+    ): CommandResponseDto
+
+    @POST("api/v1/tenants/{tenant}/printers/{printer}/controls")
+    suspend fun moveAxes(
+        @Path("tenant") tenant: String,
+        @Path("printer") printer: String,
+        @Body body: MoveAxesRequest,
     ): CommandResponseDto
 
     @POST("api/v1/tenants/{tenant}/printers/{printer}/controls")

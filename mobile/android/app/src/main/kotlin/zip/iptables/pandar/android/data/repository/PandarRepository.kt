@@ -7,6 +7,7 @@ import zip.iptables.pandar.android.data.remote.PandarApi
 import zip.iptables.pandar.android.data.remote.dto.AmsLoadFilamentRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsRereadRfidRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsUnloadFilamentRequest
+import zip.iptables.pandar.android.data.remote.dto.MoveAxesRequest
 import zip.iptables.pandar.android.data.remote.dto.PauseRequest
 import zip.iptables.pandar.android.data.remote.dto.PrinterEventDto
 import zip.iptables.pandar.android.data.remote.dto.ResumeRequest
@@ -46,6 +47,9 @@ class PandarRepository(
     suspend fun pause(printerId: String): Command = api.pause(tenant(), printerId).toDomain()
     suspend fun resume(printerId: String): Command = api.resume(tenant(), printerId).toDomain()
     suspend fun stop(printerId: String): Command = api.stop(tenant(), printerId).toDomain()
+    suspend fun home(printerId: String): Command = api.home(tenant(), printerId).toDomain()
+    suspend fun moveAxes(printerId: String, body: MoveAxesRequest): Command =
+        api.moveAxes(tenant(), printerId, body).toDomain()
     suspend fun toggleLight(printerId: String): Command = api.toggleLight(tenant(), printerId).toDomain()
     suspend fun setChamberLight(printerId: String, on: Boolean): Command =
         api.setChamberLight(tenant(), printerId, SetChamberLightRequest(lightOn = on)).toDomain()

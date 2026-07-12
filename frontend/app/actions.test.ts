@@ -191,6 +191,67 @@ describe("refreshPrinterMaterials", () => {
   });
 });
 
+describe("controlPrinter axis operations", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: "command-1" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+  });
+
+  it.each([
+    ["x", "-10", 3000],
+    ["y", "1", 3000],
+    ["z", "10", 900],
+  ] as const)(
+    "posts a single %s movement with the Studio feedrate",
+    async (axis, deltaMm, feedrateMmPerMin) => {
+      const formData = new FormData();
+      formData.set("tenant_id", "tenant-1");
+      formData.set("printer_id", "printer-1");
+      formData.set("action", "move_axes");
+      formData.set("axis", axis);
+      formData.set("delta_mm", deltaMm);
+      formData.set("feedrate_mm_per_min", String(feedrateMmPerMin));
+
+      await expect(controlPrinter(formData)).rejects.toThrow(
+        "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_control_queued",
+      );
+
+      const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+      expect(JSON.parse(String(init.body))).toEqual({
+        action: "move_axes",
+        movements: [{ axis, delta_mm: Number(deltaMm) }],
+        feedrate_mm_per_min: feedrateMmPerMin,
+      });
+    },
+  );
+
+  it("posts full-axis Home with an explicit empty axis list", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("printer_id", "printer-1");
+    formData.set("action", "home");
+
+    await expect(controlPrinter(formData)).rejects.toThrow(
+      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_control_queued",
+    );
+
+    const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(String(init.body))).toEqual({
+      action: "home",
+      axes: [],
+    });
+  });
+});
+
 describe("controlPrinter AMS operations", () => {
   beforeEach(() => {
     vi.clearAllMocks();

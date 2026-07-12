@@ -24,6 +24,7 @@ import {
 import { FormattedDate } from '../components/formatted-date'
 import { deletePrinter, refreshPrinterMaterials, updatePrinter } from './actions'
 import type { Printer } from './dashboard-types'
+import { PrinterAxisControls } from './dashboard-printer-axis-controls'
 import { PrinterMaterialsPanel } from './dashboard-printer-materials'
 import {
   PrinterControlsPanel,
@@ -96,6 +97,8 @@ export function PrinterCard({
       <PrinterTemperatureControls printer={printer} />
 
       <PrinterControlsPanel printer={printer} />
+
+      <PrinterAxisControls printer={printer} />
 
       <PrinterMaterialsPanel printer={printer} />
     </article>

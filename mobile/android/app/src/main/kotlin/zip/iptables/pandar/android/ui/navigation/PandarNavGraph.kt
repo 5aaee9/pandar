@@ -138,6 +138,8 @@ fun PandarNavGraph(mainVm: MainActivityViewModel) {
                     onResume = { vm.resume() },
                     onStop = { vm.stop() },
                     onToggleLight = { vm.toggleLight() },
+                    onHome = { vm.home() },
+                    onMoveAxis = { axis, deltaMm -> vm.moveAxis(axis, deltaMm) },
                     onSetChamberLight = { vm.setChamberLight(it) },
                     onSetHotend = { vm.setHotend(it, false, null) },
                     onSetBed = { vm.setBed(it, false) },

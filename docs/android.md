@@ -11,8 +11,9 @@ The Hub browser login update is described in
 ## Features (v1)
 
 - Printers dashboard with live WebSocket updates.
-- Per-printer detail: pause / resume / stop, chamber light, set hotend / bed /
-  chamber temperature, AMS load / unload / reread RFID.
+- Per-printer detail: pause / resume / stop, X/Y/Z movement at `-10`, `-1`,
+  `+1`, and `+10` mm, confirmed full-axis Home, chamber light, set hotend /
+  bed / chamber temperature, AMS load / unload / reread RFID.
 - Jobs list with retry-dispatch and reprint.
 - Hub browser sign-in: the app opens `/mobile-sign-in`, receives a one-use
   Android callback ticket, exchanges it with the hub, and sends the returned
@@ -39,7 +40,11 @@ cd mobile/android
 ./gradlew :app:testDebugUnitTest      # JVM unit tests
 ./gradlew :app:assembleDebug          # debug APK
 ./gradlew :app:lintDebug              # Android lint
+./gradlew :app:connectedDebugAndroidTest # emulator/device Compose tests
 ```
+
+The axis Compose instrumentation tests exercise local callbacks only. They do
+not send movement or Home commands to a Hub or a real printer.
 
 The Rust workspace and the Next.js frontend are unaffected by this module; the
 repo-wide `cargo fmt` / `cargo clippy --workspace` / `cargo nextest run
@@ -74,7 +79,7 @@ decoder uses `ignoreUnknownKeys`, so new Web task/progress/HMS and recovery fiel
 decode without changing the existing event variants. Android does not expose the
 Web build-plate recovery dialog or submit its recovery actions.
 
-Out of scope for v1: camera view, print dispatch / file upload, axis jog and
-print-speed control, admin/users/agents management, internationalization, and
+Out of scope for v1: camera view, print dispatch / file upload, print-speed
+control, admin/users/agents management, internationalization, and
 Keystore-backed encrypted token storage (tokens are stored in plain DataStore;
 tracked as a follow-up).

@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import zip.iptables.pandar.android.data.remote.dto.AmsLoadFilamentRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsRereadRfidRequest
 import zip.iptables.pandar.android.data.remote.dto.AmsUnloadFilamentRequest
+import zip.iptables.pandar.android.data.remote.dto.PrinterAxis
 import zip.iptables.pandar.android.domain.model.AmsTray
 import zip.iptables.pandar.android.domain.model.Materials
 import zip.iptables.pandar.android.domain.model.Printer
@@ -49,6 +50,8 @@ fun PrinterDetailScreen(
     onResume: () -> Unit,
     onStop: () -> Unit,
     onToggleLight: () -> Unit,
+    onHome: () -> Unit,
+    onMoveAxis: (PrinterAxis, Double) -> Unit,
     onSetChamberLight: (Boolean) -> Unit,
     onSetHotend: (Int) -> Unit,
     onSetBed: (Int) -> Unit,
@@ -76,6 +79,12 @@ fun PrinterDetailScreen(
             Header(printer)
             HorizontalDivider()
             PrintActionsRow(state, onPause, onResume, onStop, onToggleLight)
+            HorizontalDivider()
+            AxisControls(
+                enabled = !state.inFlight,
+                onHome = onHome,
+                onMoveAxis = onMoveAxis,
+            )
             HorizontalDivider()
             TemperatureControls(printer, state, onSetHotend, onSetBed, onSetChamber)
             HorizontalDivider()

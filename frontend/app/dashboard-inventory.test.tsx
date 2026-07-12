@@ -314,6 +314,7 @@ describe("PrinterInventory", () => {
     const pauseForm = screen.getByRole("button", { name: "Pause" }).closest("form");
     const lightForm = screen.getByRole("button", { name: "Light" }).closest("form");
     expect(screen.getByRole("button", { name: "View camera" })).toBeVisible();
+    expect(within(card).getByRole("button", { name: "Move axes" })).toBeVisible();
     expect(stopForm?.querySelector('input[name="action"]')).toHaveValue("stop");
     expect(stopForm?.querySelector('input[name="printer_id"]')).toHaveValue("printer-1");
     expect(pauseForm?.querySelector('input[name="action"]')).toHaveValue("pause");
