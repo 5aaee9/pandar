@@ -112,6 +112,19 @@ _Default:_
 { }
 ```
 
+## services\.pandar\.agent\.hubApiUrl
+
+Hub HTTP API URL passed through PANDAR_HUB_API_URL for saved printer connections and artifact downloads\.
+
+_Type:_
+null or string
+
+_Default:_
+
+```nix
+null
+```
+
 ## services\.pandar\.agent\.hubGrpcUrl
 
 Hub gRPC URL passed through PANDAR_HUB_GRPC_URL\.

@@ -11,6 +11,9 @@ use sea_orm::{
 use serde::Serialize;
 
 #[cfg(test)]
+use sea_orm::{SqliteTransactionMode, TransactionOptions};
+
+#[cfg(test)]
 use crate::entities::agents;
 use crate::{
     db::Database,
@@ -256,7 +259,11 @@ impl PrinterRepository {
             return Err(RepositoryError::MissingAgent);
         }
         let tx = connection
-            .begin()
+            .begin_with_options(TransactionOptions {
+                sqlite_transaction_mode: matches!(self.database, Database::Sqlite(_))
+                    .then_some(SqliteTransactionMode::Immediate),
+                ..Default::default()
+            })
             .await
             .context("failed to begin printer snapshot transaction")?;
         let printer =
