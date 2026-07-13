@@ -1,35 +1,68 @@
-use std::collections::HashMap;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
 
 use anyhow::Context;
 use clap::Parser;
 use pandar_core::created_at_now;
-use tokio::{
-    sync::mpsc,
-    time::{Duration, sleep},
-};
-use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
-use tonic::{Request, Status};
+use tokio::{sync::mpsc, time::sleep};
+use tokio_stream::wrappers::ReceiverStream;
+use tonic::Request;
 
+mod backoff;
 mod camera_control;
+mod command_stream;
 pub mod commands;
 pub mod machine;
 pub mod protocol;
+mod session_supervisor;
 mod startup;
 
-use camera_control::handle_control_camera_command;
-use commands::handle_command_with_gateway;
-use machine::{BambuMachineGateway, runtime::RuntimeBambuMachineGateway};
+pub use backoff::ReconnectBackoff;
+use backoff::{DEFAULT_REPORT_TIMEOUT, HEARTBEAT_INTERVAL, RunOutcome};
+#[cfg(test)]
+use command_stream::handle_command_stream_with_gateway;
+use command_stream::run_command_stream_until_cancelled;
+use machine::{FirmwareMachineGateway, runtime::RuntimeBambuMachineGateway};
 use protocol::agent::v1::{
-    AgentCapability, AgentEvent, AgentHeartbeat, AgentHello, HubCommand,
-    agent_control_client::AgentControlClient, agent_event, hub_command,
+    AgentCapability, AgentEvent, AgentHeartbeat, AgentHello,
+    agent_control_client::AgentControlClient, agent_event,
 };
+use session_supervisor::SessionSupervisor;
+#[cfg(test)]
+use session_supervisor::reap_session_task;
 use startup::startup_printers;
-
-const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
-const DEFAULT_REPORT_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[cfg(test)]
 pub(crate) static TRACING_CAPTURE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+static ACTIVE_HEARTBEAT_TASKS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn active_heartbeat_tasks_for_test() -> usize {
+    ACTIVE_HEARTBEAT_TASKS.load(Ordering::SeqCst)
+}
+
+#[cfg(test)]
+struct HeartbeatTaskGuard;
+
+#[cfg(test)]
+impl HeartbeatTaskGuard {
+    fn new() -> Self {
+        ACTIVE_HEARTBEAT_TASKS.fetch_add(1, Ordering::SeqCst);
+        Self
+    }
+}
+
+#[cfg(test)]
+impl Drop for HeartbeatTaskGuard {
+    fn drop(&mut self) {
+        ACTIVE_HEARTBEAT_TASKS.fetch_sub(1, Ordering::SeqCst);
+    }
+}
 
 #[cfg(test)]
 pub(crate) mod test_tracing {
@@ -193,6 +226,7 @@ pub fn hello_event(config: &AgentConfig) -> AgentEvent {
                 AgentCapability::HandlePrintErrorSequenceZeroPubackOnly as i32,
                 AgentCapability::RequiredDeviceFeatures as i32,
                 AgentCapability::GcodeLine as i32,
+                AgentCapability::FirmwareControl as i32,
             ],
         }),
     )
@@ -210,10 +244,14 @@ pub fn heartbeat_event(config: &AgentConfig) -> AgentEvent {
 
 pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
     let printers = startup_printers(&config).await?;
-    let gateway = RuntimeBambuMachineGateway::new(config.clone(), printers, DEFAULT_REPORT_TIMEOUT);
+    let gateway = Arc::new(RuntimeBambuMachineGateway::new(
+        config.clone(),
+        printers,
+        DEFAULT_REPORT_TIMEOUT,
+    ));
     let mut backoff = ReconnectBackoff::new();
     loop {
-        match run_once(config.clone(), &gateway).await {
+        match run_once(config.clone(), Arc::clone(&gateway)).await {
             Ok(RunOutcome::ConnectedThenEnded) => backoff.reset(),
             Err(err) => {
                 tracing::error!(error = %format!("{err:#}"), "agent reverse connection failed");
@@ -231,8 +269,10 @@ pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
 
 async fn run_once(
     config: AgentConfig,
-    gateway: &RuntimeBambuMachineGateway,
+    gateway: Arc<RuntimeBambuMachineGateway>,
 ) -> anyhow::Result<RunOutcome> {
+    static NEXT_SESSION_EPOCH: AtomicU64 = AtomicU64::new(1);
+    let session_epoch = NEXT_SESSION_EPOCH.fetch_add(1, Ordering::Relaxed);
     let mut client = AgentControlClient::connect(config.hub_grpc_url.clone())
         .await
         .with_context(|| format!("connect to hub gRPC at {}", config.hub_grpc_url))?;
@@ -247,97 +287,98 @@ async fn run_once(
         .await
         .context("open reverse agent control stream")?;
 
-    let heartbeat_sender = sender.clone();
-    let heartbeat_config = config.clone();
-    tokio::spawn(async move {
-        loop {
-            sleep(HEARTBEAT_INTERVAL).await;
-            if heartbeat_sender
-                .send(heartbeat_event(&heartbeat_config))
+    let (cancel_session, cancelled) = tokio::sync::oneshot::channel();
+    let task = tokio::spawn(async move {
+        let mut cancelled = Box::pin(async move {
+            let _ = cancelled.await;
+        });
+        let heartbeat_sender = sender.clone();
+        let heartbeat_config = config.clone();
+        #[cfg(test)]
+        let heartbeat_gateway = Arc::clone(&gateway);
+        let heartbeat = tokio::spawn(async move {
+            #[cfg(test)]
+            let _guard = HeartbeatTaskGuard::new();
+            #[cfg(test)]
+            heartbeat_gateway
+                .panic_heartbeat_for_test_if_installed()
+                .await;
+            loop {
+                sleep(HEARTBEAT_INTERVAL).await;
+                if heartbeat_sender
+                    .send(heartbeat_event(&heartbeat_config))
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+        let prepared = {
+            let prepare = gateway.prepare_session(&sender);
+            tokio::pin!(prepare);
+            tokio::select! {
+                result = &mut prepare => Some(result.context("prepare runtime printer session")),
+                _ = &mut cancelled => None,
+            }
+        };
+        let mut outcome = match prepared {
+            Some(Ok(())) => {
+                run_command_stream_until_cancelled(
+                    &config,
+                    Arc::clone(&gateway),
+                    &sender,
+                    response.into_inner(),
+                    session_epoch,
+                    cancelled,
+                )
                 .await
-                .is_err()
-            {
-                break;
+            }
+            Some(Err(error)) => Err(error),
+            None => Ok(RunOutcome::ConnectedThenEnded),
+        };
+        heartbeat.abort();
+        match heartbeat.await {
+            Ok(()) => {}
+            Err(error) if error.is_cancelled() => {}
+            Err(error) => {
+                let error = anyhow::Error::new(error).context("join Agent heartbeat task");
+                if outcome.is_ok() {
+                    outcome = Err(error);
+                } else {
+                    tracing::warn!(
+                        error = %format!("{error:#}"),
+                        "additional reverse-session heartbeat teardown failure"
+                    );
+                }
             }
         }
+        if let Err(error) = gateway.teardown_session_report_forwarders().await {
+            let error = error.context("teardown runtime printer report forwarders");
+            if outcome.is_ok() {
+                outcome = Err(error);
+            } else {
+                tracing::warn!(
+                    error = %format!("{error:#}"),
+                    "additional reverse-session report teardown failure"
+                );
+            }
+        }
+        if let Err(error) = gateway.cancel_firmware_session(session_epoch).await {
+            let error = error.context("teardown reverse-session firmware MQTT tasks");
+            if outcome.is_ok() {
+                outcome = Err(error);
+            } else {
+                tracing::warn!(
+                    error = %format!("{error:#}"),
+                    "additional reverse-session firmware teardown failure"
+                );
+            }
+        }
+        gateway.clear_session_sender(&sender).await;
+        outcome
     });
-
-    let outcome = async {
-        gateway
-            .prepare_session(&sender)
-            .await
-            .context("prepare runtime printer session")?;
-        handle_command_stream_with_gateway(&config, gateway, &sender, response.into_inner()).await
-    }
-    .await;
-    gateway.clear_session_sender(&sender).await;
-    outcome
-}
-
-async fn handle_command_stream_with_gateway<G, S>(
-    config: &AgentConfig,
-    gateway: &G,
-    sender: &mpsc::Sender<AgentEvent>,
-    mut commands: S,
-) -> anyhow::Result<RunOutcome>
-where
-    G: BambuMachineGateway,
-    S: Stream<Item = Result<HubCommand, Status>> + Unpin,
-{
-    let mut camera_streams = HashMap::new();
-    while let Some(command) = commands
-        .next()
-        .await
-        .transpose()
-        .context("read hub command from reverse stream")?
-    {
-        if let Some(hub_command::Command::CameraStream(camera_command)) = command.command {
-            handle_control_camera_command(config, gateway, &mut camera_streams, camera_command)
-                .await?;
-            continue;
-        }
-        handle_command_with_gateway(config, gateway, sender, command).await?;
-    }
-
-    for (_, task) in camera_streams {
-        task.abort();
-    }
-
-    Ok(RunOutcome::ConnectedThenEnded)
-}
-
-#[derive(Debug)]
-pub struct ReconnectBackoff {
-    next: Duration,
-}
-
-impl ReconnectBackoff {
-    pub fn new() -> Self {
-        Self {
-            next: Duration::from_secs(1),
-        }
-    }
-
-    pub fn next_delay(&mut self) -> Duration {
-        let delay = self.next;
-        self.next = (self.next * 2).min(Duration::from_secs(30));
-        delay
-    }
-
-    pub fn reset(&mut self) {
-        self.next = Duration::from_secs(1);
-    }
-}
-
-impl Default for ReconnectBackoff {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RunOutcome {
-    ConnectedThenEnded,
+    SessionSupervisor::new(cancel_session, task).join().await
 }
 
 fn event(config: &AgentConfig, event_id: &str, event: agent_event::Event) -> AgentEvent {

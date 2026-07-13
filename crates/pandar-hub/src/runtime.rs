@@ -177,19 +177,32 @@ async fn expire_stale_sessions_with_timeout(
 
 #[cfg_attr(not(test), allow(dead_code))]
 async fn fail_stale_live_commands_once(state: &AppState, now: &str) -> anyhow::Result<u64> {
-    fail_stale_live_commands_with_timeout(state, now, STALE_LIVE_COMMAND_TIMEOUT).await
+    fail_stale_live_commands_with_timeouts(
+        state,
+        now,
+        STALE_LIVE_COMMAND_TIMEOUT,
+        STALE_SESSION_TIMEOUT,
+    )
+    .await
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
-async fn fail_stale_live_commands_with_timeout(
+async fn fail_stale_live_commands_with_timeouts(
     state: &AppState,
     now: &str,
-    timeout: Duration,
+    command_timeout: Duration,
+    session_timeout: Duration,
 ) -> anyhow::Result<u64> {
     let pending = state.sessions().pending_live_command_ids().await;
     state
         .commands()
-        .fail_stale_unowned_live_commands(now, timeout, &pending)
+        .fail_stale_unowned_live_commands(
+            now,
+            command_timeout,
+            session_timeout,
+            state.instance_id(),
+            &pending,
+        )
         .await
         .context("failed to fail stale unowned live commands")
 }

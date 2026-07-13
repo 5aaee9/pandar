@@ -25,10 +25,11 @@ pub use auth::{
 #[cfg(test)]
 pub(crate) use commands::printer_operation_ownership_pause;
 pub use commands::{
-    CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload,
-    PersistedLivePrinterOperation, PrintErrorAction, PrintProjectFilePayload, PrinterAxis,
-    PrinterAxisMovement, PrinterOperationKind, PrinterOperationPayload,
-    RefreshPrinterMaterialsPayload, WebPrintErrorRecovery,
+    CommandRepository, DiagnosePrinterPayload, DiscoverPrintersPayload, FirmwareCommandOwner,
+    FirmwareControlPayload, FirmwarePersistedPhase, FirmwarePersistedResult,
+    FirmwareRefreshPayload, LinkPrinterPayload, PersistedLivePrinterOperation, PrintErrorAction,
+    PrintProjectFilePayload, PrinterAxis, PrinterAxisMovement, PrinterOperationKind,
+    PrinterOperationPayload, RefreshPrinterMaterialsPayload, WebPrintErrorRecovery,
 };
 pub use jobs::{
     AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, CreatePrintJob, DuplicatePrintJob,
@@ -43,8 +44,8 @@ pub use printer_event_tickets::{
     IssuedPrinterEventTicket, PrinterEventTicketConsumeResult, PrinterEventTicketRepository,
 };
 pub use printers::{
-    DeviceFeatureUpdateOutcome, PrinterHms, PrinterLiveStatus, PrinterRepository,
-    PrinterSnapshotUpsert, PrinterWithLiveStatus,
+    DeviceFeatureUpdateOutcome, PrinterFirmwareUpdateOutcome, PrinterHms, PrinterLiveStatus,
+    PrinterRepository, PrinterSnapshotUpsert, PrinterWithLiveStatus,
 };
 pub use tenants::TenantRepository;
 

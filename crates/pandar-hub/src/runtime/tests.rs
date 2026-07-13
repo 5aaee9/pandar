@@ -1,13 +1,13 @@
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
 
-use pandar_core::CommandStatus;
 use pandar_core::{AgentId, AgentStatus, TenantId};
+use pandar_core::{CommandStatus, FirmwareControlMetadata};
 use tokio::sync::mpsc;
 use tracing_subscriber::fmt::MakeWriter;
 
 use super::*;
-use crate::repositories::{AuditActor, LinkPrinterPayload};
+use crate::repositories::{AuditActor, FirmwareCommandOwner, LinkPrinterPayload};
 use crate::sessions::{AgentSession, SessionToken};
 
 mod control_plane_close;
@@ -123,10 +123,11 @@ async fn runtime_stale_link_printer_cleanup_skips_pending_live_commands() {
         })
         .await;
 
-    let failed = fail_stale_live_commands_with_timeout(
+    let failed = fail_stale_live_commands_with_timeouts(
         &state,
         "2026-07-01T00:06:00Z",
         Duration::from_secs(300),
+        Duration::from_secs(45),
     )
     .await
     .unwrap();
@@ -152,6 +153,91 @@ async fn runtime_stale_link_printer_cleanup_skips_pending_live_commands() {
             .status,
         CommandStatus::Failed
     );
+}
+
+#[tokio::test]
+async fn runtime_firmware_command_startup_cleanup_fails_both_live_only_kinds() {
+    let state = AppState::sqlite_for_tests().await.unwrap();
+    let tenant = state
+        .tenants()
+        .create("firmware-cleanup", "Firmware Cleanup")
+        .await
+        .unwrap();
+    let agent = state
+        .agents()
+        .create(tenant.id, "firmware-cleanup-agent")
+        .await
+        .unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture(
+        state.database(),
+        tenant.id,
+        agent.id,
+    )
+    .await
+    .unwrap();
+    let refresh = state
+        .commands()
+        .create_firmware_refresh_sent_with_audit(
+            tenant.id,
+            &printer_id,
+            agent.id,
+            FirmwareCommandOwner {
+                session_id: "firmware-cleanup-session".to_owned(),
+                instance_id: state.instance_id(),
+            },
+            "refresh".to_owned(),
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+    let control = state
+        .commands()
+        .create_firmware_control_sent_with_audit(
+            tenant.id,
+            &printer_id,
+            agent.id,
+            FirmwareCommandOwner {
+                session_id: "firmware-cleanup-session".to_owned(),
+                instance_id: state.instance_id(),
+            },
+            FirmwareControlMetadata::UpgradeConfirm {
+                sequence_id: "control".to_owned(),
+                src_id: 1,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+    for command_id in [refresh.id, control.id] {
+        set_command_updated_at(&state, command_id, "2026-07-01T00:00:00Z").await;
+    }
+
+    let failed = fail_stale_live_commands_with_timeouts(
+        &state,
+        "2026-07-01T00:06:00Z",
+        Duration::from_secs(300),
+        Duration::from_secs(45),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(failed, 2);
+    for command_id in [refresh.id, control.id] {
+        let command = state
+            .commands()
+            .get_for_tenant(tenant.id, command_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(command.status, CommandStatus::Failed);
+        let result: crate::repositories::FirmwarePersistedResult =
+            serde_json::from_str(command.result_json.as_deref().unwrap()).unwrap();
+        assert_eq!(
+            result.phase,
+            crate::repositories::FirmwarePersistedPhase::PrePublishFailure
+        );
+        assert!(command.error.unwrap().contains("owner unavailable"));
+    }
 }
 
 #[test]

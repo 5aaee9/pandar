@@ -1,5 +1,6 @@
 use std::{ffi::c_void, path::PathBuf, slice};
 
+pub mod firmware;
 mod gcode;
 mod http;
 pub mod installer;
@@ -8,8 +9,9 @@ mod printer_refresh;
 mod studio_status;
 
 pub use printer_refresh::{
-    pandar_plugin_printer_refresh, pandar_plugin_printer_refresh_session_create,
-    pandar_plugin_printer_refresh_session_destroy, pandar_plugin_printer_refresh_session_update,
+    PrinterRefreshObservationReservation, pandar_plugin_printer_refresh,
+    pandar_plugin_printer_refresh_session_create, pandar_plugin_printer_refresh_session_destroy,
+    pandar_plugin_printer_refresh_session_update,
 };
 
 use serde::{Serialize, de::DeserializeOwned};

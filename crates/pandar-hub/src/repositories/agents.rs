@@ -13,6 +13,7 @@ mod rows;
 use rows::{agent_credential_from_model, agent_from_model};
 
 pub use connections::begin_current_agent_transaction;
+pub(crate) use connections::begin_stale_firmware_cleanup_transaction;
 #[cfg(test)]
 pub(crate) use connections::current_transaction_pause;
 pub use pairing::AGENT_CREDENTIAL_PREFIX;

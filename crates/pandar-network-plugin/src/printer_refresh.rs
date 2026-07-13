@@ -9,6 +9,8 @@ use crate::{
 
 const STATUS_REFRESH_TIMEOUT: Duration = Duration::from_millis(750);
 
+pub type PrinterRefreshObservationReservation = extern "C" fn(*mut c_void);
+
 pub(super) struct PrinterRefreshSession {
     state: Mutex<RefreshState>,
     request: Mutex<()>,
@@ -53,7 +55,7 @@ impl PrinterRefreshSession {
         state.generation = state.generation.wrapping_add(1);
     }
 
-    pub(super) fn refresh(&self) -> PluginHttpResult {
+    pub(super) fn refresh(&self, reserve_observation: impl FnOnce()) -> PluginHttpResult {
         let Ok(_request) = self.request.try_lock() else {
             return result(1, 0, stable_error_body("hub_unavailable"));
         };
@@ -69,7 +71,7 @@ impl PrinterRefreshSession {
             return result(1, 400, stable_error_body("invalid_auth_token"));
         }
 
-        let response = match fetch_printers(&snapshot) {
+        let response = match fetch_printers(&snapshot, reserve_observation) {
             Ok(response) => response,
             Err(error) => {
                 eprintln!("pandar printer status refresh failed: {error:#}");
@@ -103,16 +105,21 @@ impl PrinterRefreshSession {
     }
 }
 
-fn fetch_printers(snapshot: &RefreshSnapshot) -> anyhow::Result<HubResponse> {
-    runtime().block_on(async {
-        tokio::time::timeout(STATUS_REFRESH_TIMEOUT, async {
+fn fetch_printers(
+    snapshot: &RefreshSnapshot,
+    reserve_observation: impl FnOnce(),
+) -> anyhow::Result<HubResponse> {
+    runtime().block_on(async move {
+        tokio::time::timeout(STATUS_REFRESH_TIMEOUT, async move {
             let client = reqwest::Client::builder()
                 .timeout(STATUS_REFRESH_TIMEOUT)
                 .build()
                 .context("build Hub printer status refresh client")?;
-            let response = client
+            let request = client
                 .get(format!("{}/api/v1/plugin/printers", snapshot.hub_url))
-                .bearer_auth(&snapshot.token)
+                .bearer_auth(&snapshot.token);
+            reserve_observation();
+            let response = request
                 .send()
                 .await
                 .map_err(reqwest::Error::without_url)
@@ -168,11 +175,19 @@ pub extern "C" fn pandar_plugin_printer_refresh_session_update(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_printer_refresh(session: *mut c_void) -> PluginHttpResult {
+pub extern "C" fn pandar_plugin_printer_refresh(
+    session: *mut c_void,
+    observation_context: *mut c_void,
+    reserve_observation: Option<PrinterRefreshObservationReservation>,
+) -> PluginHttpResult {
     let Some(session) = (unsafe { session.cast::<PrinterRefreshSession>().as_ref() }) else {
         return invalid_input("invalid_printer_refresh_session");
     };
-    session.refresh()
+    session.refresh(|| {
+        if let Some(reserve_observation) = reserve_observation {
+            reserve_observation(observation_context);
+        }
+    })
 }
 
 #[unsafe(no_mangle)]

@@ -4,6 +4,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    time::Duration,
 };
 
 use super::*;
@@ -21,6 +22,7 @@ use tokio::net::TcpListener;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::{Request, Response, Status};
 
+mod firmware_lifecycle;
 mod startup;
 mod tls;
 
@@ -113,6 +115,7 @@ fn hello_event_has_agent_identity_version_and_exact_capability() {
                 AgentCapability::HandlePrintErrorSequenceZeroPubackOnly as i32,
                 AgentCapability::RequiredDeviceFeatures as i32,
                 AgentCapability::GcodeLine as i32,
+                AgentCapability::FirmwareControl as i32,
             ],
         }))
     );
@@ -120,11 +123,11 @@ fn hello_event_has_agent_identity_version_and_exact_capability() {
 
 #[tokio::test]
 async fn ended_command_stream_preserves_runtime_linked_printer_for_reconnect() {
-    let gateway = TestRuntimeBambuMachineGateway::new(
+    let gateway = Arc::new(TestRuntimeBambuMachineGateway::new(
         Vec::new(),
         FakeMachineFileTransfer::default(),
         Duration::from_secs(1),
-    );
+    ));
     gateway
         .push_command_transport(FakeMqttTransport::with_reports([
             get_version_report("X1 Carbon"),
@@ -144,23 +147,42 @@ async fn ended_command_stream_preserves_runtime_linked_printer_for_reconnect() {
         .await;
     let config = test_config();
     let (sender, mut events) = mpsc::channel(8);
-
-    handle_command_stream_with_gateway(
-        &config,
-        &gateway,
-        &sender,
-        tokio_stream::iter([Ok(link_printer_command())]),
-    )
-    .await
-    .unwrap();
-    assert!(received_success_result(&mut events));
+    let (commands, command_receiver) = mpsc::channel(1);
+    let handler = tokio::spawn({
+        let config = config.clone();
+        let gateway = Arc::clone(&gateway);
+        let sender = sender.clone();
+        async move {
+            handle_command_stream_with_gateway(
+                &config,
+                gateway,
+                &sender,
+                tokio_stream::wrappers::ReceiverStream::new(command_receiver),
+                1,
+            )
+            .await
+        }
+    });
+    commands.send(Ok(link_printer_command())).await.unwrap();
+    loop {
+        let event = events.recv().await.unwrap();
+        if matches!(
+            event.event,
+            Some(agent_event::Event::CommandResult(result)) if result.success
+        ) {
+            break;
+        }
+    }
+    drop(commands);
+    handler.await.unwrap().unwrap();
 
     let (reconnected_sender, _) = mpsc::channel(8);
     handle_command_stream_with_gateway(
         &config,
-        &gateway,
+        Arc::clone(&gateway),
         &reconnected_sender,
         tokio_stream::iter([]),
+        2,
     )
     .await
     .unwrap();
@@ -190,13 +212,13 @@ async fn run_once_does_not_open_camera_stream_before_camera_command() {
         hub_grpc_url: format!("http://127.0.0.1:{}", address.port()),
         ..test_config()
     };
-    let gateway = crate::machine::runtime::RuntimeBambuMachineGateway::new(
+    let gateway = Arc::new(crate::machine::runtime::RuntimeBambuMachineGateway::new(
         config.clone(),
         Vec::new(),
         Duration::from_secs(1),
-    );
+    ));
 
-    let outcome = run_once(config, &gateway).await.unwrap();
+    let outcome = run_once(config, gateway).await.unwrap();
 
     assert_eq!(outcome, RunOutcome::ConnectedThenEnded);
     assert!(!reverse_camera_called.load(Ordering::SeqCst));
@@ -339,19 +361,6 @@ fn link_printer_command() -> HubCommand {
             printer_type: "BambuLab".to_owned(),
         })),
     }
-}
-
-fn received_success_result(events: &mut mpsc::Receiver<AgentEvent>) -> bool {
-    let mut received_success = false;
-    while let Ok(event) = events.try_recv() {
-        if matches!(
-            event.event,
-            Some(agent_event::Event::CommandResult(result)) if result.success
-        ) {
-            received_success = true;
-        }
-    }
-    received_success
 }
 
 struct TestAgentControlService {

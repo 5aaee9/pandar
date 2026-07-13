@@ -5,6 +5,8 @@ use requests::{
 };
 use serde::{Deserialize, Serialize, de::IgnoredAny};
 
+mod firmware;
+mod firmware_batch;
 mod live_status;
 mod operations;
 mod requests;
@@ -69,6 +71,7 @@ struct PluginPrinterResponse {
     chamber_temperature_celsius: Option<String>,
     chamber_light_on: Option<bool>,
     materials: Option<PluginMaterialsResponse>,
+    firmware: Option<pandar_core::PrinterFirmwareState>,
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]

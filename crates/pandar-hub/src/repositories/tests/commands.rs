@@ -395,6 +395,8 @@ async fn stale_link_printer_cleanup_skips_owned_pending_commands() {
         .fail_stale_unowned_live_commands(
             "2026-07-01T00:06:00Z",
             std::time::Duration::from_secs(300),
+            std::time::Duration::from_secs(45),
+            uuid::Uuid::new_v4(),
             &[old_owned.id],
         )
         .await

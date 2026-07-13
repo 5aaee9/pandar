@@ -5,6 +5,7 @@ pub mod agent;
 pub mod command;
 pub mod compatibility;
 pub mod device_features;
+pub mod firmware;
 pub mod ids;
 pub mod job;
 pub mod printer;
@@ -13,6 +14,12 @@ pub mod tenant;
 pub use agent::{Agent, AgentStatus};
 pub use command::{CommandRecord, CommandRecordParts, CommandStatus};
 pub use device_features::{BambuDeviceFeature, BambuDeviceFeatures, BambuDeviceFeaturesParseError};
+pub use firmware::{
+    AmsFirmwareDescriptor, AmsFirmwareSwitchState, FirmwareAcknowledgement, FirmwareCatalogEntry,
+    FirmwareCatalogTarget, FirmwareCommand, FirmwareControlMetadata, FirmwareTerminalOutcome,
+    PrinterFirmwareModule, PrinterFirmwareState, PrinterFirmwareStatus, PrinterFirmwareVersion,
+    PrinterUpgradeState,
+};
 pub use ids::{AgentId, CommandId, JobId, TenantId};
 pub use job::{
     Job, JobArtifact, JobArtifactParts, JobFilamentUsage, JobParts, JobPrintState, JobStatus,

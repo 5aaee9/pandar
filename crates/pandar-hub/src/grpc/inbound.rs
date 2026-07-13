@@ -161,6 +161,36 @@ pub(super) async fn handle_event(
             )
             .await
         }
+        Some(agent_event::Event::PrinterFirmwareModulesSnapshot(snapshot)) => {
+            super::printer_firmware::handle_modules_snapshot(
+                state, tenant_id, agent_id, token, snapshot,
+            )
+            .await
+        }
+        Some(agent_event::Event::PrinterFirmwareStatusSnapshot(snapshot)) => {
+            super::printer_firmware::handle_status_snapshot(
+                state, tenant_id, agent_id, token, snapshot,
+            )
+            .await
+        }
+        Some(agent_event::Event::PrinterFirmwareInvalidated(invalidated)) => {
+            super::printer_firmware::handle_invalidated(
+                state,
+                tenant_id,
+                agent_id,
+                token,
+                invalidated,
+            )
+            .await
+        }
+        Some(agent_event::Event::FirmwarePrepared(prepared)) => {
+            super::printer_firmware::handle_prepared(state, tenant_id, agent_id, token, prepared)
+                .await
+        }
+        Some(agent_event::Event::FirmwarePublished(published)) => {
+            super::printer_firmware::handle_published(state, tenant_id, agent_id, token, published)
+                .await
+        }
         Some(agent_event::Event::Hello(_)) | None => Ok(()),
     }
 }

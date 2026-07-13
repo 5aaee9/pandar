@@ -35,6 +35,9 @@ pub mod commands;
 mod inbound;
 mod outbound;
 pub mod print_reports;
+mod printer_firmware;
+#[cfg(test)]
+pub(crate) use printer_firmware::completion_pause as firmware_completion_pause;
 pub mod printer_materials;
 pub mod printer_snapshots;
 #[cfg(test)]
@@ -221,6 +224,17 @@ impl AgentControlService {
 
         Ok(Box::pin(ReceiverStream::new(command_receiver)))
     }
+}
+
+#[cfg(test)]
+pub(crate) async fn handle_event_for_tests(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    token: SessionToken,
+    event: AgentEvent,
+) -> Result<(), Status> {
+    inbound::handle_event(state, tenant_id, agent_id, token, event).await
 }
 
 type ResponseStream = Pin<Box<dyn Stream<Item = Result<HubCommand, Status>> + Send>>;

@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
-use pandar_core::{PrinterNozzleTemperature, TenantId};
+use pandar_core::{PrinterFirmwareState, PrinterNozzleTemperature, TenantId};
 use serde::Serialize;
 
 use crate::{
     AppState, printer_events::PrinterEventMaterials, protocol::agent::v1::AgentCapability,
     repositories::PrinterHms, routes::ApiError,
+    routes::plugin::firmware::current_firmware_projection,
 };
 
 #[derive(Debug, Serialize)]
@@ -50,6 +51,8 @@ pub(super) struct PluginPrinterResponse {
     chamber_temperature_celsius: Option<String>,
     chamber_light_on: Option<bool>,
     materials: Option<PrinterEventMaterials>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    firmware: Option<PrinterFirmwareState>,
 }
 
 pub(super) async fn plugin_printer_devices(
@@ -75,6 +78,7 @@ pub(super) async fn plugin_printer_devices(
         .await?;
     let mut devices = Vec::with_capacity(printers.len());
     for printer_with_live_status in printers {
+        let firmware = printer_with_live_status.firmware;
         let printer = printer_with_live_status.printer;
         let live_status = printer_with_live_status.live_status;
         let online = studio_online_from_status(&printer.status);
@@ -101,6 +105,8 @@ pub(super) async fn plugin_printer_devices(
             }
             None => "0".to_owned(),
         };
+        let firmware =
+            current_firmware_projection(state, tenant_id, printer.agent_id, firmware).await?;
         devices.push(PluginPrinterResponse {
             dev_id: printer.serial_number.clone(),
             fun,
@@ -133,6 +139,7 @@ pub(super) async fn plugin_printer_devices(
             chamber_temperature_celsius: printer.chamber_temperature_celsius,
             chamber_light_on: printer.chamber_light_on,
             materials: materials_by_printer_id.remove(&printer.id),
+            firmware,
             pandar_printer_id: printer.id,
         });
     }

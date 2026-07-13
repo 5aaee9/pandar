@@ -2,14 +2,18 @@ use std::collections::HashSet;
 
 use anyhow::Context;
 use pandar_core::{AgentId, CommandId, CommandStatus, TenantId};
-use sea_orm::{ActiveValue::Set, ColumnTrait, Condition, EntityTrait, QueryFilter};
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, QueryFilter,
+};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     db::Database,
     entities::commands,
     repositories::{
-        PrinterOperationKind, PrinterOperationPayload, RepositoryError, RepositoryResult,
+        FirmwareControlPayload, FirmwarePersistedPhase, FirmwarePersistedResult,
+        FirmwareRefreshPayload, PrinterOperationKind, PrinterOperationPayload, RepositoryError,
+        RepositoryResult, agents::begin_stale_firmware_cleanup_transaction,
         commands::rows::command_from_model,
     },
 };
@@ -48,6 +52,16 @@ pub async fn update_status_if_current(
     database: &Database,
     transition: StatusTransition<'_>,
 ) -> RepositoryResult<bool> {
+    update_status_if_current_on(&database.sea_orm_connection(), transition).await
+}
+
+pub(super) async fn update_status_if_current_on<C>(
+    connection: &C,
+    transition: StatusTransition<'_>,
+) -> RepositoryResult<bool>
+where
+    C: ConnectionTrait,
+{
     let now = pandar_core::created_at_now();
     let allowed_status_values = transition
         .allowed_statuses
@@ -67,7 +81,7 @@ pub async fn update_status_if_current(
         .filter(commands::Column::TenantId.eq(transition.tenant_id.to_string()))
         .filter(commands::Column::AgentId.eq(transition.agent_id.to_string()))
         .filter(commands::Column::Status.is_in(allowed_status_values))
-        .exec(&database.sea_orm_connection())
+        .exec(connection)
         .await
         .context("failed to update command status")?;
 
@@ -77,16 +91,21 @@ pub async fn update_status_if_current(
 pub async fn fail_stale_unowned_live_commands(
     database: &Database,
     now: &str,
-    timeout: std::time::Duration,
+    command_timeout: std::time::Duration,
+    session_timeout: std::time::Duration,
+    sweeper_instance_id: uuid::Uuid,
     owned_command_ids: &[CommandId],
 ) -> RepositoryResult<u64> {
-    let timeout =
-        time::Duration::try_from(timeout).context("failed to convert live command timeout")?;
-    let cutoff = (OffsetDateTime::parse(now, &Rfc3339)
-        .context("failed to parse live command cleanup timestamp")?
-        - timeout)
+    let command_timeout = time::Duration::try_from(command_timeout)
+        .context("failed to convert live command timeout")?;
+    let session_timeout = time::Duration::try_from(session_timeout)
+        .context("failed to convert agent session timeout for live command cleanup")?;
+    let now_at = OffsetDateTime::parse(now, &Rfc3339)
+        .context("failed to parse live command cleanup timestamp")?;
+    let command_cutoff = (now_at - command_timeout)
         .format(&Rfc3339)
         .context("failed to format live command cleanup cutoff")?;
+    let session_cutoff_at = now_at - session_timeout;
     let owned_command_ids = owned_command_ids
         .iter()
         .map(ToString::to_string)
@@ -95,14 +114,16 @@ pub async fn fail_stale_unowned_live_commands(
         .filter(
             Condition::any()
                 .add(commands::Column::Kind.eq("link_printer"))
-                .add(commands::Column::Kind.eq("printer_operation")),
+                .add(commands::Column::Kind.eq("printer_operation"))
+                .add(commands::Column::Kind.eq("firmware_refresh"))
+                .add(commands::Column::Kind.eq("firmware_control")),
         )
         .filter(
             Condition::any()
                 .add(commands::Column::Status.eq(CommandStatus::Sent.as_str()))
                 .add(commands::Column::Status.eq(CommandStatus::Acknowledged.as_str())),
         )
-        .filter(commands::Column::UpdatedAt.lt(cutoff))
+        .filter(commands::Column::UpdatedAt.lt(command_cutoff))
         .all(&database.sea_orm_connection())
         .await
         .context("failed to load stale live command candidates")?
@@ -115,36 +136,96 @@ pub async fn fail_stale_unowned_live_commands(
         if owned_command_ids.contains(&command.id.to_string()) {
             continue;
         }
-        let error = match command.kind.as_str() {
-            "link_printer" => Some("printer link dispatch expired before completion"),
+        let (error, firmware_owner) = match command.kind.as_str() {
+            "link_printer" => (
+                Some("printer link dispatch expired before completion"),
+                None,
+            ),
             "printer_operation" => {
                 let payload: PrinterOperationPayload = serde_json::from_str(&command.payload_json)
                     .context("failed to deserialize stale printer operation command payload")?;
-                matches!(
-                    payload.operation,
-                    PrinterOperationKind::HandlePrintError { .. }
+                (
+                    matches!(
+                        payload.operation,
+                        PrinterOperationKind::HandlePrintError { .. }
+                    )
+                    .then_some("live printer operation owner unavailable before completion"),
+                    None,
                 )
-                .then_some("live printer operation owner unavailable before completion")
+            }
+            "firmware_refresh" => {
+                let payload: FirmwareRefreshPayload =
+                    serde_json::from_str(&command.payload_json)
+                        .context("failed to deserialize stale firmware refresh command payload")?;
+                (
+                    Some("live firmware refresh owner unavailable before completion"),
+                    Some((payload.owner_session_id, payload.owner_instance_id)),
+                )
+            }
+            "firmware_control" => {
+                let payload: FirmwareControlPayload =
+                    serde_json::from_str(&command.payload_json)
+                        .context("failed to deserialize stale firmware control command payload")?;
+                (
+                    Some("live firmware control owner unavailable before completion"),
+                    Some((payload.owner_session_id, payload.owner_instance_id)),
+                )
             }
             _ => unreachable!("candidate query limits live command kinds"),
         };
         let Some(error) = error else {
             continue;
         };
-        if update_status_if_current(
-            database,
-            StatusTransition {
-                command_id: command.id,
-                tenant_id: command.tenant_id,
-                agent_id: command.agent_id,
-                status: CommandStatus::Failed,
-                error: Some(error.to_owned()),
-                result_json: None,
-                allowed_statuses: &[CommandStatus::Sent, CommandStatus::Acknowledged],
-            },
+        let result_json = matches!(
+            command.kind.as_str(),
+            "firmware_refresh" | "firmware_control"
         )
-        .await?
-        {
+        .then(|| {
+            serde_json::to_string(&FirmwarePersistedResult {
+                phase: if command.status == CommandStatus::Acknowledged {
+                    FirmwarePersistedPhase::OutcomeUnknown
+                } else {
+                    FirmwarePersistedPhase::PrePublishFailure
+                },
+                outcome: None,
+                transient_status: None,
+            })
+            .context("failed to serialize stale firmware cleanup result")
+        })
+        .transpose()?;
+        let transition = StatusTransition {
+            command_id: command.id,
+            tenant_id: command.tenant_id,
+            agent_id: command.agent_id,
+            status: CommandStatus::Failed,
+            error: Some(error.to_owned()),
+            result_json,
+            allowed_statuses: &[CommandStatus::Sent, CommandStatus::Acknowledged],
+        };
+        let updated = if let Some((owner_session_id, owner_instance_id)) = firmware_owner {
+            let Some(transaction) = begin_stale_firmware_cleanup_transaction(
+                database,
+                command.tenant_id,
+                command.agent_id,
+                &owner_session_id,
+                owner_instance_id,
+                sweeper_instance_id,
+                session_cutoff_at,
+            )
+            .await?
+            else {
+                continue;
+            };
+            let updated = update_status_if_current_on(&transaction, transition).await?;
+            transaction
+                .commit()
+                .await
+                .context("failed to commit stale firmware command cleanup")?;
+            updated
+        } else {
+            update_status_if_current(database, transition).await?
+        };
+        if updated {
             failed += 1;
         }
     }

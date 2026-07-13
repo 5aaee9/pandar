@@ -1,5 +1,9 @@
 mod support;
 
+#[path = "http_boundary/firmware.rs"]
+mod http_boundary_firmware;
+#[path = "http_boundary/firmware_safety.rs"]
+mod http_boundary_firmware_safety;
 #[path = "http_boundary/general.rs"]
 mod http_boundary_general;
 #[path = "http_boundary/print_submission.rs"]

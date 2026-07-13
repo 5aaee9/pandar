@@ -127,6 +127,24 @@ pub fn router(state: AppState) -> Router {
             post(plugin::create_no_auth_session),
         )
         .route("/api/v1/plugin/printers", get(plugin::list_printers))
+        .route(
+            "/api/v1/plugin/printers/{printer_id}/firmware",
+            get(plugin::firmware::get_state),
+        )
+        .route(
+            "/api/v1/plugin/printers/{printer_id}/firmware/refresh",
+            post(plugin::firmware::refresh),
+        )
+        .route(
+            "/api/v1/plugin/printers/{printer_id}/firmware/prepare",
+            post(plugin::firmware::prepare),
+        )
+        .route(
+            "/api/v1/plugin/printers/{printer_id}/firmware/execute",
+            post(plugin::firmware::execute).layer(DefaultBodyLimit::max(
+                plugin::firmware::FIRMWARE_EXECUTE_BODY_LIMIT,
+            )),
+        )
         .route("/api/v1/plugin/jobs", get(plugin::list_jobs))
         .route(
             "/api/v1/plugin/prints",

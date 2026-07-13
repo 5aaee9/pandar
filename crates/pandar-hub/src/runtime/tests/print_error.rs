@@ -199,10 +199,11 @@ async fn stale_recovery_uses_only_process_local_live_command_owners() {
     )
     .await;
 
-    let failed = fail_stale_live_commands_with_timeout(
+    let failed = fail_stale_live_commands_with_timeouts(
         &state,
         "2026-07-10T00:06:00Z",
         Duration::from_secs(300),
+        Duration::from_secs(45),
     )
     .await
     .unwrap();

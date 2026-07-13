@@ -6,8 +6,8 @@ use tokio::sync::mpsc;
 use super::{assert_failure_contains, test_config};
 use crate::{
     commands::{
-        FilesystemArtifactReader, ack_event, handle_command_with_gateway,
-        handle_command_with_reader,
+        FilesystemArtifactReader, ack_event, handle_command_with_reader,
+        handle_non_firmware_command_with_gateway as handle_command_with_gateway,
     },
     protocol::agent::v1::{AgentEvent, HubCommand, PrintProjectFile, agent_event, hub_command},
 };

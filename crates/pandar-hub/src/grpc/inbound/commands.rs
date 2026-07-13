@@ -22,6 +22,13 @@ pub(super) async fn handle_command_ack(
     let command_id = parse_command_id(&ack.command_id)?;
     let accepted = ack.accepted;
     let error = ack.error;
+    if super::super::printer_firmware::handle_command_ack(
+        state, tenant_id, agent_id, token, command_id, accepted, &error,
+    )
+    .await?
+    {
+        return Ok(());
+    }
     match state
         .sessions()
         .claim_current_live_command(tenant_id, agent_id, token, command_id)
@@ -71,7 +78,31 @@ pub(super) async fn handle_command_result(
     token: SessionToken,
     result: CommandResult,
 ) -> Result<(), Status> {
+    if let Some(firmware_result) = result.firmware_result.clone() {
+        return super::super::printer_firmware::handle_command_result(
+            state,
+            tenant_id,
+            agent_id,
+            token,
+            &result,
+            firmware_result,
+        )
+        .await;
+    }
     let command_id = parse_command_id(&result.command_id)?;
+    if !result.success
+        && super::super::printer_firmware::handle_command_failure(
+            state,
+            tenant_id,
+            agent_id,
+            token,
+            command_id,
+            &result.error,
+        )
+        .await?
+    {
+        return Ok(());
+    }
     let result_error = result.error.clone();
     let result_json = result.result_json.clone();
     match state
@@ -162,7 +193,7 @@ async fn durable_fallback_allowed(
     }
 
     match command.kind.as_str() {
-        "link_printer" => Ok(false),
+        "link_printer" | "firmware_refresh" | "firmware_control" => Ok(false),
         "printer_operation" => {
             let payload: PrinterOperationPayload = serde_json::from_str(&command.payload_json)
                 .map_err(|err| {

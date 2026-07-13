@@ -3,3 +3,6 @@ pub mod agent {
         tonic::include_proto!("pandar.agent.v1");
     }
 }
+
+#[cfg(test)]
+mod tests;

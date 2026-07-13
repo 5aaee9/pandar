@@ -5,6 +5,7 @@ pub mod cleanup;
 pub mod cluster;
 pub mod db;
 pub mod entities;
+pub mod firmware_control;
 pub mod grpc;
 pub mod identity;
 pub mod jobs;

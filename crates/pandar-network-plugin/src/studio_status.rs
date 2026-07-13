@@ -1,11 +1,16 @@
 mod device;
+mod firmware;
 mod input;
 mod list;
 mod materials;
 mod request;
 mod scalar;
 
-pub(super) use list::validate_printer_list;
+pub(super) use firmware::{
+    acknowledgement_callback_json, current_firmware_json, firmware_refresh_failure_json,
+    firmware_refresh_success_json, firmware_reset_json,
+};
+pub(super) use list::{firmware_observations, validate_printer_list};
 
 use device::StudioTelemetry;
 use input::PrinterStatus;

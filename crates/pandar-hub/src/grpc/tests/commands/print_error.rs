@@ -376,6 +376,7 @@ fn command_result_event(
             success: true,
             error: String::new(),
             result_json: String::new(),
+            firmware_result: None,
         })),
     }
 }

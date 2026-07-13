@@ -2900,6 +2900,7 @@ dependencies = [
  "async-trait",
  "base64",
  "clap",
+ "futures-util",
  "md-5 0.10.6",
  "pandar-core",
  "prost",
@@ -2993,6 +2994,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "zeroize",
  "zip",
 ]
 
@@ -3005,6 +3007,7 @@ dependencies = [
  "futures-util",
  "http-body 1.0.1",
  "http-body-util",
+ "pandar-core",
  "reqwest",
  "rust-embed",
  "serde",

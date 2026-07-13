@@ -1,24 +1,39 @@
 use std::{collections::VecDeque, sync::Arc};
 
-use anyhow::bail;
+use async_trait::async_trait;
 use tokio::sync::Notify;
 
 use super::*;
+use crate::commands::printer_snapshot_event;
 use crate::machine::{
-    diagnostics::PrinterDiagnosticResult,
+    MachineSnapshot, MaterialRefreshResult, PrintProjectDispatchResult, PrinterOperation,
+    PrinterOperationDispatchResult, PrinterRefreshResult,
+    diagnostics::{PrinterDiagnosticResult, redact_known_access_codes},
     discovery::{DiscoveredPrinter, PrinterDiscoveryResult},
     file_transfer::{MachineFileTransfer, TransferModeCache},
-    mqtt::BambuMqttTransport,
+    mqtt::{BambuMqttTransport, refresh_printer},
 };
+use crate::protocol::agent::v1::PrintProjectFile;
+
+mod assertions;
+mod firmware_gateway;
+mod refresh_context;
+
+pub(crate) use assertions::{assert_locked_for_a_moment, assert_unlocked_for_a_moment};
+use firmware_gateway::FirmwareExecutePauseState;
 
 pub(crate) struct TestRuntimeBambuMachineGateway<T, F> {
-    inner: tokio::sync::Mutex<ConfiguredBambuMachineGateway<T, F>>,
+    inner: Arc<tokio::sync::Mutex<ConfiguredBambuMachineGateway<T, F>>>,
     discovered_printers: tokio::sync::Mutex<Vec<DiscoveredPrinter>>,
     pub(crate) report_tasks: tokio::sync::Mutex<HashMap<String, JoinHandle<()>>>,
     command_transports: tokio::sync::Mutex<VecDeque<anyhow::Result<T>>>,
     report_preparation_errors: tokio::sync::Mutex<VecDeque<anyhow::Error>>,
     report_task_replacement_pause: tokio::sync::Mutex<Option<ReportTaskReplacementPause>>,
+    refresh_context: tokio::sync::Mutex<Option<(AgentConfig, mpsc::Sender<AgentEvent>)>>,
     device_features: DeviceFeatureCache,
+    firmware: FirmwareObservationCache,
+    firmware_execute_pause: tokio::sync::Mutex<Option<Arc<FirmwareExecutePauseState>>>,
+    firmware_publish_count: std::sync::atomic::AtomicUsize,
     redaction_access_codes: StdMutex<Vec<String>>,
     transfer: F,
     report_timeout: Duration,
@@ -49,17 +64,23 @@ where
             })
             .collect();
         Self {
-            inner: tokio::sync::Mutex::new(ConfiguredBambuMachineGateway::with_file_transfer(
-                printers,
-                report_timeout,
-                TransferModeCache::default(),
+            inner: Arc::new(tokio::sync::Mutex::new(
+                ConfiguredBambuMachineGateway::with_file_transfer(
+                    printers,
+                    report_timeout,
+                    TransferModeCache::default(),
+                ),
             )),
             discovered_printers: tokio::sync::Mutex::new(discovered_printers),
             report_tasks: tokio::sync::Mutex::new(HashMap::new()),
             command_transports: tokio::sync::Mutex::new(VecDeque::new()),
             report_preparation_errors: tokio::sync::Mutex::new(VecDeque::new()),
             report_task_replacement_pause: tokio::sync::Mutex::new(None),
+            refresh_context: tokio::sync::Mutex::new(None),
             device_features: DeviceFeatureCache::default(),
+            firmware: FirmwareObservationCache::default(),
+            firmware_execute_pause: tokio::sync::Mutex::new(None),
+            firmware_publish_count: std::sync::atomic::AtomicUsize::new(0),
             redaction_access_codes: StdMutex::new(redaction_access_codes),
             transfer,
             report_timeout,
@@ -206,8 +227,8 @@ where
 #[async_trait]
 impl<T, F> BambuMachineGateway for TestRuntimeBambuMachineGateway<T, F>
 where
-    T: BambuMqttTransport + Send + Sync,
-    F: MachineFileTransfer + Clone + Send + Sync,
+    T: BambuMqttTransport + Clone + Send + Sync + 'static,
+    F: MachineFileTransfer + Clone + Send + Sync + 'static,
 {
     fn redact_error(&self, message: &str) -> String {
         redact_known_access_codes(message, self.redaction_access_codes.lock().unwrap().clone())
@@ -234,15 +255,14 @@ where
     }
 
     async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
-        let results = self.inner.lock().await.refresh_printers().await?;
-        for result in &results {
-            if let Some(value) = result.snapshot.device_features {
-                self.device_features
-                    .update(&result.snapshot.serial, value)
-                    .await;
-            }
-        }
-        Ok(results)
+        refresh_runtime_printers_with_firmware(
+            Arc::clone(&self.inner),
+            self.firmware.clone(),
+            self.device_features.clone(),
+            self.refresh_context.lock().await.clone(),
+            self.report_timeout,
+        )
+        .await
     }
 
     async fn refresh_printer_materials(
@@ -297,18 +317,25 @@ where
         sender: &mpsc::Sender<AgentEvent>,
     ) -> anyhow::Result<MachineSnapshot> {
         let command_transport = self.next_command_transport().await?;
-        let mut inner = self.inner.lock().await;
+        let version_lease = self
+            .firmware
+            .version_observation_lease(&endpoint.serial)
+            .await;
         let snapshot = refresh_printer(&command_transport, &endpoint, self.report_timeout)
             .await
             .with_context(|| format!("validate runtime printer {}", endpoint.serial))?
             .snapshot;
         self.prepare_report_forwarding().await?;
+        let mut inner = self.inner.lock().await;
         if let Some(task) = self.report_tasks.lock().await.remove(&endpoint.serial) {
             task.abort();
             let _ = task.await;
         }
         self.device_features.invalidate(&endpoint.serial).await;
         if !sender.is_closed() {
+            sender
+                .send(printer_snapshot_event(config, snapshot.clone()))
+                .await?;
             sender
                 .send(crate::machine::mqtt::feature_event(
                     config,
@@ -333,6 +360,7 @@ where
             tokio::spawn(async { std::future::pending::<()>().await }),
         );
         self.record_access_code(&endpoint);
+        drop(version_lease);
         Ok(snapshot)
     }
 }
@@ -369,17 +397,4 @@ impl ReportTaskReplacementPause {
         self.state.blocked.notify_waiters();
         self.state.release.notified().await;
     }
-}
-
-pub(crate) async fn assert_locked_for_a_moment<T, F>(
-    gateway: &TestRuntimeBambuMachineGateway<T, F>,
-) -> anyhow::Result<()>
-where
-    T: BambuMqttTransport + Send + Sync,
-    F: MachineFileTransfer + Clone + Send + Sync,
-{
-    if gateway.inner.try_lock().is_ok() {
-        bail!("runtime gateway lock was available while link_printer validation was paused");
-    }
-    Ok(())
 }

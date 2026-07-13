@@ -126,6 +126,10 @@ impl FakeMqttTransport {
     pub async fn published_commands(&self) -> Vec<PublishedMqttCommand> {
         self.state.lock().await.published_commands.clone()
     }
+
+    pub async fn push_report(&self, report: Value) {
+        self.state.lock().await.reports.push_back(report);
+    }
 }
 
 #[cfg(test)]

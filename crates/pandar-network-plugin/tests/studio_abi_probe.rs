@@ -1,7 +1,12 @@
 #![cfg(any(unix, windows))]
+#![recursion_limit = "256"]
 
 #[path = "studio_abi_probe/compiler.rs"]
 mod compiler;
+#[path = "studio_abi_probe/firmware_mock.rs"]
+mod firmware_mock;
+#[path = "studio_abi_probe/firmware_probe.rs"]
+mod firmware_probe;
 #[path = "studio_abi_probe/mock_hub.rs"]
 mod mock_hub;
 #[path = "studio_abi_probe/native_print_error.rs"]
@@ -22,6 +27,45 @@ fn assert_json_field(output: &str, field: &str, value: &str) {
 
 fn compiler_identity_is_allowed_for_target(compiler: &str, target_requires_msvc: bool) -> bool {
     !target_requires_msvc || compiler.to_ascii_lowercase().contains("cl.exe")
+}
+
+#[test]
+fn firmware_probe_wires_native_cloud_and_lan_behavior() {
+    let output = firmware_probe::run_firmware_probe();
+    println!("Studio firmware ABI probe compiler: {}", output.compiler);
+    #[cfg(all(windows, target_env = "msvc"))]
+    assert!(
+        compiler_identity_is_allowed_for_target(&output.compiler, true),
+        "firmware ABI probe must compile with MSVC cl.exe, got {}",
+        output.compiler
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "firmware ABI probe stderr was not empty: {}",
+        output.stderr
+    );
+    let result: serde_json::Value = serde_json::from_str(output.stdout.trim()).unwrap();
+    assert_eq!(result["ok"], serde_json::json!(true));
+    assert_eq!(result["catalog_exact"], serde_json::json!(true));
+    assert_eq!(result["versions_exact"], serde_json::json!(true));
+    assert!(result["callback_delay_ms"].as_u64().unwrap() >= 1_100);
+    assert!(result["callback_delay_ms"].as_u64().unwrap() < 2_000);
+    assert!(result["overlap_callback_delay_ms"].as_u64().unwrap() >= 1_100);
+    assert!(result["overlap_callback_delay_ms"].as_u64().unwrap() < 2_000);
+    assert_eq!(result["overlap_callback_exact"], serde_json::json!(true));
+    assert_eq!(result["callbacks_serialized"], serde_json::json!(true));
+    assert_eq!(result["status_logout_safe"], serde_json::json!(true));
+    assert_eq!(
+        result["synchronous_generation_fenced"],
+        serde_json::json!(true)
+    );
+    assert_eq!(
+        result["synchronous_reentrant_logout"],
+        serde_json::json!(true)
+    );
+    assert_eq!(result["deadline_expired"], serde_json::json!(true));
+    assert_eq!(result["logout_cancelled"], serde_json::json!(true));
+    assert_eq!(result["destroy_cancelled"], serde_json::json!(true));
 }
 
 #[test]

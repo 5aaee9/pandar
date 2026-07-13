@@ -17,6 +17,7 @@ use crate::{
     },
 };
 
+pub(super) mod firmware;
 mod responses;
 mod studio_devices;
 pub(crate) use responses::redact_artifact_error;

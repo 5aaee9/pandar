@@ -4,13 +4,19 @@ use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder}
 
 mod audit;
 mod enqueue;
+mod firmware;
 pub mod inserts;
 mod operations;
 mod ownership;
 mod query;
 pub(crate) mod rows;
+mod terminal;
 mod transitions;
 mod types;
+pub use firmware::{
+    FirmwareCommandOwner, FirmwareControlPayload, FirmwarePersistedPhase, FirmwarePersistedResult,
+    FirmwareRefreshPayload,
+};
 use rows::command_from_model;
 use transitions::{CommandTransition, TerminalCommandTransition, invalid_transition};
 pub use types::{
@@ -251,7 +257,7 @@ impl CommandRepository {
         agent_id: AgentId,
         result_json: Option<String>,
     ) -> RepositoryResult<CommandRecord> {
-        self.guard_terminal_transition(TerminalCommandTransition {
+        self.guard_generic_terminal_transition(TerminalCommandTransition {
             command_id,
             tenant_id,
             agent_id,
@@ -282,7 +288,7 @@ impl CommandRepository {
         error: impl Into<String>,
         result_json: Option<String>,
     ) -> RepositoryResult<CommandRecord> {
-        self.guard_terminal_transition(TerminalCommandTransition {
+        self.guard_generic_terminal_transition(TerminalCommandTransition {
             command_id,
             tenant_id,
             agent_id,
@@ -297,13 +303,17 @@ impl CommandRepository {
     pub async fn fail_stale_unowned_live_commands(
         &self,
         now: &str,
-        timeout: std::time::Duration,
+        command_timeout: std::time::Duration,
+        session_timeout: std::time::Duration,
+        sweeper_instance_id: uuid::Uuid,
         owned_command_ids: &[CommandId],
     ) -> RepositoryResult<u64> {
         transitions::fail_stale_unowned_live_commands(
             &self.database,
             now,
-            timeout,
+            command_timeout,
+            session_timeout,
+            sweeper_instance_id,
             owned_command_ids,
         )
         .await
@@ -347,37 +357,5 @@ impl CommandRepository {
         self.get(transition.command_id)
             .await?
             .ok_or(RepositoryError::MissingCommand)
-    }
-
-    async fn guard_terminal_transition(
-        &self,
-        transition: TerminalCommandTransition,
-    ) -> RepositoryResult<CommandRecord> {
-        let updated = transitions::update_status_if_current(
-            &self.database,
-            transitions::StatusTransition {
-                command_id: transition.command_id,
-                tenant_id: transition.tenant_id,
-                agent_id: transition.agent_id,
-                status: transition.terminal_status.clone(),
-                error: transition.error,
-                result_json: transition.result_json,
-                allowed_statuses: &[CommandStatus::Sent, CommandStatus::Acknowledged],
-            },
-        )
-        .await?;
-        let command = self
-            .load_owned(
-                transition.command_id,
-                transition.tenant_id,
-                transition.agent_id,
-            )
-            .await?;
-
-        if updated || command.status == transition.terminal_status {
-            return Ok(command);
-        }
-
-        Err(invalid_transition(command.status, transition.action))
     }
 }

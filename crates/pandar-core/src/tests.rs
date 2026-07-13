@@ -1,6 +1,7 @@
 use super::*;
 
 mod command_job;
+mod firmware;
 
 #[test]
 fn id_parse_rejects_invalid_uuid() {

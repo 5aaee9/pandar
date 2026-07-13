@@ -1,35 +1,75 @@
-use std::{collections::HashMap, sync::Mutex as StdMutex, time::Duration};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex as StdMutex},
+    time::Duration,
+};
 
-use tokio::{sync::mpsc, task::JoinHandle, time::sleep};
-use {anyhow::Context, async_trait::async_trait};
+use anyhow::Context;
+#[cfg(test)]
+use tokio::time::sleep;
+use tokio::{sync::mpsc, task::JoinHandle};
 
+#[cfg(test)]
+use crate::machine::{
+    FirmwareVersionObservation, PrinterRefreshResult, diagnostics::redact_access_code,
+    mqtt::forward_print_reports,
+};
 use crate::{
     AgentConfig,
     machine::{
         BambuMachineGateway, BambuPrinterEndpoint, ConfiguredBambuMachineGateway,
-        DeviceFeatureCache, MachineSnapshot, MaterialRefreshResult, PrintProjectDispatchResult,
-        PrinterOperation, PrinterOperationDispatchResult, PrinterRefreshResult,
-        diagnostics::{redact_access_code, redact_known_access_codes},
-        mqtt::{
-            RumqttcBambuMqttTransport, dispatch_sequence_zero_recovery, feature_event,
-            forward_print_reports, refresh_printer,
-        },
-        transfer::BambuMachineFileTransfer,
+        DeviceFeatureCache, FirmwareObservationCache, FirmwareReportContext,
+        mqtt::{FirmwareMqttTaskSet, RumqttcBambuMqttTransport, feature_event},
     },
-    protocol::agent::v1::{AgentEvent, PrintProjectFile},
+    protocol::agent::v1::AgentEvent,
 };
 
 use super::operations::mqtt_command_for_printer_operation;
 use super::operations::operate_printer_with_feature_selection;
 
+mod firmware;
+mod firmware_gateway;
+#[cfg(test)]
+mod firmware_gateway_tests;
+mod firmware_refresh;
+#[cfg(test)]
+mod firmware_refresh_tests;
+#[cfg(test)]
+mod firmware_tests;
+mod gateway;
+mod session;
+#[cfg(test)]
+mod session_test_support;
+pub(crate) use firmware::{
+    RuntimeReportContext, forward_print_reports_with_firmware_retry,
+    refresh_runtime_printers_with_firmware,
+};
+
+#[cfg(test)]
+type LinkValidationResult = anyhow::Result<(PrinterRefreshResult, FirmwareVersionObservation)>;
+
 pub struct RuntimeBambuMachineGateway {
-    inner: tokio::sync::Mutex<ConfiguredBambuMachineGateway<RumqttcBambuMqttTransport>>,
+    inner: Arc<tokio::sync::Mutex<ConfiguredBambuMachineGateway<RumqttcBambuMqttTransport>>>,
     report_tasks: tokio::sync::Mutex<HashMap<String, JoinHandle<()>>>,
     device_features: DeviceFeatureCache,
+    firmware: FirmwareObservationCache,
+    firmware_mqtt_tasks: FirmwareMqttTaskSet,
     current_sender: tokio::sync::Mutex<Option<mpsc::Sender<AgentEvent>>>,
     redaction_access_codes: StdMutex<Vec<String>>,
     config: AgentConfig,
     report_timeout: Duration,
+    #[cfg(test)]
+    prepare_session_pause: tokio::sync::Mutex<Option<Arc<PrepareSessionPauseState>>>,
+    #[cfg(test)]
+    partial_prepare_report_hook:
+        tokio::sync::Mutex<Option<Arc<session_test_support::PartialPrepareReportHookState>>>,
+    #[cfg(test)]
+    report_join_pause: tokio::sync::Mutex<Option<Arc<session_test_support::ReportJoinPauseState>>>,
+    #[cfg(test)]
+    heartbeat_panic_hook:
+        tokio::sync::Mutex<Option<Arc<session_test_support::HeartbeatPanicState>>>,
+    #[cfg(test)]
+    link_validation_result: tokio::sync::Mutex<Option<LinkValidationResult>>,
 }
 
 const REPORT_FORWARD_RETRY_DELAY: Duration = Duration::from_secs(5);
@@ -56,30 +96,39 @@ impl RuntimeBambuMachineGateway {
         );
 
         Self {
-            inner: tokio::sync::Mutex::new(inner),
+            inner: Arc::new(tokio::sync::Mutex::new(inner)),
             report_tasks: tokio::sync::Mutex::new(HashMap::new()),
             device_features: DeviceFeatureCache::default(),
+            firmware: FirmwareObservationCache::default(),
+            firmware_mqtt_tasks: FirmwareMqttTaskSet::default(),
             current_sender: tokio::sync::Mutex::new(None),
             redaction_access_codes: StdMutex::new(redaction_access_codes),
             config,
             report_timeout,
+            #[cfg(test)]
+            prepare_session_pause: tokio::sync::Mutex::new(None),
+            #[cfg(test)]
+            partial_prepare_report_hook: tokio::sync::Mutex::new(None),
+            #[cfg(test)]
+            report_join_pause: tokio::sync::Mutex::new(None),
+            #[cfg(test)]
+            heartbeat_panic_hook: tokio::sync::Mutex::new(None),
+            #[cfg(test)]
+            link_validation_result: tokio::sync::Mutex::new(None),
         }
     }
 
     pub async fn prepare_session(&self, sender: &mpsc::Sender<AgentEvent>) -> anyhow::Result<()> {
-        let tasks = self
-            .report_tasks
-            .lock()
-            .await
-            .drain()
-            .map(|(_, task)| task)
-            .collect::<Vec<_>>();
-        for task in tasks {
-            task.abort();
-            let _ = task.await;
-        }
+        self.teardown_session_report_forwarders().await?;
         *self.current_sender.lock().await = Some(sender.clone());
+        #[cfg(test)]
+        self.pause_prepare_session_for_test_if_installed().await;
         let endpoints = self.inner.lock().await.endpoints();
+        #[cfg(test)]
+        self.fail_partial_prepare_after_report_forwarder_for_test_if_installed(&endpoints, sender)
+            .await?;
+        self.queue_configured_printer_rows(&endpoints, sender)
+            .await?;
         for endpoint in &endpoints {
             self.device_features.invalidate(&endpoint.serial).await;
             sender
@@ -123,7 +172,7 @@ impl RuntimeBambuMachineGateway {
                 }
             }
         }
-        self.start_initial_report_forwarders(sender).await;
+        self.start_initial_report_forwarders(sender).await?;
         Ok(())
     }
 
@@ -137,41 +186,88 @@ impl RuntimeBambuMachineGateway {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) async fn pause_prepare_session_for_test(&self) -> PrepareSessionPause {
+        let state = Arc::new(PrepareSessionPauseState {
+            reached: tokio::sync::Notify::new(),
+            dropped: tokio::sync::Notify::new(),
+        });
+        *self.prepare_session_pause.lock().await = Some(Arc::clone(&state));
+        PrepareSessionPause { state }
+    }
+
+    #[cfg(test)]
+    async fn pause_prepare_session_for_test_if_installed(&self) {
+        let Some(state) = self.prepare_session_pause.lock().await.take() else {
+            return;
+        };
+        let _guard = PrepareSessionPauseGuard(Arc::clone(&state));
+        state.reached.notify_one();
+        std::future::pending::<()>().await;
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn has_current_sender_for_test(&self) -> bool {
+        self.current_sender.lock().await.is_some()
+    }
+
     pub fn device_feature_cache(&self) -> DeviceFeatureCache {
         self.device_features.clone()
     }
 
-    pub async fn start_initial_report_forwarders(&self, sender: &mpsc::Sender<AgentEvent>) {
+    pub fn firmware_cache(&self) -> FirmwareObservationCache {
+        self.firmware.clone()
+    }
+
+    pub async fn start_initial_report_forwarders(
+        &self,
+        sender: &mpsc::Sender<AgentEvent>,
+    ) -> anyhow::Result<()> {
         let endpoints = self.inner.lock().await.endpoints();
         for endpoint in endpoints {
-            self.replace_report_task(endpoint, sender).await;
+            self.replace_report_task(endpoint, sender).await?;
         }
+        Ok(())
     }
 
     async fn replace_report_task(
         &self,
         endpoint: BambuPrinterEndpoint,
         sender: &mpsc::Sender<AgentEvent>,
-    ) {
+    ) -> anyhow::Result<()> {
         let transport = RumqttcBambuMqttTransport::connect_for_reports(&endpoint);
-        self.replace_report_task_with_transport(endpoint, transport, sender)
-            .await;
+        let transition = self
+            .firmware
+            .begin_generation(&self.config, endpoint.clone(), sender, None)
+            .await?
+            .expect("initial report generation is unconditional");
+        let firmware = FirmwareReportContext {
+            cache: self.firmware.clone(),
+            generation: transition.generation(),
+        };
+        self.replace_report_task_with_transport(endpoint, transport, sender, firmware)
+            .await?;
+        drop(transition);
+        Ok(())
     }
 
-    async fn replace_report_task_with_transport(
+    pub(super) async fn replace_report_task_with_transport(
         &self,
         endpoint: BambuPrinterEndpoint,
         transport: RumqttcBambuMqttTransport,
         sender: &mpsc::Sender<AgentEvent>,
-    ) {
+        firmware: FirmwareReportContext,
+    ) -> anyhow::Result<()> {
+        let serial = endpoint.serial.clone();
+        self.stop_report_task(&serial, "join replaced runtime printer report forwarder")
+            .await?;
         let mut tasks = self.report_tasks.lock().await;
-        if let Some(task) = tasks.remove(&endpoint.serial) {
-            task.abort();
-        }
-        tasks.insert(
-            endpoint.serial.clone(),
-            self.spawn_report_task(endpoint, transport, sender.clone()),
+        let previous = tasks.insert(
+            serial.clone(),
+            self.spawn_report_task(endpoint, transport, sender.clone(), firmware),
         );
+        assert!(previous.is_none(), "report task replacement is serialized");
+        Ok(())
     }
 
     fn spawn_report_task(
@@ -179,17 +275,21 @@ impl RuntimeBambuMachineGateway {
         endpoint: BambuPrinterEndpoint,
         transport: RumqttcBambuMqttTransport,
         sender: mpsc::Sender<AgentEvent>,
+        firmware: FirmwareReportContext,
     ) -> JoinHandle<()> {
         let config = self.config.clone();
         let report_timeout = self.report_timeout;
-        tokio::spawn(forward_print_reports_with_retry(
+        tokio::spawn(forward_print_reports_with_firmware_retry(
             config,
             transport,
             endpoint,
             report_timeout,
             sender,
             REPORT_FORWARD_RETRY_DELAY,
-            self.device_features.clone(),
+            RuntimeReportContext {
+                device_features: self.device_features.clone(),
+                firmware,
+            },
         ))
     }
 
@@ -200,6 +300,39 @@ impl RuntimeBambuMachineGateway {
     }
 }
 
+#[cfg(test)]
+pub(crate) struct PrepareSessionPause {
+    state: Arc<PrepareSessionPauseState>,
+}
+
+#[cfg(test)]
+struct PrepareSessionPauseState {
+    reached: tokio::sync::Notify,
+    dropped: tokio::sync::Notify,
+}
+
+#[cfg(test)]
+struct PrepareSessionPauseGuard(Arc<PrepareSessionPauseState>);
+
+#[cfg(test)]
+impl PrepareSessionPause {
+    pub(crate) async fn wait_until_reached(&mut self) {
+        self.state.reached.notified().await;
+    }
+
+    pub(crate) async fn wait_until_dropped(&mut self) {
+        self.state.dropped.notified().await;
+    }
+}
+
+#[cfg(test)]
+impl Drop for PrepareSessionPauseGuard {
+    fn drop(&mut self) {
+        self.0.dropped.notify_one();
+    }
+}
+
+#[cfg(test)]
 pub(crate) async fn forward_print_reports_with_retry<T>(
     config: AgentConfig,
     transport: T,
@@ -245,154 +378,6 @@ pub(crate) async fn forward_print_reports_with_retry<T>(
             _ = sender.closed() => return,
             _ = sleep(retry_delay) => {}
         }
-    }
-}
-
-#[async_trait]
-impl BambuMachineGateway for RuntimeBambuMachineGateway {
-    fn redact_error(&self, message: &str) -> String {
-        redact_known_access_codes(message, self.redaction_access_codes.lock().unwrap().clone())
-    }
-
-    async fn discover_printers(
-        &self,
-        timeout_seconds: u32,
-    ) -> anyhow::Result<crate::machine::discovery::PrinterDiscoveryResult> {
-        self.inner
-            .lock()
-            .await
-            .discover_printers(timeout_seconds)
-            .await
-    }
-
-    async fn diagnose_printer(
-        &self,
-        serial_number: &str,
-    ) -> anyhow::Result<crate::machine::diagnostics::PrinterDiagnosticResult> {
-        self.inner
-            .lock()
-            .await
-            .diagnose_printer(serial_number)
-            .await
-    }
-
-    async fn refresh_printers(&self) -> anyhow::Result<Vec<PrinterRefreshResult>> {
-        let results = self.inner.lock().await.refresh_printers().await?;
-        for result in &results {
-            if let Some(value) = result.snapshot.device_features {
-                self.device_features
-                    .update(&result.snapshot.serial, value)
-                    .await;
-            }
-        }
-        Ok(results)
-    }
-
-    async fn refresh_printer_materials(
-        &self,
-        serial_number: &str,
-        printer_id: Option<&str>,
-    ) -> anyhow::Result<MaterialRefreshResult> {
-        self.inner
-            .lock()
-            .await
-            .refresh_printer_materials(serial_number, printer_id)
-            .await
-    }
-
-    async fn validate_printer(&self, serial_number: &str) -> anyhow::Result<()> {
-        self.inner
-            .lock()
-            .await
-            .validate_printer(serial_number)
-            .await
-    }
-
-    async fn print_project_file(
-        &self,
-        serial_number: &str,
-        command: &PrintProjectFile,
-        artifact: Vec<u8>,
-    ) -> anyhow::Result<PrintProjectDispatchResult> {
-        self.inner
-            .lock()
-            .await
-            .print_project_file(serial_number, command, artifact)
-            .await
-    }
-
-    async fn operate_printer(
-        &self,
-        serial_number: &str,
-        operation: PrinterOperation,
-    ) -> anyhow::Result<PrinterOperationDispatchResult> {
-        if matches!(
-            &operation,
-            PrinterOperation::HandlePrintError { sequence_id: 0, .. }
-        ) {
-            let endpoint = self
-                .inner
-                .lock()
-                .await
-                .endpoint(serial_number)
-                .with_context(|| {
-                    format!("no configured Bambu printer matches serial {serial_number}")
-                })?;
-            let command = mqtt_command_for_printer_operation(operation)?;
-            return dispatch_sequence_zero_recovery(&endpoint, command).await;
-        }
-
-        operate_printer_with_feature_selection(
-            &self.config,
-            &self.inner,
-            &self.device_features,
-            &self.current_sender,
-            serial_number,
-            operation,
-        )
-        .await
-    }
-
-    async fn camera_endpoint(&self, serial_number: &str) -> anyhow::Result<BambuPrinterEndpoint> {
-        self.inner.lock().await.camera_endpoint(serial_number).await
-    }
-
-    async fn link_printer(
-        &self,
-        endpoint: BambuPrinterEndpoint,
-        _config: &AgentConfig,
-        sender: &mpsc::Sender<AgentEvent>,
-    ) -> anyhow::Result<MachineSnapshot> {
-        let command_transport = RumqttcBambuMqttTransport::connect(&endpoint);
-        let report_transport = RumqttcBambuMqttTransport::connect_for_reports(&endpoint);
-        let transfer = BambuMachineFileTransfer::new(endpoint.clone());
-        let mut inner = self.inner.lock().await;
-        let snapshot = refresh_printer(&command_transport, &endpoint, self.report_timeout)
-            .await
-            .with_context(|| format!("validate runtime printer {}", endpoint.serial))?
-            .snapshot;
-        if let Some(task) = self.report_tasks.lock().await.remove(&endpoint.serial) {
-            task.abort();
-            let _ = task.await;
-        }
-        self.device_features.invalidate(&endpoint.serial).await;
-        sender
-            .send(feature_event(&self.config, endpoint.serial.clone(), None))
-            .await
-            .with_context(|| {
-                format!(
-                    "queue printer {} device feature invalidation",
-                    endpoint.serial
-                )
-            })?;
-        if let Some(value) = snapshot.device_features {
-            self.device_features.update(&endpoint.serial, value).await;
-        }
-        inner.replace_printer(endpoint.clone(), command_transport, transfer);
-        self.record_access_code(&endpoint);
-        self.replace_report_task_with_transport(endpoint, report_transport, sender)
-            .await;
-        Ok(snapshot)
     }
 }
 

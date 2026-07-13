@@ -6,6 +6,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tonic_prost_build::configure()
         .type_attribute(
+            ".pandar.agent.v1.AgentEvent.event",
+            "#[allow(clippy::large_enum_variant)]",
+        )
+        .type_attribute(
             ".pandar.agent.v1.HubCommand.command",
             "#[allow(clippy::large_enum_variant)]",
         )

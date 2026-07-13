@@ -1,3 +1,5 @@
+#[path = "mock_hub/firmware_compat.rs"]
+mod firmware_compat;
 #[path = "mock_hub/native.rs"]
 mod native;
 #[path = "mock_hub/operations.rs"]
@@ -55,8 +57,14 @@ fn next_request(
     path: &str,
 ) -> (TcpStream, String) {
     let waiting_for = format!("{method} {path}");
-    read_request_until(listener, stop, deadline, &waiting_for)
-        .unwrap_or_else(|| panic!("Studio ABI probe exited before {waiting_for}"))
+    loop {
+        let (mut stream, request) = read_request_until(listener, stop, deadline, &waiting_for)
+            .unwrap_or_else(|| panic!("Studio ABI probe exited before {waiting_for}"));
+        if firmware_compat::try_respond(&mut stream, &request) {
+            continue;
+        }
+        return (stream, request);
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -95,6 +103,9 @@ fn serve_axis_features(listener: &TcpListener, stop: &AtomicBool, deadline: Inst
             return;
         };
         let line = request.lines().next().unwrap_or_default();
+        if firmware_compat::try_respond(&mut stream, &request) {
+            continue;
+        }
         if line == "POST /api/v1/plugin/no-auth-session HTTP/1.1" {
             write_response(
                 &mut stream,

@@ -8,6 +8,9 @@ use super::*;
 use crate::protocol::agent::v1::{AgentHeartbeat, CommandAck, agent_event, hub_command};
 
 mod commands;
+mod firmware_commands;
+mod firmware_events;
+mod firmware_wire;
 mod lifecycle;
 mod log_capture;
 mod print_jobs;
@@ -363,6 +366,7 @@ async fn grpc_ack_and_result_update_command_status() {
             success: true,
             error: String::new(),
             result_json: String::new(),
+            firmware_result: None,
         },
     )
     .await
@@ -523,6 +527,7 @@ pub(super) fn success_event(
             success: true,
             error: String::new(),
             result_json: String::new(),
+            firmware_result: None,
         })),
     }
 }

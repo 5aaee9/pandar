@@ -39,6 +39,7 @@ fn command_result_payload(
         success,
         error: error.into(),
         result_json: result_json.into(),
+        firmware_result: None,
     }
 }
 
@@ -778,6 +779,7 @@ async fn grpc_command_result_persists_result_json() {
             success: true,
             error: String::new(),
             result_json: result_json.to_owned(),
+            firmware_result: None,
         },
     )
     .await
@@ -853,6 +855,7 @@ async fn grpc_print_command_result_persists_dispatch_result_json() {
             success: true,
             error: String::new(),
             result_json: result_json.to_owned(),
+            firmware_result: None,
         },
     )
     .await
@@ -912,6 +915,7 @@ async fn grpc_printer_operation_result_publishes_command_event() {
             success: true,
             error: String::new(),
             result_json: result_json.to_owned(),
+            firmware_result: None,
         },
     )
     .await
@@ -1624,6 +1628,7 @@ fn result_event(
             success,
             error,
             result_json,
+            firmware_result: None,
         })),
     }
 }

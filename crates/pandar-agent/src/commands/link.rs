@@ -8,9 +8,7 @@ use crate::{
     protocol::agent::v1::{AgentEvent, LinkPrinter},
 };
 
-use super::responses::{
-    ack_event, failure_event, printer_snapshot_event, success_event_with_result,
-};
+use super::responses::{ack_event, failure_event, success_event_with_result};
 
 pub(super) async fn emit_link_printer_events<G>(
     config: &AgentConfig,
@@ -58,10 +56,6 @@ where
 
     match gateway.link_printer(endpoint.clone(), config, sender).await {
         Ok(snapshot) => {
-            sender
-                .send(printer_snapshot_event(config, snapshot.clone()))
-                .await
-                .context("queue linked printer snapshot event")?;
             let result_json = serde_json::to_string(&PrinterLinkResult {
                 kind: "printer_link",
                 serial_number: &snapshot.serial,

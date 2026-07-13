@@ -145,6 +145,29 @@ Important boundaries:
 - The plugin does not store Bambu printer access codes.
 - Bambu LAN MQTT and machine file transfer remain agent-local.
 
+### Native Bambu Studio firmware updates
+
+The Rust plugin layer serves Bambu Studio's native Firmware page from typed Hub data. A bounded live `info.get_version` refresh returns the printer-main module plus every AMS-family module in the printer's ordered report, including future names. Pandar does not filter by printer model or module prefix and does not impose an artificial aggregate module cap. The printer remains authoritative for command support, versions, and upgrade progress.
+
+Cloud/tunnel devices receive the native page, current status, and command transport end to end. The LAN entrypoints use the same protocol handling, but Studio itself suppresses the firmware-update button for a true LAN-mode `MachineObject`; Pandar does not override or claim otherwise. The catalog response is valid but empty because Pandar does not stage or host packages. It never creates an empty-URL selectable package.
+
+The long-lived Agent report stream is the only durable firmware-status writer. Hub exposes firmware state only for the owning Agent's exact current session and active generation, with strictly newer module and status revisions. Every report stream invalidates a generation before publishing its firmware module or status snapshots. On reconnect or ownership replacement, the Agent first re-establishes printer ownership without reusing firmware state, then establishes the current generation; invalidation/reset clears Studio's retained main and AMS fields until fresh exact-generation telemetry arrives. Lower revisions, stale generations, and replaced sessions cannot restore an older snapshot.
+
+A mutation has two live-only phases at each process boundary:
+
+1. The plugin prepares with Hub without sending an action URL, receives a bounded one-use token, and attempts execute at most once.
+2. Hub prepares the exact current capable Agent generation without an action or URL; Agent grants a one-use reservation that expires if execute does not claim it in time.
+3. Execute carries the typed command, with a signed URL only for `start`, and rechecks current session/generation immediately before printer publish.
+4. A known pre-publish failure fails safely. After execute is attempted, ambiguous HTTP, delivery, or publish outcomes are terminal outcome-unknown behavior: do not retry, redispatch, reconstruct, or replay them. Later long-lived printer telemetry alone reports upgrade progress or completion.
+
+Prepared tokens and reservations expire and stale work is cleaned up. Agent replacement, generation invalidation, disconnect, or process shutdown cancels unexecuted work; potentially published work remains outcome-unknown rather than being sent again. The signed start URL may exist transiently in Studio input, the single plugin execute request, Hub/Agent process memory, the live protobuf execute message, and the printer MQTT payload. It is excluded and redacted from durable payload/result JSON, audit metadata, telemetry, errors, and loggable results.
+
+Firmware session ownership, prepared secrets, and result waiters are process-local. A plugin request that reaches a Hub process which does not own the current Agent session returns unavailable and cannot forward or reconstruct the command. Deploy this firmware path with one active Hub process; the general NATS control plane does not remove this feature-specific limitation.
+
+Roll out in the order Agent, Hub schema/protobuf/plugin endpoints with both SQLite and PostgreSQL migrations, then network plugin. The plugin exposes controls only after the exact current Agent session advertises firmware capability. For rollback, first stop and roll back the network plugin so it cannot start new firmware mutations. Before rolling back Hub or Agent, let the owning Hub's process-local URL/result waiters reach a terminal acknowledgement or explicitly fail them, allow outstanding reservations to expire, and never transfer or replay the work. Then roll back Hub and finally Agent, leaving the additive nullable firmware columns in place. A printer already flashing remains under printer control; rollback neither cancels it nor asserts an outcome.
+
+Local verification is deterministic: typed parser and repository tests, fake MQTT/HTTP peers, lifecycle/race tests, and compiled Cloud/LAN ABI fixtures. `PANDAR_TEST_POSTGRES_URL` was unset, so real PostgreSQL firmware tests were explicitly skipped; SQLite behavior and SQLite/PostgreSQL migration parity were covered. Verification downloaded no external firmware package, sent no live printer firmware command, and adds no new real Bambu Studio compatibility evidence. Web/Android remote OTA plus firmware package staging or hosting remain future C work, not implemented behavior.
+
 ### Feature-aware Home and XYZ controls
 
 Agent parses nested printer `print.fun` as typed `BambuDeviceFeatures`: one through sixteen ASCII hexadecimal digits representing the complete unsigned 64-bit bitmap. Canonical serialization is uppercase hexadecimal, including `"0"` for a valid zero bitmap. Named checks currently consume bit 32 for MQTT homing and bit 38 for MQTT axis control, but unknown bits and bit 63 remain intact through Agent protobuf, Hub storage, plugin telemetry, and Studio. The Hub migrations add equivalent nullable text bitmap and observation-session columns for SQLite and PostgreSQL so the full unsigned value is not constrained by either database's signed integer range.

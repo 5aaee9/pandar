@@ -26,10 +26,12 @@ use crate::{
 };
 
 mod device_features;
+mod firmware;
 mod live_status;
 mod queries;
 
 pub use device_features::DeviceFeatureUpdateOutcome;
+pub use firmware::PrinterFirmwareUpdateOutcome;
 pub use live_status::{PrinterHms, PrinterLiveStatus, PrinterWithLiveStatus};
 pub(crate) use live_status::{
     PrinterLiveStatusPatch, from_model as live_status_from_model, merge_live_report,
@@ -300,17 +302,7 @@ async fn upsert_snapshot_in_transaction(
     device_features: Option<BambuDeviceFeatures>,
     device_features_session_id: Option<&str>,
 ) -> RepositoryResult<Printer> {
-    let query = printers::Entity::find()
-        .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
-        .filter(printers::Column::SerialNumber.eq(&snapshot.serial_number));
-    let current = match transaction.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(transaction).await,
-        _ => query.one(transaction).await,
-    }
-    .context("failed to lock printer snapshot row")?;
-    let printer_id = current
-        .map(|printer| printer.id)
-        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let printer_id = uuid::Uuid::new_v4().to_string();
     adapters::printers::upsert_snapshot(
         transaction,
         tenant_id,

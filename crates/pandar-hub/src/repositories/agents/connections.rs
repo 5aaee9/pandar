@@ -4,6 +4,7 @@ use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ConnectionTrait, DatabaseTransaction, EntityTrait,
     IntoActiveModel, QuerySelect, SqliteTransactionMode, TransactionOptions, TransactionTrait,
 };
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use super::{AgentRepository, agent_from_model};
 use crate::{
@@ -13,6 +14,15 @@ use crate::{
 };
 
 impl AgentRepository {
+    pub(crate) async fn begin_current_session_fence(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        session_id: &str,
+    ) -> RepositoryResult<DatabaseTransaction> {
+        begin_current_agent_transaction(&self.database, tenant_id, agent_id, session_id).await
+    }
+
     #[cfg(test)]
     pub(crate) async fn update_connection(
         &self,
@@ -171,6 +181,43 @@ pub async fn begin_current_agent_transaction(
     #[cfg(test)]
     current_transaction_pause::wait(session_id, &tx).await;
     Ok(tx)
+}
+
+pub(crate) async fn begin_stale_firmware_cleanup_transaction(
+    database: &Database,
+    tenant_id: TenantId,
+    agent_id: AgentId,
+    owner_session_id: &str,
+    owner_instance_id: uuid::Uuid,
+    sweeper_instance_id: uuid::Uuid,
+    cutoff: OffsetDateTime,
+) -> RepositoryResult<Option<DatabaseTransaction>> {
+    let tx = begin_agent_transaction(database).await?;
+    let agent = locked_agent(&tx, agent_id).await?;
+    let has_fresh_owner = match agent {
+        Some(agent)
+            if agent.tenant_id == tenant_id.to_string()
+                && agent.current_session_id.as_deref() == Some(owner_session_id) =>
+        {
+            agent
+                .last_seen_at
+                .as_deref()
+                .map(|last_seen_at| {
+                    OffsetDateTime::parse(last_seen_at, &Rfc3339)
+                        .context("failed to parse agent heartbeat during firmware cleanup")
+                })
+                .transpose()?
+                .is_some_and(|last_seen_at| last_seen_at > cutoff)
+        }
+        _ => false,
+    };
+    if has_fresh_owner && owner_instance_id != sweeper_instance_id {
+        tx.commit()
+            .await
+            .context("failed to commit fresh firmware owner cleanup comparison")?;
+        return Ok(None);
+    }
+    Ok(Some(tx))
 }
 
 async fn begin_agent_transaction(database: &Database) -> RepositoryResult<DatabaseTransaction> {

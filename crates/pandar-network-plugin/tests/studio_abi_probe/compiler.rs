@@ -70,7 +70,7 @@ fn discovered_compiler() -> (Command, String) {
     }
 }
 
-pub(super) fn compile_probe(mode_arg: &str) -> CompiledProbe {
+fn compile_fixture(mode_arg: &str, fixture_name: &str) -> CompiledProbe {
     let directory = tempfile::tempdir().expect("create Studio ABI compiler directory");
     let executable = directory.path().join(if cfg!(windows) {
         format!("studio_abi_probe_{mode_arg}.exe")
@@ -78,8 +78,9 @@ pub(super) fn compile_probe(mode_arg: &str) -> CompiledProbe {
         format!("studio_abi_probe_{mode_arg}")
     });
     let object = executable.with_extension("obj");
-    let fixture =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/studio_abi_probe.cpp");
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(fixture_name);
     let (mut command, compiler) = discovered_compiler();
 
     if cfg!(target_env = "msvc") {
@@ -124,6 +125,14 @@ pub(super) fn compile_probe(mode_arg: &str) -> CompiledProbe {
         compiler,
         _directory: directory,
     }
+}
+
+pub(super) fn compile_probe(mode_arg: &str) -> CompiledProbe {
+    compile_fixture(mode_arg, "studio_abi_probe.cpp")
+}
+
+pub(super) fn compile_firmware_probe() -> CompiledProbe {
+    compile_fixture("firmware", "firmware_abi_probe.cpp")
 }
 
 pub(super) fn build_plugin() -> PathBuf {

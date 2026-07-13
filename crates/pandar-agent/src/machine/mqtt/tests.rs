@@ -12,6 +12,12 @@ use crate::{
 };
 
 mod device_features;
+mod firmware_ambiguity;
+mod firmware_control;
+mod firmware_domain;
+mod firmware_observation;
+mod firmware_persistent;
+mod firmware_session;
 mod fixtures;
 mod hms;
 mod print_error;
@@ -402,20 +408,17 @@ fn get_version_payload_matches_reference() {
 
 #[test]
 fn get_version_report_extracts_trimmed_ota_model() {
-    assert_eq!(
-        model_from_get_version_report(
-            parse_get_version_report(&get_version_report(" P2S ")).unwrap()
-        )
-        .unwrap(),
-        "P2S"
-    );
+    let observation = parse_firmware_version_observation(&get_version_report(" P2S "))
+        .unwrap()
+        .unwrap();
+    assert_eq!(observation.model, "P2S");
 }
 
 #[test]
 fn get_version_report_rejects_missing_model() {
     let report = get_version_report_with_blank_model();
 
-    assert!(model_from_get_version_report(parse_get_version_report(&report).unwrap()).is_err());
+    assert!(parse_firmware_version_observation(&report).is_err());
 }
 
 #[test]

@@ -18,6 +18,7 @@ use crate::repositories::{AgentRepository, RepositoryError, RepositoryResult};
 #[cfg(test)]
 use pandar_core::{AgentStatus, CommandId};
 
+pub(crate) mod firmware_commands;
 pub(crate) mod live_commands;
 mod transient;
 mod transitions;
@@ -25,6 +26,10 @@ mod transitions;
 #[cfg(test)]
 pub(crate) use transitions::pause as transition_pause;
 
+pub(crate) use firmware_commands::{
+    ClaimedFirmwareCommand, ClaimedFirmwareKind, FirmwareCommandIdentity, FirmwareSessionDispatch,
+    PendingFirmwareCommands, PendingFirmwarePhase,
+};
 pub use live_commands::{
     LiveCommandClaim, LiveCommandClaimOutcome, LiveDispatchError, PendingLiveCommand,
     PendingLiveCommands, empty_pending_live_commands,
@@ -35,6 +40,7 @@ use transitions::AgentTransitions;
 pub struct SessionRegistry {
     sessions: Arc<Mutex<HashMap<AgentId, AgentSession>>>,
     transitions: AgentTransitions,
+    firmware_commands: PendingFirmwareCommands,
 }
 
 #[derive(Debug, Clone)]
@@ -78,6 +84,7 @@ impl SessionRegistry {
         Self {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             transitions: AgentTransitions::default(),
+            firmware_commands: PendingFirmwareCommands::default(),
         }
     }
 

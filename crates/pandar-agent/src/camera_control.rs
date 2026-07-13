@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, future::Future};
 
 use anyhow::Context;
 use tokio::{sync::mpsc, task::JoinHandle};
-use tokio_stream::{StreamExt, wrappers::ReceiverStream};
+use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
 use tonic::Request;
 
 use crate::{
@@ -17,6 +17,69 @@ use crate::{
         hub_camera_command,
     },
 };
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+struct CameraJoinPause {
+    reached: tokio::sync::oneshot::Sender<()>,
+    release: tokio::sync::oneshot::Receiver<()>,
+}
+
+#[cfg(test)]
+static CAMERA_JOIN_PAUSES: std::sync::OnceLock<std::sync::Mutex<HashMap<String, CameraJoinPause>>> =
+    std::sync::OnceLock::new();
+
+#[cfg(test)]
+pub(crate) struct CameraJoinPauseHandle {
+    reached: tokio::sync::oneshot::Receiver<()>,
+    _release: tokio::sync::oneshot::Sender<()>,
+}
+
+#[cfg(test)]
+impl CameraJoinPauseHandle {
+    pub(crate) async fn wait_reached(&mut self) {
+        (&mut self.reached)
+            .await
+            .expect("camera join pause must be reached");
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn install_camera_join_pause(stream_id: &str) -> CameraJoinPauseHandle {
+    let (reached, reached_receiver) = tokio::sync::oneshot::channel();
+    let (release, release_receiver) = tokio::sync::oneshot::channel();
+    let previous = CAMERA_JOIN_PAUSES
+        .get_or_init(Default::default)
+        .lock()
+        .expect("camera join pause lock must not be poisoned")
+        .insert(
+            stream_id.to_owned(),
+            CameraJoinPause {
+                reached,
+                release: release_receiver,
+            },
+        );
+    assert!(previous.is_none(), "camera join pause already installed");
+    CameraJoinPauseHandle {
+        reached: reached_receiver,
+        _release: release,
+    }
+}
+
+#[cfg(test)]
+pub(crate) async fn pause_camera_join_for_test(stream_id: &str) {
+    let pause = CAMERA_JOIN_PAUSES
+        .get_or_init(Default::default)
+        .lock()
+        .expect("camera join pause lock must not be poisoned")
+        .remove(stream_id);
+    if let Some(pause) = pause {
+        let _ = pause.reached.send(());
+        let _ = pause.release.await;
+    }
+}
 
 pub fn camera_hello_event(config: &AgentConfig) -> AgentCameraEvent {
     camera_event(
@@ -39,9 +102,7 @@ where
 {
     match command.command {
         Some(hub_camera_command::Command::Open(open)) => {
-            if let Some(task) = streams.remove(&command.stream_id) {
-                task.abort();
-            }
+            stop_camera_task(streams, &command.stream_id).await?;
             let stream_id = command.stream_id.clone();
             let mode = CameraStreamMode::try_from(open.mode).unwrap_or(CameraStreamMode::Mjpeg);
             let task = match gateway.camera_endpoint(&open.serial_number).await {
@@ -56,14 +117,31 @@ where
             streams.insert(stream_id, task);
         }
         Some(hub_camera_command::Command::Close(_)) => {
-            if let Some(task) = streams.remove(&command.stream_id) {
-                task.abort();
-            }
+            stop_camera_task(streams, &command.stream_id).await?;
         }
         None => {}
     }
 
     Ok(())
+}
+
+async fn stop_camera_task(
+    streams: &mut HashMap<String, JoinHandle<()>>,
+    stream_id: &str,
+) -> anyhow::Result<()> {
+    let Some(task) = streams.get_mut(stream_id) else {
+        return Ok(());
+    };
+    task.abort();
+    #[cfg(test)]
+    pause_camera_join_for_test(stream_id).await;
+    let result = (&mut *task).await;
+    streams.remove(stream_id);
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) if error.is_cancelled() => Ok(()),
+        Err(error) => Err(error).context("join replaced camera task"),
+    }
 }
 
 fn spawn_reverse_camera_stream(
@@ -98,31 +176,55 @@ async fn reverse_camera_stream(
         .send(camera_hello_event(&config))
         .await
         .context("queue agent camera hello event")?;
-    let mut response = client
+    let response = client
         .reverse_camera(Request::new(ReceiverStream::new(receiver)))
         .await
         .context("open reverse agent camera stream")?
         .into_inner();
-    let mut task = spawn_camera_stream(config, stream_id.clone(), endpoint, mode, sender);
+    let producer_endpoint = endpoint.clone();
+    forward_reverse_camera_session(
+        &config,
+        &stream_id,
+        &endpoint,
+        sender,
+        response,
+        move |frame_sender| stream_camera(producer_endpoint, mode, frame_sender),
+    )
+    .await
+}
+
+async fn forward_reverse_camera_session<S, P, F>(
+    config: &AgentConfig,
+    stream_id: &str,
+    endpoint: &crate::machine::BambuPrinterEndpoint,
+    sender: mpsc::Sender<AgentCameraEvent>,
+    mut response: S,
+    producer: P,
+) -> anyhow::Result<()>
+where
+    S: Stream<Item = Result<HubCameraCommand, tonic::Status>> + Unpin,
+    P: FnOnce(mpsc::Sender<Vec<u8>>) -> F,
+    F: Future<Output = anyhow::Result<()>>,
+{
+    let (frame_sender, frame_receiver) = mpsc::channel(4);
+    let worker = producer(frame_sender);
+    let forwarding =
+        forward_camera_frames(config, stream_id, endpoint, sender, frame_receiver, worker);
+    tokio::pin!(forwarding);
 
     loop {
         tokio::select! {
-            result = &mut task => {
-                result.context("join camera stream task")?;
-                return Ok(());
-            }
+            () = &mut forwarding => return Ok(()),
             command = response.next() => {
                 let Some(command) = command
                     .transpose()
                     .context("read hub camera command from reverse stream")?
                 else {
-                    task.abort();
                     return Ok(());
                 };
                 if command.stream_id == stream_id
                     && matches!(command.command, Some(hub_camera_command::Command::Close(_)))
                 {
-                    task.abort();
                     return Ok(());
                 }
             }
@@ -171,41 +273,47 @@ async fn reverse_camera_closed(
     Ok(())
 }
 
-fn spawn_camera_stream(
-    config: AgentConfig,
-    stream_id: String,
-    endpoint: crate::machine::BambuPrinterEndpoint,
-    mode: CameraStreamMode,
+async fn forward_camera_frames<F>(
+    config: &AgentConfig,
+    stream_id: &str,
+    endpoint: &crate::machine::BambuPrinterEndpoint,
     sender: mpsc::Sender<AgentCameraEvent>,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        let (frame_sender, mut frame_receiver) = mpsc::channel(4);
-        let mut worker = tokio::spawn(stream_camera(endpoint.clone(), mode, frame_sender));
-        loop {
-            tokio::select! {
-                Some(frame) = frame_receiver.recv() => {
+    mut frame_receiver: mpsc::Receiver<Vec<u8>>,
+    worker: F,
+) where
+    F: Future<Output = anyhow::Result<()>>,
+{
+    tokio::pin!(worker);
+    let mut frames_open = true;
+    loop {
+        tokio::select! {
+            frame = frame_receiver.recv(), if frames_open => {
+                match frame {
+                    Some(frame) => {
                     let event = camera_event(
-                        &config,
+                        config,
                         &format!("camera-chunk-{stream_id}"),
                         agent_camera_event::Event::Chunk(AgentCameraChunk {
-                            stream_id: stream_id.clone(),
+                            stream_id: stream_id.to_owned(),
                             data: frame,
                         }),
                     );
                     if sender.send(event).await.is_err() {
-                        worker.abort();
-                        break;
+                            return;
+                        }
                     }
+                    None => frames_open = false,
                 }
-                result = &mut worker => {
-                    let closed = match result {
-                        Ok(Ok(())) => AgentCameraClosed {
-                            stream_id: stream_id.clone(),
+            }
+            result = &mut worker => {
+                let closed = match result {
+                        Ok(()) => AgentCameraClosed {
+                            stream_id: stream_id.to_owned(),
                             success: true,
                             error: String::new(),
                         },
-                        Ok(Err(err)) => AgentCameraClosed {
-                            stream_id: stream_id.clone(),
+                        Err(err) => AgentCameraClosed {
+                            stream_id: stream_id.to_owned(),
                             success: false,
                             error: {
                                 let error = crate::machine::diagnostics::redact_access_code(
@@ -216,29 +324,18 @@ fn spawn_camera_stream(
                                 error
                             },
                         },
-                        Err(err) if err.is_cancelled() => AgentCameraClosed {
-                            stream_id: stream_id.clone(),
-                            success: true,
-                            error: String::new(),
-                        },
-                        Err(err) => AgentCameraClosed {
-                            stream_id: stream_id.clone(),
-                            success: false,
-                            error: format!("{err:#}"),
-                        },
-                    };
-                    let _ = sender
-                        .send(camera_event(
-                            &config,
-                            &format!("camera-closed-{stream_id}"),
-                            agent_camera_event::Event::Closed(closed),
-                        ))
-                        .await;
-                    break;
-                }
+                };
+                let _ = sender
+                    .send(camera_event(
+                        config,
+                        &format!("camera-closed-{stream_id}"),
+                        agent_camera_event::Event::Closed(closed),
+                    ))
+                    .await;
+                return;
             }
         }
-    })
+    }
 }
 
 async fn stream_camera(

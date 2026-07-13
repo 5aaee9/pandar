@@ -2,7 +2,8 @@ use crate::{
     AgentConfig,
     machine::{MachineSnapshot, MaterialRefreshResult},
     protocol::agent::v1::{
-        AgentEvent, CommandAck, CommandResult, PrinterDeviceFeatures, PrinterSnapshot, agent_event,
+        AgentEvent, CommandAck, CommandResult, FirmwareCommandResult, PrinterDeviceFeatures,
+        PrinterSnapshot, agent_event,
     },
 };
 
@@ -77,6 +78,25 @@ fn result_event(
             success,
             error,
             result_json,
+            firmware_result: None,
+        }),
+    )
+}
+
+pub(crate) fn firmware_result_event(
+    config: &AgentConfig,
+    command_id: &str,
+    result: FirmwareCommandResult,
+) -> AgentEvent {
+    event(
+        config,
+        "firmware-result",
+        agent_event::Event::CommandResult(CommandResult {
+            command_id: command_id.to_owned(),
+            success: true,
+            error: String::new(),
+            result_json: String::new(),
+            firmware_result: Some(result),
         }),
     )
 }

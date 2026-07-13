@@ -141,6 +141,16 @@ pub fn hub_command_from_record_with_options(
                 "link printer command requires live secret dispatch",
             ));
         }
+        "firmware_refresh" | "firmware_control" => {
+            tracing::error!(
+                command_id = %command.id,
+                command_kind = %command.kind,
+                "live-only firmware command reached durable queued-command conversion"
+            );
+            return Err(Status::failed_precondition(
+                "firmware command requires live session dispatch",
+            ));
+        }
         "print_project_file" => {
             let payload: PrintProjectFilePayload = serde_json::from_str(&command.payload_json)
                 .map_err(|err| {

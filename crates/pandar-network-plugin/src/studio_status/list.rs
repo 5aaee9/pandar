@@ -1,4 +1,5 @@
 use anyhow::{Context, bail};
+use pandar_core::PrinterFirmwareState;
 use serde::Deserialize;
 
 use super::input::{ActiveTray, AmsUnit, MaterialTray, PrinterHms};
@@ -56,8 +57,7 @@ struct Printer {
     _subtask_name: Option<String>,
     #[serde(rename = "hms")]
     _hms: Vec<PrinterHms>,
-    #[serde(rename = "pandar_printer_id")]
-    _pandar_printer_id: String,
+    pandar_printer_id: String,
     #[serde(rename = "nozzle_temperatures")]
     _nozzle_temperatures: Vec<ValidatedNozzleTemperature>,
     #[serde(rename = "active_nozzle")]
@@ -72,6 +72,13 @@ struct Printer {
     _chamber_light_on: Option<bool>,
     #[serde(rename = "materials")]
     _materials: Option<ValidatedMaterials>,
+    firmware: Option<PrinterFirmwareState>,
+}
+
+pub(crate) struct FirmwareObservation {
+    pub(crate) dev_id: String,
+    pub(crate) pandar_printer_id: String,
+    pub(crate) firmware: Option<PrinterFirmwareState>,
 }
 
 #[derive(Deserialize)]
@@ -101,8 +108,30 @@ struct ValidatedMaterials {
 }
 
 pub(crate) fn validate_printer_list(body: &str) -> anyhow::Result<()> {
-    let response = serde_json::from_str::<PrinterList>(body)
-        .context("deserialize Hub plugin printer status response")?;
+    let response = parse_printer_list(body)?;
+    validate_response(&response)
+}
+
+pub(crate) fn firmware_observations(body: &str) -> anyhow::Result<Vec<FirmwareObservation>> {
+    let response = parse_printer_list(body)?;
+    validate_response(&response)?;
+    Ok(response
+        .devices
+        .into_iter()
+        .map(|printer| FirmwareObservation {
+            dev_id: printer.dev_id,
+            pandar_printer_id: printer.pandar_printer_id,
+            firmware: printer.firmware,
+        })
+        .collect())
+}
+
+fn parse_printer_list(body: &str) -> anyhow::Result<PrinterList> {
+    serde_json::from_str::<PrinterList>(body)
+        .context("deserialize Hub plugin printer status response")
+}
+
+fn validate_response(response: &PrinterList) -> anyhow::Result<()> {
     if response.message != "success" {
         bail!("Hub plugin printer status response was not successful");
     }

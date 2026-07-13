@@ -42,6 +42,13 @@ pub struct Model {
     pub print_error: Option<i32>,
     pub print_job_id: Option<String>,
     pub hms_json: String,
+    pub firmware_modules_json: Option<String>,
+    pub firmware_upgrade_state_json: Option<String>,
+    pub firmware_cfg: Option<String>,
+    pub firmware_session_id: Option<String>,
+    pub firmware_generation: Option<i64>,
+    pub firmware_module_revision: i64,
+    pub firmware_status_revision: i64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

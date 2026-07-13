@@ -3,6 +3,7 @@ use std::time::Duration;
 mod commands;
 mod device_features;
 mod fake;
+mod firmware;
 mod hms;
 mod recovery;
 mod report_payload;
@@ -14,7 +15,6 @@ mod transport;
 use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
 use pandar_core::created_at_now;
-use serde::Deserialize;
 use serde_json::Value;
 
 #[cfg(test)]
@@ -33,12 +33,23 @@ pub(crate) use device_features::{
 };
 #[cfg(test)]
 pub(crate) use fake::FakeMqttTransport;
+pub(crate) use firmware::{
+    FirmwareMqttCommand, FirmwareMqttSession, FirmwareMqttTaskSet, FirmwarePumpAbortHandle,
+    firmware_command_payload, firmware_mqtt_failure, firmware_mqtt_failure_phase,
+    has_non_firmware_print_telemetry, parse_firmware_acknowledgement,
+    parse_firmware_refresh_modules, parse_firmware_version_observation,
+};
+#[cfg(test)]
+pub(crate) use firmware::{
+    firmware_barrier_pause, firmware_mqtt_options, firmware_pump_drop_pause,
+    is_firmware_pre_publish_failure,
+};
 pub use hms::MachineHmsItem;
 pub(super) use recovery::dispatch_sequence_zero_recovery;
 pub(crate) use report_payload::decode_mqtt_report_payload;
 pub use reports::{
-    forward_print_reports, print_job_report_event, print_report_from_report,
-    printer_materials_snapshot_event,
+    forward_print_reports, forward_print_reports_with_firmware, print_job_report_event,
+    print_report_from_report, printer_materials_snapshot_event,
 };
 #[cfg(test)]
 pub(crate) use rumqttc::TlsConfiguration;
@@ -53,9 +64,8 @@ pub(crate) use transport::warn_mqtt_report_receive_failed;
 pub use transport::{RumqttcBambuMqttTransport, bambu_lan_mqtt_options, bambu_lan_tls_config};
 
 use crate::machine::{
-    BambuPrinterEndpoint, MaterialRefreshResult, PrinterRefreshResult,
+    BambuPrinterEndpoint, FirmwareVersionObservation, MaterialRefreshResult, PrinterRefreshResult,
     materials::{normalize_material_patch, parse_materials_report},
-    types::decode_json_payload,
 };
 
 pub const BAMBU_MQTT_PORT: u16 = 8883;
@@ -86,13 +96,26 @@ pub async fn refresh_printer<T>(
 where
     T: BambuMqttTransport + ?Sized,
 {
+    refresh_printer_with_firmware(transport, endpoint, report_timeout)
+        .await
+        .map(|(refresh, _)| refresh)
+}
+
+pub(crate) async fn refresh_printer_with_firmware<T>(
+    transport: &T,
+    endpoint: &BambuPrinterEndpoint,
+    report_timeout: Duration,
+) -> anyhow::Result<(PrinterRefreshResult, FirmwareVersionObservation)>
+where
+    T: BambuMqttTransport + ?Sized,
+{
     async move {
         let topics = BambuMqttTopics::for_serial(&endpoint.serial);
         transport
             .subscribe(&topics.report)
             .await
             .with_context(|| format!("subscribe to report topic {}", topics.report))?;
-        let discovered_model = discover_printer_model(transport, &topics, report_timeout)
+        let firmware = discover_firmware_version(transport, &topics, report_timeout)
             .await
             .inspect_err(|err| {
                 tracing::warn!(
@@ -125,7 +148,7 @@ where
             );
         }
         let mut snapshot = snapshot_from_parsed_report(endpoint, snapshot_report.as_ref());
-        snapshot.model = Some(discovered_model);
+        snapshot.model = Some(firmware.model.clone());
         let observed_at = created_at_now();
         let materials_report = parse_materials_report(&report);
         let materials = match materials_report
@@ -140,10 +163,13 @@ where
             }),
             None => scan_materials_after_snapshot(transport, endpoint, material_deadline).await?,
         };
-        Ok::<PrinterRefreshResult, anyhow::Error>(PrinterRefreshResult {
-            snapshot,
-            materials,
-        })
+        Ok::<_, anyhow::Error>((
+            PrinterRefreshResult {
+                snapshot,
+                materials,
+            },
+            firmware,
+        ))
     }
     .await
     .with_context(|| format!("refresh printer {}", endpoint.serial))
@@ -243,11 +269,11 @@ where
     }
 }
 
-async fn discover_printer_model<T>(
+async fn discover_firmware_version<T>(
     transport: &T,
     topics: &BambuMqttTopics,
     report_timeout: Duration,
-) -> anyhow::Result<String>
+) -> anyhow::Result<FirmwareVersionObservation>
 where
     T: BambuMqttTransport + ?Sized,
 {
@@ -266,8 +292,8 @@ where
                 .next_report(report_timeout)
                 .await
                 .context("wait for MQTT get_version report")?;
-            if let Some(report) = parse_get_version_report(&report) {
-                return model_from_get_version_report(report);
+            if let Some(observation) = parse_firmware_version_observation(&report)? {
+                return Ok(observation);
             }
         }
     })
@@ -275,57 +301,6 @@ where
     .map_err(|_| {
         anyhow!("timed out waiting for MQTT get_version report after {report_timeout:?}")
     })?
-}
-
-#[derive(Debug, Deserialize)]
-struct GetVersionReport {
-    info: Option<GetVersionInfo>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GetVersionInfo {
-    command: Option<String>,
-    module: Option<Vec<GetVersionModule>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GetVersionModule {
-    name: Option<String>,
-    product_name: Option<String>,
-}
-
-fn parse_get_version_report(report: &Value) -> Option<GetVersionReport> {
-    let report = decode_json_payload::<GetVersionReport>(report)?;
-    if report.is_get_version() {
-        Some(report)
-    } else {
-        None
-    }
-}
-
-impl GetVersionReport {
-    fn is_get_version(&self) -> bool {
-        self.info.as_ref().and_then(|info| info.command.as_deref()) == Some("get_version")
-    }
-}
-
-fn model_from_get_version_report(report: GetVersionReport) -> anyhow::Result<String> {
-    let modules = report
-        .info
-        .and_then(|info| info.module)
-        .ok_or_else(|| anyhow!("get_version report missing info.module array"))?;
-
-    modules
-        .into_iter()
-        .find(|module| module.name.as_deref() == Some("ota"))
-        .and_then(|module| trimmed_string(module.product_name))
-        .ok_or_else(|| anyhow!("get_version report missing ota product_name"))
-}
-
-fn trimmed_string(value: Option<String>) -> Option<String> {
-    value
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
 }
 
 #[cfg(test)]

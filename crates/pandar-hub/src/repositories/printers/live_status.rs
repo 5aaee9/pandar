@@ -40,6 +40,7 @@ pub struct PrinterWithLiveStatus {
     pub state_revision: u64,
     pub printer: Printer,
     pub live_status: PrinterLiveStatus,
+    pub firmware: pandar_core::PrinterFirmwareState,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -67,6 +68,7 @@ pub(crate) use merge::merge_live_report;
 pub(crate) use persistence::persist_merged_live_status;
 
 pub(crate) fn from_model(model: printers::Model) -> RepositoryResult<PrinterWithLiveStatus> {
+    let firmware = super::firmware::from_model(&model)?;
     let (state_revision, live_status) = (|| -> anyhow::Result<(u64, PrinterLiveStatus)> {
         let state_revision =
             u64::try_from(model.state_revision).context("failed to read printer state revision")?;
@@ -134,5 +136,6 @@ pub(crate) fn from_model(model: printers::Model) -> RepositoryResult<PrinterWith
         state_revision,
         printer: super::printer_from_model(model)?,
         live_status,
+        firmware,
     })
 }

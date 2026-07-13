@@ -1341,7 +1341,7 @@ int main(int argc, char** argv) {
             !contains(body, R"("printer_type":"N6")") ||
             !contains(body, R"("support_chamber":true)") ||
             !contains(body, R"("support_chamber_temp_display":true)") ||
-            !contains(body, R"("cfg":"")") ||
+            contains(body, R"("cfg":"")") ||
             !contains(body, R"("fun":"8000004100000020")") ||
             !contains(body, R"("aux":"")") ||
             !contains(body, R"("stat":"")") ||

@@ -1,20 +1,23 @@
+mod diagnostics;
+mod firmware;
 mod protocol;
 mod schema;
 
 pub use protocol::print_job_report_event;
 
-use std::{collections::BTreeMap, time::Duration};
+use std::time::Duration;
 
 use anyhow::Context;
 use pandar_core::created_at_now;
-use schema::{HmsValue, NumericValue, PrintReportEnvelope};
+use schema::PrintReportEnvelope;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::{
     AgentConfig,
     machine::{
-        BambuPrinterEndpoint, DeviceFeatureCache, MachineSnapshot, MaterialRefreshResult,
+        BambuPrinterEndpoint, DeviceFeatureCache, FirmwareReportContext, MachineSnapshot,
+        MaterialRefreshResult,
         materials::{normalize_material_patch, parse_materials_report},
         types::decode_json_payload,
     },
@@ -30,6 +33,9 @@ use super::{
     MachineReportDiagnosticPayload, PrintReportProgress, PublishedMqttCommand,
     device_feature_observation, feature_event, is_mqtt_report_idle_timeout, parse_snapshot_report,
     snapshot_from_parsed_report,
+};
+use diagnostics::{
+    bounded_u32, collect_hms_diagnostics, print_error_payload, raw_print_payload, trimmed_string,
 };
 
 pub fn print_report_from_report(
@@ -188,11 +194,73 @@ pub async fn forward_print_reports<T>(
 where
     T: BambuMqttTransport + ?Sized,
 {
+    forward_print_reports_inner(
+        config,
+        transport,
+        endpoint,
+        report_timeout,
+        sender,
+        cache,
+        None,
+    )
+    .await
+}
+
+pub async fn forward_print_reports_with_firmware<T>(
+    config: &AgentConfig,
+    transport: &T,
+    endpoint: &BambuPrinterEndpoint,
+    report_timeout: Duration,
+    sender: &mpsc::Sender<AgentEvent>,
+    cache: &DeviceFeatureCache,
+    firmware: FirmwareReportContext,
+) -> anyhow::Result<()>
+where
+    T: BambuMqttTransport + ?Sized,
+{
+    forward_print_reports_inner(
+        config,
+        transport,
+        endpoint,
+        report_timeout,
+        sender,
+        cache,
+        Some(firmware),
+    )
+    .await
+}
+
+async fn forward_print_reports_inner<T>(
+    config: &AgentConfig,
+    transport: &T,
+    endpoint: &BambuPrinterEndpoint,
+    report_timeout: Duration,
+    sender: &mpsc::Sender<AgentEvent>,
+    cache: &DeviceFeatureCache,
+    firmware_context: Option<FirmwareReportContext>,
+) -> anyhow::Result<()>
+where
+    T: BambuMqttTransport + ?Sized,
+{
     let topics = BambuMqttTopics::for_serial(&endpoint.serial);
     transport
         .subscribe(&topics.report)
         .await
         .with_context(|| format!("subscribe to report topic {}", topics.report))?;
+    let mut firmware_processor = if let Some(context) = firmware_context {
+        Some(
+            firmware::FirmwareReportProcessor::start(
+                endpoint,
+                context,
+                report_timeout,
+                transport,
+                &topics,
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
     transport
         .publish(PublishedMqttCommand {
             topic: topics.request.clone(),
@@ -209,6 +277,9 @@ where
 
         match transport.next_report(report_timeout).await {
             Ok(report) => {
+                if let Some(processor) = &mut firmware_processor {
+                    processor.observe(config, &report, sender).await?;
+                }
                 let observed_at = created_at_now();
                 let print_report = parse_print_report(&report);
                 let materials_report = parse_materials_report(&report);
@@ -255,7 +326,8 @@ where
                         printer_id: None,
                         printer_materials_json: progress.printer_materials_json.clone(),
                     });
-                if !is_feature_only_report(&report)
+                if super::has_non_firmware_print_telemetry(&report)
+                    && !is_feature_only_report(&report)
                     && sender
                         .send(print_job_report_event(config, progress))
                         .await
@@ -283,6 +355,9 @@ where
                 }
             }
             Err(err) if is_mqtt_report_idle_timeout(&err) => {
+                if let Some(processor) = &mut firmware_processor {
+                    processor.expire_version_observation();
+                }
                 tracing::warn!(
                     serial = %endpoint.serial,
                     error = %format!("{err:#}"),
@@ -301,94 +376,4 @@ where
     }
 
     Ok(())
-}
-
-fn raw_print_payload(report: &Value) -> Option<MachineReportDiagnosticPayload> {
-    report.get("print").map(value_payload)
-}
-
-fn value_payload(value: &Value) -> MachineReportDiagnosticPayload {
-    match value {
-        Value::Object(object) => MachineReportDiagnosticPayload::Object(
-            object
-                .iter()
-                .map(|(key, value)| (key.clone(), value_payload(value)))
-                .collect(),
-        ),
-        Value::Array(values) => {
-            MachineReportDiagnosticPayload::Array(values.iter().map(value_payload).collect())
-        }
-        Value::String(value) => MachineReportDiagnosticPayload::String(value.clone()),
-        Value::Number(value) => MachineReportDiagnosticPayload::Number(value.clone()),
-        Value::Bool(value) => MachineReportDiagnosticPayload::Bool(*value),
-        Value::Null => MachineReportDiagnosticPayload::Null,
-    }
-}
-
-fn print_error_payload(
-    print_error: MachineReportDiagnosticPayload,
-    raw_print: Option<MachineReportDiagnosticPayload>,
-) -> MachineReportDiagnosticPayload {
-    let Some(raw_print) = raw_print else {
-        return print_error;
-    };
-
-    let mut fields = BTreeMap::new();
-    fields.insert("print_error".to_owned(), print_error);
-    fields.insert("raw_print".to_owned(), raw_print);
-    MachineReportDiagnosticPayload::Object(fields)
-}
-
-pub(super) fn trimmed_string(value: Option<&str>) -> Option<String> {
-    value
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-}
-
-fn bounded_u32(value: Option<&NumericValue>, min: u32, max: u32) -> Option<u32> {
-    let value = match value? {
-        NumericValue::Number(number) => {
-            if let Some(value) = number.as_u64() {
-                u32::try_from(value).ok()?
-            } else if let Some(value) = number.as_i64() {
-                u32::try_from(value).ok()?
-            } else {
-                let value = number.as_f64()?;
-                if !value.is_finite() || value.fract() != 0.0 || value < 0.0 {
-                    return None;
-                }
-                u32::try_from(value as u64).ok()?
-            }
-        }
-        NumericValue::String(raw) => raw.trim().parse().ok()?,
-    };
-
-    (min..=max).contains(&value).then_some(value)
-}
-
-fn collect_hms_diagnostics(
-    envelope: &PrintReportEnvelope,
-    diagnostics: &mut Vec<MachineReportDiagnostic>,
-) {
-    if let Some(hms) = &envelope.print.hms {
-        diagnostics.extend(hms.iter().filter_map(|item| item.diagnostic()));
-    }
-
-    for fields in [&envelope.fields, &envelope.print.fields] {
-        for value in hms_values(fields) {
-            let mut objects = Vec::new();
-            value.collect_objects(&mut objects);
-            diagnostics.extend(objects.into_iter().filter_map(|object| object.diagnostic()));
-        }
-    }
-}
-
-fn hms_values(
-    fields: &std::collections::BTreeMap<String, HmsValue>,
-) -> impl Iterator<Item = &HmsValue> {
-    fields
-        .iter()
-        .filter(|(key, _)| key.to_ascii_lowercase().contains("hms"))
-        .map(|(_, value)| value)
 }

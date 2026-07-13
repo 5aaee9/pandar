@@ -206,6 +206,7 @@ impl SessionRegistry {
                     .copied(),
             );
         }
+        pending.extend(self.pending_firmware_command_ids());
         pending.into_iter().collect()
     }
 }
@@ -217,6 +218,16 @@ pub(crate) async fn fail_pending_live_commands(
     session: AgentSession,
     reason: &'static str,
 ) {
+    let firmware = {
+        let _lease = state
+            .sessions()
+            .transition_lease_for_session(agent_id, session.token)
+            .await;
+        state
+            .sessions()
+            .cancel_firmware_session_under_transition(agent_id, session.token)
+    };
+    crate::firmware_control::finish_cancelled_commands(state, firmware, reason).await;
     let _transition = session.live_command_transition.clone().lock_owned().await;
     let command_ids = session
         .pending_live_commands

@@ -17,12 +17,18 @@ use crate::machine::{
         PublishedMqttCommand,
     },
     print::pick_remote_name,
-    runtime::test_support::{TestRuntimeBambuMachineGateway, assert_locked_for_a_moment},
+    runtime::test_support::{
+        TestRuntimeBambuMachineGateway, assert_locked_for_a_moment, assert_unlocked_for_a_moment,
+    },
 };
 use crate::protocol::agent::v1::{HubCommand, RefreshPrinters, agent_event, hub_command};
 
 mod axis_controls;
+mod firmware_control;
+mod firmware_generation;
+mod firmware_reducer;
 mod fixtures;
+mod link_report_ownership;
 mod print_error;
 
 use fixtures::*;
@@ -1298,9 +1304,10 @@ mod runtime {
                 released.await.expect("release queued Hub command");
                 crate::handle_command_stream_with_gateway(
                     &config,
-                    gateway.as_ref(),
+                    gateway,
                     &sender,
                     tokio_stream::wrappers::ReceiverStream::new(commands_receiver),
+                    1,
                 )
                 .await
             }
@@ -1505,7 +1512,7 @@ mod runtime {
     }
 
     #[tokio::test]
-    async fn device_features_endpoint_replacement_invalidates_before_new_snapshot() {
+    async fn device_features_endpoint_replacement_link_snapshot_precedes_feature_invalidation() {
         let transfer = FakeMachineFileTransfer::default();
         let gateway = std::sync::Arc::new(TestRuntimeBambuMachineGateway::new(
             vec![(
@@ -1563,6 +1570,11 @@ mod runtime {
         tokio::task::yield_now().await;
         replacement_pause.release();
         let snapshot = link.await.unwrap().unwrap();
+        let linked = events.recv().await.unwrap();
+        let Some(agent_event::Event::PrinterSnapshot(linked)) = linked.event else {
+            panic!("expected linked printer snapshot before feature invalidation");
+        };
+        assert_eq!(linked.serial, "SERIAL1");
         assert_eq!(feature_event_bits(events.recv().await.unwrap()), None);
         assert!(stale_finished.load(std::sync::atomic::Ordering::SeqCst));
         assert_eq!(snapshot.device_features.unwrap().bits(), 0);
@@ -1887,7 +1899,7 @@ mod runtime {
                 .await
         });
         paused.wait_until_blocked().await;
-        assert_locked_for_a_moment(&gateway).await.unwrap();
+        assert_unlocked_for_a_moment(&gateway).await.unwrap();
 
         let second_gateway = std::sync::Arc::clone(&gateway);
         let second_sender = sender.clone();
@@ -1908,6 +1920,208 @@ mod runtime {
         first.await.unwrap().unwrap();
         second.await.unwrap().unwrap();
         assert_eq!(gateway.report_task_count("SERIAL1").await, 1);
+    }
+
+    #[tokio::test]
+    async fn firmware_generation_runtime_link_validation_allows_different_serials() {
+        let gateway = std::sync::Arc::new(TestRuntimeBambuMachineGateway::new(
+            Vec::new(),
+            FakeMachineFileTransfer::default(),
+            Duration::from_secs(1),
+        ));
+        let first_transport = PausedMqttTransport::new();
+        let second_transport = PausedMqttTransport::new();
+        gateway
+            .push_command_transport(first_transport.clone())
+            .await;
+        gateway
+            .push_command_transport(second_transport.clone())
+            .await;
+        let (sender, _events) = mpsc::channel(8);
+        let config = test_config();
+
+        let first_gateway = std::sync::Arc::clone(&gateway);
+        let first_sender = sender.clone();
+        let first_config = config.clone();
+        let first = tokio::spawn(async move {
+            first_gateway
+                .link_printer(
+                    runtime_endpoint("SERIAL1", "first", "ACCESS-1"),
+                    &first_config,
+                    &first_sender,
+                )
+                .await
+        });
+        first_transport.wait_until_blocked().await;
+
+        let second_gateway = std::sync::Arc::clone(&gateway);
+        let second_sender = sender.clone();
+        let second_config = config.clone();
+        let second = tokio::spawn(async move {
+            second_gateway
+                .link_printer(
+                    runtime_endpoint("SERIAL2", "second", "ACCESS-2"),
+                    &second_config,
+                    &second_sender,
+                )
+                .await
+        });
+        tokio::time::timeout(
+            Duration::from_millis(100),
+            second_transport.wait_until_blocked(),
+        )
+        .await
+        .expect("different serial validation must not wait on the global runtime gateway mutex");
+
+        first_transport.release();
+        second_transport.release();
+        first.await.unwrap().unwrap();
+        second.await.unwrap().unwrap();
+        assert_eq!(gateway.report_task_count("SERIAL1").await, 1);
+        assert_eq!(gateway.report_task_count("SERIAL2").await, 1);
+    }
+
+    #[tokio::test]
+    async fn firmware_generation_runtime_refresh_waits_for_same_serial_version_lease() {
+        let transport = PausedMqttTransport::new();
+        let transfer = FakeMachineFileTransfer::default();
+        let gateway = std::sync::Arc::new(TestRuntimeBambuMachineGateway::new(
+            vec![(
+                runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+                transport.clone(),
+                transfer.clone(),
+            )],
+            transfer,
+            Duration::from_secs(1),
+        ));
+        let cache = gateway.firmware_cache();
+        let lease = cache.version_observation_lease("SERIAL1").await;
+        let refresh_gateway = std::sync::Arc::clone(&gateway);
+        let refresh = tokio::spawn(async move { refresh_gateway.refresh_printers().await });
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), transport.wait_until_blocked())
+                .await
+                .is_err(),
+            "runtime refresh must obtain the same-serial version observation lease"
+        );
+        drop(lease);
+        transport.wait_until_blocked().await;
+        transport.release();
+        refresh.await.unwrap().unwrap();
+    }
+
+    #[tokio::test]
+    async fn firmware_generation_runtime_refresh_allows_different_serials() {
+        let first_transport = PausedMqttTransport::new();
+        let second_transport = PausedMqttTransport::new();
+        let transfer = FakeMachineFileTransfer::default();
+        let gateway = std::sync::Arc::new(TestRuntimeBambuMachineGateway::new(
+            vec![
+                (
+                    runtime_endpoint("SERIAL1", "first", "ACCESS-1"),
+                    first_transport.clone(),
+                    transfer.clone(),
+                ),
+                (
+                    runtime_endpoint("SERIAL2", "second", "ACCESS-2"),
+                    second_transport.clone(),
+                    transfer.clone(),
+                ),
+            ],
+            transfer,
+            Duration::from_secs(1),
+        ));
+        let refresh_gateway = std::sync::Arc::clone(&gateway);
+        let refresh = tokio::spawn(async move { refresh_gateway.refresh_printers().await });
+
+        first_transport.wait_until_blocked().await;
+        tokio::time::timeout(
+            Duration::from_millis(100),
+            second_transport.wait_until_blocked(),
+        )
+        .await
+        .expect("different serial refresh must not wait on another serial's MQTT observation");
+        first_transport.release();
+        second_transport.release();
+        let results = refresh.await.unwrap().unwrap();
+        assert_eq!(
+            results
+                .into_iter()
+                .map(|result| result.snapshot.serial)
+                .collect::<Vec<_>>(),
+            ["SERIAL1", "SERIAL2"]
+        );
+    }
+
+    #[tokio::test]
+    async fn firmware_generation_runtime_refresh_commits_same_query_modules() {
+        let transport = FakeMqttTransport::with_reports([
+            serde_json::json!({
+                "info": {
+                    "command": "get_version",
+                    "module": [
+                        { "name": "ota", "product_name": "X1 Carbon", "sw_ver": "ota-1" },
+                        { "name": "ams/0", "sw_ver": "ams-1", "hw_ver": "A00" }
+                    ]
+                }
+            }),
+            runtime_state_report("READY"),
+        ]);
+        let transfer = FakeMachineFileTransfer::default();
+        let gateway = TestRuntimeBambuMachineGateway::new(
+            vec![(
+                runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+                transport,
+                transfer.clone(),
+            )],
+            transfer,
+            Duration::from_secs(1),
+        );
+        let config = test_config();
+        let (sender, mut events) = mpsc::channel(8);
+        let cache = gateway.firmware_cache();
+        let transition = cache
+            .begin_generation(
+                &config,
+                runtime_endpoint("SERIAL1", "office", "ACCESS-1"),
+                &sender,
+                None,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        let generation = transition.generation();
+        drop(transition);
+        assert!(matches!(
+            events.recv().await.unwrap().event,
+            Some(agent_event::Event::PrinterFirmwareInvalidated(_))
+        ));
+        gateway.set_refresh_context(config, sender).await;
+
+        let results = gateway.refresh_printers().await.unwrap();
+        assert_eq!(results[0].snapshot.model.as_deref(), Some("X1 Carbon"));
+        let event = tokio::time::timeout(Duration::from_millis(100), events.recv())
+            .await
+            .expect("runtime refresh must emit modules from its get_version response")
+            .unwrap();
+        let agent_event::Event::PrinterFirmwareModulesSnapshot(modules) = event.event.unwrap()
+        else {
+            panic!("expected firmware modules snapshot");
+        };
+        assert_eq!(modules.generation, generation);
+        assert_eq!(modules.module_revision, 1);
+        assert_eq!(
+            modules
+                .modules
+                .iter()
+                .map(|module| module.name.as_str())
+                .collect::<Vec<_>>(),
+            ["ota", "ams/0"]
+        );
+        let snapshot = cache.snapshot("SERIAL1").await.unwrap();
+        assert_eq!(snapshot.module_revision, 1);
+        assert_eq!(snapshot.modules.unwrap().len(), 2);
     }
 
     #[tokio::test]
@@ -2088,7 +2302,7 @@ mod runtime {
             if self.state.pause_first_report {
                 let mut reports = self.state.reports.lock().await;
                 if reports.len() == 2 {
-                    self.state.blocked.notify_waiters();
+                    self.state.blocked.notify_one();
                     drop(reports);
                     self.state.release.notified().await;
                     reports = self.state.reports.lock().await;

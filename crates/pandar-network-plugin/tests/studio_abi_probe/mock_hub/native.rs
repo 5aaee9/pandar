@@ -8,7 +8,7 @@ use std::{
 };
 
 use super::{
-    PRINTERS_RESPONSE,
+    PRINTERS_RESPONSE, firmware_compat,
     operations::{TestOperation, TestPrintErrorAction, assert_operation_body_eq},
     transport::{read_request_until, write_response},
 };
@@ -57,6 +57,10 @@ pub(super) fn serve(listener: &TcpListener, stop: &Arc<AtomicBool>, deadline: In
             return;
         };
         let line = request_line(&request);
+
+        if firmware_compat::try_respond(&mut stream, &request) {
+            continue;
+        }
 
         if line == "POST /api/v1/plugin/no-auth-session HTTP/1.1" {
             write_response(

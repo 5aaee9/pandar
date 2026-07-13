@@ -172,6 +172,18 @@ struct PluginHttpResult {
     std::size_t body_cap;
 };
 
+struct PluginFirmwareCallbackResult {
+    int32_t status;
+    uint64_t origin_tick;
+    uint8_t* dev_id_ptr;
+    std::size_t dev_id_len;
+    std::size_t dev_id_cap;
+    uint8_t* message_ptr;
+    std::size_t message_len;
+    std::size_t message_cap;
+    int32_t tunnel;
+};
+
 PluginHttpResult pandar_plugin_exchange_ticket(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_create_no_auth_session(const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_get_printers(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
@@ -184,8 +196,49 @@ int32_t pandar_plugin_printer_refresh_session_update(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t
 );
-PluginHttpResult pandar_plugin_printer_refresh(void*);
+PluginHttpResult pandar_plugin_printer_refresh(void*, void*, void (*)(void*));
 void pandar_plugin_printer_refresh_session_destroy(void*);
+void* pandar_plugin_firmware_session_create(
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t,
+    uint64_t
+);
+int32_t pandar_plugin_firmware_session_update(
+    void*,
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t,
+    uint64_t
+);
+int32_t pandar_plugin_firmware_observe_printers(
+    void*, const uint8_t*, std::size_t, uint64_t, uint64_t
+);
+PluginHttpResult pandar_plugin_firmware_catalog(
+    void*,
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t
+);
+PluginHttpResult pandar_plugin_firmware_refresh_version(
+    void*,
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t
+);
+PluginHttpResult pandar_plugin_firmware_send(
+    void*,
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t,
+    int32_t,
+    uint64_t*
+);
+int32_t pandar_plugin_firmware_return_handoff(void*, uint64_t, uint64_t);
+PluginHttpResult pandar_plugin_firmware_next_status_override(
+    void*, const uint8_t*, std::size_t
+);
+PluginFirmwareCallbackResult pandar_plugin_firmware_next_callback(void*, uint64_t);
+void pandar_plugin_firmware_cancel_generation(void*, uint64_t);
+void pandar_plugin_firmware_stop(void*);
+void pandar_plugin_firmware_session_destroy(void*);
 PluginHttpResult pandar_plugin_submit_print(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t,
@@ -246,8 +299,15 @@ struct Agent {
     std::string frontend_url = "http://localhost:3000";
     std::string last_error;
     void* printer_refresh_session = nullptr;
+    void* firmware_session = nullptr;
+    std::string firmware_hub_url;
+    std::string firmware_token;
+    std::uint64_t firmware_generation = 1;
+    std::uint64_t firmware_observation_sequence = 0;
     mutable std::mutex trace_mutex;
     mutable std::mutex status_mutex;
+    mutable std::timed_mutex callback_mutex;
+    mutable std::recursive_mutex firmware_transition_mutex;
     std::map<std::string, std::pair<std::string, std::string>> printer_connections;
     std::map<std::string, std::string> pandar_printer_ids;
     std::map<std::string, std::string> printer_models;
@@ -262,10 +322,20 @@ struct Agent {
     BBL::OnMessageFn on_local_message;
     std::thread status_thread;
     std::atomic<bool> status_thread_stop = false;
+    std::mutex status_thread_mutex;
+    std::condition_variable status_thread_wake;
+    std::thread firmware_thread;
+    std::atomic<bool> firmware_thread_stop = false;
+    std::atomic<bool> firmware_transition_pending = false;
     std::atomic<std::uint64_t> printer_status_epoch = 0;
     bool connected = false;
     bool hub_configured = false;
     bool frontend_configured = false;
+};
+
+struct FirmwareObservationTicket {
+    std::uint64_t generation = 0;
+    std::uint64_t sequence = 0;
 };
 
 Agent* as_agent(void* raw) {
@@ -294,14 +364,34 @@ void trace_plugin_event(const Agent* agent, const std::string& event, const std:
 std::string body_from_result(PluginHttpResult result);
 void refresh_local_webserver_config(Agent* agent);
 PluginHttpResult rust_get_printers(const Agent* agent);
-PluginHttpResult get_printers_with_token_refresh(Agent* agent, std::uint64_t& request_epoch);
+PluginHttpResult get_printers_with_token_refresh(
+    Agent*, std::uint64_t& request_epoch, FirmwareObservationTicket& observation
+);
 void sync_printer_refresh_session(Agent* agent);
+FirmwareObservationTicket begin_firmware_observation(Agent* agent);
+bool observe_firmware_printers(
+    Agent*, const std::string& body, const FirmwareObservationTicket& observation
+);
+BBL::OnMessageFn message_callback_for(Agent* agent, MessageTunnel tunnel);
+void invoke_message_callback(
+    Agent*, const BBL::OnMessageFn&, const std::string&, const std::string&
+);
+
+struct FirmwareObservationReservation {
+    Agent* agent;
+    FirmwareObservationTicket* observation;
+};
+
+extern "C" void reserve_firmware_observation(void* context) noexcept {
+    auto* reservation = static_cast<FirmwareObservationReservation*>(context);
+    *reservation->observation = begin_firmware_observation(reservation->agent);
+}
 
 bool has_hub(const Agent* agent) {
     return agent && !agent->hub_url.empty();
 }
 
-void clear_login_state(Agent* agent) {
+void clear_login_state(Agent* agent, bool sync_sessions = true) {
     agent->printer_status_epoch.fetch_add(1);
     agent->token.clear();
     agent->user_id.clear();
@@ -320,7 +410,7 @@ void clear_login_state(Agent* agent) {
         agent->cloud_connection_notifications.clear();
     }
     agent->connected = false;
-    sync_printer_refresh_session(agent);
+    if (sync_sessions) sync_printer_refresh_session(agent);
 }
 
 std::filesystem::path persisted_login_path(const Agent* agent) {
@@ -498,7 +588,13 @@ bool remember_printer_connections(
 bool refresh_printer_status_cache(Agent* agent) {
     if (!agent || !agent->printer_refresh_session) return false;
     const auto epoch = agent->printer_status_epoch.load();
-    auto result = pandar_plugin_printer_refresh(agent->printer_refresh_session);
+    FirmwareObservationTicket observation;
+    FirmwareObservationReservation reservation{agent, &observation};
+    auto result = pandar_plugin_printer_refresh(
+        agent->printer_refresh_session,
+        &reservation,
+        reserve_firmware_observation
+    );
     const auto status = result.status;
     const auto http_code = result.http_code;
     auto body = body_from_result(result);
@@ -510,7 +606,9 @@ bool refresh_printer_status_cache(Agent* agent) {
         );
         return false;
     }
-    return remember_printer_connections(agent, body, epoch);
+    const auto remembered = remember_printer_connections(agent, body, epoch);
+    if (remembered) observe_firmware_printers(agent, body, observation);
+    return remembered;
 }
 
 std::pair<std::string, std::string> printer_connection_for(const Agent* agent, const std::string& dev_id) {
@@ -560,9 +658,11 @@ std::string ensure_selected_machine(Agent* agent) {
     if (selected.empty() && !agent->token.empty()) {
         refresh_local_webserver_config(agent);
         std::uint64_t request_epoch = 0;
-        auto result = get_printers_with_token_refresh(agent, request_epoch);
+        FirmwareObservationTicket observation;
+        auto result = get_printers_with_token_refresh(agent, request_epoch, observation);
         auto body = body_from_result(result);
         if (result.status == 0 && remember_printer_connections(agent, body, request_epoch)) {
+            observe_firmware_printers(agent, body, observation);
             selected = first_known_printer_id(agent);
         }
     }
@@ -617,30 +717,8 @@ std::string printer_push_status_report(const Agent* agent, const std::string& de
     const auto ip = studio_ip_integer(host);
     return std::string(R"({"print":{"command":"push_status","msg":0,)")
         + printer_telemetry_for(agent, dev_id) +
-        R"(,"cfg":"","aux":"","stat":"","wifi_signal":"100%","sdcard":true,"ipcam":{"ipcam_dev":"1","liveview":{"local":"rtsps","remote":"none"},"rtsp_url":)" +
+        R"(,"aux":"","stat":"","wifi_signal":"100%","sdcard":true,"ipcam":{"ipcam_dev":"1","liveview":{"local":"rtsps","remote":"none"},"rtsp_url":)" +
         escape_json(rtsp_url) + R"(},"net":{"info":[{"ip":)" + std::to_string(ip) + R"(}]}}})";
-}
-
-std::string printer_version_report(const Agent* agent, const std::string& dev_id, const std::string& sequence_id) {
-    const auto model = printer_model_for(agent, dev_id);
-    const auto product_name = model.empty() ? "Bambu Lab" : model;
-    const auto serial = studio_dev_id(dev_id);
-    const auto module = [&](const char* name, const char* sw_ver, const char* hw_ver) {
-        return std::string(R"({"name":)") + escape_json(name) +
-            R"(,"product_name":)" + escape_json(product_name) +
-            R"(,"sw_ver":)" + escape_json(sw_ver) +
-            R"(,"sw_new_ver":"","hw_ver":)" + escape_json(hw_ver) +
-            R"(,"sn":)" + escape_json(serial) + R"(,"flag":0})";
-    };
-    return std::string(R"({"info":{"command":"get_version","sequence_id":)") +
-        escape_json(sequence_id.empty() ? "0" : sequence_id) +
-        R"(,"module":[)" +
-        module("ota", "01.07.00.00", "OTA") + "," +
-        module("esp32", "01.07.22.25", "AP05") + "," +
-        module("rv1126", "00.00.27.38", "AP05") + "," +
-        module("th", "00.00.04.00", "TH07") + "," +
-        module("mc", "00.00.10.00", "MC07") +
-        R"(]}})";
 }
 
 std::string printer_alive_report(const Agent* agent, const std::string& dev_id) {
@@ -680,19 +758,34 @@ void emit_cloud_printer_connected_signal(Agent* agent, const std::string& dev_id
 
 void emit_printer_status(Agent* agent, const std::string& dev_id, MessageTunnel tunnel) {
     if (!agent || dev_id.empty()) return;
+    std::uint64_t firmware_generation;
+    {
+        std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
+        firmware_generation = agent->firmware_generation;
+    }
     const auto report = printer_push_status_report(agent, dev_id);
     trace_plugin_event(agent, "push_status", dev_id);
-    BBL::OnMessageFn callback;
-    {
-        std::lock_guard<std::mutex> lock(agent->status_mutex);
-        callback = tunnel == MessageTunnel::Cloud ? agent->on_message : agent->on_local_message;
-    }
+    auto callback = message_callback_for(agent, tunnel);
     trace_plugin_event(
         agent,
         std::string("push_status callbacks dev_id=") + dev_id +
             " tunnel=" + (tunnel == MessageTunnel::Cloud ? "cloud" : "local") +
             " callback=" + (callback ? "1" : "0"));
-    if (callback) callback(dev_id, report);
+    invoke_message_callback(agent, callback, dev_id, report);
+    if (!callback) return;
+    const auto normalized_dev_id = studio_dev_id(dev_id);
+    std::lock_guard<std::timed_mutex> callback_lock(agent->callback_mutex);
+    std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
+    if (agent->firmware_generation != firmware_generation) return;
+    auto firmware = pandar_plugin_firmware_next_status_override(
+        agent->firmware_session,
+        reinterpret_cast<const uint8_t*>(normalized_dev_id.data()),
+        normalized_dev_id.size()
+    );
+    auto firmware_body = body_from_result(firmware);
+    if (firmware.status == 0) {
+        callback(dev_id, firmware_body);
+    }
 }
 
 void emit_printer_version(
@@ -702,17 +795,33 @@ void emit_printer_version(
     MessageTunnel tunnel
 ) {
     if (!agent || dev_id.empty()) return;
-    BBL::OnMessageFn callback;
+    std::uint64_t firmware_generation;
     {
-        std::lock_guard<std::mutex> lock(agent->status_mutex);
-        callback = tunnel == MessageTunnel::Cloud ? agent->on_message : agent->on_local_message;
+        std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
+        firmware_generation = agent->firmware_generation;
     }
+    auto callback = message_callback_for(agent, tunnel);
     trace_plugin_event(
         agent,
         std::string("get_version_response dev_id=") + dev_id +
             " tunnel=" + (tunnel == MessageTunnel::Cloud ? "cloud" : "local") +
             " callback=" + (callback ? "1" : "0"));
-    if (callback) callback(dev_id, printer_version_report(agent, dev_id, sequence_id));
+    const auto printer_id = pandar_printer_id_for(agent, dev_id);
+    auto version = pandar_plugin_firmware_refresh_version(
+        agent->firmware_session,
+        reinterpret_cast<const uint8_t*>(dev_id.data()),
+        dev_id.size(),
+        reinterpret_cast<const uint8_t*>(printer_id.data()),
+        printer_id.size(),
+        reinterpret_cast<const uint8_t*>(sequence_id.data()),
+        sequence_id.size()
+    );
+    auto version_body = body_from_result(version);
+    if (!callback) return;
+    std::lock_guard<std::timed_mutex> callback_lock(agent->callback_mutex);
+    std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
+    if (agent->firmware_generation != firmware_generation) return;
+    callback(dev_id, version_body);
 }
 
 void emit_cloud_printer_connected_status(Agent* agent, const std::string& dev_id) {
@@ -807,8 +916,13 @@ void start_status_heartbeat(Agent* agent) {
     agent->status_thread_stop = false;
     agent->status_thread = std::thread([agent] {
         while (!agent->status_thread_stop.load()) {
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-            if (agent->status_thread_stop.load()) break;
+            std::unique_lock<std::mutex> wait_lock(agent->status_thread_mutex);
+            if (agent->status_thread_wake.wait_for(
+                    wait_lock,
+                    std::chrono::seconds(2),
+                    [agent] { return agent->status_thread_stop.load(); }
+                )) break;
+            wait_lock.unlock();
             if (has_status_heartbeat_listener(agent)) {
                 refresh_printer_status_cache(agent);
             }
@@ -824,6 +938,7 @@ void start_status_heartbeat(Agent* agent) {
 void stop_status_heartbeat(Agent* agent) {
     if (!agent) return;
     agent->status_thread_stop = true;
+    agent->status_thread_wake.notify_all();
     if (agent->status_thread.joinable()) agent->status_thread.join();
 }
 
@@ -948,6 +1063,62 @@ std::string body_from_result(PluginHttpResult result) {
     return body;
 }
 
+std::string string_from_firmware_allocation(uint8_t* ptr, std::size_t len, std::size_t cap) {
+    std::string value;
+    if (ptr && len > 0) value.assign(reinterpret_cast<char*>(ptr), len);
+    pandar_plugin_free_with_capacity(ptr, len, cap);
+    return value;
+}
+
+BBL::OnMessageFn message_callback_for(Agent* agent, MessageTunnel tunnel) {
+    std::lock_guard<std::mutex> lock(agent->status_mutex);
+    return tunnel == MessageTunnel::Cloud ? agent->on_message : agent->on_local_message;
+}
+
+void invoke_message_callback(
+    Agent* agent,
+    const BBL::OnMessageFn& callback,
+    const std::string& dev_id,
+    const std::string& body
+) {
+    if (!callback) return;
+    std::lock_guard<std::timed_mutex> lock(agent->callback_mutex);
+    callback(dev_id, body);
+}
+
+void invoke_message_callback(
+    Agent* agent,
+    MessageTunnel tunnel,
+    const std::string& dev_id,
+    const std::string& body
+) {
+    invoke_message_callback(agent, message_callback_for(agent, tunnel), dev_id, body);
+}
+
+void sync_firmware_session(Agent* agent) {
+    if (!agent || !agent->firmware_session) return;
+    agent->firmware_transition_pending = true;
+    std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
+    if (agent->firmware_hub_url == agent->hub_url && agent->firmware_token == agent->token) {
+        agent->firmware_transition_pending = false;
+        return;
+    }
+    const auto previous_generation = agent->firmware_generation;
+    pandar_plugin_firmware_cancel_generation(agent->firmware_session, previous_generation);
+    ++agent->firmware_generation;
+    pandar_plugin_firmware_session_update(
+        agent->firmware_session,
+        reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
+        agent->hub_url.size(),
+        reinterpret_cast<const uint8_t*>(agent->token.data()),
+        agent->token.size(),
+        agent->firmware_generation
+    );
+    agent->firmware_hub_url = agent->hub_url;
+    agent->firmware_token = agent->token;
+    agent->firmware_transition_pending = false;
+}
+
 void sync_printer_refresh_session(Agent* agent) {
     if (!agent || !agent->printer_refresh_session) return;
     pandar_plugin_printer_refresh_session_update(
@@ -957,6 +1128,96 @@ void sync_printer_refresh_session(Agent* agent) {
         reinterpret_cast<const uint8_t*>(agent->token.data()),
         agent->token.size()
     );
+    sync_firmware_session(agent);
+}
+
+FirmwareObservationTicket begin_firmware_observation(Agent* agent) {
+    if (!agent) return {};
+    std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
+    return {
+        agent->firmware_generation,
+        ++agent->firmware_observation_sequence,
+    };
+}
+
+bool observe_firmware_printers(
+    Agent* agent,
+    const std::string& body,
+    const FirmwareObservationTicket& observation
+) {
+    if (!agent || !agent->firmware_session) return false;
+    std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
+    return pandar_plugin_firmware_observe_printers(
+        agent->firmware_session,
+        reinterpret_cast<const uint8_t*>(body.data()),
+        body.size(),
+        observation.generation,
+        observation.sequence
+    ) == 0;
+}
+
+void start_firmware_dispatcher(Agent* agent) {
+    if (!agent || agent->firmware_thread.joinable()) return;
+    agent->firmware_thread_stop = false;
+    agent->firmware_thread = std::thread([agent] {
+        while (!agent->firmware_thread_stop.load()) {
+            if (agent->firmware_transition_pending.load()) {
+                std::this_thread::yield();
+                continue;
+            }
+            PluginFirmwareCallbackResult result{};
+            std::uint64_t callback_generation = 0;
+            {
+                std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
+                result = pandar_plugin_firmware_next_callback(agent->firmware_session, 25);
+                callback_generation = agent->firmware_generation;
+            }
+            if (result.status == 0) {
+                auto dev_id = string_from_firmware_allocation(
+                    result.dev_id_ptr,
+                    result.dev_id_len,
+                    result.dev_id_cap
+                );
+                auto message = string_from_firmware_allocation(
+                    result.message_ptr,
+                    result.message_len,
+                    result.message_cap
+                );
+                const auto tunnel = result.tunnel == 0
+                    ? MessageTunnel::Cloud
+                    : MessageTunnel::Local;
+                auto callback = message_callback_for(agent, tunnel);
+                if (callback) {
+                    const auto callback_deadline = std::chrono::steady_clock::time_point(
+                        std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                            std::chrono::nanoseconds(
+                                static_cast<std::chrono::nanoseconds::rep>(result.origin_tick)
+                            )
+                        )
+                    ) + std::chrono::seconds(2);
+                    std::unique_lock<std::timed_mutex> callback_lock(
+                        agent->callback_mutex,
+                        std::defer_lock
+                    );
+                    if (!callback_lock.try_lock_until(callback_deadline)) continue;
+                    std::lock_guard<std::recursive_mutex> transition(agent->firmware_transition_mutex);
+                    if (std::chrono::steady_clock::now() < callback_deadline &&
+                        !agent->firmware_thread_stop.load() &&
+                        agent->firmware_generation == callback_generation) {
+                        callback(dev_id, message);
+                    }
+                }
+            }
+            std::this_thread::yield();
+        }
+    });
+}
+
+void stop_firmware_dispatcher(Agent* agent) {
+    if (!agent) return;
+    agent->firmware_thread_stop = true;
+    pandar_plugin_firmware_stop(agent->firmware_session);
+    if (agent->firmware_thread.joinable()) agent->firmware_thread.join();
 }
 
 PluginHttpResult rust_exchange_ticket(const Agent* agent, const std::string& ticket) {
@@ -993,7 +1254,7 @@ void refresh_local_webserver_config(Agent* agent) {
     if (const auto hub_url = field_from_json(body, "hub_url"); !hub_url.empty()) {
         if (hub_url != agent->hub_url) {
             clear_persisted_login(agent);
-            clear_login_state(agent);
+            clear_login_state(agent, false);
         }
         agent->hub_url = hub_url;
         sync_printer_refresh_session(agent);
@@ -1076,6 +1337,59 @@ int submit_printer_operation_json(Agent* agent, std::string dev_id, const std::s
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
+struct FirmwareSendAttempt {
+    bool handled;
+    int result;
+    std::uint64_t callback_token;
+};
+
+FirmwareSendAttempt begin_firmware_send(
+    Agent* agent,
+    const std::string& dev_id,
+    const std::string& message,
+    MessageTunnel tunnel
+) {
+    const auto normalized_dev_id = studio_dev_id(dev_id);
+    const auto printer_id = pandar_printer_id_for(agent, normalized_dev_id);
+    if (normalized_dev_id.empty() || printer_id.empty()) {
+        return {false, BBL::BAMBU_NETWORK_SUCCESS, 0};
+    }
+    std::uint64_t callback_token = 0;
+    auto result = pandar_plugin_firmware_send(
+        agent->firmware_session,
+        reinterpret_cast<const uint8_t*>(normalized_dev_id.data()),
+        normalized_dev_id.size(),
+        reinterpret_cast<const uint8_t*>(printer_id.data()),
+        printer_id.size(),
+        reinterpret_cast<const uint8_t*>(message.data()),
+        message.size(),
+        tunnel == MessageTunnel::Cloud ? 0 : 1,
+        &callback_token
+    );
+    auto body = body_from_result(result);
+    if (result.status == 2) return {false, BBL::BAMBU_NETWORK_SUCCESS, 0};
+    if (result.status != 0) {
+        agent->last_error = std::move(body);
+        return {true, BBL::BAMBU_NETWORK_ERR_INVALID_RESULT, 0};
+    }
+    agent->last_error.clear();
+    return {true, BBL::BAMBU_NETWORK_SUCCESS, callback_token};
+}
+
+int finish_firmware_send(Agent* agent, FirmwareSendAttempt attempt) {
+    if (attempt.callback_token != 0) {
+        const auto tick = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()
+        ).count();
+        pandar_plugin_firmware_return_handoff(
+            agent->firmware_session,
+            attempt.callback_token,
+            static_cast<std::uint64_t>(tick)
+        );
+    }
+    return attempt.result;
+}
+
 void apply_login_response_body(Agent* agent, const std::string& body) {
     agent->token = field_from_json(body, "token");
     agent->profile_json = object_from_json(body, "profile");
@@ -1103,13 +1417,19 @@ bool refresh_no_auth_session(Agent* agent) {
     return !agent->token.empty();
 }
 
-PluginHttpResult get_printers_with_token_refresh(Agent* agent, std::uint64_t& request_epoch) {
+PluginHttpResult get_printers_with_token_refresh(
+    Agent* agent,
+    std::uint64_t& request_epoch,
+    FirmwareObservationTicket& observation
+) {
     request_epoch = agent->printer_status_epoch.load();
+    observation = begin_firmware_observation(agent);
     auto result = rust_get_printers(agent);
     if (result_needs_token_refresh(result)) {
         body_from_result(result);
         if (refresh_no_auth_session(agent)) {
             request_epoch = agent->printer_status_epoch.load();
+            observation = begin_firmware_observation(agent);
             result = rust_get_printers(agent);
         }
     }
@@ -1243,6 +1563,16 @@ PANDAR_ABI void* bambu_network_create_agent(std::string log_dir) {
         reinterpret_cast<const uint8_t*>(agent->token.data()),
         agent->token.size()
     );
+    agent->firmware_session = pandar_plugin_firmware_session_create(
+        reinterpret_cast<const uint8_t*>(agent->hub_url.data()),
+        agent->hub_url.size(),
+        reinterpret_cast<const uint8_t*>(agent->token.data()),
+        agent->token.size(),
+        agent->firmware_generation
+    );
+    agent->firmware_hub_url = agent->hub_url;
+    agent->firmware_token = agent->token;
+    if (agent->firmware_session) start_firmware_dispatcher(agent);
     start_status_heartbeat(agent);
     return agent;
 }
@@ -1250,7 +1580,17 @@ PANDAR_ABI void* bambu_network_create_agent(std::string log_dir) {
 PANDAR_ABI int bambu_network_destroy_agent(void* agent) {
     auto* a = as_agent(agent);
     stop_status_heartbeat(a);
-    if (a) pandar_plugin_printer_refresh_session_destroy(a->printer_refresh_session);
+    stop_firmware_dispatcher(a);
+    if (a) {
+        pandar_plugin_firmware_session_destroy(a->firmware_session);
+        pandar_plugin_printer_refresh_session_destroy(a->printer_refresh_session);
+        std::lock_guard<std::mutex> lock(a->status_mutex);
+        a->on_message = {};
+        a->on_local_message = {};
+        a->on_printer_connected = {};
+        a->on_server_connected = {};
+        a->on_local_connect = {};
+    }
     delete a;
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
@@ -1432,6 +1772,8 @@ PANDAR_ABI int bambu_network_send_message(void* agent, std::string dev_id, std::
     trace_plugin_event(a, "send_message", dev_id);
     if (dev_id.empty()) dev_id = ensure_selected_machine(a);
     if (dev_id.empty()) return BBL::BAMBU_NETWORK_SUCCESS;
+    auto firmware = begin_firmware_send(a, dev_id, message, MessageTunnel::Cloud);
+    if (firmware.handled) return finish_firmware_send(a, firmware);
     if (handle_status_request(a, dev_id, message, MessageTunnel::Cloud)) {
         return BBL::BAMBU_NETWORK_SUCCESS;
     }
@@ -1471,6 +1813,9 @@ PANDAR_ABI int bambu_network_send_message_to_printer(void* agent, std::string de
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     trace_plugin_event(a, "send_message_to_printer", dev_id);
+
+    auto firmware = begin_firmware_send(a, dev_id, message, MessageTunnel::Local);
+    if (firmware.handled) return finish_firmware_send(a, firmware);
 
     if (handle_status_request(a, dev_id, message, MessageTunnel::Local)) {
         return BBL::BAMBU_NETWORK_SUCCESS;
@@ -1711,7 +2056,8 @@ PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http
         return BBL::BAMBU_NETWORK_ERR_GET_USER_PRINTINFO_FAILED;
     }
     std::uint64_t request_epoch = 0;
-    auto result = get_printers_with_token_refresh(a, request_epoch);
+    FirmwareObservationTicket observation;
+    auto result = get_printers_with_token_refresh(a, request_epoch, observation);
     if (http_code) *http_code = result.http_code;
     auto body = body_from_result(result);
     if (result.status == 0 && !remember_printer_connections(a, body, request_epoch)) {
@@ -1720,6 +2066,7 @@ PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http
         if (http_body) *http_body = R"({"error":"invalid_auth_token"})";
         return BBL::BAMBU_NETWORK_ERR_GET_USER_PRINTINFO_FAILED;
     }
+    if (result.status == 0) observe_firmware_printers(a, body, observation);
     trace_plugin_event(a, std::string("get_user_print_info status=") + std::to_string(result.status));
     if (http_body) *http_body = body;
     if (result.status != 0) return BBL::BAMBU_NETWORK_ERR_GET_USER_PRINTINFO_FAILED;
@@ -1732,9 +2079,27 @@ PANDAR_ABI int bambu_network_get_user_tasks(void* agent, BBL::TaskQueryParams, s
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 
-PANDAR_ABI int bambu_network_get_printer_firmware(void*, std::string dev_id, unsigned* http_code, std::string* http_body) {
-    if (http_code) *http_code = 200;
-    if (http_body) *http_body = std::string(R"({"devices":[{"dev_id":)") + escape_json(dev_id) + R"(,"firmware":[],"ams":[]}]})";
+PANDAR_ABI int bambu_network_get_printer_firmware(void* agent, std::string dev_id, unsigned* http_code, std::string* http_body) {
+    auto* a = as_agent(agent);
+    if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    refresh_local_webserver_config(a);
+    const auto normalized_dev_id = studio_dev_id(dev_id);
+    const auto printer_id = pandar_printer_id_for(a, normalized_dev_id);
+    auto result = pandar_plugin_firmware_catalog(
+        a->firmware_session,
+        reinterpret_cast<const uint8_t*>(normalized_dev_id.data()),
+        normalized_dev_id.size(),
+        reinterpret_cast<const uint8_t*>(printer_id.data()),
+        printer_id.size()
+    );
+    if (http_code) *http_code = result.http_code;
+    auto body = body_from_result(result);
+    if (http_body) *http_body = body;
+    if (result.status != 0) {
+        a->last_error = std::move(body);
+        return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
+    }
+    a->last_error.clear();
     return BBL::BAMBU_NETWORK_SUCCESS;
 }
 

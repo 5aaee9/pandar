@@ -5,6 +5,7 @@ mod device_features;
 pub mod diagnostics;
 pub mod discovery;
 pub mod file_transfer;
+mod firmware;
 pub mod ftps;
 pub mod materials;
 pub mod mqtt;
@@ -30,11 +31,25 @@ pub(crate) use device_features::transition_pause as device_feature_transition_pa
 use diagnostics::PrinterDiagnosticResult;
 use discovery::{DiscoveredPrinter, PrinterDiscoveryResult};
 use file_transfer::{MachineFileTransfer, TransferModeCache};
+#[cfg(test)]
+pub(crate) use firmware::firmware_event_pause;
+pub use firmware::{
+    FirmwareCacheSnapshot, FirmwareControlOutcome, FirmwareControlPhase, FirmwareExecuteRequest,
+    FirmwareExecutionLease, FirmwareGenerationTransition, FirmwareMachineGateway,
+    FirmwareModulesDelivery, FirmwareModulesObservation, FirmwareObservationCache,
+    FirmwarePrepareRequest, FirmwarePreparedObservation, FirmwarePublishTransition,
+    FirmwareRefreshRequest, FirmwareReportContext, FirmwareReportReducer, FirmwareReservationState,
+    FirmwareStatusObservation, FirmwareVersionObservation, firmware_modules_event,
+    firmware_status_event,
+};
+pub(crate) use firmware::{proto_module as proto_firmware_module, proto_upgrade_state};
 use mqtt::{BambuMqttTransport, refresh_printer, refresh_printer_materials};
 pub use noop::NoopMachineGateway;
 use operations::dispatch_printer_operation;
 pub use operations::{PrinterAxis, PrinterOperation};
 use print::dispatch_print_project_file;
+#[cfg(test)]
+pub(crate) use runtime::RuntimeReportContext;
 use transfer::BambuMachineFileTransfer;
 pub use types::{
     BambuPrinterEndpoint, MachineJsonPayload, MachineNozzleTemperature, MachineSnapshot,
@@ -258,6 +273,16 @@ impl<T, F> ConfiguredBambuMachineGateway<T, F> {
             .iter()
             .find(|(endpoint, _, _)| endpoint.serial == serial_number)
             .map(|(endpoint, _, _)| endpoint.clone())
+    }
+
+    pub(crate) fn refresh_target(&self, serial_number: &str) -> Option<(BambuPrinterEndpoint, T)>
+    where
+        T: Clone,
+    {
+        self.printers
+            .iter()
+            .find(|(endpoint, _, _)| endpoint.serial == serial_number)
+            .map(|(endpoint, transport, _)| (endpoint.clone(), transport.clone()))
     }
 
     pub(crate) async fn probe_device_features(

@@ -1,5 +1,6 @@
 mod artifacts;
 mod diagnostics;
+mod firmware_wire;
 mod print;
 mod print_error;
 mod reports;
@@ -8,16 +9,17 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use async_trait::async_trait;
-use pandar_core::{BambuDeviceFeature, BambuDeviceFeatures};
+use pandar_core::{BambuDeviceFeature, BambuDeviceFeatures, PrinterFirmwareModule};
 use reports::{ams_ready_report, get_version_report};
 use serde::{Deserialize, Serialize};
 use tokio::{sync::Mutex, sync::mpsc};
 
+use super::handle_non_firmware_command_with_gateway as handle_command_with_gateway;
 use super::*;
 use crate::{
     machine::{
-        BambuMachineGateway, BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult,
-        NoopMachineGateway, PrintProjectDispatchResult,
+        BambuMachineGateway, BambuPrinterEndpoint, FirmwareObservationCache, MachineSnapshot,
+        MaterialRefreshResult, NoopMachineGateway, PrintProjectDispatchResult,
         PrinterOperation as MachinePrinterOperation, PrinterRefreshResult,
         diagnostics::PrinterDiagnosticResult,
         discovery::{DiscoveredPrinter, PrinterDiscoveryResult},
@@ -989,6 +991,60 @@ async fn link_printer_emits_ack_snapshot_and_success_without_access_code() {
 }
 
 #[tokio::test]
+async fn link_printer_gateway_snapshot_precedes_firmware_events_without_duplicate() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = LinkGateway::success_with_firmware(snapshot(
+        "SERIAL123",
+        "Office X1C",
+        Some("X1 Carbon"),
+        "READY",
+    ));
+    let (sender, mut receiver) = mpsc::channel(8);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        link_printer_command(command_id.clone(), "SECRET-LINK-CODE"),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_snapshot(
+        receiver.recv().await.unwrap(),
+        "SERIAL123",
+        "Office X1C",
+        "X1 Carbon",
+        "READY",
+    );
+    let invalidation = receiver.recv().await.unwrap();
+    let agent_event::Event::PrinterFirmwareInvalidated(invalidation) = invalidation.event.unwrap()
+    else {
+        panic!("expected firmware invalidation after linked printer snapshot");
+    };
+    let modules = receiver.recv().await.unwrap();
+    let agent_event::Event::PrinterFirmwareModulesSnapshot(modules) = modules.event.unwrap() else {
+        panic!("expected firmware modules after link invalidation");
+    };
+    assert_eq!(modules.generation, invalidation.generation);
+    assert_eq!(modules.module_revision, 1);
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert_eq!(result.command_id, command_id);
+            assert!(result.success);
+        }
+        other => panic!("expected command result without a duplicate snapshot, got {other:?}"),
+    }
+    assert!(receiver.recv().await.is_none());
+}
+
+#[tokio::test]
 async fn link_printer_fails_when_discovery_does_not_find_host() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
@@ -1208,6 +1264,8 @@ struct LinkGateway {
     direct_host_discovery: Arc<Mutex<anyhow::Result<Option<DiscoveredPrinter>>>>,
     result: Arc<Mutex<anyhow::Result<MachineSnapshot>>>,
     linked_endpoints: Arc<Mutex<Vec<BambuPrinterEndpoint>>>,
+    firmware: FirmwareObservationCache,
+    emit_firmware: bool,
     access_code: Option<String>,
 }
 
@@ -1220,7 +1278,16 @@ impl LinkGateway {
             direct_host_discovery: Arc::new(Mutex::new(Ok(None))),
             result: Arc::new(Mutex::new(Ok(snapshot))),
             linked_endpoints: Arc::new(Mutex::new(Vec::new())),
+            firmware: FirmwareObservationCache::default(),
+            emit_firmware: false,
             access_code: None,
+        }
+    }
+
+    fn success_with_firmware(snapshot: MachineSnapshot) -> Self {
+        Self {
+            emit_firmware: true,
+            ..Self::success(snapshot)
         }
     }
 
@@ -1235,6 +1302,8 @@ impl LinkGateway {
                 "READY",
             )))),
             linked_endpoints: Arc::new(Mutex::new(Vec::new())),
+            firmware: FirmwareObservationCache::default(),
+            emit_firmware: false,
             access_code: None,
         }
     }
@@ -1253,6 +1322,8 @@ impl LinkGateway {
                 "READY",
             )))),
             linked_endpoints: Arc::new(Mutex::new(Vec::new())),
+            firmware: FirmwareObservationCache::default(),
+            emit_firmware: false,
             access_code: None,
         }
     }
@@ -1268,6 +1339,8 @@ impl LinkGateway {
                     .context("validate runtime printer SERIAL123"),
             )),
             linked_endpoints: Arc::new(Mutex::new(Vec::new())),
+            firmware: FirmwareObservationCache::default(),
+            emit_firmware: false,
             access_code: Some(access_code.to_owned()),
         }
     }
@@ -1373,20 +1446,51 @@ impl BambuMachineGateway for LinkGateway {
     async fn link_printer(
         &self,
         endpoint: BambuPrinterEndpoint,
-        _config: &AgentConfig,
-        _sender: &mpsc::Sender<AgentEvent>,
+        config: &AgentConfig,
+        sender: &mpsc::Sender<AgentEvent>,
     ) -> anyhow::Result<MachineSnapshot> {
         assert_eq!(endpoint.host, "192.0.2.10");
         assert_eq!(endpoint.serial, "SERIAL123");
         assert_eq!(endpoint.access_code, "SECRET-LINK-CODE");
         assert_eq!(endpoint.name.as_deref(), Some("Office X1C"));
         assert_eq!(endpoint.model.as_deref(), Some("X1 Carbon"));
-        self.linked_endpoints.lock().await.push(endpoint);
+        self.linked_endpoints.lock().await.push(endpoint.clone());
         let mut result = self.result.lock().await;
-        std::mem::replace(
+        let snapshot = std::mem::replace(
             &mut *result,
             Ok(snapshot("SERIAL123", "unused", None, "unused")),
-        )
+        )?;
+        drop(result);
+        sender
+            .send(responses::printer_snapshot_event(config, snapshot.clone()))
+            .await?;
+        if self.emit_firmware {
+            let transition = self
+                .firmware
+                .begin_generation(config, endpoint.clone(), sender, None)
+                .await?
+                .expect("link test generation is unconditional");
+            let generation = transition.generation();
+            let modules = transition.commit_modules(
+                &endpoint.serial,
+                vec![PrinterFirmwareModule {
+                    name: "ota".to_owned(),
+                    software_version: Some("01.00.00.00".to_owned()),
+                    software_new_version: None,
+                    new_version: None,
+                    visible: None,
+                    product_name: Some("X1 Carbon".to_owned()),
+                    serial_number: None,
+                    hardware_version: None,
+                    firmware_flag: None,
+                }],
+            )?;
+            assert_eq!(modules.generation, generation);
+            sender
+                .send(crate::machine::firmware_modules_event(config, modules))
+                .await?;
+        }
+        Ok(snapshot)
     }
 }
 

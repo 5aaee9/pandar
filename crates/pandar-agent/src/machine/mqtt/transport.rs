@@ -49,12 +49,13 @@ pub(crate) fn is_mqtt_report_idle_timeout(error: &anyhow::Error) -> bool {
     error.downcast_ref::<MqttReportIdleTimeout>().is_some()
 }
 
+#[derive(Clone)]
 pub struct RumqttcBambuMqttTransport {
     client: AsyncClient,
-    event_loop: Mutex<EventLoop>,
+    event_loop: Arc<Mutex<EventLoop>>,
     endpoint_serial: String,
     host: String,
-    mqtt_serial: OnceCell<String>,
+    mqtt_serial: Arc<OnceCell<String>>,
 }
 
 impl RumqttcBambuMqttTransport {
@@ -72,10 +73,10 @@ impl RumqttcBambuMqttTransport {
         let (client, event_loop) = AsyncClient::new(options, 10);
         Self {
             client,
-            event_loop: Mutex::new(event_loop),
+            event_loop: Arc::new(Mutex::new(event_loop)),
             endpoint_serial: endpoint.serial.clone(),
             host: endpoint.host.clone(),
-            mqtt_serial: OnceCell::new(),
+            mqtt_serial: Arc::new(OnceCell::new()),
         }
     }
 

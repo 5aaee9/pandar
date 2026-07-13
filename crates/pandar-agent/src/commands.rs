@@ -4,6 +4,7 @@ mod artifacts;
 mod config;
 mod diagnostics;
 mod events;
+mod firmware;
 mod link;
 mod operation_results;
 mod operations;
@@ -16,6 +17,7 @@ pub use artifacts::{
     ArtifactReader, FilesystemArtifactReader, HubArtifactReader, artifact_download_url,
 };
 pub use config::parse_printer_config;
+pub(crate) use firmware::{handle_firmware_command, is_firmware_command};
 use link::emit_link_printer_events;
 use print_project::{emit_print_project_file_events, emit_print_project_file_events_with_reader};
 use refresh::{emit_refresh_printer_materials_events, emit_refresh_printers_events};
@@ -23,7 +25,7 @@ use refresh::{emit_refresh_printer_materials_events, emit_refresh_printers_event
 pub(crate) use responses::success_event;
 pub(super) use responses::{
     ack_event, failure_event, failure_event_with_result, printer_materials_snapshot_event,
-    rejected_ack_event, success_event_with_result,
+    printer_snapshot_event, rejected_ack_event, success_event_with_result,
 };
 
 #[cfg(test)]
@@ -34,7 +36,7 @@ use crate::{
     protocol::agent::v1::{AgentEvent, hub_command},
 };
 
-pub async fn handle_command_with_gateway<G>(
+pub async fn handle_non_firmware_command_with_gateway<G>(
     config: &AgentConfig,
     gateway: &G,
     sender: &mpsc::Sender<AgentEvent>,
@@ -130,6 +132,11 @@ where
             emit_link_printer_events(config, gateway, sender, &command.command_id, link).await
         }
         Some(hub_command::Command::CameraStream(_)) => Ok(()),
+        Some(
+            hub_command::Command::RefreshFirmwareVersion(_)
+            | hub_command::Command::PrepareFirmwareControl(_)
+            | hub_command::Command::ExecuteFirmwareControl(_),
+        ) => anyhow::bail!("firmware command was misrouted to non-firmware worker"),
         None => Ok(()),
     }
 }
