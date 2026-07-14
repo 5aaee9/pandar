@@ -1065,6 +1065,7 @@ Exit criteria:
 
 ## Completed: Android App
 
+- Added a GitHub Actions workflow that builds and uploads the Android release APK with `git rev-list --count HEAD` injected as its `versionCode`.
 - Added a Jetpack Compose + Material 3 Android app under `mobile/android/` (package `zip.iptables.pandar.android`) that monitors printers/jobs and controls Bambu machines via the pandar-hub HTTP/WebSocket API.
 - Replaced Android direct OIDC configuration with a Hub browser login flow: Android now asks only for the Hub URL, opens `/mobile-sign-in`, receives a `zip.iptables.pandar.android:/auth/callback` one-use ticket, exchanges it with Hub mobile login-ticket APIs, and stores the returned tenant token for normal tenant HTTP/WebSocket calls while keeping the Bambu Studio plugin callback validator loopback-only.
 - Added a printers dashboard, per-printer detail (pause/resume/stop, X/Y/Z movement, confirmed full-axis Home, chamber light, set hotend/bed/chamber temperature, AMS load/unload/reread RFID), and a jobs screen with retry-dispatch and reprint, all updated live over the tenant `printer-events` WebSocket.

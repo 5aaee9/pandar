@@ -1,0 +1,56 @@
+name: Android
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "mobile/android/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "mobile/android/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Android app
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v5.0.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5.0.0
+
+      - name: Calculate version code
+        id: version
+        shell: bash
+        run: echo "code=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build release APK
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease -PversionCode=${{ steps.version.outputs.code }}
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: pandar-android-${{ steps.version.outputs.code }}
+          path: mobile/android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
