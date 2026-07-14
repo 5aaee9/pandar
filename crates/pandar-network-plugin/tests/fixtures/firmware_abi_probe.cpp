@@ -253,9 +253,7 @@ int main(int argc, char** argv) {
 
     void* agent = create("firmware-probe");
     Capture capture;
-    if (!agent || set_config(agent, argv[2]) != kSuccess || start(agent) != kSuccess ||
-        set_cloud(agent, [&capture](std::string id, std::string body) { capture.on_message(true, id, body); }) != kSuccess ||
-        set_local(agent, [&capture](std::string id, std::string body) { capture.on_message(false, id, body); }) != kSuccess) {
+    if (!agent || set_config(agent, argv[2]) != kSuccess || start(agent) != kSuccess) {
         fail(agent, destroy, "firmware probe setup failed");
     }
     unsigned code = 0;
@@ -267,12 +265,24 @@ int main(int argc, char** argv) {
         delayed_seed_rc = get_print_info(agent, &delayed_code, &delayed_body);
     });
     const auto race_ready = std::filesystem::path(argv[2]) / "auxiliary-printer-ready";
-    if (!wait_until([&] { return std::filesystem::exists(race_ready); }, Clock::now() + std::chrono::seconds(2))) {
+    if (!wait_until([&] { return std::filesystem::exists(race_ready); }, Clock::now() + std::chrono::seconds(5))) {
         fail(agent, destroy, "delayed printer response did not enter mock Hub");
     }
     const auto selected = get_selected_machine(agent);
     std::filesystem::create_directory(std::filesystem::path(argv[2]) / "auxiliary-printer-applied");
     delayed_seed.join();
+    if (set_cloud(agent, [&capture](std::string id, std::string body) { capture.on_message(true, id, body); }) != kSuccess ||
+        set_local(agent, [&capture](std::string id, std::string body) { capture.on_message(false, id, body); }) != kSuccess) {
+        fail(agent, destroy, "firmware callback setup failed");
+    }
+    const auto background_failure =
+        std::filesystem::path(argv[2]) / "background-printer-failure-served";
+    if (!wait_until(
+            [&] { return std::filesystem::exists(background_failure); },
+            Clock::now() + std::chrono::seconds(5)
+        )) {
+        fail(agent, destroy, "background printer failure was not served");
+    }
     if (selected != "studio-serial-1" || delayed_seed_rc != kSuccess ||
         send_cloud(agent, "studio-serial-1", R"({"pushing":{"command":"pushall","sequence_id":"auxiliary-fence"}})", 0, 0) != kSuccess ||
         !capture.auxiliary_fence_new || capture.auxiliary_fence_old) {

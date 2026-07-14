@@ -48,9 +48,11 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: Set up hestia cache
-        uses: Mic92/hestia@v1.0.1
+        uses: Mic92/hestia@v2.0.0
         with:
+          version: v2.0.0
           upstream-cache-filter: true
+          no-closure: true
 
       - name: Run checks
         run: |
@@ -85,9 +87,11 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: Set up hestia cache
-        uses: Mic92/hestia@v1.0.1
+        uses: Mic92/hestia@v2.0.0
         with:
+          version: v2.0.0
           upstream-cache-filter: true
+          no-closure: true
 
       - name: Build packages
         run: |
@@ -135,9 +139,11 @@ jobs:
             experimental-features = nix-command flakes
 
       - name: Set up hestia cache
-        uses: Mic92/hestia@v1.0.1
+        uses: Mic92/hestia@v2.0.0
         with:
+          version: v2.0.0
           upstream-cache-filter: true
+          no-closure: true
 
       - name: Run NixOS VM test
         run: nix build --show-trace .#checks.${{ matrix.system }}.pandar-nixos-test-${{ matrix.backend }}

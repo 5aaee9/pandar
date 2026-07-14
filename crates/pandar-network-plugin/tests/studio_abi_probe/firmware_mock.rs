@@ -147,11 +147,14 @@ impl State {
                 );
                 self.delayed_printer_stream = None;
             }
-            3 => respond(
-                &mut stream,
-                "HTTP/1.1 503 Service Unavailable",
-                r#"{"error":"observe cached firmware"}"#.to_owned(),
-            ),
+            3 => {
+                fs::create_dir(race_directory.join("background-printer-failure-served")).unwrap();
+                respond(
+                    &mut stream,
+                    "HTTP/1.1 503 Service Unavailable",
+                    r#"{"error":"observe cached firmware"}"#.to_owned(),
+                );
+            }
             _ => respond(&mut stream, "HTTP/1.1 200 OK", printer_list()),
         }
     }

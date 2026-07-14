@@ -241,7 +241,7 @@ async fn firmware_lifecycle_aborted_prepare_after_dispatch_still_expires_exact_o
     request.abort();
     assert!(request.await.unwrap_err().is_cancelled());
     pause.resume();
-    tokio::time::sleep(Duration::from_millis(1_200)).await;
+    wait_for_failed_command(&fixture, command_id).await;
 
     assert!(
         !fixture
@@ -294,7 +294,7 @@ async fn firmware_lifecycle_aborted_prepare_before_registration_fails_without_di
     request.abort();
     assert!(request.await.unwrap_err().is_cancelled());
     pause.resume();
-    tokio::time::sleep(Duration::from_millis(1_200)).await;
+    wait_for_failed_command(&fixture, command.id).await;
 
     assert!(fixture.command_receiver.try_recv().is_err());
     let command = fixture.command(command.id).await;
@@ -305,6 +305,19 @@ async fn firmware_lifecycle_aborted_prepare_before_registration_fails_without_di
         persisted.phase,
         crate::repositories::FirmwarePersistedPhase::PrePublishFailure
     );
+}
+
+async fn wait_for_failed_command(fixture: &FirmwareFixture, command_id: CommandId) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if fixture.command(command_id).await.status == CommandStatus::Failed {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("firmware prepare expiry must complete");
 }
 
 #[tokio::test]

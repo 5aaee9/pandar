@@ -1208,7 +1208,11 @@ void start_firmware_dispatcher(Agent* agent) {
                     }
                 }
             }
-            std::this_thread::yield();
+            if (result.status == 0) {
+                std::this_thread::yield();
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
         }
     });
 }

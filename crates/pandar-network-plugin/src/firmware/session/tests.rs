@@ -1,15 +1,20 @@
 use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
-    sync::{Arc, mpsc},
+    sync::{Arc, Mutex, mpsc},
     thread,
     time::Duration,
 };
 
 use crate::firmware::{FirmwarePluginSession, FirmwareTunnel, callbacks::test_hook};
 
+static CALLBACK_PUSH_TEST_LOCK: Mutex<()> = Mutex::new(());
+
 #[test]
 fn firmware_callback_generation_update_cannot_race_between_validation_and_enqueue() {
+    let _test_lock = CALLBACK_PUSH_TEST_LOCK
+        .lock()
+        .expect("firmware callback push test lock poisoned");
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let hub = format!("http://{}", listener.local_addr().unwrap());
     let server = thread::spawn(move || {
@@ -59,6 +64,9 @@ fn firmware_callback_generation_update_cannot_race_between_validation_and_enqueu
 
 #[test]
 fn firmware_callback_generation_cancel_cannot_race_with_in_flight_enqueue() {
+    let _test_lock = CALLBACK_PUSH_TEST_LOCK
+        .lock()
+        .expect("firmware callback push test lock poisoned");
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let hub = format!("http://{}", listener.local_addr().unwrap());
     let server = thread::spawn(move || {
