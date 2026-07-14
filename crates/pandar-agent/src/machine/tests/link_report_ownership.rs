@@ -34,6 +34,7 @@ async fn firmware_runtime_configured_startup_snapshot_precedes_first_generation(
     assert_eq!(snapshot.serial, "SERIAL1");
     assert_eq!(snapshot.name, "configured office");
     assert_eq!(snapshot.state, "unknown");
+    assert!(snapshot.connection_authoritative);
 
     let second = loop {
         if let event @ agent_event::Event::PrinterFirmwareInvalidated(_) =

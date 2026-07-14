@@ -27,8 +27,7 @@ use reload_connection::emit_reload_printer_connection_events;
 pub(crate) use responses::success_event;
 pub(super) use responses::{
     ack_event, authoritative_printer_snapshot_event, failure_event, failure_event_with_result,
-    printer_materials_snapshot_event, printer_snapshot_event, rejected_ack_event,
-    success_event_with_result,
+    printer_materials_snapshot_event, rejected_ack_event, success_event_with_result,
 };
 
 #[cfg(test)]

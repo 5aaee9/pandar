@@ -10,6 +10,8 @@ use crate::{
     repositories::{MaterialPatchInput, test_helpers::insert_printer_fixture},
 };
 
+mod material_reset;
+
 #[tokio::test]
 async fn grpc_printer_snapshot_persists_printer_state() {
     let state = fixture_state().await;
