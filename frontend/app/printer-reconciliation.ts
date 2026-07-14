@@ -34,14 +34,18 @@ export function mergePrinterEvent(
   }
 
   const previous = current[index]!;
-  const materials = latestMaterials(previous.materials, incoming.materials);
+  const advancesState =
+    isEnrichedPrinter(previous) &&
+    isEnrichedPrinter(incoming) &&
+    incoming.state_revision > previous.state_revision;
+  const materials =
+    advancesState && incoming.materials === null
+      ? null
+      : latestMaterials(previous.materials, incoming.materials);
   let next: Printer;
 
   if (isEnrichedPrinter(previous)) {
-    if (
-      isEnrichedPrinter(incoming) &&
-      incoming.state_revision > previous.state_revision
-    ) {
+    if (advancesState) {
       next = { ...incoming, materials };
     } else if (materials !== previous.materials) {
       next = { ...previous, materials };

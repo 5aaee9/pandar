@@ -141,7 +141,6 @@ impl MaterialRepository {
             .await?;
         printer_material_snapshots::Entity::delete_many()
             .filter(printer_material_snapshots::Column::TenantId.eq(tenant_id.to_string()))
-            .filter(printer_material_snapshots::Column::AgentId.eq(agent_id.to_string()))
             .filter(printer_material_snapshots::Column::PrinterId.eq(printer_id))
             .exec(&tx)
             .await

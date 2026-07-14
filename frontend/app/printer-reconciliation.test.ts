@@ -147,6 +147,43 @@ describe("printer reconciliation", () => {
     );
   });
 
+  it("clears materials when a higher revision explicitly reports none", () => {
+    const current = printer("p1", {
+      state_revision: 4,
+      materials: materials("2026-07-10T00:00:00Z"),
+    });
+    const cleared = printer("p1", {
+      state_revision: 5,
+      materials: null,
+    });
+
+    const result = mergePrinterEvent([current], cleared);
+
+    expect(result.kind).toBe("applied");
+    expect(result.printers[0]?.materials).toBeNull();
+  });
+
+  it.each([3, 4])(
+    "does not let revision %s clear newer materials",
+    (stateRevision) => {
+      const current = printer("p1", {
+        state_revision: 4,
+        materials: materials("2026-07-10T00:00:00Z"),
+      });
+      const staleClear = printer("p1", {
+        state_revision: stateRevision,
+        materials: null,
+      });
+
+      const result = mergePrinterEvent([current], staleClear);
+
+      expect(result.kind).toBe("ignored");
+      expect(result.printers[0]?.materials?.observed_at).toBe(
+        "2026-07-10T00:00:00Z",
+      );
+    },
+  );
+
   it("accepts newer materials from a legacy event without overwriting enriched state", () => {
     const current = printer("p1", {
       state_revision: 9,

@@ -3,11 +3,16 @@ use serde::{Deserialize, Serialize};
 use super::*;
 
 #[tokio::test]
-async fn authoritative_connection_snapshot_discards_materials_from_previous_printer() {
+async fn authoritative_connection_snapshot_discards_materials_from_previous_agent() {
     let state = fixture_state().await;
-    let (tenant_id, agent_id) = tenant_agent(&state).await;
-    let token = register_test_session(&state, tenant_id, agent_id).await;
-    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
+    let (tenant_id, previous_agent_id) = tenant_agent(&state).await;
+    let current_agent = state
+        .agents()
+        .create(tenant_id, "current-agent")
+        .await
+        .unwrap();
+    let token = register_test_session(&state, tenant_id, current_agent.id).await;
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, previous_agent_id)
         .await
         .unwrap();
     let serial = format!("serial-{printer_id}");
@@ -15,7 +20,7 @@ async fn authoritative_connection_snapshot_discards_materials_from_previous_prin
         .materials()
         .upsert_from_patch(MaterialPatchInput {
             tenant_id,
-            agent_id,
+            agent_id: previous_agent_id,
             printer_id: printer_id.clone(),
             serial_number: serial.clone(),
             printer_materials_json: material_patch("2026-07-15T00:00:00Z", &["0", "1", "128"]),
@@ -25,7 +30,7 @@ async fn authoritative_connection_snapshot_discards_materials_from_previous_prin
 
     let mut connection = snapshot(&serial, "Printer", "X2D", "IDLE");
     connection.connection_authoritative = true;
-    handle_snapshot(&state, tenant_id, agent_id, token, connection)
+    handle_snapshot(&state, tenant_id, current_agent.id, token, connection)
         .await
         .unwrap();
     assert!(
@@ -41,7 +46,7 @@ async fn authoritative_connection_snapshot_discards_materials_from_previous_prin
         .materials()
         .upsert_from_patch(MaterialPatchInput {
             tenant_id,
-            agent_id,
+            agent_id: current_agent.id,
             printer_id: printer_id.clone(),
             serial_number: serial,
             printer_materials_json: material_patch("2026-07-15T00:01:00Z", &["0"]),
