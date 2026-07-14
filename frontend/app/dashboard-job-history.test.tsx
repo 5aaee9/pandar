@@ -78,10 +78,9 @@ function renderHistory({
       <NextIntlClientProvider locale="en" messages={en}>
         <JobHistory
           agents={[]}
-          dispatchOpen={false}
           jobs={jobs}
           onClearRedirect={onClearRedirect}
-          onToggleDispatch={vi.fn()}
+          onOpenDispatch={vi.fn()}
           printers={[]}
           selectedTenant={selectedTenant}
         />
@@ -129,14 +128,13 @@ describe('JobHistory actions', () => {
       <NextIntlClientProvider locale="en" messages={en}>
         <JobHistory
           agents={[]}
-          dispatchOpen={false}
           jobs={[
             job({
               status: 'queued',
               command: { id: 'command-1', kind: 'start_print', status: 'queued' },
             }),
           ]}
-          onToggleDispatch={vi.fn()}
+          onOpenDispatch={vi.fn()}
           printers={[]}
           selectedTenant={tenant}
         />
@@ -183,14 +181,13 @@ describe('JobHistory actions', () => {
       <NextIntlClientProvider locale="en" messages={en}>
         <JobHistory
           agents={[]}
-          dispatchOpen={false}
           jobs={[
             job({
               ...failedBeforePrint,
               print: { ...failedBeforePrint.print, progress_percent: 1 },
             }),
           ]}
-          onToggleDispatch={vi.fn()}
+          onOpenDispatch={vi.fn()}
           printers={[]}
           selectedTenant={tenant}
         />

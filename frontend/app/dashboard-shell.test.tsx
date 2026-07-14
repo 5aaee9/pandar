@@ -434,7 +434,7 @@ describe("DashboardViewContent", () => {
     );
   });
 
-  it("renders job actions and toggles the dispatch form on jobs", async () => {
+  it("opens the dispatch form in a dialog from jobs", async () => {
     const user = userEvent.setup();
     renderWithMessages(<DashboardViewContent {...baseProps} view="jobs" />);
 
@@ -449,16 +449,16 @@ describe("DashboardViewContent", () => {
     expect(screen.queryByRole("heading", { name: "Printer inventory" })).not.toBeInTheDocument();
 
     const newButton = screen.getByRole("button", { name: "New" });
-    expect(newButton).toHaveAttribute("aria-expanded", "false");
+    expect(newButton).toHaveAttribute("aria-haspopup", "dialog");
 
     await user.click(newButton);
 
-    expect(newButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("heading", { name: "Dispatch print job" })).toBeVisible();
+    expect(
+      screen.getByRole("dialog", { name: "Dispatch print job" }),
+    ).toBeVisible();
 
-    await user.click(newButton);
+    await user.click(screen.getByRole("button", { name: "Close" }));
 
-    expect(newButton).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("heading", { name: "Dispatch print job" })).not.toBeInTheDocument();
   });
 });

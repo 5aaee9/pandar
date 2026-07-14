@@ -77,16 +77,14 @@ export function JobHistory({
   jobs,
   printers,
   agents,
-  dispatchOpen,
-  onToggleDispatch,
+  onOpenDispatch,
   onClearRedirect = (url) => window.location.assign(url),
 }: {
   selectedTenant: Tenant | null
   jobs: Job[]
   printers: Printer[]
   agents: Agent[]
-  dispatchOpen: boolean
-  onToggleDispatch: () => void
+  onOpenDispatch: () => void
   onClearRedirect?: (url: string) => void
 }) {
   const t = useTranslations('inventory')
@@ -145,9 +143,8 @@ export function JobHistory({
         actions={
           <>
             <Button
-              aria-controls="dispatch-print-job"
-              aria-expanded={dispatchOpen}
-              onClick={onToggleDispatch}
+              aria-haspopup="dialog"
+              onClick={onOpenDispatch}
               type="button"
             >
               {t('newJob')}

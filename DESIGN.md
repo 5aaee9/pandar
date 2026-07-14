@@ -185,10 +185,10 @@ Flat by default. Depth is conveyed through tonal layering (white surfaces, neutr
 
 ## Design principles
 
-- Progressive disclosure: keep creation forms collapsed until requested; reveal metadata and AMS mapping only when the required file and printer context exists.
+- Progressive disclosure: keep creation forms in focused dialogs until requested; reveal metadata and AMS mapping only when the required file and printer context exists.
 - Safe operations: destructive collection actions require an explicit confirmation that states what is removed and what is retained.
 - Operational density: use compact rows and native controls instead of large cards or wizard steps.
-- Tradeoffs: prefer inline disclosure for reversible work; reserve dialogs for confirmation of irreversible actions.
+- Tradeoffs: use dialogs for focused creation flows and irreversible confirmations; keep secondary record details inline.
 
 ## Visual language
 
@@ -202,14 +202,14 @@ Flat by default. Depth is conveyed through tonal layering (white surfaces, neutr
 ## Components
 
 - Existing components to reuse: `SectionHeader`, `Button`, `Dialog`, `EmptyState`, native `select`, and the existing dispatch form controls.
-- New/changed components: Jobs header action slot; inline dispatch disclosure; compact required-material mapping rows.
-- Variants and states: New collapsed/expanded; Clear disabled/confirming/clearing; mapping loading/ready/unmapped/no-slots.
+- New/changed components: Jobs header action slot; dispatch dialog; compact required-material mapping rows.
+- Variants and states: New dialog closed/open; Clear disabled/confirming/clearing; mapping loading/ready/unmapped/no-slots.
 - Token/component ownership: shared primitives remain in `frontend/components/ui`; Jobs-specific composition remains in `frontend/app`.
 
 ## Accessibility
 
 - Target standard: WCAG 2.2 AA.
-- Keyboard/focus behavior: New exposes `aria-expanded`/`aria-controls`; dialogs trap focus; every material mapping has an accessible select label.
+- Keyboard/focus behavior: New opens a labelled dialog that traps focus; every material mapping has an accessible select label.
 - Contrast/readability: status and material names remain textual; swatches supplement text and never carry meaning alone.
 - Screen-reader semantics: use headings, fieldsets, legends, labels, and explicit confirmation descriptions.
 - Reduced motion and sensory considerations: no required animation or color-only feedback.

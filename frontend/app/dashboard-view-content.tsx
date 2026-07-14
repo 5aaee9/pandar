@@ -7,7 +7,7 @@ import { LanguageSwitcher } from '../components/language-switcher'
 import { ThemeSwitcher } from '../components/theme-switcher'
 import { AgentPairingGuidance } from './agent-pairing-guidance'
 import { DiagnosticsSection, LinkedAgentsSection } from './diagnostics-panel'
-import { DispatchForm } from './dispatch-form'
+import { DispatchDialog } from './dispatch-dialog'
 import { LinkPrinterForm } from './link-printer-form'
 import { RecoveryActions } from './recovery-actions'
 import {
@@ -126,17 +126,17 @@ function JobsView({
     <>
       <JobHistory
         agents={agents}
-        dispatchOpen={dispatchOpen}
         jobs={jobs}
-        onToggleDispatch={() => setDispatchOpen((open) => !open)}
+        onOpenDispatch={() => setDispatchOpen(true)}
         printers={printers}
         selectedTenant={selectedTenant}
       />
-      {dispatchOpen ? (
-        <div id="dispatch-print-job">
-          <DispatchForm selectedTenant={selectedTenant} printers={printers} />
-        </div>
-      ) : null}
+      <DispatchDialog
+        open={dispatchOpen}
+        onOpenChange={setDispatchOpen}
+        printers={printers}
+        selectedTenant={selectedTenant}
+      />
       <RecoveryActions selectedTenant={selectedTenant} agents={agents} printers={printers} jobs={jobs} />
     </>
   )

@@ -150,144 +150,136 @@ export function DispatchForm({
 
   const selectedFilename = artifact.file?.name ?? ''
 
-  return (
-    <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
-      <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold">{t('title')}</h2>
-          <p className="mt-0.5 text-sm text-slate-600">
-            {t('subtitle')}
-          </p>
-        </div>
-      </div>
+  if (!selectedTenant) {
+    return <DispatchEmptyState title={t('noTenantTitle')} message={t('noTenantMessage')} />
+  }
+  if (printers.length === 0) {
+    return (
+      <DispatchEmptyState
+        title={t('noPrintersTitle')}
+        message={t('noPrintersMessage')}
+      />
+    )
+  }
 
-      {!selectedTenant ? (
-        <DispatchEmptyState title={t('noTenantTitle')} message={t('noTenantMessage')} />
-      ) : printers.length === 0 ? (
-        <DispatchEmptyState
-          title={t('noPrintersTitle')}
-          message={t('noPrintersMessage')}
-        />
-      ) : (
-        <form
-          action={uploadPath(selectedTenant.id, selectedPrinterId)}
-          className="grid gap-4 px-4 py-4 lg:grid-cols-2"
-          encType="multipart/form-data"
-          method="post"
-          onSubmit={(event) => void submitPrintJob(event)}
+  return (
+    <form
+      action={uploadPath(selectedTenant.id, selectedPrinterId)}
+      className="grid gap-4 lg:grid-cols-2"
+      encType="multipart/form-data"
+      method="post"
+      onSubmit={(event) => void submitPrintJob(event)}
+    >
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="text-xs font-medium text-slate-500">{t('printer')}</span>
+        <select
+          name="printer_id"
+          className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
+          onChange={(event) => setPreferredPrinterId(event.currentTarget.value)}
+          required
+          value={selectedPrinterId}
         >
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs font-medium text-slate-500">{t('printer')}</span>
-            <select
-              name="printer_id"
-              className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
-              onChange={(event) => setPreferredPrinterId(event.currentTarget.value)}
-              required
-              value={selectedPrinterId}
-            >
-              {printers.map((printer) => (
-                <option key={printer.id} value={printer.id}>
-                  {printer.name} ({printer.serial_number})
-                </option>
-              ))}
-            </select>
+          {printers.map((printer) => (
+            <option key={printer.id} value={printer.id}>
+              {printer.name} ({printer.serial_number})
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="flex flex-col gap-1 text-sm">
+        <span className="flex items-center gap-1 text-xs font-medium text-slate-500">
+          {t('plate')}
+          <HelpTip label={t('plate')}>{t('plateHelp')}</HelpTip>
+        </span>
+        <input
+          aria-label={t('plate')}
+          className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950"
+          min="1"
+          name="plate_id"
+          onChange={(event) => setPlateId(Number(event.currentTarget.value))}
+          type="number"
+          required
+          value={plateId}
+        />
+      </div>
+      <label className="flex flex-col gap-1 text-sm lg:col-span-2">
+        <span className="text-xs font-medium text-slate-500">{t('artifact')}</span>
+        <input
+          accept=".3mf,.gcode,.gcode.3mf,application/octet-stream,model/3mf"
+          className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-950 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium"
+          name="file"
+          onChange={(event) => selectArtifact(event.currentTarget.files?.[0] ?? null)}
+          type="file"
+          required
+        />
+        <span className="text-xs text-slate-600">{t('maxSize', { size: formatBytes(maxArtifactBytes, num) })}</span>
+      </label>
+      <input name="use_ams" type="hidden" value="false" />
+      <input name="flow_cali" type="hidden" value="false" />
+      <input name="timelapse" type="hidden" value="false" />
+      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 lg:col-span-2">
+        <div className="font-medium text-slate-950">
+          {selectedFilename || t('noArtifact')}
+        </div>
+        <div className="mt-1 text-xs">
+          {artifact.state === 'ready'
+            ? t('readySize', { size: formatBytes(artifact.size, num) })
+            : artifact.state === 'too_large'
+              ? t('tooLargeSize', { size: formatBytes(artifact.size, num) })
+              : t('chooseFile')}
+        </div>
+        <MetadataPreview preview={metadataPreview} />
+        <details className="mt-2 text-xs text-slate-600">
+          <summary className="cursor-pointer select-none text-slate-500">{t('errorCodes')}</summary>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {backendErrorCodes.map((code) => (
+              <code key={code} className="rounded bg-white px-1.5 py-0.5 text-slate-600">
+                {code}
+              </code>
+            ))}
+          </div>
+        </details>
+      </div>
+      {metadataPreview.state === 'ready' && metadataPreview.metadata && selectedPrinter ? (
+        <DispatchMaterialMappingFields
+          metadata={metadataPreview.metadata}
+          plateId={plateId}
+          printer={selectedPrinter}
+        />
+      ) : null}
+      <div className="flex flex-wrap gap-4 text-sm text-slate-700 lg:col-span-2">
+        <span className="flex items-center gap-1.5">
+          <label className="flex items-center gap-2">
+            <input name="use_ams" type="checkbox" value="true" defaultChecked />
+            {t('useAms')}
           </label>
-          <div className="flex flex-col gap-1 text-sm">
-            <span className="flex items-center gap-1 text-xs font-medium text-slate-500">
-              {t('plate')}
-              <HelpTip label={t('plate')}>{t('plateHelp')}</HelpTip>
-            </span>
-            <input
-              aria-label={t('plate')}
-              className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950"
-              min="1"
-              name="plate_id"
-              onChange={(event) => setPlateId(Number(event.currentTarget.value))}
-              type="number"
-              required
-              value={plateId}
-            />
-          </div>
-          <label className="flex flex-col gap-1 text-sm lg:col-span-2">
-            <span className="text-xs font-medium text-slate-500">{t('artifact')}</span>
-            <input
-              accept=".3mf,.gcode,.gcode.3mf,application/octet-stream,model/3mf"
-              className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-950 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium"
-              name="file"
-              onChange={(event) => selectArtifact(event.currentTarget.files?.[0] ?? null)}
-              type="file"
-              required
-            />
-            <span className="text-xs text-slate-600">{t('maxSize', { size: formatBytes(maxArtifactBytes, num) })}</span>
+          <HelpTip label={t('useAms')}>{t('useAmsHelp')}</HelpTip>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <label className="flex items-center gap-2">
+            <input name="flow_cali" type="checkbox" value="true" />
+            {t('flowCali')}
           </label>
-          <input name="use_ams" type="hidden" value="false" />
-          <input name="flow_cali" type="hidden" value="false" />
-          <input name="timelapse" type="hidden" value="false" />
-          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 lg:col-span-2">
-            <div className="font-medium text-slate-950">
-              {selectedFilename || t('noArtifact')}
-            </div>
-            <div className="mt-1 text-xs">
-              {artifact.state === 'ready'
-                ? t('readySize', { size: formatBytes(artifact.size, num) })
-                : artifact.state === 'too_large'
-                  ? t('tooLargeSize', { size: formatBytes(artifact.size, num) })
-                  : t('chooseFile')}
-            </div>
-            <MetadataPreview preview={metadataPreview} />
-            <details className="mt-2 text-xs text-slate-600">
-              <summary className="cursor-pointer select-none text-slate-500">{t('errorCodes')}</summary>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {backendErrorCodes.map((code) => (
-                  <code key={code} className="rounded bg-white px-1.5 py-0.5 text-slate-600">
-                    {code}
-                  </code>
-                ))}
-              </div>
-            </details>
-          </div>
-          {metadataPreview.state === 'ready' && metadataPreview.metadata && selectedPrinter ? (
-            <DispatchMaterialMappingFields
-              metadata={metadataPreview.metadata}
-              plateId={plateId}
-              printer={selectedPrinter}
-            />
-          ) : null}
-          <div className="flex flex-wrap gap-4 text-sm text-slate-700 lg:col-span-2">
-            <span className="flex items-center gap-1.5">
-              <label className="flex items-center gap-2">
-                <input name="use_ams" type="checkbox" value="true" defaultChecked />
-                {t('useAms')}
-              </label>
-              <HelpTip label={t('useAms')}>{t('useAmsHelp')}</HelpTip>
-            </span>
-            <span className="flex items-center gap-1.5">
-              <label className="flex items-center gap-2">
-                <input name="flow_cali" type="checkbox" value="true" />
-                {t('flowCali')}
-              </label>
-              <HelpTip label={t('flowCali')}>{t('flowCaliHelp')}</HelpTip>
-            </span>
-            <span className="flex items-center gap-1.5">
-              <label className="flex items-center gap-2">
-                <input name="timelapse" type="checkbox" value="true" />
-                {t('timelapse')}
-              </label>
-              <HelpTip label={t('timelapse')}>{t('timelapseHelp')}</HelpTip>
-            </span>
-          </div>
-          <div className="lg:col-span-2">
-            <button
-              className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:bg-slate-300 disabled:text-white"
-              disabled={artifact.state !== 'ready' || submitting}
-              type="submit"
-            >
-              {submitting ? t('dispatching') : t('dispatch')}
-            </button>
-          </div>
-        </form>
-      )}
-    </section>
+          <HelpTip label={t('flowCali')}>{t('flowCaliHelp')}</HelpTip>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <label className="flex items-center gap-2">
+            <input name="timelapse" type="checkbox" value="true" />
+            {t('timelapse')}
+          </label>
+          <HelpTip label={t('timelapse')}>{t('timelapseHelp')}</HelpTip>
+        </span>
+      </div>
+      <div className="lg:col-span-2">
+        <button
+          className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:bg-slate-300 disabled:text-white"
+          disabled={artifact.state !== 'ready' || submitting}
+          type="submit"
+        >
+          {submitting ? t('dispatching') : t('dispatch')}
+        </button>
+      </div>
+    </form>
   )
 }
 
