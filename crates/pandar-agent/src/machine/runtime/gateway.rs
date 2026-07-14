@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     AgentConfig,
-    commands::printer_snapshot_event,
+    commands::authoritative_printer_snapshot_event,
     machine::{
         BambuMachineGateway, BambuPrinterEndpoint, FirmwareReportContext, MachineSnapshot,
         MaterialRefreshResult, PrintProjectDispatchResult, PrinterOperation,
@@ -13,7 +13,7 @@ use crate::{
         firmware_modules_event,
         mqtt::{
             RumqttcBambuMqttTransport, dispatch_sequence_zero_recovery, feature_event,
-            refresh_printer_with_firmware,
+            refresh_printer_with_firmware, resolve_bambu_mqtt_serial,
         },
         transfer::BambuMachineFileTransfer,
     },
@@ -88,6 +88,21 @@ impl BambuMachineGateway for RuntimeBambuMachineGateway {
             .await
             .validate_printer(serial_number)
             .await
+    }
+
+    async fn validate_printer_endpoint_identity(
+        &self,
+        endpoint: &BambuPrinterEndpoint,
+    ) -> anyhow::Result<()> {
+        let actual_serial = resolve_bambu_mqtt_serial(&endpoint.host).await?;
+        if actual_serial != endpoint.serial {
+            anyhow::bail!(
+                "printer at {} reported serial {actual_serial}, expected {}",
+                endpoint.host,
+                endpoint.serial
+            );
+        }
+        Ok(())
     }
 
     async fn print_project_file(
@@ -174,7 +189,10 @@ impl BambuMachineGateway for RuntimeBambuMachineGateway {
         let replaces_generation = self.firmware.snapshot(&endpoint.serial).await.is_some();
         if !replaces_generation {
             sender
-                .send(printer_snapshot_event(&self.config, snapshot.clone()))
+                .send(authoritative_printer_snapshot_event(
+                    &self.config,
+                    snapshot.clone(),
+                ))
                 .await
                 .context("queue linked printer snapshot event")?;
         }
@@ -185,7 +203,10 @@ impl BambuMachineGateway for RuntimeBambuMachineGateway {
             .expect("endpoint replacement generation is unconditional");
         if replaces_generation {
             sender
-                .send(printer_snapshot_event(&self.config, snapshot.clone()))
+                .send(authoritative_printer_snapshot_event(
+                    &self.config,
+                    snapshot.clone(),
+                ))
                 .await
                 .context("queue linked printer snapshot event")?;
             transition.resend_invalidation(&self.config, sender).await?;

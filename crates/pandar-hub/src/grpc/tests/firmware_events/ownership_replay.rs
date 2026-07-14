@@ -290,6 +290,7 @@ fn snapshot_event(
             active_nozzle: String::new(),
             chamber_light_on: None,
             device_features: None,
+            connection_authoritative: false,
         }),
     )
 }

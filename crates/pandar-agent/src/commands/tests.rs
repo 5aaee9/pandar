@@ -3,6 +3,7 @@ mod diagnostics;
 mod firmware_wire;
 mod print;
 mod print_error;
+mod reload_connection;
 mod reports;
 
 use std::{sync::Arc, time::Duration};
@@ -1426,6 +1427,16 @@ impl BambuMachineGateway for LinkGateway {
         unreachable!("link printer tests do not validate by serial")
     }
 
+    async fn validate_printer_endpoint_identity(
+        &self,
+        endpoint: &BambuPrinterEndpoint,
+    ) -> anyhow::Result<()> {
+        assert_eq!(endpoint.host, "192.0.2.10");
+        assert_eq!(endpoint.serial, "SERIAL123");
+        assert_eq!(endpoint.access_code, "SECRET-LINK-CODE");
+        Ok(())
+    }
+
     async fn print_project_file(
         &self,
         _serial_number: &str,
@@ -1462,7 +1473,10 @@ impl BambuMachineGateway for LinkGateway {
         )?;
         drop(result);
         sender
-            .send(responses::printer_snapshot_event(config, snapshot.clone()))
+            .send(responses::authoritative_printer_snapshot_event(
+                config,
+                snapshot.clone(),
+            ))
             .await?;
         if self.emit_firmware {
             let transition = self

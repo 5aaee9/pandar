@@ -385,7 +385,19 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
                 chamber_light_on: None,
+                connection_authoritative: false,
             },
+        )
+        .await
+        .unwrap();
+    printers
+        .update_details_with_audit(
+            tenant.id,
+            &created.id,
+            "Garage A1".to_owned(),
+            "192.0.2.11".to_owned(),
+            "edited-access-code".to_owned(),
+            AuditActor::no_auth(),
         )
         .await
         .unwrap();
@@ -395,8 +407,8 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
             agent.id,
             PrinterSnapshotUpsert {
                 serial_number: "SN-001".to_string(),
-                host: None,
-                access_code: None,
+                host: Some("192.0.2.10".to_owned()),
+                access_code: Some("12345678".to_owned()),
                 name: "Ignored Snapshot Name".to_string(),
                 model: Some("A1 Mini".to_string()),
                 status: "printing".to_string(),
@@ -407,6 +419,7 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
                 chamber_light_on: None,
+                connection_authoritative: false,
             },
         )
         .await
@@ -415,13 +428,42 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
     assert_eq!(updated.id, created.id);
     assert_eq!(updated.created_at, created.created_at);
     assert_eq!(updated.name, "Garage A1");
-    assert_eq!(updated.host.as_deref(), Some("192.0.2.10"));
-    assert_eq!(updated.access_code.as_deref(), Some("12345678"));
+    assert_eq!(updated.host.as_deref(), Some("192.0.2.11"));
+    assert_eq!(updated.access_code.as_deref(), Some("edited-access-code"));
     assert_eq!(updated.status, "printing");
     assert_eq!(updated.last_seen_at, "2026-06-21T00:05:00Z");
+
+    let authoritative = printers
+        .upsert_snapshot(
+            tenant.id,
+            agent.id,
+            PrinterSnapshotUpsert {
+                serial_number: "SN-001".to_string(),
+                host: Some("192.0.2.12".to_owned()),
+                access_code: Some("reloaded-access-code".to_owned()),
+                name: "Ignored Snapshot Name".to_string(),
+                model: Some("A1 Mini".to_string()),
+                status: "idle".to_string(),
+                observed_at: "2026-06-21T00:10:00Z".to_string(),
+                nozzle_temperatures: Vec::new(),
+                active_nozzle: None,
+                bed_temperature_celsius: None,
+                bed_target_temperature_celsius: None,
+                chamber_temperature_celsius: None,
+                chamber_light_on: None,
+                connection_authoritative: true,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(authoritative.host.as_deref(), Some("192.0.2.12"));
+    assert_eq!(
+        authoritative.access_code.as_deref(),
+        Some("reloaded-access-code")
+    );
     assert_eq!(
         printers.list_for_tenant(tenant.id).await.unwrap(),
-        vec![updated]
+        vec![authoritative]
     );
 }
 

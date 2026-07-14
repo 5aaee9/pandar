@@ -486,6 +486,7 @@ pub(super) fn snapshot(serial: &str, name: &str, model: &str, state: &str) -> Pr
         chamber_temperature_celsius: String::new(),
         chamber_light_on: None,
         device_features: None,
+        connection_authoritative: false,
     }
 }
 

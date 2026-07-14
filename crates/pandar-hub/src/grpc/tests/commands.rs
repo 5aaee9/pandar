@@ -21,7 +21,7 @@ use crate::{
     repositories::{
         CreatePrintJob, DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload,
         PrintProjectFilePayload, PrinterAxis, PrinterOperationKind, PrinterOperationPayload,
-        RefreshPrinterMaterialsPayload,
+        RefreshPrinterMaterialsPayload, ReloadPrinterConnectionPayload,
     },
 };
 
@@ -586,6 +586,41 @@ async fn converts_refresh_printer_materials_command_to_proto() {
             assert_eq!(command.serial_number, "SERIAL123");
         }
         other => panic!("expected refresh materials command, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn converts_reload_printer_connection_command_to_proto() {
+    let tenant_id = TenantId::new();
+    let agent_id = AgentId::new();
+    let printer_id = "printer-1".to_string();
+    let payload = ReloadPrinterConnectionPayload {
+        printer_id: printer_id.clone(),
+        serial_number: "SERIAL123".to_string(),
+    };
+    let command = CommandRecord::from_parts(CommandRecordParts {
+        id: CommandId::new(),
+        tenant_id,
+        agent_id,
+        printer_id: Some(printer_id),
+        kind: "reload_printer_connection".to_string(),
+        status: "queued".to_string(),
+        payload_json: serde_json::to_string(&payload).unwrap(),
+        result_json: None,
+        error: None,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        updated_at: "2026-01-01T00:00:00Z".to_string(),
+    })
+    .unwrap();
+
+    let hub_command = hub_command_from_record(command).unwrap();
+
+    match hub_command.command.unwrap() {
+        hub_command::Command::ReloadPrinterConnection(command) => {
+            assert_eq!(command.printer_id, "printer-1");
+            assert_eq!(command.serial_number, "SERIAL123");
+        }
+        other => panic!("expected reload printer connection command, got {other:?}"),
     }
 }
 

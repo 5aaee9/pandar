@@ -21,7 +21,7 @@ use rows::command_from_model;
 use transitions::{CommandTransition, TerminalCommandTransition, invalid_transition};
 pub use types::{
     DiagnosePrinterPayload, DiscoverPrintersPayload, LinkPrinterPayload, PrintProjectFilePayload,
-    RefreshPrinterMaterialsPayload,
+    RefreshPrinterMaterialsPayload, ReloadPrinterConnectionPayload,
 };
 
 pub use audit::{PersistedLivePrinterOperation, WebPrintErrorRecovery};
@@ -139,6 +139,14 @@ impl CommandRepository {
             actor,
         )
         .await
+    }
+
+    pub(crate) async fn enqueue_reload_printer_connection(
+        &self,
+        tenant_id: TenantId,
+        printer_id: &str,
+    ) -> RepositoryResult<CommandRecord> {
+        enqueue::reload_printer_connection(&self.database, tenant_id, printer_id).await
     }
 
     pub async fn create_link_printer_sent_with_audit(

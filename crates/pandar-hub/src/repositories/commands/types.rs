@@ -37,6 +37,12 @@ pub struct RefreshPrinterMaterialsPayload {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReloadPrinterConnectionPayload {
+    pub printer_id: String,
+    pub serial_number: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LinkPrinterPayload {
     pub printer_type: String,
     pub host: String,

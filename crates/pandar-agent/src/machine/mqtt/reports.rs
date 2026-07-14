@@ -171,6 +171,7 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
                 .map(|features| PrinterDeviceFeatures {
                     bambu_fun_bits: features.bits(),
                 }),
+            connection_authoritative: false,
         })),
     }
 }

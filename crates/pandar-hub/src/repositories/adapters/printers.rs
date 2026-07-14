@@ -34,8 +34,14 @@ pub(crate) async fn upsert_snapshot(
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, 1)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
-                     host = COALESCE(excluded.host, printers.host),
-                     access_code = COALESCE(excluded.access_code, printers.access_code),
+                     host = CASE
+                         WHEN ?19 THEN excluded.host
+                         ELSE COALESCE(printers.host, excluded.host)
+                     END,
+                     access_code = CASE
+                         WHEN ?19 THEN excluded.access_code
+                         ELSE COALESCE(printers.access_code, excluded.access_code)
+                     END,
                      model = excluded.model,
                      status = excluded.status,
                      last_seen_at = excluded.last_seen_at,
@@ -70,6 +76,7 @@ pub(crate) async fn upsert_snapshot(
                         snapshot.chamber_light_on.into(),
                         bambu_fun_bits.clone().into(),
                         bambu_fun_session_id.clone().into(),
+                        snapshot.connection_authoritative.into(),
                     ],
                 ))
                 .await
@@ -91,8 +98,14 @@ pub(crate) async fn upsert_snapshot(
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11, $12, $13, $14, $15, $16, $17, $18, 1)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
-                     host = COALESCE(excluded.host, printers.host),
-                     access_code = COALESCE(excluded.access_code, printers.access_code),
+                     host = CASE
+                         WHEN $19 THEN excluded.host
+                         ELSE COALESCE(printers.host, excluded.host)
+                     END,
+                     access_code = CASE
+                         WHEN $19 THEN excluded.access_code
+                         ELSE COALESCE(printers.access_code, excluded.access_code)
+                     END,
                      model = excluded.model,
                      status = excluded.status,
                      last_seen_at = excluded.last_seen_at,
@@ -127,6 +140,7 @@ pub(crate) async fn upsert_snapshot(
                         snapshot.chamber_light_on.into(),
                         bambu_fun_bits.into(),
                         bambu_fun_session_id.into(),
+                        snapshot.connection_authoritative.into(),
                     ],
                 ))
                 .await

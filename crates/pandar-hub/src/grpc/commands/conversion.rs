@@ -9,11 +9,12 @@ use crate::{
     material_mapping::{AmsMapping2Entry, AmsMappingInfoEntry, validate_mapping_len},
     protocol::agent::v1::{
         DiagnosePrinter, DiscoverPrinters, HubCommand, PrintProjectFile, PrinterOperation,
-        RefreshPrinterMaterials, RefreshPrinters, hub_command,
+        RefreshPrinterMaterials, RefreshPrinters, ReloadPrinterConnection, hub_command,
     },
     repositories::{
         DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
         PrinterOperationKind, PrinterOperationPayload, RefreshPrinterMaterialsPayload,
+        ReloadPrinterConnectionPayload,
     },
 };
 
@@ -98,6 +99,21 @@ pub fn hub_command_from_record_with_options(
                     Status::internal("invalid refresh printer materials command payload")
                 })?;
             hub_command::Command::RefreshPrinterMaterials(RefreshPrinterMaterials {
+                printer_id: payload.printer_id,
+                serial_number: payload.serial_number,
+            })
+        }
+        "reload_printer_connection" => {
+            let payload: ReloadPrinterConnectionPayload =
+                serde_json::from_str(&command.payload_json).map_err(|err| {
+                    tracing::error!(
+                        command_id = %command.id,
+                        error = %format!("{err:#}"),
+                        "failed to deserialize reload printer connection command payload"
+                    );
+                    Status::internal("invalid reload printer connection command payload")
+                })?;
+            hub_command::Command::ReloadPrinterConnection(ReloadPrinterConnection {
                 printer_id: payload.printer_id,
                 serial_number: payload.serial_number,
             })

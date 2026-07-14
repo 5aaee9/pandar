@@ -105,6 +105,21 @@ pub(crate) fn printer_snapshot_event(
     config: &AgentConfig,
     snapshot: MachineSnapshot,
 ) -> AgentEvent {
+    printer_snapshot_event_with_connection_authority(config, snapshot, false)
+}
+
+pub(crate) fn authoritative_printer_snapshot_event(
+    config: &AgentConfig,
+    snapshot: MachineSnapshot,
+) -> AgentEvent {
+    printer_snapshot_event_with_connection_authority(config, snapshot, true)
+}
+
+fn printer_snapshot_event_with_connection_authority(
+    config: &AgentConfig,
+    snapshot: MachineSnapshot,
+    connection_authoritative: bool,
+) -> AgentEvent {
     event(
         config,
         "printer-snapshot",
@@ -140,6 +155,7 @@ pub(crate) fn printer_snapshot_event(
                 .map(|features| PrinterDeviceFeatures {
                     bambu_fun_bits: features.bits(),
                 }),
+            connection_authoritative,
         }),
     )
 }

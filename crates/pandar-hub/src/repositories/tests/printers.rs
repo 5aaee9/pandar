@@ -26,6 +26,7 @@ fn snapshot(
         bed_target_temperature_celsius: None,
         chamber_temperature_celsius: None,
         chamber_light_on: None,
+        connection_authoritative: false,
     }
 }
 
@@ -152,6 +153,99 @@ async fn printer_repository_updates_connection_details() {
             .unwrap()
             .unwrap(),
         updated
+    );
+}
+
+#[tokio::test]
+async fn printer_repository_rejects_stale_connection_snapshot_after_edit() {
+    let (_, tenants, agents, printers, _, _) = repositories().await;
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let created = printers
+        .upsert_snapshot(
+            tenant.id,
+            agent.id,
+            snapshot(
+                "SN-001",
+                "Printer",
+                Some("X1C"),
+                "idle",
+                "2026-06-21T00:00:00Z",
+            ),
+        )
+        .await
+        .unwrap();
+    printers
+        .update_details_with_audit(
+            tenant.id,
+            &created.id,
+            "Printer".to_owned(),
+            "192.0.2.11".to_owned(),
+            "edited-access-code".to_owned(),
+            AuditActor::no_auth(),
+        )
+        .await
+        .unwrap();
+
+    let stale = printers
+        .upsert_snapshot(
+            tenant.id,
+            agent.id,
+            snapshot(
+                "SN-001",
+                "Printer",
+                Some("X1C"),
+                "printing",
+                "2026-06-21T00:05:00Z",
+            ),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(stale.host.as_deref(), Some("192.0.2.11"));
+    assert_eq!(stale.access_code.as_deref(), Some("edited-access-code"));
+    assert_eq!(stale.status, "printing");
+}
+
+#[tokio::test]
+async fn printer_repository_accepts_authoritative_connection_snapshot() {
+    let (_, tenants, agents, printers, _, _) = repositories().await;
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    printers
+        .upsert_snapshot(
+            tenant.id,
+            agent.id,
+            snapshot(
+                "SN-001",
+                "Printer",
+                Some("X1C"),
+                "idle",
+                "2026-06-21T00:00:00Z",
+            ),
+        )
+        .await
+        .unwrap();
+    let mut authoritative = snapshot(
+        "SN-001",
+        "Printer",
+        Some("X1C"),
+        "idle",
+        "2026-06-21T00:05:00Z",
+    );
+    authoritative.host = Some("192.0.2.12".to_owned());
+    authoritative.access_code = Some("reloaded-access-code".to_owned());
+    authoritative.connection_authoritative = true;
+
+    let reloaded = printers
+        .upsert_snapshot(tenant.id, agent.id, authoritative)
+        .await
+        .unwrap();
+
+    assert_eq!(reloaded.host.as_deref(), Some("192.0.2.12"));
+    assert_eq!(
+        reloaded.access_code.as_deref(),
+        Some("reloaded-access-code")
     );
 }
 

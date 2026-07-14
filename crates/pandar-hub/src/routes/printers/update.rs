@@ -33,7 +33,7 @@ pub(in crate::routes) async fn update_printer(
     let (name, host, access_code) =
         payload.into_fields(printer.host.clone(), printer.access_code.clone())?;
 
-    state
+    let updated = state
         .printers()
         .update_details_with_audit(
             tenant_id,
@@ -44,6 +44,11 @@ pub(in crate::routes) async fn update_printer(
             auth::audit_actor(&auth),
         )
         .await?;
+    state
+        .commands()
+        .enqueue_reload_printer_connection(tenant_id, printer_id)
+        .await?;
+    state.wake_agent(tenant_id, updated.agent_id).await;
     let Some(updated) = state
         .printers()
         .get_with_live_status_for_tenant(tenant_id, printer_id)

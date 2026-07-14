@@ -62,6 +62,7 @@ message PrinterSnapshot {
   string host = 11;
   string access_code = 12;
   PrinterDeviceFeatures device_features = 13;
+  bool connection_authoritative = 14;
 }
 
 message PrinterDeviceFeatures {
@@ -309,6 +310,7 @@ message HubCommand {
     RefreshFirmwareVersion refresh_firmware_version = 18;
     PrepareFirmwareControl prepare_firmware_control = 19;
     ExecuteFirmwareControl execute_firmware_control = 20;
+    ReloadPrinterConnection reload_printer_connection = 21;
   }
 }
 
@@ -334,6 +336,11 @@ message ExecuteFirmwareControl {
 message RefreshPrinters {}
 
 message RefreshPrinterMaterials {
+  string printer_id = 1;
+  string serial_number = 2;
+}
+
+message ReloadPrinterConnection {
   string printer_id = 1;
   string serial_number = 2;
 }

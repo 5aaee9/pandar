@@ -537,6 +537,20 @@ async fn update_printer_updates_details_without_agent_session() {
     assert_eq!(printer.name, "Office A1 Updated");
     assert_eq!(printer.host.as_deref(), Some("192.0.2.11"));
     assert_eq!(printer.access_code.as_deref(), Some(access_code));
+
+    let command = state
+        .commands()
+        .next_queued_for_agent(tenant_id, agent_id)
+        .await
+        .unwrap()
+        .expect("printer update should enqueue a connection reload");
+    assert_eq!(command.kind, "reload_printer_connection");
+    assert_eq!(command.printer_id.as_deref(), Some(printer_id.as_str()));
+    let payload: crate::repositories::ReloadPrinterConnectionPayload =
+        serde_json::from_str(&command.payload_json).unwrap();
+    assert_eq!(payload.printer_id, printer_id);
+    assert_eq!(payload.serial_number, printer.serial_number);
+    assert!(!command.payload_json.contains(access_code));
 }
 
 #[tokio::test]

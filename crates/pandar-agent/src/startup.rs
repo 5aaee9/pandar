@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use anyhow::{Context, bail};
 use serde::Deserialize;
 
@@ -21,12 +19,13 @@ pub(crate) async fn startup_printers(
     let saved = fetch_saved_printer_connections(config, hub_api_url)
         .await
         .context("load saved printer connections from pandar-hub")?;
-    let mut configured_serials = printers
-        .iter()
-        .map(|printer| printer.serial.clone())
-        .collect::<HashSet<_>>();
     for printer in saved {
-        if configured_serials.insert(printer.serial.clone()) {
+        if let Some(configured) = printers
+            .iter_mut()
+            .find(|configured| configured.serial == printer.serial)
+        {
+            *configured = printer;
+        } else {
             printers.push(printer);
         }
     }
@@ -34,7 +33,7 @@ pub(crate) async fn startup_printers(
     Ok(printers)
 }
 
-async fn fetch_saved_printer_connections(
+pub(crate) async fn fetch_saved_printer_connections(
     config: &AgentConfig,
     hub_api_url: &str,
 ) -> anyhow::Result<Vec<BambuPrinterEndpoint>> {

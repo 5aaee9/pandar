@@ -1315,6 +1315,7 @@ fn snapshot_event(tenant_id: TenantId, agent_id: AgentId) -> AgentEvent {
             chamber_temperature_celsius: String::new(),
             chamber_light_on: None,
             device_features: None,
+            connection_authoritative: false,
         })),
     }
 }

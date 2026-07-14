@@ -312,6 +312,7 @@ fn reassignment_snapshot(fixture: &FirmwareFixture) -> PrinterSnapshotUpsert {
         bed_target_temperature_celsius: None,
         chamber_temperature_celsius: None,
         chamber_light_on: None,
+        connection_authoritative: false,
     }
 }
 

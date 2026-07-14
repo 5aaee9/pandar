@@ -10,6 +10,7 @@ mod operation_results;
 mod operations;
 mod print_project;
 mod refresh;
+mod reload_connection;
 mod responses;
 #[cfg(test)]
 pub(crate) use artifacts::resolve_artifact_path;
@@ -21,11 +22,13 @@ pub(crate) use firmware::{handle_firmware_command, is_firmware_command};
 use link::emit_link_printer_events;
 use print_project::{emit_print_project_file_events, emit_print_project_file_events_with_reader};
 use refresh::{emit_refresh_printer_materials_events, emit_refresh_printers_events};
+use reload_connection::emit_reload_printer_connection_events;
 #[cfg(test)]
 pub(crate) use responses::success_event;
 pub(super) use responses::{
-    ack_event, failure_event, failure_event_with_result, printer_materials_snapshot_event,
-    printer_snapshot_event, rejected_ack_event, success_event_with_result,
+    ack_event, authoritative_printer_snapshot_event, failure_event, failure_event_with_result,
+    printer_materials_snapshot_event, printer_snapshot_event, rejected_ack_event,
+    success_event_with_result,
 };
 
 #[cfg(test)]
@@ -49,6 +52,10 @@ where
     match command.command {
         Some(hub_command::Command::LinkPrinter(link)) => {
             emit_link_printer_events(config, gateway, sender, &command_id, link).await
+        }
+        Some(hub_command::Command::ReloadPrinterConnection(reload)) => {
+            emit_reload_printer_connection_events(config, gateway, sender, &command_id, reload)
+                .await
         }
         Some(hub_command::Command::PrintProjectFile(print)) => {
             emit_print_project_file_events(config, gateway, sender, &command_id, print).await
@@ -130,6 +137,16 @@ where
         }
         Some(hub_command::Command::LinkPrinter(link)) => {
             emit_link_printer_events(config, gateway, sender, &command.command_id, link).await
+        }
+        Some(hub_command::Command::ReloadPrinterConnection(reload)) => {
+            emit_reload_printer_connection_events(
+                config,
+                gateway,
+                sender,
+                &command.command_id,
+                reload,
+            )
+            .await
         }
         Some(hub_command::Command::CameraStream(_)) => Ok(()),
         Some(

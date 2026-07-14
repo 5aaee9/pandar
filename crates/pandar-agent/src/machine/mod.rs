@@ -82,6 +82,15 @@ pub trait BambuMachineGateway: Send + Sync {
         printer_id: Option<&str>,
     ) -> anyhow::Result<MaterialRefreshResult>;
     async fn validate_printer(&self, serial_number: &str) -> anyhow::Result<()>;
+    async fn validate_printer_endpoint_identity(
+        &self,
+        endpoint: &BambuPrinterEndpoint,
+    ) -> anyhow::Result<()> {
+        bail!(
+            "printer endpoint identity validation is not supported for {}",
+            endpoint.serial
+        )
+    }
     async fn print_project_file(
         &self,
         serial_number: &str,

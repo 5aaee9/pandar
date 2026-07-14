@@ -345,6 +345,7 @@ fn rich_snapshot(serial_number: &str, status: &str) -> PrinterSnapshotUpsert {
         bed_target_temperature_celsius: Some("65".to_owned()),
         chamber_temperature_celsius: Some("32".to_owned()),
         chamber_light_on: Some(true),
+        connection_authoritative: false,
     }
 }
 

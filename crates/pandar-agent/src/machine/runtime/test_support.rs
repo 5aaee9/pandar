@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use tokio::sync::Notify;
 
 use super::*;
-use crate::commands::printer_snapshot_event;
+use crate::commands::authoritative_printer_snapshot_event as snapshot_event;
 use crate::machine::{
     MachineSnapshot, MaterialRefreshResult, PrintProjectDispatchResult, PrinterOperation,
     PrinterOperationDispatchResult, PrinterRefreshResult,
@@ -334,7 +334,7 @@ where
         self.device_features.invalidate(&endpoint.serial).await;
         if !sender.is_closed() {
             sender
-                .send(printer_snapshot_event(config, snapshot.clone()))
+                .send(snapshot_event(config, snapshot.clone()))
                 .await?;
             sender
                 .send(crate::machine::mqtt::feature_event(

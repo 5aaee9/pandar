@@ -163,6 +163,7 @@ async fn exercise_exact_session_guards(database: Database, mutation_database: Da
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
                 chamber_light_on: None,
+                connection_authoritative: false,
             },
         )
         .await
@@ -310,6 +311,7 @@ async fn assert_postgres_agent_then_printer_lock_order(
                         bed_target_temperature_celsius: None,
                         chamber_temperature_celsius: None,
                         chamber_light_on: None,
+                        connection_authoritative: false,
                     },
                 )
                 .await

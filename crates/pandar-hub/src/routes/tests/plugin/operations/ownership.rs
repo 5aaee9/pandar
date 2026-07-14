@@ -58,6 +58,7 @@ async fn plugin_print_error_rejects_same_serial_reassignment_between_owner_read_
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
                 chamber_light_on: None,
+                connection_authoritative: false,
             },
         )
         .await

@@ -53,6 +53,7 @@ pub struct PrinterSnapshotUpsert {
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
+    pub connection_authoritative: bool,
 }
 
 #[derive(Debug, Clone)]

@@ -90,6 +90,7 @@ pub(crate) async fn exercise_atomic_revisions(database: Database) {
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
                 chamber_light_on: None,
+                connection_authoritative: false,
             },
         )
         .await

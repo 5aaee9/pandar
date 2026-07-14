@@ -39,6 +39,35 @@ async fn startup_printers_loads_saved_hub_connections() {
     );
 }
 
+#[tokio::test]
+async fn startup_printers_prefers_saved_hub_connection_for_same_serial() {
+    let server = TestHubPrinterServer::start(
+        "agent-id",
+        "pandar_ac_test",
+        r#"{"printers":[{"serial":"SERIAL123","host":"10.1.61.124","access_code":"new-code","name":"Office X1C","model":"X1 Carbon"}]}"#,
+    )
+    .await;
+    let config = AgentConfig {
+        hub_api_url: Some(server.base_url()),
+        printers: r#"[{"host":"10.1.61.84","serial":"SERIAL123","access_code":"old-code","model":"X1 Carbon","name":"Office X1C"}]"#.to_owned(),
+        ..super::test_config()
+    };
+
+    let printers = startup_printers(&config).await.unwrap();
+
+    assert_eq!(
+        printers,
+        vec![BambuPrinterEndpoint {
+            host: "10.1.61.124".to_owned(),
+            serial: "SERIAL123".to_owned(),
+            access_code: "new-code".to_owned(),
+            model: Some("X1 Carbon".to_owned()),
+            name: Some("Office X1C".to_owned()),
+        }]
+    );
+    server.request().await;
+}
+
 struct TestHubPrinterServer {
     address: std::net::SocketAddr,
     request_receiver: oneshot::Receiver<TestHubPrinterRequest>,

@@ -29,7 +29,8 @@ pub use commands::{
     FirmwareControlPayload, FirmwarePersistedPhase, FirmwarePersistedResult,
     FirmwareRefreshPayload, LinkPrinterPayload, PersistedLivePrinterOperation, PrintErrorAction,
     PrintProjectFilePayload, PrinterAxis, PrinterAxisMovement, PrinterOperationKind,
-    PrinterOperationPayload, RefreshPrinterMaterialsPayload, WebPrintErrorRecovery,
+    PrinterOperationPayload, RefreshPrinterMaterialsPayload, ReloadPrinterConnectionPayload,
+    WebPrintErrorRecovery,
 };
 pub use jobs::{
     AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, CreatePrintJob, DuplicatePrintJob,

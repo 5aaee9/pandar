@@ -3,13 +3,47 @@ use pandar_core::{AgentId, CommandId, CommandRecord, TenantId};
 use sea_orm::EntityTrait;
 
 use super::{
-    DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload, command_from_model,
-    inserts, inserts::InsertCommand, ownership,
+    DiagnosePrinterPayload, DiscoverPrintersPayload, PrintProjectFilePayload,
+    ReloadPrinterConnectionPayload, command_from_model, inserts, inserts::InsertCommand, ownership,
 };
 use crate::{
     db::Database,
     repositories::{RepositoryError, RepositoryResult},
 };
+
+pub async fn reload_printer_connection(
+    database: &Database,
+    tenant_id: TenantId,
+    printer_id: &str,
+) -> RepositoryResult<CommandRecord> {
+    let printer = ownership::printer_for_tenant(database, tenant_id, printer_id).await?;
+    let payload = ReloadPrinterConnectionPayload {
+        printer_id: printer.id.clone(),
+        serial_number: printer.serial_number,
+    };
+    let payload_json = serde_json::to_string(&payload)
+        .context("failed to serialize reload printer connection command payload")?;
+    let id = CommandId::new();
+    let now = pandar_core::created_at_now();
+    inserts::insert(
+        &database.sea_orm_connection(),
+        InsertCommand {
+            id,
+            tenant_id,
+            agent_id: printer.agent_id,
+            printer_id: Some(&printer.id),
+            kind: "reload_printer_connection",
+            payload_json: &payload_json,
+            created_at: &now,
+        },
+    )
+    .await
+    .context("failed to enqueue reload printer connection command")?;
+
+    load(database, id)
+        .await?
+        .ok_or(RepositoryError::MissingCommand)
+}
 
 pub async fn refresh_printers(
     database: &Database,

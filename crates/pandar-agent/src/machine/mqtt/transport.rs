@@ -235,7 +235,7 @@ pub(crate) fn mqtt_topic_for_serial(
     }
 }
 
-async fn resolve_bambu_mqtt_serial(host: &str) -> anyhow::Result<String> {
+pub(crate) async fn resolve_bambu_mqtt_serial(host: &str) -> anyhow::Result<String> {
     let server_name = ServerName::try_from(host.to_owned())
         .map_err(|_| anyhow!("invalid Bambu MQTT TLS server name {host}"))?;
     let tls_stream = tokio::time::timeout(Duration::from_secs(10), async {
