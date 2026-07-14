@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { LanguageSwitcher } from '../components/language-switcher'
@@ -119,10 +120,23 @@ function JobsView({
   agents,
   jobs,
 }: DashboardViewContentProps) {
+  const [dispatchOpen, setDispatchOpen] = useState(false)
+
   return (
     <>
-      <JobHistory selectedTenant={selectedTenant} jobs={jobs} printers={printers} agents={agents} />
-      <DispatchForm selectedTenant={selectedTenant} printers={printers} />
+      <JobHistory
+        agents={agents}
+        dispatchOpen={dispatchOpen}
+        jobs={jobs}
+        onToggleDispatch={() => setDispatchOpen((open) => !open)}
+        printers={printers}
+        selectedTenant={selectedTenant}
+      />
+      {dispatchOpen ? (
+        <div id="dispatch-print-job">
+          <DispatchForm selectedTenant={selectedTenant} printers={printers} />
+        </div>
+      ) : null}
       <RecoveryActions selectedTenant={selectedTenant} agents={agents} printers={printers} jobs={jobs} />
     </>
   )

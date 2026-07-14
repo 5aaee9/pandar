@@ -258,6 +258,24 @@ pub async fn list_jobs(
     Ok(Json(JobListResponse { jobs }))
 }
 
+pub async fn clear_jobs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(tenant_id): Path<String>,
+) -> Result<Json<crate::repositories::ClearJobsOutcome>, ApiError> {
+    let tenant_id = parse_tenant_id(&tenant_id)?;
+    let auth = auth::authorize_tenant_admin_user_or_no_auth(&state, &headers, tenant_id).await?;
+    let outcome = state
+        .jobs()
+        .clear_terminal_for_tenant_with_audit(
+            state.artifact_storage(),
+            tenant_id,
+            auth::audit_actor(&auth),
+        )
+        .await?;
+    Ok(Json(outcome))
+}
+
 pub async fn get_job(
     State(state): State<AppState>,
     headers: HeaderMap,

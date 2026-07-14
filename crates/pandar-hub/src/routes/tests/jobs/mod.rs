@@ -5,6 +5,7 @@ use serde_json::Number;
 use std::collections::BTreeMap;
 
 mod auth_validation;
+mod clear;
 mod create;
 mod multipart;
 mod read;

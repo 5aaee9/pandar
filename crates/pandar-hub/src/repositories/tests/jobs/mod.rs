@@ -7,6 +7,7 @@ use crate::repositories::{
     PrintReportDiagnostic,
 };
 
+pub(super) mod clear;
 mod lifecycle;
 mod mapping;
 mod recovery;

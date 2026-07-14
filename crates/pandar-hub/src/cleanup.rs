@@ -143,7 +143,7 @@ async fn execute_cleanup(database: &Database, cutoffs: &CleanupCutoffs) -> anyho
     .await
 }
 
-async fn delete_artifacts(
+pub(crate) async fn delete_artifacts(
     artifact_storage: &dyn ArtifactStorage,
     storage_paths: &[String],
 ) -> anyhow::Result<()> {

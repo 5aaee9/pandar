@@ -33,8 +33,8 @@ pub use commands::{
     WebPrintErrorRecovery,
 };
 pub use jobs::{
-    AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, CreatePrintJob, DuplicatePrintJob,
-    JobRepository, JobWithArtifact, PrintReportDiagnostic,
+    AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, ClearJobsOutcome, CreatePrintJob,
+    DuplicatePrintJob, JobRepository, JobWithArtifact, PrintReportDiagnostic,
 };
 pub(crate) use materials::CurrentMaterialPatchOutcome;
 pub use materials::{

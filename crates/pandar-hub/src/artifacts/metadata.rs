@@ -262,6 +262,7 @@ fn parse_slice_info(contents: &str, draft: &mut Draft) -> anyhow::Result<()> {
                     }
                     let mut filament = FilamentMetadata {
                         filament_id: None,
+                        tray_info_idx: None,
                         filament_type: None,
                         color: None,
                         used_grams: None,
@@ -271,6 +272,7 @@ fn parse_slice_info(contents: &str, draft: &mut Draft) -> anyhow::Result<()> {
                         let value = attr_value(&reader, &attr)?;
                         match attr.key.as_ref() {
                             b"id" => filament.filament_id = Some(value),
+                            b"tray_info_idx" => filament.tray_info_idx = Some(value),
                             b"type" => filament.filament_type = Some(value),
                             b"color" => filament.color = Some(value),
                             b"used_g" => filament.used_grams = parse_f64(&value),

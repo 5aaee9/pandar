@@ -2,7 +2,7 @@ use super::*;
 use crate::cleanup::{CleanupMode, CleanupOptions, cleanup_database};
 
 mod retention;
-mod storage;
+pub(super) mod storage;
 
 use retention::{insert_tenant_token, insert_ticket};
 use storage::RecordingArtifactStorage;

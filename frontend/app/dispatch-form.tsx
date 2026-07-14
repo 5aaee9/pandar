@@ -3,19 +3,16 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
 
-import type { ArtifactMetadata } from './dashboard-types'
+import type { ArtifactMetadata, Printer } from './dashboard-types'
 import { formatBytes } from './dashboard-format'
+import { DispatchMaterialMappingFields } from './dispatch-material-mapping-fields'
 import { HelpTip } from './dashboard-ui'
 
 type DispatchTenant = {
   id: string
 }
 
-type DispatchPrinter = {
-  id: string
-  name: string
-  serial_number: string
-}
+type DispatchPrinter = Pick<Printer, 'id' | 'name' | 'serial_number' | 'materials'>
 
 const maxArtifactBytes = 268435456
 const backendErrorCodes = [
@@ -39,6 +36,7 @@ export function DispatchForm({
   const format = useFormatter()
   const num = (n: number) => format.number(n)
   const [preferredPrinterId, setPreferredPrinterId] = useState('')
+  const [plateId, setPlateId] = useState(1)
   const [artifact, setArtifact] = useState<{
     file: File | null
     size: number
@@ -61,6 +59,7 @@ export function DispatchForm({
   const selectedPrinterId = printers.some((printer) => printer.id === preferredPrinterId)
     ? preferredPrinterId
     : (printers[0]?.id ?? '')
+  const selectedPrinter = printers.find((printer) => printer.id === selectedPrinterId) ?? null
 
   const selectArtifact = (file: File | null) => {
     if (!file) {
@@ -201,11 +200,12 @@ export function DispatchForm({
             <input
               aria-label={t('plate')}
               className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950"
-              defaultValue="1"
               min="1"
               name="plate_id"
+              onChange={(event) => setPlateId(Number(event.currentTarget.value))}
               type="number"
               required
+              value={plateId}
             />
           </div>
           <label className="flex flex-col gap-1 text-sm lg:col-span-2">
@@ -246,6 +246,13 @@ export function DispatchForm({
               </div>
             </details>
           </div>
+          {metadataPreview.state === 'ready' && metadataPreview.metadata && selectedPrinter ? (
+            <DispatchMaterialMappingFields
+              metadata={metadataPreview.metadata}
+              plateId={plateId}
+              printer={selectedPrinter}
+            />
+          ) : null}
           <div className="flex flex-wrap gap-4 text-sm text-slate-700 lg:col-span-2">
             <span className="flex items-center gap-1.5">
               <label className="flex items-center gap-2">

@@ -1,5 +1,6 @@
 import { NextIntlClientProvider } from "next-intl";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
@@ -433,12 +434,31 @@ describe("DashboardViewContent", () => {
     );
   });
 
-  it("renders job history, dispatch, and recovery on jobs", () => {
+  it("renders job actions and toggles the dispatch form on jobs", async () => {
+    const user = userEvent.setup();
     renderWithMessages(<DashboardViewContent {...baseProps} view="jobs" />);
 
-    expect(screen.getByRole("heading", { name: "Print jobs" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Dispatch print job" })).toBeVisible();
+    const jobsHeading = screen.getByRole("heading", { name: "Print jobs" });
+    expect(jobsHeading).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Dispatch print job" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Recovery actions" })).toBeVisible();
+    expect(
+      within(jobsHeading.parentElement!.parentElement!).queryByText("0 jobs"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
     expect(screen.queryByRole("heading", { name: "Printer inventory" })).not.toBeInTheDocument();
+
+    const newButton = screen.getByRole("button", { name: "New" });
+    expect(newButton).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(newButton);
+
+    expect(newButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("heading", { name: "Dispatch print job" })).toBeVisible();
+
+    await user.click(newButton);
+
+    expect(newButton).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("heading", { name: "Dispatch print job" })).not.toBeInTheDocument();
   });
 });

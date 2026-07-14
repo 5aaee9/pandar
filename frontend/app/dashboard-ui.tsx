@@ -70,16 +70,29 @@ export function EmptyState({ title, message }: { title: string; message: string 
   )
 }
 
-export function SectionHeader({ title, subtitle, meta }: { title: string; subtitle: string; meta: string }) {
+export function SectionHeader({
+  title,
+  subtitle,
+  meta,
+  actions,
+}: {
+  title: string
+  subtitle: string
+  meta?: string
+  actions?: ReactNode
+}) {
   return (
     <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h2 className="text-base font-semibold">{title}</h2>
         <p className="mt-0.5 text-sm text-slate-600">{subtitle}</p>
       </div>
-      <div className="flex items-center gap-2 text-sm text-slate-600">
-        <span>{meta}</span>
-      </div>
+      {meta || actions ? (
+        <div className="flex items-center gap-2 text-sm text-slate-600">
+          {meta ? <span>{meta}</span> : null}
+          {actions}
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -3,6 +3,15 @@
 import { useState } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
 
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { FormattedDate } from '../components/formatted-date'
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
 import { formatBytes } from './dashboard-format'
@@ -23,6 +32,30 @@ function useLocaleDate() {
   }
 }
 const TERMINAL_JOB_STATUSES = new Set(['completed', 'failed', 'cancelled'])
+const CLEARABLE_JOB_STATUSES = new Set(['succeeded', 'failed'])
+const CLEARABLE_PRINT_STATUSES = new Set(['completed', 'failed', 'cancelled'])
+
+function isClearableJob(job: Job): boolean {
+  const status = job.status.toLowerCase()
+  const printStatus = job.print.status.toLowerCase()
+  if (
+    !CLEARABLE_JOB_STATUSES.has(status) ||
+    !CLEARABLE_JOB_STATUSES.has(job.command.status.toLowerCase()) ||
+    job.command.kind !== 'print_project_file'
+  ) {
+    return false
+  }
+  if (CLEARABLE_PRINT_STATUSES.has(printStatus)) {
+    return true
+  }
+  return (
+    printStatus === 'pending' &&
+    status === 'failed' &&
+    job.print.started_at === null &&
+    (job.print.progress_percent ?? 0) === 0 &&
+    (job.print.current_layer ?? 0) === 0
+  )
+}
 
 function jobMatchesStatus(job: Job, status: string): boolean {
   const dispatch = job.status.toLowerCase()
@@ -44,15 +77,26 @@ export function JobHistory({
   jobs,
   printers,
   agents,
+  dispatchOpen,
+  onToggleDispatch,
+  onClearRedirect = (url) => window.location.assign(url),
 }: {
   selectedTenant: Tenant | null
   jobs: Job[]
   printers: Printer[]
   agents: Agent[]
+  dispatchOpen: boolean
+  onToggleDispatch: () => void
+  onClearRedirect?: (url: string) => void
 }) {
   const t = useTranslations('inventory')
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
+  const [clearOpen, setClearOpen] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [clearError, setClearError] = useState(false)
+  const clearableCount = jobs.filter(isClearableJob).length
+  const clearDisabled = !selectedTenant || clearableCount === 0 || clearing
   const normalizedQuery = query.trim().toLowerCase()
   const filtered = jobs.filter((job) => {
     if (!jobMatchesStatus(job, status)) {
@@ -67,12 +111,60 @@ export function JobHistory({
     return true
   })
 
+  const clearJobs = async () => {
+    if (!selectedTenant) {
+      return
+    }
+    setClearing(true)
+    setClearError(false)
+    try {
+      const response = await fetch(
+        `/api/tenants/${encodeURIComponent(selectedTenant.id)}/jobs`,
+        { method: 'DELETE' },
+      )
+      if (response.ok) {
+        setClearOpen(false)
+        onClearRedirect(
+          `/jobs?tenant=${encodeURIComponent(selectedTenant.id)}&status=jobs_cleared`,
+        )
+      } else {
+        setClearError(true)
+      }
+    } catch {
+      setClearError(true)
+    } finally {
+      setClearing(false)
+    }
+  }
+
   return (
     <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
       <SectionHeader
         title={t('jobsTitle')}
         subtitle={t('jobsSubtitle')}
-        meta={t('jobsMeta', { count: jobs.length })}
+        actions={
+          <>
+            <Button
+              aria-controls="dispatch-print-job"
+              aria-expanded={dispatchOpen}
+              onClick={onToggleDispatch}
+              type="button"
+            >
+              {t('newJob')}
+            </Button>
+            <Button
+              disabled={clearDisabled}
+              onClick={() => {
+                setClearError(false)
+                setClearOpen(true)
+              }}
+              type="button"
+              variant="outline"
+            >
+              {t('clearJobs')}
+            </Button>
+          </>
+        }
       />
       {!selectedTenant ? (
         <EmptyState title={t('jobsNoTenantTitle')} message={t('jobsNoTenantMessage')} />
@@ -113,6 +205,35 @@ export function JobHistory({
           )}
         </>
       )}
+      <Dialog open={clearOpen} onOpenChange={setClearOpen}>
+        <DialogContent closeLabel={t('cancel')} showCloseButton={!clearing}>
+          <DialogHeader>
+            <DialogTitle>{t('clearJobsTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('clearJobsDescription', { count: clearableCount })}
+            </DialogDescription>
+            {clearError ? <p className="text-sm text-destructive">{t('clearJobsFailed')}</p> : null}
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              disabled={clearing}
+              onClick={() => setClearOpen(false)}
+              type="button"
+              variant="outline"
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              disabled={clearing}
+              onClick={() => void clearJobs()}
+              type="button"
+              variant="destructive"
+            >
+              {clearing ? t('clearingJobs') : t('confirmClearJobs')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }

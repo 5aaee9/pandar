@@ -69,6 +69,7 @@ describe("action status toast helpers", () => {
     expect(actionStatusTone("refresh_queued")).toBe("success");
     expect(actionStatusTone("materials_refresh_queued")).toBe("success");
     expect(actionStatusTone("agent_deleted")).toBe("success");
+    expect(actionStatusTone("jobs_cleared")).toBe("success");
     expect(actionStatusTone("refresh_partial")).toBe("warning");
     expect(actionStatusTone("http_500")).toBe("error");
     expect(actionStatusTone("agent_not_connected")).toBe("error");

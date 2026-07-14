@@ -278,6 +278,7 @@ export type ArtifactMetadata = {
     objects: string[];
     filaments: Array<{
       filament_id: string | null;
+      tray_info_idx?: string | null;
       filament_type: string | null;
       color: string | null;
       used_grams: number | null;

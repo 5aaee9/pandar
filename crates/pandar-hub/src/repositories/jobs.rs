@@ -8,6 +8,7 @@ use sea_orm::{ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, Transacti
 
 mod artifacts;
 mod audit;
+mod clear;
 mod create;
 pub(crate) mod hydration;
 mod print_reports;
@@ -22,6 +23,7 @@ use crate::{
 };
 
 pub use artifacts::AgentArtifactAccess;
+pub use clear::ClearJobsOutcome;
 pub use print_reports::{AppliedPrintReport, ApplyPrintReport, PrintReportDiagnostic};
 use rows::job_from_model_loading_usage;
 

@@ -208,7 +208,10 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/tenants/{tenant_id}/printers/{printer_id}/materials:refresh",
             post(printers::refresh_printer_materials),
         )
-        .route("/api/v1/tenants/{tenant_id}/jobs", get(jobs::list_jobs))
+        .route(
+            "/api/v1/tenants/{tenant_id}/jobs",
+            get(jobs::list_jobs).delete(jobs::clear_jobs),
+        )
         .route(
             "/api/v1/tenants/{tenant_id}/jobs/{job_id}",
             get(jobs::get_job),

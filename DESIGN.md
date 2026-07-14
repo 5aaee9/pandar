@@ -152,6 +152,101 @@ Flat by default. Depth is conveyed through tonal layering (white surfaces, neutr
 
 **The Flat-By-Default Rule.** Surfaces are flat at rest. Shadows are a state response (hover, elevation, focus), never ambient decoration. When a shadow appears, there is no accompanying decorative border on the same element.
 
+## Source of truth
+
+- Status: Active
+- Last refreshed: 2026-07-15
+- Primary product surfaces: tenant dashboard, Devices, Jobs, Agents, Users, and Settings.
+- Evidence reviewed: `frontend/app/dashboard-view-content.tsx`, `frontend/app/dashboard-job-history.tsx`, `frontend/app/dispatch-form.tsx`, `frontend/components/ui`, `frontend/app/globals.css`, and the current Jobs browser screenshot.
+
+## Brand
+
+- Personality: calm, precise, technical, and trustworthy.
+- Trust signals: explicit machine state, restrained destructive actions, visible identifiers, and predictable controls.
+- Avoid: decorative dashboards, consumer-device novelty, hidden destructive behavior, and color-only status.
+
+## Product goals
+
+- Goals: make fleet state and the next safe operator action immediately scannable; keep common print dispatch work close to job history.
+- Non-goals: becoming a slicer, hiding printer state behind decorative summaries, or replacing explicit operator choices with opaque automation.
+- Success signals: operators can create a job, verify every required material mapping, and clear finished history without risking an active print.
+
+## Personas and jobs
+
+- Primary personas: self-hosting printer operators and tenant administrators.
+- User jobs: monitor printers, dispatch prepared project files, resolve failures, and maintain useful operational history.
+- Key contexts of use: repeated desktop use, occasional tablet use, dark rooms/workshops, and degraded network conditions.
+
+## Information architecture
+
+- Primary navigation: Devices, Jobs, Agents, Users, and Settings within the selected tenant.
+- Core routes/screens: `/devices`, `/jobs`, `/agents`, `/users`, and `/settings`.
+- Content hierarchy: current operational state first, contextual actions second, detailed history and recovery controls after.
+
+## Design principles
+
+- Progressive disclosure: keep creation forms collapsed until requested; reveal metadata and AMS mapping only when the required file and printer context exists.
+- Safe operations: destructive collection actions require an explicit confirmation that states what is removed and what is retained.
+- Operational density: use compact rows and native controls instead of large cards or wizard steps.
+- Tradeoffs: prefer inline disclosure for reversible work; reserve dialogs for confirmation of irreversible actions.
+
+## Visual language
+
+- Color: use the neutral token system above; use destructive color only inside destructive confirmation/action states.
+- Typography: use the fixed Inter/system scale and monospace only for machine identifiers.
+- Spacing/layout rhythm: use the existing 4px Tailwind rhythm and compact section headers.
+- Shape/radius/elevation: rounded-md operational surfaces, hairline borders, and no ambient shadow.
+- Motion: short state reveal/focus transitions only; no decorative motion.
+- Imagery/iconography: small functional Lucide icons and literal material color swatches.
+
+## Components
+
+- Existing components to reuse: `SectionHeader`, `Button`, `Dialog`, `EmptyState`, native `select`, and the existing dispatch form controls.
+- New/changed components: Jobs header action slot; inline dispatch disclosure; compact required-material mapping rows.
+- Variants and states: New collapsed/expanded; Clear disabled/confirming/clearing; mapping loading/ready/unmapped/no-slots.
+- Token/component ownership: shared primitives remain in `frontend/components/ui`; Jobs-specific composition remains in `frontend/app`.
+
+## Accessibility
+
+- Target standard: WCAG 2.2 AA.
+- Keyboard/focus behavior: New exposes `aria-expanded`/`aria-controls`; dialogs trap focus; every material mapping has an accessible select label.
+- Contrast/readability: status and material names remain textual; swatches supplement text and never carry meaning alone.
+- Screen-reader semantics: use headings, fieldsets, legends, labels, and explicit confirmation descriptions.
+- Reduced motion and sensory considerations: no required animation or color-only feedback.
+
+## Responsive behavior
+
+- Supported breakpoints/devices: modern desktop, tablet, and narrow mobile dashboard layouts.
+- Layout adaptations: material rows collapse from two columns to one; section header actions wrap without hiding labels.
+- Touch/hover differences: all actions remain full buttons/selects with no hover-only capability.
+
+## Interaction states
+
+- Loading: disable the active submit/clear action and retain its context label.
+- Empty: keep New available when a tenant exists; disable Clear when no backend-clearable jobs exist.
+- Error: keep the current form/dialog context and surface stable error status through the existing action-status system.
+- Success: redirect/reconcile the Jobs list and show the existing transient action-status toast.
+- Disabled: explain missing tenant, printer, file, AMS slots, or clearable history through nearby copy.
+- Offline/slow network: preserve entered dispatch choices; never optimistically remove active job history.
+
+## Content voice
+
+- Tone: concise, literal, and operational.
+- Terminology: use Print jobs, New, Clear, required materials, AMS slot, and Unmapped consistently.
+- Microcopy rules: destructive confirmation states both the affected count and that active jobs are retained.
+
+## Implementation constraints
+
+- Framework/styling system: Next.js, React, next-intl, Tailwind CSS, and local shadcn-style primitives.
+- Design-token constraints: reuse existing semantic CSS variables; do not add a parallel token system.
+- Performance constraints: parse 3MF metadata on Hub; calculate the bounded 32-entry visual mapping without browser archive parsing.
+- Compatibility constraints: explicit `ams_mapping`/`ams_mapping2` fields remain authoritative and current Agent/Hub protocol shapes are reused.
+- Test/screenshot expectations: Vitest interaction coverage, Next build, and manual verification at the current Jobs route.
+
+## Open questions
+
+- [ ] Add reliable slicer nozzle/group metadata to advisory preview before automatically generating `ams_mapping_info` for every dual-nozzle project; owner: print pipeline; impact: nozzle-aware default mapping remains limited to metadata currently exposed by the artifact parser.
+
 ## 6. Do's and Don'ts
 
 ### Do:

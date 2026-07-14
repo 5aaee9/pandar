@@ -5,13 +5,13 @@ use crate::artifacts::{
 };
 
 #[derive(Clone, Default)]
-pub(super) struct RecordingArtifactStorage {
+pub(in crate::repositories::tests) struct RecordingArtifactStorage {
     deleted: Arc<Mutex<Vec<String>>>,
     fail_delete: bool,
 }
 
 impl RecordingArtifactStorage {
-    pub(super) fn failing() -> Self {
+    pub(in crate::repositories::tests) fn failing() -> Self {
         Self {
             deleted: Arc::new(Mutex::new(Vec::new())),
             fail_delete: true,

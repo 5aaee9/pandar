@@ -33,7 +33,7 @@ fn slice_info_extracts_plate_estimates_objects_and_filaments() {
               <plate index="2" prediction="3600" weight="18.5">
                 <object name="body"/>
                 <object name="lid"/>
-                <filament id="1" type="PLA" color="#ffffff" used_g="18.5" used_m="6.2"/>
+                <filament id="1" tray_info_idx="GFA00" type="PLA" color="#ffffff" used_g="18.5" used_m="6.2"/>
               </plate>
             </config>
             "##,
@@ -59,6 +59,10 @@ fn slice_info_extracts_plate_estimates_objects_and_filaments() {
     assert_eq!(
         metadata.plates[0].filaments[0].filament_type.as_deref(),
         Some("PLA")
+    );
+    assert_eq!(
+        metadata.plates[0].filaments[0].tray_info_idx.as_deref(),
+        Some("GFA00")
     );
     assert_eq!(
         metadata.plates[0].filaments[0].color.as_deref(),
