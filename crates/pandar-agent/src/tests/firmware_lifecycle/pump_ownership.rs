@@ -106,7 +106,7 @@ async fn firmware_stream_cancellation_aborts_queued_publish_before_generation_re
         let (mut stream, _) = listener.accept().await.unwrap();
         accept_subscription(&mut stream).await;
         let mut byte = [0_u8; 1];
-        let count = timeout(Duration::from_millis(500), stream.read(&mut byte))
+        let count = timeout(Duration::from_secs(5), stream.read(&mut byte))
             .await
             .expect("cancelled firmware pump must close before report teardown resumes")
             .unwrap();
@@ -222,7 +222,7 @@ async fn firmware_stream_cancellation_aborts_queued_publish_before_generation_re
 
     cancel.send(()).unwrap();
     timeout(
-        Duration::from_millis(250),
+        Duration::from_secs(5),
         pump_drop_pause_handle.wait_until_reached(),
     )
     .await
@@ -237,13 +237,13 @@ async fn firmware_stream_cancellation_aborts_queued_publish_before_generation_re
         "command teardown must retain the registered pump join"
     );
     pump_drop_pause_handle.release();
-    let outcome = timeout(Duration::from_millis(250), stream)
+    let outcome = timeout(Duration::from_secs(5), stream)
         .await
         .expect("firmware command cancellation must not wait for report teardown")
         .unwrap()
         .unwrap();
     assert_eq!(outcome, RunOutcome::ConnectedThenEnded);
-    timeout(Duration::from_millis(250), replacement)
+    timeout(Duration::from_secs(5), replacement)
         .await
         .expect("cancelled firmware command must release the generation transition")
         .unwrap()

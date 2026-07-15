@@ -310,7 +310,14 @@ async fn firmware_lifecycle_aborted_prepare_before_registration_fails_without_di
 async fn wait_for_failed_command(fixture: &FirmwareFixture, command_id: CommandId) {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
-            if fixture.command(command_id).await.status == CommandStatus::Failed {
+            let command_failed = fixture.command(command_id).await.status == CommandStatus::Failed;
+            let cleanup_finished = !fixture
+                .state
+                .sessions()
+                .pending_live_command_ids()
+                .await
+                .contains(&command_id);
+            if command_failed && cleanup_finished {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;

@@ -61,6 +61,17 @@ pub(super) fn spawn_firmware_mock_hub(race_directory: &Path) -> FirmwareMockHub 
             match listener.accept() {
                 Ok((mut stream, _)) => {
                     stream.set_nonblocking(false).unwrap();
+                    stream
+                        .set_read_timeout(Some(Duration::from_secs(5)))
+                        .unwrap();
+                    let mut first_byte = [0_u8; 1];
+                    match stream.peek(&mut first_byte) {
+                        Ok(0) => continue,
+                        Ok(_) => {}
+                        Err(error) => {
+                            panic!("firmware mock failed waiting for request bytes: {error}")
+                        }
+                    }
                     let request =
                         read_http_request_with_timeout(&mut stream, Some(Duration::from_secs(5)));
                     if request.lines().next().unwrap_or_default()

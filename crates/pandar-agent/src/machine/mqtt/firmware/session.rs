@@ -236,6 +236,13 @@ impl FirmwarePumpDropPauseHandle {
 }
 
 #[cfg(test)]
+impl Drop for FirmwarePumpDropPauseHandle {
+    fn drop(&mut self) {
+        self.state.release.store(true, Ordering::SeqCst);
+    }
+}
+
+#[cfg(test)]
 pub(crate) fn is_firmware_pre_publish_failure(error: &anyhow::Error) -> bool {
     firmware_mqtt_failure_phase(error) == Some(false)
 }
