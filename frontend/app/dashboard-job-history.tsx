@@ -15,6 +15,7 @@ import {
 import { FormattedDate } from '../components/formatted-date'
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
 import { formatBytes } from './dashboard-format'
+import { isJobStalled } from './dashboard-attention'
 import { EmptyState, SectionHeader, StatusBadge } from './dashboard-ui'
 import {
   formatArtifactMetadata,
@@ -35,12 +36,13 @@ const TERMINAL_JOB_STATUSES = new Set(['completed', 'failed', 'cancelled'])
 const CLEARABLE_JOB_STATUSES = new Set(['succeeded', 'failed'])
 const CLEARABLE_PRINT_STATUSES = new Set(['completed', 'failed', 'cancelled'])
 
-function isClearableJob(job: Job): boolean {
+function isClearableJob(job: Job, nowMs: number): boolean {
   const status = job.status.toLowerCase()
+  const commandStatus = job.command.status.toLowerCase()
   const printStatus = job.print.status.toLowerCase()
   if (
     !CLEARABLE_JOB_STATUSES.has(status) ||
-    !CLEARABLE_JOB_STATUSES.has(job.command.status.toLowerCase()) ||
+    !CLEARABLE_JOB_STATUSES.has(commandStatus) ||
     job.command.kind !== 'print_project_file'
   ) {
     return false
@@ -48,12 +50,14 @@ function isClearableJob(job: Job): boolean {
   if (CLEARABLE_PRINT_STATUSES.has(printStatus)) {
     return true
   }
-  return (
+  const neverStarted =
     printStatus === 'pending' &&
-    status === 'failed' &&
     job.print.started_at === null &&
     (job.print.progress_percent ?? 0) === 0 &&
     (job.print.current_layer ?? 0) === 0
+  return neverStarted && (
+    status === 'failed' ||
+    (status === 'succeeded' && commandStatus === 'succeeded' && isJobStalled(job, nowMs))
   )
 }
 
@@ -75,6 +79,7 @@ function jobMatchesStatus(job: Job, status: string): boolean {
 export function JobHistory({
   selectedTenant,
   jobs,
+  nowMs,
   printers,
   agents,
   onOpenDispatch,
@@ -82,6 +87,7 @@ export function JobHistory({
 }: {
   selectedTenant: Tenant | null
   jobs: Job[]
+  nowMs: number
   printers: Printer[]
   agents: Agent[]
   onOpenDispatch: () => void
@@ -93,7 +99,7 @@ export function JobHistory({
   const [clearOpen, setClearOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [clearError, setClearError] = useState(false)
-  const clearableCount = jobs.filter(isClearableJob).length
+  const clearableCount = jobs.filter((job) => isClearableJob(job, nowMs)).length
   const clearDisabled = !selectedTenant || clearableCount === 0 || clearing
   const normalizedQuery = query.trim().toLowerCase()
   const filtered = jobs.filter((job) => {

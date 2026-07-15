@@ -322,6 +322,7 @@ describe("SettingsView", () => {
         printers={[]}
         agents={[]}
         jobs={[]}
+        nowMs={0}
         selectedCommand={null}
         commandData={null}
         notifications={[]}
@@ -361,6 +362,7 @@ describe("SettingsView", () => {
         printers={[]}
         agents={[]}
         jobs={[]}
+        nowMs={0}
         selectedCommand={null}
         commandData={null}
         notifications={[]}
@@ -400,6 +402,7 @@ describe("DashboardViewContent", () => {
     printers: [],
     agents: [],
     jobs: [],
+    nowMs: 0,
     selectedCommand: null,
     commandData: null,
     notifications: [],

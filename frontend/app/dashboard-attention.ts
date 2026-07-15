@@ -52,6 +52,10 @@ function isJobActive(job: Job): boolean {
   );
 }
 
+export function isJobStalled(job: Job, nowMs: number): boolean {
+  return nowMs > 0 && isJobActive(job) && isStale(job, nowMs);
+}
+
 function isJobFailed(job: Job): boolean {
   return (
     job.status.toLowerCase() === "failed" ||
@@ -181,7 +185,7 @@ export function computeAttention(args: {
         sectionId: "recovery",
         ageMs: null,
       });
-    } else if (nowMs > 0 && isJobActive(job) && isStale(job, nowMs)) {
+    } else if (isJobStalled(job, nowMs)) {
       items.push({
         id: `job:${job.id}:stale`,
         agentId: job.agent_id,

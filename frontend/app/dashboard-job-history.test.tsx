@@ -66,10 +66,12 @@ function job(overrides: Partial<Job> = {}): Job {
 function renderHistory({
   selectedTenant = tenant,
   jobs = [job()],
+  nowMs = 0,
   onClearRedirect = vi.fn(),
 }: {
   selectedTenant?: Tenant | null
   jobs?: Job[]
+  nowMs?: number
   onClearRedirect?: (url: string) => void
 } = {}) {
   return {
@@ -79,6 +81,7 @@ function renderHistory({
         <JobHistory
           agents={[]}
           jobs={jobs}
+          nowMs={nowMs}
           onClearRedirect={onClearRedirect}
           onOpenDispatch={vi.fn()}
           printers={[]}
@@ -104,8 +107,14 @@ describe('JobHistory actions', () => {
     await user.click(screen.getByRole('button', { name: 'Clear' }))
 
     expect(screen.getByRole('dialog')).toBeVisible()
-    expect(screen.getByRole('heading', { name: 'Clear completed jobs?' })).toBeVisible()
-    expect(screen.getByText('This removes 1 terminal job. Active jobs are kept.')).toBeVisible()
+    expect(
+      screen.getByRole('heading', { name: 'Clear terminal and stalled waiting jobs?' }),
+    ).toBeVisible()
+    expect(
+      screen.getByText(
+        'This removes 1 terminal or stalled waiting job. Running and other active jobs are kept.',
+      ),
+    ).toBeVisible()
 
     await user.click(screen.getByRole('button', { name: 'Clear jobs' }))
 
@@ -134,6 +143,7 @@ describe('JobHistory actions', () => {
               command: { id: 'command-1', kind: 'start_print', status: 'queued' },
             }),
           ]}
+          nowMs={0}
           onOpenDispatch={vi.fn()}
           printers={[]}
           selectedTenant={tenant}
@@ -158,6 +168,103 @@ describe('JobHistory actions', () => {
     ).toBeVisible()
     expect(screen.getByRole('dialog')).toBeVisible()
     expect(onClearRedirect).not.toHaveBeenCalled()
+  })
+
+  it('counts terminal and stalled waiting jobs while retaining other active jobs', async () => {
+    const user = userEvent.setup()
+    const stalled = job({
+      id: 'job-stalled',
+      updated_at: '2026-07-15T00:00:00Z',
+      print: {
+        ...job().print,
+        status: 'pending',
+        progress_percent: 0,
+        current_layer: 0,
+        started_at: null,
+        finished_at: null,
+        updated_at: null,
+      },
+    })
+    const running = job({
+      id: 'job-running',
+      updated_at: '2026-07-15T00:00:00Z',
+      print: {
+        ...job().print,
+        status: 'running',
+        progress_percent: 10,
+        current_layer: 1,
+        finished_at: null,
+        updated_at: '2026-07-15T00:00:00Z',
+      },
+    })
+    const recentlyUpdated = job({
+      id: 'job-recent',
+      updated_at: '2026-07-15T00:00:00Z',
+      print: {
+        ...stalled.print,
+        updated_at: '2026-07-15T00:10:00Z',
+      },
+    })
+    renderHistory({
+      jobs: [job({ id: 'job-terminal' }), stalled, running, recentlyUpdated],
+      nowMs: Date.parse('2026-07-15T00:16:00Z'),
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Clear' }))
+
+    expect(
+      screen.getByText(
+        'This removes 2 terminal or stalled waiting jobs. Running and other active jobs are kept.',
+      ),
+    ).toBeVisible()
+  })
+
+  it('uses a strict fifteen-minute stalled threshold', () => {
+    const stalled = job({
+      updated_at: '2026-07-15T00:00:00Z',
+      print: {
+        ...job().print,
+        status: 'pending',
+        progress_percent: 0,
+        current_layer: 0,
+        started_at: null,
+        finished_at: null,
+        updated_at: null,
+      },
+    })
+    const { rerender } = renderHistory({ jobs: [stalled] })
+
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
+
+    rerender(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <JobHistory
+          agents={[]}
+          jobs={[stalled]}
+          nowMs={Date.parse('2026-07-15T00:15:00Z')}
+          onOpenDispatch={vi.fn()}
+          printers={[]}
+          selectedTenant={tenant}
+        />
+      </NextIntlClientProvider>,
+    )
+
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
+
+    rerender(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <JobHistory
+          agents={[]}
+          jobs={[stalled]}
+          nowMs={Date.parse('2026-07-15T00:15:00.001Z')}
+          onOpenDispatch={vi.fn()}
+          printers={[]}
+          selectedTenant={tenant}
+        />
+      </NextIntlClientProvider>,
+    )
+
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeEnabled()
   })
 
   it('matches the backend rule for failed jobs that never started printing', () => {
@@ -187,6 +294,7 @@ describe('JobHistory actions', () => {
               print: { ...failedBeforePrint.print, progress_percent: 1 },
             }),
           ]}
+          nowMs={0}
           onOpenDispatch={vi.fn()}
           printers={[]}
           selectedTenant={tenant}

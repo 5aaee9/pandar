@@ -54,6 +54,7 @@ export type DashboardViewContentProps = {
   printers: Printer[]
   agents: Agent[]
   jobs: Job[]
+  nowMs: number
   selectedCommand: Command | null
   commandData: CommandResultData | null
   notifications: RuntimeNotification[]
@@ -91,6 +92,7 @@ function DevicesView({
   selectedTenant,
   printers,
   agents,
+  nowMs,
 }: DashboardViewContentProps) {
   return (
     <>
@@ -108,7 +110,7 @@ function DevicesView({
         key={selectedTenant?.id ?? 'no-tenant'}
         printers={printers}
       >
-        <PrinterInventory selectedTenant={selectedTenant} printers={printers} agents={agents} />
+        <PrinterInventory selectedTenant={selectedTenant} printers={printers} agents={agents} nowMs={nowMs} />
       </PrinterMismatchCoordinator>
     </>
   )
@@ -119,6 +121,7 @@ function JobsView({
   printers,
   agents,
   jobs,
+  nowMs,
 }: DashboardViewContentProps) {
   const [dispatchOpen, setDispatchOpen] = useState(false)
 
@@ -127,6 +130,7 @@ function JobsView({
       <JobHistory
         agents={agents}
         jobs={jobs}
+        nowMs={nowMs}
         onOpenDispatch={() => setDispatchOpen(true)}
         printers={printers}
         selectedTenant={selectedTenant}

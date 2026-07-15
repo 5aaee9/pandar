@@ -21,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { FormattedDate } from '../components/formatted-date'
 import { deletePrinter, refreshPrinterMaterials, updatePrinter } from './actions'
 import type { Printer } from './dashboard-types'
 import { PrinterAxisControls } from './dashboard-printer-axis-controls'
@@ -34,14 +33,18 @@ import { StatusBadge } from './dashboard-ui'
 import { ConfirmDialog } from './confirm-dialog'
 import { PrinterMismatchWarning } from './printer-mismatch-dialog'
 import { PrinterPrintStatus } from './printer-print-status'
+import { PrinterLastSeen } from './printer-last-seen'
+
 export function PrinterCard({
   printer,
   agentName,
   materialDetail,
+  nowMs,
 }: {
   printer: Printer
   agentName: string
   materialDetail: string
+  nowMs: number
 }) {
   const t = useTranslations('inventory')
   return (
@@ -71,7 +74,7 @@ export function PrinterCard({
             </span>
             <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
               <ClockIcon className="size-3.5" />
-              <FormattedDate value={printer.last_seen_at} />
+              <PrinterLastSeen nowMs={nowMs} value={printer.last_seen_at} />
             </span>
           </div>
         </div>

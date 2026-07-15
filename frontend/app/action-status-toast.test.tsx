@@ -61,6 +61,7 @@ describe("action status toast helpers", () => {
 
     expect(formatActionStatus("refresh_queued", tStatus)).toBe("Refresh queued");
     expect(formatActionStatus("agent_deleted", tStatus)).toBe("Agent deleted");
+    expect(formatActionStatus("jobs_cleared", tStatus)).toBe("Terminal and stalled waiting jobs cleared");
     expect(formatActionStatus("agent_not_connected", tStatus)).toBe("Agent is not connected to this Hub process");
     expect(formatActionStatus("artifact_too_large", tStatus)).toBe("Artifact Too Large");
   });

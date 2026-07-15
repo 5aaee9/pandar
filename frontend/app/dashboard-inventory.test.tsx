@@ -126,7 +126,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[livePrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[livePrinter]} agents={[agent]} nowMs={0} />,
     );
 
     const status = screen.getByTestId("printer-print-status");
@@ -163,7 +163,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[mismatchPrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[mismatchPrinter]} agents={[agent]} nowMs={0} />,
     );
 
     const card = screen.getByRole("article", { name: "Office A1" });
@@ -175,7 +175,7 @@ describe("PrinterInventory", () => {
 
   it("renders inventory content without the tenant subtitle or reported count", () => {
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} nowMs={0} />,
     );
 
     expect(screen.getByRole("heading", { name: "Printer inventory" })).toBeVisible();
@@ -185,7 +185,7 @@ describe("PrinterInventory", () => {
 
   it("renders printers as individual machine cards", () => {
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} nowMs={0} />,
     );
 
     const card = screen.getByRole("article", { name: "Office A1" });
@@ -199,7 +199,7 @@ describe("PrinterInventory", () => {
 
   it("places the managing agent chip beside the summary status badge", () => {
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} nowMs={0} />,
     );
 
     const chip = screen.getByText("Shop Agent").parentElement;
@@ -209,7 +209,7 @@ describe("PrinterInventory", () => {
   it("opens a printer actions menu with delete", async () => {
     const user = userEvent.setup();
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} nowMs={0} />,
     );
 
     await user.click(screen.getByRole("button", { name: "Details" }));
@@ -221,7 +221,7 @@ describe("PrinterInventory", () => {
   it("opens an edit printer dialog from the printer actions menu", async () => {
     const user = userEvent.setup();
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} nowMs={0} />,
     );
 
     await user.click(screen.getByRole("button", { name: "Details" }));
@@ -243,7 +243,7 @@ describe("PrinterInventory", () => {
   it("opens the machine form from the empty printer state", async () => {
     const user = userEvent.setup();
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[]} agents={[agent]} nowMs={0} />,
     );
 
     expect(screen.getByText("No printers reported")).toBeVisible();
@@ -261,7 +261,7 @@ describe("PrinterInventory", () => {
   it("renders AMS refresh inside the printer actions menu with tenant and printer ids", async () => {
     const user = userEvent.setup();
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} nowMs={0} />,
     );
 
     expect(screen.queryByRole("button", { name: "Refresh AMS" })).not.toBeInTheDocument();
@@ -289,7 +289,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} nowMs={0} />,
     );
 
     const card = screen.getByRole("article", { name: "Office A1" });
@@ -330,7 +330,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} nowMs={0} />,
     );
 
     await user.click(screen.getByRole("button", { name: "View camera" }));
@@ -354,7 +354,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} nowMs={0} />,
     );
 
     const lightForm = screen.getByRole("button", { name: "Light" }).closest("form");
@@ -369,7 +369,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} nowMs={0} />,
       "zh",
     );
 
@@ -401,7 +401,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[dualNozzlePrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[dualNozzlePrinter]} agents={[agent]} nowMs={0} />,
     );
 
     const switchButton = screen.getByRole("button", { name: "Switch nozzle L R Nozzle" });
@@ -429,7 +429,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} nowMs={0} />,
     );
 
     const card = screen.getByRole("article", { name: "Office A1" });
@@ -447,7 +447,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} nowMs={0} />,
     );
 
     await user.click(screen.getByRole("button", { name: "Set nozzle temperature" }));
@@ -473,7 +473,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[dualNozzlePrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[dualNozzlePrinter]} agents={[agent]} nowMs={0} />,
     );
 
     await user.click(screen.getByRole("button", { name: "Set nozzle temperatures" }));
@@ -501,7 +501,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} nowMs={0} />,
     );
 
     await user.click(screen.getByRole("button", { name: "Set bed temperature" }));
@@ -522,7 +522,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} nowMs={0} />,
     );
 
     await user.click(screen.getByRole("button", { name: "Set chamber temperature" }));
@@ -543,7 +543,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} nowMs={0} />,
     );
 
     const card = screen.getByRole("article", { name: "Office A1" });
@@ -554,7 +554,7 @@ describe("PrinterInventory", () => {
 
   it("replaces the filament summary with AMS and external slot loading details", () => {
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[printerWithMaterials]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[printerWithMaterials]} agents={[agent]} nowMs={0} />,
     );
 
     const card = screen.getByRole("article", { name: "Office A1" });
@@ -584,7 +584,7 @@ describe("PrinterInventory", () => {
     };
 
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[activePrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[activePrinter]} agents={[agent]} nowMs={0} />,
     );
 
     const card = screen.getByRole("article", { name: "Office A1" });
@@ -595,7 +595,7 @@ describe("PrinterInventory", () => {
   it("opens an AMS slot menu on hover with RFID, load, and unload operations", async () => {
     const user = userEvent.setup();
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[printerWithMaterials]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[printerWithMaterials]} agents={[agent]} nowMs={0} />,
     );
 
     await user.hover(screen.getByRole("button", { name: "AMS-A slot 2 PETG" }));
@@ -640,7 +640,7 @@ describe("PrinterInventory", () => {
       },
     };
     renderWithMessages(
-      <PrinterInventory selectedTenant={tenant} printers={[unsupportedPrinter]} agents={[agent]} />,
+      <PrinterInventory selectedTenant={tenant} printers={[unsupportedPrinter]} agents={[agent]} nowMs={0} />,
     );
 
     await user.hover(screen.getByRole("button", { name: "AMS-A slot 1 PLA" }));

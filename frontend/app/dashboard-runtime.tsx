@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { AppSidebar } from '../components/app-sidebar'
@@ -25,6 +25,7 @@ import { computeAttention, computeHealth, maxSeverity } from './dashboard-attent
 import { DashboardShellHeader } from './dashboard-shell-header'
 import type { DashboardQuery, DashboardView } from './dashboard-shell'
 import { ActionStatusToast } from './action-status-toast'
+import { useDashboardClock } from './use-dashboard-clock'
 import { useDashboardRuntimeEvents } from './use-dashboard-runtime-events'
 
 type DashboardRuntimeProps = {
@@ -81,13 +82,7 @@ export function DashboardRuntime({
   })
   const printers = runtime.printers
   const jobs = runtime.jobs
-  const [nowMs, setNowMs] = useState(() => Date.now())
-
-  useEffect(() => {
-    const update = () => setNowMs(Date.now())
-    const interval = setInterval(update, 60_000)
-    return () => clearInterval(interval)
-  }, [])
+  const nowMs = useDashboardClock(printers)
 
   const fleetEmpty = printers.length === 0 && agents.length === 0 && jobs.length === 0
   const health = useMemo(() => computeHealth(agents, printers, jobs), [agents, printers, jobs])
@@ -137,6 +132,7 @@ export function DashboardRuntime({
             printers={printers}
             agents={agents}
             jobs={jobs}
+            nowMs={nowMs}
             selectedCommand={selectedCommand}
             commandData={commandData}
             notifications={runtime.notifications}

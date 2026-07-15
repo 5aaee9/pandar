@@ -44,10 +44,12 @@ export function PrinterInventory({
   selectedTenant,
   printers,
   agents,
+  nowMs,
 }: {
   selectedTenant: Tenant | null
   printers: Printer[]
   agents: Agent[]
+  nowMs: number
 }) {
   const t = useTranslations('inventory')
   const tMat = useTranslations('material')
@@ -122,6 +124,7 @@ export function PrinterInventory({
                     agentName={agent?.name ?? t('unknownAgent')}
                     key={printer.id}
                     materialDetail={material.detail}
+                    nowMs={nowMs}
                     printer={printer}
                   />
                 )

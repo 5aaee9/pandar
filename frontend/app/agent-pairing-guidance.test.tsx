@@ -83,6 +83,7 @@ const baseProps: DashboardViewContentProps = {
   printers: [],
   agents: [],
   jobs: [],
+  nowMs: 0,
   selectedCommand: null,
   commandData: null,
   notifications: [],
