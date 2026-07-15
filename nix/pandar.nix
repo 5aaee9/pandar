@@ -179,7 +179,7 @@
         src = frontendWorkspaceSource;
         npmWorkspace = "pandar-auth";
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-23LDr/5jiJKmSR+ll4C63E0JKKIFeRJNtBlQXksVjqk=";
+        npmDepsHash = "sha256-VeHmCF1+SxJ1VTKBUz7Xz5C4TA/S82IlsbFI989Hk6w=";
 
         nativeBuildInputs = [
           pkgs.makeWrapper
@@ -263,7 +263,7 @@
         version = "0.1.0";
         src = frontendWorkspaceSource;
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-23LDr/5jiJKmSR+ll4C63E0JKKIFeRJNtBlQXksVjqk=";
+        npmDepsHash = "sha256-VeHmCF1+SxJ1VTKBUz7Xz5C4TA/S82IlsbFI989Hk6w=";
         npmBuildScript = "build:web";
 
         nativeBuildInputs = [
