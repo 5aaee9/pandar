@@ -30,7 +30,10 @@ fn slice_info_extracts_plate_estimates_objects_and_filaments() {
         "Metadata/slice_info.config",
         r##"
             <config>
-              <plate index="2" prediction="3600" weight="18.5">
+              <plate>
+                <metadata key="index" value="2"/>
+                <metadata key="prediction" value="3600"/>
+                <metadata key="weight" value="18.5"/>
                 <object name="body"/>
                 <object name="lid"/>
                 <filament id="1" tray_info_idx="GFA00" type="PLA" color="#ffffff" used_g="18.5" used_m="6.2"/>
@@ -70,6 +73,50 @@ fn slice_info_extracts_plate_estimates_objects_and_filaments() {
     );
     assert_eq!(metadata.plates[0].filaments[0].used_grams, Some(18.5));
     assert_eq!(metadata.plates[0].filaments[0].used_meters, Some(6.2));
+}
+
+#[test]
+fn current_slice_info_metadata_extracts_plate_and_filaments() {
+    let temp = zip_fixture(&[
+        (
+            "Metadata/plate_1.json",
+            r##"{"bbox_objects":[{"name":"Cube"}],"filament_colors":["#000000"],"filament_ids":[0]}"##,
+        ),
+        ("Metadata/plate_1.gcode", ""),
+        (
+            "Metadata/slice_info.config",
+            r##"
+            <config>
+              <plate>
+                <metadata key="index" value="1"/>
+                <metadata key="prediction" value="1043"/>
+                <metadata key="weight" value="6.42"/>
+                <object identify_id="69" name="Cube" skipped="false"/>
+                <filament id="1" tray_info_idx="GFA00" type="PLA" color="#000000" used_m="2.12" used_g="6.42"/>
+              </plate>
+            </config>
+            "##,
+        ),
+    ]);
+
+    let metadata = parse_artifact_metadata("Untitled.gcode.3mf", "model/3mf", temp.path())
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(metadata.default_plate_id, Some(1));
+    assert_eq!(metadata.plates[0].estimated_time_seconds, Some(1043));
+    assert_eq!(metadata.plates[0].filament_weight_grams, Some(6.42));
+    assert_eq!(metadata.plates[0].object_count, 1);
+    assert_eq!(metadata.plates[0].objects, ["Cube"]);
+    assert_eq!(metadata.plates[0].filaments.len(), 1);
+    assert_eq!(
+        metadata.plates[0].filaments[0].filament_type.as_deref(),
+        Some("PLA")
+    );
+    assert_eq!(
+        metadata.plates[0].filaments[0].color.as_deref(),
+        Some("#000000")
+    );
 }
 
 #[test]
@@ -120,7 +167,7 @@ fn default_plate_uses_source_precedence_and_sorted_ids() {
         ),
         (
             "Metadata/slice_info.config",
-            r#"<config><plate index="5" prediction="1" weight="2"/></config>"#,
+            r#"<config><plate><metadata key="index" value="5"/><metadata key="prediction" value="1"/><metadata key="weight" value="2"/></plate></config>"#,
         ),
         ("Metadata/plate_3.gcode", ""),
     ]);
@@ -170,7 +217,7 @@ fn lower_precedence_data_does_not_replace_existing_fields() {
     let temp = zip_fixture(&[
         (
             "Metadata/slice_info.config",
-            r#"<config><plate index="2" prediction="42" weight="3"/></config>"#,
+            r#"<config><plate><metadata key="index" value="2"/><metadata key="prediction" value="42"/><metadata key="weight" value="3"/></plate></config>"#,
         ),
         (
             "Metadata/plate_2.json",

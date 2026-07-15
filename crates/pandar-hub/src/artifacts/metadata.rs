@@ -9,6 +9,7 @@ use quick_xml::{Reader, XmlVersion, events::Event, events::attributes::Attribute
 use serde::Deserialize;
 use zip::ZipArchive;
 
+mod slice_info;
 mod types;
 
 pub use types::{ArtifactMetadata, FilamentMetadata, PlateMetadata};
@@ -101,7 +102,7 @@ fn parse_zip_archive<R: Read + Seek>(
 
         match name.as_str() {
             "Metadata/slice_info.config" => {
-                let _ = parse_slice_info(&contents, &mut draft);
+                let _ = slice_info::parse(&contents, &mut draft);
             }
             "Metadata/model_settings.config" => {
                 let _ = parse_model_settings(&contents, &mut draft);
@@ -201,100 +202,6 @@ fn plate_id_from_name(name: &str, suffix: &str) -> Option<u32> {
     value.parse::<u32>().ok().filter(|value| *value > 0)
 }
 
-fn parse_slice_info(contents: &str, draft: &mut Draft) -> anyhow::Result<()> {
-    let mut reader = Reader::from_str(contents);
-    let mut current_plate: Option<u32> = None;
-    loop {
-        match reader.read_event() {
-            Ok(Event::Start(event)) | Ok(Event::Empty(event)) => match event.name().as_ref() {
-                b"plate" => {
-                    let mut plate_id = None;
-                    let mut seconds = None;
-                    let mut grams = None;
-                    for attr in event.attributes().flatten() {
-                        let value = attr_value(&reader, &attr)?;
-                        match attr.key.as_ref() {
-                            b"index" => plate_id = parse_u32(&value),
-                            b"prediction" => seconds = parse_u32(&value),
-                            b"weight" => grams = parse_f64(&value),
-                            _ => {}
-                        }
-                    }
-                    current_plate = plate_id;
-                    if let Some(plate_id) = plate_id
-                        && let Some(plate) = draft.ensure_plate(plate_id, PlateSource::SliceInfo)
-                    {
-                        if plate.metadata.estimated_time_seconds.is_none() {
-                            plate.metadata.estimated_time_seconds = seconds;
-                        }
-                        if plate.metadata.filament_weight_grams.is_none() {
-                            plate.metadata.filament_weight_grams = grams;
-                        }
-                    }
-                }
-                b"object" => {
-                    let Some(plate_id) = current_plate else {
-                        continue;
-                    };
-                    let Some(plate) = draft.ensure_plate(plate_id, PlateSource::SliceInfo) else {
-                        continue;
-                    };
-                    let mut name = None;
-                    for attr in event.attributes().flatten() {
-                        if attr.key.as_ref() == b"name" {
-                            name = Some(attr_value(&reader, &attr)?);
-                        }
-                    }
-                    if let Some(name) = name.filter(|value| !value.trim().is_empty()) {
-                        push_object(&mut plate.metadata, name);
-                    }
-                }
-                b"filament" => {
-                    let Some(plate_id) = current_plate else {
-                        continue;
-                    };
-                    let Some(plate) = draft.ensure_plate(plate_id, PlateSource::SliceInfo) else {
-                        continue;
-                    };
-                    if plate.metadata.filaments.len() >= MAX_FILAMENTS_PER_PLATE {
-                        draft.warnings.insert("filament_limit_reached");
-                        continue;
-                    }
-                    let mut filament = FilamentMetadata {
-                        filament_id: None,
-                        tray_info_idx: None,
-                        filament_type: None,
-                        color: None,
-                        used_grams: None,
-                        used_meters: None,
-                    };
-                    for attr in event.attributes().flatten() {
-                        let value = attr_value(&reader, &attr)?;
-                        match attr.key.as_ref() {
-                            b"id" => filament.filament_id = Some(value),
-                            b"tray_info_idx" => filament.tray_info_idx = Some(value),
-                            b"type" => filament.filament_type = Some(value),
-                            b"color" => filament.color = Some(value),
-                            b"used_g" => filament.used_grams = parse_f64(&value),
-                            b"used_m" => filament.used_meters = parse_f64(&value),
-                            _ => {}
-                        }
-                    }
-                    plate.metadata.filaments.push(filament);
-                }
-                _ => {}
-            },
-            Ok(Event::End(event)) if event.name().as_ref() == b"plate" => {
-                current_plate = None;
-            }
-            Ok(Event::Eof) => break,
-            Err(err) => return Err(err).context("failed to parse slice_info.config"),
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
 fn parse_model_settings(contents: &str, draft: &mut Draft) -> anyhow::Result<()> {
     let mut reader = Reader::from_str(contents);
     let mut pending_plate_id: Option<u32> = None;
@@ -348,6 +255,9 @@ fn parse_plate_json(plate_id: u32, contents: &str, draft: &mut Draft) {
     let Some(plate) = draft.ensure_plate(plate_id, PlateSource::Json) else {
         return;
     };
+    if plate.metadata.object_count > 0 {
+        return;
+    }
     for name in objects
         .into_iter()
         .filter_map(|object| object.name.filter(|name| !name.trim().is_empty()))
@@ -370,10 +280,6 @@ fn push_object(plate: &mut PlateMetadata, name: String) {
 
 fn parse_u32(value: &str) -> Option<u32> {
     value.parse::<u32>().ok().filter(|value| *value > 0)
-}
-
-fn parse_f64(value: &str) -> Option<f64> {
-    value.parse::<f64>().ok().filter(|value| value.is_finite())
 }
 
 #[cfg(test)]

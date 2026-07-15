@@ -36,7 +36,7 @@ export function DispatchForm({
   const format = useFormatter()
   const num = (n: number) => format.number(n)
   const [preferredPrinterId, setPreferredPrinterId] = useState('')
-  const [plateId, setPlateId] = useState(1)
+  const [plateId, setPlateId] = useState<number | null>(null)
   const [artifact, setArtifact] = useState<{
     file: File | null
     size: number
@@ -64,6 +64,7 @@ export function DispatchForm({
   const selectArtifact = (file: File | null) => {
     if (!file) {
       previewRequestRef.current += 1
+      setPlateId(null)
       setArtifact({ file: null, size: 0, state: 'idle' })
       setMetadataPreview({ state: 'idle', metadata: null })
       return
@@ -71,17 +72,20 @@ export function DispatchForm({
 
     if (file.size > maxArtifactBytes) {
       previewRequestRef.current += 1
+      setPlateId(null)
       setArtifact({ file, size: file.size, state: 'too_large' })
       setMetadataPreview({ state: 'idle', metadata: null })
       return
     }
 
+    setPlateId(null)
     setArtifact({ file, size: file.size, state: 'ready' })
     void previewArtifact(file)
   }
 
   const previewArtifact = async (file: File) => {
     if (!selectedTenant) {
+      setPlateId(null)
       setMetadataPreview({ state: 'idle', metadata: null })
       return
     }
@@ -104,6 +108,7 @@ export function DispatchForm({
         return
       }
       if (!response.ok) {
+        setPlateId(1)
         setMetadataPreview({ state: 'error', metadata: null })
         return
       }
@@ -111,6 +116,10 @@ export function DispatchForm({
       if (isStale()) {
         return
       }
+      const defaultPlate = body.metadata?.plates.find(
+        (plate) => plate.plate_id === body.metadata?.default_plate_id,
+      )
+      setPlateId(defaultPlate?.plate_id ?? body.metadata?.plates[0]?.plate_id ?? 1)
       setMetadataPreview(
         body.metadata
           ? { state: 'ready', metadata: body.metadata }
@@ -120,13 +129,14 @@ export function DispatchForm({
       if (isStale()) {
         return
       }
+      setPlateId(1)
       setMetadataPreview({ state: 'error', metadata: null })
     }
   }
 
   const submitPrintJob = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!selectedTenant || artifact.state !== 'ready' || !selectedPrinterId) {
+    if (!selectedTenant || artifact.state !== 'ready' || plateId === null || !selectedPrinterId) {
       return
     }
 
@@ -149,6 +159,9 @@ export function DispatchForm({
   }
 
   const selectedFilename = artifact.file?.name ?? ''
+  const parsedPlates = metadataPreview.state === 'ready'
+    ? (metadataPreview.metadata?.plates ?? [])
+    : []
 
   if (!selectedTenant) {
     return <DispatchEmptyState title={t('noTenantTitle')} message={t('noTenantMessage')} />
@@ -170,7 +183,7 @@ export function DispatchForm({
       method="post"
       onSubmit={(event) => void submitPrintJob(event)}
     >
-      <label className="flex flex-col gap-1 text-sm">
+      <label className="flex flex-col gap-1 text-sm lg:col-span-2">
         <span className="text-xs font-medium text-slate-500">{t('printer')}</span>
         <select
           name="printer_id"
@@ -186,22 +199,6 @@ export function DispatchForm({
           ))}
         </select>
       </label>
-      <div className="flex flex-col gap-1 text-sm">
-        <span className="flex items-center gap-1 text-xs font-medium text-slate-500">
-          {t('plate')}
-          <HelpTip label={t('plate')}>{t('plateHelp')}</HelpTip>
-        </span>
-        <input
-          aria-label={t('plate')}
-          className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950"
-          min="1"
-          name="plate_id"
-          onChange={(event) => setPlateId(Number(event.currentTarget.value))}
-          type="number"
-          required
-          value={plateId}
-        />
-      </div>
       <label className="flex flex-col gap-1 text-sm lg:col-span-2">
         <span className="text-xs font-medium text-slate-500">{t('artifact')}</span>
         <input
@@ -228,7 +225,7 @@ export function DispatchForm({
               ? t('tooLargeSize', { size: formatBytes(artifact.size, num) })
               : t('chooseFile')}
         </div>
-        <MetadataPreview preview={metadataPreview} />
+        <MetadataPreview plateId={plateId} preview={metadataPreview} />
         <details className="mt-2 text-xs text-slate-600">
           <summary className="cursor-pointer select-none text-slate-500">{t('errorCodes')}</summary>
           <div className="mt-1 flex flex-wrap gap-1">
@@ -240,7 +237,42 @@ export function DispatchForm({
           </div>
         </details>
       </div>
-      {metadataPreview.state === 'ready' && metadataPreview.metadata && selectedPrinter ? (
+      {plateId !== null && metadataPreview.state !== 'idle' && metadataPreview.state !== 'loading' ? (
+        <div className="flex flex-col gap-1 text-sm lg:col-span-2">
+          <span className="flex items-center gap-1 text-xs font-medium text-slate-500">
+            {t('plate')}
+            <HelpTip label={t('plate')}>{t('plateHelp')}</HelpTip>
+          </span>
+          {parsedPlates.length > 0 ? (
+            <select
+              aria-label={t('plate')}
+              className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
+              name="plate_id"
+              onChange={(event) => setPlateId(Number(event.currentTarget.value))}
+              required
+              value={plateId}
+            >
+              {parsedPlates.map((plate) => (
+                <option key={plate.plate_id} value={plate.plate_id}>
+                  {t('plateOption', { id: plate.plate_id, name: plate.name })}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              aria-label={t('plate')}
+              className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950"
+              min="1"
+              name="plate_id"
+              onChange={(event) => setPlateId(Number(event.currentTarget.value))}
+              type="number"
+              required
+              value={plateId}
+            />
+          )}
+        </div>
+      ) : null}
+      {metadataPreview.state === 'ready' && metadataPreview.metadata && plateId !== null && selectedPrinter ? (
         <DispatchMaterialMappingFields
           metadata={metadataPreview.metadata}
           plateId={plateId}
@@ -273,7 +305,7 @@ export function DispatchForm({
       <div className="lg:col-span-2">
         <button
           className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:bg-slate-300 disabled:text-white"
-          disabled={artifact.state !== 'ready' || submitting}
+          disabled={artifact.state !== 'ready' || plateId === null || submitting}
           type="submit"
         >
           {submitting ? t('dispatching') : t('dispatch')}
@@ -301,8 +333,10 @@ async function errorCode(response: Response) {
 }
 
 function MetadataPreview({
+  plateId,
   preview,
 }: {
+  plateId: number | null
   preview: {
     state: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
     metadata: ArtifactMetadata | null
@@ -324,6 +358,7 @@ function MetadataPreview({
 
   const metadata = preview.metadata
   const primaryPlate =
+    metadata.plates.find((plate) => plate.plate_id === plateId) ??
     metadata.plates.find((plate) => plate.plate_id === metadata.default_plate_id) ??
     metadata.plates[0]
 
@@ -336,7 +371,7 @@ function MetadataPreview({
       <div>
         <span className="text-slate-500">{t('plateLabel')} </span>
         <span className="font-medium text-slate-900">
-          {metadata.default_plate_id ?? '-'}
+          {primaryPlate?.plate_id ?? '-'}
         </span>
       </div>
       <div className="truncate">

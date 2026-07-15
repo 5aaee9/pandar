@@ -168,7 +168,10 @@ pub(super) fn slicer_metadata_fixture() -> Vec<u8> {
         zip.write_all(
             br##"
             <config>
-              <plate index="1" prediction="120" weight="4.5">
+              <plate>
+                <metadata key="index" value="1"/>
+                <metadata key="prediction" value="120"/>
+                <metadata key="weight" value="4.5"/>
                 <object name="calibration cube"/>
                 <filament id="1" type="PLA" color="#00ff00" used_g="4.5" used_m="1.2"/>
               </plate>
