@@ -39,4 +39,5 @@ tonic-prost-build.workspace = true
 [dev-dependencies]
 clap.workspace = true
 rcgen.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
 tracing-core.workspace = true
