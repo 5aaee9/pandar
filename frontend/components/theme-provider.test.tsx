@@ -1,5 +1,5 @@
 import { render } from "@testing-library/react";
-import { renderToStaticMarkup } from "react-dom/server";
+import Script from "next/script";
 import { describe, expect, it } from "vitest";
 
 import { ThemeProvider } from "./theme-provider";
@@ -16,10 +16,16 @@ describe("theme components", () => {
     expect(container.querySelector("script")).toBeNull();
   });
 
-  it("keeps the bootstrap script server-renderable", () => {
-    const markup = renderToStaticMarkup(<ThemeScript />);
+  it("registers the bootstrap as a before-interactive Next.js script", () => {
+    const element = ThemeScript();
 
-    expect(markup).toContain("<script");
-    expect(markup).toContain("pandar.settings");
+    expect(element.type).toBe(Script);
+    expect(element.props).toMatchObject({
+      id: "pandar-theme",
+      strategy: "beforeInteractive",
+    });
+    expect(element.props.dangerouslySetInnerHTML.__html).toContain(
+      "pandar.settings",
+    );
   });
 });

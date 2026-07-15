@@ -1,3 +1,5 @@
+import Script from "next/script";
+
 const mediaQuery = "(prefers-color-scheme: dark)";
 
 export function ThemeScript() {
@@ -16,5 +18,11 @@ export function ThemeScript() {
   } catch {}
 })();`;
 
-  return <script dangerouslySetInnerHTML={{ __html: code }} />;
+  return (
+    <Script
+      id="pandar-theme"
+      strategy="beforeInteractive"
+      dangerouslySetInnerHTML={{ __html: code }}
+    />
+  );
 }
