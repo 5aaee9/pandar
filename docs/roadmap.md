@@ -16,6 +16,9 @@
 
 ## Completed
 
+- Replaced absolute printer last-seen timestamps on Devices cards with localized presence text: reports under three minutes old show Online, while older reports show a Day.js relative last-online age, driven by one shared clock that schedules exact per-printer transition deadlines.
+- Kept Linked Agents table actions compact by using a fixed Delete label while retaining the agent name in confirmation and disabled-state guidance.
+- Extended Print Jobs Clear to remove dispatch-complete jobs that have remained pending without any physical-print evidence for more than 15 minutes, while retaining queued, sent, acknowledged, running, recently updated, and outcome-unknown work. The confirmation count and localized copy describe this safe subset as stalled waiting jobs.
 - Cleared the two Next.js development issues on dashboard routes: the theme bootstrap now uses Next.js' tracked `beforeInteractive` script path instead of rendering a raw client script tag, and mobile sidebar detection keeps the server and first client render identical before applying the viewport result after hydration.
 - Changed Jobs dispatch to choose Plate only after artifact metadata finishes loading: parsed 3MF files expose their real, potentially non-contiguous plate IDs in a default-aware selector, selected plate changes update the object summary and material Mapping, and metadata-unavailable files receive the numeric fallback only after preview completes. Dispatch stays disabled while plate metadata is unresolved.
 - Fixed authoritative AMS cleanup across Agent reassignment by deleting the prior material snapshot under the current session fence by tenant/printer identity instead of the stale material-row owner, and made higher-revision printer events propagate an explicit `materials: null` tombstone to open dashboards while rejecting equal/lower-revision clears.
