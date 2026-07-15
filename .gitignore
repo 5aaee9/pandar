@@ -22,6 +22,7 @@ target/
 /pandar-spool/
 /logs/
 /.logs/
+/crates/pandar-network-plugin/probe-*/
 .impeccable/
 .local/
 .playwright-mcp/
