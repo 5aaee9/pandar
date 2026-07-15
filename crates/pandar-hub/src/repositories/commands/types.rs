@@ -1,3 +1,4 @@
+use pandar_core::PrintCalibrationMode;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -13,7 +14,11 @@ pub struct PrintProjectFilePayload {
     pub size_bytes: u64,
     pub plate_id: u32,
     pub use_ams: bool,
+    pub auto_bed_leveling: PrintCalibrationMode,
+    pub bed_leveling: bool,
     pub flow_cali: bool,
+    pub auto_flow_cali: PrintCalibrationMode,
+    pub auto_offset_cali: PrintCalibrationMode,
     pub timelapse: bool,
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,

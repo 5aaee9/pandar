@@ -531,6 +531,12 @@ message AmsUnloadFilamentOperation {
   optional uint32 extruder_id = 5;
 }
 
+enum PrintCalibrationMode {
+  PRINT_CALIBRATION_MODE_OFF = 0;
+  PRINT_CALIBRATION_MODE_ON = 1;
+  PRINT_CALIBRATION_MODE_AUTO = 2;
+}
+
 message PrintProjectFile {
   string job_id = 1;
   string artifact_id = 2;
@@ -547,4 +553,8 @@ message PrintProjectFile {
   string ams_mapping2_json = 13;
   string artifact_download_path = 14;
   string ams_mapping_info_json = 15;
+  optional PrintCalibrationMode auto_bed_leveling = 16;
+  optional PrintCalibrationMode auto_flow_cali = 17;
+  optional PrintCalibrationMode auto_offset_cali = 18;
+  bool bed_leveling = 19;
 }

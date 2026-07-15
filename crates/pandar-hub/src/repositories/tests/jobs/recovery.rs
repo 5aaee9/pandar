@@ -1,4 +1,5 @@
 use super::*;
+use pandar_core::PrintCalibrationMode;
 
 #[tokio::test]
 async fn job_repository_retry_dispatch_requires_safe_pre_physical_failure() {
@@ -10,7 +11,12 @@ async fn job_repository_retry_dispatch_requires_safe_pre_physical_failure() {
             .await
             .unwrap();
     let safe = jobs
-        .create_print_job(create_input(tenant.id, agent.id, &printer_id, "safe"))
+        .create_print_job(with_studio_auto_calibration(create_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            "safe",
+        )))
         .await
         .unwrap();
     jobs.mark_print_sent(safe.job.command_id, tenant.id, agent.id)
@@ -54,6 +60,7 @@ async fn job_repository_retry_dispatch_requires_safe_pre_physical_failure() {
         payload.artifact_download_path,
         format!("/api/v1/agents/{}/artifacts/{}", agent.id, safe.artifact.id)
     );
+    assert_studio_auto_calibration(&payload);
     commands
         .mark_sent(command.id, tenant.id, agent.id)
         .await
@@ -179,13 +186,13 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
             .await
             .unwrap();
     let source = jobs
-        .create_print_job(create_input_with_filename(
+        .create_print_job(with_studio_auto_calibration(create_input_with_filename(
             tenant.id,
             agent.id,
             &printer_id,
             "source-artifact",
             "source.3mf",
-        ))
+        )))
         .await
         .unwrap();
     jobs.apply_print_report(report_input(
@@ -241,6 +248,7 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
             agent.id, source.artifact.id
         )
     );
+    assert_studio_auto_calibration(&reprint_payload);
     commands
         .mark_sent(reprint_command.id, tenant.id, agent.id)
         .await
@@ -274,7 +282,11 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
                 printer_id: Some(printer_id.clone()),
                 plate_id: Some(2),
                 use_ams: Some(false),
-                flow_cali: Some(true),
+                bed_leveling: Some(true),
+                auto_bed_leveling: Some(PrintCalibrationMode::Auto),
+                flow_cali: Some(false),
+                auto_flow_cali: Some(PrintCalibrationMode::Auto),
+                auto_offset_cali: Some(PrintCalibrationMode::On),
                 timelapse: Some(true),
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
@@ -324,4 +336,24 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
             agent.id, running.artifact.id
         )
     );
+    assert_studio_auto_calibration(&duplicate_payload);
+}
+
+fn with_studio_auto_calibration(mut input: CreatePrintJob) -> CreatePrintJob {
+    input.bed_leveling = true;
+    input.auto_bed_leveling = PrintCalibrationMode::Auto;
+    input.flow_cali = false;
+    input.auto_flow_cali = PrintCalibrationMode::Auto;
+    input.auto_offset_cali = PrintCalibrationMode::On;
+    input.timelapse = true;
+    input
+}
+
+fn assert_studio_auto_calibration(payload: &PrintProjectFilePayload) {
+    assert!(payload.bed_leveling);
+    assert_eq!(payload.auto_bed_leveling, PrintCalibrationMode::Auto);
+    assert!(!payload.flow_cali);
+    assert_eq!(payload.auto_flow_cali, PrintCalibrationMode::Auto);
+    assert_eq!(payload.auto_offset_cali, PrintCalibrationMode::On);
+    assert!(payload.timelapse);
 }

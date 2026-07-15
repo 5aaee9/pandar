@@ -1,11 +1,15 @@
 use anyhow::{Context, bail};
+use pandar_core::PrintCalibrationMode;
 
 use crate::{
     machine::{
         BambuMqttTransport, BambuPrinterEndpoint, MachineFileTransfer, MachineJsonPayload,
         PrintProjectDispatchResult, TransferModeCache,
         brtc::md5_upper,
-        compatibility::flow_calibration_supported,
+        compatibility::{
+            auto_bed_leveling_supported, auto_flow_calibration_supported,
+            flow_calibration_supported, nozzle_offset_calibration_supported,
+        },
         file_transfer::run_with_transfer_mode,
         mqtt::{BambuMqttCommand, BambuMqttTopics, ProjectFileCommand, PublishedMqttCommand},
     },
@@ -24,9 +28,40 @@ where
     F: MachineFileTransfer + Send + Sync,
     T: BambuMqttTransport + Send + Sync,
 {
-    if command.flow_cali && !flow_calibration_supported(endpoint.model.as_deref()) {
+    let auto_bed_leveling =
+        required_calibration_mode(command.auto_bed_leveling, "auto_bed_leveling")?;
+    let auto_flow_cali = required_calibration_mode(command.auto_flow_cali, "auto_flow_cali")?;
+    let auto_offset_cali = required_calibration_mode(command.auto_offset_cali, "auto_offset_cali")?;
+
+    if (command.flow_cali || auto_flow_cali == PrintCalibrationMode::On)
+        && !flow_calibration_supported(endpoint.model.as_deref())
+    {
         bail!(
             "flow calibration is not supported for model {}",
+            endpoint.model.as_deref().unwrap_or("unknown")
+        );
+    }
+    if auto_flow_cali == PrintCalibrationMode::Auto
+        && !auto_flow_calibration_supported(endpoint.model.as_deref())
+    {
+        bail!(
+            "automatic flow calibration is not supported for model {}",
+            endpoint.model.as_deref().unwrap_or("unknown")
+        );
+    }
+    if auto_bed_leveling == PrintCalibrationMode::Auto
+        && !auto_bed_leveling_supported(endpoint.model.as_deref())
+    {
+        bail!(
+            "automatic bed leveling is not supported for model {}",
+            endpoint.model.as_deref().unwrap_or("unknown")
+        );
+    }
+    if auto_offset_cali != PrintCalibrationMode::Off
+        && !nozzle_offset_calibration_supported(endpoint.model.as_deref())
+    {
+        bail!(
+            "nozzle offset calibration is not supported for model {}",
             endpoint.model.as_deref().unwrap_or("unknown")
         );
     }
@@ -50,7 +85,11 @@ where
         task_id: command.job_id.clone(),
         subtask_id: command.artifact_id.clone(),
         use_ams: command.use_ams,
+        bed_leveling: command.bed_leveling,
+        auto_bed_leveling,
         flow_cali: command.flow_cali,
+        auto_flow_cali,
+        auto_offset_cali,
         timelapse: command.timelapse,
         ams_mapping_json: non_empty_string(&command.ams_mapping_json),
         ams_mapping2_json: non_empty_string(&command.ams_mapping2_json),
@@ -73,6 +112,15 @@ where
         uploaded_url: uploaded.url,
         md5,
     })
+}
+fn required_calibration_mode(
+    value: Option<i32>,
+    field: &str,
+) -> anyhow::Result<PrintCalibrationMode> {
+    let value = value.ok_or_else(|| anyhow::anyhow!("missing {field}"))?;
+    let value = u8::try_from(value).with_context(|| format!("invalid {field} calibration mode"))?;
+    PrintCalibrationMode::try_from(value)
+        .with_context(|| format!("invalid {field} calibration mode"))
 }
 
 pub(crate) fn pick_remote_name(filename: &str) -> String {

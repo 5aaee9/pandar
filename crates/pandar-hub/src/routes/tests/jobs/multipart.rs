@@ -286,7 +286,11 @@ async fn job_create_rejects_oversized_text_fields_before_buffering() {
                 ("content_type", "model/3mf"),
                 ("plate_id", "1"),
                 ("use_ams", "true"),
+                ("bed_leveling", "false"),
+                ("auto_bed_leveling", "0"),
                 ("flow_cali", "false"),
+                ("auto_flow_cali", "0"),
+                ("auto_offset_cali", "0"),
                 ("timelapse", "true"),
                 ("ams_mapping", &huge_mapping),
             ],
@@ -368,7 +372,7 @@ async fn job_create_deletes_stored_artifact_when_repository_fails() {
 }
 
 #[tokio::test]
-async fn job_create_removes_staged_upload_when_later_text_field_is_invalid() {
+async fn job_create_rejects_invalid_calibration_mode_and_removes_staged_upload() {
     let existing_temp_uploads = temp_upload_paths();
     let state = state().await;
     let app = router(state.clone());
@@ -395,9 +399,13 @@ async fn job_create_removes_staged_upload_when_later_text_field_is_invalid() {
             &[
                 ("filename", "plate.3mf"),
                 ("content_type", "model/3mf"),
-                ("plate_id", "not-a-number"),
+                ("plate_id", "1"),
                 ("use_ams", "true"),
+                ("bed_leveling", "false"),
+                ("auto_bed_leveling", "0"),
                 ("flow_cali", "false"),
+                ("auto_flow_cali", "3"),
+                ("auto_offset_cali", "0"),
                 ("timelapse", "true"),
             ],
         ),

@@ -1205,7 +1205,11 @@ int main(int argc, char** argv) {
     params.filename = argv[2];
     params.plate_index = 1;
     params.task_use_ams = true;
+    params.task_bed_leveling = true;
+    params.auto_bed_leveling = 2;
     params.task_flow_cali = false;
+    params.auto_flow_cali = 1;
+    params.auto_offset_cali = 0;
     params.task_record_timelapse = false;
 
     BBL::OnUpdateStatusFn update = [&out](int stage, int code, std::string body) {

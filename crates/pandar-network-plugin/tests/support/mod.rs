@@ -61,13 +61,29 @@ pub fn assert_multipart_print_request(request: &str) {
         "content_type",
         "plate_id",
         "use_ams",
+        "bed_leveling",
+        "auto_bed_leveling",
         "flow_cali",
+        "auto_flow_cali",
+        "auto_offset_cali",
         "timelapse",
         "file",
     ] {
         assert!(
             request.contains(&format!(r#"name="{field}""#)),
             "request did not contain multipart field {field}: {request}"
+        );
+    }
+    for (field, value) in [
+        ("bed_leveling", "true"),
+        ("auto_bed_leveling", "2"),
+        ("flow_cali", "false"),
+        ("auto_flow_cali", "1"),
+        ("auto_offset_cali", "0"),
+    ] {
+        assert!(
+            request.contains(&format!("name=\"{field}\"\r\n\r\n{value}\r\n")),
+            "multipart field {field} did not contain {value}: {request}"
         );
     }
     let retired_json_artifact_field = ["artifact", "base64"].join("_");

@@ -99,6 +99,17 @@ fn get_jobs(hub_url: &[u8], token: &[u8]) -> PluginHttpResult {
 }
 
 fn submit_print(hub_url: &[u8], token: &[u8], artifact_path: &[u8]) -> PluginHttpResult {
+    submit_print_with_modes(hub_url, token, artifact_path, 2, 1, 0)
+}
+
+fn submit_print_with_modes(
+    hub_url: &[u8],
+    token: &[u8],
+    artifact_path: &[u8],
+    auto_bed_leveling: i32,
+    auto_flow_cali: i32,
+    auto_offset_cali: i32,
+) -> PluginHttpResult {
     let printer_id = b"printer";
     let filename = b"job.3mf";
     pandar_plugin_submit_print(
@@ -114,7 +125,11 @@ fn submit_print(hub_url: &[u8], token: &[u8], artifact_path: &[u8]) -> PluginHtt
         artifact_path.len(),
         1,
         true,
+        true,
+        auto_bed_leveling,
         false,
+        auto_flow_cali,
+        auto_offset_cali,
         false,
         b"".as_ptr(),
         0,
@@ -124,7 +139,6 @@ fn submit_print(hub_url: &[u8], token: &[u8], artifact_path: &[u8]) -> PluginHtt
         0,
     )
 }
-
 fn submit_printer_operation(
     hub_url: &[u8],
     token: &[u8],

@@ -1,6 +1,5 @@
 use axum::{extract::Multipart, http::StatusCode};
 use pandar_core::TenantId;
-use serde::de::DeserializeOwned;
 use tokio::{fs, io::AsyncWriteExt};
 
 use crate::{
@@ -10,8 +9,10 @@ use crate::{
 };
 
 use super::metadata_preview::{artifact_metadata_json, parsed_artifact_metadata};
+use parsing::{parse_bool, parse_calibration_mode, parse_i64, parse_optional_json_field, required};
 use types::PreparedPrintJob;
 
+mod parsing;
 mod types;
 
 pub(in crate::routes::jobs) use types::{MultipartPrintFields, StagedUpload};
@@ -28,20 +29,24 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
 ) -> Result<JobWithArtifact, ApiError> {
     let parsed = parse_multipart_print_fields(state, multipart).await?;
     let prepared = prepare_print_job(state, tenant_id, path_printer_id, &parsed).await;
-    let (
+    let PreparedPrintJob {
         printer,
         plate_id,
         ams_mapping_json,
         ams_mapping2_json,
         ams_mapping_info_json,
         use_ams,
+        bed_leveling,
+        auto_bed_leveling,
         flow_cali,
+        auto_flow_cali,
+        auto_offset_cali,
         timelapse,
         filename,
         content_type,
         artifact_metadata,
         upload_file,
-    ) = match prepared {
+    } = match prepared {
         Ok(prepared) => prepared,
         Err(err) => {
             parsed.cleanup_staged_uploads().await;
@@ -88,7 +93,11 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
                 artifact_metadata_json: artifact_metadata_json(artifact_metadata.as_ref())?,
                 plate_id,
                 use_ams,
+                bed_leveling,
+                auto_bed_leveling,
                 flow_cali,
+                auto_flow_cali,
+                auto_offset_cali,
                 timelapse,
                 ams_mapping_json,
                 ams_mapping2_json,
@@ -186,7 +195,17 @@ pub(super) async fn parse_multipart_print_fields(
             }
             "plate_id" => parse_i64(&text).map(|value| fields.plate_id = Some(value)),
             "use_ams" => parse_bool(&text).map(|value| fields.use_ams = Some(value)),
+            "bed_leveling" => parse_bool(&text).map(|value| fields.bed_leveling = Some(value)),
+            "auto_bed_leveling" => {
+                parse_calibration_mode(&text).map(|value| fields.auto_bed_leveling = Some(value))
+            }
             "flow_cali" => parse_bool(&text).map(|value| fields.flow_cali = Some(value)),
+            "auto_flow_cali" => {
+                parse_calibration_mode(&text).map(|value| fields.auto_flow_cali = Some(value))
+            }
+            "auto_offset_cali" => {
+                parse_calibration_mode(&text).map(|value| fields.auto_offset_cali = Some(value))
+            }
             "timelapse" => parse_bool(&text).map(|value| fields.timelapse = Some(value)),
             "ams_mapping" => {
                 parse_optional_json_field(&text).map(|value| fields.ams_mapping = value)
@@ -240,7 +259,11 @@ async fn prepare_print_job(
     let ams_mapping2_json = material::ams_mapping2_json(parsed.ams_mapping2.clone())?;
     let ams_mapping_info_json = material::ams_mapping_info_json(parsed.ams_mapping_info.clone())?;
     let use_ams = required(parsed.use_ams)?;
+    let bed_leveling = required(parsed.bed_leveling)?;
+    let auto_bed_leveling = required(parsed.auto_bed_leveling)?;
     let flow_cali = required(parsed.flow_cali)?;
+    let auto_flow_cali = required(parsed.auto_flow_cali)?;
+    let auto_offset_cali = required(parsed.auto_offset_cali)?;
     let timelapse = required(parsed.timelapse)?;
     let file = parsed
         .file
@@ -274,20 +297,24 @@ async fn prepare_print_job(
     })?;
     let artifact_metadata = parsed_artifact_metadata(&filename, &content_type, &file.path).await?;
 
-    Ok((
+    Ok(PreparedPrintJob {
         printer,
         plate_id,
         ams_mapping_json,
         ams_mapping2_json,
         ams_mapping_info_json,
         use_ams,
+        bed_leveling,
+        auto_bed_leveling,
         flow_cali,
+        auto_flow_cali,
+        auto_offset_cali,
         timelapse,
         filename,
         content_type,
         artifact_metadata,
         upload_file,
-    ))
+    })
 }
 
 async fn stage_file_field(
@@ -361,27 +388,4 @@ async fn stage_file_field(
 
 async fn cleanup_staged_upload(file: &StagedUpload) {
     let _ = fs::remove_file(&file.path).await;
-}
-
-fn parse_i64(value: &str) -> Result<i64, ApiError> {
-    value
-        .parse::<i64>()
-        .map_err(|_| ApiError::bad_request("bad_request"))
-}
-
-fn parse_bool(value: &str) -> Result<bool, ApiError> {
-    value
-        .parse::<bool>()
-        .map_err(|_| ApiError::bad_request("bad_request"))
-}
-
-fn parse_optional_json_field<T>(value: &str) -> Result<Option<T>, ApiError>
-where
-    T: DeserializeOwned,
-{
-    serde_json::from_str(value).map_err(|_| ApiError::bad_request("invalid_material_mapping"))
-}
-
-fn required<T>(value: Option<T>) -> Result<T, ApiError> {
-    value.ok_or_else(|| ApiError::bad_request("bad_request"))
 }

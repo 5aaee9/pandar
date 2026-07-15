@@ -14,12 +14,13 @@ pub use printer_refresh::{
     pandar_plugin_printer_refresh_session_update,
 };
 
-use serde::{Serialize, de::DeserializeOwned};
+use serde::de::DeserializeOwned;
 
 use gcode::{PrinterOperation, StudioOperationParse, operation_json_from_gcode};
 use http::{
-    AmsMapping, AmsMapping2, AmsMappingInfo, PrintSubmissionBody, get_json,
-    plugin_printer_operation_url, post_json, post_multipart_print,
+    AmsMapping, AmsMapping2, AmsMappingInfo, EmptyRequest, PrintSubmissionBody,
+    TicketExchangeRequest, calibration_mode, get_json, plugin_printer_operation_url, post_json,
+    post_multipart_print,
 };
 
 pub const PLUGIN_NAME: &str = "pandar-network-plugin";
@@ -156,7 +157,11 @@ pub extern "C" fn pandar_plugin_submit_print(
     artifact_path_len: usize,
     plate_id: i64,
     use_ams: bool,
+    bed_leveling: bool,
+    auto_bed_leveling: i32,
     flow_cali: bool,
+    auto_flow_cali: i32,
+    auto_offset_cali: i32,
     timelapse: bool,
     ams_mapping_ptr: *const u8,
     ams_mapping_len: usize,
@@ -180,6 +185,15 @@ pub extern "C" fn pandar_plugin_submit_print(
     };
     let Some(artifact_path) = read_utf8(artifact_path_ptr, artifact_path_len) else {
         return invalid_input("artifact_missing");
+    };
+    let Some(auto_bed_leveling) = calibration_mode(auto_bed_leveling) else {
+        return invalid_input("bad_request");
+    };
+    let Some(auto_flow_cali) = calibration_mode(auto_flow_cali) else {
+        return invalid_input("bad_request");
+    };
+    let Some(auto_offset_cali) = calibration_mode(auto_offset_cali) else {
+        return invalid_input("bad_request");
     };
     let artifact_path = PathBuf::from(artifact_path);
     let artifact_len = match std::fs::metadata(&artifact_path) {
@@ -208,6 +222,10 @@ pub extern "C" fn pandar_plugin_submit_print(
             flow_cali,
             timelapse,
             ams_mapping,
+            bed_leveling,
+            auto_bed_leveling,
+            auto_flow_cali,
+            auto_offset_cali,
             ams_mapping2,
             ams_mapping_info,
         },
@@ -376,11 +394,3 @@ fn parse_optional_json<T: DeserializeOwned>(ptr: *const u8, len: usize) -> Optio
     }
     serde_json::from_str(&value).ok()
 }
-
-#[derive(Serialize)]
-struct TicketExchangeRequest<'a> {
-    ticket: &'a str,
-}
-
-#[derive(Serialize)]
-struct EmptyRequest {}

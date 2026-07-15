@@ -10,6 +10,7 @@ mod phase1;
 mod postgres;
 mod postgres_commands;
 mod postgres_persistence;
+mod print_calibration_migration;
 mod printer_device_features;
 mod printer_event_tickets;
 mod printer_firmware;

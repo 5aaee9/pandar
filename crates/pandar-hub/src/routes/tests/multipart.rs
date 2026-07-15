@@ -75,7 +75,11 @@ pub(super) fn multipart_print_body_with_mappings(
     push_text("content_type", "model/3mf");
     push_text("plate_id", &plate_id.to_string());
     push_text("use_ams", "true");
+    push_text("bed_leveling", "false");
+    push_text("auto_bed_leveling", "0");
     push_text("flow_cali", "false");
+    push_text("auto_flow_cali", "0");
+    push_text("auto_offset_cali", "0");
     push_text("timelapse", "true");
     if let Some(ams_mapping) = ams_mapping {
         push_text("ams_mapping", &ams_mapping.to_string());

@@ -1,5 +1,6 @@
 use anyhow::Context;
 use futures_util::TryStreamExt;
+use pandar_core::PrintCalibrationMode;
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use std::{collections::BTreeMap, io::Write, path::PathBuf};
@@ -11,6 +12,19 @@ use super::{
 
 #[cfg(test)]
 mod tests;
+
+#[derive(Serialize)]
+pub(super) struct TicketExchangeRequest<'a> {
+    pub(super) ticket: &'a str,
+}
+
+#[derive(Serialize)]
+pub(super) struct EmptyRequest {}
+
+pub(super) fn calibration_mode(value: i32) -> Option<PrintCalibrationMode> {
+    let value = u8::try_from(value).ok()?;
+    PrintCalibrationMode::try_from(value).ok()
+}
 
 pub(super) fn get_json(
     hub_url_ptr: *const u8,
@@ -122,7 +136,11 @@ pub(super) struct PrintSubmissionBody {
     pub(super) artifact_len: u64,
     pub(super) plate_id: i64,
     pub(super) use_ams: bool,
+    pub(super) bed_leveling: bool,
+    pub(super) auto_bed_leveling: PrintCalibrationMode,
     pub(super) flow_cali: bool,
+    pub(super) auto_flow_cali: PrintCalibrationMode,
+    pub(super) auto_offset_cali: PrintCalibrationMode,
     pub(super) timelapse: bool,
     pub(super) ams_mapping: Option<AmsMapping>,
     pub(super) ams_mapping2: Option<AmsMapping2>,
@@ -193,7 +211,17 @@ pub(super) fn post_multipart_print(
             .text("content_type", "model/3mf")
             .text("plate_id", body.plate_id.to_string())
             .text("use_ams", body.use_ams.to_string())
+            .text("bed_leveling", body.bed_leveling.to_string())
+            .text(
+                "auto_bed_leveling",
+                body.auto_bed_leveling.as_u8().to_string(),
+            )
             .text("flow_cali", body.flow_cali.to_string())
+            .text("auto_flow_cali", body.auto_flow_cali.as_u8().to_string())
+            .text(
+                "auto_offset_cali",
+                body.auto_offset_cali.as_u8().to_string(),
+            )
             .text("timelapse", body.timelapse.to_string());
         if let Some(ams_mapping) = body.ams_mapping {
             form = form.text("ams_mapping", multipart_json_text(&ams_mapping));

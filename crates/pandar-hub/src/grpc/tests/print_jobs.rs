@@ -41,6 +41,11 @@ async fn grpc_dispatch_print_project_file_sends_payload_and_marks_job_sent() {
     );
     assert_eq!(print.size_bytes, 42);
     assert!(print.serial_number.starts_with("serial-"));
+    assert!(print.bed_leveling);
+    assert!(!print.flow_cali);
+    assert_eq!(print.auto_bed_leveling, Some(2));
+    assert_eq!(print.auto_flow_cali, Some(1));
+    assert_eq!(print.auto_offset_cali, Some(0));
     assert_eq!(
         state
             .jobs()
@@ -256,7 +261,11 @@ async fn printer_operation_success_does_not_mutate_physical_print_status() {
             artifact_metadata_json: None,
             plate_id: 1,
             use_ams: true,
+            bed_leveling: false,
+            auto_bed_leveling: pandar_core::PrintCalibrationMode::Off,
             flow_cali: false,
+            auto_flow_cali: pandar_core::PrintCalibrationMode::Off,
+            auto_offset_cali: pandar_core::PrintCalibrationMode::Off,
             timelapse: false,
             ams_mapping_json: None,
             ams_mapping2_json: None,
@@ -340,7 +349,11 @@ async fn create_print_job_with_mappings(
             artifact_metadata_json: None,
             plate_id: 1,
             use_ams: true,
+            bed_leveling: true,
+            auto_bed_leveling: pandar_core::PrintCalibrationMode::Auto,
             flow_cali: false,
+            auto_flow_cali: pandar_core::PrintCalibrationMode::On,
+            auto_offset_cali: pandar_core::PrintCalibrationMode::Off,
             timelapse: true,
             ams_mapping_json,
             ams_mapping2_json,
@@ -372,7 +385,7 @@ async fn corrupt_command_payload(state: &AppState, command_id: pandar_core::Comm
 }
 
 async fn corrupt_command_mapping(state: &AppState, command_id: pandar_core::CommandId) {
-    let payload = r#"{"job_id":"job","artifact_id":"artifact","printer_id":"printer","serial_number":"serial","filename":"plate.3mf","storage_path":"tenant/artifact/plate.3mf","artifact_download_path":"/api/v1/agents/agent/artifacts/artifact","size_bytes":42,"plate_id":1,"use_ams":true,"flow_cali":false,"timelapse":true,"ams_mapping_json":"[{}]","ams_mapping2_json":null}"#;
+    let payload = r#"{"job_id":"job","artifact_id":"artifact","printer_id":"printer","serial_number":"serial","filename":"plate.3mf","storage_path":"tenant/artifact/plate.3mf","artifact_download_path":"/api/v1/agents/agent/artifacts/artifact","size_bytes":42,"plate_id":1,"use_ams":true,"bed_leveling":true,"auto_bed_leveling":2,"flow_cali":false,"auto_flow_cali":1,"auto_offset_cali":0,"timelapse":true,"ams_mapping_json":"[{}]","ams_mapping2_json":null}"#;
     match state.database() {
         Database::Sqlite(pool) => {
             sqlx::query("UPDATE commands SET payload_json = ?2 WHERE id = ?1")

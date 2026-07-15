@@ -6,7 +6,7 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
 };
-use pandar_core::{Job, JobArtifact, JobId, JobPrintState};
+use pandar_core::{Job, JobArtifact, JobId, JobPrintState, PrintCalibrationMode};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -30,7 +30,11 @@ pub struct DuplicateJobRequest {
     printer_id: Option<String>,
     plate_id: Option<i64>,
     use_ams: Option<bool>,
+    bed_leveling: Option<bool>,
+    auto_bed_leveling: Option<PrintCalibrationMode>,
     flow_cali: Option<bool>,
+    auto_flow_cali: Option<PrintCalibrationMode>,
+    auto_offset_cali: Option<PrintCalibrationMode>,
     timelapse: Option<bool>,
     ams_mapping: Option<AmsMapping>,
     ams_mapping2: Option<AmsMapping2>,
@@ -208,7 +212,11 @@ pub async fn duplicate(
                 printer_id: payload.printer_id,
                 plate_id,
                 use_ams: payload.use_ams,
+                bed_leveling: payload.bed_leveling,
+                auto_bed_leveling: payload.auto_bed_leveling,
                 flow_cali: payload.flow_cali,
+                auto_flow_cali: payload.auto_flow_cali,
+                auto_offset_cali: payload.auto_offset_cali,
                 timelapse: payload.timelapse,
                 ams_mapping_json: material::ams_mapping_json(payload.ams_mapping)?,
                 ams_mapping2_json: material::ams_mapping2_json(payload.ams_mapping2)?,

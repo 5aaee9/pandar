@@ -6,13 +6,14 @@ import { useFormatter, useTranslations } from 'next-intl'
 import type { ArtifactMetadata, Printer } from './dashboard-types'
 import { formatBytes } from './dashboard-format'
 import { DispatchMaterialMappingFields } from './dispatch-material-mapping-fields'
+import { DispatchPrintOptions } from './dispatch-print-options'
 import { HelpTip } from './dashboard-ui'
 
 type DispatchTenant = {
   id: string
 }
 
-type DispatchPrinter = Pick<Printer, 'id' | 'name' | 'serial_number' | 'materials'>
+type DispatchPrinter = Pick<Printer, 'id' | 'name' | 'serial_number' | 'model' | 'materials'>
 
 const maxArtifactBytes = 268435456
 const backendErrorCodes = [
@@ -212,8 +213,6 @@ export function DispatchForm({
         <span className="text-xs text-slate-600">{t('maxSize', { size: formatBytes(maxArtifactBytes, num) })}</span>
       </label>
       <input name="use_ams" type="hidden" value="false" />
-      <input name="flow_cali" type="hidden" value="false" />
-      <input name="timelapse" type="hidden" value="false" />
       <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 lg:col-span-2">
         <div className="font-medium text-slate-950">
           {selectedFilename || t('noArtifact')}
@@ -287,21 +286,11 @@ export function DispatchForm({
           </label>
           <HelpTip label={t('useAms')}>{t('useAmsHelp')}</HelpTip>
         </span>
-        <span className="flex items-center gap-1.5">
-          <label className="flex items-center gap-2">
-            <input name="flow_cali" type="checkbox" value="true" />
-            {t('flowCali')}
-          </label>
-          <HelpTip label={t('flowCali')}>{t('flowCaliHelp')}</HelpTip>
-        </span>
-        <span className="flex items-center gap-1.5">
-          <label className="flex items-center gap-2">
-            <input name="timelapse" type="checkbox" value="true" />
-            {t('timelapse')}
-          </label>
-          <HelpTip label={t('timelapse')}>{t('timelapseHelp')}</HelpTip>
-        </span>
       </div>
+      <DispatchPrintOptions
+        key={selectedPrinter ? selectedPrinter.id + ':' + (selectedPrinter.model ?? 'unknown') : 'unknown'}
+        model={selectedPrinter?.model ?? null}
+      />
       <div className="lg:col-span-2">
         <button
           className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:bg-slate-300 disabled:text-white"

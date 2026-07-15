@@ -129,6 +129,11 @@ export function AttentionRow({
         <code className="hidden shrink-0 font-mono text-xs text-slate-600 sm:block">{item.mono}</code>
         <AttentionAction item={item} tenant={tenant} />
       </div>
+      {item.detailKey ? (
+        <div className="mt-2 break-words text-xs text-red-700 sm:ml-7 dark:text-red-300">
+          <AttentionText textKey={item.detailKey} />
+        </div>
+      ) : null}
     </li>
   )
 }

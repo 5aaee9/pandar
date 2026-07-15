@@ -1050,6 +1050,8 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Aligned Agent project-file dispatch identities with Bambu Studio/Bambuddy behavior by generating a fresh non-zero int32-range `project_id`/`task_id`/`subtask_id` per submission instead of sending `"0"`.
 - Added Bambu LAN X.509 v1 certificate compatibility for MQTT, FTPS, and BRTC while preserving TLS handshake signature verification, with local handshake regressions for valid and mismatched keys.
 - Resolved X2D MQTT topic identity from the printer certificate common name while preserving its distinct inventory serial in Hub data, with retrying background report subscription.
+- Displayed the Hub-provided dispatch or print failure cause directly in each Devices "Needs attention" job row, with localized reason labels and wrapping text so operators can diagnose failures without opening the Jobs view.
+- Matched Bambu Studio print dispatch options by model, carrying Timelapse plus paired Auto/On/Off bed-leveling, flow-dynamics, and nozzle-offset values through Web, Hub, gRPC, Agent, MQTT, and the Studio plugin ABI; migrated existing queued commands and corrected N6/X2D capability handling.
 
 Exit criteria:
 

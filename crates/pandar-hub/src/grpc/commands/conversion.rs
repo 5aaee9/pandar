@@ -194,7 +194,11 @@ pub fn hub_command_from_record_with_options(
                 plate_id: payload.plate_id,
                 use_ams: payload.use_ams,
                 flow_cali: payload.flow_cali,
+                bed_leveling: payload.bed_leveling,
                 timelapse: payload.timelapse,
+                auto_bed_leveling: Some(payload.auto_bed_leveling.as_u8().into()),
+                auto_flow_cali: Some(payload.auto_flow_cali.as_u8().into()),
+                auto_offset_cali: Some(payload.auto_offset_cali.as_u8().into()),
                 ams_mapping_json: mapping_payload_string(
                     payload.ams_mapping_json.as_deref(),
                     "ams_mapping_json",

@@ -88,6 +88,48 @@ impl FromStr for PrintStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
+#[repr(u8)]
+pub enum PrintCalibrationMode {
+    Off = 0,
+    On = 1,
+    Auto = 2,
+}
+
+impl PrintCalibrationMode {
+    pub fn as_u8(self) -> u8 {
+        self.into()
+    }
+
+    pub fn is_on(self) -> bool {
+        self == Self::On
+    }
+
+    pub fn is_off(self) -> bool {
+        self == Self::Off
+    }
+}
+
+impl From<PrintCalibrationMode> for u8 {
+    fn from(value: PrintCalibrationMode) -> Self {
+        value as Self
+    }
+}
+
+impl TryFrom<u8> for PrintCalibrationMode {
+    type Error = CoreError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Off),
+            1 => Ok(Self::On),
+            2 => Ok(Self::Auto),
+            value => Err(CoreError::InvalidPrintCalibrationMode(value)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobArtifact {
     pub id: String,

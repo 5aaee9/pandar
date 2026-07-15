@@ -23,7 +23,7 @@ pub(super) fn project_file_payload(command: &ProjectFileCommand) -> BambuMqttCom
             file: command.filename.clone(),
             md5: command.md5.clone().unwrap_or_default(),
             bed_type: "auto",
-            bed_leveling: false,
+            bed_leveling: command.bed_leveling,
             flow_cali: command.flow_cali,
             vibration_cali: false,
             layer_inspect: false,
@@ -43,10 +43,10 @@ pub(super) fn project_file_payload(command: &ProjectFileCommand) -> BambuMqttCom
                 .ams_mapping_info_json
                 .as_deref()
                 .and_then(project_file_ams_mapping_info),
-            auto_bed_leveling: 0,
-            nozzle_offset_cali: 0,
+            auto_bed_leveling: command.auto_bed_leveling.as_u8(),
+            nozzle_offset_cali: command.auto_offset_cali.as_u8(),
             cfg: "0",
-            extrude_cali_flag: 0,
+            extrude_cali_flag: command.auto_flow_cali.as_u8(),
         },
     };
     BambuMqttCommandPayload::with_sequence(

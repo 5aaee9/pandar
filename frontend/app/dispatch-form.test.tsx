@@ -1,5 +1,5 @@
 import { NextIntlClientProvider } from "next-intl";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -10,6 +10,136 @@ describe("DispatchForm", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("matches Bambu Studio print option modes and defaults", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <DispatchForm
+          selectedTenant={{ id: "tenant-1" }}
+          printers={[{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null }]}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    const timelapse = within(screenGroup(container, "Timelapse"));
+    expect(timelapse.getByRole("radio", { name: "On" })).toBeChecked();
+
+    const bedLeveling = within(screenGroup(container, "Auto Bed Leveling"));
+    expect(bedLeveling.getByRole("radio", { name: "Auto" })).toBeChecked();
+
+    const flowCalibration = within(
+      screenGroup(container, "Flow Dynamics Calibration"),
+    );
+    expect(flowCalibration.getByRole("radio", { name: "Auto" })).toBeChecked();
+
+    const nozzleOffset = within(
+      screenGroup(container, "Nozzle Offset Calibration"),
+    );
+    expect(nozzleOffset.getByRole("radio", { name: "Off" })).toBeChecked();
+    expect(container.querySelector('input[name="bed_leveling"]')).toHaveValue("false");
+    expect(container.querySelector('input[name="flow_cali"]')).toHaveValue("false");
+    expect(container.querySelector('input[name="use_ams"][type="checkbox"]')).toBeChecked();
+
+    const form = container.querySelector("form") as HTMLFormElement;
+    let formData = new FormData(form);
+    expect(formData.get("timelapse")).toBe("true");
+    expect(formData.get("bed_leveling")).toBe("false");
+    expect(formData.get("auto_bed_leveling")).toBe("2");
+    expect(formData.get("flow_cali")).toBe("false");
+    expect(formData.get("auto_flow_cali")).toBe("2");
+    expect(formData.get("auto_offset_cali")).toBe("0");
+
+    await user.click(flowCalibration.getByRole("radio", { name: "On" }));
+    await user.click(timelapse.getByRole("radio", { name: "Off" }));
+    formData = new FormData(form);
+    expect(formData.get("flow_cali")).toBe("true");
+    expect(formData.get("auto_flow_cali")).toBe("1");
+    expect(formData.get("timelapse")).toBe("false");
+  });
+  it("resets modes when the selected printer profile changes", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <DispatchForm
+          selectedTenant={{ id: "tenant-1" }}
+          printers={[
+            {
+              id: "x2d",
+              name: "X2D",
+              serial_number: "SN-X2D",
+              model: "N6",
+              materials: null,
+            },
+            {
+              id: "a1",
+              name: "A1",
+              serial_number: "SN-A1",
+              model: "A1",
+              materials: null,
+            },
+          ]}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    expect(
+      within(screenGroup(container, "Flow Dynamics Calibration")).getByRole(
+        "radio",
+        { name: "Auto" },
+      ),
+    ).toBeChecked();
+
+    await user.selectOptions(
+      container.querySelector('select[name="printer_id"]') as HTMLSelectElement,
+      "a1",
+    );
+
+    const flow = within(screenGroup(container, "Flow Dynamics Calibration"));
+    expect(flow.queryByRole("radio", { name: "Auto" })).not.toBeInTheDocument();
+    expect(flow.getByRole("radio", { name: "On" })).toBeChecked();
+    expect(
+      Array.from(container.querySelectorAll("fieldset")).some(
+        (field) => field.querySelector("legend")?.textContent === "Nozzle Offset Calibration",
+      ),
+    ).toBe(false);
+
+    const formData = new FormData(container.querySelector("form") as HTMLFormElement);
+    expect(formData.get("bed_leveling")).toBe("true");
+    expect(formData.get("auto_bed_leveling")).toBe("1");
+    expect(formData.get("flow_cali")).toBe("true");
+    expect(formData.get("auto_flow_cali")).toBe("1");
+    expect(formData.get("auto_offset_cali")).toBe("0");
+  });
+
+  it("submits conservative safe-off values for an unknown printer model", () => {
+    const { container } = render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <DispatchForm
+          selectedTenant={{ id: "tenant-1" }}
+          printers={[
+            {
+              id: "unknown",
+              name: "Unknown",
+              serial_number: "SN-UNKNOWN",
+              model: null,
+              materials: null,
+            },
+          ]}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    expect(container.querySelectorAll("fieldset")).toHaveLength(0);
+    expect(container.querySelector("section")).not.toBeInTheDocument();
+    const formData = new FormData(container.querySelector("form") as HTMLFormElement);
+    expect(formData.get("timelapse")).toBe("false");
+    expect(formData.get("bed_leveling")).toBe("false");
+    expect(formData.get("auto_bed_leveling")).toBe("0");
+    expect(formData.get("flow_cali")).toBe("false");
+    expect(formData.get("auto_flow_cali")).toBe("0");
+    expect(formData.get("auto_offset_cali")).toBe("0");
   });
 
   it("redirects dispatch results to jobs", async () => {
@@ -29,7 +159,7 @@ describe("DispatchForm", () => {
       <NextIntlClientProvider locale="en" messages={en}>
         <DispatchForm
           selectedTenant={{ id: "tenant-1" }}
-          printers={[{ id: "printer-1", name: "Printer One", serial_number: "SN1", materials: null }]}
+          printers={[{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null }]}
           onRedirect={onRedirect}
         />
       </NextIntlClientProvider>,
@@ -66,7 +196,7 @@ describe("DispatchForm", () => {
       <NextIntlClientProvider locale="en" messages={en}>
         <DispatchForm
           selectedTenant={{ id: "tenant-1" }}
-          printers={[{ id: "printer-1", name: "Printer One", serial_number: "SN1", materials: null }]}
+          printers={[{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null }]}
         />
       </NextIntlClientProvider>,
     );
@@ -186,6 +316,7 @@ describe("DispatchForm", () => {
               id: "printer-1",
               name: "Printer One",
               serial_number: "SN1",
+              model: "N6",
               materials: {
                 observed_at: "2026-07-15T00:00:00Z",
                 active_tray: null,
@@ -234,3 +365,10 @@ describe("DispatchForm", () => {
     expect(container.querySelector('input[name="ams_mapping"]')).toHaveValue("[0,0]");
   });
 });
+function screenGroup(container: HTMLElement, name: string) {
+  const group = Array.from(container.querySelectorAll("fieldset")).find(
+    (field) => field.querySelector("legend")?.textContent === name,
+  );
+  expect(group).toBeInstanceOf(HTMLFieldSetElement);
+  return group as HTMLFieldSetElement;
+}

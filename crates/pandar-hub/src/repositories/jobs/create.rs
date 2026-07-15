@@ -1,4 +1,5 @@
 use anyhow::Context;
+use pandar_core::PrintCalibrationMode;
 use pandar_core::{
     CommandId, Job, JobArtifact, JobArtifactParts, JobId, JobParts, JobStatus, PrintStatus,
 };
@@ -68,7 +69,11 @@ pub struct NewPrintJobFromArtifact {
     artifact_metadata_json: Option<String>,
     plate_id: u32,
     use_ams: bool,
+    auto_bed_leveling: PrintCalibrationMode,
+    bed_leveling: bool,
     flow_cali: bool,
+    auto_flow_cali: PrintCalibrationMode,
+    auto_offset_cali: PrintCalibrationMode,
     timelapse: bool,
     ams_mapping_json: Option<String>,
     ams_mapping2_json: Option<String>,
@@ -85,7 +90,11 @@ impl NewPrintJobFromArtifact {
             printer_id: None,
             plate_id: None,
             use_ams: None,
+            auto_bed_leveling: None,
+            bed_leveling: None,
             flow_cali: None,
+            auto_flow_cali: None,
+            auto_offset_cali: None,
             timelapse: None,
             ams_mapping_json: None,
             ams_mapping2_json: None,
@@ -103,7 +112,19 @@ impl NewPrintJobFromArtifact {
             artifact_metadata_json: source.artifact.metadata_json,
             plate_id: overrides.plate_id.unwrap_or(source_payload.plate_id),
             use_ams: overrides.use_ams.unwrap_or(source_payload.use_ams),
+            bed_leveling: overrides
+                .bed_leveling
+                .unwrap_or(source_payload.bed_leveling),
+            auto_bed_leveling: overrides
+                .auto_bed_leveling
+                .unwrap_or(source_payload.auto_bed_leveling),
             flow_cali: overrides.flow_cali.unwrap_or(source_payload.flow_cali),
+            auto_flow_cali: overrides
+                .auto_flow_cali
+                .unwrap_or(source_payload.auto_flow_cali),
+            auto_offset_cali: overrides
+                .auto_offset_cali
+                .unwrap_or(source_payload.auto_offset_cali),
             timelapse: overrides.timelapse.unwrap_or(source_payload.timelapse),
             ams_mapping_json: overrides.ams_mapping_json.or(source.job.ams_mapping_json),
             ams_mapping2_json: overrides.ams_mapping2_json.or(source.job.ams_mapping2_json),

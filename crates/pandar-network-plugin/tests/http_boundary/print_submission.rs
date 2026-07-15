@@ -2,7 +2,7 @@ use std::fs;
 
 use super::{
     TOKEN, assert_plugin_multipart_print_request, body, one_shot_server, submit_print,
-    write_artifact,
+    submit_print_with_modes, write_artifact,
 };
 
 #[test]
@@ -27,6 +27,23 @@ fn print_not_found_without_stable_code_maps_to_printer_not_found() {
     assert_eq!(body(result), r#"{"error":"printer_not_found"}"#);
 }
 
+#[test]
+fn invalid_calibration_modes_are_rejected_before_artifact_or_network_io() {
+    for modes in [(3, 1, 0), (2, -1, 0), (2, 1, 3)] {
+        let result = submit_print_with_modes(
+            b"http://127.0.0.1:9",
+            TOKEN,
+            b"/missing/calibration-test.3mf",
+            modes.0,
+            modes.1,
+            modes.2,
+        );
+
+        assert_ne!(result.status, 0);
+        assert_eq!(result.http_code, 400);
+        assert_eq!(body(result), r#"{"error":"bad_request"}"#);
+    }
+}
 #[test]
 fn empty_artifact_is_rejected_before_network() {
     let artifact =

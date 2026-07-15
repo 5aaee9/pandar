@@ -85,6 +85,7 @@ export type AttentionItem = {
   reason: AttentionReason;
   title: string;
   label: string;
+  detailKey?: TextKey;
   titleKey: TextKey;
   labelKey: TextKey;
   mono: string;
@@ -161,6 +162,7 @@ export function computeAttention(args: {
     const artifactFilename = job.artifact.filename;
     if (isJobFailed(job)) {
       const physical = job.print.status.toLowerCase() === "failed";
+      const failureReason = physical ? job.print.error : job.error;
       items.push({
         id: `job:${job.id}:failed`,
         agentId: job.agent_id,
@@ -170,6 +172,15 @@ export function computeAttention(args: {
         reason: physical ? "job_print_failed" : "job_dispatch_failed",
         title: physical ? "Print failed" : "Dispatch failed",
         label: artifactFilename,
+        ...(failureReason
+          ? {
+              detailKey: {
+                namespace: "attention",
+                key: "failureReason",
+                values: { reason: failureReason },
+              },
+            }
+          : {}),
         titleKey: {
           namespace: physical
             ? "attention.jobPrintFailed"

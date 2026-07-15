@@ -23,7 +23,7 @@ pub use firmware::{
 pub use ids::{AgentId, CommandId, JobId, TenantId};
 pub use job::{
     Job, JobArtifact, JobArtifactParts, JobFilamentUsage, JobParts, JobPrintState, JobStatus,
-    PrintStatus,
+    PrintCalibrationMode, PrintStatus,
 };
 pub use printer::{Printer, PrinterNozzleTemperature, PrinterParts};
 pub use tenant::Tenant;
@@ -76,6 +76,8 @@ pub enum CoreError {
     InvalidJobStatus(String),
     #[error("invalid print status: {0}")]
     InvalidPrintStatus(String),
+    #[error("invalid print calibration mode: {0}")]
+    InvalidPrintCalibrationMode(u8),
 }
 
 pub fn created_at_now() -> String {

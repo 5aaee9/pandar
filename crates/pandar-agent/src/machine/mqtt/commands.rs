@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::bail;
+use pandar_core::PrintCalibrationMode;
 use serde::Serialize;
 use serde_json::{Number, Value};
 
@@ -60,7 +61,11 @@ pub struct ProjectFileCommand {
     pub task_id: String,
     pub subtask_id: String,
     pub use_ams: bool,
+    pub bed_leveling: bool,
+    pub auto_bed_leveling: PrintCalibrationMode,
     pub flow_cali: bool,
+    pub auto_flow_cali: PrintCalibrationMode,
+    pub auto_offset_cali: PrintCalibrationMode,
     pub timelapse: bool,
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,

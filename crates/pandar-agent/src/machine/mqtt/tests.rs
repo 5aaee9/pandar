@@ -1,5 +1,6 @@
 use std::{sync::atomic::AtomicU32, time::Duration};
 
+use pandar_core::PrintCalibrationMode;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -275,7 +276,11 @@ fn studio_command_payloads_use_incrementing_studio_sequence_ids() {
                 task_id: "task-1".to_string(),
                 subtask_id: "subtask-1".to_string(),
                 use_ams: true,
+                bed_leveling: false,
+                auto_bed_leveling: PrintCalibrationMode::Off,
                 flow_cali: true,
+                auto_flow_cali: PrintCalibrationMode::Off,
+                auto_offset_cali: PrintCalibrationMode::Off,
                 timelapse: false,
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
@@ -589,7 +594,11 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
         task_id: "task-1".to_string(),
         subtask_id: "subtask-1".to_string(),
         use_ams: true,
+        bed_leveling: true,
+        auto_bed_leveling: PrintCalibrationMode::Auto,
         flow_cali: true,
+        auto_flow_cali: PrintCalibrationMode::Auto,
+        auto_offset_cali: PrintCalibrationMode::On,
         timelapse: false,
         ams_mapping_json: None,
         ams_mapping2_json: None,
@@ -608,7 +617,7 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
     assert_eq!(print.file, "job.3mf");
     assert_eq!(print.md5, "");
     assert_eq!(print.bed_type, "auto");
-    assert!(!print.bed_leveling);
+    assert!(print.bed_leveling);
     assert!(print.flow_cali);
     assert!(!print.vibration_cali);
     assert!(!print.layer_inspect);
@@ -617,10 +626,10 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
     assert_eq!(print.ams_mapping, Vec::<i64>::new());
     assert_eq!(print.ams_mapping2, Vec::<TestAmsMapping2>::new());
     assert_eq!(print.ams_mapping_info, None);
-    assert_eq!(print.auto_bed_leveling, 0);
-    assert_eq!(print.nozzle_offset_cali, 0);
+    assert_eq!(print.auto_bed_leveling, 2);
+    assert_eq!(print.nozzle_offset_cali, 1);
     assert_eq!(print.cfg, "0");
-    assert_eq!(print.extrude_cali_flag, 0);
+    assert_eq!(print.extrude_cali_flag, 2);
 
     let project_id = print.project_id.parse::<u32>().unwrap();
     assert!((1..=2_147_483_647).contains(&project_id));
@@ -628,6 +637,37 @@ fn project_file_payload_reserves_dispatch_identity_and_flags() {
     assert_eq!(print.subtask_id, print.project_id);
 }
 
+#[test]
+fn project_file_payload_matches_studio_auto_calibration_combination() {
+    let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+        printer_model: Some("N6".to_owned()),
+        filename: "job.3mf".to_owned(),
+        url: None,
+        md5: None,
+        plate_id: 1,
+        task_id: "task".to_owned(),
+        subtask_id: "subtask".to_owned(),
+        use_ams: true,
+        bed_leveling: false,
+        auto_bed_leveling: PrintCalibrationMode::Auto,
+        flow_cali: false,
+        auto_flow_cali: PrintCalibrationMode::Auto,
+        auto_offset_cali: PrintCalibrationMode::Off,
+        timelapse: true,
+        ams_mapping_json: None,
+        ams_mapping2_json: None,
+        ams_mapping_info_json: None,
+    })
+    .payload();
+
+    let print = project_file_payload(&payload).print;
+    assert!(!print.bed_leveling);
+    assert_eq!(print.auto_bed_leveling, 2);
+    assert!(!print.flow_cali);
+    assert_eq!(print.extrude_cali_flag, 2);
+    assert_eq!(print.nozzle_offset_cali, 0);
+    assert!(print.timelapse);
+}
 #[test]
 fn project_file_payload_defaults_mapping_keys_when_no_mapping_supplied() {
     let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
@@ -639,7 +679,11 @@ fn project_file_payload_defaults_mapping_keys_when_no_mapping_supplied() {
         task_id: "task-1".to_string(),
         subtask_id: "subtask-1".to_string(),
         use_ams: false,
+        bed_leveling: false,
+        auto_bed_leveling: PrintCalibrationMode::Off,
         flow_cali: false,
+        auto_flow_cali: PrintCalibrationMode::Off,
+        auto_offset_cali: PrintCalibrationMode::Off,
         timelapse: false,
         ams_mapping_json: None,
         ams_mapping2_json: None,
@@ -664,7 +708,11 @@ fn project_file_payload_includes_ams_mapping_only_when_supplied() {
         task_id: "task-1".to_string(),
         subtask_id: "subtask-1".to_string(),
         use_ams: true,
+        bed_leveling: false,
+        auto_bed_leveling: PrintCalibrationMode::Off,
         flow_cali: false,
+        auto_flow_cali: PrintCalibrationMode::Off,
+        auto_offset_cali: PrintCalibrationMode::Off,
         timelapse: false,
         ams_mapping_json: Some("[0,-1,4]".to_string()),
         ams_mapping2_json: None,
@@ -689,7 +737,11 @@ fn project_file_payload_includes_ams_mapping2_only_when_supplied() {
         task_id: "task-1".to_string(),
         subtask_id: "subtask-1".to_string(),
         use_ams: true,
+        bed_leveling: false,
+        auto_bed_leveling: PrintCalibrationMode::Off,
         flow_cali: false,
+        auto_flow_cali: PrintCalibrationMode::Off,
+        auto_offset_cali: PrintCalibrationMode::Off,
         timelapse: false,
         ams_mapping_json: None,
         ams_mapping2_json: Some(r#"[{"ams_id":255,"slot_id":0}]"#.to_string()),
@@ -719,7 +771,11 @@ fn project_file_payload_includes_both_mapping_keys_when_supplied() {
         task_id: "task-1".to_string(),
         subtask_id: "subtask-1".to_string(),
         use_ams: true,
+        bed_leveling: false,
+        auto_bed_leveling: PrintCalibrationMode::Off,
         flow_cali: false,
+        auto_flow_cali: PrintCalibrationMode::Off,
+        auto_offset_cali: PrintCalibrationMode::Off,
         timelapse: false,
         ams_mapping_json: Some("[0,1]".to_string()),
         ams_mapping2_json: Some(r#"[{"ams_id":0,"slot_id":1}]"#.to_string()),
@@ -756,7 +812,11 @@ fn project_file_payload_rewrites_flat_external_mapping_values() {
         task_id: "task-1".to_string(),
         subtask_id: "subtask-1".to_string(),
         use_ams: true,
+        bed_leveling: false,
+        auto_bed_leveling: PrintCalibrationMode::Off,
         flow_cali: false,
+        auto_flow_cali: PrintCalibrationMode::Off,
+        auto_offset_cali: PrintCalibrationMode::Off,
         timelapse: false,
         ams_mapping_json: Some("[254,255,15]".to_string()),
         ams_mapping2_json: None,

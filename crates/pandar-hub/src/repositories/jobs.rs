@@ -1,4 +1,5 @@
 use anyhow::Context;
+use pandar_core::PrintCalibrationMode;
 use pandar_core::{
     AgentId, CommandId, CommandRecord, CommandStatus, Job, JobArtifact, JobId, JobStatus, TenantId,
 };
@@ -45,7 +46,11 @@ pub struct CreatePrintJob {
     pub artifact_metadata_json: Option<String>,
     pub plate_id: u32,
     pub use_ams: bool,
+    pub auto_bed_leveling: PrintCalibrationMode,
+    pub bed_leveling: bool,
     pub flow_cali: bool,
+    pub auto_flow_cali: PrintCalibrationMode,
+    pub auto_offset_cali: PrintCalibrationMode,
     pub timelapse: bool,
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
@@ -57,7 +62,11 @@ pub struct DuplicatePrintJob {
     pub printer_id: Option<String>,
     pub plate_id: Option<u32>,
     pub use_ams: Option<bool>,
+    pub auto_bed_leveling: Option<PrintCalibrationMode>,
+    pub bed_leveling: Option<bool>,
     pub flow_cali: Option<bool>,
+    pub auto_flow_cali: Option<PrintCalibrationMode>,
+    pub auto_offset_cali: Option<PrintCalibrationMode>,
     pub timelapse: Option<bool>,
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
