@@ -4,7 +4,7 @@ use super::*;
 use crate::repositories::{ApplyPrintReport, CreatePrintJob};
 
 #[tokio::test]
-async fn postgres_clear_terminal_jobs_when_configured() {
+async fn postgres_clear_terminal_and_stalled_jobs_when_configured() {
     let Some(database) = postgres_database().await else {
         eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
         return;

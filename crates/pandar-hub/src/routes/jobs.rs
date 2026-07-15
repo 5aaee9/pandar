@@ -267,7 +267,7 @@ pub async fn clear_jobs(
     let auth = auth::authorize_tenant_admin_user_or_no_auth(&state, &headers, tenant_id).await?;
     let outcome = state
         .jobs()
-        .clear_terminal_for_tenant_with_audit(
+        .clear_for_tenant_with_audit(
             state.artifact_storage(),
             tenant_id,
             auth::audit_actor(&auth),

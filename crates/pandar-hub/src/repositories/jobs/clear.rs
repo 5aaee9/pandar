@@ -6,6 +6,7 @@ use sea_orm::{
     SqliteTransactionMode, TransactionOptions, TransactionTrait,
 };
 use serde::Serialize;
+use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     artifacts::ArtifactStorage,
@@ -16,6 +17,8 @@ use crate::{
         audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
     },
 };
+
+const STALLED_JOB_AGE: Duration = Duration::minutes(15);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ClearJobsOutcome {
@@ -36,7 +39,7 @@ struct ClearJobsAuditMetadata {
 }
 
 impl JobRepository {
-    pub async fn clear_terminal_for_tenant_with_audit(
+    pub async fn clear_for_tenant_with_audit(
         &self,
         artifact_storage: &dyn ArtifactStorage,
         tenant_id: pandar_core::TenantId,
@@ -53,14 +56,18 @@ impl JobRepository {
             .iter()
             .map(|command| (command.id.as_str(), command))
             .collect::<HashMap<_, _>>();
+        let now = OffsetDateTime::now_utc();
         let clearable_ids = tenant_jobs
             .iter()
-            .filter(|job| {
-                command_by_id
-                    .get(job.command_id.as_str())
-                    .is_some_and(|command| clearable_job(job, command))
+            .map(|job| -> RepositoryResult<Option<String>> {
+                let Some(command) = command_by_id.get(job.command_id.as_str()) else {
+                    return Ok(None);
+                };
+                Ok(clearable_job(job, command, now)?.then(|| job.id.clone()))
             })
-            .map(|job| job.id.clone())
+            .collect::<RepositoryResult<Vec<_>>>()?
+            .into_iter()
+            .flatten()
             .collect::<HashSet<_>>();
         let retained_jobs = tenant_jobs.len() as u64 - clearable_ids.len() as u64;
 
@@ -105,7 +112,7 @@ impl JobRepository {
         insert_clear_audit(&tx, tenant_id, actor, &outcome).await?;
         tx.commit()
             .await
-            .context("failed to commit terminal job clear transaction")?;
+            .context("failed to commit job clear transaction")?;
         Ok(outcome)
     }
 }
@@ -119,7 +126,7 @@ async fn begin_clear_transaction(database: &Database) -> RepositoryResult<Databa
             ..Default::default()
         })
         .await
-        .context("failed to begin terminal job clear transaction")
+        .context("failed to begin job clear transaction")
         .map_err(Into::into)
 }
 
@@ -187,22 +194,45 @@ async fn locked_artifacts(
     Ok(rows)
 }
 
-fn clearable_job(job: &jobs::Model, command: &commands::Model) -> bool {
+fn clearable_job(
+    job: &jobs::Model,
+    command: &commands::Model,
+    now: OffsetDateTime,
+) -> RepositoryResult<bool> {
     if !matches!(job.status.as_str(), "succeeded" | "failed")
         || !matches!(command.status.as_str(), "succeeded" | "failed")
         || command.kind != "print_project_file"
     {
-        return false;
+        return Ok(false);
     }
-    match job.print_status.as_str() {
+    let clearable = match job.print_status.as_str() {
         "completed" | "failed" | "cancelled" => true,
-        "pending" if job.status == "failed" => {
-            job.print_started_at.is_none()
+        "pending"
+            if job.print_started_at.is_none()
                 && job.progress_percent.unwrap_or(0) == 0
-                && job.current_layer.unwrap_or(0) == 0
+                && job.current_layer.unwrap_or(0) == 0 =>
+        {
+            job.status == "failed"
+                || (job.status == "succeeded"
+                    && command.status == "succeeded"
+                    && stalled_job(job, now)?)
         }
         _ => false,
-    }
+    };
+    Ok(clearable)
+}
+
+fn stalled_job(job: &jobs::Model, now: OffsetDateTime) -> RepositoryResult<bool> {
+    let updated_at = OffsetDateTime::parse(&job.updated_at, &Rfc3339)
+        .with_context(|| format!("failed to parse updated_at for job {}", job.id))?;
+    let latest_update = if let Some(print_updated_at) = &job.print_updated_at {
+        let print_updated_at = OffsetDateTime::parse(print_updated_at, &Rfc3339)
+            .with_context(|| format!("failed to parse print_updated_at for job {}", job.id))?;
+        updated_at.max(print_updated_at)
+    } else {
+        updated_at
+    };
+    Ok(latest_update < now - STALLED_JOB_AGE)
 }
 
 async fn delete_jobs(
@@ -218,7 +248,7 @@ async fn delete_jobs(
         .filter(jobs::Column::Id.is_in(ids.clone()))
         .exec(tx)
         .await
-        .context("failed to delete terminal jobs")
+        .context("failed to delete clearable jobs")
         .map(|result| result.rows_affected)
         .map_err(Into::into)
 }

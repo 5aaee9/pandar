@@ -13,8 +13,10 @@ use crate::{
     },
 };
 
+const STALE_AT: &str = "2000-01-01T00:00:00Z";
+
 #[tokio::test]
-async fn clear_terminal_jobs_preserves_active_and_shared_artifacts_on_sqlite() {
+async fn clear_jobs_removes_terminal_and_stalled_jobs_safely_on_sqlite() {
     let (database, tenants, agents, _, commands, jobs) = repositories().await;
     let spool = tempfile::tempdir().unwrap();
     let storage = FilesystemArtifactStorage::new(spool.path(), DEFAULT_MAX_ARTIFACT_BYTES).unwrap();
@@ -49,7 +51,7 @@ async fn artifact_delete_failure_rolls_back_job_clear_on_sqlite() {
     let storage = crate::repositories::tests::cleanup::storage::RecordingArtifactStorage::failing();
 
     let error = jobs
-        .clear_terminal_for_tenant_with_audit(&storage, tenant.id, AuditActor::no_auth())
+        .clear_for_tenant_with_audit(&storage, tenant.id, AuditActor::no_auth())
         .await
         .unwrap_err();
 
@@ -116,9 +118,16 @@ pub(in crate::repositories::tests) async fn exercise_clear_jobs(
     .unwrap();
 
     let queued = create_job(&jobs, tenant.id, agent.id, &printer_id, "queued").await;
+    age_job(&database, queued.job.id, None).await;
 
     let waiting = create_job(&jobs, tenant.id, agent.id, &printer_id, "waiting").await;
     succeed(&jobs, waiting.job.command_id, tenant.id, agent.id).await;
+    let fresh_print_update = pandar_core::created_at_now();
+    age_job(&database, waiting.job.id, Some(&fresh_print_update)).await;
+
+    let stalled = create_job(&jobs, tenant.id, agent.id, &printer_id, "stalled").await;
+    succeed(&jobs, stalled.job.command_id, tenant.id, agent.id).await;
+    age_job(&database, stalled.job.id, None).await;
 
     let running = create_job(&jobs, tenant.id, agent.id, &printer_id, "running").await;
     succeed(&jobs, running.job.command_id, tenant.id, agent.id).await;
@@ -132,6 +141,7 @@ pub(in crate::repositories::tests) async fn exercise_clear_jobs(
     ))
     .await
     .unwrap();
+    age_job(&database, running.job.id, Some(STALE_AT)).await;
 
     let suspicious = create_job(&jobs, tenant.id, agent.id, &printer_id, "suspicious").await;
     jobs.mark_print_sent(suspicious.job.command_id, tenant.id, agent.id)
@@ -154,6 +164,7 @@ pub(in crate::repositories::tests) async fn exercise_clear_jobs(
         .exec(&database.sea_orm_connection())
         .await
         .unwrap();
+    age_job(&database, suspicious.job.id, Some(STALE_AT)).await;
 
     let shared_active = create_job(&jobs, tenant.id, agent.id, &printer_id, "shared").await;
     let shared_terminal = jobs
@@ -187,15 +198,15 @@ pub(in crate::repositories::tests) async fn exercise_clear_jobs(
     .unwrap();
 
     let outcome = jobs
-        .clear_terminal_for_tenant_with_audit(storage, tenant.id, AuditActor::no_auth())
+        .clear_for_tenant_with_audit(storage, tenant.id, AuditActor::no_auth())
         .await
         .unwrap();
 
-    assert_eq!(outcome.deleted_jobs, 3);
+    assert_eq!(outcome.deleted_jobs, 4);
     assert_eq!(outcome.retained_jobs, 5);
-    assert_eq!(outcome.deleted_commands, 3);
-    assert_eq!(outcome.deleted_artifacts, 2);
-    assert_eq!(outcome.deleted_artifact_bytes, 84);
+    assert_eq!(outcome.deleted_commands, 4);
+    assert_eq!(outcome.deleted_artifacts, 3);
+    assert_eq!(outcome.deleted_artifact_bytes, 126);
     assert!(
         jobs.get_for_tenant(tenant.id, completed.job.id)
             .await
@@ -204,6 +215,12 @@ pub(in crate::repositories::tests) async fn exercise_clear_jobs(
     );
     assert!(
         jobs.get_for_tenant(tenant.id, dispatch_failed.job.id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        jobs.get_for_tenant(tenant.id, stalled.job.id)
             .await
             .unwrap()
             .is_none()
@@ -237,7 +254,7 @@ pub(in crate::repositories::tests) async fn exercise_clear_jobs(
     assert!(cleared_machine_event_is_printer_level(&database, completed.job.id).await);
 
     let replay = jobs
-        .clear_terminal_for_tenant_with_audit(storage, tenant.id, AuditActor::no_auth())
+        .clear_for_tenant_with_audit(storage, tenant.id, AuditActor::no_auth())
         .await
         .unwrap();
     assert_eq!(replay.deleted_jobs, 0);
@@ -269,6 +286,19 @@ async fn succeed(
         .await
         .unwrap();
     jobs.mark_print_succeeded(command_id, tenant_id, agent_id)
+        .await
+        .unwrap();
+}
+
+async fn age_job(database: &Database, job_id: JobId, print_updated_at: Option<&str>) {
+    job_entities::Entity::update_many()
+        .set(job_entities::ActiveModel {
+            updated_at: Set(STALE_AT.to_owned()),
+            print_updated_at: Set(print_updated_at.map(str::to_owned)),
+            ..Default::default()
+        })
+        .filter(job_entities::Column::Id.eq(job_id.to_string()))
+        .exec(&database.sea_orm_connection())
         .await
         .unwrap();
 }
