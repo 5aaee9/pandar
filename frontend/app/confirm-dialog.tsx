@@ -74,6 +74,7 @@ export function ConfirmForm({
   tone = 'danger',
   buttonClassName,
   buttonLabel,
+  buttonAriaLabel,
   disabled,
   children,
 }: {
@@ -85,6 +86,7 @@ export function ConfirmForm({
   tone?: 'default' | 'danger'
   buttonClassName: string
   buttonLabel: string
+  buttonAriaLabel?: string
   disabled?: boolean
   children?: ReactNode
 }) {
@@ -98,6 +100,7 @@ export function ConfirmForm({
       <form ref={formRef} action={action}>
         {children}
         <button
+          aria-label={buttonAriaLabel}
           className={buttonClassName}
           disabled={disabled}
           onClick={openDialog}

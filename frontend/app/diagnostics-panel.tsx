@@ -92,7 +92,8 @@ export function LinkedAgentsSection({
                   <td className="px-4 py-3">
                     <AgentDeleteForm
                       action={deleteAgent}
-                      buttonLabel={t('deleteAgent', { name: agent.name })}
+                      buttonAriaLabel={t('deleteAgentAriaLabel', { name: agent.name })}
+                      buttonLabel={t('deleteAgent')}
                       disabled={agent.status.toLowerCase() === 'online'}
                       disabledMessage={agent.status.toLowerCase() === 'online' ? t('deleteOnline', { name: agent.name }) : undefined}
                       title={t('deleteTitle')}

@@ -185,16 +185,28 @@ describe("Agents view pairing guidance", () => {
       ],
     });
 
-    expect(
-      screen.getByRole("button", { name: "Delete Offline agent" }),
-    ).toBeEnabled();
+    const offlineDelete = screen.getByRole("button", {
+      name: "Delete Offline agent",
+    });
     const onlineDelete = screen.getByRole("button", {
       name: "Delete Online agent",
     });
+    expect(offlineDelete).toHaveTextContent(/^Delete$/);
+    expect(onlineDelete).toHaveTextContent(/^Delete$/);
+    expect(offlineDelete).toBeEnabled();
     expect(onlineDelete).toBeDisabled();
     expect(onlineDelete).toHaveAccessibleDescription(
       "Online agent is online, cannot be deleted",
     );
+
+    await user.click(offlineDelete);
+    expect(screen.getByRole("dialog", { name: "Delete agent" })).toBeVisible();
+    expect(
+      screen.getByText(
+        "Delete Offline agent? Its reported printers, commands, jobs, and machine events will be removed.",
+      ),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     const deleteHint = onlineDelete.parentElement;
     expect(deleteHint).not.toBeNull();

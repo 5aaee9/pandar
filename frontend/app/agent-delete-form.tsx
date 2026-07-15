@@ -16,6 +16,7 @@ export function AgentDeleteForm({
   message,
   confirmLabel,
   buttonLabel,
+  buttonAriaLabel,
   disabled,
   disabledMessage,
   children,
@@ -25,6 +26,7 @@ export function AgentDeleteForm({
   message: string
   confirmLabel: string
   buttonLabel: string
+  buttonAriaLabel: string
   disabled?: boolean
   disabledMessage?: string
   children?: ReactNode
@@ -38,7 +40,13 @@ export function AgentDeleteForm({
           delay={0}
           render={<span className="inline-flex cursor-not-allowed" onClick={() => toast.warning(disabledMessage)} />}
         >
-          <button aria-describedby={disabledMessageId} className={DELETE_BUTTON_CLASS} disabled type="button">
+          <button
+            aria-describedby={disabledMessageId}
+            aria-label={buttonAriaLabel}
+            className={DELETE_BUTTON_CLASS}
+            disabled
+            type="button"
+          >
             {buttonLabel}
           </button>
           <span className="sr-only" id={disabledMessageId}>
@@ -55,6 +63,7 @@ export function AgentDeleteForm({
   return (
     <ConfirmForm
       action={action}
+      buttonAriaLabel={buttonAriaLabel}
       buttonClassName={DELETE_BUTTON_CLASS}
       buttonLabel={buttonLabel}
       disabled={disabled}
