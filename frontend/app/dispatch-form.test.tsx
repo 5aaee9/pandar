@@ -40,7 +40,7 @@ describe("DispatchForm", () => {
     expect(nozzleOffset.getByRole("radio", { name: "Off" })).toBeChecked();
     expect(container.querySelector('input[name="bed_leveling"]')).toHaveValue("false");
     expect(container.querySelector('input[name="flow_cali"]')).toHaveValue("false");
-    expect(container.querySelector('input[name="use_ams"][type="checkbox"]')).toBeChecked();
+    expect(container.querySelector('input[type="checkbox"]')).toBeChecked();
 
     const form = container.querySelector("form") as HTMLFormElement;
     let formData = new FormData(form);
@@ -51,6 +51,7 @@ describe("DispatchForm", () => {
     expect(formData.get("auto_flow_cali")).toBe("2");
     expect(formData.get("auto_offset_cali")).toBe("0");
 
+    expect(formData.get("use_ams")).toBe("true");
     await user.click(flowCalibration.getByRole("radio", { name: "On" }));
     await user.click(timelapse.getByRole("radio", { name: "Off" }));
     formData = new FormData(form);
@@ -262,8 +263,9 @@ describe("DispatchForm", () => {
       .toBe("3");
   });
 
-  it("maps uploaded project materials to the selected printer AMS and allows overrides", async () => {
+  it("shows Studio-style routed material pickers with colors and allows valid overrides", async () => {
     const user = userEvent.setup();
+    const onRedirect = vi.fn();
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -273,33 +275,35 @@ describe("DispatchForm", () => {
               display_name: "benchy",
               default_plate_id: 1,
               warnings: [],
-              plates: [
-                {
-                  plate_id: 1,
-                  name: "Plate 1",
-                  estimated_time_seconds: null,
-                  filament_weight_grams: null,
-                  object_count: 1,
-                  objects: ["benchy"],
-                  filaments: [
-                    {
-                      filament_id: "1",
-                      filament_type: "PLA",
-                      color: "#ff0000",
-                      used_grams: 10,
-                      used_meters: 3,
-                    },
-                    {
-                      filament_id: "2",
-                      filament_type: "ABS",
-                      color: "#111111",
-                      used_grams: 2,
-                      used_meters: 1,
-                    },
-                  ],
-                  has_thumbnail: false,
-                },
-              ],
+              plates: [{
+                plate_id: 1,
+                name: "Plate 1",
+                estimated_time_seconds: null,
+                filament_weight_grams: null,
+                object_count: 1,
+                objects: ["benchy"],
+                filaments: [
+                  {
+                    filament_id: "1",
+                    tray_info_idx: "GFA00",
+                    nozzle_id: 1,
+                    filament_type: "PLA",
+                    color: "#000000",
+                    used_grams: 10,
+                    used_meters: 3,
+                  },
+                  {
+                    filament_id: "2",
+                    tray_info_idx: "GFA01",
+                    nozzle_id: 0,
+                    filament_type: "PLA",
+                    color: "#FF0000",
+                    used_grams: 2,
+                    used_meters: 1,
+                  },
+                ],
+                has_thumbnail: false,
+              }],
             },
           });
         }
@@ -307,37 +311,70 @@ describe("DispatchForm", () => {
       }),
     );
 
-    const { container } = render(
+    const { container, findByRole, getByRole, getByText } = render(
       <NextIntlClientProvider locale="en" messages={en}>
         <DispatchForm
           selectedTenant={{ id: "tenant-1" }}
-          printers={[
-            {
-              id: "printer-1",
-              name: "Printer One",
-              serial_number: "SN1",
-              model: "N6",
-              materials: {
-                observed_at: "2026-07-15T00:00:00Z",
-                active_tray: null,
-                external_spools: [],
-                ams_units: [
-                  {
-                    unit_id: "0",
-                    trays: [
-                      {
-                        tray_id: "0",
-                        global_tray_id: 0,
-                        type: "PLA",
-                        color: "FF0000",
-                        exists: true,
-                      },
-                    ],
-                  },
-                ],
-              },
+          onRedirect={onRedirect}
+          printers={[{
+            id: "printer-1",
+            name: "Printer One",
+            serial_number: "SN1",
+            model: "Bambu Lab X2D",
+            materials: {
+              filament_switch_installed: false,
+              observed_at: "2026-07-15T00:00:00Z",
+              active_tray: null,
+              ams_units: [
+                {
+                  unit_id: "0",
+                  trays: [{
+                    tray_id: "0",
+                    global_tray_id: 0,
+                    type: "PLA",
+                    color: "FF0000",
+                    exists: true,
+                  }],
+                },
+                {
+                  unit_id: "1",
+                  trays: [{
+                    tray_id: "0",
+                    global_tray_id: 4,
+                    type: "PLA",
+                    color: "000000",
+                    exists: true,
+                  }],
+                },
+                {
+                  unit_id: "128",
+                  unit_kind: "ams_ht",
+                  toolhead: "R",
+                  trays: [{
+                    tray_id: "0",
+                    type: "PETG",
+                    color: "00FF00",
+                    exists: true,
+                  }],
+                },
+              ],
+              external_spools: [
+                {
+                  external_id: "254",
+                  tray_id: "0",
+                  type: "PLA",
+                  color: "00000000",
+                  exists: true,
+                },
+                {
+                  external_id: "255",
+                  tray_id: "1",
+                  type: "ABS",
+                  color: "0000FF",
+                  exists: true,
+                }],
             },
-          ]}
+          }]}
         />
       </NextIntlClientProvider>,
     );
@@ -347,22 +384,87 @@ describe("DispatchForm", () => {
       new File(["3mf"], "benchy.3mf", { type: "model/3mf" }),
     );
 
-    const plaMapping = await waitFor(() =>
-      container.querySelector('select[aria-label="Map PLA (1)"]'),
-    );
-    expect(plaMapping).toHaveValue("0:0");
-    expect(container.querySelector('select[aria-label="Map ABS (2)"]')).toHaveValue("");
-    expect(container.querySelector('input[name="ams_mapping"]')).toHaveValue("[0,-1]");
+    const mainMapping = await findByRole("button", { name: "Map PLA (1)" });
+    const auxiliaryMapping = getByRole("button", { name: "Map PLA (2)" });
+    expect(getByText("Main nozzle")).toBeInTheDocument();
+    expect(getByText("Auxiliary nozzle")).toBeInTheDocument();
+    expect(mainMapping).toHaveTextContent("B1");
+    expect(auxiliaryMapping).toHaveTextContent("A1");
+    expect(mainMapping.querySelector('[style*="background-color"]'))
+      .toHaveStyle({ backgroundColor: "#000000" });
+    expect(container.querySelector('input[name="ams_mapping"]')).toHaveValue("[4,0]");
     expect(container.querySelector('input[name="ams_mapping2"]')).toHaveValue(
-      '[{"ams_id":0,"slot_id":0},{"ams_id":255,"slot_id":255}]',
+      '[{"ams_id":1,"slot_id":0},{"ams_id":0,"slot_id":0}]',
+    );
+    expect(container.querySelector('input[name="ams_mapping_info"]')).toHaveValue(
+      '[{"ams":4,"filamentType":"PLA","filamentId":"GFA00","nozzleId":1,"sourceColor":"#000000FF","targetColor":"#000000FF"},{"ams":0,"filamentType":"PLA","filamentId":"GFA01","nozzleId":0,"sourceColor":"#FF0000FF","targetColor":"#FF0000FF"}]',
     );
 
-    await user.selectOptions(
-      container.querySelector('select[aria-label="Map ABS (2)"]') as HTMLSelectElement,
-      "0:0",
-    );
+    await user.click(auxiliaryMapping);
+    expect(await findByRole("heading", {
+      name: "Select the filament installed on the Auxiliary nozzle.",
+    })).toBeInTheDocument();
+    expect(getByText("Left AMS")).toBeInTheDocument();
+    expect(getByText("Right AMS")).toBeInTheDocument();
+    expect(getByText("AMS(2)")).toBeInTheDocument();
+    expect(getByText("AMS(1)")).toBeInTheDocument();
+    expect(getByRole("button", {
+      name: "B1, PLA, This source cannot feed the selected nozzle.",
+    })).toBeDisabled();
 
-    expect(container.querySelector('input[name="ams_mapping"]')).toHaveValue("[0,0]");
+    const transparentExternal = getByRole("button", {
+      name: "Ext-L, PLA, This source cannot feed the selected nozzle.",
+    });
+    expect(transparentExternal.querySelector('[style*="background-color"]'))
+      .toHaveStyle({ backgroundColor: "#00000000" });
+    expect(getByText("AMS HT (1)")).toBeInTheDocument();
+    expect(getByRole("button", {
+      name: "HT-A, PETG, The installed AMS material type does not match the project material.",
+    })).toBeDisabled();
+    await user.click(getByRole("button", { name: "Unmapped" }));
+    await waitFor(() => {
+      expect(container.querySelector('input[name="material_mapping_valid"]'))
+        .toHaveValue("false");
+    });
+    expect(getByRole("button", { name: "Dispatch" })).toBeDisabled();
+    expect(getByText(
+      "Select a compatible filament source for every required material before dispatch.",
+    )).toBeInTheDocument();
+    await user.click(auxiliaryMapping);
+    await user.click(getByRole("button", { name: "Ext-R, ABS" }));
+    expect(auxiliaryMapping).toHaveTextContent("Ext-R");
+    expect(container.querySelector('input[name="ams_mapping"]')).toHaveValue("[4,-1]");
+    expect(container.querySelector('input[name="ams_mapping2"]')).toHaveValue(
+      '[{"ams_id":1,"slot_id":0},{"ams_id":255,"slot_id":0}]',
+    );
+    expect(container.querySelector('input[name="material_mapping_valid"]'))
+      .toHaveValue("true");
+    expect(container.querySelector('input[name="external_material_mismatch"]'))
+      .toHaveValue("true");
+    expect(container.querySelector('input[name="material_mapping_uses_ams"]'))
+      .toHaveValue("true");
+    expect(getByText(
+      "The selected external spool has a different material type. Pandar will ask for confirmation before dispatch.",
+    )).toBeInTheDocument();
+
+    await user.click(getByRole("checkbox", { name: "Use AMS" }));
+    expect(getByRole("checkbox", { name: "Use AMS" })).not.toBeChecked();
+    await waitFor(() => {
+      expect(container.querySelector('input[name="material_mapping_uses_ams"]'))
+        .toHaveValue("false");
+      expect(container.querySelector('input[name="ams_mapping2"]')).toHaveValue(
+        '[{"ams_id":254,"slot_id":0},{"ams_id":255,"slot_id":0}]',
+      );
+    });
+
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.submit(container.querySelector("form") as HTMLFormElement);
+    expect(confirm).toHaveBeenCalledWith("The external spool material type does not match the project. Dispatch anyway?");
+    await waitFor(() => expect(onRedirect).toHaveBeenCalled());
+    const upload = vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body;
+    expect(upload).toBeInstanceOf(FormData);
+    expect((upload as FormData).get("use_ams")).toBe("false");
+    expect((upload as FormData).get("material_mapping_uses_ams")).toBeNull();
   });
 });
 function screenGroup(container: HTMLElement, name: string) {

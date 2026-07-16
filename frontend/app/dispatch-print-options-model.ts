@@ -104,6 +104,12 @@ export function dispatchPrintOptionCapabilities(
   }
 }
 
+export function isDualNozzleModel(model: string | null) {
+  return ['N6', 'X2D', 'O1C', 'O1C2', 'H2C', 'O1D', 'H2D', 'O1E', 'H2DPRO'].includes(
+    normalizedModelKey(model),
+  )
+}
+
 function normalizedModelKey(model: string | null) {
   const compact = model?.trim().toUpperCase().replace(/[\s_-]/g, '') ?? ''
   return compact.startsWith('BAMBULAB') ? compact.slice('BAMBULAB'.length) : compact

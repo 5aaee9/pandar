@@ -12,6 +12,7 @@ pub struct Model {
     pub ams_json: String,
     pub external_spools_json: String,
     pub active_tray_json: Option<String>,
+    pub filament_switch_installed: Option<bool>,
     pub observed_at: String,
     pub updated_at: String,
 }

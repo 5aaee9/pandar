@@ -13,11 +13,13 @@ pub(super) fn parse(contents: &str, draft: &mut Draft) -> anyhow::Result<()> {
     let mut current_plate = None;
     let mut inside_plate = false;
     let mut slice_objects = BTreeSet::new();
+    let mut filament_nozzle_ids = Vec::new();
 
     loop {
         match reader.read_event() {
             Ok(Event::Start(event)) if event.name().as_ref() == b"plate" => {
                 current_plate = None;
+                filament_nozzle_ids.clear();
                 inside_plate = true;
             }
             Ok(Event::Start(event)) | Ok(Event::Empty(event)) if inside_plate => {
@@ -26,6 +28,7 @@ pub(super) fn parse(contents: &str, draft: &mut Draft) -> anyhow::Result<()> {
                     &event,
                     &mut current_plate,
                     &mut slice_objects,
+                    &mut filament_nozzle_ids,
                     draft,
                 )?;
             }
@@ -47,6 +50,7 @@ fn parse_plate_element(
     event: &BytesStart<'_>,
     current_plate: &mut Option<u32>,
     slice_objects: &mut BTreeSet<u32>,
+    filament_nozzle_ids: &mut Vec<Option<u8>>,
     draft: &mut Draft,
 ) -> anyhow::Result<()> {
     match event.name().as_ref() {
@@ -77,6 +81,9 @@ fn parse_plate_element(
                     {
                         plate.metadata.filament_weight_grams = parse_f64(&value);
                     }
+                }
+                Some("filament_maps") => {
+                    *filament_nozzle_ids = parse_filament_maps(&value);
                 }
                 _ => {}
             }
@@ -114,6 +121,7 @@ fn parse_plate_element(
             let mut filament = FilamentMetadata {
                 filament_id: None,
                 tray_info_idx: None,
+                nozzle_id: None,
                 filament_type: None,
                 color: None,
                 used_grams: None,
@@ -131,6 +139,14 @@ fn parse_plate_element(
                     _ => {}
                 }
             }
+            filament.nozzle_id = filament
+                .filament_id
+                .as_deref()
+                .and_then(|id| id.parse::<usize>().ok())
+                .and_then(|id| id.checked_sub(1))
+                .and_then(|index| filament_nozzle_ids.get(index))
+                .copied()
+                .flatten();
             plate.metadata.filaments.push(filament);
         }
         _ => {}
@@ -187,4 +203,15 @@ fn parse_u32(value: &str) -> Option<u32> {
 
 fn parse_f64(value: &str) -> Option<f64> {
     value.parse::<f64>().ok().filter(|value| value.is_finite())
+}
+
+fn parse_filament_maps(value: &str) -> Vec<Option<u8>> {
+    value
+        .split_whitespace()
+        .map(|value| match value {
+            "1" => Some(1),
+            "2" => Some(0),
+            _ => None,
+        })
+        .collect()
 }

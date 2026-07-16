@@ -43,6 +43,7 @@ pub struct MaterialSnapshot {
     pub ams_units: MaterialJsonValue,
     pub external_spools: MaterialJsonValue,
     pub active_tray: Option<MaterialJsonValue>,
+    pub filament_switch_installed: Option<bool>,
     pub observed_at: String,
     pub updated_at: String,
 }
@@ -76,6 +77,7 @@ impl MaterialSnapshot {
             ams_units: &self.ams_units,
             external_spools: &self.external_spools,
             active_tray: self.active_tray.as_ref(),
+            filament_switch_installed: self.filament_switch_installed,
         })
         .expect("persisted material snapshot JSON is serializable")
     }
@@ -87,6 +89,7 @@ struct PersistedMaterialSnapshotJson<'a> {
     ams_units: &'a MaterialJsonValue,
     external_spools: &'a MaterialJsonValue,
     active_tray: Option<&'a MaterialJsonValue>,
+    filament_switch_installed: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -302,6 +305,7 @@ where
         && snapshot.ams_units == merged.ams_units
         && snapshot.external_spools == merged.external_spools
         && snapshot.active_tray == merged.active_tray
+        && snapshot.filament_switch_installed == merged.filament_switch_installed
     {
         return Ok(MaterialPatchOutcome::Unchanged(snapshot));
     }
@@ -334,6 +338,7 @@ where
         external_spools_json: Set(serde_json::to_string(&merged.external_spools)
             .context("failed to serialize external spool material state")?),
         active_tray_json: Set(active_tray_json),
+        filament_switch_installed: Set(merged.filament_switch_installed),
         observed_at: Set(patch.observed_at),
         updated_at: Set(now),
     };
@@ -372,6 +377,7 @@ fn snapshot_from_model(
                 .as_deref()
                 .map(|json| parse_object_json(json, "active material tray"))
                 .transpose()?,
+            filament_switch_installed: model.filament_switch_installed,
             observed_at: model.observed_at,
             updated_at: model.updated_at,
         })

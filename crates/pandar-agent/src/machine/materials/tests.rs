@@ -98,6 +98,40 @@ fn single_nozzle_report_does_not_guess_ams_toolhead_without_info() {
 }
 
 #[test]
+fn installed_filament_switch_marks_bound_ams_units_as_shared() {
+    let patch = normalize(filament_switch_ams_report(Some("20000000"))).unwrap();
+
+    assert_eq!(patch.ams_units[0].toolhead.as_deref(), Some("LR"));
+    assert_eq!(patch.ams_units[1].toolhead.as_deref(), Some("LR"));
+}
+
+#[test]
+fn switch_bound_ams_without_install_state_does_not_guess_toolheads() {
+    let patch = normalize(filament_switch_ams_report(None)).unwrap();
+
+    assert_eq!(patch.ams_units[0].toolhead, None);
+    assert_eq!(patch.ams_units[1].toolhead, None);
+}
+
+#[test]
+fn switch_bound_ams_rejects_an_invalid_switch_input() {
+    let patch = normalize(filament_switch_invalid_binding_report()).unwrap();
+
+    assert_eq!(patch.ams_units[0].toolhead, None);
+    assert_eq!(patch.ams_units[1].toolhead.as_deref(), Some("LR"));
+}
+
+#[test]
+fn aux_only_reports_persist_installed_and_absent_switch_states() {
+    let installed = normalize(filament_switch_only_report("20000000")).unwrap();
+    let absent = normalize(filament_switch_only_report("00000000")).unwrap();
+
+    assert_eq!(installed.filament_switch_installed, Some(true));
+    assert_eq!(absent.filament_switch_installed, Some(false));
+    assert!(installed.ams_units.is_empty());
+}
+
+#[test]
 fn decimal_ams_temperature_is_normalized() {
     let patch = normalize(decimal_ams_temperature_report()).unwrap();
 

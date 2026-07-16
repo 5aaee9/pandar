@@ -67,6 +67,7 @@ fn slice_info_extracts_plate_estimates_objects_and_filaments() {
         metadata.plates[0].filaments[0].tray_info_idx.as_deref(),
         Some("GFA00")
     );
+    assert_eq!(metadata.plates[0].filaments[0].nozzle_id, None);
     assert_eq!(
         metadata.plates[0].filaments[0].color.as_deref(),
         Some("#ffffff")
@@ -119,6 +120,48 @@ fn current_slice_info_metadata_extracts_plate_and_filaments() {
     );
 }
 
+#[test]
+fn slice_info_filament_maps_assign_cloud_nozzle_ids_per_plate() {
+    let temp = zip_fixture(&[(
+        "Metadata/slice_info.config",
+        r##"
+            <config>
+              <plate>
+                <metadata key="index" value="1"/>
+                <metadata key="filament_maps" value="1 2 invalid"/>
+                <filament id="1" type="PLA" color="#000000"/>
+                <filament id="2" type="PETG" color="#ffffff"/>
+                <filament id="3" type="ABS" color="#ff0000"/>
+              </plate>
+              <plate>
+                <metadata key="index" value="2"/>
+                <filament id="1" type="PLA" color="#000000"/>
+              </plate>
+            </config>
+            "##,
+    )]);
+
+    let metadata = parse_artifact_metadata("dual.gcode.3mf", "model/3mf", temp.path())
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(
+        metadata.plates[0]
+            .filaments
+            .iter()
+            .map(|filament| filament.nozzle_id)
+            .collect::<Vec<_>>(),
+        [Some(1), Some(0), None]
+    );
+    assert_eq!(
+        metadata.plates[1]
+            .filaments
+            .iter()
+            .map(|filament| filament.nozzle_id)
+            .collect::<Vec<_>>(),
+        [None]
+    );
+}
 #[test]
 fn model_settings_extracts_plate_display_name() {
     let temp = zip_fixture(&[

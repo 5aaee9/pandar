@@ -31,6 +31,8 @@ pub struct FilamentMetadata {
     pub filament_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tray_info_idx: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nozzle_id: Option<u8>,
     pub filament_type: Option<String>,
     pub color: Option<String>,
     pub used_grams: Option<f64>,

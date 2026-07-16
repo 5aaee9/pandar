@@ -25,20 +25,28 @@ pub(crate) fn normalize_material_patch<'a>(
     observed_at: &'a str,
 ) -> Option<MaterialPatchDocument<'a>> {
     let print = report.print.as_ref()?;
-    let ams = print.ams.as_ref()?;
+    let filament_switch_installed = filament_switch_installed(print.aux.as_ref());
     let mut patch = MaterialPatchDocument {
         document_type: "printer_material_patch",
         observed_at,
+        filament_switch_installed,
         ams_units: Vec::new(),
         external_spools: None,
         replace_external_spools: false,
         active_tray: None,
     };
 
-    if !ams.ams.is_empty() {
-        let normalized_units = normalize_ams_units(&ams.ams, ams, print);
-        if !normalized_units.is_empty() {
-            patch.ams_units = normalized_units;
+    if let Some(ams) = print.ams.as_ref() {
+        if !ams.ams.is_empty() {
+            let normalized_units =
+                normalize_ams_units(&ams.ams, ams, print, filament_switch_installed);
+            if !normalized_units.is_empty() {
+                patch.ams_units = normalized_units;
+            }
+        }
+
+        if let Some(active_tray) = normalize_active_tray(ams.tray_now.as_ref()) {
+            patch.active_tray = Some(active_tray);
         }
     }
 
@@ -47,11 +55,8 @@ pub(crate) fn normalize_material_patch<'a>(
         patch.replace_external_spools = external.replace;
     }
 
-    if let Some(active_tray) = normalize_active_tray(ams.tray_now.as_ref()) {
-        patch.active_tray = Some(active_tray);
-    }
-
-    (!patch.ams_units.is_empty()
+    (patch.filament_switch_installed.is_some()
+        || !patch.ams_units.is_empty()
         || patch.external_spools.is_some()
         || patch.replace_external_spools
         || patch.active_tray.is_some())
@@ -62,6 +67,7 @@ fn normalize_ams_units(
     units: &[AmsUnitReport],
     ams: &AmsReport,
     print: &PrintMaterialsReport,
+    filament_switch_installed: Option<bool>,
 ) -> Vec<AmsUnitPatch> {
     let power_on = ams.power_on_flag;
     let tray_exist_bits = parse_tray_exist_bits(ams.tray_exist_bits.as_ref());
@@ -73,11 +79,11 @@ fn normalize_ams_units(
         .filter_map(|unit| {
             let unit_id = unit_id(unit)?;
             let unit_kind = unit_kind(&unit_id);
-            let toolhead = unit
-                .info
-                .as_ref()
-                .and_then(normalize_toolhead)
-                .or_else(|| default_dual_ams_toolhead(unit, units.len(), dual_nozzle));
+            let toolhead = match unit.info.as_ref() {
+                Some(info) => normalize_toolhead(info, filament_switch_installed),
+                None if filament_switch_installed == Some(true) => None,
+                None => default_dual_ams_toolhead(unit, units.len(), dual_nozzle),
+            };
             let mut trays = Vec::new();
             let mut replace_trays = false;
 
@@ -282,13 +288,26 @@ fn normalize_multi_color(value: &ColorSource) -> Option<Vec<String>> {
     (!colors.is_empty()).then_some(colors)
 }
 
-fn normalize_toolhead(value: &ScalarValue) -> Option<String> {
+fn filament_switch_installed(value: Option<&ScalarValue>) -> Option<bool> {
+    let raw = normalized_string(value)?;
+    let parsed =
+        u64::from_str_radix(raw.trim_start_matches("0x").trim_start_matches("0X"), 16).ok()?;
+    Some((parsed >> 29) & 1 == 1)
+}
+
+fn normalize_toolhead(
+    value: &ScalarValue,
+    filament_switch_installed: Option<bool>,
+) -> Option<String> {
     let raw = normalized_string(Some(value))?;
     let parsed =
         u64::from_str_radix(raw.trim_start_matches("0x").trim_start_matches("0X"), 16).ok()?;
     match (parsed >> 8) & 0xF {
         0 => Some("R".to_owned()),
         1 => Some("L".to_owned()),
+        0xE if filament_switch_installed == Some(true) && matches!((parsed >> 24) & 0xF, 0 | 1) => {
+            Some("LR".to_owned())
+        }
         _ => None,
     }
 }

@@ -42,8 +42,10 @@ export type Printer = {
 };
 
 export type PrinterMaterials = {
+  filament_switch_installed?: boolean | null;
   ams_units: Array<{
     unit_id?: string;
+    unit_kind?: string | null;
     humidity?: number | string | null;
     humidity_level?: number | string | null;
     temperature_celsius?: number | string | null;
@@ -54,6 +56,7 @@ export type PrinterMaterials = {
       color?: string | null;
       multi_color?: string[] | null;
       filament_id?: string | null;
+      setting_id?: string | null;
       name?: string | null;
       remaining_estimate?: string | number | null;
       k_value?: string | number | null;
@@ -69,6 +72,7 @@ export type PrinterMaterials = {
     color?: string | null;
     multi_color?: string[] | null;
     filament_id?: string | null;
+    setting_id?: string | null;
     name?: string | null;
     remaining_estimate?: string | number | null;
     k_value?: string | number | null;
@@ -279,6 +283,7 @@ export type ArtifactMetadata = {
     filaments: Array<{
       filament_id: string | null;
       tray_info_idx?: string | null;
+      nozzle_id?: number | null;
       filament_type: string | null;
       color: string | null;
       used_grams: number | null;

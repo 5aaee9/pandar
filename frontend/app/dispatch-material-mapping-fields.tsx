@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import { useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
-import type { ArtifactMetadata, Printer } from './dashboard-types'
+import type { ArtifactMetadata, Printer } from "./dashboard-types";
 import {
   autoMapSlotSelections,
   materialMappingPayload,
@@ -11,127 +11,188 @@ import {
   projectFilamentsForPlate,
   type PrinterAmsSlot,
   type ProjectFilament,
-} from './dispatch-material-mapping'
+} from "./dispatch-material-mapping";
+import {
+  DispatchMaterialSlotMenu,
+  MaterialColorSwatch,
+} from "./dispatch-material-slot-menu";
 
 export function DispatchMaterialMappingFields({
   metadata,
+  onValidityChange,
   plateId,
   printer,
+  useAms,
 }: {
-  metadata: ArtifactMetadata
-  plateId: number
-  printer: Pick<Printer, 'id' | 'materials'>
+  metadata: ArtifactMetadata;
+  onValidityChange: (valid: boolean) => void;
+  plateId: number;
+  printer: Pick<Printer, "id" | "model" | "materials">;
+  useAms: boolean;
 }) {
   const filaments = useMemo(
     () => projectFilamentsForPlate(metadata, plateId),
     [metadata, plateId],
-  )
-  const slots = useMemo(() => printerAmsSlots(printer), [printer])
-  if (filaments.length === 0) return null
-
+  );
+  const slots = useMemo(() => printerAmsSlots(printer), [printer]);
   const editorKey = [
     printer.id,
+    printer.model,
     plateId,
+    useAms,
     ...filaments.map((filament) =>
-      `${filament.mappingIndex}:${filament.filamentType}:${filament.color}`),
-    ...slots.map((slot) => `${slot.key}:${slot.filamentType}:${slot.color}`),
-  ].join('|')
+      [
+        filament.mappingIndex,
+        filament.filamentType,
+        filament.color,
+        filament.nozzleId,
+      ].join(":")),
+    ...slots.map((slot) =>
+      [
+        slot.key,
+        slot.filamentType,
+        slot.color,
+        slot.toolhead,
+        slot.exists,
+        slot.filamentSwitchInstalled,
+      ].join(":")),
+  ].join("|");
 
-  return <MappingEditor key={editorKey} filaments={filaments} plateId={plateId} slots={slots} />
+  return (
+    <MappingEditor
+      key={editorKey}
+      filaments={filaments}
+      model={printer.model}
+      onValidityChange={onValidityChange}
+      plateId={plateId}
+      slots={slots}
+      useAms={useAms}
+    />
+  );
 }
 
 function MappingEditor({
   filaments,
+  model,
+  onValidityChange,
   plateId,
   slots,
+  useAms,
 }: {
-  filaments: ProjectFilament[]
-  plateId: number
-  slots: PrinterAmsSlot[]
+  filaments: ProjectFilament[];
+  model: string | null;
+  onValidityChange: (valid: boolean) => void;
+  plateId: number;
+  slots: PrinterAmsSlot[];
+  useAms: boolean;
 }) {
-  const t = useTranslations('dispatch')
-  const [selections, setSelections] = useState(() => autoMapSlotSelections(filaments, slots))
-  const payload = materialMappingPayload(filaments, slots, selections)
+  const t = useTranslations("dispatch");
+  const [selections, setSelections] = useState(() => autoMapSlotSelections(filaments, slots, useAms));
+  const payload = materialMappingPayload(filaments, slots, selections, useAms);
+
+  useEffect(() => {
+    onValidityChange(payload.mappingValid);
+  }, [onValidityChange, payload.mappingValid]);
+
+  if (filaments.length === 0) return null;
 
   const selectSlot = (mappingIndex: number, slotKey: string) => {
     setSelections((current) => {
-      const next = new Map(current)
-      if (slotKey) next.set(mappingIndex, slotKey)
-      else next.delete(mappingIndex)
-      return next
-    })
-  }
+      const next = new Map(current);
+      if (slotKey) next.set(mappingIndex, slotKey);
+      else next.delete(mappingIndex);
+      return next;
+    });
+  };
 
   return (
     <fieldset className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 lg:col-span-2">
-      <legend className="px-1 text-xs font-medium text-slate-700">{t('requiredMaterials')}</legend>
-      <p className="text-xs text-slate-600">{t('mappingForPlate', { plate: plateId })}</p>
+      <legend className="px-1 text-xs font-medium text-slate-700">{t("requiredMaterials")}</legend>
+      <p className="text-xs text-slate-600">{t("mappingForPlate", { plate: plateId })}</p>
       <input name="ams_mapping" type="hidden" value={JSON.stringify(payload.amsMapping)} />
       <input name="ams_mapping2" type="hidden" value={JSON.stringify(payload.amsMapping2)} />
+      {payload.amsMappingInfo ? (
+        <input
+          name="ams_mapping_info"
+          type="hidden"
+          value={JSON.stringify(payload.amsMappingInfo)}
+        />
+      ) : null}
+      <input
+        name="external_material_mismatch"
+        type="hidden"
+        value={String(payload.externalTypeMismatch)}
+      />
+      <input
+        name="material_mapping_valid"
+        type="hidden"
+        value={String(payload.mappingValid)}
+      />
+      <input
+        name="material_mapping_uses_ams"
+        type="hidden"
+        value={String(payload.usesAms)}
+      />
       <div className="grid gap-2 md:grid-cols-2">
         {filaments.map((filament) => {
-          const name = materialName(filament)
+          const name = materialName(filament);
           return (
-            <label
-              className="grid gap-2 rounded-md border border-slate-200 bg-white p-2 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(10rem,1.2fr)] sm:items-center"
+            <div
+              className="grid gap-2 rounded-md border border-slate-200 bg-white p-2"
               key={filament.mappingIndex}
             >
-              <span className="flex min-w-0 items-center gap-2">
-                <ColorSwatch color={filament.color} />
+              <div className="text-xs font-semibold text-slate-700">
+                {nozzleName(t, model, filament.nozzleId)}
+              </div>
+              <div className="flex min-w-0 items-center gap-2">
+                <MaterialColorSwatch color={filament.color} />
                 <span className="min-w-0">
-                  <span className="block truncate font-medium text-slate-950">{name}</span>
+                  <span className="block truncate text-sm font-medium text-slate-950">{name}</span>
                   <span className="block truncate text-xs text-slate-500">
-                    {t('projectMaterialSlot', { slot: filament.mappingIndex + 1 })}
+                    {t("projectMaterialSlot", { slot: filament.mappingIndex + 1 })}
                   </span>
                 </span>
-              </span>
-              <select
-                aria-label={t('mapMaterial', { material: name })}
-                className="h-9 min-w-0 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
-                onChange={(event) => selectSlot(filament.mappingIndex, event.currentTarget.value)}
-                value={selections.get(filament.mappingIndex) ?? ''}
-              >
-                <option value="">{t('unmapped')}</option>
-                {slots.map((slot) => (
-                  <option key={slot.key} value={slot.key}>
-                    {slotLabel(slot)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )
+              </div>
+              <DispatchMaterialSlotMenu
+                filament={filament}
+                materialName={name}
+                model={model}
+                onSelect={(slotKey) => selectSlot(filament.mappingIndex, slotKey)}
+                selectedKey={selections.get(filament.mappingIndex) ?? ""}
+                slots={slots}
+                useAms={useAms}
+              />
+            </div>
+          );
         })}
       </div>
-      {slots.length === 0 ? <p className="text-xs text-amber-700">{t('noAmsSlots')}</p> : null}
+      {!payload.mappingValid ? (
+        <p className="text-xs text-red-700">{t("requiredMaterialMappingIncomplete")}</p>
+      ) : null}
+      {payload.externalTypeMismatch ? (
+        <p className="text-xs text-amber-700">{t("externalMaterialMismatchInline")}</p>
+      ) : null}
+      {slots.length === 0 ? <p className="text-xs text-amber-700">{t("noAmsSlots")}</p> : null}
     </fieldset>
-  )
+  );
 }
 
 function materialName(filament: ProjectFilament) {
-  const type = filament.filamentType || 'Unknown'
-  return filament.filamentId ? `${type} (${filament.filamentId})` : type
+  const type = filament.filamentType || "Unknown";
+  return filament.filamentId ? type + " (" + filament.filamentId + ")" : type;
 }
 
-function slotLabel(slot: PrinterAmsSlot) {
-  const unitId = Number.parseInt(slot.unitId, 10)
-  const unit = unitId >= 128 && unitId <= 135
-    ? `AMS-HT ${unitId - 127}`
-    : unitId >= 0 && unitId < 26
-      ? `AMS-${String.fromCharCode(65 + unitId)}`
-      : `AMS-${slot.unitId}`
-  return `${unit} ${slot.slotId + 1} · ${slot.filamentType || slot.filamentId || 'Unknown'}`
-}
-
-function ColorSwatch({ color }: { color: string | null }) {
-  const normalized = color?.trim().replace(/^#/, '')
-  const backgroundColor = normalized && /^[0-9a-f]{6}([0-9a-f]{2})?$/i.test(normalized)
-    ? `#${normalized.slice(0, 6)}`
-    : 'transparent'
-  return (
-    <span
-      aria-hidden="true"
-      className="size-5 shrink-0 rounded-full border border-slate-300"
-      style={{ backgroundColor }}
-    />
-  )
+function nozzleName(
+  t: ReturnType<typeof useTranslations>,
+  model: string | null,
+  nozzleId: 0 | 1 | null,
+) {
+  const normalized = model?.trim().toUpperCase().replace(/^BAMBU LAB /, "");
+  if (normalized === "N6" || normalized === "X2D") {
+    if (nozzleId === 1) return t("mainNozzle");
+    if (nozzleId === 0) return t("auxiliaryNozzle");
+  }
+  if (nozzleId === 1) return t("leftNozzle");
+  if (nozzleId === 0) return t("rightNozzle");
+  return t("selectedNozzle");
 }

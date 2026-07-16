@@ -8,6 +8,7 @@ use time::OffsetDateTime;
 #[derive(Debug)]
 pub(super) struct ParsedPatch {
     pub(super) observed_at: String,
+    pub(super) filament_switch_installed: Option<bool>,
     pub(super) ams_units: Option<Vec<MaterialUnitPatch>>,
     pub(super) external_spools: Option<Vec<MaterialExternalSpoolPatch>>,
     pub(super) replace_external_spools: bool,
@@ -27,6 +28,8 @@ struct MaterialPatchDocument {
     #[serde(rename = "type")]
     kind: String,
     observed_at: String,
+    #[serde(default)]
+    filament_switch_installed: Option<bool>,
     #[serde(default)]
     ams_units: Option<Vec<MaterialUnitPatch>>,
     #[serde(default)]
@@ -147,6 +150,7 @@ pub(super) fn parse_patch_result(raw: &str) -> anyhow::Result<ParsedPatch> {
 
     Ok(ParsedPatch {
         observed_at: document.observed_at,
+        filament_switch_installed: document.filament_switch_installed,
         ams_units: document.ams_units.map(redacted_units),
         external_spools: document.external_spools.map(redacted_external_spools),
         replace_external_spools: document.replace_external_spools,

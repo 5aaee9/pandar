@@ -67,6 +67,7 @@ struct EnrichedPrint {
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
 struct PrinterMaterialsResponse {
+    filament_switch_installed: Option<bool>,
     ams_units: Vec<AmsUnitResponse>,
     external_spools: Vec<ExternalSpoolResponse>,
     active_tray: Option<ActiveTrayResponse>,
@@ -150,6 +151,7 @@ struct PrinterMaterialPatchFixture {
     #[serde(rename = "type")]
     kind: &'static str,
     observed_at: &'static str,
+    filament_switch_installed: bool,
     ams_units: [PrinterMaterialPatchAmsUnit; 1],
     external_spools: [PrinterMaterialPatchExternalSpool; 1],
     active_tray: PrinterMaterialPatchActiveTray,
@@ -616,6 +618,7 @@ async fn printer_routes_return_material_snapshots_without_credentials() {
             printer_materials_json: serde_json::to_string(&PrinterMaterialPatchFixture {
                 kind: "printer_material_patch",
                 observed_at: "2026-06-23T01:02:03Z",
+                filament_switch_installed: true,
                 ams_units: [PrinterMaterialPatchAmsUnit {
                     unit_id: "0",
                     trays: [PrinterMaterialPatchTray {
@@ -666,6 +669,7 @@ async fn printer_routes_return_material_snapshots_without_credentials() {
     let body = decode::<PrinterListResponse>(body);
     let materials = body.printers[0].materials.as_ref().unwrap();
     assert_eq!(materials.observed_at, "2026-06-23T01:02:03Z");
+    assert_eq!(materials.filament_switch_installed, Some(true));
     assert_eq!(materials.ams_units[0].unit_id, "0");
     assert_eq!(materials.external_spools[0].external_id, "254");
     assert_eq!(materials.active_tray.as_ref().unwrap().kind, "ams");

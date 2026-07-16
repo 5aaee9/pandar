@@ -122,6 +122,21 @@ fn refresh_printer_materials_requires_no_new_migration_files() {
 }
 
 #[test]
+fn filament_switch_state_migrations_are_backend_equivalent() {
+    let sqlite =
+        include_str!("../../../migrations/sqlite/20260716000000_filament_switch_state.sql");
+    let postgres =
+        include_str!("../../../migrations/postgres/20260716000000_filament_switch_state.sql");
+
+    for migration in [sqlite, postgres] {
+        assert!(migration.contains("ALTER TABLE printer_material_snapshots"));
+        assert!(migration.contains("ADD COLUMN filament_switch_installed"));
+    }
+    assert!(sqlite.contains("INTEGER"));
+    assert!(postgres.contains("BOOLEAN"));
+}
+
+#[test]
 fn phase_28_slicer_metadata_migrations_are_backend_equivalent() {
     let sqlite =
         include_str!("../../../migrations/sqlite/20260624010000_phase_28_slicer_metadata.sql");

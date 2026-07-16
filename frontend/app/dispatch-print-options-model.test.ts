@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   type CalibrationOption,
   dispatchPrintOptionCapabilities,
+  isDualNozzleModel,
 } from "./dispatch-print-options-model";
 
 const auto: CalibrationOption = { modes: [2, 1, 0], defaultMode: 2 };
@@ -79,4 +80,16 @@ describe("dispatchPrintOptionCapabilities", () => {
       });
     },
   );
+});
+
+describe("isDualNozzleModel", () => {
+  it.each([
+    "N6", "Bambu Lab X2D", "O1C", "O1C2", "H2C", "O1D", "H2D", "O1E", "H2D Pro",
+  ])("recognizes Studio dual-nozzle model %s", (model) => {
+    expect(isDualNozzleModel(model)).toBe(true);
+  });
+
+  it.each([null, "", "P1S", "Mystery Model"])("rejects non-dual model %s", (model) => {
+    expect(isDualNozzleModel(model)).toBe(false);
+  });
 });

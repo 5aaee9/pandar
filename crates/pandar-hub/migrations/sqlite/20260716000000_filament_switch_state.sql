@@ -1,0 +1,1 @@
+ALTER TABLE printer_material_snapshots ADD COLUMN filament_switch_installed INTEGER;

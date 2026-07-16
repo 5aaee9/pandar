@@ -12,6 +12,7 @@ pub(super) struct MergedSnapshot {
     pub(super) ams_units: MaterialJsonValue,
     pub(super) external_spools: MaterialJsonValue,
     pub(super) active_tray: Option<MaterialJsonValue>,
+    pub(super) filament_switch_installed: Option<bool>,
 }
 
 pub(super) fn merge_snapshot(
@@ -48,10 +49,15 @@ pub(super) fn merge_snapshot(
         Presence::Value(value) => Some(value.clone()),
     };
 
+    let filament_switch_installed = patch
+        .filament_switch_installed
+        .or_else(|| current.and_then(|snapshot| snapshot.filament_switch_installed));
+
     Ok(MergedSnapshot {
         ams_units: material_units_json(ams_units),
         external_spools: material_external_spools_json(external_spools),
         active_tray,
+        filament_switch_installed,
     })
 }
 

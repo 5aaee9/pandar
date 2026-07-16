@@ -95,6 +95,57 @@ fn material_outcome_input(
 }
 
 #[tokio::test]
+async fn filament_switch_state_persists_across_partial_patches_and_explicit_false() {
+    let (materials, tenant, agent, printer_id) = fixture().await;
+
+    materials
+        .upsert_from_patch(patch_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            MaterialPatchFixture {
+                filament_switch_installed: Some(true),
+                ..material_patch("2026-07-16T00:00:00Z")
+            },
+        ))
+        .await
+        .unwrap();
+    materials
+        .upsert_from_patch(patch_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            material_patch("2026-07-16T00:01:00Z"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        materials
+            .latest_for_printer(tenant.id, &printer_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .filament_switch_installed,
+        Some(true)
+    );
+
+    let snapshot = materials
+        .upsert_from_patch(patch_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            MaterialPatchFixture {
+                filament_switch_installed: Some(false),
+                ..material_patch("2026-07-16T00:02:00Z")
+            },
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snapshot.filament_switch_installed, Some(false));
+}
+
+#[tokio::test]
 async fn material_snapshots_are_scoped_to_tenant_and_printer() {
     let (database, tenants, agents, _, materials) = material_repositories().await;
     let acme = tenants.create("acme", "Acme Labs").await.unwrap();

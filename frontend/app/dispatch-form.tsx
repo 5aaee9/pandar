@@ -6,6 +6,7 @@ import { useFormatter, useTranslations } from 'next-intl'
 import type { ArtifactMetadata, Printer } from './dashboard-types'
 import { formatBytes } from './dashboard-format'
 import { DispatchMaterialMappingFields } from './dispatch-material-mapping-fields'
+import { dispatchErrorCode, prepareDispatchSubmission } from './dispatch-form-submission'
 import { DispatchPrintOptions } from './dispatch-print-options'
 import { HelpTip } from './dashboard-ui'
 
@@ -55,6 +56,8 @@ export function DispatchForm({
     metadata: null,
   })
   const [submitting, setSubmitting] = useState(false)
+  const [materialMappingValid, setMaterialMappingValid] = useState(true)
+  const [useAms, setUseAms] = useState(true)
   const previewRequestRef = useRef(0)
 
   const selectedPrinterId = printers.some((printer) => printer.id === preferredPrinterId)
@@ -63,6 +66,7 @@ export function DispatchForm({
   const selectedPrinter = printers.find((printer) => printer.id === selectedPrinterId) ?? null
 
   const selectArtifact = (file: File | null) => {
+    setMaterialMappingValid(true)
     if (!file) {
       previewRequestRef.current += 1
       setPlateId(null)
@@ -137,20 +141,28 @@ export function DispatchForm({
 
   const submitPrintJob = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!selectedTenant || artifact.state !== 'ready' || plateId === null || !selectedPrinterId) {
+    if (
+      !selectedTenant ||
+      artifact.state !== 'ready' ||
+      plateId === null ||
+      !selectedPrinterId ||
+      !materialMappingValid
+    ) {
       return
     }
 
-    const formData = new FormData(event.currentTarget)
-    const printerId = String(formData.get('printer_id') ?? '')
+    const submission = prepareDispatchSubmission(new FormData(event.currentTarget), () =>
+      window.confirm(t('externalMaterialMismatchWarning')),
+    )
+    if (!submission) return
     setSubmitting(true)
 
     try {
-      const response = await fetch(uploadPath(selectedTenant.id, printerId), {
+      const response = await fetch(uploadPath(selectedTenant.id, submission.printerId), {
         method: 'POST',
-        body: formData,
+        body: submission.formData,
       })
-      const status = response.ok ? 'job_created' : await errorCode(response)
+      const status = response.ok ? 'job_created' : await dispatchErrorCode(response)
       onRedirect(
         `/jobs?tenant=${encodeURIComponent(selectedTenant.id)}&status=${encodeURIComponent(status)}`,
       )
@@ -212,7 +224,7 @@ export function DispatchForm({
         />
         <span className="text-xs text-slate-600">{t('maxSize', { size: formatBytes(maxArtifactBytes, num) })}</span>
       </label>
-      <input name="use_ams" type="hidden" value="false" />
+      <input name="use_ams" type="hidden" value={String(useAms)} />
       <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 lg:col-span-2">
         <div className="font-medium text-slate-950">
           {selectedFilename || t('noArtifact')}
@@ -276,12 +288,18 @@ export function DispatchForm({
           metadata={metadataPreview.metadata}
           plateId={plateId}
           printer={selectedPrinter}
+          onValidityChange={setMaterialMappingValid}
+          useAms={useAms}
         />
       ) : null}
       <div className="flex flex-wrap gap-4 text-sm text-slate-700 lg:col-span-2">
         <span className="flex items-center gap-1.5">
           <label className="flex items-center gap-2">
-            <input name="use_ams" type="checkbox" value="true" defaultChecked />
+            <input
+              checked={useAms}
+              onChange={(event) => setUseAms(event.currentTarget.checked)}
+              type="checkbox"
+            />
             {t('useAms')}
           </label>
           <HelpTip label={t('useAms')}>{t('useAmsHelp')}</HelpTip>
@@ -294,7 +312,12 @@ export function DispatchForm({
       <div className="lg:col-span-2">
         <button
           className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:bg-slate-300 disabled:text-white"
-          disabled={artifact.state !== 'ready' || plateId === null || submitting}
+          disabled={
+            artifact.state !== 'ready' ||
+            plateId === null ||
+            submitting ||
+            !materialMappingValid
+          }
           type="submit"
         >
           {submitting ? t('dispatching') : t('dispatch')}
@@ -312,14 +335,6 @@ function metadataPreviewPath(tenantId: string) {
   return `/api/tenants/${encodeURIComponent(tenantId)}/artifact-metadata-preview`
 }
 
-async function errorCode(response: Response) {
-  try {
-    const body = (await response.json()) as { error?: string }
-    return body.error ?? `http_${response.status}`
-  } catch {
-    return `http_${response.status}`
-  }
-}
 
 function MetadataPreview({
   plateId,

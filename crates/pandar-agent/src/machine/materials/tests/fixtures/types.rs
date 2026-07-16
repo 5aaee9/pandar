@@ -4,6 +4,7 @@ use serde::Deserialize;
 pub(crate) struct TestMaterialPatch {
     #[serde(rename = "type")]
     pub(crate) document_type: String,
+    pub(crate) filament_switch_installed: Option<bool>,
     #[serde(default)]
     pub(crate) ams_units: Vec<TestAmsUnit>,
     pub(crate) external_spools: Option<Vec<TestExternalSpool>>,

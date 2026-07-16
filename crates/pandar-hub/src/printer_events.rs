@@ -73,6 +73,7 @@ pub struct PrinterEventMaterials {
     pub ams_units: PrinterEventMaterialJson,
     pub external_spools: PrinterEventMaterialJson,
     pub active_tray: Option<PrinterEventMaterialJson>,
+    pub filament_switch_installed: Option<bool>,
     pub observed_at: String,
 }
 
@@ -153,6 +154,7 @@ impl From<MaterialSnapshot> for PrinterEventMaterials {
             ams_units: PrinterEventMaterialJson::from(snapshot.ams_units).scrubbed(),
             external_spools: PrinterEventMaterialJson::from(snapshot.external_spools).scrubbed(),
             active_tray: snapshot.active_tray.map(scrub_material_json),
+            filament_switch_installed: snapshot.filament_switch_installed,
             observed_at: snapshot.observed_at,
         }
     }

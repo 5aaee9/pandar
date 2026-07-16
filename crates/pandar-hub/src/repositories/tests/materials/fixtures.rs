@@ -112,6 +112,8 @@ pub(super) struct MaterialPatchFixture<'a> {
     pub(super) kind: &'static str,
     pub(super) observed_at: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) filament_switch_installed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) ams_units: Option<Vec<PatchAmsUnit<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) external_spools: Option<Vec<PatchExternalSpool<'a>>>,
@@ -146,6 +148,7 @@ pub(super) fn material_patch(observed_at: &str) -> MaterialPatchFixture<'_> {
     MaterialPatchFixture {
         kind: "printer_material_patch",
         observed_at,
+        filament_switch_installed: None,
         ams_units: None,
         external_spools: None,
         replace_external_spools: None,

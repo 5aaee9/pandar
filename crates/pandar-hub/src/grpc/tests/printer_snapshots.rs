@@ -378,6 +378,7 @@ async fn printer_snapshot_event_includes_latest_materials() {
     assert_eq!(print.job_state, None);
     assert!(print.hms.is_empty());
     let materials = printer.materials.unwrap();
+    assert_eq!(materials.filament_switch_installed, Some(true));
     assert_eq!(
         materials.ams_units,
         PrinterEventMaterialJson::Array(vec![PrinterEventMaterialJson::Object(BTreeMap::from([
@@ -528,6 +529,7 @@ pub(super) fn valid_material_patch(observed_at: &str) -> String {
     serde_json::to_string(&TestMaterialPatch {
         kind: "printer_material_patch",
         observed_at,
+        filament_switch_installed: true,
         ams_units: vec![TestAmsUnit {
             unit_id: "0",
             trays: vec![TestMaterialPatchTray {
@@ -545,6 +547,7 @@ struct TestMaterialPatch<'a> {
     #[serde(rename = "type")]
     kind: &'static str,
     observed_at: &'a str,
+    filament_switch_installed: bool,
     ams_units: Vec<TestAmsUnit>,
     external_spools: Vec<TestExternalSpool>,
 }

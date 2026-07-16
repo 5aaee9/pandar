@@ -89,6 +89,53 @@ pub(super) fn single_nozzle_ams_report() -> Value {
     ams_unit_pair_report(Some(28), None, None)
 }
 
+pub(super) fn filament_switch_ams_report(aux: Option<&str>) -> Value {
+    value(MaterialReport {
+        print: MaterialPrint {
+            aux,
+            nozzle_temper: Some(28),
+            nozzle_temper2: Some(27),
+            ams: MaterialAms {
+                ams: vec![
+                    MaterialAmsUnit {
+                        id: Scalar::Str("0"),
+                        info: Some("00000E00"),
+                        tray: vec![tray_with_id(Scalar::Str("0"))],
+                        humidity: None,
+                        humidity_raw: None,
+                        temp: None,
+                    },
+                    MaterialAmsUnit {
+                        id: Scalar::Str("1"),
+                        info: Some("01000E00"),
+                        tray: vec![tray_with_id(Scalar::Str("0"))],
+                        humidity: None,
+                        humidity_raw: None,
+                        temp: None,
+                    },
+                ],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    })
+}
+
+pub(super) fn filament_switch_invalid_binding_report() -> Value {
+    let mut report = filament_switch_ams_report(Some("20000000"));
+    report["print"]["ams"]["ams"][0]["info"] = Value::String("02000E00".to_owned());
+    report
+}
+
+pub(super) fn filament_switch_only_report(aux: &str) -> Value {
+    value(MaterialReport {
+        print: MaterialPrint {
+            aux: Some(aux),
+            ..Default::default()
+        },
+    })
+}
+
 pub(super) fn decimal_ams_temperature_report() -> Value {
     value(single_unit_report(MaterialAmsUnit {
         id: Scalar::Str("0"),
