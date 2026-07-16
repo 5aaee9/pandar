@@ -17,6 +17,7 @@ use tokio::{
     sync::{Mutex, OnceCell},
 };
 use tokio_rustls::TlsConnector;
+use uuid::Uuid;
 use x509_parser::prelude::{FromDer, X509Certificate};
 
 use crate::machine::BambuPrinterEndpoint;
@@ -60,15 +61,16 @@ pub struct RumqttcBambuMqttTransport {
 
 impl RumqttcBambuMqttTransport {
     pub fn connect(endpoint: &BambuPrinterEndpoint) -> Self {
-        Self::connect_with_client_suffix(endpoint, None)
+        Self::connect_with_client_role(endpoint, "command")
     }
 
     pub fn connect_for_reports(endpoint: &BambuPrinterEndpoint) -> Self {
-        Self::connect_with_client_suffix(endpoint, Some("reports"))
+        Self::connect_with_client_role(endpoint, "reports")
     }
 
-    fn connect_with_client_suffix(endpoint: &BambuPrinterEndpoint, suffix: Option<&str>) -> Self {
-        let options = bambu_lan_mqtt_options(endpoint, suffix);
+    fn connect_with_client_role(endpoint: &BambuPrinterEndpoint, role: &str) -> Self {
+        let suffix = mqtt_session_client_suffix(role);
+        let options = bambu_lan_mqtt_options(endpoint, Some(&suffix));
 
         let (client, event_loop) = AsyncClient::new(options, 10);
         Self {
@@ -91,6 +93,10 @@ impl RumqttcBambuMqttTransport {
             topic,
         ))
     }
+}
+
+fn mqtt_session_client_suffix(role: &str) -> String {
+    format!("{role}-{}", Uuid::new_v4())
 }
 
 pub fn bambu_lan_mqtt_options(
@@ -334,5 +340,19 @@ fn qos_from_u8(qos: u8) -> anyhow::Result<QoS> {
         1 => Ok(QoS::AtLeastOnce),
         2 => Ok(QoS::ExactlyOnce),
         _ => bail!("invalid MQTT QoS {qos}; expected 0, 1, or 2"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mqtt_session_client_suffix;
+
+    #[test]
+    fn mqtt_session_client_suffix_is_unique_and_role_scoped() {
+        let first = mqtt_session_client_suffix("reports");
+        let second = mqtt_session_client_suffix("reports");
+
+        assert_ne!(first, second);
+        assert!(first.starts_with("reports-"));
     }
 }
