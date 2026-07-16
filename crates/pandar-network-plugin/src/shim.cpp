@@ -721,7 +721,7 @@ std::string printer_push_status_report(const Agent* agent, const std::string& de
     const auto ip = studio_ip_integer(host);
     return std::string(R"({"print":{"command":"push_status","msg":0,)")
         + printer_telemetry_for(agent, dev_id) +
-        R"(,"stat":"","wifi_signal":"100%","sdcard":true,"ipcam":{"ipcam_dev":"1","liveview":{"local":"rtsps","remote":"none"},"rtsp_url":)" +
+        R"(,"wifi_signal":"100%","sdcard":true,"ipcam":{"ipcam_dev":"1","liveview":{"local":"rtsps","remote":"none"},"rtsp_url":)" +
         escape_json(rtsp_url) + R"(},"net":{"info":[{"ip":)" + std::to_string(ip) + R"(}]}}})";
 }
 

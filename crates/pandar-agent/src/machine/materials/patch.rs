@@ -7,6 +7,12 @@ pub(crate) struct MaterialPatchDocument<'a> {
     pub(super) document_type: &'static str,
     pub(super) observed_at: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) cfg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) aux: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) stat: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) filament_switch_installed: Option<bool>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(super) ams_units: Vec<AmsUnitPatch>,

@@ -33,6 +33,9 @@ fn filament_switch_printers_response() -> String {
     let mut response: serde_json::Value = serde_json::from_str(PRINTERS_RESPONSE).unwrap();
     let materials = &mut response["devices"][0]["materials"];
     materials["filament_switch_installed"] = serde_json::json!(true);
+    materials["cfg"] = serde_json::json!("8000000000000001");
+    materials["aux"] = serde_json::json!("A4003001");
+    materials["stat"] = serde_json::json!("1000000001");
     let ams_units = materials["ams_units"].as_array_mut().unwrap();
     ams_units[0]["info"] = serde_json::json!("00000E00");
     ams_units[0]["toolhead"] = serde_json::json!("LR");

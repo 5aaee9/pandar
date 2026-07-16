@@ -146,6 +146,58 @@ async fn filament_switch_state_persists_across_partial_patches_and_explicit_fals
 }
 
 #[tokio::test]
+async fn studio_status_flags_persist_raw_values_across_partial_patches() {
+    let (materials, tenant, agent, printer_id) = fixture().await;
+
+    materials
+        .upsert_from_patch(patch_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            MaterialPatchFixture {
+                cfg: Some("8000000000000001"),
+                aux: Some("A4003001"),
+                stat: Some("1000000001"),
+                ..material_patch("2026-07-16T01:00:00Z")
+            },
+        ))
+        .await
+        .unwrap();
+    materials
+        .upsert_from_patch(patch_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            material_patch("2026-07-16T01:01:00Z"),
+        ))
+        .await
+        .unwrap();
+    materials
+        .upsert_from_patch(patch_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            MaterialPatchFixture {
+                cfg: Some(""),
+                aux: Some(""),
+                stat: Some(""),
+                ..material_patch("2026-07-16T01:02:00Z")
+            },
+        ))
+        .await
+        .unwrap();
+
+    let snapshot = materials
+        .latest_for_printer(tenant.id, &printer_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snapshot.cfg.as_deref(), Some(""));
+    assert_eq!(snapshot.aux.as_deref(), Some(""));
+    assert_eq!(snapshot.stat.as_deref(), Some(""));
+}
+
+#[tokio::test]
 async fn material_snapshots_are_scoped_to_tenant_and_printer() {
     let (database, tenants, agents, _, materials) = material_repositories().await;
     let acme = tenants.create("acme", "Acme Labs").await.unwrap();
@@ -331,12 +383,20 @@ async fn postgres_material_repository_behavior_when_configured() {
             tenant.id,
             agent.id,
             &printer_id,
-            patch("2026-06-23T00:00:00Z", &[tray("0", "0", "PLA", "FF0000")]),
+            MaterialPatchFixture {
+                cfg: Some("8000000000000001"),
+                aux: Some("A4003001"),
+                stat: Some("1000000001"),
+                ..patch("2026-06-23T00:00:00Z", &[tray("0", "0", "PLA", "FF0000")])
+            },
         ))
         .await
         .unwrap()
         .unwrap();
 
+    assert_eq!(snapshot.cfg.as_deref(), Some("8000000000000001"));
+    assert_eq!(snapshot.aux.as_deref(), Some("A4003001"));
+    assert_eq!(snapshot.stat.as_deref(), Some("1000000001"));
     assert_eq!(
         materials
             .latest_for_printer(tenant.id, &printer_id)

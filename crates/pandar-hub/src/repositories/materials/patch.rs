@@ -9,6 +9,9 @@ use time::OffsetDateTime;
 pub(super) struct ParsedPatch {
     pub(super) observed_at: String,
     pub(super) filament_switch_installed: Option<bool>,
+    pub(super) cfg: Option<String>,
+    pub(super) aux: Option<String>,
+    pub(super) stat: Option<String>,
     pub(super) ams_units: Option<Vec<MaterialUnitPatch>>,
     pub(super) external_spools: Option<Vec<MaterialExternalSpoolPatch>>,
     pub(super) replace_external_spools: bool,
@@ -30,6 +33,12 @@ struct MaterialPatchDocument {
     observed_at: String,
     #[serde(default)]
     filament_switch_installed: Option<bool>,
+    #[serde(default)]
+    cfg: Option<String>,
+    #[serde(default)]
+    aux: Option<String>,
+    #[serde(default)]
+    stat: Option<String>,
     #[serde(default)]
     ams_units: Option<Vec<MaterialUnitPatch>>,
     #[serde(default)]
@@ -152,6 +161,9 @@ pub(super) fn parse_patch_result(raw: &str) -> anyhow::Result<ParsedPatch> {
         observed_at: document.observed_at,
         filament_switch_installed: document.filament_switch_installed,
         ams_units: document.ams_units.map(redacted_units),
+        cfg: document.cfg,
+        aux: document.aux,
+        stat: document.stat,
         external_spools: document.external_spools.map(redacted_external_spools),
         replace_external_spools: document.replace_external_spools,
         active_tray: document.active_tray.redacted(),

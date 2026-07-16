@@ -8,8 +8,13 @@ use super::{
 
 #[derive(Serialize)]
 pub(super) struct StudioTelemetry {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cfg: Option<String>,
     fun: String,
-    aux: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    aux: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stat: Option<String>,
     gcode_state: String,
     mc_percent: u8,
     mc_remaining_time: u32,
@@ -73,18 +78,19 @@ impl From<&PrinterStatus> for StudioTelemetry {
         };
 
         Self {
+            cfg: printer
+                .materials
+                .as_ref()
+                .and_then(|materials| materials.cfg.clone()),
             fun: printer.fun.clone().unwrap_or_else(|| "0".to_owned()),
             aux: printer
                 .materials
                 .as_ref()
-                .and_then(|materials| materials.filament_switch_installed)
-                .map_or_else(String::new, |installed| {
-                    if installed {
-                        "20000000".to_owned()
-                    } else {
-                        "00000000".to_owned()
-                    }
-                }),
+                .and_then(|materials| materials.aux.clone()),
+            stat: printer
+                .materials
+                .as_ref()
+                .and_then(|materials| materials.stat.clone()),
             gcode_state: printer
                 .gcode_state
                 .clone()

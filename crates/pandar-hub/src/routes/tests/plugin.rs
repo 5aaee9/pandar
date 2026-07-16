@@ -91,6 +91,9 @@ struct PluginMaterialsResponse {
     ams_units: Vec<PluginAmsUnitResponse>,
     external_spools: Vec<PluginExternalSpoolResponse>,
     active_tray: PluginActiveTrayResponse,
+    cfg: String,
+    aux: String,
+    stat: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -198,6 +201,9 @@ struct PluginMaterialPatchFixture {
     #[serde(rename = "type")]
     kind: &'static str,
     observed_at: &'static str,
+    cfg: &'static str,
+    aux: &'static str,
+    stat: &'static str,
     ams_units: [PluginMaterialPatchAmsUnit; 1],
     external_spools: [PluginMaterialPatchExternalSpool; 1],
     active_tray: PluginMaterialPatchActiveTray,
@@ -622,6 +628,9 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
             printer_materials_json: serde_json::to_string(&PluginMaterialPatchFixture {
                 kind: "printer_material_patch",
                 observed_at: "2026-06-20T00:01:00Z",
+                cfg: "8000000000000001",
+                aux: "A4003001",
+                stat: "1000000001",
                 ams_units: [PluginMaterialPatchAmsUnit {
                     unit_id: "0",
                     info: "00000E00",
@@ -706,6 +715,9 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
     assert_eq!(device.chamber_temperature_celsius.as_deref(), Some("32"));
     assert_eq!(device.chamber_light_on, Some(true));
     let materials = device.materials.as_ref().unwrap();
+    assert_eq!(materials.cfg, "8000000000000001");
+    assert_eq!(materials.aux, "A4003001");
+    assert_eq!(materials.stat, "1000000001");
     assert_eq!(materials.ams_units[0].unit_id, "0");
     assert_eq!(materials.ams_units[0].info, "00000E00");
     assert_eq!(materials.external_spools[0].external_id, "254");

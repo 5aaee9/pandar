@@ -134,6 +134,62 @@ fn aux_only_reports_persist_installed_and_absent_switch_states() {
 }
 
 #[test]
+fn studio_flags_preserve_unknown_bits_and_leading_zero_width() {
+    let patch = normalize(studio_flags_only_report(
+        Some("0x0000000a"),
+        Some("0xA4003001"),
+        Some("00000000000000ff"),
+    ))
+    .unwrap();
+
+    assert_eq!(patch.cfg.as_deref(), Some("0000000A"));
+    assert_eq!(patch.aux.as_deref(), Some("A4003001"));
+    assert_eq!(patch.stat.as_deref(), Some("00000000000000FF"));
+    assert_eq!(patch.filament_switch_installed, Some(true));
+    assert!(patch.ams_units.is_empty());
+}
+
+#[test]
+fn cfg_and_stat_only_reports_emit_patches() {
+    let cfg = normalize(studio_flags_only_report(Some("00000001"), None, None)).unwrap();
+    let stat = normalize(studio_flags_only_report(None, None, Some("00000002"))).unwrap();
+
+    assert_eq!(cfg.cfg.as_deref(), Some("00000001"));
+    assert_eq!(cfg.aux, None);
+    assert_eq!(stat.stat.as_deref(), Some("00000002"));
+    assert_eq!(stat.filament_switch_installed, None);
+}
+
+#[test]
+fn invalid_studio_flags_are_omitted_instead_of_becoming_false() {
+    let report = invalid_studio_flags_material_report();
+    let patch = normalize(report.clone()).unwrap();
+    let serialized = normalize_json(report).unwrap();
+
+    assert_eq!(patch.cfg, None);
+    assert_eq!(patch.aux, None);
+    assert_eq!(patch.stat, None);
+    assert_eq!(patch.filament_switch_installed, None);
+    assert!(!serialized.contains("\"cfg\""));
+    assert!(!serialized.contains("\"aux\""));
+    assert!(!serialized.contains("\"stat\""));
+    assert!(!serialized.contains("\"filament_switch_installed\""));
+}
+
+#[test]
+fn explicit_empty_studio_flags_are_preserved_and_clear_switch_state() {
+    let patch = normalize(studio_flags_only_report(Some(""), Some(""), Some(""))).unwrap();
+    let serialized =
+        normalize_json(studio_flags_only_report(Some(""), Some(""), Some(""))).unwrap();
+
+    assert_eq!(patch.cfg.as_deref(), Some(""));
+    assert_eq!(patch.aux.as_deref(), Some(""));
+    assert_eq!(patch.stat.as_deref(), Some(""));
+    assert_eq!(patch.filament_switch_installed, Some(false));
+    assert!(serialized.contains(r#""aux":""#));
+}
+
+#[test]
 fn decimal_ams_temperature_is_normalized() {
     let patch = normalize(decimal_ams_temperature_report()).unwrap();
 

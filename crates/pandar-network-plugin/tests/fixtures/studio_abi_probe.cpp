@@ -1345,10 +1345,10 @@ int main(int argc, char** argv) {
             !contains(body, R"("printer_type":"N6")") ||
             !contains(body, R"("support_chamber":true)") ||
             !contains(body, R"("support_chamber_temp_display":true)") ||
-            contains(body, R"("cfg":"")") ||
+            !contains(body, R"("cfg":"8000000000000001")") ||
             !contains(body, R"("fun":"8000004100000020")") ||
-            !contains(body, R"("aux":"20000000")") ||
-            !contains(body, R"("stat":"")") ||
+            !contains(body, R"("aux":"A4003001")") ||
+            !contains(body, R"("stat":"1000000001")") ||
             !contains(body, R"("device")") ||
             !contains(body, R"("type":1)") ||
             !contains(body, R"("extruder")") ||

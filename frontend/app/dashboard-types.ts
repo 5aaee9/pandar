@@ -43,6 +43,9 @@ export type Printer = {
 
 export type PrinterMaterials = {
   filament_switch_installed?: boolean | null;
+  cfg?: string | null;
+  aux?: string | null;
+  stat?: string | null;
   ams_units: Array<{
     unit_id?: string;
     unit_kind?: string | null;

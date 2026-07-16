@@ -82,6 +82,7 @@ fn studio_status_defaults_missing_or_null_fun_without_discarding_telemetry() {
 #[test]
 fn printer_telemetry_defaults_to_studio_safe_idle_shape() {
     let body = telemetry("{}");
+    let json: serde_json::Value = serde_json::from_str(&format!("{{{body}}}")).unwrap();
 
     assert!(body.contains(r#""gcode_state":"IDLE""#));
     assert!(body.contains(r#""mc_percent":0"#));
@@ -93,7 +94,9 @@ fn printer_telemetry_defaults_to_studio_safe_idle_shape() {
     assert!(body.contains(r#""subtask_id":"0""#));
     assert!(body.contains(r#""hms":[]"#));
     assert!(body.contains(r#""printer_type":"C11""#));
-    assert!(body.contains(r#""aux":"""#));
+    assert!(json.get("cfg").is_none());
+    assert!(json.get("aux").is_none());
+    assert!(json.get("stat").is_none());
     assert!(body.contains(r#""bed_temper":0"#));
     assert!(body.contains(
         r#""nozzle":{"exist":1,"state":0,"info":[{"id":0,"diameter":0.4,"type":"XS01","stat":0}]}"#
@@ -149,16 +152,18 @@ fn printer_telemetry_maps_ams_and_external_materials() {
     assert!(body.contains(r#""vir_slot":[{"id":"254""#));
     assert!(body.contains(r#""id":"255""#));
     assert!(body.contains(r#""tray_type":"PETG""#));
-    assert!(body.contains(r#""aux":"""#));
+    assert!(!body.contains(r#""aux":"#));
 }
 
 #[test]
 fn printer_telemetry_preserves_filament_switch_aux_and_routes() {
     let telemetry = telemetry_json(
-        r#"{"materials":{"filament_switch_installed":true,"ams_units":[{"unit_id":"0","info":"00000E00","toolhead":"LR","trays":[]},{"unit_id":"1","info":"01000E00","toolhead":"LR","trays":[]}]}}"#,
+        r#"{"materials":{"cfg":"8000000000000001","aux":"A4003001","stat":"1000000001","filament_switch_installed":true,"ams_units":[{"unit_id":"0","info":"00000E00","toolhead":"LR","trays":[]},{"unit_id":"1","info":"01000E00","toolhead":"LR","trays":[]}]}}"#,
     );
 
-    assert_eq!(telemetry["aux"], serde_json::json!("20000000"));
+    assert_eq!(telemetry["cfg"], serde_json::json!("8000000000000001"));
+    assert_eq!(telemetry["aux"], serde_json::json!("A4003001"));
+    assert_eq!(telemetry["stat"], serde_json::json!("1000000001"));
     assert_eq!(telemetry["ams"]["ams_exist_bits"], serde_json::json!("3"));
     assert_eq!(telemetry["ams"]["ams"][0]["id"], serde_json::json!("0"));
     assert_eq!(
@@ -175,18 +180,37 @@ fn printer_telemetry_preserves_filament_switch_aux_and_routes() {
 #[test]
 fn printer_telemetry_keeps_legacy_lr_projection_when_switch_is_absent() {
     let telemetry = telemetry_json(
-        r#"{"materials":{"filament_switch_installed":false,"ams_units":[{"unit_id":"0","info":"00000E00","toolhead":"R","trays":[]},{"unit_id":"1","info":"01000E00","toolhead":"L","trays":[]}]}}"#,
+        r#"{"materials":{"aux":"84001000","filament_switch_installed":false,"ams_units":[{"unit_id":"0","info":"00000E00","toolhead":"R","trays":[]},{"unit_id":"1","info":"01000E00","toolhead":"L","trays":[]}]}}"#,
     );
 
-    assert_eq!(telemetry["aux"], serde_json::json!("00000000"));
+    assert_eq!(telemetry["aux"], serde_json::json!("84001000"));
     assert_eq!(telemetry["ams"]["ams"][0]["info"], serde_json::json!("1"));
     assert_eq!(telemetry["ams"]["ams"][1]["info"], serde_json::json!("101"));
 }
 
 #[test]
+fn printer_telemetry_does_not_invent_aux_when_raw_state_is_missing() {
+    let telemetry =
+        telemetry_json(r#"{"materials":{"filament_switch_installed":true,"ams_units":[]}}"#);
+
+    assert!(telemetry.get("aux").is_none());
+}
+
+#[test]
+fn printer_telemetry_preserves_explicit_empty_studio_flags() {
+    let telemetry = telemetry_json(
+        r#"{"materials":{"cfg":"","aux":"","stat":"","filament_switch_installed":false,"ams_units":[]}}"#,
+    );
+
+    assert_eq!(telemetry["cfg"], serde_json::json!(""));
+    assert_eq!(telemetry["aux"], serde_json::json!(""));
+    assert_eq!(telemetry["stat"], serde_json::json!(""));
+}
+
+#[test]
 fn printer_telemetry_drops_invalid_filament_switch_routes() {
     let telemetry = telemetry_json(
-        r#"{"materials":{"filament_switch_installed":true,"ams_units":[{"unit_id":"0","info":"00000E00","toolhead":"LR","trays":[{"tray_id":"0"}]},{"unit_id":"1","toolhead":"LR","trays":[{"tray_id":"0"}]},{"unit_id":"2","info":"00000000","toolhead":"LR","trays":[{"tray_id":"0"}]},{"unit_id":"3","info":"02000E00","toolhead":"LR","trays":[{"tray_id":"0"}]},{"unit_id":"4","info":"not-hex","toolhead":"LR","trays":[{"tray_id":"0"}]}]}}"#,
+        r#"{"materials":{"aux":"20000000","filament_switch_installed":true,"ams_units":[{"unit_id":"0","info":"00000E00","toolhead":"LR","trays":[{"tray_id":"0"}]},{"unit_id":"1","toolhead":"LR","trays":[{"tray_id":"0"}]},{"unit_id":"2","info":"00000000","toolhead":"LR","trays":[{"tray_id":"0"}]},{"unit_id":"3","info":"02000E00","toolhead":"LR","trays":[{"tray_id":"0"}]},{"unit_id":"4","info":"not-hex","toolhead":"LR","trays":[{"tray_id":"0"}]}]}}"#,
     );
 
     assert_eq!(telemetry["aux"], serde_json::json!("20000000"));

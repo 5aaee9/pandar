@@ -6,8 +6,6 @@ use sea_orm::{
 };
 #[cfg(test)]
 use sea_orm::{SqliteTransactionMode, TransactionOptions, TransactionTrait};
-#[cfg(test)]
-use serde::Serialize;
 
 use crate::{
     db::Database,
@@ -17,6 +15,8 @@ use crate::{
 
 mod merge;
 mod patch;
+#[cfg(test)]
+mod test_json;
 
 use merge::merge_snapshot;
 pub use patch::MaterialJsonValue;
@@ -44,6 +44,9 @@ pub struct MaterialSnapshot {
     pub external_spools: MaterialJsonValue,
     pub active_tray: Option<MaterialJsonValue>,
     pub filament_switch_installed: Option<bool>,
+    pub cfg: Option<String>,
+    pub aux: Option<String>,
+    pub stat: Option<String>,
     pub observed_at: String,
     pub updated_at: String,
 }
@@ -68,28 +71,6 @@ pub(crate) enum CurrentMaterialPatchOutcome {
         printer_id: String,
         outcome: Box<MaterialPatchOutcome>,
     },
-}
-
-impl MaterialSnapshot {
-    #[cfg(test)]
-    pub(crate) fn persisted_json(&self) -> String {
-        serde_json::to_string(&PersistedMaterialSnapshotJson {
-            ams_units: &self.ams_units,
-            external_spools: &self.external_spools,
-            active_tray: self.active_tray.as_ref(),
-            filament_switch_installed: self.filament_switch_installed,
-        })
-        .expect("persisted material snapshot JSON is serializable")
-    }
-}
-
-#[cfg(test)]
-#[derive(Serialize)]
-struct PersistedMaterialSnapshotJson<'a> {
-    ams_units: &'a MaterialJsonValue,
-    external_spools: &'a MaterialJsonValue,
-    active_tray: Option<&'a MaterialJsonValue>,
-    filament_switch_installed: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -306,6 +287,9 @@ where
         && snapshot.external_spools == merged.external_spools
         && snapshot.active_tray == merged.active_tray
         && snapshot.filament_switch_installed == merged.filament_switch_installed
+        && snapshot.cfg == merged.cfg
+        && snapshot.aux == merged.aux
+        && snapshot.stat == merged.stat
     {
         return Ok(MaterialPatchOutcome::Unchanged(snapshot));
     }
@@ -340,6 +324,9 @@ where
         active_tray_json: Set(active_tray_json),
         filament_switch_installed: Set(merged.filament_switch_installed),
         observed_at: Set(patch.observed_at),
+        studio_cfg: Set(merged.cfg),
+        studio_aux: Set(merged.aux),
+        studio_stat: Set(merged.stat),
         updated_at: Set(now),
     };
 
@@ -379,6 +366,9 @@ fn snapshot_from_model(
                 .transpose()?,
             filament_switch_installed: model.filament_switch_installed,
             observed_at: model.observed_at,
+            cfg: model.studio_cfg,
+            aux: model.studio_aux,
+            stat: model.studio_stat,
             updated_at: model.updated_at,
         })
     })()

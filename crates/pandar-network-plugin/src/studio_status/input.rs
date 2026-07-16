@@ -69,6 +69,12 @@ pub(super) struct NozzleTemperature {
 #[derive(Default, Deserialize)]
 pub(super) struct Materials {
     #[serde(default)]
+    pub(super) cfg: Option<String>,
+    #[serde(default)]
+    pub(super) aux: Option<String>,
+    #[serde(default)]
+    pub(super) stat: Option<String>,
+    #[serde(default)]
     pub(super) ams_units: Vec<AmsUnit>,
     #[serde(default)]
     pub(super) external_spools: Vec<MaterialTray>,

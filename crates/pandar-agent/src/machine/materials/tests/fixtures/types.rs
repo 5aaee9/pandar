@@ -4,6 +4,9 @@ use serde::Deserialize;
 pub(crate) struct TestMaterialPatch {
     #[serde(rename = "type")]
     pub(crate) document_type: String,
+    pub(crate) cfg: Option<String>,
+    pub(crate) aux: Option<String>,
+    pub(crate) stat: Option<String>,
     pub(crate) filament_switch_installed: Option<bool>,
     #[serde(default)]
     pub(crate) ams_units: Vec<TestAmsUnit>,

@@ -379,6 +379,9 @@ async fn printer_snapshot_event_includes_latest_materials() {
     assert!(print.hms.is_empty());
     let materials = printer.materials.unwrap();
     assert_eq!(materials.filament_switch_installed, Some(true));
+    assert_eq!(materials.cfg.as_deref(), Some("8000000000000001"));
+    assert_eq!(materials.aux.as_deref(), Some("A4003001"));
+    assert_eq!(materials.stat.as_deref(), Some("1000000001"));
     assert_eq!(
         materials.ams_units,
         PrinterEventMaterialJson::Array(vec![PrinterEventMaterialJson::Object(BTreeMap::from([
@@ -534,6 +537,9 @@ pub(super) fn valid_material_patch(observed_at: &str) -> String {
         kind: "printer_material_patch",
         observed_at,
         filament_switch_installed: true,
+        cfg: "8000000000000001",
+        aux: "A4003001",
+        stat: "1000000001",
         ams_units: vec![TestAmsUnit {
             unit_id: "0",
             info: "00000E00",
@@ -553,6 +559,9 @@ struct TestMaterialPatch<'a> {
     kind: &'static str,
     observed_at: &'a str,
     filament_switch_installed: bool,
+    cfg: &'static str,
+    aux: &'static str,
+    stat: &'static str,
     ams_units: Vec<TestAmsUnit>,
     external_spools: Vec<TestExternalSpool>,
 }

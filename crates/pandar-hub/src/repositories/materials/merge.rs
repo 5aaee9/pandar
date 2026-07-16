@@ -13,6 +13,9 @@ pub(super) struct MergedSnapshot {
     pub(super) external_spools: MaterialJsonValue,
     pub(super) active_tray: Option<MaterialJsonValue>,
     pub(super) filament_switch_installed: Option<bool>,
+    pub(super) cfg: Option<String>,
+    pub(super) aux: Option<String>,
+    pub(super) stat: Option<String>,
 }
 
 pub(super) fn merge_snapshot(
@@ -52,12 +55,27 @@ pub(super) fn merge_snapshot(
     let filament_switch_installed = patch
         .filament_switch_installed
         .or_else(|| current.and_then(|snapshot| snapshot.filament_switch_installed));
+    let cfg = patch
+        .cfg
+        .clone()
+        .or_else(|| current.and_then(|snapshot| snapshot.studio_cfg.clone()));
+    let aux = patch
+        .aux
+        .clone()
+        .or_else(|| current.and_then(|snapshot| snapshot.studio_aux.clone()));
+    let stat = patch
+        .stat
+        .clone()
+        .or_else(|| current.and_then(|snapshot| snapshot.studio_stat.clone()));
 
     Ok(MergedSnapshot {
         ams_units: material_units_json(ams_units),
         external_spools: material_external_spools_json(external_spools),
         active_tray,
         filament_switch_installed,
+        cfg,
+        aux,
+        stat,
     })
 }
 

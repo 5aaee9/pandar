@@ -9,7 +9,11 @@ pub(super) struct MaterialReport<'a> {
 #[derive(Default, Serialize)]
 pub(super) struct MaterialPrint<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) cfg: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) aux: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) stat: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) nozzle_temper: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]

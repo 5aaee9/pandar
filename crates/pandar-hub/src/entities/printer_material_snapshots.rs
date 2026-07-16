@@ -13,6 +13,9 @@ pub struct Model {
     pub external_spools_json: String,
     pub active_tray_json: Option<String>,
     pub filament_switch_installed: Option<bool>,
+    pub studio_cfg: Option<String>,
+    pub studio_aux: Option<String>,
+    pub studio_stat: Option<String>,
     pub observed_at: String,
     pub updated_at: String,
 }

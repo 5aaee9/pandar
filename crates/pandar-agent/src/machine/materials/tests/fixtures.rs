@@ -89,6 +89,29 @@ pub(super) fn single_nozzle_ams_report() -> Value {
     ams_unit_pair_report(Some(28), None, None)
 }
 
+pub(super) fn studio_flags_only_report(
+    cfg: Option<&str>,
+    aux: Option<&str>,
+    stat: Option<&str>,
+) -> Value {
+    value(MaterialReport {
+        print: MaterialPrint {
+            cfg,
+            aux,
+            stat,
+            ..Default::default()
+        },
+    })
+}
+
+pub(super) fn invalid_studio_flags_material_report() -> Value {
+    let mut report = humidity_raw_report();
+    report["print"]["cfg"] = Value::Number(1.into());
+    report["print"]["aux"] = Value::Bool(true);
+    report["print"]["stat"] = Value::String("10000000000000000".to_owned());
+
+    report
+}
 pub(super) fn filament_switch_ams_report(aux: Option<&str>) -> Value {
     value(MaterialReport {
         print: MaterialPrint {

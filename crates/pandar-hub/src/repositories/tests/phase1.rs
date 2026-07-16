@@ -64,6 +64,17 @@ async fn sqlite_migrations_create_phase_1_schema() {
             .await
             .unwrap();
     assert_eq!(jobs_command_id_count, 1);
+
+    for column in ["studio_cfg", "studio_aux", "studio_stat"] {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM pragma_table_info('printer_material_snapshots') WHERE name = ?1",
+        )
+        .bind(column)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(count, 1, "{column} column should exist");
+    }
 }
 
 #[test]
@@ -134,6 +145,20 @@ fn filament_switch_state_migrations_are_backend_equivalent() {
     }
     assert!(sqlite.contains("INTEGER"));
     assert!(postgres.contains("BOOLEAN"));
+}
+
+#[test]
+fn studio_status_flag_migrations_are_backend_equivalent() {
+    let sqlite = include_str!("../../../migrations/sqlite/20260716010000_studio_status_flags.sql");
+    let postgres =
+        include_str!("../../../migrations/postgres/20260716010000_studio_status_flags.sql");
+
+    assert_eq!(postgres.trim(), sqlite.trim());
+    for column in ["studio_cfg", "studio_aux", "studio_stat"] {
+        assert!(sqlite.contains(&format!(
+            "ALTER TABLE printer_material_snapshots ADD COLUMN {column} TEXT;"
+        )));
+    }
 }
 
 #[test]

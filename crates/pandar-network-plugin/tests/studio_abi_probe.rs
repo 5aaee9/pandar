@@ -139,7 +139,12 @@ fn studio_abi_probe_preserves_full_axis_feature_bitmap_and_submits_semantics_thr
         status["print"]["fun"],
         serde_json::json!("8000004100000020")
     );
-    assert_eq!(status["print"]["aux"], serde_json::json!("20000000"));
+    assert_eq!(
+        status["print"]["cfg"],
+        serde_json::json!("8000000000000001")
+    );
+    assert_eq!(status["print"]["aux"], serde_json::json!("A4003001"));
+    assert_eq!(status["print"]["stat"], serde_json::json!("1000000001"));
     assert_eq!(
         status["print"]["ams"]["ams"][0]["info"],
         serde_json::json!("00000E00")

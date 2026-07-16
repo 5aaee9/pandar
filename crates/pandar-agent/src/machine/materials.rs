@@ -25,10 +25,16 @@ pub(crate) fn normalize_material_patch<'a>(
     observed_at: &'a str,
 ) -> Option<MaterialPatchDocument<'a>> {
     let print = report.print.as_ref()?;
-    let filament_switch_installed = filament_switch_installed(print.aux.as_ref());
+    let cfg = normalize_studio_flag(print.cfg.as_ref());
+    let aux = normalize_studio_flag(print.aux.as_ref());
+    let stat = normalize_studio_flag(print.stat.as_ref());
+    let filament_switch_installed = filament_switch_installed(aux.as_deref());
     let mut patch = MaterialPatchDocument {
         document_type: "printer_material_patch",
         observed_at,
+        cfg,
+        aux,
+        stat,
         filament_switch_installed,
         ams_units: Vec::new(),
         external_spools: None,
@@ -55,7 +61,10 @@ pub(crate) fn normalize_material_patch<'a>(
         patch.replace_external_spools = external.replace;
     }
 
-    (patch.filament_switch_installed.is_some()
+    (patch.cfg.is_some()
+        || patch.aux.is_some()
+        || patch.stat.is_some()
+        || patch.filament_switch_installed.is_some()
         || !patch.ams_units.is_empty()
         || patch.external_spools.is_some()
         || patch.replace_external_spools
@@ -291,10 +300,25 @@ fn normalize_multi_color(value: &ColorSource) -> Option<Vec<String>> {
     (!colors.is_empty()).then_some(colors)
 }
 
-fn filament_switch_installed(value: Option<&ScalarValue>) -> Option<bool> {
-    let raw = normalized_string(value)?;
-    let parsed =
-        u64::from_str_radix(raw.trim_start_matches("0x").trim_start_matches("0X"), 16).ok()?;
+fn normalize_studio_flag(value: Option<&ScalarValue>) -> Option<String> {
+    let ScalarValue::String(raw) = value? else {
+        return None;
+    };
+    let raw = raw.trim().trim_start_matches("0x").trim_start_matches("0X");
+    if raw.is_empty() {
+        return Some(String::new());
+    }
+    u64::from_str_radix(raw, 16)
+        .is_ok()
+        .then(|| raw.to_ascii_uppercase())
+}
+
+fn filament_switch_installed(aux: Option<&str>) -> Option<bool> {
+    let aux = aux?;
+    if aux.is_empty() {
+        return Some(false);
+    }
+    let parsed = u64::from_str_radix(aux, 16).ok()?;
     Some((parsed >> 29) & 1 == 1)
 }
 

@@ -12,7 +12,11 @@ pub(crate) struct MaterialsReport {
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct PrintMaterialsReport {
     #[serde(default)]
+    pub(super) cfg: Option<ScalarValue>,
+    #[serde(default)]
     pub(super) aux: Option<ScalarValue>,
+    #[serde(default)]
+    pub(super) stat: Option<ScalarValue>,
     #[serde(default)]
     pub(super) ams: Option<AmsReport>,
     #[serde(default)]

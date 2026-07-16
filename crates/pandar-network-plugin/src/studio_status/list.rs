@@ -97,6 +97,12 @@ struct ValidatedNozzleTemperature {
 
 #[derive(Deserialize)]
 struct ValidatedMaterials {
+    #[serde(rename = "cfg")]
+    _cfg: Option<String>,
+    #[serde(rename = "aux")]
+    _aux: Option<String>,
+    #[serde(rename = "stat")]
+    _stat: Option<String>,
     #[serde(rename = "ams_units")]
     _ams_units: Vec<AmsUnit>,
     #[serde(rename = "external_spools")]
