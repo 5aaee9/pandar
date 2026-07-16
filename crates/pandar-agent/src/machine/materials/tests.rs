@@ -101,6 +101,8 @@ fn single_nozzle_report_does_not_guess_ams_toolhead_without_info() {
 fn installed_filament_switch_marks_bound_ams_units_as_shared() {
     let patch = normalize(filament_switch_ams_report(Some("20000000"))).unwrap();
 
+    assert_eq!(patch.ams_units[0].info.as_deref(), Some("00000E00"));
+    assert_eq!(patch.ams_units[1].info.as_deref(), Some("01000E00"));
     assert_eq!(patch.ams_units[0].toolhead.as_deref(), Some("LR"));
     assert_eq!(patch.ams_units[1].toolhead.as_deref(), Some("LR"));
 }

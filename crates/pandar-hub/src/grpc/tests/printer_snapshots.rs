@@ -383,6 +383,10 @@ async fn printer_snapshot_event_includes_latest_materials() {
         materials.ams_units,
         PrinterEventMaterialJson::Array(vec![PrinterEventMaterialJson::Object(BTreeMap::from([
             (
+                "info".to_owned(),
+                PrinterEventMaterialJson::String("00000E00".to_owned())
+            ),
+            (
                 "unit_id".to_owned(),
                 PrinterEventMaterialJson::String("0".to_owned())
             ),
@@ -532,6 +536,7 @@ pub(super) fn valid_material_patch(observed_at: &str) -> String {
         filament_switch_installed: true,
         ams_units: vec![TestAmsUnit {
             unit_id: "0",
+            info: "00000E00",
             trays: vec![TestMaterialPatchTray {
                 tray_id: "0",
                 material_type: "PLA",
@@ -555,6 +560,7 @@ struct TestMaterialPatch<'a> {
 #[derive(Serialize)]
 struct TestAmsUnit {
     unit_id: &'static str,
+    info: &'static str,
     trays: Vec<TestMaterialPatchTray>,
 }
 

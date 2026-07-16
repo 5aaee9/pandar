@@ -23,6 +23,8 @@ pub(super) struct AmsUnitPatch {
     pub(super) unit_id: String,
     pub(super) unit_kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) info: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) humidity: Option<Number>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) humidity_level: Option<Number>,

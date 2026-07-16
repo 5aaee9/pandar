@@ -32,7 +32,14 @@ impl AmsPayload {
         let ams = materials
             .ams_units
             .iter()
-            .filter_map(|unit| AmsUnitPayload::new(unit, &mut ams_exist_bits, &mut tray_exist_bits))
+            .filter_map(|unit| {
+                AmsUnitPayload::new(
+                    unit,
+                    &mut ams_exist_bits,
+                    &mut tray_exist_bits,
+                    materials.filament_switch_installed,
+                )
+            })
             .collect();
         Self::WithBits {
             ams,
@@ -57,17 +64,18 @@ pub(super) struct AmsUnitPayload {
 }
 
 impl AmsUnitPayload {
-    fn new(unit: &AmsUnit, ams_exist_bits: &mut u64, tray_exist_bits: &mut u64) -> Option<Self> {
+    fn new(
+        unit: &AmsUnit,
+        ams_exist_bits: &mut u64,
+        tray_exist_bits: &mut u64,
+        filament_switch_installed: Option<bool>,
+    ) -> Option<Self> {
+        let info = studio_ams_info(unit, filament_switch_installed)?;
         let unit_id = text_if_present(&unit.unit_id)?;
         let unit_number = parse_u64_or_zero(&unit_id);
         if unit_number < 64 {
             *ams_exist_bits |= 1_u64 << unit_number;
         }
-        let extruder_id = if text(&unit.toolhead).eq_ignore_ascii_case("L") {
-            1
-        } else {
-            0
-        };
         let tray = unit
             .trays
             .iter()
@@ -81,13 +89,36 @@ impl AmsUnitPayload {
             .collect();
         Some(Self {
             id: unit_id,
-            info: hex_string(1 | (extruder_id << 8)),
+            info,
             humidity: text_if_present(&unit.humidity_level),
             humidity_raw: text_if_present(&unit.humidity),
             temp: text_if_present(&unit.temperature_celsius),
             tray,
         })
     }
+}
+
+fn studio_ams_info(unit: &AmsUnit, filament_switch_installed: Option<bool>) -> Option<String> {
+    if filament_switch_installed == Some(true) {
+        return filament_switch_info(unit);
+    }
+
+    let extruder_id = if text(&unit.toolhead).eq_ignore_ascii_case("L") {
+        1
+    } else {
+        0
+    };
+    Some(hex_string(1 | (extruder_id << 8)))
+}
+
+fn filament_switch_info(unit: &AmsUnit) -> Option<String> {
+    let info = text_if_present(&unit.info)?;
+    let value = info
+        .strip_prefix("0x")
+        .or_else(|| info.strip_prefix("0X"))
+        .unwrap_or(&info);
+    let parsed = u64::from_str_radix(value, 16).ok()?;
+    (((parsed >> 8) & 0xF == 0xE) && matches!((parsed >> 24) & 0xF, 0 | 1)).then_some(info)
 }
 
 #[derive(Serialize)]

@@ -9,6 +9,7 @@ use super::{
 #[derive(Serialize)]
 pub(super) struct StudioTelemetry {
     fun: String,
+    aux: String,
     gcode_state: String,
     mc_percent: u8,
     mc_remaining_time: u32,
@@ -73,6 +74,17 @@ impl From<&PrinterStatus> for StudioTelemetry {
 
         Self {
             fun: printer.fun.clone().unwrap_or_else(|| "0".to_owned()),
+            aux: printer
+                .materials
+                .as_ref()
+                .and_then(|materials| materials.filament_switch_installed)
+                .map_or_else(String::new, |installed| {
+                    if installed {
+                        "20000000".to_owned()
+                    } else {
+                        "00000000".to_owned()
+                    }
+                }),
             gcode_state: printer
                 .gcode_state
                 .clone()

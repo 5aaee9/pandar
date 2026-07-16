@@ -79,6 +79,7 @@ fn normalize_ams_units(
         .filter_map(|unit| {
             let unit_id = unit_id(unit)?;
             let unit_kind = unit_kind(&unit_id);
+            let info = unit.info.as_ref().and_then(normalize_ams_info);
             let toolhead = match unit.info.as_ref() {
                 Some(info) => normalize_toolhead(info, filament_switch_installed),
                 None if filament_switch_installed == Some(true) => None,
@@ -114,12 +115,14 @@ fn normalize_ams_units(
                 || unit.humidity.is_some()
                 || unit.temperature_celsius.is_some()
                 || unit.temp.is_some()
+                || info.is_some()
                 || toolhead.is_some()
                 || !trays.is_empty()
                 || replace_trays)
                 .then_some(AmsUnitPatch {
                     unit_id,
                     unit_kind: unit_kind.to_owned(),
+                    info,
                     humidity: unit.humidity_raw.as_ref().and_then(normalized_number),
                     humidity_level: unit.humidity.as_ref().and_then(normalized_number),
                     temperature_celsius: unit
@@ -293,6 +296,13 @@ fn filament_switch_installed(value: Option<&ScalarValue>) -> Option<bool> {
     let parsed =
         u64::from_str_radix(raw.trim_start_matches("0x").trim_start_matches("0X"), 16).ok()?;
     Some((parsed >> 29) & 1 == 1)
+}
+
+fn normalize_ams_info(value: &ScalarValue) -> Option<String> {
+    let raw = normalized_string(Some(value))?;
+    let raw = raw.trim_start_matches("0x").trim_start_matches("0X");
+    u64::from_str_radix(raw, 16).ok()?;
+    Some(raw.to_ascii_uppercase())
 }
 
 fn normalize_toolhead(

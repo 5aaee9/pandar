@@ -96,6 +96,7 @@ struct PluginMaterialsResponse {
 #[derive(Debug, Deserialize)]
 struct PluginAmsUnitResponse {
     unit_id: String,
+    info: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -205,6 +206,7 @@ struct PluginMaterialPatchFixture {
 #[derive(Debug, Serialize)]
 struct PluginMaterialPatchAmsUnit {
     unit_id: &'static str,
+    info: &'static str,
     humidity: u8,
     humidity_level: u8,
     temperature_celsius: f64,
@@ -622,6 +624,7 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
                 observed_at: "2026-06-20T00:01:00Z",
                 ams_units: [PluginMaterialPatchAmsUnit {
                     unit_id: "0",
+                    info: "00000E00",
                     humidity: 25,
                     humidity_level: 3,
                     temperature_celsius: 28.5,
@@ -704,6 +707,7 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
     assert_eq!(device.chamber_light_on, Some(true));
     let materials = device.materials.as_ref().unwrap();
     assert_eq!(materials.ams_units[0].unit_id, "0");
+    assert_eq!(materials.ams_units[0].info, "00000E00");
     assert_eq!(materials.external_spools[0].external_id, "254");
     assert_eq!(materials.active_tray.global_tray_id, 0);
 }

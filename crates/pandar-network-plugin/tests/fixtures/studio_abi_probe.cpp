@@ -1347,7 +1347,7 @@ int main(int argc, char** argv) {
             !contains(body, R"("support_chamber_temp_display":true)") ||
             contains(body, R"("cfg":"")") ||
             !contains(body, R"("fun":"8000004100000020")") ||
-            !contains(body, R"("aux":"")") ||
+            !contains(body, R"("aux":"20000000")") ||
             !contains(body, R"("stat":"")") ||
             !contains(body, R"("device")") ||
             !contains(body, R"("type":1)") ||
@@ -1357,8 +1357,8 @@ int main(int argc, char** argv) {
             !contains(body, R"("ams_exist_bits":"3")") ||
             !contains(body, R"("tray_exist_bits":"ff")") ||
             !contains(body, R"("tray_now":"3")") ||
-            !contains(body, R"("id":"0","info":"1")") ||
-            !contains(body, R"("id":"1","info":"101")") ||
+            !contains(body, R"("id":"0","info":"00000E00")") ||
+            !contains(body, R"("id":"1","info":"01000E00")") ||
             !contains(body, R"("humidity":"3")") ||
             !contains(body, R"("humidity_raw":"25")") ||
             !contains(body, R"("temp":"28.5")") ||

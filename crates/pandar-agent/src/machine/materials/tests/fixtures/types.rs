@@ -16,6 +16,7 @@ pub(crate) struct TestMaterialPatch {
 pub(crate) struct TestAmsUnit {
     pub(crate) unit_id: String,
     pub(crate) unit_kind: String,
+    pub(crate) info: Option<String>,
     #[serde(default)]
     pub(crate) trays: Vec<TestAmsTray>,
     pub(crate) replace_trays: Option<bool>,

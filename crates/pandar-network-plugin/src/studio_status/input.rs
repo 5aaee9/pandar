@@ -74,12 +74,16 @@ pub(super) struct Materials {
     pub(super) external_spools: Vec<MaterialTray>,
     #[serde(default)]
     pub(super) active_tray: Option<ActiveTray>,
+    #[serde(default)]
+    pub(super) filament_switch_installed: Option<bool>,
 }
 
 #[derive(Default, Deserialize)]
 pub(super) struct AmsUnit {
     #[serde(default)]
     pub(super) unit_id: Option<Scalar>,
+    #[serde(default)]
+    pub(super) info: Option<Scalar>,
     #[serde(default)]
     pub(super) humidity: Option<Scalar>,
     #[serde(default)]

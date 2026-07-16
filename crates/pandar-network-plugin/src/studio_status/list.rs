@@ -103,6 +103,8 @@ struct ValidatedMaterials {
     _external_spools: Vec<MaterialTray>,
     #[serde(rename = "active_tray")]
     _active_tray: Option<ActiveTray>,
+    #[serde(rename = "filament_switch_installed")]
+    _filament_switch_installed: Option<bool>,
     #[serde(rename = "observed_at")]
     _observed_at: String,
 }
