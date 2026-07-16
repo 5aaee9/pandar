@@ -8,6 +8,8 @@
     "build:web": "npm run build:plugin-local && npm run build --workspace pandar-web",
     "build:auth": "npm run build --workspace pandar-auth",
     "test:web": "npm run test --workspace pandar-web",
-    "test:auth": "npm run test --workspace pandar-auth"
+    "test:auth": "npm run test --workspace pandar-auth",
+    "typecheck:web": "npm run typecheck --workspace pandar-web",
+    "typecheck:auth": "npm run typecheck --workspace pandar-auth"
   }
 }

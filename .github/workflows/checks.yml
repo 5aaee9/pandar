@@ -14,6 +14,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  frontend-quality:
+    name: Frontend tests and type checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Web tests
+        run: npm run test:web
+
+      - name: Run Auth tests
+        run: npm run test:auth
+
+      - name: Type-check Web
+        run: npm run typecheck:web
+
+      - name: Type-check Auth
+        run: npm run typecheck:auth
+
   helm-chart:
     name: Helm chart
     runs-on: ubuntu-latest

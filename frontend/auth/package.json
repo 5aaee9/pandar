@@ -6,7 +6,8 @@
     "build": "next build",
     "start": "next start",
     "migrate": "auth migrate --config ./lib/auth.ts --yes",
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@better-auth/passkey": "1.6.22",

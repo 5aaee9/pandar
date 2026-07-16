@@ -7,6 +7,7 @@
     "build": "next build",
     "build:plugin-local": "npm --prefix plugin-local run build",
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "start": "next start",
     "lint": "next lint"
   },
