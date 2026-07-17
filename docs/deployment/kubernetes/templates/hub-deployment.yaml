@@ -57,6 +57,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "pandar.hubDatabaseSecretName" . }}
                   key: {{ .Values.hub.database.existingSecretKey }}
+            - name: PANDAR_PRINTER_ACCESS_CODE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "hub.accessCodeEncryption.existingSecret is required" .Values.hub.accessCodeEncryption.existingSecret }}
+                  key: {{ .Values.hub.accessCodeEncryption.existingSecretKey }}
             {{- with .Values.hub.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

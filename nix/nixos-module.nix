@@ -104,6 +104,12 @@ in
           description = "Artifact spool directory passed through PANDAR_SPOOL_DIR.";
         };
 
+        environmentFile = lib.mkOption {
+          type = lib.types.nullOr lib.types.path;
+          default = null;
+          description = "Optional systemd EnvironmentFile containing PANDAR_PRINTER_ACCESS_CODE_KEY and other hub secrets.";
+        };
+
         extraEnvironment = lib.mkOption {
           type = lib.types.attrsOf lib.types.str;
           default = { };
@@ -355,6 +361,14 @@ in
           message = "services.pandar.hub.nats.url is required when services.pandar.hub.controlPlane is \"nats\" and services.pandar.hub.nats.mode is \"external\".";
         }
         {
+          assertion =
+            !cfg.enable
+            || !cfg.hub.enable
+            || cfg.hub.environmentFile != null
+            || cfg.hub.extraEnvironment ? PANDAR_PRINTER_ACCESS_CODE_KEY;
+          message = "services.pandar.hub requires PANDAR_PRINTER_ACCESS_CODE_KEY through services.pandar.hub.environmentFile or services.pandar.hub.extraEnvironment.";
+        }
+        {
           assertion = !authCfg.enable || authBindParts != null;
           message = "services.pandar-auth.bind must be formatted as host:port.";
         }
@@ -434,6 +448,9 @@ in
           WorkingDirectory = "/var/lib/pandar-hub";
           Restart = "on-failure";
           RestartSec = "5s";
+        }
+        // lib.optionalAttrs (cfg.hub.environmentFile != null) {
+          EnvironmentFile = cfg.hub.environmentFile;
         };
       };
 

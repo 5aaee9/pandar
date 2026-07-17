@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     entities::printers,
+    printer_secrets::PrinterAccessCodeCipher,
     repositories::{RepositoryError, RepositoryResult},
 };
 
@@ -67,7 +68,10 @@ mod persistence;
 pub(crate) use merge::merge_live_report;
 pub(crate) use persistence::persist_merged_live_status;
 
-pub(crate) fn from_model(model: printers::Model) -> RepositoryResult<PrinterWithLiveStatus> {
+pub(crate) fn from_model(
+    model: printers::Model,
+    access_code_cipher: &PrinterAccessCodeCipher,
+) -> RepositoryResult<PrinterWithLiveStatus> {
     let firmware = super::firmware::from_model(&model)?;
     let (state_revision, live_status) = (|| -> anyhow::Result<(u64, PrinterLiveStatus)> {
         let state_revision =
@@ -134,7 +138,7 @@ pub(crate) fn from_model(model: printers::Model) -> RepositoryResult<PrinterWith
 
     Ok(PrinterWithLiveStatus {
         state_revision,
-        printer: super::printer_from_model(model)?,
+        printer: super::printer_from_model(model, access_code_cipher)?,
         live_status,
         firmware,
     })

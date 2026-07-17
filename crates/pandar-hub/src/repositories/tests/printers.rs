@@ -154,6 +154,68 @@ async fn printer_repository_updates_connection_details() {
             .unwrap(),
         updated
     );
+
+    let Database::Sqlite(pool) = &database else {
+        panic!("expected SQLite database");
+    };
+    let (plaintext, encrypted): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT access_code, access_code_encrypted FROM printers WHERE id = ?1")
+            .bind(&printer_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    assert_eq!(plaintext, None);
+    assert!(
+        encrypted
+            .as_deref()
+            .is_some_and(|value| value.starts_with("v1:"))
+    );
+    assert!(!encrypted.unwrap().contains("updated-access-code"));
+}
+
+#[tokio::test]
+async fn printer_access_code_migration_encrypts_legacy_plaintext() {
+    let (database, tenants, agents, printers, _, _) = repositories().await;
+    let tenant = tenants.create("legacy", "Legacy").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)
+        .await
+        .unwrap();
+    let Database::Sqlite(pool) = &database else {
+        panic!("expected SQLite database");
+    };
+    sqlx::query("UPDATE printers SET access_code = 'legacy-code' WHERE id = ?1")
+        .bind(&printer_id)
+        .execute(pool)
+        .await
+        .unwrap();
+
+    crate::printer_secrets::migrate_printer_access_codes(&database, &printers.access_code_cipher())
+        .await
+        .unwrap();
+
+    let (plaintext, encrypted): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT access_code, access_code_encrypted FROM printers WHERE id = ?1")
+            .bind(&printer_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    assert_eq!(plaintext, None);
+    assert!(
+        encrypted
+            .as_deref()
+            .is_some_and(|value| value.starts_with("v1:"))
+    );
+    assert_eq!(
+        printers
+            .get_for_tenant(tenant.id, &printer_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .access_code
+            .as_deref(),
+        Some("legacy-code")
+    );
 }
 
 #[tokio::test]

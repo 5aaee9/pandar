@@ -1,14 +1,11 @@
 use anyhow::Context;
-use pandar_core::{
-    AgentId, BambuDeviceFeatures, Printer, PrinterNozzleTemperature, PrinterParts, TenantId,
-};
+use pandar_core::{AgentId, BambuDeviceFeatures, Printer, PrinterNozzleTemperature, TenantId};
 use sea_orm::{
     ActiveValue::Set,
     ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, PaginatorTrait, QueryFilter,
     QueryOrder, QuerySelect, TransactionTrait,
     sea_query::{Expr, ExprTrait},
 };
-use serde::Serialize;
 
 #[cfg(test)]
 use sea_orm::{SqliteTransactionMode, TransactionOptions};
@@ -18,6 +15,7 @@ use crate::entities::agents;
 use crate::{
     db::Database,
     entities::{printers, tenants},
+    printer_secrets::PrinterAccessCodeCipher,
     repositories::{
         AuditActor, RepositoryError, RepositoryResult, adapters,
         audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
@@ -25,11 +23,14 @@ use crate::{
     },
 };
 
+mod audit_metadata;
 mod device_features;
 mod firmware;
 mod live_status;
 mod queries;
+mod rows;
 
+use audit_metadata::{PrinterDeleteAuditMetadata, PrinterUpdateAuditMetadata};
 pub use device_features::DeviceFeatureUpdateOutcome;
 pub use firmware::PrinterFirmwareUpdateOutcome;
 pub use live_status::{PrinterHms, PrinterLiveStatus, PrinterWithLiveStatus};
@@ -37,6 +38,7 @@ pub(crate) use live_status::{
     PrinterLiveStatusPatch, from_model as live_status_from_model, merge_live_report,
     persist_merged_live_status,
 };
+use rows::printer_from_model;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrinterSnapshotUpsert {
@@ -59,29 +61,32 @@ pub struct PrinterSnapshotUpsert {
 #[derive(Debug, Clone)]
 pub struct PrinterRepository {
     database: Database,
-}
-
-#[derive(Serialize)]
-struct PrinterDeleteAuditMetadata<'a> {
-    printer_name: &'a str,
-    serial_number: &'a str,
-    agent_id: String,
-    previous_status: &'a str,
-}
-
-#[derive(Serialize)]
-struct PrinterUpdateAuditMetadata<'a> {
-    previous_name: &'a str,
-    previous_host: &'a Option<String>,
-    printer_name: &'a str,
-    printer_host: &'a Option<String>,
-    serial_number: &'a str,
-    agent_id: String,
+    access_code_cipher: PrinterAccessCodeCipher,
 }
 
 impl PrinterRepository {
-    pub fn new(database: Database) -> Self {
-        Self { database }
+    pub(crate) fn new_with_cipher(
+        database: Database,
+        access_code_cipher: PrinterAccessCodeCipher,
+    ) -> Self {
+        Self {
+            database,
+            access_code_cipher,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new(database: Database) -> Self {
+        Self::new_with_cipher(
+            database,
+            crate::printer_secrets::configured_printer_access_code_cipher()
+                .expect("test printer access-code cipher is valid"),
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn access_code_cipher(&self) -> PrinterAccessCodeCipher {
+        self.access_code_cipher.clone()
     }
 
     pub async fn count(&self) -> RepositoryResult<i64> {
@@ -107,7 +112,7 @@ impl PrinterRepository {
             .await
             .context("failed to list printers")?
             .into_iter()
-            .map(printer_from_model)
+            .map(|model| printer_from_model(model, &self.access_code_cipher))
             .collect()
     }
 
@@ -121,7 +126,7 @@ impl PrinterRepository {
             .one(&self.database.sea_orm_connection())
             .await
             .context("failed to get printer")?
-            .map(printer_from_model)
+            .map(|model| printer_from_model(model, &self.access_code_cipher))
             .transpose()
     }
 
@@ -147,7 +152,7 @@ impl PrinterRepository {
             return Err(RepositoryError::MissingPrinter);
         };
 
-        let printer = live_status_from_model(model)?;
+        let printer = live_status_from_model(model, &self.access_code_cipher)?;
         insert_audit_event_tx(
             &tx,
             &record_audit_event(
@@ -207,7 +212,12 @@ impl PrinterRepository {
             .set(printers::ActiveModel {
                 name: Set(name),
                 host: Set(Some(host)),
-                access_code: Set(Some(access_code)),
+                access_code: Set(None),
+                access_code_encrypted: Set(Some(self.access_code_cipher.encrypt(
+                    &tenant_id.to_string(),
+                    &model.serial_number,
+                    &access_code,
+                )?)),
                 ..Default::default()
             })
             .col_expr(
@@ -223,7 +233,7 @@ impl PrinterRepository {
             .await
             .context("failed to reload printer details")?
             .ok_or(RepositoryError::MissingPrinter)?;
-        let printer = printer_from_model(model)?;
+        let printer = printer_from_model(model, &self.access_code_cipher)?;
         insert_audit_event_tx(
             &tx,
             &record_audit_event(
@@ -269,8 +279,16 @@ impl PrinterRepository {
             })
             .await
             .context("failed to begin printer snapshot transaction")?;
-        let printer =
-            upsert_snapshot_in_transaction(&tx, tenant_id, agent_id, snapshot, None, None).await?;
+        let printer = upsert_snapshot_in_transaction(
+            &tx,
+            tenant_id,
+            agent_id,
+            snapshot,
+            None,
+            None,
+            &self.access_code_cipher,
+        )
+        .await?;
         tx.commit()
             .await
             .context("failed to commit printer snapshot transaction")?;
@@ -286,8 +304,16 @@ impl PrinterRepository {
     ) -> RepositoryResult<Printer> {
         let tx = begin_current_agent_transaction(&self.database, tenant_id, agent_id, session_id)
             .await?;
-        let printer =
-            upsert_snapshot_in_transaction(&tx, tenant_id, agent_id, snapshot, None, None).await?;
+        let printer = upsert_snapshot_in_transaction(
+            &tx,
+            tenant_id,
+            agent_id,
+            snapshot,
+            None,
+            None,
+            &self.access_code_cipher,
+        )
+        .await?;
         tx.commit()
             .await
             .context("failed to commit current-session printer snapshot transaction")?;
@@ -302,14 +328,21 @@ async fn upsert_snapshot_in_transaction(
     snapshot: PrinterSnapshotUpsert,
     device_features: Option<BambuDeviceFeatures>,
     device_features_session_id: Option<&str>,
+    access_code_cipher: &PrinterAccessCodeCipher,
 ) -> RepositoryResult<Printer> {
-    let printer_id = uuid::Uuid::new_v4().to_string();
+    let access_code_encrypted = snapshot
+        .access_code
+        .as_deref()
+        .map(|access_code| {
+            access_code_cipher.encrypt(&tenant_id.to_string(), &snapshot.serial_number, access_code)
+        })
+        .transpose()?;
     adapters::printers::upsert_snapshot(
         transaction,
         tenant_id,
         agent_id,
-        &printer_id,
         &snapshot,
+        access_code_encrypted.as_deref(),
         device_features,
         device_features_session_id,
     )
@@ -321,7 +354,7 @@ async fn upsert_snapshot_in_transaction(
         .await
         .context("failed to reload printer snapshot")?
         .ok_or_else(|| anyhow::anyhow!("printer snapshot missing after upsert").into())
-        .and_then(printer_from_model)
+        .and_then(|model| printer_from_model(model, access_code_cipher))
 }
 
 async fn tenant_exists<C>(connection: &C, tenant_id: TenantId) -> RepositoryResult<bool>
@@ -352,40 +385,4 @@ where
         .context("failed to check agent ownership for printer repository")
         .map(|agent| agent.is_some())
         .map_err(Into::into)
-}
-
-fn printer_from_model(model: printers::Model) -> RepositoryResult<Printer> {
-    (|| {
-        Printer::from_parts(PrinterParts {
-            id: model.id,
-            tenant_id: TenantId::parse(&model.tenant_id).map_err(anyhow::Error::from)?,
-            agent_id: AgentId::parse(&model.agent_id).map_err(anyhow::Error::from)?,
-            serial_number: model.serial_number,
-            host: model.host,
-            access_code: model.access_code,
-            name: model.name,
-            model: model.model,
-            status: model.status,
-            last_seen_at: model
-                .last_seen_at
-                .context("failed to read printer last_seen_at")?,
-            created_at: model.created_at,
-            nozzle_temperatures: serde_json::from_str(&model.nozzle_temperatures_json)
-                .context("failed to read printer nozzle temperatures")?,
-            active_nozzle: model.active_nozzle,
-            bed_temperature_celsius: model.bed_temperature_celsius,
-            bed_target_temperature_celsius: model.bed_target_temperature_celsius,
-            chamber_temperature_celsius: model.chamber_temperature_celsius,
-            chamber_light_on: model.chamber_light_on,
-            bambu_device_features: model
-                .bambu_fun_bits
-                .map(|value| BambuDeviceFeatures::from_hex(&value))
-                .transpose()
-                .context("failed to rehydrate printer Bambu device features")?,
-            bambu_device_features_session_id: model.bambu_fun_session_id,
-        })
-        .map_err(anyhow::Error::from)
-    })()
-    .context("failed to rehydrate printer")
-    .map_err(RepositoryError::from)
 }

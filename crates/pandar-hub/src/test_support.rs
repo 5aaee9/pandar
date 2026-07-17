@@ -57,10 +57,11 @@ impl AppState {
     }
 
     pub(crate) fn sibling_for_tests(&self) -> Self {
-        Self::from_database_with_control_plane(
+        Self::from_database_with_control_plane_and_cipher(
             self.database.clone(),
             self.artifact_storage.clone(),
             self.control_plane.clone(),
+            self.printers.access_code_cipher(),
         )
         .with_external_auth_option(self.external_auth.clone())
         .with_no_auth(self.no_auth)

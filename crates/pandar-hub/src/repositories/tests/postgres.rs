@@ -363,7 +363,7 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
 
     let tenants = TenantRepository::new(database.clone());
     let agents = AgentRepository::new(database.clone());
-    let printers = PrinterRepository::new(database);
+    let printers = PrinterRepository::new(database.clone());
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
     let agent = agents.create(tenant.id, "agent").await.unwrap();
 
@@ -432,6 +432,21 @@ async fn postgres_printer_repository_upsert_list_when_configured() {
     assert_eq!(updated.access_code.as_deref(), Some("edited-access-code"));
     assert_eq!(updated.status, "printing");
     assert_eq!(updated.last_seen_at, "2026-06-21T00:05:00Z");
+    let Database::Postgres(pool) = &database else {
+        panic!("expected PostgreSQL database");
+    };
+    let (plaintext, encrypted): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT access_code, access_code_encrypted FROM printers WHERE id = $1")
+            .bind(&created.id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    assert_eq!(plaintext, None);
+    assert!(
+        encrypted
+            .as_deref()
+            .is_some_and(|value| value.starts_with("v1:"))
+    );
 
     let authoritative = printers
         .upsert_snapshot(
@@ -482,6 +497,60 @@ async fn postgres_print_reports_merge_printer_live_status_without_a_job_when_con
         "postgres-revision-race",
     )
     .await;
+}
+
+#[tokio::test]
+async fn postgres_printer_access_code_migration_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+    let tenants = TenantRepository::new(database.clone());
+    let agents = AgentRepository::new(database.clone());
+    let printers = PrinterRepository::new(database.clone());
+    let tenant = tenants
+        .create("legacy-secret", "Legacy Secret")
+        .await
+        .unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id = insert_printer_fixture(&database, tenant.id, agent.id)
+        .await
+        .unwrap();
+    let Database::Postgres(pool) = &database else {
+        panic!("expected PostgreSQL database");
+    };
+    sqlx::query("UPDATE printers SET access_code = 'legacy-code' WHERE id = $1")
+        .bind(&printer_id)
+        .execute(pool)
+        .await
+        .unwrap();
+
+    crate::printer_secrets::migrate_printer_access_codes(&database, &printers.access_code_cipher())
+        .await
+        .unwrap();
+
+    let (plaintext, encrypted): (Option<String>, Option<String>) =
+        sqlx::query_as("SELECT access_code, access_code_encrypted FROM printers WHERE id = $1")
+            .bind(&printer_id)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+    assert_eq!(plaintext, None);
+    assert!(
+        encrypted
+            .as_deref()
+            .is_some_and(|value| value.starts_with("v1:"))
+    );
+    assert_eq!(
+        printers
+            .get_for_tenant(tenant.id, &printer_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .access_code
+            .as_deref(),
+        Some("legacy-code")
+    );
 }
 
 #[tokio::test]

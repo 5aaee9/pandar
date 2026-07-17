@@ -5,6 +5,7 @@ use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     entities::{jobs, printers},
+    printer_secrets::PrinterAccessCodeCipher,
     repositories::{
         JobWithArtifact, PrinterLiveStatus, RepositoryResult,
         jobs::hydration::hydrate_jobs_with_artifacts, printers::live_status_from_model,
@@ -21,6 +22,7 @@ pub(super) struct PrinterMatch {
 
 pub(super) async fn printer_for_serial<C>(
     connection: &C,
+    access_code_cipher: &PrinterAccessCodeCipher,
     input: &ApplyPrintReport,
 ) -> RepositoryResult<Option<PrinterMatch>>
 where
@@ -35,7 +37,7 @@ where
         _ => query.one(connection).await,
     }
     .context("failed to resolve print report printer")?
-    .map(live_status_from_model)
+    .map(|model| live_status_from_model(model, access_code_cipher))
     .transpose()
     .map(|printer| {
         printer.map(|printer| PrinterMatch {

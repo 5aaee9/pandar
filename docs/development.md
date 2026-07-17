@@ -12,6 +12,8 @@ sqlite://pandar.db
 
 `pandar-hub` listens for HTTP/WebSocket traffic on `PANDAR_HUB_BIND` and defaults to `0.0.0.0:8080`. The reverse agent gRPC listener uses `PANDAR_HUB_GRPC_BIND` and defaults to `0.0.0.0:50051`.
 
+`PANDAR_PRINTER_ACCESS_CODE_KEY` is required and must contain the unpadded base64url encoding of exactly 32 random bytes. Generate it with `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`, inject the same value into every Hub replica through a secret manager, and back it up separately with the database. The Hub stores successful Bambu access codes only as versioned AES-256-GCM envelopes bound to the tenant and printer serial. Startup transactionally encrypts legacy plaintext rows and clears the plaintext column; an absent, changed, or invalid key prevents startup rather than silently dropping saved printer connections.
+
 Set `PANDAR_HUB_NO_AUTH=true` only for local development or explicitly trusted single-user deployments. In this mode, hub HTTP/WebSocket tenant and bootstrap APIs skip bearer-token authentication and role checks, and startup logs a warning. Agent reverse gRPC connections still require agent credentials.
 
 The hub runs backend-specific SQLx migrations automatically when it connects. SQLite migrations live under `crates/pandar-hub/migrations/sqlite`; PostgreSQL migrations live under `crates/pandar-hub/migrations/postgres`.
@@ -39,7 +41,7 @@ PANDAR_PRINTERS='[{"host":"192.0.2.10","serial":"01S00EXAMPLE","access_code":"12
 
 The value is a JSON array. `host`, `serial`, and `access_code` are required; `model` and `name` are optional. Empty, whitespace, or `[]` means no configured printers and the agent will not open Bambu machine sockets. Invalid printer config fails at startup with `PANDAR_PRINTERS` context.
 
-Printers can also be linked at runtime from the dashboard Agents page. Runtime-linked printers are held only in the running `pandar-agent` process: they do not survive an agent restart unless the same printer is added to `PANDAR_PRINTERS`. The Hub never stores the submitted Bambu access code. In multi-Hub deployments, runtime linking must be routed to the Hub process that owns the agent's reverse gRPC stream; otherwise the API returns `agent_not_connected` and no command row is created.
+Printers can also be linked at runtime from the dashboard Agents page. After the Agent validates and reports a linked printer, the Hub stores its host and an encrypted access-code envelope so the Agent can restore the connection after restart. In multi-Hub deployments, runtime linking must be routed to the Hub process that owns the agent's reverse gRPC stream; otherwise the API returns `agent_not_connected` and no command row is created.
 
 Dashboard runtime printer linking is separate from `PANDAR_PRINTERS`. The Agents page add-printer form sends `type = BambuLab`, printer IPv4 address, access code, and optional display name to the selected live local agent. Operators do not enter serial number or model for this flow; the agent resolves those values through Bambu SSDP discovery and MQTT validation, then reports them back through the printer snapshot and command result. If SSDP cannot see the submitted IPv4 address or the discovery response lacks a serial number, the link command fails without persisting the access code in Hub storage.
 
@@ -398,7 +400,7 @@ curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/agent-pairings" \
 
 The pairing bundle returns `PANDAR_TENANT_ID`, `PANDAR_AGENT_ID`, `PANDAR_AGENT_NAME`, and `PANDAR_AGENT_CREDENTIAL`. Store the credential only in the agent runtime environment.
 
-Hub audit records are stored in `audit_events` for successful user-triggered mutations such as agent creation, refresh commands, and print job creation. Bambu printer access codes remain agent-local in `PANDAR_PRINTERS`; do not store them in hub database rows or frontend environment variables.
+Hub audit records are stored in `audit_events` for successful user-triggered mutations such as agent creation, refresh commands, and print job creation. Bambu printer access codes from successful links are encrypted at rest with `PANDAR_PRINTER_ACCESS_CODE_KEY`; they must never appear in command rows, audit metadata, logs, frontend environment variables, or unencrypted backups.
 
 ## Operations
 
@@ -432,9 +434,9 @@ psql "$PANDAR_DATABASE_URL" < pandar.sql
 ## Deployment Examples
 
 ```bash
-APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.sqlite.yml up --build
-POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.postgres.yml up --build
-POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> PANDAR_CONTROL_PLANE=nats PANDAR_ARTIFACT_STORAGE=s3 PANDAR_ARTIFACT_S3_BUCKET=<bucket> PANDAR_ARTIFACT_S3_REGION=<region> PANDAR_ARTIFACT_S3_ENDPOINT=<endpoint> PANDAR_ARTIFACT_S3_ACCESS_KEY_ID=<access key> PANDAR_ARTIFACT_S3_SECRET_ACCESS_KEY=<secret> docker compose -f docker-compose.postgres.yml --profile nats up --build
+PANDAR_PRINTER_ACCESS_CODE_KEY=<base64url key> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.sqlite.yml up --build
+PANDAR_PRINTER_ACCESS_CODE_KEY=<base64url key> POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.postgres.yml up --build
+PANDAR_PRINTER_ACCESS_CODE_KEY=<base64url key> POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> PANDAR_CONTROL_PLANE=nats PANDAR_ARTIFACT_STORAGE=s3 PANDAR_ARTIFACT_S3_BUCKET=<bucket> PANDAR_ARTIFACT_S3_REGION=<region> PANDAR_ARTIFACT_S3_ENDPOINT=<endpoint> PANDAR_ARTIFACT_S3_ACCESS_KEY_ID=<access key> PANDAR_ARTIFACT_S3_SECRET_ACCESS_KEY=<secret> docker compose -f docker-compose.postgres.yml --profile nats up --build
 ```
 
 `pandar-hub` defaults to the in-process control plane. Use `PANDAR_CONTROL_PLANE=nats` with PostgreSQL and `PANDAR_NATS_URL` for the broker-backed control plane required by horizontally scaled Hub replicas. The compose example above starts one API service with fixed host ports; multiple replicas need an external HTTP/gRPC routing layer and per-container port planning. SQLite rejects the NATS control plane because it is intended for lightweight single-process deployments.
@@ -444,6 +446,7 @@ NATS is internal Hub infrastructure only: tenants, browsers, and `pandar-agent` 
 The Phase 26 local HA/failure smoke harness exercises the default cross-Hub contract without live PostgreSQL, NATS, MinIO, cloud S3, or Docker services:
 
 ```bash
+export PANDAR_PRINTER_ACCESS_CODE_KEY=<base64url key>
 cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run
 cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run --iterations 2 --concurrency 2
 cargo run --manifest-path tools/scaled-artifact-smoke/Cargo.toml -- --dry-run --scenario storage

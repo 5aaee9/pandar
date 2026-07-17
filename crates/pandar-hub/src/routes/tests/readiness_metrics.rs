@@ -52,7 +52,7 @@ async fn readyz_reports_artifact_storage_failure() {
     let file_path = temp_dir.path().join("not-a-directory");
     std::fs::write(&file_path, b"file").unwrap();
     let storage = crate::jobs::JobStorageConfig::new(&file_path, 1024).unwrap();
-    let app = router(AppState::from_database(database, storage));
+    let app = router(AppState::from_database(database, storage).await.unwrap());
 
     let (status, body) = request(app, Method::GET, "/readyz", None).await;
 

@@ -50,12 +50,14 @@ impl SmokeWorld {
             database.clone(),
             storage.clone(),
             control_plane.clone(),
-        );
+        )
+        .await?;
         let hub_b = AppState::from_database_with_control_plane(
             database.clone(),
             storage.clone(),
             control_plane.clone(),
-        );
+        )
+        .await?;
 
         Ok(Self {
             temp,
@@ -110,12 +112,14 @@ impl SmokeWorld {
             database.clone(),
             storage.clone(),
             control_plane.clone(),
-        );
+        )
+        .await?;
         let hub_b = AppState::from_database_with_control_plane(
             database.clone(),
             storage.clone(),
             control_plane.clone(),
-        );
+        )
+        .await?;
 
         Ok(Self {
             temp: tempfile::tempdir().context("create live smoke temp dir")?,
@@ -127,12 +131,13 @@ impl SmokeWorld {
         })
     }
 
-    pub fn restarted_state(&self) -> AppState {
+    pub async fn restarted_state(&self) -> anyhow::Result<AppState> {
         AppState::from_database_with_control_plane(
             self.database.clone(),
             self.storage.clone(),
             self.control_plane.clone(),
         )
+        .await
     }
 }
 
@@ -146,12 +151,14 @@ pub async fn world_with_storage(storage: Arc<dyn ArtifactStorage>) -> anyhow::Re
         database.clone(),
         storage.clone(),
         control_plane.clone(),
-    );
+    )
+    .await?;
     let hub_b = AppState::from_database_with_control_plane(
         database.clone(),
         storage.clone(),
         control_plane.clone(),
-    );
+    )
+    .await?;
 
     Ok(SmokeWorld {
         temp,

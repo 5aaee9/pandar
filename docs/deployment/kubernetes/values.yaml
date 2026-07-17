@@ -19,6 +19,9 @@ hub:
     url: sqlite:///data/pandar.db
     existingSecret: ""
     existingSecretKey: PANDAR_DATABASE_URL
+  accessCodeEncryption:
+    existingSecret: ""
+    existingSecretKey: PANDAR_PRINTER_ACCESS_CODE_KEY
   service:
     type: ClusterIP
     httpPort: 8080

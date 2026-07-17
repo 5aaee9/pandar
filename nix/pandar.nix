@@ -318,6 +318,7 @@
                   controlPlane = "nats";
                   nats.mode = "service";
                   nats.subject = "pandar.test.control";
+                  environmentFile = "/run/secrets/pandar-hub.env";
                 };
                 services.pandar.agent = {
                   enable = true;
@@ -343,6 +344,7 @@
                 services.pandar.enable = true;
                 services.pandar.hub = {
                   controlPlane = "nats";
+                  environmentFile = "/run/secrets/pandar-hub.env";
                   nats = {
                     mode = "external";
                     url = "nats://broker.example:4222";
@@ -411,6 +413,7 @@
           test "${serviceHub.environment.PANDAR_CONTROL_PLANE}" = "nats"
           test "${serviceHub.environment.PANDAR_NATS_URL}" = "nats://127.0.0.1:4222"
           test "${serviceHub.environment.PANDAR_NATS_SUBJECT}" = "pandar.test.control"
+          test "${serviceHub.serviceConfig.EnvironmentFile}" = "/run/secrets/pandar-hub.env"
           test "${serviceWeb.environment.APP_API_URL}" = "http://127.0.0.1:8080"
           test "${serviceAgent.environment.PANDAR_HUB_GRPC_URL}" = "http://127.0.0.1:50051"
           test "${serviceAgent.environment.PANDAR_HUB_API_URL}" = "http://127.0.0.1:8080"

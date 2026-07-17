@@ -21,6 +21,7 @@ mod transitions;
 use crate::{
     db::Database,
     entities::jobs,
+    printer_secrets::PrinterAccessCodeCipher,
     repositories::{AuditActor, RepositoryResult},
 };
 
@@ -32,6 +33,7 @@ use rows::job_from_model_loading_usage;
 #[derive(Debug, Clone)]
 pub struct JobRepository {
     database: Database,
+    access_code_cipher: PrinterAccessCodeCipher,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,8 +83,23 @@ pub struct JobWithArtifact {
 }
 
 impl JobRepository {
-    pub fn new(database: Database) -> Self {
-        Self { database }
+    pub(crate) fn new_with_cipher(
+        database: Database,
+        access_code_cipher: PrinterAccessCodeCipher,
+    ) -> Self {
+        Self {
+            database,
+            access_code_cipher,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new(database: Database) -> Self {
+        Self::new_with_cipher(
+            database,
+            crate::printer_secrets::configured_printer_access_code_cipher()
+                .expect("test printer access-code cipher is valid"),
+        )
     }
 
     pub async fn create_print_job(
@@ -325,7 +342,7 @@ impl JobRepository {
         &self,
         input: ApplyPrintReport,
     ) -> RepositoryResult<AppliedPrintReport> {
-        print_reports::apply_print_report(&self.database, input).await
+        print_reports::apply_print_report(&self.database, &self.access_code_cipher, input).await
     }
 
     pub async fn apply_current_print_report(
@@ -333,6 +350,12 @@ impl JobRepository {
         session_id: &str,
         input: ApplyPrintReport,
     ) -> RepositoryResult<AppliedPrintReport> {
-        print_reports::apply_current_print_report(&self.database, session_id, input).await
+        print_reports::apply_current_print_report(
+            &self.database,
+            &self.access_code_cipher,
+            session_id,
+            input,
+        )
+        .await
     }
 }

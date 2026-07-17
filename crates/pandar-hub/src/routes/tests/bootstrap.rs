@@ -365,7 +365,9 @@ async fn postgres_bootstrap_tenant_admin_transaction_when_configured() {
         return;
     };
     let state =
-        AppState::from_database(database, crate::jobs::JobStorageConfig::from_env().unwrap());
+        AppState::from_database(database, crate::jobs::JobStorageConfig::from_env().unwrap())
+            .await
+            .unwrap();
 
     let bootstrapped = state
         .auth()

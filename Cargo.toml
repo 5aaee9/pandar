@@ -21,6 +21,7 @@ repository = "https://github.com/indexyz/pandar"
 [workspace.dependencies]
 anyhow = "1.0.100"
 aes = "0.8.4"
+aes-gcm = "0.10.3"
 async-trait = "0.1.89"
 async-nats = "0.49.1"
 aws-config = { version = "1.8.18", default-features = false, features = ["rt-tokio", "rustls"] }
@@ -40,7 +41,7 @@ pandar-core = { path = "crates/pandar-core" }
 pandar-studio-dev-hook = { path = "crates/pandar-studio-dev-hook" }
 prost = "0.14"
 protoc-bin-vendored = "3.2.0"
-quick-xml = "0.40.1"
+quick-xml = "0.41.0"
 rcgen = "0.14.8"
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "multipart", "rustls"] }
 rsa = { version = "0.9.8", features = ["pem", "sha2"] }

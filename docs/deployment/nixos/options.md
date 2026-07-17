@@ -242,6 +242,19 @@ _Default:_
 "sqlite:///var/lib/pandar-hub/pandar.db"
 ```
 
+## services\.pandar\.hub\.environmentFile
+
+Optional systemd EnvironmentFile containing PANDAR_PRINTER_ACCESS_CODE_KEY and other hub secrets\.
+
+_Type:_
+null or absolute path
+
+_Default:_
+
+```nix
+null
+```
+
 ## services\.pandar\.hub\.extraEnvironment
 
 Extra environment variables for pandar-hub\.

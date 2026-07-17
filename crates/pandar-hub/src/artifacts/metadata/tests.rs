@@ -309,6 +309,24 @@ fn unknown_and_traversal_entries_are_ignored() {
 }
 
 #[test]
+fn attribute_heavy_metadata_remains_bounded_by_the_file_limit() {
+    let attributes = (0..20_000)
+        .map(|index| format!(" attr_{index}=\"x\""))
+        .collect::<String>();
+    let xml = format!(
+        "<config><plate><metadata key=\"index\" value=\"1\"/><filament{attributes}/></plate></config>"
+    );
+    assert!(u64::try_from(xml.len()).unwrap() < MAX_METADATA_FILE_BYTES);
+    let temp = zip_fixture(&[("Metadata/slice_info.config", xml.as_str())]);
+
+    let metadata = parse_artifact_metadata("part.3mf", "model/3mf", temp.path())
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(metadata.default_plate_id, Some(1));
+}
+
+#[test]
 fn display_name_strips_known_suffixes() {
     assert_eq!(
         display_name_from_filename("../folder/My Project.gcode.3mf"),

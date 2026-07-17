@@ -57,7 +57,7 @@ The release archive provides the operator CLI and Bambu Studio plugin library. D
 - `pandar-web`: Next.js frontend, default bind `0.0.0.0:3000`.
 - `pandar-agent`: local-network agent that connects outward to Hub gRPC and talks to Bambu machines.
 
-The hub needs `PANDAR_DATABASE_URL`. The frontend needs `APP_API_URL`, `APP_BASE_URL`, and provider metadata when external auth is used. The agent needs `PANDAR_HUB_GRPC_URL`, tenant and agent IDs, an agent credential, and any `PANDAR_PRINTERS` entries for local machines.
+The hub needs `PANDAR_DATABASE_URL` and `PANDAR_PRINTER_ACCESS_CODE_KEY`. The latter is the unpadded base64url encoding of exactly 32 random bytes (`openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`) and encrypts persisted Bambu access codes with versioned AES-256-GCM envelopes. Use the same key on every Hub replica and retain it with database backups; a missing or incorrect key prevents startup. The frontend needs `APP_API_URL`, `APP_BASE_URL`, and provider metadata when external auth is used. The agent needs `PANDAR_HUB_GRPC_URL`, tenant and agent IDs, an agent credential, and any `PANDAR_PRINTERS` entries for local machines.
 
 For Clerk, Logto, or Better Auth deployments, configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, optional audience, and allowed algorithms. Configure `pandar-web` with `APP_AUTH_PROVIDER` and the matching provider metadata. Better Auth 1.6.22 uses `keyPairConfig.alg = "RS256"` for RSA JWT signing, matching Pandar's `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` verifier setting.
 
@@ -104,38 +104,38 @@ For agent artifact downloads, set `PANDAR_HUB_API_URL` when `PANDAR_HUB_GRPC_URL
 Use the SQLite compose shape for single-process or local deployments:
 
 ```bash
-APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.sqlite.yml up --build
+PANDAR_PRINTER_ACCESS_CODE_KEY=<base64url key> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.sqlite.yml up --build
 ```
 
 Use the PostgreSQL compose shape when the database must be external to the Hub container:
 
 ```bash
-POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.postgres.yml up --build
+PANDAR_PRINTER_ACCESS_CODE_KEY=<base64url key> POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.postgres.yml up --build
 ```
 
 Use external auth by setting both Hub verification variables and Web provider variables:
 
 ```bash
-PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth PANDAR_EXTERNAL_AUTH_ISSUER=https://auth.example.com PANDAR_EXTERNAL_AUTH_JWKS_URL=https://auth.example.com/api/auth/jwks PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256 APP_AUTH_PROVIDER=betterauth APP_AUTH_BETTER_AUTH_BASE_URL=https://auth.example.com docker compose -f docker-compose.sqlite.yml up --build
+PANDAR_PRINTER_ACCESS_CODE_KEY=<base64url key> PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth PANDAR_EXTERNAL_AUTH_ISSUER=https://auth.example.com PANDAR_EXTERNAL_AUTH_JWKS_URL=https://auth.example.com/api/auth/jwks PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256 APP_AUTH_PROVIDER=betterauth APP_AUTH_BETTER_AUTH_BASE_URL=https://auth.example.com docker compose -f docker-compose.sqlite.yml up --build
 ```
 
 Use the PostgreSQL plus NATS profile to run the broker-backed deployment shape with S3-compatible artifact storage:
 
 ```bash
-POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> PANDAR_CONTROL_PLANE=nats PANDAR_ARTIFACT_STORAGE=s3 PANDAR_ARTIFACT_S3_BUCKET=<bucket> PANDAR_ARTIFACT_S3_REGION=<region> PANDAR_ARTIFACT_S3_ENDPOINT=<endpoint> PANDAR_ARTIFACT_S3_ACCESS_KEY_ID=<access key> PANDAR_ARTIFACT_S3_SECRET_ACCESS_KEY=<secret> docker compose -f docker-compose.postgres.yml --profile nats up --build
+PANDAR_PRINTER_ACCESS_CODE_KEY=<base64url key> POSTGRES_PASSWORD=<db password> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> PANDAR_CONTROL_PLANE=nats PANDAR_ARTIFACT_STORAGE=s3 PANDAR_ARTIFACT_S3_BUCKET=<bucket> PANDAR_ARTIFACT_S3_REGION=<region> PANDAR_ARTIFACT_S3_ENDPOINT=<endpoint> PANDAR_ARTIFACT_S3_ACCESS_KEY_ID=<access key> PANDAR_ARTIFACT_S3_SECRET_ACCESS_KEY=<secret> docker compose -f docker-compose.postgres.yml --profile nats up --build
 ```
 
 The compose file starts one `pandar-api` service with fixed host ports. For multiple Hub replicas, put replicas behind your own HTTP/gRPC routing layer and avoid publishing the same host ports from every container.
 
 SQLite is for lightweight single-process deployments and rejects the NATS control plane. The SQLite compose shape keeps the filesystem artifact backend and `PANDAR_SPOOL_DIR`. PostgreSQL plus NATS should use S3-compatible artifact storage; a shared filesystem is accepted only with the explicit `PANDAR_ARTIFACT_FILESYSTEM_SHARED=true` readiness override when every Hub replica truly mounts the same artifact directory.
 
-Back up SQLite deployments by capturing both the SQLite database file and the filesystem artifact directory. Back up PostgreSQL/object-storage deployments by capturing the PostgreSQL database and the configured object-storage bucket.
+Back up SQLite deployments by capturing the SQLite database file, filesystem artifact directory, and `PANDAR_PRINTER_ACCESS_CODE_KEY`. Back up PostgreSQL/object-storage deployments by capturing the PostgreSQL database, configured object-storage bucket, and the same encryption key. Store the key separately from database media while preserving their recovery association.
 
 ## NixOS services.pandar
 
 NixOS deployments use the flake module exposed as `nixosModules.default` and `nixosModules.pandar`. Configure Hub, Web, and Agent through `services.pandar`.
 
-The optional self-hosted issuer is configured separately through `services.pandar-auth`. It has its own package, bind address, SQLite database path, callback/sign-out URLs, email delivery options, and `environmentFile` for secrets such as `BETTER_AUTH_SECRET`, `RESEND_API_KEY`, and `PANDAR_AUTH_SMTP_PASSWORD`. Generated option documentation is in `docs/deployment/nixos/options.md`. Use it as the source for exact option names, package overrides, environment files, bind addresses, and agent credential wiring.
+Set `services.pandar.hub.environmentFile` to a root-owned file containing `PANDAR_PRINTER_ACCESS_CODE_KEY`; the module refuses to enable Hub without that file or an explicit test-only-style `extraEnvironment` value. The optional self-hosted issuer is configured separately through `services.pandar-auth`. It has its own package, bind address, SQLite database path, callback/sign-out URLs, email delivery options, and `environmentFile` for secrets such as `BETTER_AUTH_SECRET`, `RESEND_API_KEY`, and `PANDAR_AUTH_SMTP_PASSWORD`. Generated option documentation is in `docs/deployment/nixos/options.md`. Use it as the source for exact option names, package overrides, environment files, bind addresses, and agent credential wiring.
 
 ## Bambu Studio Plugin Replacement
 

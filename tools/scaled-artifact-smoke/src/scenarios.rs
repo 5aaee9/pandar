@@ -166,7 +166,7 @@ pub async fn restart_convergence(iteration: usize, config: &HarnessConfig) -> an
     )
     .await?;
     create_print_through_multipart_route(&world.hub_a, &fixture).await?;
-    let restarted = world.restarted_state();
+    let restarted = world.restarted_state().await?;
     let (command_id, _print) = dequeue_print_command(&restarted, &fixture).await?;
     let persisted = restarted
         .commands()

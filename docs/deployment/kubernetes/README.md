@@ -8,16 +8,30 @@ The published OCI chart is stored under:
 oci://ghcr.io/5aaee9/pandar/chart/pandar
 ```
 
+Create the required Hub access-code encryption Secret once and retain it with
+database backups. The value must be an unpadded base64url encoding of 32 random
+bytes:
+
+```sh
+PANDAR_PRINTER_ACCESS_CODE_KEY="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+kubectl create secret generic pandar-hub-secrets \
+  --from-literal=PANDAR_PRINTER_ACCESS_CODE_KEY="$PANDAR_PRINTER_ACCESS_CODE_KEY"
+```
+
 Install the main pre-release chart:
 
 ```sh
-helm install pandar oci://ghcr.io/5aaee9/pandar/chart/pandar --version 0.1.0-main
+helm install pandar oci://ghcr.io/5aaee9/pandar/chart/pandar \
+  --version 0.1.0-main \
+  --set hub.accessCodeEncryption.existingSecret=pandar-hub-secrets
 ```
 
 Install a release chart:
 
 ```sh
-helm install pandar oci://ghcr.io/5aaee9/pandar/chart/pandar --version 0.1.1
+helm install pandar oci://ghcr.io/5aaee9/pandar/chart/pandar \
+  --version 0.1.1 \
+  --set hub.accessCodeEncryption.existingSecret=pandar-hub-secrets
 ```
 
 The default values run a single Hub replica with SQLite at `/data/pandar.db` and filesystem artifacts under `/spool`, both backed by PVCs. For production PostgreSQL, provide `PANDAR_DATABASE_URL` through an existing Secret:
@@ -28,7 +42,8 @@ kubectl create secret generic pandar-database \
 
 helm upgrade --install pandar oci://ghcr.io/5aaee9/pandar/chart/pandar \
   --version 0.1.1 \
-  --set hub.database.existingSecret=pandar-database
+  --set hub.database.existingSecret=pandar-database \
+  --set hub.accessCodeEncryption.existingSecret=pandar-hub-secrets
 ```
 
 If the API is exposed outside the cluster, set `web.appApiUrl` to the public Hub URL so browser WebSocket connections use the same external origin:
@@ -36,8 +51,14 @@ If the API is exposed outside the cluster, set `web.appApiUrl` to the public Hub
 ```sh
 helm upgrade --install pandar oci://ghcr.io/5aaee9/pandar/chart/pandar \
   --version 0.1.1 \
+  --set hub.accessCodeEncryption.existingSecret=pandar-hub-secrets \
   --set web.appApiUrl=https://api.example.com
 ```
+
+Changing or losing `PANDAR_PRINTER_ACCESS_CODE_KEY` makes saved printer access
+codes undecryptable and prevents Hub startup. Restore the same Secret on every
+Hub replica; key rotation requires re-encrypting stored envelopes before the old
+key is removed.
 
 When `hub.image.tag` and `web.image.tag` are empty, the chart uses the packaged `appVersion` as the image tag. Main-branch packages use `appVersion: main`; release packages use the Git tag, for example `v0.1.1`.
 

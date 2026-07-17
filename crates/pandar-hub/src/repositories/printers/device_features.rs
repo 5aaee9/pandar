@@ -37,6 +37,7 @@ impl PrinterRepository {
             snapshot,
             features,
             feature_session_id,
+            &self.access_code_cipher,
         )
         .await?;
         transaction

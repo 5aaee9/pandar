@@ -27,7 +27,7 @@ impl PrinterRepository {
             .await
             .context("failed to list printers with live status")?
             .into_iter()
-            .map(live_status::from_model)
+            .map(|model| live_status::from_model(model, &self.access_code_cipher))
             .collect()
     }
 
@@ -41,7 +41,7 @@ impl PrinterRepository {
             .one(&self.database.sea_orm_connection())
             .await
             .context("failed to get printer with live status")?
-            .map(live_status::from_model)
+            .map(|model| live_status::from_model(model, &self.access_code_cipher))
             .transpose()
     }
 }

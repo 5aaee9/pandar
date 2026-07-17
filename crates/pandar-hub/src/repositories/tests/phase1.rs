@@ -162,6 +162,21 @@ fn studio_status_flag_migrations_are_backend_equivalent() {
 }
 
 #[test]
+fn printer_access_code_encryption_migrations_are_backend_equivalent() {
+    let sqlite =
+        include_str!("../../../migrations/sqlite/20260718000000_encrypt_printer_access_codes.sql");
+    let postgres = include_str!(
+        "../../../migrations/postgres/20260718000000_encrypt_printer_access_codes.sql"
+    );
+
+    assert_eq!(postgres.trim(), sqlite.trim());
+    assert_eq!(
+        sqlite.trim(),
+        "ALTER TABLE printers ADD COLUMN access_code_encrypted TEXT;"
+    );
+}
+
+#[test]
 fn phase_28_slicer_metadata_migrations_are_backend_equivalent() {
     let sqlite =
         include_str!("../../../migrations/sqlite/20260624010000_phase_28_slicer_metadata.sql");

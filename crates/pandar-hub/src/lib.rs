@@ -3,6 +3,7 @@ mod bootstrap;
 pub mod camera_sessions;
 pub mod cleanup;
 pub mod cluster;
+mod config;
 pub mod db;
 pub mod entities;
 pub mod firmware_control;
@@ -13,6 +14,7 @@ pub(crate) mod material_mapping;
 pub mod metrics;
 mod metrics_export;
 pub mod printer_events;
+mod printer_secrets;
 pub mod protocol;
 pub mod readiness;
 pub mod redaction;
@@ -28,10 +30,15 @@ use std::{fmt, sync::Arc};
 use crate::{
     artifacts::{ArtifactStorage, ArtifactStorageConfig, IntoArtifactStorage, JobStorageAlias},
     camera_sessions::CameraSessionRegistry,
+    config::{no_auth_from_env, tenant_self_create_allowed_from_env},
     db::{Database, DatabaseConfig},
     identity::{ExternalAuthConfig, JwtVerifier},
     metrics::{ControlPlaneMetric, MetricsState},
     printer_events::{PrinterEvent, PrinterEventHub},
+    printer_secrets::{
+        PrinterAccessCodeCipher, configured_printer_access_code_cipher,
+        migrate_printer_access_codes,
+    },
     repositories::{
         AgentRepository, AuditEventRepository, AuthRepository, CommandRepository, JobRepository,
         MaterialRepository, PrinterEventTicketRepository, PrinterRepository, TenantRepository,
@@ -117,6 +124,7 @@ impl AppState {
         nats_subject: Option<&str>,
     ) -> anyhow::Result<Self> {
         let database_url = database_url.into();
+        let printer_access_code_cipher = configured_printer_access_code_cipher()?;
         let config = DatabaseConfig::from_url(database_url)?;
         let control_plane_config = cluster::ControlPlaneConfig::from_values(
             config.backend(),
@@ -127,6 +135,7 @@ impl AppState {
         let control_plane = cluster::ControlPlane::from_config(control_plane_config).await?;
         let database = Database::connect(&config).await?;
         database.migrate().await?;
+        migrate_printer_access_codes(&database, &printer_access_code_cipher).await?;
 
         let bootstrap_token = std::env::var("PANDAR_BOOTSTRAP_TOKEN")
             .ok()
@@ -134,27 +143,50 @@ impl AppState {
         let tenant_self_create_allowed = tenant_self_create_allowed_from_env()?;
         let no_auth = no_auth_from_env()?;
 
-        Ok(
-            Self::from_database_with_control_plane(database, artifact_storage, control_plane)
-                .with_external_auth_option(external_auth)
-                .with_no_auth(no_auth)
-                .with_tenant_self_create_allowed(tenant_self_create_allowed)
-                .with_bootstrap_token_option(bootstrap_token),
+        Ok(Self::from_database_with_control_plane_and_cipher(
+            database,
+            artifact_storage,
+            control_plane,
+            printer_access_code_cipher,
         )
+        .with_external_auth_option(external_auth)
+        .with_no_auth(no_auth)
+        .with_tenant_self_create_allowed(tenant_self_create_allowed)
+        .with_bootstrap_token_option(bootstrap_token))
     }
 
-    pub fn from_database(database: Database, artifact_storage: impl IntoArtifactStorage) -> Self {
+    pub async fn from_database(
+        database: Database,
+        artifact_storage: impl IntoArtifactStorage,
+    ) -> anyhow::Result<Self> {
         Self::from_database_with_control_plane(
             database,
             artifact_storage,
             cluster::ControlPlane::in_process(),
         )
+        .await
     }
 
-    pub fn from_database_with_control_plane(
+    pub async fn from_database_with_control_plane(
         database: Database,
         artifact_storage: impl IntoArtifactStorage,
         control_plane: cluster::ControlPlane,
+    ) -> anyhow::Result<Self> {
+        let printer_access_code_cipher = configured_printer_access_code_cipher()?;
+        migrate_printer_access_codes(&database, &printer_access_code_cipher).await?;
+        Ok(Self::from_database_with_control_plane_and_cipher(
+            database,
+            artifact_storage,
+            control_plane,
+            printer_access_code_cipher,
+        ))
+    }
+
+    fn from_database_with_control_plane_and_cipher(
+        database: Database,
+        artifact_storage: impl IntoArtifactStorage,
+        control_plane: cluster::ControlPlane,
+        printer_access_code_cipher: PrinterAccessCodeCipher,
     ) -> Self {
         let metrics = MetricsState::new();
         Self {
@@ -163,9 +195,12 @@ impl AppState {
             auth: AuthRepository::new(database.clone()),
             audit_events: AuditEventRepository::new(database.clone()),
             agents: AgentRepository::new(database.clone()),
-            printers: PrinterRepository::new(database.clone()),
+            printers: PrinterRepository::new_with_cipher(
+                database.clone(),
+                printer_access_code_cipher.clone(),
+            ),
             commands: CommandRepository::new(database.clone()),
-            jobs: JobRepository::new(database.clone()),
+            jobs: JobRepository::new_with_cipher(database.clone(), printer_access_code_cipher),
             materials: MaterialRepository::new(database.clone()),
             printer_event_tickets: PrinterEventTicketRepository::new(database),
             artifact_storage: artifact_storage.into_artifact_storage(),
@@ -343,34 +378,6 @@ impl AppState {
 
     pub(crate) fn database(&self) -> &Database {
         &self.database
-    }
-}
-
-fn tenant_self_create_allowed_from_env() -> anyhow::Result<bool> {
-    let Some(value) = std::env::var("PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-    else {
-        return Ok(true);
-    };
-    match value.trim() {
-        "true" => Ok(true),
-        "false" => Ok(false),
-        _ => anyhow::bail!("PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE must be true or false"),
-    }
-}
-
-fn no_auth_from_env() -> anyhow::Result<bool> {
-    let Some(value) = std::env::var("PANDAR_HUB_NO_AUTH")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-    else {
-        return Ok(false);
-    };
-    match value.trim() {
-        "true" => Ok(true),
-        "false" => Ok(false),
-        _ => anyhow::bail!("PANDAR_HUB_NO_AUTH must be true or false"),
     }
 }
 

@@ -24,6 +24,8 @@ let
       services.pandar = {
         enable = true;
         web.enable = false;
+        hub.extraEnvironment.PANDAR_PRINTER_ACCESS_CODE_KEY =
+          "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI";
       };
 
       environment.systemPackages = [ pkgs.curl ];

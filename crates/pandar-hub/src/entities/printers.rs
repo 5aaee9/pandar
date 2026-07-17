@@ -10,6 +10,7 @@ pub struct Model {
     pub serial_number: String,
     pub host: Option<String>,
     pub access_code: Option<String>,
+    pub access_code_encrypted: Option<String>,
     pub name: String,
     pub model: Option<String>,
     pub status: String,

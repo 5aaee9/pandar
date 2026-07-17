@@ -1274,24 +1274,48 @@ async fn seed_printer_connection(
     host: &str,
     access_code: &str,
 ) {
-    match database {
+    let (tenant_id, serial_number): (String, String) = match database {
         crate::db::Database::Sqlite(pool) => {
-            sqlx::query("UPDATE printers SET host = ?1, access_code = ?2 WHERE id = ?3")
-                .bind(host)
-                .bind(access_code)
+            sqlx::query_as("SELECT tenant_id, serial_number FROM printers WHERE id = ?1")
                 .bind(printer_id)
-                .execute(pool)
+                .fetch_one(pool)
                 .await
-                .unwrap();
+                .unwrap()
         }
         crate::db::Database::Postgres(pool) => {
-            sqlx::query("UPDATE printers SET host = $1, access_code = $2 WHERE id = $3")
-                .bind(host)
-                .bind(access_code)
+            sqlx::query_as("SELECT tenant_id, serial_number FROM printers WHERE id = $1")
                 .bind(printer_id)
-                .execute(pool)
+                .fetch_one(pool)
                 .await
-                .unwrap();
+                .unwrap()
+        }
+    };
+    let encrypted = crate::printer_secrets::configured_printer_access_code_cipher()
+        .unwrap()
+        .encrypt(&tenant_id, &serial_number, access_code)
+        .unwrap();
+    match database {
+        crate::db::Database::Sqlite(pool) => {
+            sqlx::query(
+                "UPDATE printers SET host = ?1, access_code = NULL, access_code_encrypted = ?2 WHERE id = ?3",
+            )
+            .bind(host)
+            .bind(encrypted)
+            .bind(printer_id)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+        crate::db::Database::Postgres(pool) => {
+            sqlx::query(
+                "UPDATE printers SET host = $1, access_code = NULL, access_code_encrypted = $2 WHERE id = $3",
+            )
+            .bind(host)
+            .bind(encrypted)
+            .bind(printer_id)
+            .execute(pool)
+            .await
+            .unwrap();
         }
     }
 }

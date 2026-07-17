@@ -7,6 +7,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     db::Database,
+    printer_secrets::PrinterAccessCodeCipher,
     repositories::{
         JobWithArtifact, MaterialPatchOutcome, PrinterHms, PrinterRepository,
         PrinterWithLiveStatus, RepositoryError, RepositoryResult, begin_current_agent_transaction,
@@ -73,22 +74,30 @@ pub struct AppliedPrintReport {
 #[cfg(test)]
 pub async fn apply_print_report(
     database: &Database,
+    access_code_cipher: &PrinterAccessCodeCipher,
     input: ApplyPrintReport,
 ) -> RepositoryResult<AppliedPrintReport> {
     let tenant_id = input.tenant_id;
     let received_at = hub_received_at()?;
     let tx = begin_print_report_transaction(database).await?;
-    let mut applied =
-        apply_print_report_tx(&tx, input, "repository-test-session", &received_at).await?;
+    let mut applied = apply_print_report_tx(
+        &tx,
+        access_code_cipher,
+        input,
+        "repository-test-session",
+        &received_at,
+    )
+    .await?;
     tx.commit()
         .await
         .context("failed to commit print report transaction")?;
-    reload_applied_printer(database, tenant_id, &mut applied).await?;
+    reload_applied_printer(database, access_code_cipher, tenant_id, &mut applied).await?;
     Ok(applied)
 }
 
 pub async fn apply_current_print_report(
     database: &Database,
+    access_code_cipher: &PrinterAccessCodeCipher,
     session_id: &str,
     input: ApplyPrintReport,
 ) -> RepositoryResult<AppliedPrintReport> {
@@ -96,11 +105,12 @@ pub async fn apply_current_print_report(
     let received_at = hub_received_at()?;
     let tx = begin_current_agent_transaction(database, input.tenant_id, input.agent_id, session_id)
         .await?;
-    let mut applied = apply_print_report_tx(&tx, input, session_id, &received_at).await?;
+    let mut applied =
+        apply_print_report_tx(&tx, access_code_cipher, input, session_id, &received_at).await?;
     tx.commit()
         .await
         .context("failed to commit current-session print report transaction")?;
-    reload_applied_printer(database, tenant_id, &mut applied).await?;
+    reload_applied_printer(database, access_code_cipher, tenant_id, &mut applied).await?;
     Ok(applied)
 }
 
@@ -122,6 +132,7 @@ async fn begin_print_report_transaction(
 
 async fn apply_print_report_tx<C>(
     transaction: &C,
+    access_code_cipher: &PrinterAccessCodeCipher,
     input: ApplyPrintReport,
     session_id: &str,
     received_at: &str,
@@ -129,7 +140,7 @@ async fn apply_print_report_tx<C>(
 where
     C: ConnectionTrait,
 {
-    let Some(printer) = printer_for_serial(transaction, &input).await? else {
+    let Some(printer) = printer_for_serial(transaction, access_code_cipher, &input).await? else {
         return Ok(AppliedPrintReport {
             printer_id: None,
             printer: None,
@@ -257,13 +268,15 @@ fn hub_received_at() -> RepositoryResult<String> {
 
 async fn reload_applied_printer(
     database: &Database,
+    access_code_cipher: &PrinterAccessCodeCipher,
     tenant_id: TenantId,
     applied: &mut AppliedPrintReport,
 ) -> RepositoryResult<()> {
     if let Some(printer_id) = applied.printer_id.as_deref() {
-        applied.printer = PrinterRepository::new(database.clone())
-            .get_with_live_status_for_tenant(tenant_id, printer_id)
-            .await?;
+        applied.printer =
+            PrinterRepository::new_with_cipher(database.clone(), access_code_cipher.clone())
+                .get_with_live_status_for_tenant(tenant_id, printer_id)
+                .await?;
     }
     Ok(())
 }
