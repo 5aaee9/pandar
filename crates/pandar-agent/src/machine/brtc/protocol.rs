@@ -1,7 +1,9 @@
-use anyhow::{Context, anyhow};
+use anyhow::{Context, anyhow, bail};
 use serde::{Deserialize, Serialize};
 
-use super::{BRTC_CTRL_JSON_MTYPE, BRTC_CTRL_SETUP_MTYPE, BRTC_FILE_UPLOAD_CMD};
+use super::{
+    BRTC_CTRL_JSON_MTYPE, BRTC_CTRL_SETUP_MTYPE, BRTC_FILE_UPLOAD_CMD, BRTC_MAX_UPLOAD_CHUNK_SIZE,
+};
 
 #[derive(Debug, Serialize)]
 struct BrtcSetupRequest<'a> {
@@ -168,20 +170,38 @@ impl BrtcUploadReplyFrame {
     }
 
     pub(super) fn chunk_size_bytes(&self) -> anyhow::Result<usize> {
-        self.reply
+        let chunk_size_kib = self
+            .reply
             .reply
             .as_ref()
             .and_then(|reply| reply.chunk_size)
             .filter(|value| *value > 0)
-            .map(|value| value as usize * 1024)
-            .ok_or_else(|| anyhow!("BRTC upload init reply did not include chunk_size"))
+            .ok_or_else(|| anyhow!("BRTC upload init reply did not include chunk_size"))?;
+        let chunk_size = chunk_size_kib
+            .checked_mul(1024)
+            .ok_or_else(|| anyhow!("BRTC upload init reply chunk_size overflowed"))?;
+        let chunk_size =
+            usize::try_from(chunk_size).context("convert BRTC upload init reply chunk_size")?;
+        if chunk_size > BRTC_MAX_UPLOAD_CHUNK_SIZE {
+            tracing::warn!(
+                chunk_size,
+                limit = BRTC_MAX_UPLOAD_CHUNK_SIZE,
+                "rejecting oversized BRTC upload chunk size"
+            );
+            bail!(
+                "BRTC upload init reply chunk_size {chunk_size} exceeds limit {BRTC_MAX_UPLOAD_CHUNK_SIZE}"
+            );
+        }
+        Ok(chunk_size)
     }
 
-    pub(super) fn offset(&self) -> usize {
-        self.reply
+    pub(super) fn offset(&self) -> anyhow::Result<usize> {
+        let offset = self
+            .reply
             .reply
             .as_ref()
             .and_then(|reply| reply.offset)
-            .unwrap_or(0) as usize
+            .unwrap_or(0);
+        usize::try_from(offset).context("convert BRTC upload init reply offset")
     }
 }

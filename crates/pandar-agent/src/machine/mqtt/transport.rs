@@ -2,9 +2,7 @@ use std::{fmt, sync::Arc, time::Duration};
 
 use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
-use rumqttc::{
-    AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS, TlsConfiguration, Transport,
-};
+use rumqttc::{AsyncClient, MqttOptions, QoS, TlsConfiguration, Transport};
 use rustls::{
     CertificateError, ClientConfig, DigitallySignedStruct, Error as TlsError, PeerMisbehaved,
     SignatureScheme,
@@ -12,10 +10,7 @@ use rustls::{
     pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime},
 };
 use serde_json::Value;
-use tokio::{
-    net::TcpStream,
-    sync::{Mutex, OnceCell},
-};
+use tokio::{net::TcpStream, sync::OnceCell};
 use tokio_rustls::TlsConnector;
 use uuid::Uuid;
 use x509_parser::prelude::{FromDer, X509Certificate};
@@ -24,8 +19,12 @@ use crate::machine::BambuPrinterEndpoint;
 
 use super::{
     BAMBU_MQTT_MAX_PACKET_SIZE, BAMBU_MQTT_PORT, BAMBU_MQTT_RETAIN, BAMBU_MQTT_USERNAME,
-    BambuMqttTopics, BambuMqttTransport, PublishedMqttCommand, decode_mqtt_report_payload,
+    BambuMqttTopics, BambuMqttTransport, PublishedMqttCommand,
 };
+
+mod pump;
+
+use pump::MqttEventLoopPump;
 
 #[derive(Debug)]
 struct MqttReportIdleTimeout(Duration);
@@ -53,7 +52,7 @@ pub(crate) fn is_mqtt_report_idle_timeout(error: &anyhow::Error) -> bool {
 #[derive(Clone)]
 pub struct RumqttcBambuMqttTransport {
     client: AsyncClient,
-    event_loop: Arc<Mutex<EventLoop>>,
+    pump: Arc<MqttEventLoopPump>,
     endpoint_serial: String,
     host: String,
     mqtt_serial: Arc<OnceCell<String>>,
@@ -72,13 +71,27 @@ impl RumqttcBambuMqttTransport {
         let suffix = mqtt_session_client_suffix(role);
         let options = bambu_lan_mqtt_options(endpoint, Some(&suffix));
 
+        Self::connect_with_options(
+            options,
+            endpoint.serial.clone(),
+            endpoint.host.clone(),
+            Arc::new(OnceCell::new()),
+        )
+    }
+
+    fn connect_with_options(
+        options: MqttOptions,
+        endpoint_serial: String,
+        host: String,
+        mqtt_serial: Arc<OnceCell<String>>,
+    ) -> Self {
         let (client, event_loop) = AsyncClient::new(options, 10);
         Self {
             client,
-            event_loop: Arc::new(Mutex::new(event_loop)),
-            endpoint_serial: endpoint.serial.clone(),
-            host: endpoint.host.clone(),
-            mqtt_serial: Arc::new(OnceCell::new()),
+            pump: Arc::new(MqttEventLoopPump::spawn(event_loop)),
+            endpoint_serial,
+            host,
+            mqtt_serial,
         }
     }
 
@@ -299,18 +312,7 @@ impl BambuMqttTransport for RumqttcBambuMqttTransport {
     }
 
     async fn next_report(&self, report_timeout: Duration) -> anyhow::Result<Value> {
-        let result = tokio::time::timeout(report_timeout, async {
-            let mut event_loop = self.event_loop.lock().await;
-            loop {
-                match event_loop.poll().await.context("poll rumqttc event loop")? {
-                    Event::Incoming(Packet::Publish(publish)) => {
-                        return decode_mqtt_report_payload(publish.payload.as_ref());
-                    }
-                    _ => continue,
-                }
-            }
-        })
-        .await;
+        let result = tokio::time::timeout(report_timeout, self.pump.next_report()).await;
 
         match result {
             Ok(Ok(report)) => Ok(report),
@@ -344,15 +346,5 @@ fn qos_from_u8(qos: u8) -> anyhow::Result<QoS> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::mqtt_session_client_suffix;
-
-    #[test]
-    fn mqtt_session_client_suffix_is_unique_and_role_scoped() {
-        let first = mqtt_session_client_suffix("reports");
-        let second = mqtt_session_client_suffix("reports");
-
-        assert_ne!(first, second);
-        assert!(first.starts_with("reports-"));
-    }
-}
+#[path = "transport_test.rs"]
+mod transport_test;

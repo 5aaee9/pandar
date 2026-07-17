@@ -23,6 +23,8 @@ const BRTC_CTRL_CLIENT_MAGIC: u32 = 0x0102013f;
 const BRTC_CTRL_SETUP_MTYPE: i64 = 12291;
 const BRTC_CTRL_JSON_MTYPE: i64 = 12289;
 const BRTC_FILE_UPLOAD_CMD: i64 = 5;
+const BRTC_MAX_FRAME_PAYLOAD_SIZE: usize = 16 * 1024 * 1024;
+const BRTC_MAX_UPLOAD_CHUNK_SIZE: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct BrtcMachineFileTransfer {
@@ -140,7 +142,7 @@ impl BrtcSession {
             );
         }
         let chunk_size = init_reply.chunk_size_bytes()?;
-        let mut offset = init_reply.offset();
+        let mut offset = init_reply.offset()?;
         if offset > bytes.len() {
             bail!(
                 "BRTC upload resume offset {offset} exceeds file size {}",
@@ -151,7 +153,7 @@ impl BrtcSession {
         let digest_lower = md5_lower(bytes);
         let mut fragment = 0_u32;
         while offset < bytes.len() {
-            let end = (offset + chunk_size).min(bytes.len());
+            let end = checked_chunk_end(offset, chunk_size, bytes.len())?;
             let chunk = &bytes[offset..end];
             let last = end == bytes.len();
             let chunk_request = protocol::upload_chunk_request(
@@ -167,7 +169,11 @@ impl BrtcSession {
                     format!("send BRTC upload chunk {fragment} for emmc/{dest_name}")
                 })?;
             offset = end;
-            fragment += 1;
+            if !last {
+                fragment = fragment
+                    .checked_add(1)
+                    .ok_or_else(|| anyhow!("BRTC upload fragment id overflow"))?;
+            }
         }
 
         for _ in 0..32 {
@@ -202,15 +208,15 @@ impl BrtcSession {
         value: &impl Serialize,
         binary: &[u8],
     ) -> anyhow::Result<()> {
-        let mut body = protocol::wrap_ctrl_json(value)?.into_bytes();
-        body.extend_from_slice(b"\n\n");
-        body.extend_from_slice(binary);
+        let body =
+            append_binary_frame_payload(protocol::wrap_ctrl_json(value)?.into_bytes(), binary)?;
         self.send_frame(BRTC_CTRL_CLIENT_MAGIC, &body).await
     }
 
     async fn send_frame(&mut self, magic: u32, payload: &[u8]) -> anyhow::Result<()> {
         let mut header = [0_u8; 16];
-        header[0..4].copy_from_slice(&(payload.len() as u32).to_le_bytes());
+        let payload_len = u32::try_from(payload.len()).context("BRTC frame payload exceeds u32")?;
+        header[0..4].copy_from_slice(&payload_len.to_le_bytes());
         header[4..8].copy_from_slice(&magic.to_le_bytes());
         header[8..12].copy_from_slice(&self.frame_seq.to_le_bytes());
         self.frame_seq = self.frame_seq.wrapping_add(1);
@@ -256,14 +262,66 @@ impl BrtcSession {
     async fn read_frame(&mut self) -> anyhow::Result<BrtcFrame> {
         let mut header = [0_u8; 16];
         self.stream.read_exact(&mut header).await?;
-        let payload_len = u32::from_le_bytes(header[0..4].try_into().unwrap()) as usize;
+        let payload_len =
+            checked_frame_payload_len(u32::from_le_bytes(header[0..4].try_into().unwrap()))?;
         let magic = u32::from_le_bytes(header[4..8].try_into().unwrap());
-        let mut payload = vec![0_u8; payload_len];
+        let mut payload = Vec::new();
+        payload
+            .try_reserve_exact(payload_len)
+            .with_context(|| format!("reserve {payload_len} bytes for BRTC frame payload"))?;
+        payload.resize(payload_len, 0);
         if payload_len > 0 {
             self.stream.read_exact(&mut payload).await?;
         }
         Ok(BrtcFrame { magic, payload })
     }
+}
+
+fn checked_frame_payload_len(payload_len: u32) -> anyhow::Result<usize> {
+    let payload_len = usize::try_from(payload_len).context("convert BRTC frame payload length")?;
+    if payload_len > BRTC_MAX_FRAME_PAYLOAD_SIZE {
+        tracing::warn!(
+            payload_len,
+            limit = BRTC_MAX_FRAME_PAYLOAD_SIZE,
+            "rejecting oversized BRTC frame payload"
+        );
+        bail!(
+            "BRTC frame payload length {payload_len} exceeds limit {BRTC_MAX_FRAME_PAYLOAD_SIZE}"
+        );
+    }
+    Ok(payload_len)
+}
+
+fn checked_chunk_end(offset: usize, chunk_size: usize, total: usize) -> anyhow::Result<usize> {
+    offset
+        .checked_add(chunk_size)
+        .map(|end| end.min(total))
+        .ok_or_else(|| {
+            anyhow!("BRTC upload offset {offset} plus chunk size {chunk_size} overflowed")
+        })
+}
+
+fn checked_binary_frame_payload_len(
+    body_len: usize,
+    binary_len: usize,
+) -> anyhow::Result<(usize, usize)> {
+    let additional = 2_usize
+        .checked_add(binary_len)
+        .ok_or_else(|| anyhow!("BRTC binary frame payload length overflowed"))?;
+    let frame_len = body_len
+        .checked_add(additional)
+        .ok_or_else(|| anyhow!("BRTC binary frame payload length overflowed"))?;
+    u32::try_from(frame_len).context("BRTC binary frame payload exceeds u32")?;
+    Ok((additional, frame_len))
+}
+
+fn append_binary_frame_payload(mut body: Vec<u8>, binary: &[u8]) -> anyhow::Result<Vec<u8>> {
+    let (additional, _) = checked_binary_frame_payload_len(body.len(), binary.len())?;
+    body.try_reserve_exact(additional)
+        .with_context(|| format!("reserve {additional} bytes for BRTC binary frame payload"))?;
+    body.extend_from_slice(b"\n\n");
+    body.extend_from_slice(binary);
+    Ok(body)
 }
 
 struct BrtcFrame {
