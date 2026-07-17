@@ -2,7 +2,12 @@ import { useTranslations } from 'next-intl'
 
 import { FormattedDate } from '../components/formatted-date'
 import { AgentDeleteForm } from './agent-delete-form'
-import { deleteAgent, diagnosePrinter, discoverPrinters } from './actions'
+import {
+  deleteAgent,
+  diagnosePrinter,
+  discoverPrinters,
+  refreshPrinters,
+} from './actions'
 import { DetailLine, EmptyState, HelpTip, StatusBadge, Tag } from './dashboard-ui'
 import type {
   Agent,
@@ -90,19 +95,33 @@ export function LinkedAgentsSection({
                     </form>
                   </td>
                   <td className="px-4 py-3">
-                    <AgentDeleteForm
-                      action={deleteAgent}
-                      buttonAriaLabel={t('deleteAgentAriaLabel', { name: agent.name })}
-                      buttonLabel={t('deleteAgent')}
-                      disabled={agent.status.toLowerCase() === 'online'}
-                      disabledMessage={agent.status.toLowerCase() === 'online' ? t('deleteOnline', { name: agent.name }) : undefined}
-                      title={t('deleteTitle')}
-                      message={t('deleteMessage', { name: agent.name })}
-                      confirmLabel={t('deleteConfirm')}
-                    >
-                      <input name="tenant_id" type="hidden" value={selectedTenant.id} />
-                      <input name="agent_id" type="hidden" value={agent.id} />
-                    </AgentDeleteForm>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <form action={refreshPrinters}>
+                        <input name="tenant_id" type="hidden" value={selectedTenant.id} />
+                        <input name="agent_id" type="hidden" value={agent.id} />
+                        <input name="return_to" type="hidden" value="agents" />
+                        <button
+                          aria-label={t('refreshAgentAriaLabel', { name: agent.name })}
+                          className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-800"
+                          type="submit"
+                        >
+                          {t('refreshAgent')}
+                        </button>
+                      </form>
+                      <AgentDeleteForm
+                        action={deleteAgent}
+                        buttonAriaLabel={t('deleteAgentAriaLabel', { name: agent.name })}
+                        buttonLabel={t('deleteAgent')}
+                        disabled={agent.status.toLowerCase() === 'online'}
+                        disabledMessage={agent.status.toLowerCase() === 'online' ? t('deleteOnline', { name: agent.name }) : undefined}
+                        title={t('deleteTitle')}
+                        message={t('deleteMessage', { name: agent.name })}
+                        confirmLabel={t('deleteConfirm')}
+                      >
+                        <input name="tenant_id" type="hidden" value={selectedTenant.id} />
+                        <input name="agent_id" type="hidden" value={agent.id} />
+                      </AgentDeleteForm>
+                    </div>
                   </td>
                 </tr>
               ))}

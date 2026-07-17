@@ -1,5 +1,5 @@
 use anyhow::Context;
-use pandar_core::{JobId, TenantId};
+use pandar_core::{JobId, PrintStatus, TenantId};
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -175,7 +175,7 @@ where
         .filter(jobs::Column::TenantId.eq(input.tenant_id.to_string()))
         .filter(jobs::Column::AgentId.eq(input.agent_id.to_string()))
         .filter(jobs::Column::PrinterId.eq(&printer.id))
-        .filter(jobs::Column::PrintStatus.is_in(["pending", "running"]))
+        .filter(jobs::Column::PrintStatus.is_in(["pending", "stalled", "running"]))
         .filter(jobs::Column::CreatedAt.gte(cutoff))
         .all(connection)
         .await
@@ -194,13 +194,25 @@ fn single_file_match(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let mut matches = candidates.into_iter().filter(|candidate| {
+    let mut active_matches = Vec::new();
+    let mut stalled_matches = Vec::new();
+    for candidate in candidates {
         let filename = candidate.artifact.filename.trim();
-        report_basename.is_some_and(|name| name == filename)
+        if report_basename.is_some_and(|name| name == filename)
             || subtask_name.is_some_and(|name| name == filename_stem(filename))
-    });
-    let first = matches.next()?;
-    matches.next().is_none().then_some(first)
+        {
+            if candidate.job.print.status == PrintStatus::Stalled {
+                stalled_matches.push(candidate);
+            } else {
+                active_matches.push(candidate);
+            }
+        }
+    }
+    match active_matches.len() {
+        1 => active_matches.pop(),
+        0 if stalled_matches.len() == 1 => stalled_matches.pop(),
+        _ => None,
+    }
 }
 
 fn cutoff_observed_at(observed_at: &str) -> RepositoryResult<String> {

@@ -1,13 +1,13 @@
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex};
 
-use pandar_core::{AgentId, AgentStatus, TenantId};
+use pandar_core::{AgentId, AgentStatus, PrintCalibrationMode, PrintStatus, TenantId};
 use pandar_core::{CommandStatus, FirmwareControlMetadata};
 use tokio::sync::mpsc;
 use tracing_subscriber::fmt::MakeWriter;
 
 use super::*;
-use crate::repositories::{AuditActor, FirmwareCommandOwner, LinkPrinterPayload};
+use crate::repositories::{AuditActor, CreatePrintJob, FirmwareCommandOwner, LinkPrinterPayload};
 use crate::sessions::{AgentSession, SessionToken};
 
 mod control_plane_close;
@@ -61,6 +61,96 @@ async fn runtime_expiry_tick_marks_stale_agent_offline() {
     assert!(state.sessions().get(agent.id).await.is_none());
     let persisted = state.agents().get(agent.id).await.unwrap().unwrap();
     assert_eq!(persisted.status, AgentStatus::Offline);
+}
+
+#[tokio::test]
+async fn runtime_stall_sweep_publishes_persisted_job_progress() {
+    let state = AppState::sqlite_for_tests().await.unwrap();
+    let (_control_plane, ready) = spawn_control_plane_ready(state.clone());
+    ready.await.unwrap().unwrap();
+    let tenant = state
+        .tenants()
+        .create("stalled-runtime", "Stalled Runtime")
+        .await
+        .unwrap();
+    let agent = state
+        .agents()
+        .create(tenant.id, "stalled-agent")
+        .await
+        .unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture(
+        state.database(),
+        tenant.id,
+        agent.id,
+    )
+    .await
+    .unwrap();
+    let created = state
+        .jobs()
+        .create_print_job(CreatePrintJob {
+            tenant_id: tenant.id,
+            printer_id,
+            agent_id: agent.id,
+            artifact_id: "stalled-runtime-artifact".to_owned(),
+            artifact_filename: "stalled-runtime.3mf".to_owned(),
+            artifact_content_type: "model/3mf".to_owned(),
+            artifact_size_bytes: 42,
+            artifact_storage_path: "stalled-runtime/stalled-runtime.3mf".to_owned(),
+            artifact_metadata_json: None,
+            plate_id: 1,
+            use_ams: true,
+            auto_bed_leveling: PrintCalibrationMode::Off,
+            bed_leveling: false,
+            flow_cali: false,
+            auto_flow_cali: PrintCalibrationMode::Off,
+            auto_offset_cali: PrintCalibrationMode::Off,
+            timelapse: false,
+            ams_mapping_json: None,
+            ams_mapping2_json: None,
+            ams_mapping_info_json: None,
+        })
+        .await
+        .unwrap();
+    state
+        .jobs()
+        .mark_print_sent(created.job.command_id, tenant.id, agent.id)
+        .await
+        .unwrap();
+    state
+        .jobs()
+        .mark_print_succeeded(created.job.command_id, tenant.id, agent.id)
+        .await
+        .unwrap();
+    set_job_waiting_at(&state, created.job.id, "2026-07-17T00:00:00Z").await;
+    set_command_updated_at(&state, created.job.command_id, "2026-07-17T00:00:00Z").await;
+    let mut events = state.printer_events().subscribe(tenant.id).await;
+
+    assert_eq!(
+        mark_stalled_pending_jobs_once(&state, "2026-07-17T00:15:01Z")
+            .await
+            .unwrap(),
+        1,
+    );
+    let event = tokio::time::timeout(Duration::from_secs(1), events.recv())
+        .await
+        .expect("stall sweep should publish a printer event")
+        .unwrap();
+    let event = serde_json::to_value(event).unwrap();
+    assert_eq!(event["type"], "job_progress");
+    assert_eq!(event["job"]["id"], created.job.id.to_string());
+    assert_eq!(event["job"]["print"]["status"], "stalled");
+    assert_eq!(
+        state
+            .jobs()
+            .get_for_tenant(tenant.id, created.job.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .job
+            .print
+            .status,
+        PrintStatus::Stalled,
+    );
 }
 
 #[tokio::test]
@@ -411,6 +501,22 @@ fn link_payload(serial: &str) -> LinkPrinterPayload {
 
 fn test_audit_actor() -> AuditActor {
     AuditActor::tenant_token(None, "test-runtime-token", vec!["*"])
+}
+
+async fn set_job_waiting_at(state: &AppState, job_id: pandar_core::JobId, updated_at: &str) {
+    let crate::db::Database::Sqlite(pool) = state.database() else {
+        panic!("expected SQLite database");
+    };
+    sqlx::query(
+        "UPDATE jobs SET updated_at = ?2, print_updated_at = NULL, \
+         progress_percent = NULL, current_layer = NULL, print_started_at = NULL \
+         WHERE id = ?1",
+    )
+    .bind(job_id.to_string())
+    .bind(updated_at)
+    .execute(pool)
+    .await
+    .unwrap();
 }
 
 async fn set_command_updated_at(

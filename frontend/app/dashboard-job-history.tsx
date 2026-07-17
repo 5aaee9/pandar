@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useFormatter, useTranslations } from 'next-intl'
+import { useTranslations } from 'next-intl'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -12,31 +12,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { FormattedDate } from '../components/formatted-date'
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
-import { formatBytes } from './dashboard-format'
-import { isJobStalled } from './dashboard-attention'
-import { EmptyState, SectionHeader, StatusBadge } from './dashboard-ui'
-import {
-  formatArtifactMetadata,
-  formatJobMaterial,
-  formatJobRecoveryState,
-} from './dashboard-runtime-helpers'
-import { formatLayers, formatProgress, formatRemaining } from './job-format'
+import { EmptyState, SectionHeader } from './dashboard-ui'
+import { JobRow } from './dashboard-job-row'
 
-function useLocaleDate() {
-  const format = useFormatter()
-  return (value: string) => {
-    const d = new Date(value)
-    if (Number.isNaN(d.getTime())) return value
-    return format.dateTime(d, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' })
-  }
-}
-const TERMINAL_JOB_STATUSES = new Set(['completed', 'failed', 'cancelled'])
+const TERMINAL_JOB_STATUSES = new Set(['stalled', 'completed', 'failed', 'cancelled'])
 const CLEARABLE_JOB_STATUSES = new Set(['succeeded', 'failed'])
-const CLEARABLE_PRINT_STATUSES = new Set(['completed', 'failed', 'cancelled'])
+const CLEARABLE_PRINT_STATUSES = new Set(['stalled', 'completed', 'failed', 'cancelled'])
 
-function isClearableJob(job: Job, nowMs: number): boolean {
+function isClearableJob(job: Job): boolean {
   const status = job.status.toLowerCase()
   const commandStatus = job.command.status.toLowerCase()
   const printStatus = job.print.status.toLowerCase()
@@ -50,14 +34,12 @@ function isClearableJob(job: Job, nowMs: number): boolean {
   if (CLEARABLE_PRINT_STATUSES.has(printStatus)) {
     return true
   }
-  const neverStarted =
+  return (
     printStatus === 'pending' &&
     job.print.started_at === null &&
     (job.print.progress_percent ?? 0) === 0 &&
-    (job.print.current_layer ?? 0) === 0
-  return neverStarted && (
-    status === 'failed' ||
-    (status === 'succeeded' && commandStatus === 'succeeded' && isJobStalled(job, nowMs))
+    (job.print.current_layer ?? 0) === 0 &&
+    status === 'failed'
   )
 }
 
@@ -65,7 +47,10 @@ function jobMatchesStatus(job: Job, status: string): boolean {
   const dispatch = job.status.toLowerCase()
   const physical = job.print.status.toLowerCase()
   if (status === 'active') {
-    return !TERMINAL_JOB_STATUSES.has(dispatch) && !TERMINAL_JOB_STATUSES.has(physical)
+    return (
+      !TERMINAL_JOB_STATUSES.has(dispatch) &&
+      !TERMINAL_JOB_STATUSES.has(physical)
+    )
   }
   if (status === 'failed') {
     return dispatch === 'failed' || physical === 'failed'
@@ -79,19 +64,22 @@ function jobMatchesStatus(job: Job, status: string): boolean {
 export function JobHistory({
   selectedTenant,
   jobs,
-  nowMs,
   printers,
   agents,
+  canManageJobs = true,
   onOpenDispatch,
   onClearRedirect = (url) => window.location.assign(url),
+  onDeleteRedirect = (url) => window.location.assign(url),
 }: {
   selectedTenant: Tenant | null
   jobs: Job[]
   nowMs: number
   printers: Printer[]
   agents: Agent[]
+  canManageJobs?: boolean
   onOpenDispatch: () => void
   onClearRedirect?: (url: string) => void
+  onDeleteRedirect?: (url: string) => void
 }) {
   const t = useTranslations('inventory')
   const [query, setQuery] = useState('')
@@ -99,8 +87,12 @@ export function JobHistory({
   const [clearOpen, setClearOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [clearError, setClearError] = useState(false)
-  const clearableCount = jobs.filter((job) => isClearableJob(job, nowMs)).length
-  const clearDisabled = !selectedTenant || clearableCount === 0 || clearing
+  const [deleteTarget, setDeleteTarget] = useState<Job | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(false)
+  const clearableCount = jobs.filter(isClearableJob).length
+  const clearDisabled =
+    !canManageJobs || !selectedTenant || clearableCount === 0 || clearing
   const normalizedQuery = query.trim().toLowerCase()
   const filtered = jobs.filter((job) => {
     if (!jobMatchesStatus(job, status)) {
@@ -141,6 +133,32 @@ export function JobHistory({
     }
   }
 
+  const deleteJob = async () => {
+    if (!selectedTenant || !deleteTarget) {
+      return
+    }
+    setDeleting(true)
+    setDeleteError(false)
+    try {
+      const response = await fetch(
+        `/api/tenants/${encodeURIComponent(selectedTenant.id)}/jobs/${encodeURIComponent(deleteTarget.id)}`,
+        { method: 'DELETE' },
+      )
+      if (response.ok) {
+        setDeleteTarget(null)
+        onDeleteRedirect(
+          `/jobs?tenant=${encodeURIComponent(selectedTenant.id)}&status=job_deleted`,
+        )
+      } else {
+        setDeleteError(true)
+      }
+    } catch {
+      setDeleteError(true)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
       <SectionHeader
@@ -170,9 +188,15 @@ export function JobHistory({
         }
       />
       {!selectedTenant ? (
-        <EmptyState title={t('jobsNoTenantTitle')} message={t('jobsNoTenantMessage')} />
+        <EmptyState
+          title={t('jobsNoTenantTitle')}
+          message={t('jobsNoTenantMessage')}
+        />
       ) : jobs.length === 0 ? (
-        <EmptyState title={t('jobsEmptyTitle')} message={t('jobsEmptyMessage')} />
+        <EmptyState
+          title={t('jobsEmptyTitle')}
+          message={t('jobsEmptyMessage')}
+        />
       ) : (
         <>
           <FilterBar
@@ -189,18 +213,39 @@ export function JobHistory({
             ]}
           />
           {filtered.length === 0 ? (
-            <EmptyState title={t('jobsNoMatchesTitle')} message={t('jobsNoMatchesMessage')} />
+            <EmptyState
+              title={t('jobsNoMatchesTitle')}
+              message={t('jobsNoMatchesMessage')}
+            />
           ) : (
-            <ul className="divide-y divide-slate-200" aria-label={t('jobsAria')}>
+            <ul
+              className="divide-y divide-slate-200"
+              aria-label={t('jobsAria')}
+            >
               {filtered.map((job) => {
-                const printer = printers.find((candidate) => candidate.id === job.printer_id)
-                const agent = agents.find((candidate) => candidate.id === job.agent_id)
+                const printer = printers.find(
+                  (candidate) => candidate.id === job.printer_id,
+                )
+                const agent = agents.find(
+                  (candidate) => candidate.id === job.agent_id,
+                )
                 return (
                   <JobRow
+                    tenantId={selectedTenant.id}
                     key={job.id}
                     job={job}
                     printerName={printer?.name}
                     agentName={agent?.name}
+                    canDelete={canManageJobs && isClearableJob(job)}
+                    deleteUnavailableReason={
+                      canManageJobs
+                        ? t('deleteJobUnavailable')
+                        : t('deleteJobAdminOnly')
+                    }
+                    onDelete={() => {
+                      setDeleteError(false)
+                      setDeleteTarget(job)
+                    }}
                   />
                 )
               })}
@@ -215,7 +260,11 @@ export function JobHistory({
             <DialogDescription>
               {t('clearJobsDescription', { count: clearableCount })}
             </DialogDescription>
-            {clearError ? <p className="text-sm text-destructive">{t('clearJobsFailed')}</p> : null}
+            {clearError ? (
+              <p className="text-sm text-destructive" role="alert">
+                {t('clearJobsFailed')}
+              </p>
+            ) : null}
           </DialogHeader>
           <DialogFooter>
             <Button
@@ -233,6 +282,57 @@ export function JobHistory({
               variant="destructive"
             >
               {clearing ? t('clearingJobs') : t('confirmClearJobs')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) {
+            setDeleteTarget(null)
+            setDeleteError(false)
+          }
+        }}
+      >
+        <DialogContent
+          closeLabel={t('closeDialog')}
+          showCloseButton={!deleting}
+        >
+          <DialogHeader>
+            <DialogTitle>{t('deleteJobTitle')}</DialogTitle>
+            <DialogDescription>
+              {deleteTarget
+                ? t('deleteJobDescription', {
+                    filename: deleteTarget.artifact.filename,
+                  })
+                : null}
+            </DialogDescription>
+            {deleteError ? (
+              <p className="text-sm text-destructive" role="alert">
+                {t('deleteJobFailed')}
+              </p>
+            ) : null}
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              disabled={deleting}
+              onClick={() => {
+                setDeleteTarget(null)
+                setDeleteError(false)
+              }}
+              type="button"
+              variant="outline"
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              disabled={deleting}
+              onClick={() => void deleteJob()}
+              type="button"
+              variant="destructive"
+            >
+              {deleting ? t('deletingJob') : t('confirmDeleteJob')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -280,114 +380,5 @@ export function FilterBar({
         ))}
       </select>
     </div>
-  )
-}
-
-function JobRow({
-  job,
-  printerName,
-  agentName,
-}: {
-  job: Job
-  printerName?: string
-  agentName?: string
-}) {
-  const t = useTranslations('inventory')
-  const tMat = useTranslations('material')
-  const tRec = useTranslations('recovery.state')
-  const tJf = useTranslations('jobFormat')
-  const formatDate = useLocaleDate()
-  const format = useFormatter()
-  const num = (n: number) => format.number(n)
-  const updated = job.print.updated_at ?? job.updated_at
-  return (
-    <li
-      aria-label={`${job.artifact.filename}, ${t('dispatch')} ${job.status}, ${t('print')} ${job.print.status}, ${formatProgress(job)}`}
-      className="px-4 py-3"
-    >
-      <div className="grid gap-3 text-sm xl:grid-cols-[1.4fr_1fr_1fr_1fr]">
-        <div className="min-w-0">
-          <div className="truncate font-medium text-slate-950">{job.artifact.filename}</div>
-          <div className="truncate text-xs text-slate-500">
-            {t('updatedPrefix')} <FormattedDate value={updated} />
-          </div>
-        </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap gap-2">
-            <StatusPill label={t('dispatch')} value={job.status} />
-            <StatusPill label={t('print')} value={job.print.status} />
-          </div>
-          {job.error ? <div className="mt-1 truncate text-xs text-red-700">{job.error}</div> : null}
-          {job.print.error ? <div className="mt-1 truncate text-xs text-red-700">{job.print.error}</div> : null}
-        </div>
-        <div className="min-w-0 text-xs text-slate-600">
-          <div className="truncate font-medium text-slate-900">{printerName ?? t('unknownPrinter')}</div>
-          <div className="truncate">{agentName ?? t('unknownAgent')}</div>
-        </div>
-        <div>
-          <div className="font-medium text-slate-900">{formatProgress(job)}</div>
-          <div className="text-xs text-slate-600">{formatLayers(job, tJf)}</div>
-          <div className="text-xs text-slate-600">{formatRemaining(job.print.remaining_time_minutes, tJf)}</div>
-        </div>
-      </div>
-      <details className="mt-2">
-        <summary className="cursor-pointer select-none text-xs font-medium text-slate-500">{t('details')}</summary>
-        <div className="mt-2 grid gap-2 text-xs text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="sm:col-span-2 lg:col-span-3">
-            <span className="text-slate-500">{t('recoveryLabel')} </span>
-            {formatJobRecoveryState(job, tRec)}
-          </div>
-          <div className="sm:col-span-2 lg:col-span-3 truncate">
-            <span className="text-slate-500">{t('projectLabel')} </span>
-            {formatArtifactMetadata(job, tMat, formatDate)}
-          </div>
-          <div>
-            <span className="text-slate-500">{t('artifactLabel')} </span>
-            {job.artifact.content_type} · {formatBytes(job.artifact.size_bytes, num)}
-          </div>
-          <div>
-            <span className="text-slate-500">{t('materialLabel')} </span>
-            {formatJobMaterial(job, tMat)}
-          </div>
-          <div>
-            <span className="text-slate-500">{t('jobLabel')} </span>
-            <span className="font-mono">{job.id}</span>
-          </div>
-          {job.print.active_file ? (
-            <div className="truncate">
-              <span className="text-slate-500">{t('fileLabel')} </span>
-              {job.print.active_file}
-            </div>
-          ) : null}
-          {job.print.printer_state ? (
-            <div>
-              <span className="text-slate-500">{t('stateLabel')} </span>
-              {job.print.printer_state}
-            </div>
-          ) : null}
-          <div>
-            <span className="text-slate-500">{t('createdLabel')} </span>
-            <FormattedDate value={job.created_at} />
-          </div>
-          <div>
-            <span className="text-slate-500">{t('startedLabel')} </span>
-            {job.print.started_at ? <FormattedDate value={job.print.started_at} /> : '-'}
-          </div>
-          <div>
-            <span className="text-slate-500">{t('finishedLabel')} </span>
-            {job.print.finished_at ? <FormattedDate value={job.print.finished_at} /> : '-'}
-          </div>
-        </div>
-      </details>
-    </li>
-  )
-}
-
-function StatusPill({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="inline-flex items-center gap-1">
-      <span className="text-xs text-slate-500">{label}</span>
-      <StatusBadge value={value} />
-    </span>
   )
 }

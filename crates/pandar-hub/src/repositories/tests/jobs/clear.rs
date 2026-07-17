@@ -6,7 +6,8 @@ use super::*;
 use crate::{
     artifacts::{DEFAULT_MAX_ARTIFACT_BYTES, FilesystemArtifactStorage},
     entities::{
-        audit_events, job_artifacts, job_filament_usages, jobs as job_entities, machine_events,
+        audit_events, commands as command_entities, job_artifacts, job_filament_usages,
+        jobs as job_entities, machine_events,
     },
     repositories::{
         AgentRepository, AuditActor, CommandRepository, JobRepository, TenantRepository,
@@ -128,6 +129,14 @@ pub(in crate::repositories::tests) async fn exercise_clear_jobs(
     let stalled = create_job(&jobs, tenant.id, agent.id, &printer_id, "stalled").await;
     succeed(&jobs, stalled.job.command_id, tenant.id, agent.id).await;
     age_job(&database, stalled.job.id, None).await;
+    age_command(&database, stalled.job.command_id).await;
+    assert_eq!(
+        jobs.mark_stalled_pending_jobs("2000-01-01T00:15:01Z")
+            .await
+            .unwrap()
+            .len(),
+        1,
+    );
 
     let running = create_job(&jobs, tenant.id, agent.id, &printer_id, "running").await;
     succeed(&jobs, running.job.command_id, tenant.id, agent.id).await;
@@ -290,6 +299,18 @@ async fn succeed(
         .await
         .unwrap();
     jobs.mark_print_succeeded(command_id, tenant_id, agent_id)
+        .await
+        .unwrap();
+}
+
+async fn age_command(database: &Database, command_id: CommandId) {
+    command_entities::Entity::update_many()
+        .set(command_entities::ActiveModel {
+            updated_at: Set(STALE_AT.to_owned()),
+            ..Default::default()
+        })
+        .filter(command_entities::Column::Id.eq(command_id.to_string()))
+        .exec(&database.sea_orm_connection())
         .await
         .unwrap();
 }

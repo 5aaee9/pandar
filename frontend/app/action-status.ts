@@ -7,6 +7,7 @@ const knownPositiveActionStatuses = new Set([
   "printer_updated",
   "job_created",
   "jobs_cleared",
+  "job_deleted",
   "tenant_created",
   "tenant_token_revoked",
   "join_link_accepted",

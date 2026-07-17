@@ -85,6 +85,7 @@ fn job_status_round_trips_persisted_strings() {
 fn print_status_round_trips_persisted_strings() {
     for (status, value) in [
         (PrintStatus::Pending, "pending"),
+        (PrintStatus::Stalled, "stalled"),
         (PrintStatus::Running, "running"),
         (PrintStatus::Completed, "completed"),
         (PrintStatus::Failed, "failed"),

@@ -23,7 +23,6 @@ vi.mock("./actions", () => ({
   discoverPrinters: vi.fn(),
   duplicateJob: vi.fn(),
   linkPrinter: vi.fn(),
-  refreshAllAgents: vi.fn(),
   refreshPrinters: vi.fn(),
   retryDispatchJob: vi.fn(),
   retryDispatchJobs: vi.fn(),
@@ -93,6 +92,7 @@ const baseProps: DashboardViewContentProps = {
   joinLinks: [],
   auditEvents: [],
   adminUnavailable: false,
+  canManageJobs: true,
 };
 
 function renderAgentsView(overrides: Partial<DashboardViewContentProps> = {}) {
@@ -162,6 +162,31 @@ describe("Agents view pairing guidance", () => {
       screen.getByText("Use a tenant admin account or scoped registration token before creating this pairing."),
     ).toBeVisible();
     expect(screen.queryByLabelText("Agent name")).not.toBeInTheDocument();
+  });
+
+  it("renders Refresh in each linked Agent row and returns to Agents", () => {
+    renderAgentsView({
+      agents: [
+        {
+          id: "agent-online",
+          tenant_id: tenant.id,
+          name: "Online agent",
+          status: "online",
+          created_at: "2026-06-30T00:00:00Z",
+        },
+      ],
+    });
+
+    const refresh = screen.getByRole("button", {
+      name: "Refresh Online agent",
+    });
+    expect(refresh).toHaveTextContent(/^Refresh$/);
+    expect(refresh).toBeEnabled();
+    expect(refresh.closest("form")).toHaveFormValues({
+      tenant_id: tenant.id,
+      agent_id: "agent-online",
+      return_to: "agents",
+    });
   });
 
   it("keeps delete controls visible for online agents and explains why deletion is disabled", async () => {

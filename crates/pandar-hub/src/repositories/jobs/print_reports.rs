@@ -189,15 +189,27 @@ where
         });
     };
 
-    let original = update_from_job(&job);
-    let desired = reconciled_update(&original, &input);
-    let changed = original != desired;
+    let mut original = update_from_job(&job);
+    let mut desired = reconciled_update(&original, &input);
+    let mut changed = original != desired;
     let job_id = job.job.id;
-    let wrote = if changed {
-        update_job_print(transaction, &job_id, &desired).await?
+    let mut wrote = if changed {
+        update_job_print(transaction, &job_id, &original.print_status, &desired).await?
     } else {
         false
     };
+    if changed && !wrote {
+        let current = job_by_id(transaction, input.tenant_id, job_id)
+            .await?
+            .ok_or(RepositoryError::MissingJob)?;
+        original = update_from_job(&current);
+        desired = reconciled_update(&original, &input);
+        changed = original != desired;
+        if changed {
+            wrote =
+                update_job_print(transaction, &job_id, &original.print_status, &desired).await?;
+        }
+    }
     let job = job_by_id(transaction, input.tenant_id, job_id).await?;
     if let Some(job) = job.as_ref()
         && matches!(

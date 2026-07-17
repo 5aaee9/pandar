@@ -3,7 +3,7 @@ import { NextIntlClientProvider } from 'next-intl'
 import { describe, expect, it } from 'vitest'
 
 import en from '../messages/en.json'
-import { computeAttention } from './dashboard-attention'
+import { computeAttention, computeHealth, statusMeta } from './dashboard-attention'
 import type { Job } from './dashboard-types'
 import { NeedsAttention } from './needs-attention'
 
@@ -12,11 +12,13 @@ function job({
   error = null,
   printStatus = 'pending',
   printError = null,
+  commandStatus = 'failed',
 }: {
   status?: string
   error?: string | null
   printStatus?: string
   printError?: string | null
+  commandStatus?: string
 } = {}): Job {
   return {
     id: 'job-1',
@@ -46,7 +48,7 @@ function job({
     command: {
       id: 'command-1',
       kind: 'print_project_file',
-      status: 'failed',
+      status: commandStatus,
     },
     artifact: {
       id: 'artifact-1',
@@ -100,6 +102,39 @@ describe('job failure attention', () => {
     )
 
     expect(item.detailKey?.values).toEqual({ reason: 'nozzle temperature fault' })
+  })
+
+  it('treats persisted stalled jobs as recoverable warnings, not active failures', () => {
+    const stalled = job({
+      status: 'succeeded',
+      commandStatus: 'succeeded',
+      printStatus: 'stalled',
+    })
+    const [item] = attentionFor(stalled)
+
+    expect(item).toMatchObject({
+      severity: 'warning',
+      reason: 'job_stalled',
+      title: 'Job stalled',
+      label: 'Untitled.gcode.3mf · did not start within 15 minutes',
+      ageMs: null,
+    })
+    expect(computeHealth([], [], [stalled])).toMatchObject({
+      jobsActive: 0,
+      jobsFailed: 0,
+    })
+    expect(statusMeta('stalled')).toEqual({
+      severity: 'warning',
+      label: 'Stalled',
+    })
+  })
+
+  it('does not infer stalled from a pending job and the browser clock', () => {
+    expect(
+      attentionFor(
+        job({ status: 'succeeded', commandStatus: 'succeeded' }),
+      ),
+    ).toEqual([])
   })
 
   it('omits the reason row when the API has no failure cause', () => {

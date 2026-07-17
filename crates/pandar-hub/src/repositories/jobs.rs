@@ -15,6 +15,7 @@ pub(crate) mod hydration;
 mod print_reports;
 mod recovery;
 pub mod rows;
+mod stalled;
 mod transitions;
 
 use crate::{

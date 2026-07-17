@@ -51,7 +51,7 @@ pub(super) fn reconciled_update(current: &PrintUpdate, input: &ApplyPrintReport)
         current_status,
         Some(PrintStatus::Completed | PrintStatus::Failed | PrintStatus::Cancelled)
     );
-    let incoming_status = incoming_status(input.gcode_state.as_deref(), current_status.as_ref());
+    let incoming_status = incoming_status(input, current_status.as_ref());
 
     if !is_terminal && let Some(status) = &incoming_status {
         next.print_status = status.as_str().to_string();
@@ -112,6 +112,7 @@ pub(super) fn is_terminal_status(status: &PrintStatus) -> bool {
 pub(super) async fn update_job_print<C>(
     connection: &C,
     job_id: &JobId,
+    expected_print_status: &str,
     update: &PrintUpdate,
 ) -> RepositoryResult<bool>
 where
@@ -136,6 +137,7 @@ where
             ..Default::default()
         })
         .filter(jobs::Column::Id.eq(job_id.to_string()))
+        .filter(jobs::Column::PrintStatus.eq(expected_print_status))
         .filter(jobs::Column::PrintStatus.is_not_in(["completed", "failed", "cancelled"]))
         .exec(connection)
         .await
@@ -143,12 +145,17 @@ where
     Ok(result.rows_affected > 0)
 }
 
-fn incoming_status(state: Option<&str>, current: Option<&PrintStatus>) -> Option<PrintStatus> {
-    match state.map(str::trim) {
+fn incoming_status(input: &ApplyPrintReport, current: Option<&PrintStatus>) -> Option<PrintStatus> {
+    match input.gcode_state.as_deref().map(str::trim) {
         Some("RUNNING") => Some(PrintStatus::Running),
         Some("FINISH") => Some(PrintStatus::Completed),
         Some("FAILED") => Some(PrintStatus::Failed),
         Some("IDLE") if current == Some(&PrintStatus::Running) => Some(PrintStatus::Cancelled),
+        None if current == Some(&PrintStatus::Stalled)
+            && (input.percent.unwrap_or(0) > 0 || input.current_layer.unwrap_or(0) > 0) =>
+        {
+            Some(PrintStatus::Running)
+        }
         _ => None,
     }
 }

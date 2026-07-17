@@ -1,5 +1,6 @@
 "use server";
 
+import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { apiHeaders, requireAuth } from "./api-auth";
@@ -11,9 +12,9 @@ export type SecretActionState =
   | {
       ok: true;
       kind: "tenant_token";
+      operation: "created" | "rotated";
       token: string;
       tenantToken: TenantToken;
-      message: string;
     }
   | {
       ok: true;
@@ -133,30 +134,6 @@ export async function updatePrinter(formData: FormData) {
   redirect(statusUrl(tenantId, "printer_updated"));
 }
 
-export async function refreshAllAgents(formData: FormData) {
-  await requireAuth();
-  const tenantId = stringField(formData, "tenant_id");
-  const agentIds = formData
-    .getAll("agent_id")
-    .filter((value): value is string => typeof value === "string");
-  const responses = await Promise.all(
-    agentIds.map((agentId) =>
-      postJson(
-        `/api/v1/tenants/${tenantId}/agents/${agentId}/refresh-printers`,
-        {},
-      ),
-    ),
-  );
-  const allOk = responses.every((response) => response.ok);
-  redirect(
-    statusUrlForForm(
-      formData,
-      tenantId,
-      allOk ? "refresh_queued" : "refresh_partial",
-    ),
-  );
-}
-
 export async function deleteAgent(formData: FormData) {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
@@ -243,12 +220,13 @@ export async function createTenantToken(
     tenant_token: TenantToken;
     token: string;
   };
+  refresh();
   return {
     ok: true,
     kind: "tenant_token",
+    operation: "created",
     tenantToken: body.tenant_token,
     token: body.token,
-    message: "Tenant token created",
   };
 }
 
@@ -264,7 +242,8 @@ export async function revokeTenantToken(formData: FormData) {
     },
   );
   redirect(
-    statusUrl(
+    statusUrlForForm(
+      formData,
       tenantId,
       response.ok ? "tenant_token_revoked" : await errorCode(response),
     ),
@@ -291,12 +270,13 @@ export async function rotateTenantToken(
     tenant_token: TenantToken;
     token: string;
   };
+  refresh();
   return {
     ok: true,
     kind: "tenant_token",
+    operation: "rotated",
     tenantToken: body.tenant_token,
     token: body.token,
-    message: "Tenant token rotated",
   };
 }
 
@@ -684,7 +664,14 @@ function statusUrlForForm(
 }
 
 function statusUrl(tenantId: string, status: string, returnTo?: string) {
-  const view = returnTo === "jobs" ? "jobs" : "devices";
+  const view =
+    returnTo === "jobs"
+      ? "jobs"
+      : returnTo === "agents"
+        ? "agents"
+        : returnTo === "settings"
+          ? "settings"
+          : "devices";
   return `/${view}?tenant=${encodeURIComponent(tenantId)}&status=${encodeURIComponent(status)}`;
 }
 

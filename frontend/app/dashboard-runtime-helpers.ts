@@ -266,6 +266,7 @@ const enRecoveryState: Record<string, string> = {
   completed: "Print completed",
   failed: "Print failed",
   cancelled: "Print cancelled",
+  stalled: "Print did not start within 15 minutes",
   waitingAgent: "Waiting for the agent to come back online",
   fileFailed: "Could not send the file to the printer",
   mqttFailed: "Printer did not accept the start command",
@@ -290,6 +291,9 @@ export function jobRecoveryStateKey(job: Job): string {
   }
   if (physical === "cancelled") {
     return "cancelled";
+  }
+  if (physical === "stalled") {
+    return "stalled";
   }
   if (dispatch === "queued" || command === "queued") {
     return "waitingAgent";

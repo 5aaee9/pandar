@@ -49,6 +49,7 @@ impl FromStr for JobStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PrintStatus {
     Pending,
+    Stalled,
     Running,
     Completed,
     Failed,
@@ -59,6 +60,7 @@ impl PrintStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Pending => "pending",
+            Self::Stalled => "stalled",
             Self::Running => "running",
             Self::Completed => "completed",
             Self::Failed => "failed",
@@ -79,6 +81,7 @@ impl FromStr for PrintStatus {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "pending" => Ok(Self::Pending),
+            "stalled" => Ok(Self::Stalled),
             "running" => Ok(Self::Running),
             "completed" => Ok(Self::Completed),
             "failed" => Ok(Self::Failed),

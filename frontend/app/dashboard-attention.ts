@@ -1,14 +1,11 @@
-import type { Translator } from "./dashboard-runtime-helpers";
 import type { Agent, Job, Printer } from "./dashboard-types";
-
-export const STALE_MS = 15 * 60 * 1000;
 
 export type Severity = "critical" | "warning" | "success" | "info";
 
 export const OFFLINE_PRINTER_STATUSES = new Set(["offline", "problem"]);
 const ONLINE_AGENT_STATUSES = new Set(["online"]);
 const HEALTHY_AGENT_STATUSES = new Set(["online", "connecting"]);
-const TERMINAL_JOB_STATUSES = new Set(["completed", "failed", "cancelled"]);
+const TERMINAL_JOB_STATUSES = new Set(["stalled", "completed", "failed", "cancelled"]);
 
 const SEVERITY_RANK: Record<Severity, number> = {
   critical: 0,
@@ -52,8 +49,8 @@ function isJobActive(job: Job): boolean {
   );
 }
 
-export function isJobStalled(job: Job, nowMs: number): boolean {
-  return nowMs > 0 && isJobActive(job) && isStale(job, nowMs);
+export function isJobStalled(job: Job): boolean {
+  return job.print.status.toLowerCase() === "stalled";
 }
 
 function isJobFailed(job: Job): boolean {
@@ -99,7 +96,7 @@ export function computeAttention(args: {
   jobs: Job[];
   nowMs: number;
 }): AttentionItem[] {
-  const { agents, printers, jobs, nowMs } = args;
+  const { agents, printers, jobs } = args;
   const items: AttentionItem[] = [];
 
   for (const agent of agents) {
@@ -196,7 +193,7 @@ export function computeAttention(args: {
         sectionId: "recovery",
         ageMs: null,
       });
-    } else if (isJobStalled(job, nowMs)) {
+    } else if (isJobStalled(job)) {
       items.push({
         id: `job:${job.id}:stale`,
         agentId: job.agent_id,
@@ -205,19 +202,16 @@ export function computeAttention(args: {
         kind: "job",
         reason: "job_stalled",
         title: "Job stalled",
-        label: `${artifactFilename} · no progress for ${formatDuration(staleAgeMs(job, nowMs) ?? 0)}`,
+        label: `${artifactFilename} · did not start within 15 minutes`,
         titleKey: { namespace: "attention.jobStalled", key: "title" },
         labelKey: {
           namespace: "attention.jobStalled",
           key: "label",
-          values: {
-            filename: artifactFilename,
-            duration: formatDuration(staleAgeMs(job, nowMs) ?? 0),
-          },
+          values: { filename: artifactFilename },
         },
         mono: job.id,
         sectionId: "jobs",
-        ageMs: staleAgeMs(job, nowMs),
+        ageMs: null,
       });
     }
   }
@@ -231,27 +225,6 @@ export function computeAttention(args: {
 
 function agentName(agents: Agent[], id: string): string {
   return agents.find((agent) => agent.id === id)?.name ?? "Unknown agent";
-}
-
-function latestJobUpdateMs(job: Job): number {
-  const candidates = [
-    Date.parse(job.updated_at),
-    job.print.updated_at ? Date.parse(job.print.updated_at) : NaN,
-  ];
-  const valid = candidates.filter((value) => !Number.isNaN(value));
-  return valid.length ? Math.max(...valid) : NaN;
-}
-
-function isStale(job: Job, nowMs: number): boolean {
-  const updated = latestJobUpdateMs(job);
-  if (Number.isNaN(updated)) return false;
-  return nowMs - updated > STALE_MS;
-}
-
-function staleAgeMs(job: Job, nowMs: number): number | null {
-  const updated = latestJobUpdateMs(job);
-  if (Number.isNaN(updated)) return null;
-  return Math.max(0, nowMs - updated);
 }
 
 export function maxSeverity(items: AttentionItem[]): Severity | null {
@@ -273,21 +246,6 @@ export function notificationSeverity(title: string, detail: string): Severity {
     return "warning";
   if (text.includes("complete")) return "success";
   return "info";
-}
-
-const enDuration: Translator = (key, values) => {
-  const count = (values?.count as number) ?? 0;
-  if (key === "lessThanMinute") return "less than a minute";
-  if (key === "minutes") return count === 1 ? "1 minute" : `${count} minutes`;
-  return count === 1 ? "1 hour" : `${count} hours`;
-};
-
-function formatDuration(ms: number, t: Translator = enDuration): string {
-  const minutes = Math.round(ms / 60000);
-  if (minutes < 1) return t("lessThanMinute");
-  if (minutes < 60) return t("minutes", { count: minutes });
-  const hours = Math.round(minutes / 60);
-  return t("hours", { count: hours });
 }
 
 const STATUS_SEVERITY: Array<{ severity: Severity; tokens: string[] }> = [
@@ -313,6 +271,7 @@ const STATUS_SEVERITY: Array<{ severity: Severity; tokens: string[] }> = [
       "connecting",
       "problem",
       "degraded",
+      "stalled",
       "pending",
     ],
   },

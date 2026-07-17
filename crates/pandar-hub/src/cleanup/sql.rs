@@ -4,7 +4,7 @@ FROM jobs
 JOIN commands ON commands.id = jobs.command_id
 WHERE jobs.updated_at < ?
   AND jobs.status IN ('succeeded', 'failed')
-  AND jobs.print_status IN ('completed', 'failed', 'cancelled', 'pending')
+  AND jobs.print_status IN ('stalled', 'completed', 'failed', 'cancelled', 'pending')
   AND jobs.print_status <> 'running'
   AND commands.status NOT IN ('queued', 'sent', 'acknowledged')";
 
@@ -18,7 +18,7 @@ WHERE EXISTS (
     WHERE selected_jobs.artifact_id = artifact.id
       AND selected_jobs.updated_at < ?
       AND selected_jobs.status IN ('succeeded', 'failed')
-      AND selected_jobs.print_status IN ('completed', 'failed', 'cancelled', 'pending')
+      AND selected_jobs.print_status IN ('stalled', 'completed', 'failed', 'cancelled', 'pending')
       AND commands.status NOT IN ('queued', 'sent', 'acknowledged')
   )
   AND NOT EXISTS (
@@ -31,7 +31,7 @@ WHERE EXISTS (
         WHERE retained_command.id = retained.command_id
           AND retained.updated_at < ?
           AND retained.status IN ('succeeded', 'failed')
-          AND retained.print_status IN ('completed', 'failed', 'cancelled', 'pending')
+          AND retained.print_status IN ('stalled', 'completed', 'failed', 'cancelled', 'pending')
           AND retained_command.status NOT IN ('queued', 'sent', 'acknowledged')
       )
   )";
@@ -48,7 +48,7 @@ WHERE commands.updated_at < ?
       AND NOT (
         retained.updated_at < ?
         AND retained.status IN ('succeeded', 'failed')
-        AND retained.print_status IN ('completed', 'failed', 'cancelled', 'pending')
+        AND retained.print_status IN ('stalled', 'completed', 'failed', 'cancelled', 'pending')
         AND commands.status NOT IN ('queued', 'sent', 'acknowledged')
       )
   )";
@@ -66,7 +66,7 @@ WHERE audit_events.created_at < ?
       WHERE NOT (
         retained.updated_at < ?
         AND retained.status IN ('succeeded', 'failed')
-        AND retained.print_status IN ('completed', 'failed', 'cancelled', 'pending')
+        AND retained.print_status IN ('stalled', 'completed', 'failed', 'cancelled', 'pending')
         AND retained_command.status NOT IN ('queued', 'sent', 'acknowledged')
       )
     )
@@ -86,7 +86,7 @@ WHERE audit_events.created_at < ?
             AND NOT (
               retained_job.updated_at < ?
               AND retained_job.status IN ('succeeded', 'failed')
-              AND retained_job.print_status IN ('completed', 'failed', 'cancelled', 'pending')
+              AND retained_job.print_status IN ('stalled', 'completed', 'failed', 'cancelled', 'pending')
               AND retained.status NOT IN ('queued', 'sent', 'acknowledged')
             )
         )
@@ -115,7 +115,7 @@ WHERE id IN (
   JOIN commands ON commands.id = jobs.command_id
   WHERE jobs.updated_at < ?
     AND jobs.status IN ('succeeded', 'failed')
-    AND jobs.print_status IN ('completed', 'failed', 'cancelled', 'pending')
+    AND jobs.print_status IN ('stalled', 'completed', 'failed', 'cancelled', 'pending')
     AND commands.status NOT IN ('queued', 'sent', 'acknowledged')
 )";
 
@@ -140,7 +140,7 @@ WHERE id IN (
         AND NOT (
           retained.updated_at < ?
           AND retained.status IN ('succeeded', 'failed')
-          AND retained.print_status IN ('completed', 'failed', 'cancelled', 'pending')
+          AND retained.print_status IN ('stalled', 'completed', 'failed', 'cancelled', 'pending')
           AND commands.status NOT IN ('queued', 'sent', 'acknowledged')
         )
     )

@@ -22,6 +22,9 @@ pub fn spawn_session_expiry(state: AppState) -> JoinHandle<()> {
             if let Err(err) = expire_stale_sessions_once(&state, &now).await {
                 tracing::error!(error = %format!("{err:#}"), "failed to expire stale agent sessions");
             }
+            if let Err(err) = mark_stalled_pending_jobs_once(&state, &now).await {
+                tracing::error!(error = %format!("{err:#}"), "failed to mark pending print jobs stalled");
+            }
             if let Err(err) = fail_stale_live_commands_once(&state, &now).await {
                 log_stale_live_command_cleanup_error(&err);
             }
@@ -173,6 +176,30 @@ async fn expire_stale_sessions_with_timeout(
         .await;
     }
     Ok(expired_count)
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+async fn mark_stalled_pending_jobs_once(state: &AppState, now: &str) -> anyhow::Result<usize> {
+    let stalled = state
+        .jobs()
+        .mark_stalled_pending_jobs(now)
+        .await
+        .context("failed to advance pending print jobs to stalled")?;
+    let count = stalled.len();
+    for job in stalled {
+        let tenant_id = job.job.tenant_id;
+        let response = crate::routes::jobs::JobResponse::try_from(job)
+            .context("failed to build stalled print job event")?;
+        state
+            .publish_printer_event(
+                tenant_id,
+                crate::printer_events::PrinterEvent::JobProgress {
+                    job: Box::new(response),
+                },
+            )
+            .await;
+    }
+    Ok(count)
 }
 
 #[cfg_attr(not(test), allow(dead_code))]

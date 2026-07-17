@@ -6,19 +6,23 @@ use sea_orm::{
     SqliteTransactionMode, TransactionOptions, TransactionTrait,
 };
 use serde::Serialize;
-use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
+use time::OffsetDateTime;
 
 use crate::{
     artifacts::ArtifactStorage,
     db::Database,
     entities::{commands, job_artifacts, jobs},
-    repositories::{
-        AuditActor, JobRepository, RepositoryResult,
-        audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
-    },
+    repositories::{AuditActor, JobRepository, RepositoryResult},
 };
 
-const STALLED_JOB_AGE: Duration = Duration::minutes(15);
+mod audit;
+
+use audit::{DeleteJobAuditContext, insert_clear_audit};
+
+enum ClearScope {
+    Tenant,
+    Job(String),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ClearJobsOutcome {
@@ -29,15 +33,6 @@ pub struct ClearJobsOutcome {
     pub deleted_artifact_bytes: u64,
 }
 
-#[derive(Serialize)]
-struct ClearJobsAuditMetadata {
-    deleted_jobs: u64,
-    retained_jobs: u64,
-    deleted_commands: u64,
-    deleted_artifacts: u64,
-    deleted_artifact_bytes: u64,
-}
-
 impl JobRepository {
     pub async fn clear_for_tenant_with_audit(
         &self,
@@ -45,8 +40,42 @@ impl JobRepository {
         tenant_id: pandar_core::TenantId,
         actor: AuditActor,
     ) -> RepositoryResult<ClearJobsOutcome> {
+        self.clear_with_audit(artifact_storage, tenant_id, ClearScope::Tenant, actor)
+            .await
+    }
+
+    pub async fn delete_clearable_for_tenant_with_audit(
+        &self,
+        artifact_storage: &dyn ArtifactStorage,
+        tenant_id: pandar_core::TenantId,
+        job_id: pandar_core::JobId,
+        actor: AuditActor,
+    ) -> RepositoryResult<ClearJobsOutcome> {
+        self.clear_with_audit(
+            artifact_storage,
+            tenant_id,
+            ClearScope::Job(job_id.to_string()),
+            actor,
+        )
+        .await
+    }
+
+    async fn clear_with_audit(
+        &self,
+        artifact_storage: &dyn ArtifactStorage,
+        tenant_id: pandar_core::TenantId,
+        scope: ClearScope,
+        actor: AuditActor,
+    ) -> RepositoryResult<ClearJobsOutcome> {
         let tx = begin_clear_transaction(&self.database).await?;
         let tenant_jobs = locked_tenant_jobs(&tx, tenant_id).await?;
+        let target_id = match &scope {
+            ClearScope::Tenant => None,
+            ClearScope::Job(job_id) => Some(job_id),
+        };
+        if target_id.is_some_and(|job_id| !tenant_jobs.iter().any(|job| &job.id == job_id)) {
+            return Err(crate::repositories::RepositoryError::MissingJob);
+        }
         let command_ids = tenant_jobs
             .iter()
             .map(|job| job.command_id.clone())
@@ -57,7 +86,7 @@ impl JobRepository {
             .map(|command| (command.id.as_str(), command))
             .collect::<HashMap<_, _>>();
         let now = OffsetDateTime::now_utc();
-        let clearable_ids = tenant_jobs
+        let mut clearable_ids = tenant_jobs
             .iter()
             .map(|job| -> RepositoryResult<Option<String>> {
                 let Some(command) = command_by_id.get(job.command_id.as_str()) else {
@@ -69,6 +98,12 @@ impl JobRepository {
             .into_iter()
             .flatten()
             .collect::<HashSet<_>>();
+        if let Some(job_id) = target_id {
+            if !clearable_ids.contains(job_id) {
+                return Err(crate::repositories::RepositoryError::JobNotClearable);
+            }
+            clearable_ids.retain(|candidate| candidate == job_id);
+        }
         let retained_jobs = tenant_jobs.len() as u64 - clearable_ids.len() as u64;
 
         let candidate_artifact_ids = tenant_jobs
@@ -76,17 +111,33 @@ impl JobRepository {
             .filter(|job| clearable_ids.contains(&job.id))
             .map(|job| job.artifact_id.clone())
             .collect::<HashSet<_>>();
+        let candidate_artifacts = locked_artifacts(&tx, tenant_id, &candidate_artifact_ids).await?;
+        let delete_audit_context = target_id.map(|job_id| {
+            let job = tenant_jobs
+                .iter()
+                .find(|job| &job.id == job_id)
+                .expect("locked target job exists");
+            let artifact = candidate_artifacts
+                .iter()
+                .find(|artifact| artifact.id == job.artifact_id)
+                .expect("locked target artifact exists");
+            DeleteJobAuditContext::from_models(job, artifact)
+        });
         let artifact_references = locked_artifact_references(&tx, &candidate_artifact_ids).await?;
         let orphan_artifact_ids = candidate_artifact_ids
-            .into_iter()
+            .iter()
             .filter(|artifact_id| {
                 artifact_references
                     .iter()
-                    .filter(|job| &job.artifact_id == artifact_id)
+                    .filter(|job| &job.artifact_id == *artifact_id)
                     .all(|job| clearable_ids.contains(&job.id))
             })
+            .cloned()
             .collect::<HashSet<_>>();
-        let orphan_artifacts = locked_artifacts(&tx, tenant_id, &orphan_artifact_ids).await?;
+        let orphan_artifacts = candidate_artifacts
+            .into_iter()
+            .filter(|artifact| orphan_artifact_ids.contains(&artifact.id))
+            .collect::<Vec<_>>();
         let artifact_paths = orphan_artifacts
             .iter()
             .map(|artifact| artifact.storage_path.clone())
@@ -109,7 +160,15 @@ impl JobRepository {
             deleted_artifacts,
             deleted_artifact_bytes,
         };
-        insert_clear_audit(&tx, tenant_id, actor, &outcome).await?;
+        insert_clear_audit(
+            &tx,
+            tenant_id,
+            actor,
+            &scope,
+            delete_audit_context.as_ref(),
+            &outcome,
+        )
+        .await?;
         tx.commit()
             .await
             .context("failed to commit job clear transaction")?;
@@ -206,7 +265,7 @@ fn clearable_job(
         return Ok(false);
     }
     let clearable = match job.print_status.as_str() {
-        "completed" | "failed" | "cancelled" => true,
+        "stalled" | "completed" | "failed" | "cancelled" => true,
         "pending"
             if job.print_started_at.is_none()
                 && job.progress_percent.unwrap_or(0) == 0
@@ -215,24 +274,11 @@ fn clearable_job(
             job.status == "failed"
                 || (job.status == "succeeded"
                     && command.status == "succeeded"
-                    && stalled_job(job, now)?)
+                    && super::stalled::pending_job_is_stalled(command, now)?)
         }
         _ => false,
     };
     Ok(clearable)
-}
-
-fn stalled_job(job: &jobs::Model, now: OffsetDateTime) -> RepositoryResult<bool> {
-    let updated_at = OffsetDateTime::parse(&job.updated_at, &Rfc3339)
-        .with_context(|| format!("failed to parse updated_at for job {}", job.id))?;
-    let latest_update = if let Some(print_updated_at) = &job.print_updated_at {
-        let print_updated_at = OffsetDateTime::parse(print_updated_at, &Rfc3339)
-            .with_context(|| format!("failed to parse print_updated_at for job {}", job.id))?;
-        updated_at.max(print_updated_at)
-    } else {
-        updated_at
-    };
-    Ok(latest_update < now - STALLED_JOB_AGE)
 }
 
 async fn delete_jobs(
@@ -309,27 +355,4 @@ async fn delete_artifact_rows(
         .context("failed to delete orphan job artifact rows")
         .map(|result| result.rows_affected)
         .map_err(Into::into)
-}
-
-async fn insert_clear_audit(
-    tx: &DatabaseTransaction,
-    tenant_id: pandar_core::TenantId,
-    actor: AuditActor,
-    outcome: &ClearJobsOutcome,
-) -> RepositoryResult<()> {
-    let event = record_audit_event(
-        tenant_id,
-        actor,
-        "job.clear",
-        "job_collection",
-        None,
-        audit_metadata(ClearJobsAuditMetadata {
-            deleted_jobs: outcome.deleted_jobs,
-            retained_jobs: outcome.retained_jobs,
-            deleted_commands: outcome.deleted_commands,
-            deleted_artifacts: outcome.deleted_artifacts,
-            deleted_artifact_bytes: outcome.deleted_artifact_bytes,
-        }),
-    );
-    insert_audit_event_tx(tx, &event).await
 }

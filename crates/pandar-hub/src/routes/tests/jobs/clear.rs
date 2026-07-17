@@ -142,7 +142,41 @@ async fn no_auth_can_clear_jobs_and_records_no_auth_actor() {
     assert_eq!(event.user_id, None);
 }
 
-async fn create_job(
+#[tokio::test]
+async fn all_scope_tenant_token_can_clear_jobs() {
+    let state = state().await;
+    let app = router(external_auth_state(state.clone()));
+    let tenant = state
+        .tenants()
+        .create("clear-token", "Clear Token")
+        .await
+        .unwrap();
+    let token = all_scope_tenant_token(&state, &tenant.id.to_string(), "clear-all-scope").await;
+
+    let (status, body) = request_as(
+        app,
+        Method::DELETE,
+        &format!("/api/v1/tenants/{}/jobs", tenant.id),
+        None,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(decode::<ClearJobsResponse>(body).deleted_jobs, 0);
+    let events = state
+        .audit_events()
+        .list_for_tenant(tenant.id)
+        .await
+        .unwrap();
+    let event = events
+        .iter()
+        .find(|event| event.action == "job.clear")
+        .unwrap();
+    assert_eq!(event.actor_type, "tenant_token");
+}
+
+pub(super) async fn create_job(
     state: &AppState,
     tenant_id: pandar_core::TenantId,
     agent_id: pandar_core::AgentId,
@@ -177,7 +211,7 @@ async fn create_job(
         .unwrap()
 }
 
-fn report(
+pub(super) fn report(
     tenant_id: pandar_core::TenantId,
     agent_id: pandar_core::AgentId,
     printer_id: &str,

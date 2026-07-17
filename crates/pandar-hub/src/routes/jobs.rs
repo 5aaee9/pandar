@@ -16,9 +16,11 @@ use crate::{
     routes::{ApiError, auth, parse_tenant_id},
 };
 
+mod delete;
 mod material;
 mod metadata_preview;
 pub(super) mod multipart;
+pub(super) use delete::delete_job;
 
 #[derive(Debug, Deserialize)]
 pub struct RecoveryReasonRequest {
@@ -272,7 +274,7 @@ pub async fn clear_jobs(
     Path(tenant_id): Path<String>,
 ) -> Result<Json<crate::repositories::ClearJobsOutcome>, ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
-    let auth = auth::authorize_tenant_admin_user_or_no_auth(&state, &headers, tenant_id).await?;
+    let auth = auth::authorize_tenant_admin_principal(&state, &headers, tenant_id).await?;
     let outcome = state
         .jobs()
         .clear_for_tenant_with_audit(

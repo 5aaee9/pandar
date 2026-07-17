@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 mod auth_validation;
 mod clear;
 mod create;
+mod delete;
 mod multipart;
 mod read;
 mod recovery;

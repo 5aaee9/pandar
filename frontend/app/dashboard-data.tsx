@@ -172,6 +172,7 @@ export async function renderDashboardView(view: DashboardView, { searchParams }:
       auditEventsResult?.error ||
       identityResults.some((result) => result.error),
   )
+  const canManageJobs = !usersResult?.error
   const selectedCommand = commandResult?.data ?? null
   const commandData = parseCommandResult(selectedCommand)
   const errors = [
@@ -203,6 +204,7 @@ export async function renderDashboardView(view: DashboardView, { searchParams }:
       joinLinks={joinLinks}
       auditEvents={auditEvents}
       adminUnavailable={adminUnavailable}
+      canManageJobs={canManageJobs}
       actionStatus={actionStatus}
       selectedCommand={selectedCommand}
       selectedCommandId={requestedCommand}

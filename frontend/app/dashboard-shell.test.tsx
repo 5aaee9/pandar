@@ -1,6 +1,5 @@
 import { NextIntlClientProvider } from "next-intl";
-import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
@@ -332,6 +331,7 @@ describe("SettingsView", () => {
         joinLinks={[]}
         auditEvents={[]}
         adminUnavailable={false}
+        canManageJobs={true}
       />,
     );
 
@@ -372,6 +372,7 @@ describe("SettingsView", () => {
         joinLinks={[]}
         auditEvents={[]}
         adminUnavailable={false}
+        canManageJobs={true}
       />,
     );
 
@@ -379,89 +380,5 @@ describe("SettingsView", () => {
     expect(screen.getByRole("button", { name: "System" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Light" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Dark" })).toBeVisible();
-  });
-});
-
-describe("DashboardViewContent", () => {
-  const baseProps = {
-    auth,
-    selectedTenant: tenants[0],
-    health: {
-      printersTotal: 0,
-      printersOnline: 0,
-      agentsTotal: 1,
-      agentsConnected: 1,
-      jobsActive: 0,
-      jobsFailed: 0,
-    },
-    attentionItems: [],
-    topSeverity: null,
-    liveState: "idle" as const,
-    lastEventAt: null,
-    fleetEmpty: false,
-    printers: [],
-    agents: [],
-    jobs: [],
-    nowMs: 0,
-    selectedCommand: null,
-    commandData: null,
-    notifications: [],
-    users: [],
-    userIdentities: [],
-    tenantTokens: [],
-    joinLinks: [],
-    auditEvents: [],
-    adminUnavailable: false,
-  };
-
-  it("keeps devices focused on overview and printer inventory", () => {
-    renderWithMessages(<DashboardViewContent {...baseProps} view="devices" />);
-
-    expect(screen.getByText("All systems nominal")).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Printer inventory" })).toBeVisible();
-    expect(screen.queryByRole("heading", { name: "Print jobs" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Dispatch print job" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Recovery actions" })).not.toBeInTheDocument();
-  });
-
-  it("links overview agent and job stats to their dashboard pages", () => {
-    renderWithMessages(<DashboardViewContent {...baseProps} view="devices" />);
-
-    expect(screen.getByRole("link", { name: "Agents 1/1 connected" })).toHaveAttribute(
-      "href",
-      "/agents?tenant=t1",
-    );
-    expect(screen.getByRole("link", { name: "Active jobs 0 active" })).toHaveAttribute(
-      "href",
-      "/jobs?tenant=t1",
-    );
-  });
-
-  it("opens the dispatch form in a dialog from jobs", async () => {
-    const user = userEvent.setup();
-    renderWithMessages(<DashboardViewContent {...baseProps} view="jobs" />);
-
-    const jobsHeading = screen.getByRole("heading", { name: "Print jobs" });
-    expect(jobsHeading).toBeVisible();
-    expect(screen.queryByRole("heading", { name: "Dispatch print job" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Recovery actions" })).toBeVisible();
-    expect(
-      within(jobsHeading.parentElement!.parentElement!).queryByText("0 jobs"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
-    expect(screen.queryByRole("heading", { name: "Printer inventory" })).not.toBeInTheDocument();
-
-    const newButton = screen.getByRole("button", { name: "New" });
-    expect(newButton).toHaveAttribute("aria-haspopup", "dialog");
-
-    await user.click(newButton);
-
-    expect(
-      screen.getByRole("dialog", { name: "Dispatch print job" }),
-    ).toBeVisible();
-
-    await user.click(screen.getByRole("button", { name: "Close" }));
-
-    expect(screen.queryByRole("heading", { name: "Dispatch print job" })).not.toBeInTheDocument();
   });
 });

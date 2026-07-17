@@ -124,6 +124,9 @@ impl From<RepositoryError> for ApiError {
                 Self::new(StatusCode::NOT_FOUND, "printer_not_found")
             }
             RepositoryError::MissingJob => Self::new(StatusCode::NOT_FOUND, "job_not_found"),
+            RepositoryError::JobNotClearable => {
+                Self::new(StatusCode::CONFLICT, "job_not_clearable")
+            }
             RepositoryError::CommandOwnershipMismatch => {
                 Self::new(StatusCode::FORBIDDEN, "command_ownership_mismatch")
             }

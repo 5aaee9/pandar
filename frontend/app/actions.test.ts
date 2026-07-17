@@ -3,13 +3,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   controlPrinter,
   createMobileTicket,
+  createTenantToken,
   deletePrinter,
   duplicateJob,
   linkPrinter,
-  refreshAllAgents,
   refreshPrinterMaterials,
   refreshPrinters,
   reprintJob,
+  revokeTenantToken,
+  rotateTenantToken,
   retryDispatchJob,
   retryDispatchJobs,
   updatePrinter,
@@ -20,6 +22,11 @@ const redirectMock = vi.hoisted(() =>
     throw new Error(`NEXT_REDIRECT:${url}`);
   }),
 );
+const refreshMock = vi.hoisted(() => vi.fn());
+
+vi.mock("next/cache", () => ({
+  refresh: refreshMock,
+}));
 
 vi.mock("next/navigation", () => ({
   redirect: redirectMock,
@@ -433,12 +440,6 @@ describe("job action redirects", () => {
       "refresh_queued",
     ],
     [
-      "refreshAllAgents",
-      refreshAllAgents,
-      [["agent_id", "agent-1"]],
-      "refresh_queued",
-    ],
-    [
       "retryDispatchJob",
       retryDispatchJob,
       [["job_id", "job-1"]],
@@ -477,6 +478,17 @@ describe("job action redirects", () => {
     },
   );
 
+  it("redirects agent refresh back to Agents", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("agent_id", "agent-1");
+    formData.set("return_to", "agents");
+
+    await expect(refreshPrinters(formData)).rejects.toThrow(
+      "NEXT_REDIRECT:/agents?tenant=tenant-1&status=refresh_queued",
+    );
+  });
+
   it("keeps recovery actions on devices by default", async () => {
     const formData = new FormData();
     formData.set("tenant_id", "tenant-1");
@@ -485,5 +497,204 @@ describe("job action redirects", () => {
     await expect(retryDispatchJob(formData)).rejects.toThrow(
       "NEXT_REDIRECT:/devices?tenant=tenant-1&status=retry_queued",
     );
+  });
+});
+
+describe("revokeTenantToken", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ tenant_token: { id: "token-1" } }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+  });
+
+  it("returns to token management after revoking a token", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("token_id", "token-1");
+    formData.set("return_to", "settings");
+
+    await expect(revokeTenantToken(formData)).rejects.toThrow(
+      "NEXT_REDIRECT:/settings?tenant=tenant-1&status=tenant_token_revoked",
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/tenants/tenant-1/tenant-tokens/token-1",
+      {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+      },
+    );
+  });
+});
+
+describe("createTenantToken", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("posts normalized token fields, returns the one-time secret, and refreshes token management", async () => {
+    const tenantToken = {
+      id: "token-created",
+      tenant_id: "tenant-1",
+      name: "Studio automation",
+      scopes: ["plugin:studio", "agent:register"],
+      created_by_user_id: null,
+      created_at: "2026-07-17T01:00:00Z",
+      last_used_at: null,
+      expires_at: "2026-12-31T00:00:00Z",
+      revoked_at: null,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              tenant_token: tenantToken,
+              token: "pandar_tenant_created-secret",
+            }),
+            {
+              status: 201,
+              headers: { "content-type": "application/json" },
+            },
+          ),
+      ),
+    );
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("name", "Studio automation");
+    formData.set("scopes", " plugin:studio, agent:register, ");
+    formData.set("expires_at", "2026-12-31T00:00:00Z");
+
+    await expect(createTenantToken(null, formData)).resolves.toEqual({
+      ok: true,
+      kind: "tenant_token",
+      operation: "created",
+      tenantToken,
+      token: "pandar_tenant_created-secret",
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/tenants/tenant-1/tenant-tokens",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Studio automation",
+          scopes: ["plugin:studio", "agent:register"],
+          expires_at: "2026-12-31T00:00:00Z",
+        }),
+      },
+    );
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the API error without refreshing token management", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: "invalid_scope" }), {
+            status: 400,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("name", "Broken token");
+    formData.set("scopes", "unknown:scope");
+
+    await expect(createTenantToken(null, formData)).resolves.toEqual({
+      ok: false,
+      error: "invalid_scope",
+    });
+    expect(refreshMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("rotateTenantToken", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("posts the replacement expiration, returns the one-time secret, and refreshes token management", async () => {
+    const tenantToken = {
+      id: "token-rotated",
+      tenant_id: "tenant-1",
+      name: "Studio automation",
+      scopes: ["plugin:studio"],
+      created_by_user_id: null,
+      created_at: "2026-07-17T02:00:00Z",
+      last_used_at: null,
+      expires_at: "2027-01-01T00:00:00Z",
+      revoked_at: null,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              tenant_token: tenantToken,
+              token: "pandar_tenant_rotated-secret",
+            }),
+            {
+              status: 201,
+              headers: { "content-type": "application/json" },
+            },
+          ),
+      ),
+    );
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("token_id", "token-old");
+    formData.set("expires_at", "2027-01-01T00:00:00Z");
+
+    await expect(rotateTenantToken(null, formData)).resolves.toEqual({
+      ok: true,
+      kind: "tenant_token",
+      operation: "rotated",
+      tenantToken,
+      token: "pandar_tenant_rotated-secret",
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/tenants/tenant-1/tenant-tokens/token-old/rotate",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ expires_at: "2027-01-01T00:00:00Z" }),
+      },
+    );
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns the API error without refreshing token management", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: "invalid_expires_at" }), {
+            status: 400,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("token_id", "token-old");
+    formData.set("expires_at", "not-a-date");
+
+    await expect(rotateTenantToken(null, formData)).resolves.toEqual({
+      ok: false,
+      error: "invalid_expires_at",
+    });
+    expect(refreshMock).not.toHaveBeenCalled();
   });
 });

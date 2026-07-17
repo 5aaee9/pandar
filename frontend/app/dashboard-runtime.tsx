@@ -44,6 +44,7 @@ type DashboardRuntimeProps = {
   joinLinks: JoinLink[]
   auditEvents: AuditEvent[]
   adminUnavailable: boolean
+  canManageJobs: boolean
   actionStatus?: string
   selectedCommand: Command | null
   selectedCommandId?: string
@@ -66,6 +67,7 @@ export function DashboardRuntime({
   joinLinks,
   auditEvents,
   adminUnavailable,
+  canManageJobs,
   actionStatus,
   selectedCommand,
   selectedCommandId,
@@ -142,6 +144,7 @@ export function DashboardRuntime({
             joinLinks={joinLinks}
             auditEvents={auditEvents}
             adminUnavailable={adminUnavailable}
+            canManageJobs={canManageJobs}
           />
         </main>
       </SidebarInset>

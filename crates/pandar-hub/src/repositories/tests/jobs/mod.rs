@@ -8,10 +8,12 @@ use crate::repositories::{
 };
 
 pub(super) mod clear;
+pub(super) mod delete;
 mod lifecycle;
 mod mapping;
 mod recovery;
 mod repository;
+pub(super) mod stalled;
 mod transitions;
 
 pub(super) fn create_input(

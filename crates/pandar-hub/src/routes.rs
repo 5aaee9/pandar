@@ -214,7 +214,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/api/v1/tenants/{tenant_id}/jobs/{job_id}",
-            get(jobs::get_job),
+            get(jobs::get_job).delete(jobs::delete_job),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/jobs/{job_id}/retry-dispatch",

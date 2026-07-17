@@ -100,6 +100,8 @@ pub enum RepositoryError {
     MissingCommand,
     #[error("job not found")]
     MissingJob,
+    #[error("job cannot be deleted while it may still be active")]
+    JobNotClearable,
     #[error("command belongs to a different tenant or agent")]
     CommandOwnershipMismatch,
     #[error("cannot {action} command from {from}")]

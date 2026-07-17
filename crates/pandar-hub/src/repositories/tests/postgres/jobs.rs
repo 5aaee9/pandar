@@ -26,6 +26,45 @@ async fn postgres_clear_terminal_and_stalled_jobs_when_configured() {
     )
     .await;
 }
+#[tokio::test]
+async fn postgres_pending_print_jobs_become_stalled_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    crate::repositories::tests::jobs::stalled::exercise_stalled_print_jobs(
+        database.clone(),
+        TenantRepository::new(database.clone()),
+        AgentRepository::new(database.clone()),
+        JobRepository::new(database),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn postgres_deletes_one_clearable_job_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+    let spool = tempfile::tempdir().unwrap();
+    let storage = crate::artifacts::FilesystemArtifactStorage::new(
+        spool.path(),
+        crate::artifacts::DEFAULT_MAX_ARTIFACT_BYTES,
+    )
+    .unwrap();
+
+    crate::repositories::tests::jobs::delete::exercise_delete_job(
+        database.clone(),
+        TenantRepository::new(database.clone()),
+        AgentRepository::new(database.clone()),
+        CommandRepository::new(database.clone()),
+        JobRepository::new(database),
+        &storage,
+    )
+    .await;
+}
 
 #[tokio::test]
 async fn postgres_job_repository_behavior_when_configured() {

@@ -140,7 +140,10 @@ pub async fn reprint_with_audit(
     let source_payload = load_source_payload(database, &source).await?;
     if !matches!(
         source.job.print.status,
-        PrintStatus::Completed | PrintStatus::Failed | PrintStatus::Cancelled
+        PrintStatus::Stalled
+            | PrintStatus::Completed
+            | PrintStatus::Failed
+            | PrintStatus::Cancelled
     ) {
         return Err(RepositoryError::ReprintNotAllowed);
     }
