@@ -7,6 +7,9 @@
 @theme {
   --font-app-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 * {
@@ -29,14 +32,14 @@ html {
 
 dialog.pandar-dialog {
   transition:
-    display 150ms allow-discrete,
-    overlay 150ms allow-discrete;
+    display var(--motion-duration-feedback) allow-discrete,
+    overlay var(--motion-duration-feedback) allow-discrete;
 }
 
 dialog.pandar-dialog::backdrop {
   background-color: rgb(15 23 42 / 0.5);
   opacity: 0;
-  transition: opacity 150ms allow-discrete;
+  transition: opacity var(--motion-duration-feedback) allow-discrete;
 }
 
 dialog.pandar-dialog[open]::backdrop {
@@ -47,8 +50,8 @@ dialog.pandar-dialog[open]::backdrop {
   opacity: 0;
   transform: translateY(6px) scale(0.98);
   transition:
-    opacity 150ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+    opacity var(--motion-duration-feedback) var(--ease-out),
+    transform var(--motion-duration-feedback) var(--ease-out);
 }
 
 dialog.pandar-dialog[open] .pandar-dialog-card {
@@ -61,16 +64,187 @@ dialog.pandar-dialog[open] .pandar-dialog-card {
     opacity: 0;
     transform: translateY(6px) scale(0.98);
   }
+
   dialog.pandar-dialog[open]::backdrop {
     opacity: 0;
   }
+
+  [data-motion="secret-result"],
+  [data-motion="dispatch-unlocked"] {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
+.pandar-popover-motion {
+  opacity: 1;
+  translate: none;
+  scale: 1;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity var(--motion-duration-feedback) var(--ease-out),
+    translate var(--motion-duration-feedback) var(--ease-out),
+    scale var(--motion-duration-feedback) var(--ease-out);
+}
+
+.pandar-popover-motion[data-starting-style],
+.pandar-popover-motion[data-ending-style] {
+  opacity: 0;
+  scale: 0.95;
+}
+
+.pandar-popover-motion[data-side="bottom"][data-starting-style],
+.pandar-popover-motion[data-side="bottom"][data-ending-style] {
+  translate: 0 -0.5rem;
+}
+
+.pandar-popover-motion[data-side="top"][data-starting-style],
+.pandar-popover-motion[data-side="top"][data-ending-style] {
+  translate: 0 0.5rem;
+}
+
+.pandar-popover-motion[data-side="right"][data-starting-style],
+.pandar-popover-motion[data-side="right"][data-ending-style],
+.pandar-popover-motion[data-side="inline-end"][data-starting-style],
+.pandar-popover-motion[data-side="inline-end"][data-ending-style] {
+  translate: -0.5rem 0;
+}
+
+.pandar-popover-motion[data-side="left"][data-starting-style],
+.pandar-popover-motion[data-side="left"][data-ending-style],
+.pandar-popover-motion[data-side="inline-start"][data-starting-style],
+.pandar-popover-motion[data-side="inline-start"][data-ending-style] {
+  translate: 0.5rem 0;
+}
+
+.pandar-hover-card-motion,
+.pandar-tooltip-motion {
+  opacity: 1;
+  transition: opacity var(--motion-duration-feedback) var(--ease-out);
+}
+
+.pandar-hover-card-motion[data-starting-style],
+.pandar-hover-card-motion[data-ending-style],
+.pandar-tooltip-motion[data-starting-style],
+.pandar-tooltip-motion[data-ending-style] {
+  opacity: 0;
+}
+
+.pandar-dialog-backdrop-motion {
+  opacity: 1;
+  transition: opacity var(--motion-duration-modal) var(--ease-out);
+}
+
+.pandar-dialog-backdrop-motion[data-starting-style],
+.pandar-dialog-backdrop-motion[data-ending-style] {
+  opacity: 0;
+}
+
+.pandar-dialog-content-motion {
+  opacity: 1;
+  scale: 1;
+  transition:
+    opacity var(--motion-duration-modal) var(--ease-out),
+    scale var(--motion-duration-modal) var(--ease-out);
+}
+
+.pandar-dialog-content-motion[data-starting-style],
+.pandar-dialog-content-motion[data-ending-style] {
+  opacity: 0;
+  scale: 0.95;
+}
+
+.pandar-sheet-backdrop-motion {
+  opacity: 1;
+  transition: opacity var(--motion-duration-drawer) var(--ease-drawer);
+}
+
+.pandar-sheet-backdrop-motion[data-starting-style],
+.pandar-sheet-backdrop-motion[data-ending-style] {
+  opacity: 0;
+}
+
+.pandar-sheet-content-motion {
+  opacity: 1;
+  translate: none;
+  transition:
+    opacity var(--motion-duration-drawer) var(--ease-drawer),
+    translate var(--motion-duration-drawer) var(--ease-drawer);
+}
+
+.pandar-sheet-content-motion[data-starting-style],
+.pandar-sheet-content-motion[data-ending-style] {
+  opacity: 0;
+}
+
+.pandar-sheet-content-motion[data-side="bottom"][data-starting-style],
+.pandar-sheet-content-motion[data-side="bottom"][data-ending-style] {
+  translate: 0 2.5rem;
+}
+
+.pandar-sheet-content-motion[data-side="top"][data-starting-style],
+.pandar-sheet-content-motion[data-side="top"][data-ending-style] {
+  translate: 0 -2.5rem;
+}
+
+.pandar-sheet-content-motion[data-side="left"][data-starting-style],
+.pandar-sheet-content-motion[data-side="left"][data-ending-style] {
+  translate: -2.5rem 0;
+}
+
+.pandar-sheet-content-motion[data-side="right"][data-starting-style],
+.pandar-sheet-content-motion[data-side="right"][data-ending-style] {
+  translate: 2.5rem 0;
+}
+
+[data-motion="secret-result"],
+[data-motion="dispatch-unlocked"] {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--motion-duration-feedback) var(--ease-out),
+    transform var(--motion-duration-feedback) var(--ease-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
   dialog.pandar-dialog,
   .pandar-dialog-card,
   dialog.pandar-dialog::backdrop {
-    transition-duration: 0.01ms;
+    transition-duration: var(--motion-duration-feedback);
+  }
+
+  .pandar-dialog-card,
+  dialog.pandar-dialog[open] .pandar-dialog-card {
+    transform: none;
+  }
+
+  .pandar-popover-motion[data-side][data-starting-style],
+  .pandar-popover-motion[data-side][data-ending-style] {
+    translate: none;
+    scale: 1;
+  }
+
+  .pandar-dialog-content-motion[data-starting-style],
+  .pandar-dialog-content-motion[data-ending-style] {
+    scale: 1;
+  }
+
+  .pandar-sheet-content-motion[data-side][data-starting-style],
+  .pandar-sheet-content-motion[data-side][data-ending-style] {
+    translate: none;
+  }
+
+  [data-motion="secret-result"],
+  [data-motion="dispatch-unlocked"] {
+    transform: none;
+  }
+
+  @starting-style {
+    [data-motion="secret-result"],
+    [data-motion="dispatch-unlocked"] {
+      opacity: 0;
+      transform: none;
+    }
   }
 }
 
@@ -142,6 +316,9 @@ dialog.pandar-dialog[open] .pandar-dialog-card {
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
+  --motion-duration-feedback: 150ms;
+  --motion-duration-modal: 200ms;
+  --motion-duration-drawer: 200ms;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);

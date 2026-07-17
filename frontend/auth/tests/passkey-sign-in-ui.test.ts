@@ -69,4 +69,40 @@ describe("passkey sign-in UI", () => {
       /<form action=\{dashboardSignOutUrl\} method="post">/,
     );
   });
+
+  it("preserves useful feedback while removing reduced motion", async () => {
+    const css = await readSource("app/globals.css");
+    const reducedMotion = css.slice(
+      css.indexOf("@media (prefers-reduced-motion: reduce)"),
+    );
+
+    expect(css).not.toMatch(/0\.01ms|animation-iteration-count/);
+    expect(reducedMotion).toContain(".auth-spinner {\n    animation: none;");
+    expect(reducedMotion).toContain(".auth-feedback-enter");
+    expect(reducedMotion).toContain("transform: none;");
+    expect(css).toMatch(/@starting-style \{[\s\S]*\.auth-feedback-enter/);
+  });
+
+  it("marks only rare conditional Auth feedback for entry motion", async () => {
+    const loginForm = await readSource("components/login-form.tsx");
+    const completeAuth = await readSource("app/auth/complete/complete-auth.tsx");
+    const signOutClient = await readSource("app/sign-out/sign-out-client.tsx");
+
+    expect(loginForm).toContain('<FieldError className="auth-feedback-enter">');
+    expect(loginForm).toContain(
+      'className="auth-feedback-enter rounded-md border bg-muted/40 p-3 text-center"',
+    );
+    expect(completeAuth).toContain(
+      '<output className="auth-feedback-enter auth-status">',
+    );
+    expect(completeAuth).toContain(
+      '<div className="auth-error auth-feedback-enter" role="alert">',
+    );
+    expect(signOutClient).toContain(
+      '<div className="auth-error auth-feedback-enter" role="alert">',
+    );
+    expect(signOutClient).toContain(
+      '<output className="auth-status" aria-live="polite">',
+    );
+  });
 });

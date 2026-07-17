@@ -16,7 +16,7 @@ export function SecretActionResult({ state }: { state: SecretActionState }) {
   }
   if (state.kind === "tenant_token") {
     return (
-      <div className="grid gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-2 text-xs text-foreground">
+      <div data-motion="secret-result" className="grid gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-2 text-xs text-foreground">
         <div className="font-semibold">
           {t(state.operation === "created" ? "tokenCreated" : "tokenRotated")}
         </div>
@@ -29,7 +29,7 @@ export function SecretActionResult({ state }: { state: SecretActionState }) {
   }
   if (state.kind === "join_link") {
     return (
-      <div className="grid gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-2 text-xs text-foreground">
+      <div data-motion="secret-result" className="grid gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-2 text-xs text-foreground">
         <div className="font-semibold">{state.message}</div>
         <code className="break-all rounded border border-border bg-background px-2 py-1 font-mono text-[11px] text-foreground">{`/join#${state.token}`}</code>
         <div>{t("joinTokenShownOnce")}</div>
@@ -37,7 +37,7 @@ export function SecretActionResult({ state }: { state: SecretActionState }) {
     );
   }
   return (
-    <div className="grid gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-2 text-xs text-foreground">
+    <div data-motion="secret-result" className="grid gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-2 text-xs text-foreground">
       <div className="font-semibold">{state.message}</div>
       <pre className="overflow-x-auto rounded border border-border bg-background px-2 py-1 font-mono text-[11px] text-foreground">
         {state.agentEnv}

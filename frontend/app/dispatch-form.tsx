@@ -249,7 +249,7 @@ export function DispatchForm({
         </details>
       </div>
       {plateId !== null && metadataPreview.state !== 'idle' && metadataPreview.state !== 'loading' ? (
-        <div className="flex flex-col gap-1 text-sm lg:col-span-2">
+        <div className="flex flex-col gap-1 text-sm lg:col-span-2" data-motion="dispatch-unlocked">
           <span className="flex items-center gap-1 text-xs font-medium text-slate-500">
             {t('plate')}
             <HelpTip label={t('plate')}>{t('plateHelp')}</HelpTip>

@@ -65,7 +65,7 @@ export function SignOutClient({
 
   if (state === "failed") {
     return (
-      <div className="auth-error" role="alert">
+      <div className="auth-error auth-feedback-enter" role="alert">
         <span>{messages.signOutWarning}</span>
         {error}
         <div className="auth-status-actions">

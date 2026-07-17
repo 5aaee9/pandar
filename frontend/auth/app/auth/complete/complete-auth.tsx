@@ -54,13 +54,13 @@ export function CompleteAuth({
   return (
     <div className="auth-form">
       {added ? (
-        <output className="auth-status">
+        <output className="auth-feedback-enter auth-status">
           <strong>{messages.passkeyAdded}</strong>
           <span>{messages.returningDashboard}</span>
         </output>
       ) : null}
       {error ? (
-        <div className="auth-error" role="alert">
+        <div className="auth-error auth-feedback-enter" role="alert">
           <span>{messages.passkeyAddFailed}</span>
           {error}
         </div>

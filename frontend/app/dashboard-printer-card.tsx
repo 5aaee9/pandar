@@ -21,6 +21,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { deletePrinter, refreshPrinterMaterials, updatePrinter } from './actions'
 import type { Printer } from './dashboard-types'
 import { PrinterAxisControls } from './dashboard-printer-axis-controls'
@@ -116,21 +121,26 @@ function PrinterActions({ printer }: { printer: Printer }) {
   const [editOpen, setEditOpen] = useState(false)
 
   return (
-    <div className="relative shrink-0">
-      <button
-        aria-expanded={menuOpen}
-        aria-haspopup="menu"
-        aria-label={t('details')}
-        className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-        onClick={() => setMenuOpen((open) => !open)}
-        type="button"
-      >
-        <MoreVerticalIcon className="size-4" />
-      </button>
-      {menuOpen ? (
-        <div
-          className="absolute right-0 z-20 mt-1 min-w-36 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+    <div className="shrink-0">
+      <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+        <PopoverTrigger
+          render={
+            <button
+              aria-haspopup="menu"
+              aria-label={t('details')}
+              className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              type="button"
+            />
+          }
+        >
+          <MoreVerticalIcon className="size-4" />
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          className="w-auto min-w-36 gap-0 p-1"
           role="menu"
+          side="bottom"
+          sideOffset={4}
         >
           <button
             className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted"
@@ -170,8 +180,8 @@ function PrinterActions({ printer }: { printer: Printer }) {
             <TrashIcon className="size-4" />
             {t('deletePrinter')}
           </button>
-        </div>
-      ) : null}
+        </PopoverContent>
+      </Popover>
       <form ref={formRef} action={deletePrinter}>
         <input name="tenant_id" type="hidden" value={printer.tenant_id} />
         <input name="printer_id" type="hidden" value={printer.id} />

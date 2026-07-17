@@ -58,7 +58,7 @@ export function DispatchMaterialMappingFields({
       ].join(":")),
   ].join("|");
 
-  return (
+  const editor = (
     <MappingEditor
       key={editorKey}
       filaments={filaments}
@@ -68,6 +68,16 @@ export function DispatchMaterialMappingFields({
       slots={slots}
       useAms={useAms}
     />
+  );
+
+  if (filaments.length === 0) {
+    return editor;
+  }
+
+  return (
+    <div className="lg:col-span-2" data-motion="dispatch-unlocked">
+      {editor}
+    </div>
   );
 }
 
@@ -106,7 +116,7 @@ function MappingEditor({
   };
 
   return (
-    <fieldset className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 lg:col-span-2">
+    <fieldset className="grid gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
       <legend className="px-1 text-xs font-medium text-slate-700">{t("requiredMaterials")}</legend>
       <p className="text-xs text-slate-600">{t("mappingForPlate", { plate: plateId })}</p>
       <input name="ams_mapping" type="hidden" value={JSON.stringify(payload.amsMapping)} />

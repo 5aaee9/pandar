@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
 import type { SecretActionState } from "./actions";
+import { SecretActionResult } from "./admin-panel-shared";
 import { TenantSecretsPanel } from "./admin-settings-panel";
 import type { Tenant, TenantToken } from "./dashboard-types";
 
@@ -118,6 +119,9 @@ describe("tenant token dialogs", () => {
       await request.promise;
     });
     expect(screen.getByText("pandar_tenant_create-once")).toBeVisible();
+    expect(
+      screen.getByText("pandar_tenant_create-once").closest('[data-motion="secret-result"]'),
+    ).toBeVisible();
     expect(within(dialog).getByLabelText("Name")).toBeDisabled();
     expect(within(dialog).getByLabelText("Scopes")).toBeDisabled();
     expect(within(dialog).getByLabelText("Expires at")).toBeDisabled();
@@ -193,6 +197,9 @@ describe("tenant token dialogs", () => {
       await request.promise;
     });
     expect(screen.getByText("pandar_tenant_rotate-once")).toBeVisible();
+    expect(
+      screen.getByText("pandar_tenant_rotate-once").closest('[data-motion="secret-result"]'),
+    ).toBeVisible();
     expect(within(dialog).getByLabelText("Expires at")).toBeDisabled();
     expect(
       within(dialog).queryByRole("button", { name: "Rotate token" }),
@@ -233,6 +240,18 @@ describe("tenant token dialogs", () => {
       "data-token-status",
       "revoked",
     );
+  });
+
+  it("keeps errors immediate without the successful-result motion marker", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <SecretActionResult state={{ ok: false, error: "Creation failed" }} />
+      </NextIntlClientProvider>,
+    );
+
+    const error = screen.getByText("Creation failed");
+    expect(error).toBeVisible();
+    expect(error.closest("[data-motion]")).toBeNull();
   });
 
   it("locks revoke confirmation while its redirecting action is pending", async () => {

@@ -28,3 +28,4 @@ target/
 .playwright-mcp/
 .pi-subagents/
 .pi/remote-pi/config.json
+/animation-plans/

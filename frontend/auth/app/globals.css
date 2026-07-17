@@ -40,6 +40,12 @@
   --danger-bg: oklch(0.97 0 0);
   --danger-border: var(--border);
   --radius: 0.625rem;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --motion-duration-feedback: 150ms;
+  --motion-duration-modal: 200ms;
+  --motion-duration-drawer: 200ms;
 }
 
 .dark {
@@ -139,10 +145,10 @@ button,
 input,
 a {
   transition:
-    background-color 150ms ease,
-    border-color 150ms ease,
-    color 150ms ease,
-    opacity 150ms ease;
+    background-color var(--motion-duration-feedback) ease,
+    border-color var(--motion-duration-feedback) ease,
+    color var(--motion-duration-feedback) ease,
+    opacity var(--motion-duration-feedback) ease;
 }
 
 button,
@@ -417,6 +423,21 @@ input {
   }
 }
 
+.auth-feedback-enter {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--motion-duration-feedback) var(--ease-out),
+    transform var(--motion-duration-feedback) var(--ease-out);
+}
+
+@starting-style {
+  .auth-feedback-enter {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}
+
 @keyframes auth-spin {
   to {
     transform: rotate(360deg);
@@ -428,8 +449,20 @@ input {
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+  }
+
+  .auth-spinner {
+    animation: none;
+  }
+
+  .auth-feedback-enter {
+    transform: none;
+  }
+
+  @starting-style {
+    .auth-feedback-enter {
+      opacity: 0;
+      transform: none;
+    }
   }
 }

@@ -1,10 +1,10 @@
 import { NextIntlClientProvider } from "next-intl";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
 import { AppSidebar } from "../components/app-sidebar";
-import { SidebarProvider } from "../components/ui/sidebar";
+import { Sidebar, SidebarProvider } from "../components/ui/sidebar";
 import { FleetStatusStrip } from "./dashboard-overview";
 import { DashboardShellHeader } from "./dashboard-shell-header";
 import { DashboardViewContent } from "./dashboard-view-content";
@@ -251,6 +251,35 @@ describe("AppSidebar", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("switches desktop sidebar state on the keyboard shortcut", () => {
+    const { container } = renderWithMessages(
+      <SidebarProvider defaultOpen>
+        <Sidebar>Navigation</Sidebar>
+      </SidebarProvider>,
+    );
+    const sidebar = container.querySelector('[data-slot="sidebar"][data-state]');
+
+    expect(sidebar).toHaveAttribute("data-state", "expanded");
+    fireEvent.keyDown(window, { key: "b", ctrlKey: true });
+    expect(sidebar).toHaveAttribute("data-state", "collapsed");
+  });
+
+  it("keeps the mobile sidebar on the Sheet interaction path", async () => {
+    vi.stubGlobal("innerWidth", 500);
+    const { container } = renderWithMessages(
+      <SidebarProvider defaultOpen>
+        <Sidebar>Mobile navigation</Sidebar>
+      </SidebarProvider>,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-slot="sidebar"][data-state]')).toBeNull();
+    });
+    fireEvent.keyDown(window, { key: "b", ctrlKey: true });
+
+    expect(await screen.findByRole("dialog", { name: "Sidebar" })).toBeVisible();
   });
 
   it("preserves the agents command context when switching tenants from the sidebar", () => {

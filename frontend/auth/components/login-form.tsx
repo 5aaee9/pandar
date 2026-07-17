@@ -230,7 +230,7 @@ export function LoginForm({
               }
             />
             {error ? (
-              <FieldError>
+              <FieldError className="auth-feedback-enter">
                 <span>{messages.magicLinkSendFailed}</span>
                 <span>{error}</span>
               </FieldError>
@@ -238,7 +238,7 @@ export function LoginForm({
           </Field>
           {sent ? (
             <Field>
-              <FieldDescription className="rounded-md border bg-muted/40 p-3 text-center">
+              <FieldDescription className="auth-feedback-enter rounded-md border bg-muted/40 p-3 text-center">
                 <span className="block font-medium text-foreground">
                   {messages.magicLinkEmailSent}
                 </span>
