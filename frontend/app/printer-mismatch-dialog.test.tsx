@@ -75,16 +75,16 @@ describe("PrinterMismatchCoordinator", () => {
   it.each([
     [
       "en",
-      "Build plate mismatch",
-      "Detected build plate is not the same as the G-code file. Please adjust slicer settings or use the correct plate.",
-      ["Problem solved and resume", "Ignore and resume", "Stop printing"],
+      "Warning",
+      "Build plate mismatch with slicer settings. Please use the correct build plate or update the slicer settings and try again.",
+      ["Problem Solved and Resume", "Ignore this and Resume", "Stop Printing"],
       "Review build plate mismatch for First",
       "Close mismatch dialog",
     ],
     [
       "zh",
-      "打印板不匹配",
-      "检测到打印板类型与切片 G-code 中不一致。请修改切片参数或者使用匹配的打印板。",
+      "警告",
+      "打印板类型与切片设置不符。请更换匹配的打印板，或修改切片参数后重新打印。",
       ["问题已解决，继续", "忽略此问题，继续", "停止打印"],
       "查看 First 的打印板不匹配问题",
       "关闭打印板不匹配对话框",
@@ -108,7 +108,7 @@ describe("PrinterMismatchCoordinator", () => {
     },
   );
 
-  it("uses the packaged 094 copy for an unknown build plate type", async () => {
+  it("uses the current runtime marker copy for a 094 printer", async () => {
     const printer = mismatchPrinter("p1", "First", {
       serial_number: "094123",
       print: {
@@ -119,13 +119,11 @@ describe("PrinterMismatchCoordinator", () => {
     renderCoordinator([printer]);
 
     const dialog = await screen.findByRole("dialog");
-    expect(
-      within(dialog).getByRole("heading", { name: "Build plate type unknown" }),
-    ).toBeVisible();
+    expect(within(dialog).getByRole("heading", { name: "Warning" })).toBeVisible();
     expect(within(dialog).getByText("0500-8062")).toBeVisible();
     expect(
       within(dialog).getByText(
-        "The printer could not identify the build plate type. Install the correct plate before continuing.",
+        "The print plate marker was not detected. Please confirm the print plate is correctly positioned on the heatbed with all four corners aligned, and the marker is visible. If strong light is shining on the print sheet, consider closing the front door and blocking external light sources.",
       ),
     ).toBeVisible();
   });
@@ -133,31 +131,31 @@ describe("PrinterMismatchCoordinator", () => {
   it.each([
     [
       83_918_945,
-      "Build plate not detected",
+      "Warning",
       "0500-8061",
-      "No build plate was detected. Place it correctly on the heatbed before continuing.",
-      ["Ignore and resume", "Problem solved and resume"],
+      "No print plate detected. Please make sure it is placed correctly.",
+      ["Ignore this and Resume", "Problem Solved and Resume"],
     ],
     [
       83_918_988,
-      "Build plate is misaligned",
+      "Warning",
       "0500-808C",
-      "The build plate is offset or has debris beneath it. Align it with the heatbed and clear the plate before continuing.",
-      ["Ignore and resume", "Problem solved and resume"],
+      "Detected build plate offset. Please align the build plate with the heatbed, and then continue.",
+      ["Ignore this and Resume", "Problem Solved and Resume"],
     ],
     [
       83_919_003,
-      "Build plate position may cause a collision",
+      "Warning",
       "0500-809B",
-      "The build plate may collide with the waste chute. Reposition it and align it with the heatbed before continuing.",
-      ["Ignore and resume", "Problem solved and resume"],
+      "Build plate not properly positioned, may collide with the waste chute. Please reposition build plate and align with heatbed.",
+      ["Ignore this and Resume", "Problem Solved and Resume"],
     ],
     [
       83_919_008,
-      "Visual encoder board not detected",
+      "Warning",
       "0500-80A0",
-      "Check that the visual encoder board is installed, aligned at all four corners, and that its positioning marks are visible.",
-      ["Problem solved and resume", "Ignore and resume"],
+      "The visual encoder board was not detected. Please check if the board is properly placed and aligned at all four corners, and ensure the positioning markings are clear and free from wear.",
+      ["Problem Solved and Resume", "Ignore this and Resume"],
     ],
   ] as const)(
     "renders additional Studio plate recovery error %s",
@@ -184,16 +182,16 @@ describe("PrinterMismatchCoordinator", () => {
   it.each([
     [
       "en",
-      "Build plate marker not detected",
-      "The print plate marker was not detected. Make sure the plate is aligned on all four corners and its marker is visible.",
-      ["Ignore and resume", "Problem solved and resume"],
+      "Warning",
+      "The print plate marker was not detected. Please confirm the print plate is correctly positioned on the heatbed with all four corners aligned, and the marker is visible. If strong light is shining on the print sheet, consider closing the front door and blocking external light sources.",
+      ["Ignore this and Resume", "Problem Solved and Resume"],
       "Review build plate marker issue for First",
       "Close build plate marker dialog",
     ],
     [
       "zh",
-      "未检测到打印板标记",
-      "未检测到打印板标记。请确认打印板四角已正确对齐热床且标记清晰可见。",
+      "警告",
+      "未检测到打印板定位标识。请确保打印板放置正确，定位标识清晰。如有强光照射打印板，建议关闭前门并适当遮挡外部光源。",
       ["忽略此问题，继续", "问题已解决，继续"],
       "查看 First 的打印板标记问题",
       "关闭打印板标记对话框",
@@ -221,6 +219,24 @@ describe("PrinterMismatchCoordinator", () => {
       expect(screen.getByRole("button", { name: warningLabel, hidden: true })).toBeVisible();
     },
   );
+
+  it("uses the 31B-specific offset and debris guidance", async () => {
+    const printer = mismatchPrinter("p1", "First", {
+      serial_number: "31B123",
+      print: {
+        ...mismatchPrinter("p1", "First").print!,
+        print_error: 83_918_988,
+      },
+    });
+    renderCoordinator([printer]);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText(
+        "Detected build plate offset or debris. Please align the build plate with the heatbed and remove all debris from the plate surface before continuing.",
+      ),
+    ).toBeVisible();
+  });
 
   it("auto-opens once, preserves dismissal across reconnect, reopens inline, and opens a higher generation", async () => {
     const printer = mismatchPrinter("p1", "First");
@@ -373,7 +389,7 @@ describe("PrinterMismatchCoordinator", () => {
   });
 
   it.each([
-    ["en", "Use the printer screen to resolve this error.", "Stop printing"],
+    ["en", "Use the printer screen to resolve this error.", "Stop Printing"],
     ["zh", "请在打印机屏幕上处理此错误。", "停止打印"],
   ] as const)("keeps unsupported occurrences informational in %s and applies the coarse inactive veto", async (locale, guidance, stopLabel) => {
     const unsupported = mismatchPrinter("p1", "Unsupported", {
@@ -409,7 +425,7 @@ describe("PrinterMismatchCoordinator", () => {
     renderCoordinator([mismatchPrinter("p1", "First")]);
 
     const dialog = await screen.findByRole("dialog");
-    const resume = within(dialog).getByRole("button", { name: "Problem solved and resume" });
+    const resume = within(dialog).getByRole("button", { name: "Problem Solved and Resume" });
     await user.click(resume);
     expect(handlePrintError).toHaveBeenCalledTimes(1);
     expect(
@@ -441,7 +457,7 @@ describe("PrinterMismatchCoordinator", () => {
 
     await user.click(
       within(await screen.findByRole("dialog")).getByRole("button", {
-        name: "Problem solved and resume",
+        name: "Problem Solved and Resume",
       }),
     );
     const dialog = await screen.findByRole("dialog");

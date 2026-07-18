@@ -198,7 +198,7 @@ export function PrinterMismatchDialog({
           <XIcon />
         </Button>
         <DialogHeader>
-          <DialogTitle>{t(copy.title)}</DialogTitle>
+          <DialogTitle>{t("warningTitle")}</DialogTitle>
           <DialogDescription>{printer.name}</DialogDescription>
         </DialogHeader>
         <div className="rounded-md bg-muted px-3 py-2 font-mono text-sm font-medium">
@@ -279,15 +279,15 @@ const PLATE_RECOVERY_COPY = {
     review: "reviewPlateMarker",
     title: "plateMarkerTitle",
   },
-  "unknown-type": {
-    close: "closePlateRecovery",
-    explanation: "plateUnknownExplanation",
-    review: "reviewPlateRecovery",
-    title: "plateUnknownTitle",
-  },
   misaligned: {
     close: "closePlateRecovery",
     explanation: "plateOffsetExplanation",
+    review: "reviewPlateRecovery",
+    title: "plateOffsetTitle",
+  },
+  "misaligned-with-debris": {
+    close: "closePlateRecovery",
+    explanation: "plateOffsetDebrisExplanation",
     review: "reviewPlateRecovery",
     title: "plateOffsetTitle",
   },

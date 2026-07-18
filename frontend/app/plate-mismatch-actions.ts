@@ -13,8 +13,8 @@ export type PlateRecoveryIssueKind =
   | "mismatch"
   | "missing"
   | "marker-not-detected"
-  | "unknown-type"
   | "misaligned"
+  | "misaligned-with-debris"
   | "collision-risk"
   | "encoder-board-missing";
 
@@ -102,9 +102,9 @@ function recoveryIssueKind(
     case BUILD_PLATE_NOT_DETECTED:
       return "missing";
     case BUILD_PLATE_MARKER_NOT_DETECTED:
-      return family === "094" ? "unknown-type" : "marker-not-detected";
+      return "marker-not-detected";
     case BUILD_PLATE_OFFSET:
-      return "misaligned";
+      return family === "31B" ? "misaligned-with-debris" : "misaligned";
     case BUILD_PLATE_COLLISION_RISK:
       return "collision-risk";
     case VISUAL_ENCODER_BOARD_NOT_DETECTED:

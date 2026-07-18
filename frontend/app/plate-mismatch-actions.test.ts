@@ -4,6 +4,7 @@ import type { Printer } from "./dashboard-types";
 import {
   availablePlateMismatchActions,
   plateMismatchActions,
+  plateRecoveryIssue,
 } from "./plate-mismatch-actions";
 import type { PrinterPrintState } from "./printer-live-types";
 
@@ -47,6 +48,24 @@ const additionalPlateRecoveryCatalog = [
 ] as const;
 
 describe("plateMismatchActions", () => {
+  it("uses the current marker warning for 094 build plate marker errors", () => {
+    expect(plateRecoveryIssue("094123", 83_918_946)).toEqual({
+      code: "0500-8062",
+      kind: "marker-not-detected",
+    });
+  });
+
+  it("uses the 31B-specific offset and debris warning", () => {
+    expect(plateRecoveryIssue("31B123", 83_918_988)).toEqual({
+      code: "0500-808C",
+      kind: "misaligned-with-debris",
+    });
+    expect(plateRecoveryIssue("20P123", 83_918_988)).toEqual({
+      code: "0500-808C",
+      kind: "misaligned",
+    });
+  });
+
   it.each(["093", "094", "20P", "22E", "239", "31B"])(
     "uses native Resume, Ignore, Stop order for family %s",
     (family) => {
