@@ -23,7 +23,7 @@ import {
 import { OFFLINE_PRINTER_STATUSES } from './dashboard-attention'
 import type { Agent, Printer, Tenant } from './dashboard-types'
 import { formatPrinterMaterials } from './dashboard-runtime-helpers'
-import { FilterBar } from './dashboard-job-history'
+import { FilterBar } from './dashboard-filter-bar'
 import { PrinterCard } from './dashboard-printer-card'
 import { LinkPrinterMachineForm } from './link-printer-form'
 

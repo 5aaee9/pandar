@@ -146,6 +146,9 @@ async fn job_repository_reprint_and_duplicate_reuse_artifact_metadata() {
             .unwrap();
     let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
     input.artifact_metadata_json = Some(artifact_metadata_json("Reusable", 2));
+    input.ams_mapping_json = Some("[0]".to_owned());
+    input.ams_mapping2_json = Some(r#"[{"ams_id":0,"slot_id":0}]"#.to_owned());
+    input.ams_mapping_info_json = Some(r#"[{"nozzleId":0}]"#.to_owned());
     let source = jobs.create_print_job(input).await.unwrap();
     commands
         .mark_sent(source.job.command_id, tenant.id, agent.id)
@@ -169,7 +172,16 @@ async fn job_repository_reprint_and_duplicate_reuse_artifact_metadata() {
         .unwrap();
 
     let reprint = jobs
-        .reprint_with_audit(tenant.id, source.job.id, None, test_audit_actor())
+        .reprint_with_audit(
+            tenant.id,
+            source.job.id,
+            DuplicatePrintJob {
+                replace_ams_mappings: true,
+                ..DuplicatePrintJob::default()
+            },
+            None,
+            test_audit_actor(),
+        )
         .await
         .unwrap();
     let duplicate = jobs
@@ -186,6 +198,7 @@ async fn job_repository_reprint_and_duplicate_reuse_artifact_metadata() {
                 auto_flow_cali: None,
                 auto_offset_cali: None,
                 timelapse: None,
+                replace_ams_mappings: false,
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
                 ams_mapping_info_json: None,
@@ -203,6 +216,10 @@ async fn job_repository_reprint_and_duplicate_reuse_artifact_metadata() {
         duplicate.artifact.metadata_json,
         source.artifact.metadata_json
     );
+    assert_eq!(reprint.job.ams_mapping_json, None);
+    assert_eq!(reprint.job.ams_mapping2_json, None);
+    assert_eq!(reprint.job.ams_mapping_info_json, None);
+    assert_eq!(duplicate.job.ams_mapping_json, source.job.ams_mapping_json);
 }
 
 #[tokio::test]

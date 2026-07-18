@@ -190,6 +190,7 @@ pub(in crate::repositories::tests) async fn exercise_clear_jobs(
                 auto_flow_cali: None,
                 auto_offset_cali: None,
                 timelapse: None,
+                replace_ams_mappings: false,
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
                 ams_mapping_info_json: None,

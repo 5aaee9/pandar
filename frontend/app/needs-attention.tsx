@@ -8,9 +8,11 @@ import type { Tenant } from './dashboard-types'
 
 export function NeedsAttention({
   items,
+  onOpenReprint,
   selectedTenant,
 }: {
   items: AttentionItem[]
+  onOpenReprint: (jobId: string) => void
   selectedTenant: Tenant | null
 }) {
   const tAtt = useTranslations('overview')
@@ -39,6 +41,7 @@ export function NeedsAttention({
           <AttentionRow
             key={item.id}
             item={item}
+            onOpenReprint={onOpenReprint}
             showGroup={showGroup}
             zebra={zebra}
             tenant={selectedTenant}

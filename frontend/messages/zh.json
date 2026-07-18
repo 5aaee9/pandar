@@ -435,6 +435,8 @@
   "dispatch": {
     "title": "派发打印任务",
     "subtitle": "将项目产物上传到所选租户打印机",
+    "reprintTitle": "重新打印",
+    "reprintSubtitle": "开始新一轮打印前，请检查打印机、打印板、材料和打印选项。",
     "noTenantTitle": "未选择租户",
     "noTenantMessage": "请选择一个租户以派发任务。",
     "noPrintersTitle": "暂无可用打印机",
@@ -467,6 +469,8 @@
     "nozzleOffsetCaliHelp": "打印前校准喷嘴偏移。自动模式会在无需校准时跳过。",
     "dispatching": "派发中",
     "dispatch": "派发",
+    "reprinting": "正在开始重新打印",
+    "reprint": "重新打印",
     "readingMetadata": "正在读取切片元数据",
     "metadataUnavailableFound": "未找到切片元数据",
     "metadataUnavailable": "元数据预览不可用",

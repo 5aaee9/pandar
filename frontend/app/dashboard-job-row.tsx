@@ -14,7 +14,6 @@ import { useFormatter, useTranslations } from 'next-intl'
 
 import { FormattedDate } from '../components/formatted-date'
 import { Button } from '@/components/ui/button'
-import { reprintJob } from './job-actions'
 import { formatBytes } from './dashboard-format'
 import {
   formatArtifactMetadata,
@@ -34,20 +33,20 @@ const REPRINTABLE_PRINT_STATUSES = new Set([
 
 export function JobRow({
   job,
-  tenantId,
   printerName,
   agentName,
   canDelete,
   deleteUnavailableReason,
   onDelete,
+  onReprint,
 }: {
   job: Job
-  tenantId: string
   printerName?: string
   agentName?: string
   canDelete: boolean
   deleteUnavailableReason: string
   onDelete: () => void
+  onReprint: () => void
 }) {
   const t = useTranslations('inventory')
   const tMat = useTranslations('material')
@@ -92,22 +91,19 @@ export function JobRow({
             <StatusPill label={t('dispatch')} value={job.status} />
             <StatusPill label={t('print')} value={job.print.status} />
             {canReprint ? (
-              <form action={reprintJob}>
-                <input name="tenant_id" type="hidden" value={tenantId} />
-                <input name="return_to" type="hidden" value="jobs" />
-                <input name="job_id" type="hidden" value={job.id} />
-                <Button
-                  aria-label={t('reprintJobAriaLabel', {
-                    filename: job.artifact.filename,
-                  })}
-                  size="sm"
-                  type="submit"
-                  variant="outline"
-                >
-                  <RotateCcwIcon aria-hidden="true" />
-                  {t('reprintJob')}
-                </Button>
-              </form>
+              <Button
+                aria-haspopup="dialog"
+                aria-label={t('reprintJobAriaLabel', {
+                  filename: job.artifact.filename,
+                })}
+                onClick={onReprint}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <RotateCcwIcon aria-hidden="true" />
+                {t('reprintJob')}
+              </Button>
             ) : null}
             <Button
               aria-describedby={canDelete ? undefined : deleteHelpId}

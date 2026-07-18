@@ -68,13 +68,16 @@ function renderHistory({
   jobs = [job()],
   canManageJobs = true,
   onDeleteRedirect = vi.fn(),
+  onOpenReprint = vi.fn(),
 }: {
   jobs?: Job[]
   canManageJobs?: boolean
   onDeleteRedirect?: (url: string) => void
+  onOpenReprint?: (job: Job) => void
 } = {}) {
   return {
     onDeleteRedirect,
+    onOpenReprint,
     ...render(
       <NextIntlClientProvider locale="en" messages={en}>
         <JobHistory
@@ -84,6 +87,7 @@ function renderHistory({
           nowMs={Date.parse('2026-07-15T01:00:00Z')}
           onDeleteRedirect={onDeleteRedirect}
           onOpenDispatch={vi.fn()}
+          onOpenReprint={onOpenReprint}
           printers={[]}
           selectedTenant={tenant}
         />
@@ -122,18 +126,21 @@ describe('JobHistory row actions', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('renders Reprint in a terminal Print Jobs row', () => {
-    renderHistory()
+  it('opens the print dialog with the terminal job selected for Reprint', async () => {
+    const user = userEvent.setup()
+    const { onOpenReprint } = renderHistory()
 
     const reprint = screen.getByRole('button', {
       name: 'Reprint benchy.3mf',
     })
     expect(reprint).toBeEnabled()
-    expect(reprint.closest('form')).toHaveFormValues({
-      tenant_id: 'tenant-1',
-      return_to: 'jobs',
-      job_id: 'job-1',
-    })
+    expect(reprint.closest('form')).toBeNull()
+
+    await user.click(reprint)
+
+    expect(onOpenReprint).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'job-1', artifact_id: 'artifact-1' }),
+    )
   })
 
   it('enables recovery actions and explains a persisted stalled job', () => {

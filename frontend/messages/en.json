@@ -438,6 +438,8 @@
   "dispatch": {
     "title": "Dispatch print job",
     "subtitle": "Upload a project file to the selected tenant printer",
+    "reprintTitle": "Reprint",
+    "reprintSubtitle": "Review the printer, plate, materials, and print options before starting another print.",
     "noTenantTitle": "No tenant selected",
     "noTenantMessage": "Select a tenant to dispatch jobs.",
     "noPrintersTitle": "No printers available",
@@ -470,6 +472,8 @@
     "nozzleOffsetCaliHelp": "Calibrate nozzle offsets before printing. Auto skips calibration when it is unnecessary.",
     "dispatching": "Dispatching",
     "dispatch": "Dispatch print job",
+    "reprinting": "Starting reprint",
+    "reprint": "Reprint",
     "readingMetadata": "Reading slicer metadata",
     "metadataUnavailableFound": "No slicer metadata found",
     "metadataUnavailable": "Metadata preview unavailable",

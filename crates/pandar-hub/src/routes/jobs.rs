@@ -6,13 +6,12 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
 };
-use pandar_core::{Job, JobArtifact, JobId, JobPrintState, PrintCalibrationMode};
+use pandar_core::{Job, JobArtifact, JobId, JobPrintState};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
-    material_mapping::{AmsMapping, AmsMapping2, AmsMappingInfo},
-    repositories::{DuplicatePrintJob, JobWithArtifact, RepositoryError, UserRole},
+    repositories::{JobWithArtifact, RepositoryError, UserRole},
     routes::{ApiError, auth, parse_tenant_id},
 };
 
@@ -20,27 +19,14 @@ mod delete;
 mod material;
 mod metadata_preview;
 pub(super) mod multipart;
+mod recovery_request;
 pub(super) use delete::delete_job;
+
+use recovery_request::{DuplicateJobRequest, ReprintJobRequest};
 
 #[derive(Debug, Deserialize)]
 pub struct RecoveryReasonRequest {
     reason: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct DuplicateJobRequest {
-    printer_id: Option<String>,
-    plate_id: Option<i64>,
-    use_ams: Option<bool>,
-    bed_leveling: Option<bool>,
-    auto_bed_leveling: Option<PrintCalibrationMode>,
-    flow_cali: Option<bool>,
-    auto_flow_cali: Option<PrintCalibrationMode>,
-    auto_offset_cali: Option<PrintCalibrationMode>,
-    timelapse: Option<bool>,
-    ams_mapping: Option<AmsMapping>,
-    ams_mapping2: Option<AmsMapping2>,
-    ams_mapping_info: Option<AmsMappingInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,7 +157,7 @@ pub async fn reprint(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((tenant_id, job_id)): Path<(String, String)>,
-    payload: Result<Json<RecoveryReasonRequest>, JsonRejection>,
+    payload: Result<Json<ReprintJobRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<JobResponse>), ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
     let auth =
@@ -179,9 +165,16 @@ pub async fn reprint(
     let job_id = JobId::parse(&job_id).map_err(|_| ApiError::bad_request("invalid_job_id"))?;
     let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
     let reason = payload.reason;
+    let overrides = payload.overrides.into_repository()?;
     let job = state
         .jobs()
-        .reprint_with_audit(tenant_id, job_id, reason, auth::audit_actor(&auth))
+        .reprint_with_audit(
+            tenant_id,
+            job_id,
+            overrides,
+            reason,
+            auth::audit_actor(&auth),
+        )
         .await?;
     let wake_tenant_id = job.job.tenant_id;
     let wake_agent_id = job.job.agent_id;
@@ -201,29 +194,12 @@ pub async fn duplicate(
         auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
     let job_id = JobId::parse(&job_id).map_err(|_| ApiError::bad_request("invalid_job_id"))?;
     let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
-    let plate_id = payload.plate_id.map(validated_plate_id).transpose()?;
-    if let Some(printer_id) = &payload.printer_id {
-        parse_printer_id(printer_id)?;
-    }
     let job = state
         .jobs()
         .duplicate_and_print_with_audit(
             tenant_id,
             job_id,
-            DuplicatePrintJob {
-                printer_id: payload.printer_id,
-                plate_id,
-                use_ams: payload.use_ams,
-                bed_leveling: payload.bed_leveling,
-                auto_bed_leveling: payload.auto_bed_leveling,
-                flow_cali: payload.flow_cali,
-                auto_flow_cali: payload.auto_flow_cali,
-                auto_offset_cali: payload.auto_offset_cali,
-                timelapse: payload.timelapse,
-                ams_mapping_json: material::ams_mapping_json(payload.ams_mapping)?,
-                ams_mapping2_json: material::ams_mapping2_json(payload.ams_mapping2)?,
-                ams_mapping_info_json: material::ams_mapping_info_json(payload.ams_mapping_info)?,
-            },
+            payload.into_repository()?,
             auth::audit_actor(&auth),
         )
         .await?;

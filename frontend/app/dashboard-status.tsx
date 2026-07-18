@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl'
 
 import { refreshPrinters } from './actions'
-import { reprintJob, retryDispatchJob } from './job-actions'
+import { retryDispatchJob } from './job-actions'
 import { dashboardSidebarHref } from './dashboard-shell'
 import type { AttentionItem, Severity, TextKey } from './dashboard-attention'
 import type { Tenant } from './dashboard-types'
@@ -113,11 +113,13 @@ function AttentionText({ textKey }: { textKey: TextKey }) {
 
 export function AttentionRow({
   item,
+  onOpenReprint,
   showGroup,
   zebra,
   tenant,
 }: {
   item: AttentionItem
+  onOpenReprint: (jobId: string) => void
   showGroup: boolean
   zebra: boolean
   tenant: Tenant | null
@@ -138,7 +140,7 @@ export function AttentionRow({
           </div>
         </div>
         <code className="hidden shrink-0 font-mono text-xs text-muted-foreground sm:block">{item.mono}</code>
-        <AttentionAction item={item} tenant={tenant} />
+        <AttentionAction item={item} onOpenReprint={onOpenReprint} tenant={tenant} />
       </div>
       {item.detailKey ? (
         <div className="mt-2 break-words text-xs text-destructive sm:ml-7">
@@ -149,7 +151,15 @@ export function AttentionRow({
   )
 }
 
-function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant | null }) {
+function AttentionAction({
+  item,
+  onOpenReprint,
+  tenant,
+}: {
+  item: AttentionItem
+  onOpenReprint: (jobId: string) => void
+  tenant: Tenant | null
+}) {
   const tAct = useTranslations('overview.action')
   const sectionHref = item.sectionId === 'printers'
     ? '#printers'
@@ -179,16 +189,14 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
 
   if (item.kind === 'job' && item.reason === 'job_print_failed') {
     return (
-      <form action={reprintJob}>
-        <input name="tenant_id" type="hidden" value={tenant.id} />
-        <input name="job_id" type="hidden" value={item.mono} />
-        <button
-          className={`h-8 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/80`}
-          type="submit"
-        >
-          {tAct('reprint')}
-        </button>
-      </form>
+      <button
+        aria-haspopup="dialog"
+        className={`h-8 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/80`}
+        onClick={() => onOpenReprint(item.mono)}
+        type="button"
+      >
+        {tAct('reprint')}
+      </button>
     )
   }
 

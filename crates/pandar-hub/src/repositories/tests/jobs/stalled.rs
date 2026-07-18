@@ -265,7 +265,13 @@ pub(in crate::repositories::tests) async fn exercise_stalled_print_jobs(
         1,
     );
     let reprint = jobs
-        .reprint_with_audit(tenant.id, reprintable.job.id, None, AuditActor::no_auth())
+        .reprint_with_audit(
+            tenant.id,
+            reprintable.job.id,
+            crate::repositories::DuplicatePrintJob::default(),
+            None,
+            AuditActor::no_auth(),
+        )
         .await
         .unwrap();
     assert_eq!(reprint.job.status, JobStatus::Queued);

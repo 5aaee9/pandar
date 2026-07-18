@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import type { Printer, Tenant } from './dashboard-types'
+import type { Job, Printer, Tenant } from './dashboard-types'
 import { DispatchForm } from './dispatch-form'
 
 export function DispatchDialog({
@@ -17,11 +17,13 @@ export function DispatchDialog({
   onOpenChange,
   selectedTenant,
   printers,
+  sourceJob,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   selectedTenant: Tenant | null
   printers: Printer[]
+  sourceJob: Job | null
 }) {
   const t = useTranslations('dispatch')
   const tInventory = useTranslations('inventory')
@@ -33,10 +35,19 @@ export function DispatchDialog({
         closeLabel={tInventory('closeDialog')}
       >
         <DialogHeader>
-          <DialogTitle>{t('title')}</DialogTitle>
-          <DialogDescription>{t('subtitle')}</DialogDescription>
+          <DialogTitle>{sourceJob ? t('reprintTitle') : t('title')}</DialogTitle>
+          <DialogDescription>
+            {sourceJob ? t('reprintSubtitle') : t('subtitle')}
+          </DialogDescription>
         </DialogHeader>
-        <DispatchForm selectedTenant={selectedTenant} printers={printers} />
+        {open ? (
+          <DispatchForm
+            key={`${selectedTenant?.id ?? 'no-tenant'}:${sourceJob?.id ?? 'new'}`}
+            selectedTenant={selectedTenant}
+            printers={printers}
+            sourceJob={sourceJob}
+          />
+        ) : null}
       </DialogContent>
     </Dialog>
   )

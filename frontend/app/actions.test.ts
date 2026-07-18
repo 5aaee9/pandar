@@ -16,7 +16,6 @@ import {
 } from "./actions";
 import {
   duplicateJob,
-  reprintJob,
   retryDispatchJob,
   retryDispatchJobs,
 } from "./job-actions";
@@ -466,7 +465,6 @@ describe("job action redirects", () => {
       [["job_id", "job-1"]],
       "retry_queued",
     ],
-    ["reprintJob", reprintJob, [["job_id", "job-1"]], "reprint_queued"],
     ["duplicateJob", duplicateJob, [["job_id", "job-1"]], "duplicate_queued"],
     [
       "controlPrinter",

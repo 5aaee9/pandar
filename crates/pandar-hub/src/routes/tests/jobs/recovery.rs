@@ -1,5 +1,8 @@
 use pandar_core::{AgentId, CommandId, JobId};
-use requests::{duplicate_job_body, empty_body, recovery_reason_body, recovery_reason_null_body};
+use requests::{
+    duplicate_job_body, empty_body, recovery_reason_body, recovery_reason_null_body,
+    reprint_job_body,
+};
 
 use super::*;
 
@@ -98,7 +101,7 @@ async fn job_recovery_routes_retry_reprint_duplicate_and_audit() {
         app.clone(),
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/jobs/{finished_job_id}/reprint"),
-        recovery_reason_body("print another"),
+        reprint_job_body(&printer_id, 2),
         &token,
     )
     .await;
@@ -106,6 +109,21 @@ async fn job_recovery_routes_retry_reprint_duplicate_and_audit() {
     let reprint = decode::<JobResponse>(reprint);
     assert_ne!(reprint.id, finished_job_id.to_string());
     assert_eq!(reprint.artifact.id, finished.artifact.id);
+    assert_eq!(reprint.printer_id, printer_id);
+    assert_eq!(reprint.material.ams_mapping, Some(vec![4, 0]));
+    assert_eq!(
+        reprint.material.ams_mapping2,
+        Some(vec![
+            AmsMapping2Entry {
+                ams_id: 1,
+                slot_id: 0,
+            },
+            AmsMapping2Entry {
+                ams_id: 0,
+                slot_id: 0,
+            },
+        ]),
+    );
 
     let (status, duplicate) = request_as(
         app.clone(),

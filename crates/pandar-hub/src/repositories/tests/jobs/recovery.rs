@@ -1,6 +1,8 @@
 use super::*;
 use pandar_core::PrintCalibrationMode;
 
+use crate::repositories::DuplicatePrintJob;
+
 #[tokio::test]
 async fn job_repository_retry_dispatch_requires_safe_pre_physical_failure() {
     let (database, tenants, agents, _, commands, jobs) = repositories().await;
@@ -185,6 +187,14 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
         crate::repositories::test_helpers::insert_printer_fixture(&database, tenant.id, agent.id)
             .await
             .unwrap();
+    let target_agent = agents.create(tenant.id, "target-agent").await.unwrap();
+    let target_printer_id = crate::repositories::test_helpers::insert_printer_fixture(
+        &database,
+        tenant.id,
+        target_agent.id,
+    )
+    .await
+    .unwrap();
     let source = jobs
         .create_print_job(with_studio_auto_calibration(create_input_with_filename(
             tenant.id,
@@ -210,6 +220,25 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
         .reprint_with_audit(
             tenant.id,
             source.job.id,
+            DuplicatePrintJob {
+                printer_id: Some(target_printer_id.clone()),
+                plate_id: Some(2),
+                use_ams: Some(false),
+                bed_leveling: Some(false),
+                auto_bed_leveling: Some(PrintCalibrationMode::Off),
+                flow_cali: Some(true),
+                auto_flow_cali: Some(PrintCalibrationMode::On),
+                auto_offset_cali: Some(PrintCalibrationMode::Off),
+                timelapse: Some(false),
+                replace_ams_mappings: true,
+                ams_mapping_json: Some("[4,0]".to_owned()),
+                ams_mapping2_json: Some(
+                    r#"[{"ams_id":1,"slot_id":0},{"ams_id":0,"slot_id":0}]"#.to_owned(),
+                ),
+                ams_mapping_info_json: Some(
+                    r#"[{"ams":4,"filamentType":"PLA","nozzleId":1}]"#.to_owned(),
+                ),
+            },
             Some("again".to_string()),
             crate::repositories::AuditActor {
                 actor_type: "system".to_owned(),
@@ -222,6 +251,9 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
 
     assert_ne!(reprint.job.id, source.job.id);
     assert_eq!(reprint.job.status, JobStatus::Queued);
+    assert_eq!(reprint.job.printer_id, target_printer_id);
+    assert_eq!(reprint.job.agent_id, target_agent.id);
+    assert_eq!(reprint.job.ams_mapping_json.as_deref(), Some("[4,0]"));
     assert_eq!(reprint.artifact.id, source.artifact.id);
     assert_eq!(reprint.artifact.storage_path, source.artifact.storage_path);
     assert_eq!(commands.count().await.unwrap(), 2);
@@ -235,7 +267,7 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
         .await
         .unwrap();
     let reprint_command = commands
-        .next_queued_for_agent(tenant.id, agent.id)
+        .next_queued_for_agent(tenant.id, target_agent.id)
         .await
         .unwrap()
         .unwrap();
@@ -245,12 +277,20 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
         reprint_payload.artifact_download_path,
         format!(
             "/api/v1/agents/{}/artifacts/{}",
-            agent.id, source.artifact.id
+            target_agent.id, source.artifact.id
         )
     );
-    assert_studio_auto_calibration(&reprint_payload);
+    assert_eq!(reprint_payload.plate_id, 2);
+    assert!(!reprint_payload.use_ams);
+    assert!(!reprint_payload.bed_leveling);
+    assert_eq!(reprint_payload.auto_bed_leveling, PrintCalibrationMode::Off);
+    assert!(reprint_payload.flow_cali);
+    assert_eq!(reprint_payload.auto_flow_cali, PrintCalibrationMode::On);
+    assert_eq!(reprint_payload.auto_offset_cali, PrintCalibrationMode::Off);
+    assert!(!reprint_payload.timelapse);
+    assert_eq!(reprint_payload.ams_mapping_json.as_deref(), Some("[4,0]"));
     commands
-        .mark_sent(reprint_command.id, tenant.id, agent.id)
+        .mark_sent(reprint_command.id, tenant.id, target_agent.id)
         .await
         .unwrap();
 
@@ -288,6 +328,7 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
                 auto_flow_cali: Some(PrintCalibrationMode::Auto),
                 auto_offset_cali: Some(PrintCalibrationMode::On),
                 timelapse: Some(true),
+                replace_ams_mappings: false,
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
                 ams_mapping_info_json: None,

@@ -131,6 +131,7 @@ pub async fn reprint_with_audit(
     database: &Database,
     tenant_id: TenantId,
     job_id: JobId,
+    input: DuplicatePrintJob,
     reason: Option<String>,
     actor: AuditActor,
 ) -> RepositoryResult<JobWithArtifact> {
@@ -154,7 +155,7 @@ pub async fn reprint_with_audit(
             tenant_id,
             source,
             source_payload,
-            overrides: None,
+            overrides: Some(input),
             actor,
             action: "job.reprint",
             reason,

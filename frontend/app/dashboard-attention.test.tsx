@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { NextIntlClientProvider } from 'next-intl'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import en from '../messages/en.json'
 import { computeAttention, computeHealth, statusMeta } from './dashboard-attention'
@@ -84,11 +85,37 @@ describe('job failure attention', () => {
 
     render(
       <NextIntlClientProvider locale="en" messages={en}>
-        <NeedsAttention items={items} selectedTenant={null} />
+        <NeedsAttention items={items} onOpenReprint={vi.fn()} selectedTenant={null} />
       </NextIntlClientProvider>,
     )
 
     expect(screen.getByText(`Reason: ${reason}`)).toBeInTheDocument()
+  })
+
+  it('opens the configurable Reprint dialog for a physical print failure', async () => {
+    const onOpenReprint = vi.fn()
+    const items = attentionFor(
+      job({ status: 'succeeded', commandStatus: 'succeeded', printStatus: 'failed' }),
+    )
+
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <NeedsAttention
+          items={items}
+          onOpenReprint={onOpenReprint}
+          selectedTenant={{
+            id: 'tenant-1',
+            slug: 'dev',
+            display_name: 'Dev Tenant',
+            created_at: '2026-07-15T00:00:00Z',
+          }}
+        />
+      </NextIntlClientProvider>,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reprint' }))
+
+    expect(onOpenReprint).toHaveBeenCalledWith('job-1')
   })
 
   it('uses the physical print error for a physical failure', () => {

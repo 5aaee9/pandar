@@ -1,14 +1,23 @@
 'use client'
 
 import { useId, useRef, useState, type FormEvent } from 'react'
-import { useFormatter, useTranslations } from 'next-intl'
+import { useTranslations } from 'next-intl'
 
-import type { ArtifactMetadata, Printer } from './dashboard-types'
+import type { ArtifactMetadata, Job, Printer } from './dashboard-types'
 import { apiIdSegment } from './api-path'
 import { ConfirmDialog } from './confirm-dialog'
-import { formatBytes } from './dashboard-format'
+import {
+  DispatchArtifactField,
+  maxArtifactBytes,
+  type DispatchArtifactState,
+  type MetadataPreviewState,
+} from './dispatch-artifact-field'
 import { DispatchMaterialMappingFields } from './dispatch-material-mapping-fields'
-import { dispatchErrorCode, prepareDispatchSubmission } from './dispatch-form-submission'
+import {
+  dispatchErrorCode,
+  prepareDispatchSubmission,
+  reprintRequestBody,
+} from './dispatch-form-submission'
 import { DispatchPrintOptions } from './dispatch-print-options'
 import { HelpTip } from './dashboard-ui'
 
@@ -18,38 +27,24 @@ type DispatchTenant = {
 
 type DispatchPrinter = Pick<Printer, 'id' | 'name' | 'serial_number' | 'model' | 'materials'>
 
-const maxArtifactBytes = 268435456
-
 export function DispatchForm({
   selectedTenant,
   printers,
+  sourceJob,
   onRedirect = (url) => window.location.assign(url),
 }: {
   selectedTenant: DispatchTenant | null
   printers: DispatchPrinter[]
+  sourceJob?: Job | null
   onRedirect?: (url: string) => void
 }) {
   const t = useTranslations('dispatch')
-  const format = useFormatter()
-  const num = (n: number) => format.number(n)
-  const [preferredPrinterId, setPreferredPrinterId] = useState('')
-  const [plateId, setPlateId] = useState<number | null>(null)
-  const [artifact, setArtifact] = useState<{
-    file: File | null
-    size: number
-    state: 'idle' | 'ready' | 'too_large'
-  }>({
-    file: null,
-    size: 0,
-    state: 'idle',
-  })
-  const [metadataPreview, setMetadataPreview] = useState<{
-    state: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
-    metadata: ArtifactMetadata | null
-  }>({
-    state: 'idle',
-    metadata: null,
-  })
+  const [preferredPrinterId, setPreferredPrinterId] = useState(sourceJob?.printer_id ?? '')
+  const [plateId, setPlateId] = useState<number | null>(() => sourcePlateId(sourceJob))
+  const [artifact, setArtifact] = useState<DispatchArtifactState>(() => sourceArtifact(sourceJob))
+  const [metadataPreview, setMetadataPreview] = useState<MetadataPreviewState>(() =>
+    sourceMetadataPreview(sourceJob),
+  )
   const [submitting, setSubmitting] = useState(false)
   const [submitFailed, setSubmitFailed] = useState(false)
   const [mismatchFormData, setMismatchFormData] = useState<FormData | null>(null)
@@ -137,18 +132,24 @@ export function DispatchForm({
     }
   }
 
-  const uploadSubmission = async (formData: FormData) => {
+  const sendSubmission = async (formData: FormData) => {
     if (!selectedTenant) return
-    const submission = prepareDispatchSubmission(formData, () => true)
-    if (!submission) return
     setSubmitting(true)
 
     try {
-      const response = await fetch(uploadPath(selectedTenant.id, submission.printerId), {
-        method: 'POST',
-        body: submission.formData,
-      })
-      const status = response.ok ? 'job_created' : await dispatchErrorCode(response)
+      const response = sourceJob
+        ? await fetch(reprintPath(selectedTenant.id, sourceJob.id), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(reprintRequestBody(formData)),
+          })
+        : await fetch(uploadPath(selectedTenant.id, String(formData.get('printer_id'))), {
+            method: 'POST',
+            body: formData,
+          })
+      const status = response.ok
+        ? sourceJob ? 'reprint_queued' : 'job_created'
+        : await dispatchErrorCode(response)
       onRedirect(
         `/jobs?tenant=${encodeURIComponent(selectedTenant.id)}&status=${encodeURIComponent(status)}`,
       )
@@ -179,7 +180,7 @@ export function DispatchForm({
       return false
     })
     if (submission) {
-      void uploadSubmission(formData)
+      void sendSubmission(submission.formData)
       return
     }
     if (mismatch) {
@@ -187,7 +188,7 @@ export function DispatchForm({
     }
   }
 
-  const selectedFilename = artifact.file?.name ?? ''
+  const selectedFilename = sourceJob?.artifact.filename ?? artifact.file?.name ?? ''
   const parsedPlates = metadataPreview.state === 'ready'
     ? (metadataPreview.metadata?.plates ?? [])
     : []
@@ -207,9 +208,11 @@ export function DispatchForm({
   return (
     <>
       <form
-        action={uploadPath(selectedTenant.id, selectedPrinterId)}
+        action={sourceJob
+          ? reprintPath(selectedTenant.id, sourceJob.id)
+          : uploadPath(selectedTenant.id, selectedPrinterId)}
         className="grid gap-4 lg:grid-cols-2"
-        encType="multipart/form-data"
+        encType={sourceJob ? undefined : 'multipart/form-data'}
         method="post"
         onSubmit={(event) => submitPrintJob(event)}
       >
@@ -229,38 +232,16 @@ export function DispatchForm({
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-sm lg:col-span-2">
-          <span className="text-xs font-medium text-muted-foreground">{t('artifact')}</span>
-          <input
-            accept=".3mf,.gcode,.gcode.3mf,application/octet-stream,model/3mf"
-            aria-describedby={fileStatusId}
-            aria-invalid={artifact.state === 'too_large'}
-            className="rounded-md border border-input px-2 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium"
-            name="file"
-            onChange={(event) => selectArtifact(event.currentTarget.files?.[0] ?? null)}
-            type="file"
-            required
-          />
-          <span className="text-xs text-muted-foreground">{t('maxSize', { size: formatBytes(maxArtifactBytes, num) })}</span>
-        </label>
+        <DispatchArtifactField
+          artifact={artifact}
+          fileStatusId={fileStatusId}
+          metadataPreview={metadataPreview}
+          onSelectArtifact={selectArtifact}
+          plateId={plateId}
+          selectedFilename={selectedFilename}
+          sourceArtifact={Boolean(sourceJob)}
+        />
         <input name="use_ams" type="hidden" value={String(useAms)} />
-        <div className="rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground lg:col-span-2">
-          <div className="font-medium text-foreground">
-            {selectedFilename || t('noArtifact')}
-          </div>
-          <div
-            className="mt-1 text-xs"
-            id={fileStatusId}
-            role={artifact.state === 'too_large' ? 'alert' : undefined}
-          >
-            {artifact.state === 'ready'
-              ? t('readySize', { size: formatBytes(artifact.size, num) })
-              : artifact.state === 'too_large'
-                ? t('tooLargeSize', { size: formatBytes(artifact.size, num) })
-                : t('chooseFile')}
-          </div>
-          <MetadataPreview plateId={plateId} preview={metadataPreview} />
-        </div>
       {plateId !== null && metadataPreview.state !== 'idle' && metadataPreview.state !== 'loading' ? (
         <div className="flex flex-col gap-1 text-sm lg:col-span-2" data-motion="dispatch-unlocked">
           <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
@@ -341,7 +322,9 @@ export function DispatchForm({
           }
           type="submit"
         >
-          {submitting ? t('dispatching') : t('dispatch')}
+          {submitting
+            ? sourceJob ? t('reprinting') : t('dispatching')
+            : sourceJob ? t('reprint') : t('dispatch')}
         </button>
       </div>
     </form>
@@ -349,14 +332,15 @@ export function DispatchForm({
       open={mismatchFormData !== null}
       title={t('externalMaterialMismatchTitle')}
       message={t('externalMaterialMismatchWarning')}
-      confirmLabel={t('dispatch')}
+      confirmLabel={sourceJob ? t('reprint') : t('dispatch')}
       cancelLabel={t('reviewMapping')}
       tone="default"
       onConfirm={() => {
         const pending = mismatchFormData
         setMismatchFormData(null)
         if (pending) {
-          void uploadSubmission(pending)
+          const submission = prepareDispatchSubmission(pending, () => true)
+          if (submission) void sendSubmission(submission.formData)
         }
       }}
       onCancel={() => setMismatchFormData(null)}
@@ -373,57 +357,29 @@ function metadataPreviewPath(tenantId: string) {
   return `/api/tenants/${apiIdSegment(tenantId, 'tenant_id')}/artifact-metadata-preview`
 }
 
+function reprintPath(tenantId: string, jobId: string) {
+  return `/api/tenants/${apiIdSegment(tenantId, 'tenant_id')}/jobs/${apiIdSegment(jobId, 'job_id')}/reprint`
+}
 
-function MetadataPreview({
-  plateId,
-  preview,
-}: {
-  plateId: number | null
-  preview: {
-    state: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
-    metadata: ArtifactMetadata | null
-  }
-}) {
-  const t = useTranslations('dispatch')
-  if (preview.state === 'idle') {
-    return null
-  }
-  if (preview.state === 'loading') {
-    return <div className="mt-2 text-xs text-muted-foreground" role="status">{t('readingMetadata')}</div>
-  }
-  if (preview.state === 'unavailable') {
-    return <div className="mt-2 text-xs text-muted-foreground" role="status">{t('metadataUnavailableFound')}</div>
-  }
-  if (preview.state === 'error' || !preview.metadata) {
-    return <div className="mt-2 text-xs text-muted-foreground" role="status">{t('metadataUnavailable')}</div>
-  }
+function sourcePlateId(sourceJob?: Job | null) {
+  if (!sourceJob) return null
+  const metadata = sourceJob.artifact.metadata
+  return metadata?.plates.find((plate) => plate.plate_id === metadata.default_plate_id)?.plate_id
+    ?? metadata?.plates[0]?.plate_id
+    ?? 1
+}
 
-  const metadata = preview.metadata
-  const primaryPlate =
-    metadata.plates.find((plate) => plate.plate_id === plateId) ??
-    metadata.plates.find((plate) => plate.plate_id === metadata.default_plate_id) ??
-    metadata.plates[0]
+function sourceArtifact(sourceJob?: Job | null): DispatchArtifactState {
+  return sourceJob
+    ? { file: null, size: sourceJob.artifact.size_bytes, state: 'ready' }
+    : { file: null, size: 0, state: 'idle' }
+}
 
-  return (
-    <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
-      <div className="min-w-0">
-        <span className="text-muted-foreground">{t('project')} </span>
-        <span className="font-medium text-foreground">{metadata.display_name}</span>
-      </div>
-      <div>
-        <span className="text-muted-foreground">{t('plateLabel')} </span>
-        <span className="font-medium text-foreground">
-          {primaryPlate?.plate_id ?? '-'}
-        </span>
-      </div>
-      <div className="truncate">
-        <span className="text-muted-foreground">{t('objects')} </span>
-        <span className="font-medium text-foreground">
-          {primaryPlate?.objects.length ? primaryPlate.objects.join(', ') : '-'}
-        </span>
-      </div>
-    </div>
-  )
+function sourceMetadataPreview(sourceJob?: Job | null): MetadataPreviewState {
+  if (!sourceJob) return { state: 'idle', metadata: null }
+  return sourceJob.artifact.metadata
+    ? { state: 'ready', metadata: sourceJob.artifact.metadata }
+    : { state: 'unavailable', metadata: null }
 }
 
 function DispatchEmptyState({ title, message }: { title: string; message: string }) {

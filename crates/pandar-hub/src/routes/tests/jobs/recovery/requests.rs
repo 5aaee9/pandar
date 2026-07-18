@@ -1,9 +1,22 @@
+use std::collections::BTreeMap;
+
+use crate::material_mapping::{
+    AmsMapping, AmsMapping2, AmsMapping2Entry, AmsMappingInfo, AmsMappingInfoEntry,
+    AmsMappingInfoExtra,
+};
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Number, Value};
 
 #[derive(Serialize)]
 struct RecoveryReasonRequest<'a> {
     reason: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct ReprintJobRequest<'a> {
+    reason: Option<&'a str>,
+    #[serde(flatten)]
+    overrides: DuplicateJobRequest<'a>,
 }
 
 #[derive(Serialize)]
@@ -17,8 +30,9 @@ struct DuplicateJobRequest<'a> {
     auto_flow_cali: pandar_core::PrintCalibrationMode,
     auto_offset_cali: pandar_core::PrintCalibrationMode,
     timelapse: bool,
-    ams_mapping: Option<()>,
-    ams_mapping2: Option<()>,
+    ams_mapping: Option<AmsMapping>,
+    ams_mapping2: Option<AmsMapping2>,
+    ams_mapping_info: Option<AmsMappingInfo>,
 }
 
 #[derive(Serialize)]
@@ -51,6 +65,51 @@ pub(super) fn duplicate_job_body(printer_id: &str, plate_id: i32) -> Option<Valu
             timelapse: false,
             ams_mapping: None,
             ams_mapping2: None,
+            ams_mapping_info: None,
+        })
+        .unwrap(),
+    )
+}
+
+pub(super) fn reprint_job_body(printer_id: &str, plate_id: i32) -> Option<Value> {
+    Some(
+        serde_json::to_value(ReprintJobRequest {
+            reason: Some("print another"),
+            overrides: DuplicateJobRequest {
+                printer_id,
+                plate_id,
+                use_ams: true,
+                bed_leveling: false,
+                auto_bed_leveling: pandar_core::PrintCalibrationMode::Auto,
+                flow_cali: true,
+                auto_flow_cali: pandar_core::PrintCalibrationMode::On,
+                auto_offset_cali: pandar_core::PrintCalibrationMode::Off,
+                timelapse: false,
+                ams_mapping: Some(vec![4, 0]),
+                ams_mapping2: Some(vec![
+                    AmsMapping2Entry {
+                        ams_id: 1,
+                        slot_id: 0,
+                    },
+                    AmsMapping2Entry {
+                        ams_id: 0,
+                        slot_id: 0,
+                    },
+                ]),
+                ams_mapping_info: Some(vec![AmsMappingInfoEntry {
+                    nozzle_id: 1,
+                    extra: BTreeMap::from([
+                        (
+                            "ams".to_owned(),
+                            AmsMappingInfoExtra::Number(Number::from(4)),
+                        ),
+                        (
+                            "filamentType".to_owned(),
+                            AmsMappingInfoExtra::String("PLA".to_owned()),
+                        ),
+                    ]),
+                }]),
+            },
         })
         .unwrap(),
     )

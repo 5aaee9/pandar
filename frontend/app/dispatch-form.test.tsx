@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
 import { DispatchForm } from "./dispatch-form";
+import type { Job } from "./dashboard-types";
 
 describe("DispatchForm", () => {
   afterEach(() => {
@@ -182,6 +183,123 @@ describe("DispatchForm", () => {
 
     await waitFor(() =>
       expect(onRedirect).toHaveBeenCalledWith("/jobs?tenant=tenant-1&status=job_created"),
+    );
+  });
+
+  it("reprints a selected artifact while keeping printer, plate, mapping, and options editable", async () => {
+    const user = userEvent.setup();
+    const onRedirect = vi.fn();
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        Response.json({}, { status: 201 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const sourceJob = {
+      id: "job-1",
+      printer_id: "printer-2",
+      artifact: {
+        filename: "benchy.3mf",
+        content_type: "model/3mf",
+        size_bytes: 42,
+        metadata: {
+          display_name: "Benchy",
+          default_plate_id: 2,
+          warnings: [],
+          plates: [{
+            plate_id: 2,
+            name: "Plate 2",
+            estimated_time_seconds: null,
+            filament_weight_grams: null,
+            object_count: 1,
+            objects: ["benchy"],
+            filaments: [{
+              filament_id: "GFA00",
+              tray_info_idx: "GFA00",
+              nozzle_id: 0,
+              filament_type: "PLA",
+              color: "#00FF00",
+              used_grams: 10,
+              used_meters: 3,
+            }],
+            has_thumbnail: false,
+          }],
+        },
+      },
+    } as unknown as Job;
+
+    const { container } = render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <DispatchForm
+          selectedTenant={{ id: "tenant-1" }}
+          onRedirect={onRedirect}
+          sourceJob={sourceJob}
+          printers={[
+            { id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null },
+            {
+              id: "printer-2",
+              name: "Printer Two",
+              serial_number: "SN2",
+              model: "N6",
+              materials: {
+                filament_switch_installed: true,
+                observed_at: "2026-07-18T00:00:00Z",
+                active_tray: null,
+                ams_units: [{
+                  unit_id: "0",
+                  toolhead: "R",
+                  trays: [{
+                    tray_id: "0",
+                    global_tray_id: 0,
+                    type: "PLA",
+                    color: "00FF00",
+                    exists: true,
+                  }],
+                }],
+                external_spools: [],
+              },
+            },
+          ]}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    expect(container.querySelector('input[type="file"]')).toBeNull();
+    expect(screen.getByText("benchy.3mf")).toBeVisible();
+    expect(container.querySelector('select[name="printer_id"]')).toHaveValue("printer-2");
+    expect(container.querySelector('select[name="plate_id"]')).toHaveValue("2");
+    expect(container.querySelector('input[name="ams_mapping"]')).toHaveValue("[0]");
+    expect(screen.getByRole("button", { name: "Reprint" })).toBeEnabled();
+
+    await user.selectOptions(
+      container.querySelector('select[name="printer_id"]') as HTMLSelectElement,
+      "printer-1",
+    );
+    await user.selectOptions(
+      container.querySelector('select[name="printer_id"]') as HTMLSelectElement,
+      "printer-2",
+    );
+    await user.click(screen.getByRole("button", { name: "Reprint" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/tenants/tenant-1/jobs/job-1/reprint");
+    expect(init).toMatchObject({
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      printer_id: "printer-2",
+      plate_id: 2,
+      use_ams: true,
+      auto_bed_leveling: 2,
+      auto_flow_cali: 2,
+      auto_offset_cali: 0,
+      timelapse: true,
+      ams_mapping: [0],
+      ams_mapping2: [{ ams_id: 0, slot_id: 0 }],
+    });
+    expect(onRedirect).toHaveBeenCalledWith(
+      "/jobs?tenant=tenant-1&status=reprint_queued",
     );
   });
 

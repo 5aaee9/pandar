@@ -91,9 +91,9 @@ async fn postgres_job_recovery_when_configured() {
             auto_flow_cali: pandar_core::PrintCalibrationMode::Off,
             auto_offset_cali: pandar_core::PrintCalibrationMode::Off,
             timelapse: false,
-            ams_mapping_json: None,
-            ams_mapping2_json: None,
-            ams_mapping_info_json: None,
+            ams_mapping_json: Some("[0]".to_owned()),
+            ams_mapping2_json: Some(r#"[{"ams_id":0,"slot_id":0}]"#.to_owned()),
+            ams_mapping_info_json: Some(r#"[{"nozzleId":0}]"#.to_owned()),
         })
         .await
         .unwrap();
@@ -127,6 +127,21 @@ async fn postgres_job_recovery_when_configured() {
         .reprint_with_audit(
             tenant.id,
             completed_source.job.id,
+            crate::repositories::DuplicatePrintJob {
+                printer_id: None,
+                plate_id: Some(2),
+                use_ams: Some(false),
+                bed_leveling: Some(true),
+                auto_bed_leveling: Some(pandar_core::PrintCalibrationMode::Auto),
+                flow_cali: Some(true),
+                auto_flow_cali: Some(pandar_core::PrintCalibrationMode::On),
+                auto_offset_cali: Some(pandar_core::PrintCalibrationMode::Auto),
+                timelapse: Some(true),
+                replace_ams_mappings: true,
+                ams_mapping_json: None,
+                ams_mapping2_json: None,
+                ams_mapping_info_json: None,
+            },
             Some("another copy".to_string()),
             crate::repositories::AuditActor {
                 actor_type: "system".to_owned(),
@@ -143,6 +158,9 @@ async fn postgres_job_recovery_when_configured() {
         reprint.artifact.storage_path,
         completed_source.artifact.storage_path
     );
+    assert_eq!(reprint.job.ams_mapping_json, None);
+    assert_eq!(reprint.job.ams_mapping2_json, None);
+    assert_eq!(reprint.job.ams_mapping_info_json, None);
 
     let duplicate = jobs
         .duplicate_and_print_with_audit(
@@ -158,6 +176,7 @@ async fn postgres_job_recovery_when_configured() {
                 auto_flow_cali: None,
                 auto_offset_cali: None,
                 timelapse: None,
+                replace_ams_mappings: false,
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
                 ams_mapping_info_json: None,
@@ -266,6 +285,7 @@ async fn postgres_job_metadata_round_trips_and_reuses_artifact_when_configured()
         .reprint_with_audit(
             tenant.id,
             source.job.id,
+            crate::repositories::DuplicatePrintJob::default(),
             None,
             crate::repositories::AuditActor {
                 actor_type: "system".to_owned(),
@@ -289,6 +309,7 @@ async fn postgres_job_metadata_round_trips_and_reuses_artifact_when_configured()
                 auto_flow_cali: None,
                 auto_offset_cali: None,
                 timelapse: None,
+                replace_ams_mappings: false,
                 ams_mapping_json: None,
                 ams_mapping2_json: None,
                 ams_mapping_info_json: None,

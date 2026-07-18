@@ -58,25 +58,6 @@ export async function retryDispatchJobs(formData: FormData) {
   );
 }
 
-export async function reprintJob(formData: FormData) {
-  await requireAuth();
-  const tenantId = stringField(formData, "tenant_id");
-  const jobId = stringField(formData, "job_id");
-  const response = await postJson(
-    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/jobs/${apiIdSegment(jobId, "job_id")}/reprint`,
-    {
-      reason: nullableField(formData, "reason"),
-    },
-  );
-  redirect(
-    statusUrlForForm(
-      formData,
-      tenantId,
-      response.ok ? "reprint_queued" : await errorCode(response),
-    ),
-  );
-}
-
 export async function duplicateJob(formData: FormData) {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");

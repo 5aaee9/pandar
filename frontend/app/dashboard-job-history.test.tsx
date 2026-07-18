@@ -84,6 +84,7 @@ function renderHistory({
           nowMs={nowMs}
           onClearRedirect={onClearRedirect}
           onOpenDispatch={vi.fn()}
+          onOpenReprint={vi.fn()}
           printers={[]}
           selectedTenant={selectedTenant}
         />
@@ -145,6 +146,7 @@ describe('JobHistory actions', () => {
           ]}
           nowMs={0}
           onOpenDispatch={vi.fn()}
+          onOpenReprint={vi.fn()}
           printers={[]}
           selectedTenant={tenant}
         />
@@ -252,6 +254,7 @@ describe('JobHistory actions', () => {
           ]}
           nowMs={Date.parse('2026-07-15T00:00:00Z')}
           onOpenDispatch={vi.fn()}
+          onOpenReprint={vi.fn()}
           printers={[]}
           selectedTenant={tenant}
         />
@@ -313,6 +316,7 @@ describe('JobHistory actions', () => {
           ]}
           nowMs={0}
           onOpenDispatch={vi.fn()}
+          onOpenReprint={vi.fn()}
           printers={[]}
           selectedTenant={tenant}
         />

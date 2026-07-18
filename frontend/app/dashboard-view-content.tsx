@@ -85,8 +85,11 @@ function DevicesView({
   selectedTenant,
   printers,
   agents,
+  jobs,
   nowMs,
 }: DashboardViewContentProps) {
+  const [reprintJob, setReprintJob] = useState<Job | null>(null);
+
   return (
     <>
       <FleetStatusStrip
@@ -98,7 +101,14 @@ function DevicesView({
         fleetEmpty={fleetEmpty}
         tenantId={selectedTenant?.id}
       />
-      <NeedsAttention items={attentionItems} selectedTenant={selectedTenant} />
+      <NeedsAttention
+        items={attentionItems}
+        onOpenReprint={(jobId) => {
+          const job = jobs.find((candidate) => candidate.id === jobId);
+          if (job) setReprintJob(job);
+        }}
+        selectedTenant={selectedTenant}
+      />
       <PrinterMismatchCoordinator
         key={selectedTenant?.id ?? "no-tenant"}
         printers={printers}
@@ -110,6 +120,15 @@ function DevicesView({
           nowMs={nowMs}
         />
       </PrinterMismatchCoordinator>
+      <DispatchDialog
+        onOpenChange={(open) => {
+          if (!open) setReprintJob(null);
+        }}
+        open={reprintJob !== null}
+        printers={printers}
+        selectedTenant={selectedTenant}
+        sourceJob={reprintJob}
+      />
     </>
   );
 }
@@ -122,7 +141,10 @@ function JobsView({
   nowMs,
   canManageJobs,
 }: DashboardViewContentProps) {
-  const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [dispatch, setDispatch] = useState<{
+    open: boolean;
+    sourceJob: Job | null;
+  }>({ open: false, sourceJob: null });
 
   return (
     <>
@@ -131,15 +153,22 @@ function JobsView({
         agents={agents}
         jobs={jobs}
         nowMs={nowMs}
-        onOpenDispatch={() => setDispatchOpen(true)}
+        onOpenDispatch={() => setDispatch({ open: true, sourceJob: null })}
+        onOpenReprint={(sourceJob) => setDispatch({ open: true, sourceJob })}
         printers={printers}
         selectedTenant={selectedTenant}
       />
       <DispatchDialog
-        open={dispatchOpen}
-        onOpenChange={setDispatchOpen}
+        open={dispatch.open}
+        onOpenChange={(open) =>
+          setDispatch((current) => ({
+            open,
+            sourceJob: open ? current.sourceJob : null,
+          }))
+        }
         printers={printers}
         selectedTenant={selectedTenant}
+        sourceJob={dispatch.sourceJob}
       />
     </>
   );

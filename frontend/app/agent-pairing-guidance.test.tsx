@@ -26,7 +26,6 @@ vi.mock("./actions", () => ({
   refreshPrinters: vi.fn(),
   retryDispatchJob: vi.fn(),
   retryDispatchJobs: vi.fn(),
-  reprintJob: vi.fn(),
   revokeJoinLink: vi.fn(),
   revokeTenantToken: vi.fn(),
   rotateTenantToken: vi.fn(),

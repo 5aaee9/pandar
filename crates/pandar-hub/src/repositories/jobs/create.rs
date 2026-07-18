@@ -1,12 +1,3 @@
-use anyhow::Context;
-use pandar_core::PrintCalibrationMode;
-use pandar_core::{
-    CommandId, Job, JobArtifact, JobArtifactParts, JobId, JobParts, JobStatus, PrintStatus,
-};
-use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
-};
-
 use crate::{
     entities::{job_artifacts, jobs, printers},
     repositories::{
@@ -14,6 +5,14 @@ use crate::{
         RepositoryError, RepositoryResult,
         commands::inserts::{self, InsertCommand},
     },
+};
+use anyhow::Context;
+use pandar_core::{
+    AgentId, CommandId, Job, JobArtifact, JobArtifactParts, JobId, JobParts, JobStatus,
+    PrintCalibrationMode, PrintStatus,
+};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
 };
 
 mod payload;
@@ -86,20 +85,8 @@ impl NewPrintJobFromArtifact {
         source_payload: PrintProjectFilePayload,
         overrides: Option<DuplicatePrintJob>,
     ) -> Self {
-        let overrides = overrides.unwrap_or(DuplicatePrintJob {
-            printer_id: None,
-            plate_id: None,
-            use_ams: None,
-            auto_bed_leveling: None,
-            bed_leveling: None,
-            flow_cali: None,
-            auto_flow_cali: None,
-            auto_offset_cali: None,
-            timelapse: None,
-            ams_mapping_json: None,
-            ams_mapping2_json: None,
-            ams_mapping_info_json: None,
-        });
+        let overrides = overrides.unwrap_or_default();
+        let preserve_mappings = !overrides.replace_ams_mappings;
         Self {
             tenant_id: source.job.tenant_id,
             printer_id: overrides.printer_id.unwrap_or(source.job.printer_id),
@@ -126,18 +113,28 @@ impl NewPrintJobFromArtifact {
                 .auto_offset_cali
                 .unwrap_or(source_payload.auto_offset_cali),
             timelapse: overrides.timelapse.unwrap_or(source_payload.timelapse),
-            ams_mapping_json: overrides.ams_mapping_json.or(source.job.ams_mapping_json),
-            ams_mapping2_json: overrides.ams_mapping2_json.or(source.job.ams_mapping2_json),
-            ams_mapping_info_json: overrides
-                .ams_mapping_info_json
-                .or(source.job.ams_mapping_info_json),
+            ams_mapping_json: overrides.ams_mapping_json.or_else(|| {
+                preserve_mappings
+                    .then_some(source.job.ams_mapping_json)
+                    .flatten()
+            }),
+            ams_mapping2_json: overrides.ams_mapping2_json.or_else(|| {
+                preserve_mappings
+                    .then_some(source.job.ams_mapping2_json)
+                    .flatten()
+            }),
+            ams_mapping_info_json: overrides.ams_mapping_info_json.or_else(|| {
+                preserve_mappings
+                    .then_some(source.job.ams_mapping_info_json)
+                    .flatten()
+            }),
         }
     }
 }
 
 pub async fn create_print_job_from_artifact<C>(
     connection: &C,
-    input: NewPrintJobFromArtifact,
+    mut input: NewPrintJobFromArtifact,
 ) -> RepositoryResult<JobWithArtifact>
 where
     C: ConnectionTrait,
@@ -145,7 +142,8 @@ where
     validate_mapping_json(&input.ams_mapping_json, "ams_mapping_json")?;
     validate_mapping_json(&input.ams_mapping2_json, "ams_mapping2_json")?;
     validate_mapping_json(&input.ams_mapping_info_json, "ams_mapping_info_json")?;
-    let serial_number = printer_for_existing_artifact(connection, &input).await?;
+    let (serial_number, agent_id) = printer_for_existing_artifact(connection, &input).await?;
+    input.agent_id = agent_id;
     let now = pandar_core::created_at_now();
     let job_id = JobId::new();
     let command_id = CommandId::new();
@@ -186,17 +184,20 @@ where
 async fn printer_for_existing_artifact<C>(
     connection: &C,
     input: &NewPrintJobFromArtifact,
-) -> RepositoryResult<String>
+) -> RepositoryResult<(String, AgentId)>
 where
     C: ConnectionTrait,
 {
     printers::Entity::find_by_id(&input.printer_id)
         .filter(printers::Column::TenantId.eq(input.tenant_id.to_string()))
-        .filter(printers::Column::AgentId.eq(input.agent_id.to_string()))
         .one(connection)
         .await
         .context("failed to verify recovered print job printer ownership")?
-        .map(|printer| printer.serial_number)
+        .map(|printer| {
+            let agent_id = AgentId::parse(&printer.agent_id).map_err(anyhow::Error::from)?;
+            Ok::<_, anyhow::Error>((printer.serial_number, agent_id))
+        })
+        .transpose()?
         .ok_or(RepositoryError::MissingPrinter)
 }
 

@@ -60,7 +60,7 @@ pub struct CreatePrintJob {
     pub ams_mapping_info_json: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DuplicatePrintJob {
     pub printer_id: Option<String>,
     pub plate_id: Option<u32>,
@@ -71,6 +71,7 @@ pub struct DuplicatePrintJob {
     pub auto_flow_cali: Option<PrintCalibrationMode>,
     pub auto_offset_cali: Option<PrintCalibrationMode>,
     pub timelapse: Option<bool>,
+    pub replace_ams_mappings: bool,
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
     pub ams_mapping_info_json: Option<String>,
@@ -140,10 +141,11 @@ impl JobRepository {
         &self,
         tenant_id: TenantId,
         job_id: JobId,
+        input: DuplicatePrintJob,
         reason: Option<String>,
         actor: AuditActor,
     ) -> RepositoryResult<JobWithArtifact> {
-        recovery::reprint_with_audit(&self.database, tenant_id, job_id, reason, actor).await
+        recovery::reprint_with_audit(&self.database, tenant_id, job_id, input, reason, actor).await
     }
 
     pub async fn duplicate_and_print_with_audit(
