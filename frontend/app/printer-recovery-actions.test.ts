@@ -10,8 +10,8 @@ vi.mock("./api-auth", () => ({
 
 function validFormData() {
   const formData = new FormData();
-  formData.set("tenant_id", "tenant/one");
-  formData.set("printer_id", "printer ?");
+  formData.set("tenant_id", "tenant-one");
+  formData.set("printer_id", "printer-one");
   formData.set("error_action", "resume");
   formData.set("error_generation", "9");
   return formData;
@@ -35,7 +35,7 @@ describe("handlePrintError", () => {
     );
   });
 
-  it("authenticates, encodes path fields, and sends only the semantic recovery payload", async () => {
+  it("authenticates, validates path fields, and sends only the semantic recovery payload", async () => {
     const formData = validFormData();
     formData.set("print_error", "83918929");
     formData.set("printer_job_id", "native-job");
@@ -50,7 +50,7 @@ describe("handlePrintError", () => {
     expect(requireAuth).toHaveBeenCalledTimes(1);
     expect(apiHeaders).toHaveBeenCalledWith("application/json");
     expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:8080/api/v1/tenants/tenant%2Fone/printers/printer%20%3F/controls",
+      "http://localhost:8080/api/v1/tenants/tenant-one/printers/printer-one/controls",
       {
         method: "POST",
         headers: {
@@ -153,7 +153,9 @@ describe("handlePrintError", () => {
 
   it.each([
     ["tenant_id", ""],
+    ["tenant_id", "../jobs"],
     ["printer_id", ""],
+    ["printer_id", "../jobs/00000000-0000-0000-0000-000000000001"],
     ["error_action", "pause"],
     ["error_generation", ""],
     ["error_generation", "0"],

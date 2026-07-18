@@ -1,5 +1,6 @@
 import type { AuthMetadata, Job, Printer } from "./dashboard-types";
 import { formatDate as formatDateDefault } from "./dashboard-format";
+import { apiIdSegment } from "./api-path";
 
 export type Translator = (
   key: string,
@@ -65,7 +66,7 @@ export function printerEventWebSocketUrl(
   const base = new URL(apiUrl);
   const basePath = base.pathname.replace(/\/$/, "");
   const url = new URL(
-    `${basePath}/api/v1/tenants/${encodeURIComponent(tenantId)}/printer-events`,
+    `${basePath}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/printer-events`,
     base,
   );
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";

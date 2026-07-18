@@ -56,4 +56,25 @@ describe("requireAuth", () => {
 
     await expect(requireAuth()).rejects.toThrow("NEXT_REDIRECT:/sign-in");
   });
+
+  it("rejects an unknown auth provider instead of disabling authentication", async () => {
+    await expect(async () => {
+      const { requireAuth } = await loadApiAuth({
+        APP_AUTH_PROVIDER: "unexpected",
+      });
+      await requireAuth();
+    }).rejects.toThrow("Unsupported APP_AUTH_PROVIDER");
+  });
+
+  it("rejects a static API token combined with external user authentication", async () => {
+    await expect(async () => {
+      const { requireAuth } = await loadApiAuth({
+        APP_AUTH_PROVIDER: "clerk",
+        APP_API_TOKEN: "server-token",
+      });
+      await requireAuth();
+    }).rejects.toThrow(
+      "Static API tokens cannot be combined with external authentication",
+    );
+  });
 });

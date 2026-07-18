@@ -40,13 +40,13 @@ describe('tenant jobs clear proxy', () => {
     const request = new Request('https://web.example/api/tenants/tenant/jobs')
 
     const response = await DELETE(request, {
-      params: Promise.resolve({ tenantId: 'tenant / one' }),
+      params: Promise.resolve({ tenantId: 'tenant-1' }),
     })
 
     expect(dynamic).toBe('force-dynamic')
     expect(apiHeadersMock).toHaveBeenCalledOnce()
     expect(upstreamFetch).toHaveBeenCalledWith(
-      'https://hub.internal.example/base/api/v1/tenants/tenant%20%2F%20one/jobs',
+      'https://hub.internal.example/base/api/v1/tenants/tenant-1/jobs',
       {
         method: 'DELETE',
         cache: 'no-store',

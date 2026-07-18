@@ -196,6 +196,17 @@ describe("refreshPrinterMaterials", () => {
       expect.objectContaining({ method: "POST" }),
     );
   });
+
+  it("rejects a printer ID that could normalize into a jobs endpoint", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("printer_id", "../jobs/00000000-0000-0000-0000-000000000001");
+
+    await expect(refreshPrinterMaterials(formData)).rejects.toThrow(
+      "printer_id must be a valid ID",
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });
 
 describe("controlPrinter axis operations", () => {

@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
+import { apiIdSegment } from './api-path'
 import { EmptyState, SectionHeader } from './dashboard-ui'
 import { JobRow } from './dashboard-job-row'
 
@@ -115,7 +116,7 @@ export function JobHistory({
     setClearError(false)
     try {
       const response = await fetch(
-        `/api/tenants/${encodeURIComponent(selectedTenant.id)}/jobs`,
+        `/api/tenants/${apiIdSegment(selectedTenant.id, 'tenant_id')}/jobs`,
         { method: 'DELETE' },
       )
       if (response.ok) {
@@ -141,7 +142,7 @@ export function JobHistory({
     setDeleteError(false)
     try {
       const response = await fetch(
-        `/api/tenants/${encodeURIComponent(selectedTenant.id)}/jobs/${encodeURIComponent(deleteTarget.id)}`,
+        `/api/tenants/${apiIdSegment(selectedTenant.id, 'tenant_id')}/jobs/${apiIdSegment(deleteTarget.id, 'job_id')}`,
         { method: 'DELETE' },
       )
       if (response.ok) {

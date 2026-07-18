@@ -1,14 +1,13 @@
 "use server";
 
 import { apiHeaders, requireAuth } from "./api-auth";
+import { apiIdSegment, isApiId } from "./api-path";
 import type { PlateMismatchAction } from "./plate-mismatch-actions";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 
 export type PrinterRecoveryActionState =
-  | { status: "idle" }
-  | { status: "sent" }
-  | { status: "error"; error: string };
+  { status: "idle" } | { status: "sent" } | { status: "error"; error: string };
 
 export async function handlePrintError(
   _previousState: PrinterRecoveryActionState,
@@ -20,8 +19,8 @@ export async function handlePrintError(
   const errorAction = stringField(formData, "error_action");
   const errorGeneration = Number(stringField(formData, "error_generation"));
   if (
-    !tenantId ||
-    !printerId ||
+    !isApiId(tenantId) ||
+    !isApiId(printerId) ||
     !isPlateMismatchAction(errorAction) ||
     !Number.isSafeInteger(errorGeneration) ||
     errorGeneration <= 0
@@ -32,7 +31,7 @@ export async function handlePrintError(
   let response: Response;
   try {
     response = await fetch(
-      `${apiUrl}/api/v1/tenants/${encodeURIComponent(tenantId)}/printers/${encodeURIComponent(printerId)}/controls`,
+      `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/printers/${apiIdSegment(printerId, "printer_id")}/controls`,
       {
         method: "POST",
         headers: await apiHeaders("application/json"),

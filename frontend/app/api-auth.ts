@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 const apiToken = process.env.APP_API_TOKEN;
 const staticAuthToken = process.env.APP_AUTH_BEARER_TOKEN;
 const authCookieName = process.env.APP_AUTH_COOKIE_NAME ?? "pandar_auth_token";
+const authConfig = authProviderConfig();
 
 export type AuthSource =
   | "request_cookie"
@@ -35,11 +36,10 @@ export async function requireAuth() {
     return;
   }
 
-  const provider = authProviderConfig();
-  if (provider.signInUrl) {
-    redirect(provider.signInUrl);
+  if (authConfig.signInUrl) {
+    redirect(authConfig.signInUrl);
   }
-  if (provider.provider !== "none") {
+  if (authConfig.provider !== "none") {
     throw new Error("Authentication required");
   }
 }
@@ -49,7 +49,7 @@ export async function authSource(): Promise<{
   cookieName: string;
   provider: ReturnType<typeof authProviderConfig>["provider"];
 }> {
-  const provider = authProviderConfig().provider;
+  const provider = authConfig.provider;
   const cookieStore = await cookies();
   if (cookieStore.get(authCookieName)?.value) {
     return { source: "request_cookie", cookieName: authCookieName, provider };

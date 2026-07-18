@@ -45,13 +45,13 @@ describe("tenant printer list proxy", () => {
     );
 
     const response = await GET(request, {
-      params: Promise.resolve({ tenantId: "tenant / one" }),
+      params: Promise.resolve({ tenantId: "tenant-1" }),
     });
 
     expect(dynamic).toBe("force-dynamic");
     expect(apiHeadersMock).toHaveBeenCalledOnce();
     expect(upstreamFetch).toHaveBeenCalledWith(
-      "https://hub.internal.example/base/api/v1/tenants/tenant%20%2F%20one/printers",
+      "https://hub.internal.example/base/api/v1/tenants/tenant-1/printers",
       {
         cache: "no-store",
         headers: { authorization: "Bearer server-secret" },

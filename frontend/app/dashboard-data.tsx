@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { apiHeaders, authSource } from './api-auth'
 import { dashboardAuthRedirectTarget } from './auth-redirect'
 import { authProviderConfig } from './auth-provider'
+import { apiIdSegment } from './api-path'
 import { parseCommandResult } from './command-result-parser'
 import type {
   AgentList,
@@ -111,39 +112,42 @@ export async function renderDashboardView(view: DashboardView, { searchParams }:
         created_at: '',
       }
     : tenants.find((tenant) => tenant.id === requestedTenant) ?? tenants[0] ?? null
-  const printersResult = selectedTenant
+  const selectedTenantSegment = selectedTenant
+    ? apiIdSegment(selectedTenant.id, 'tenant_id')
+    : null
+  const printersResult = selectedTenantSegment
     ? await fetchJson<PrinterList>(
-        `/api/v1/tenants/${selectedTenant.id}/printers`,
+        `/api/v1/tenants/${selectedTenantSegment}/printers`,
         'Printers',
       )
     : null
-  const agentsResult = selectedTenant
-    ? await fetchJson<AgentList>(`/api/v1/tenants/${selectedTenant.id}/agents`, 'Agents')
+  const agentsResult = selectedTenantSegment
+    ? await fetchJson<AgentList>(`/api/v1/tenants/${selectedTenantSegment}/agents`, 'Agents')
     : null
-  const jobsResult = selectedTenant
-    ? await fetchJson<JobList>(`/api/v1/tenants/${selectedTenant.id}/jobs`, 'Jobs')
+  const jobsResult = selectedTenantSegment
+    ? await fetchJson<JobList>(`/api/v1/tenants/${selectedTenantSegment}/jobs`, 'Jobs')
     : null
-  const [usersResult, tenantTokensResult, joinLinksResult, auditEventsResult] = selectedTenant
+  const [usersResult, tenantTokensResult, joinLinksResult, auditEventsResult] = selectedTenantSegment
     ? await Promise.all([
-        fetchJson<UserList>(`/api/v1/tenants/${selectedTenant.id}/users`, 'Users'),
+        fetchJson<UserList>(`/api/v1/tenants/${selectedTenantSegment}/users`, 'Users'),
         fetchJson<TenantTokenList>(
-          `/api/v1/tenants/${selectedTenant.id}/tenant-tokens`,
+          `/api/v1/tenants/${selectedTenantSegment}/tenant-tokens`,
           'Tenant tokens',
         ),
         fetchJson<JoinLinkList>(
-          `/api/v1/tenants/${selectedTenant.id}/join-links`,
+          `/api/v1/tenants/${selectedTenantSegment}/join-links`,
           'Join links',
         ),
         fetchJson<AuditEventList>(
-          `/api/v1/tenants/${selectedTenant.id}/audit-events?limit=20`,
+          `/api/v1/tenants/${selectedTenantSegment}/audit-events?limit=20`,
           'Audit events',
         ),
       ])
     : [null, null, null, null]
   const commandResult =
-    selectedTenant && requestedCommand
+    selectedTenantSegment && requestedCommand
       ? await fetchJson<Command>(
-          `/api/v1/tenants/${selectedTenant.id}/commands/${requestedCommand}`,
+          `/api/v1/tenants/${selectedTenantSegment}/commands/${apiIdSegment(requestedCommand, 'command_id')}`,
           'Command',
         )
       : null
@@ -154,11 +158,11 @@ export async function renderDashboardView(view: DashboardView, { searchParams }:
   const tenantTokens = tenantTokensResult?.data?.tenant_tokens ?? []
   const joinLinks = joinLinksResult?.data?.join_links ?? []
   const auditEvents = auditEventsResult?.data?.audit_events ?? []
-  const identityResults = selectedTenant
+  const identityResults = selectedTenantSegment
     ? await Promise.all(
         users.map((user) =>
           fetchJson<UserIdentityList>(
-            `/api/v1/tenants/${selectedTenant.id}/users/${user.id}/identities`,
+            `/api/v1/tenants/${selectedTenantSegment}/users/${apiIdSegment(user.id, 'user_id')}/identities`,
             `Identities for ${user.email}`,
           ),
         ),

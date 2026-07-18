@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { apiHeaders } from "../../../../../../api-auth";
+import { apiIdSegment, invalidApiIdResponse, isApiId } from "@/app/api-path";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 
@@ -15,12 +16,15 @@ type RouteContext = {
 
 export async function POST(request: Request, context: RouteContext) {
   const { tenantId, printerId } = await context.params;
+  if (!isApiId(tenantId) || !isApiId(printerId)) {
+    return invalidApiIdResponse();
+  }
   const headers = new Headers(await apiHeaders());
   const contentType = request.headers.get("content-type");
   if (contentType) {
     headers.set("content-type", contentType);
   }
-  const upstreamUrl = `${apiUrl}/api/v1/tenants/${encodeURIComponent(tenantId)}/printers/${encodeURIComponent(printerId)}/jobs`;
+  const upstreamUrl = `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/printers/${apiIdSegment(printerId, "printer_id")}/jobs`;
 
   const response = await fetch(upstreamUrl, {
     method: "POST",

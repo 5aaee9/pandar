@@ -7,6 +7,7 @@ use tonic::{Code, Status};
 use super::*;
 use crate::protocol::agent::v1::{AgentHeartbeat, CommandAck, agent_event, hub_command};
 
+mod camera;
 mod commands;
 mod firmware_commands;
 mod firmware_events;

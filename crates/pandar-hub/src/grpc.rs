@@ -213,7 +213,7 @@ impl AgentControlService {
             let _keepalive_sender = keepalive_sender;
             while let Some(event) = inbound.next().await {
                 match event {
-                    Ok(event) => handle_camera_event(&state, event).await,
+                    Ok(event) => handle_camera_event(&state, agent_id, event).await,
                     Err(err) => {
                         tracing::warn!(error = ?err, "agent camera stream ended with error");
                         break;
@@ -294,18 +294,22 @@ fn parse_camera_hello(
     Ok((tenant_id, agent_id, hello))
 }
 
-async fn handle_camera_event(state: &AppState, event: AgentCameraEvent) {
+async fn handle_camera_event(state: &AppState, agent_id: AgentId, event: AgentCameraEvent) {
     match event.event {
         Some(agent_camera_event::Event::Chunk(chunk)) => {
             state
                 .camera_sessions()
-                .push_chunk(&chunk.stream_id, axum::body::Bytes::from(chunk.data))
+                .push_chunk(
+                    agent_id,
+                    &chunk.stream_id,
+                    axum::body::Bytes::from(chunk.data),
+                )
                 .await;
         }
         Some(agent_camera_event::Event::Closed(closed)) => {
             state
                 .camera_sessions()
-                .close_stream(&closed.stream_id, closed.success, closed.error)
+                .close_stream(agent_id, &closed.stream_id, closed.success, closed.error)
                 .await;
         }
         Some(agent_camera_event::Event::Hello(_)) | None => {}

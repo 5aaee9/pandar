@@ -12,6 +12,22 @@
 let
   cfg = config.services.pandar;
   authCfg = config.services.pandar-auth;
+  sensitiveEnvironmentNames = [
+    "APP_API_TOKEN"
+    "APP_AUTH_BEARER_TOKEN"
+    "BETTER_AUTH_SECRET"
+    "PANDAR_AGENT_CREDENTIAL"
+    "PANDAR_ARTIFACT_S3_SECRET_ACCESS_KEY"
+    "PANDAR_AUTH_SMTP_PASSWORD"
+    "PANDAR_DATABASE_URL"
+    "PANDAR_PRINTERS"
+    "PANDAR_PRINTER_ACCESS_CODE_KEY"
+    "RESEND_API_KEY"
+  ];
+  hasSensitiveEnvironment =
+    environment:
+    lib.any (name: builtins.elem name sensitiveEnvironmentNames) (builtins.attrNames environment);
+  isRuntimeEnvironmentFile = path: path == null || !lib.hasPrefix "/nix/store/" (toString path);
   natsServiceUrl = "nats://127.0.0.1:4222";
   natsUrl = if cfg.hub.nats.mode == "service" then natsServiceUrl else cfg.hub.nats.url;
   authBindParts = builtins.match "(.+):([0-9]+)" authCfg.bind;
@@ -55,12 +71,6 @@ in
           type = lib.types.str;
           default = "0.0.0.0:50051";
           description = "gRPC bind address for pandar-hub agent connections.";
-        };
-
-        databaseUrl = lib.mkOption {
-          type = lib.types.str;
-          default = "sqlite:///var/lib/pandar-hub/pandar.db";
-          description = "Database URL passed through PANDAR_DATABASE_URL.";
         };
 
         controlPlane = lib.mkOption {
@@ -107,13 +117,13 @@ in
         environmentFile = lib.mkOption {
           type = lib.types.nullOr lib.types.path;
           default = null;
-          description = "Optional systemd EnvironmentFile containing PANDAR_PRINTER_ACCESS_CODE_KEY and other hub secrets.";
+          description = "Root-owned runtime systemd EnvironmentFile outside the Nix store containing PANDAR_DATABASE_URL, PANDAR_PRINTER_ACCESS_CODE_KEY, and other hub secrets.";
         };
 
         extraEnvironment = lib.mkOption {
           type = lib.types.attrsOf lib.types.str;
           default = { };
-          description = "Extra environment variables for pandar-hub.";
+          description = "Non-sensitive extra environment variables for pandar-hub. Secrets must use environmentFile.";
         };
       };
 
@@ -148,10 +158,16 @@ in
           description = "Public frontend URL passed through APP_BASE_URL.";
         };
 
+        environmentFile = lib.mkOption {
+          type = lib.types.nullOr lib.types.path;
+          default = null;
+          description = "Optional root-owned runtime systemd EnvironmentFile outside the Nix store for frontend secrets such as APP_API_TOKEN or APP_AUTH_BEARER_TOKEN.";
+        };
+
         extraEnvironment = lib.mkOption {
           type = lib.types.attrsOf lib.types.str;
           default = { };
-          description = "Extra environment variables for pandar-web.";
+          description = "Non-sensitive extra environment variables for pandar-web. Secrets must use environmentFile.";
         };
       };
 
@@ -198,18 +214,6 @@ in
           description = "Tenant ID passed through PANDAR_TENANT_ID.";
         };
 
-        credential = lib.mkOption {
-          type = lib.types.nullOr lib.types.str;
-          default = null;
-          description = "Agent credential passed through PANDAR_AGENT_CREDENTIAL.";
-        };
-
-        printers = lib.mkOption {
-          type = lib.types.str;
-          default = "[]";
-          description = "Printer endpoint JSON passed through PANDAR_PRINTERS.";
-        };
-
         artifactRoot = lib.mkOption {
           type = lib.types.path;
           default = "/var/lib/pandar-agent/artifacts";
@@ -219,13 +223,13 @@ in
         environmentFile = lib.mkOption {
           type = lib.types.nullOr lib.types.path;
           default = null;
-          description = "Optional systemd EnvironmentFile for agent secrets.";
+          description = "Root-owned runtime systemd EnvironmentFile outside the Nix store containing PANDAR_AGENT_CREDENTIAL and optional PANDAR_PRINTERS configuration.";
         };
 
         extraEnvironment = lib.mkOption {
           type = lib.types.attrsOf lib.types.str;
           default = { };
-          description = "Extra environment variables for pandar-agent.";
+          description = "Non-sensitive extra environment variables for pandar-agent. Secrets must use environmentFile.";
         };
       };
     };
@@ -342,13 +346,13 @@ in
       environmentFile = lib.mkOption {
         type = lib.types.nullOr lib.types.path;
         default = null;
-        description = "Optional systemd EnvironmentFile for Better Auth secrets such as BETTER_AUTH_SECRET, RESEND_API_KEY, or PANDAR_AUTH_SMTP_PASSWORD.";
+        description = "Root-owned runtime systemd EnvironmentFile outside the Nix store for Better Auth secrets such as BETTER_AUTH_SECRET, RESEND_API_KEY, or PANDAR_AUTH_SMTP_PASSWORD.";
       };
 
       extraEnvironment = lib.mkOption {
         type = lib.types.attrsOf lib.types.str;
         default = { };
-        description = "Extra environment variables for pandar-auth.";
+        description = "Non-sensitive extra environment variables for pandar-auth. Secrets must use environmentFile.";
       };
     };
   };
@@ -361,34 +365,58 @@ in
           message = "services.pandar.hub.nats.url is required when services.pandar.hub.controlPlane is \"nats\" and services.pandar.hub.nats.mode is \"external\".";
         }
         {
-          assertion =
-            !cfg.enable
-            || !cfg.hub.enable
-            || cfg.hub.environmentFile != null
-            || cfg.hub.extraEnvironment ? PANDAR_PRINTER_ACCESS_CODE_KEY;
-          message = "services.pandar.hub requires PANDAR_PRINTER_ACCESS_CODE_KEY through services.pandar.hub.environmentFile or services.pandar.hub.extraEnvironment.";
+          assertion = !cfg.enable || !cfg.hub.enable || cfg.hub.environmentFile != null;
+          message = "services.pandar.hub.environmentFile is required for PANDAR_DATABASE_URL and PANDAR_PRINTER_ACCESS_CODE_KEY.";
+        }
+        {
+          assertion = !cfg.enable || !cfg.hub.enable || isRuntimeEnvironmentFile cfg.hub.environmentFile;
+          message = "services.pandar.hub.environmentFile must be a runtime path outside /nix/store.";
+        }
+        {
+          assertion = !cfg.enable || !cfg.hub.enable || !hasSensitiveEnvironment cfg.hub.extraEnvironment;
+          message = "services.pandar.hub.extraEnvironment cannot contain secrets; use services.pandar.hub.environmentFile.";
+        }
+        {
+          assertion = !cfg.enable || !cfg.web.enable || isRuntimeEnvironmentFile cfg.web.environmentFile;
+          message = "services.pandar.web.environmentFile must be a runtime path outside /nix/store.";
+        }
+        {
+          assertion = !cfg.enable || !cfg.web.enable || !hasSensitiveEnvironment cfg.web.extraEnvironment;
+          message = "services.pandar.web.extraEnvironment cannot contain secrets; use services.pandar.web.environmentFile.";
+        }
+        {
+          assertion = !cfg.enable || !cfg.agent.enable || cfg.agent.environmentFile != null;
+          message = "services.pandar.agent.environmentFile is required for PANDAR_AGENT_CREDENTIAL.";
+        }
+        {
+          assertion = !cfg.enable || !cfg.agent.enable || isRuntimeEnvironmentFile cfg.agent.environmentFile;
+          message = "services.pandar.agent.environmentFile must be a runtime path outside /nix/store.";
+        }
+        {
+          assertion = !cfg.enable || !cfg.agent.enable || !hasSensitiveEnvironment cfg.agent.extraEnvironment;
+          message = "services.pandar.agent.extraEnvironment cannot contain secrets; use services.pandar.agent.environmentFile.";
         }
         {
           assertion = !authCfg.enable || authBindParts != null;
           message = "services.pandar-auth.bind must be formatted as host:port.";
         }
         {
-          assertion =
-            !authCfg.enable || authCfg.environmentFile != null || authCfg.extraEnvironment ? BETTER_AUTH_SECRET;
-          message = "services.pandar-auth requires BETTER_AUTH_SECRET through services.pandar-auth.environmentFile or services.pandar-auth.extraEnvironment.";
+          assertion = !authCfg.enable || authCfg.environmentFile != null;
+          message = "services.pandar-auth.environmentFile is required for Better Auth and email-provider secrets.";
+        }
+        {
+          assertion = !authCfg.enable || isRuntimeEnvironmentFile authCfg.environmentFile;
+          message = "services.pandar-auth.environmentFile must be a runtime path outside /nix/store.";
+        }
+        {
+          assertion = !authCfg.enable || !hasSensitiveEnvironment authCfg.extraEnvironment;
+          message = "services.pandar-auth.extraEnvironment cannot contain secrets; use services.pandar-auth.environmentFile.";
         }
         {
           assertion = !authCfg.enable || authCfg.email.from != "";
           message = "services.pandar-auth.email.from is required.";
         }
-        {
-          assertion =
-            !authCfg.enable
-            || authCfg.email.provider != "resend"
-            || authCfg.environmentFile != null
-            || authCfg.extraEnvironment ? RESEND_API_KEY;
-          message = "services.pandar-auth with email.provider = \"resend\" requires RESEND_API_KEY through services.pandar-auth.environmentFile or services.pandar-auth.extraEnvironment.";
-        }
+
         {
           assertion = !authCfg.enable || authCfg.email.provider != "smtp" || authCfg.email.smtp.host != "";
           message = "services.pandar-auth.email.smtp.host is required when email.provider is \"smtp\".";
@@ -398,14 +426,7 @@ in
             !authCfg.enable || authCfg.email.provider != "smtp" || authCfg.email.smtp.username != "";
           message = "services.pandar-auth.email.smtp.username is required when email.provider is \"smtp\".";
         }
-        {
-          assertion =
-            !authCfg.enable
-            || authCfg.email.provider != "smtp"
-            || authCfg.environmentFile != null
-            || authCfg.extraEnvironment ? PANDAR_AUTH_SMTP_PASSWORD;
-          message = "services.pandar-auth with email.provider = \"smtp\" requires PANDAR_AUTH_SMTP_PASSWORD through services.pandar-auth.environmentFile or services.pandar-auth.extraEnvironment.";
-        }
+
       ];
     }
 
@@ -429,7 +450,7 @@ in
         environment = {
           PANDAR_HUB_BIND = cfg.hub.bind;
           PANDAR_HUB_GRPC_BIND = cfg.hub.grpcBind;
-          PANDAR_DATABASE_URL = cfg.hub.databaseUrl;
+
           PANDAR_CONTROL_PLANE = cfg.hub.controlPlane;
           PANDAR_SPOOL_DIR = toString cfg.hub.spoolDir;
         }
@@ -472,6 +493,9 @@ in
           DynamicUser = true;
           Restart = "on-failure";
           RestartSec = "5s";
+        }
+        // lib.optionalAttrs (cfg.web.environmentFile != null) {
+          EnvironmentFile = cfg.web.environmentFile;
         };
       };
 
@@ -484,7 +508,7 @@ in
         environment = {
           PANDAR_HUB_GRPC_URL = cfg.agent.hubGrpcUrl;
           PANDAR_AGENT_NAME = cfg.agent.name;
-          PANDAR_PRINTERS = cfg.agent.printers;
+
           PANDAR_ARTIFACT_ROOT = toString cfg.agent.artifactRoot;
         }
         // lib.optionalAttrs (cfg.agent.agentId != null) {
@@ -493,9 +517,7 @@ in
         // lib.optionalAttrs (cfg.agent.tenantId != null) {
           PANDAR_TENANT_ID = cfg.agent.tenantId;
         }
-        // lib.optionalAttrs (cfg.agent.credential != null) {
-          PANDAR_AGENT_CREDENTIAL = cfg.agent.credential;
-        }
+
         // lib.optionalAttrs (cfg.agent.hubApiUrl != null) {
           PANDAR_HUB_API_URL = cfg.agent.hubApiUrl;
         }

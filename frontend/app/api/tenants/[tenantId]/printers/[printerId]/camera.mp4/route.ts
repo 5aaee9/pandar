@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { apiHeaders } from "@/app/api-auth";
+import { apiIdSegment, invalidApiIdResponse, isApiId } from "@/app/api-path";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 
@@ -9,8 +10,11 @@ export async function GET(
   { params }: { params: Promise<{ tenantId: string; printerId: string }> },
 ) {
   const { tenantId, printerId } = await params;
+  if (!isApiId(tenantId) || !isApiId(printerId)) {
+    return invalidApiIdResponse();
+  }
   const response = await fetch(
-    `${apiUrl}/api/v1/tenants/${tenantId}/printers/${printerId}/camera.mp4`,
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/printers/${apiIdSegment(printerId, "printer_id")}/camera.mp4`,
     {
       headers: await apiHeaders(),
       cache: "no-store",

@@ -24,9 +24,17 @@ let
       services.pandar = {
         enable = true;
         web.enable = false;
-        hub.extraEnvironment.PANDAR_PRINTER_ACCESS_CODE_KEY =
-          "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI";
+        hub.environmentFile = "/run/secrets/pandar-hub.env";
       };
+
+      boot.postBootCommands = ''
+        install -d -m 0700 /run/secrets
+        cat > /run/secrets/pandar-hub.env <<'EOF'
+        PANDAR_DATABASE_URL=sqlite:///var/lib/pandar-hub/pandar.db
+        PANDAR_PRINTER_ACCESS_CODE_KEY=QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI
+        EOF
+        chmod 0600 /run/secrets/pandar-hub.env
+      '';
 
       environment.systemPackages = [ pkgs.curl ];
       system.stateVersion = "25.11";
@@ -50,7 +58,7 @@ in
     testScript = ''
       start_all()
       ${hubAssertions}
-      machine.succeed("systemctl show pandar-hub.service --property=Environment | grep -F 'PANDAR_DATABASE_URL=sqlite:///var/lib/pandar-hub/pandar.db'")
+      machine.succeed("! systemctl cat pandar-hub.service | grep -F 'sqlite:///var/lib/pandar-hub/pandar.db'")
       machine.succeed("test -s /var/lib/pandar-hub/pandar.db")
     '';
   };
@@ -82,14 +90,21 @@ in
           '';
         };
 
-        services.pandar.hub.databaseUrl = "postgres://pandar@127.0.0.1/pandar";
+        boot.postBootCommands = lib.mkForce ''
+          install -d -m 0700 /run/secrets
+          cat > /run/secrets/pandar-hub.env <<'EOF'
+          PANDAR_DATABASE_URL=postgres://pandar@127.0.0.1/pandar
+          PANDAR_PRINTER_ACCESS_CODE_KEY=QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI
+          EOF
+          chmod 0600 /run/secrets/pandar-hub.env
+        '';
       };
 
     testScript = ''
       start_all()
       machine.wait_for_unit("postgresql.service")
       ${hubAssertions}
-      machine.succeed("systemctl show pandar-hub.service --property=Environment | grep -F 'PANDAR_DATABASE_URL=postgres://pandar@127.0.0.1/pandar'")
+      machine.succeed("! systemctl cat pandar-hub.service | grep -F 'postgres://pandar@127.0.0.1/pandar'")
       machine.succeed("sudo -u postgres psql -d pandar -Atc \"select to_regclass('public.tenants')\" | grep -F tenants")
     '';
   };

@@ -107,7 +107,7 @@ The Hub stores and forwards typed printer operations. Bambu-specific MQTT constr
 
 The frontend reads the hub through `APP_API_URL`, defaulting to `http://localhost:8080` when unset. `APP_BASE_URL` remains the frontend's public URL for deployment wiring.
 
-`APP_AUTH_PROVIDER` selects the browser-facing provider metadata for `pandar-web`. Supported values are `clerk`, `logto`, `betterauth`, or unset/`none`. Provider-specific frontend metadata is configured with `APP_AUTH_CLERK_PUBLISHABLE_KEY`, `APP_AUTH_LOGTO_ENDPOINT`, `APP_AUTH_LOGTO_APP_ID`, or `APP_AUTH_BETTER_AUTH_BASE_URL`. The frontend still forwards only a bearer token from the configured cookie/static bridge to `pandar-hub`; Pandar tenant membership is resolved by the hub.
+`APP_AUTH_PROVIDER` selects the browser-facing provider metadata for `pandar-web`. Supported values are `clerk`, `logto`, `betterauth`, or unset/`none`; any other value fails Web startup. Provider-specific frontend metadata is configured with `APP_AUTH_CLERK_PUBLISHABLE_KEY`, `APP_AUTH_LOGTO_ENDPOINT`, `APP_AUTH_LOGTO_APP_ID`, or `APP_AUTH_BETTER_AUTH_BASE_URL`. The frontend still forwards only a bearer token from the configured cookie or static single-user bridge to `pandar-hub`; Pandar tenant membership is resolved by the hub.
 
 Server-side bearer credential precedence:
 
@@ -115,7 +115,7 @@ Server-side bearer credential precedence:
 2. Static deployment bridge `APP_AUTH_BEARER_TOKEN`.
 3. Existing service token `APP_API_TOKEN`.
 
-`APP_AUTH_BEARER_TOKEN` is useful for smoke tests or single-user deployments, but it is not a per-browser identity source and should not be used for multi-user browser deployments. Set `APP_TENANT_ID` in deployed frontends to bind the dashboard to one tenant without relying on global tenant discovery.
+`APP_AUTH_BEARER_TOKEN` and `APP_API_TOKEN` are mutually exclusive static identities for smoke tests or explicitly trusted single-user deployments. Neither may be set when `APP_AUTH_PROVIDER` selects Clerk, Logto, or Better Auth, because a static token would turn every browser request into the same API identity and bypass external user authentication. Set `APP_TENANT_ID` in static-token deployments to bind the dashboard to one tenant without relying on global tenant discovery.
 
 Phase 15 browser-safe live runtime updates:
 

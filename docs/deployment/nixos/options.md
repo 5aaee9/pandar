@@ -73,22 +73,9 @@ _Default:_
 "/var/lib/pandar-agent/artifacts"
 ```
 
-## services\.pandar\.agent\.credential
-
-Agent credential passed through PANDAR_AGENT_CREDENTIAL\.
-
-_Type:_
-null or string
-
-_Default:_
-
-```nix
-null
-```
-
 ## services\.pandar\.agent\.environmentFile
 
-Optional systemd EnvironmentFile for agent secrets\.
+Root-owned runtime systemd EnvironmentFile outside the Nix store containing PANDAR_AGENT_CREDENTIAL and optional PANDAR_PRINTERS configuration\.
 
 _Type:_
 null or absolute path
@@ -101,7 +88,7 @@ null
 
 ## services\.pandar\.agent\.extraEnvironment
 
-Extra environment variables for pandar-agent\.
+Non-sensitive extra environment variables for pandar-agent\. Secrets must use environmentFile\.
 
 _Type:_
 attribute set of string
@@ -149,19 +136,6 @@ _Default:_
 
 ```nix
 "local-agent"
-```
-
-## services\.pandar\.agent\.printers
-
-Printer endpoint JSON passed through PANDAR_PRINTERS\.
-
-_Type:_
-string
-
-_Default:_
-
-```nix
-"[]"
 ```
 
 ## services\.pandar\.agent\.tenantId
@@ -229,22 +203,9 @@ _Default:_
 "in-process"
 ```
 
-## services\.pandar\.hub\.databaseUrl
-
-Database URL passed through PANDAR_DATABASE_URL\.
-
-_Type:_
-string
-
-_Default:_
-
-```nix
-"sqlite:///var/lib/pandar-hub/pandar.db"
-```
-
 ## services\.pandar\.hub\.environmentFile
 
-Optional systemd EnvironmentFile containing PANDAR_PRINTER_ACCESS_CODE_KEY and other hub secrets\.
+Root-owned runtime systemd EnvironmentFile outside the Nix store containing PANDAR_DATABASE_URL, PANDAR_PRINTER_ACCESS_CODE_KEY, and other hub secrets\.
 
 _Type:_
 null or absolute path
@@ -257,7 +218,7 @@ null
 
 ## services\.pandar\.hub\.extraEnvironment
 
-Extra environment variables for pandar-hub\.
+Non-sensitive extra environment variables for pandar-hub\. Secrets must use environmentFile\.
 
 _Type:_
 attribute set of string
@@ -386,9 +347,22 @@ _Default:_
 "http://127.0.0.1:3000"
 ```
 
+## services\.pandar\.web\.environmentFile
+
+Optional root-owned runtime systemd EnvironmentFile outside the Nix store for frontend secrets such as APP_API_TOKEN or APP_AUTH_BEARER_TOKEN\.
+
+_Type:_
+null or absolute path
+
+_Default:_
+
+```nix
+null
+```
+
 ## services\.pandar\.web\.extraEnvironment
 
-Extra environment variables for pandar-web\.
+Non-sensitive extra environment variables for pandar-web\. Secrets must use environmentFile\.
 
 _Type:_
 attribute set of string
@@ -609,7 +583,7 @@ _Default:_
 
 ## services\.pandar-auth\.environmentFile
 
-Optional systemd EnvironmentFile for Better Auth secrets such as BETTER_AUTH_SECRET, RESEND_API_KEY, or PANDAR_AUTH_SMTP_PASSWORD\.
+Root-owned runtime systemd EnvironmentFile outside the Nix store for Better Auth secrets such as BETTER_AUTH_SECRET, RESEND_API_KEY, or PANDAR_AUTH_SMTP_PASSWORD\.
 
 _Type:_
 null or absolute path
@@ -622,7 +596,7 @@ null
 
 ## services\.pandar-auth\.extraEnvironment
 
-Extra environment variables for pandar-auth\.
+Non-sensitive extra environment variables for pandar-auth\. Secrets must use environmentFile\.
 
 _Type:_
 attribute set of string

@@ -1,4 +1,5 @@
 import { apiHeaders } from '../../../../../api-auth'
+import { apiIdSegment, invalidApiIdResponse, isApiId } from '@/app/api-path'
 
 const apiUrl = process.env.APP_API_URL ?? 'http://localhost:8080'
 
@@ -9,8 +10,11 @@ export async function DELETE(
   context: { params: Promise<{ tenantId: string; jobId: string }> },
 ): Promise<Response> {
   const { tenantId, jobId } = await context.params
+  if (!isApiId(tenantId) || !isApiId(jobId)) {
+    return invalidApiIdResponse()
+  }
   const upstream = await fetch(
-    `${apiUrl}/api/v1/tenants/${encodeURIComponent(tenantId)}/jobs/${encodeURIComponent(jobId)}`,
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, 'tenant_id')}/jobs/${apiIdSegment(jobId, 'job_id')}`,
     {
       method: 'DELETE',
       cache: 'no-store',

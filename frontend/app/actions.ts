@@ -4,6 +4,7 @@ import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { apiHeaders, requireAuth } from "./api-auth";
+import { apiIdSegment } from "./api-path";
 import type { Agent, JoinLink, Tenant, TenantToken } from "./dashboard-types";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
@@ -42,7 +43,7 @@ export async function discoverPrinters(formData: FormData) {
   const agentId = stringField(formData, "agent_id");
   const timeoutValue = stringField(formData, "timeout_seconds");
   const response = await fetch(
-    `${apiUrl}/api/v1/tenants/${tenantId}/agents/${agentId}/discover-printers`,
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/agents/${apiIdSegment(agentId, "agent_id")}/discover-printers`,
     {
       method: "POST",
       headers: await apiHeaders("application/json"),
@@ -65,7 +66,7 @@ export async function refreshPrinters(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const agentId = stringField(formData, "agent_id");
   const response = await postJson(
-    `/api/v1/tenants/${tenantId}/agents/${agentId}/refresh-printers`,
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/agents/${apiIdSegment(agentId, "agent_id")}/refresh-printers`,
     {},
   );
   redirect(
@@ -82,7 +83,7 @@ export async function refreshPrinterMaterials(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const printerId = stringField(formData, "printer_id");
   const response = await postJson(
-    `/api/v1/tenants/${tenantId}/printers/${printerId}/materials:refresh`,
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/printers/${apiIdSegment(printerId, "printer_id")}/materials:refresh`,
     {},
   );
   redirect(
@@ -98,7 +99,7 @@ export async function deletePrinter(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const printerId = stringField(formData, "printer_id");
   const response = await fetch(
-    `${apiUrl}/api/v1/tenants/${tenantId}/printers/${printerId}`,
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/printers/${apiIdSegment(printerId, "printer_id")}`,
     {
       method: "DELETE",
       headers: await apiHeaders("application/json"),
@@ -117,7 +118,7 @@ export async function updatePrinter(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const printerId = stringField(formData, "printer_id");
   const response = await fetch(
-    `${apiUrl}/api/v1/tenants/${tenantId}/printers/${printerId}`,
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/printers/${apiIdSegment(printerId, "printer_id")}`,
     {
       method: "PATCH",
       headers: await apiHeaders("application/json"),
@@ -139,7 +140,7 @@ export async function deleteAgent(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const agentId = stringField(formData, "agent_id");
   const response = await fetch(
-    `${apiUrl}/api/v1/tenants/${tenantId}/agents/${agentId}`,
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/agents/${apiIdSegment(agentId, "agent_id")}`,
     {
       method: "DELETE",
       headers: await apiHeaders("application/json"),
@@ -158,7 +159,7 @@ export async function diagnosePrinter(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const agentId = stringField(formData, "agent_id");
   const response = await fetch(
-    `${apiUrl}/api/v1/tenants/${tenantId}/agents/${agentId}/diagnose-printer`,
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/agents/${apiIdSegment(agentId, "agent_id")}/diagnose-printer`,
     {
       method: "POST",
       headers: await apiHeaders("application/json"),
@@ -181,7 +182,7 @@ export async function linkPrinter(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const agentId = stringField(formData, "agent_id");
   const response = await postJson(
-    `/api/v1/tenants/${tenantId}/agents/${agentId}/link-printer`,
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/agents/${apiIdSegment(agentId, "agent_id")}/link-printer`,
     {
       type: stringField(formData, "type"),
       host: stringField(formData, "host"),
@@ -208,11 +209,14 @@ export async function createTenantToken(
       const trimmed = scope.trim();
       return trimmed ? [trimmed] : [];
     });
-  const response = await postJson(`/api/v1/tenants/${tenantId}/tenant-tokens`, {
-    name: stringField(formData, "name"),
-    scopes,
-    expires_at: nullableField(formData, "expires_at"),
-  });
+  const response = await postJson(
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/tenant-tokens`,
+    {
+      name: stringField(formData, "name"),
+      scopes,
+      expires_at: nullableField(formData, "expires_at"),
+    },
+  );
   if (!response.ok) {
     return { ok: false, error: await errorCode(response) };
   }
@@ -235,7 +239,7 @@ export async function revokeTenantToken(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const tokenId = stringField(formData, "token_id");
   const response = await fetch(
-    `${apiUrl}/api/v1/tenants/${tenantId}/tenant-tokens/${tokenId}`,
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/tenant-tokens/${apiIdSegment(tokenId, "token_id")}`,
     {
       method: "DELETE",
       headers: await apiHeaders("application/json"),
@@ -258,7 +262,7 @@ export async function rotateTenantToken(
   const tenantId = stringField(formData, "tenant_id");
   const tokenId = stringField(formData, "token_id");
   const response = await postJson(
-    `/api/v1/tenants/${tenantId}/tenant-tokens/${tokenId}/rotate`,
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/tenant-tokens/${apiIdSegment(tokenId, "token_id")}/rotate`,
     {
       expires_at: nullableField(formData, "expires_at"),
     },
@@ -301,12 +305,15 @@ export async function createJoinLink(
 ): Promise<SecretActionState> {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
-  const response = await postJson(`/api/v1/tenants/${tenantId}/join-links`, {
-    role: stringField(formData, "role"),
-    email_constraint: nullableField(formData, "email_constraint"),
-    expires_in_seconds: numberOrNull(formData, "expires_in_seconds"),
-    max_uses: numberOrNull(formData, "max_uses"),
-  });
+  const response = await postJson(
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/join-links`,
+    {
+      role: stringField(formData, "role"),
+      email_constraint: nullableField(formData, "email_constraint"),
+      expires_in_seconds: numberOrNull(formData, "expires_in_seconds"),
+      max_uses: numberOrNull(formData, "max_uses"),
+    },
+  );
   if (!response.ok) {
     return { ok: false, error: await errorCode(response) };
   }
@@ -328,7 +335,7 @@ export async function revokeJoinLink(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const joinLinkId = stringField(formData, "join_link_id");
   const response = await fetch(
-    `${apiUrl}/api/v1/tenants/${tenantId}/join-links/${joinLinkId}`,
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/join-links/${apiIdSegment(joinLinkId, "join_link_id")}`,
     {
       method: "DELETE",
       headers: await apiHeaders("application/json"),
@@ -359,11 +366,14 @@ export async function acceptJoinLink(formData: FormData) {
 export async function createTenantUser(formData: FormData) {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
-  const response = await postJson(`/api/v1/tenants/${tenantId}/users`, {
-    email: stringField(formData, "email"),
-    display_name: stringField(formData, "display_name"),
-    role: stringField(formData, "role"),
-  });
+  const response = await postJson(
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/users`,
+    {
+      email: stringField(formData, "email"),
+      display_name: stringField(formData, "display_name"),
+      role: stringField(formData, "role"),
+    },
+  );
   redirect(
     statusUrl(
       tenantId,
@@ -377,7 +387,7 @@ export async function updateTenantUserRole(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const userId = stringField(formData, "user_id");
   const response = await fetch(
-    `${apiUrl}/api/v1/tenants/${tenantId}/users/${userId}/role`,
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/users/${apiIdSegment(userId, "user_id")}/role`,
     {
       method: "PATCH",
       headers: await apiHeaders("application/json"),
@@ -397,7 +407,7 @@ export async function linkUserIdentity(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const userId = stringField(formData, "user_id");
   const response = await postJson(
-    `/api/v1/tenants/${tenantId}/users/${userId}/identities`,
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/users/${apiIdSegment(userId, "user_id")}/identities`,
     {
       provider: stringField(formData, "provider"),
       subject: stringField(formData, "subject"),
@@ -418,7 +428,7 @@ export async function createAgentPairing(
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const response = await postJson(
-    `/api/v1/tenants/${tenantId}/agent-pairings`,
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/agent-pairings`,
     {
       name: stringField(formData, "name"),
     },
@@ -441,7 +451,7 @@ export async function retryDispatchJob(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const jobId = stringField(formData, "job_id");
   const response = await postJson(
-    `/api/v1/tenants/${tenantId}/jobs/${jobId}/retry-dispatch`,
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/jobs/${apiIdSegment(jobId, "job_id")}/retry-dispatch`,
     {
       reason: nullableField(formData, "reason"),
     },
@@ -463,9 +473,12 @@ export async function retryDispatchJobs(formData: FormData) {
     .filter((value): value is string => typeof value === "string");
   const responses = await Promise.all(
     jobIds.map((jobId) =>
-      postJson(`/api/v1/tenants/${tenantId}/jobs/${jobId}/retry-dispatch`, {
-        reason: null,
-      }),
+      postJson(
+        `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/jobs/${apiIdSegment(jobId, "job_id")}/retry-dispatch`,
+        {
+          reason: null,
+        },
+      ),
     ),
   );
   const allOk = responses.every((response) => response.ok);
@@ -483,7 +496,7 @@ export async function reprintJob(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const jobId = stringField(formData, "job_id");
   const response = await postJson(
-    `/api/v1/tenants/${tenantId}/jobs/${jobId}/reprint`,
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/jobs/${apiIdSegment(jobId, "job_id")}/reprint`,
     {
       reason: nullableField(formData, "reason"),
     },
@@ -503,7 +516,7 @@ export async function duplicateJob(formData: FormData) {
   const jobId = stringField(formData, "job_id");
   const plateId = nullableField(formData, "plate_id");
   const response = await postJson(
-    `/api/v1/tenants/${tenantId}/jobs/${jobId}/duplicate`,
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/jobs/${apiIdSegment(jobId, "job_id")}/duplicate`,
     {
       printer_id: nullableField(formData, "printer_id"),
       plate_id: plateId ? Number(plateId) : null,
@@ -541,7 +554,7 @@ export async function controlPrinter(formData: FormData) {
   const deltaMm = nullableField(formData, "delta_mm");
   const feedrateMmPerMin = nullableField(formData, "feedrate_mm_per_min");
   const response = await postJson(
-    `/api/v1/tenants/${tenantId}/printers/${printerId}/controls`,
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/printers/${apiIdSegment(printerId, "printer_id")}/controls`,
     {
       action,
       axes: action === "home" ? [] : undefined,
@@ -579,7 +592,7 @@ export async function createPluginTicket(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const redirectUrl = stringField(formData, "redirect_url");
   const response = await postJson(
-    `/api/v1/tenants/${tenantId}/plugin/login-tickets`,
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/plugin/login-tickets`,
     {
       redirect_url: redirectUrl,
     },
@@ -601,7 +614,7 @@ export async function createMobileTicket(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const redirectUrl = stringField(formData, "redirect_url");
   const response = await postJson(
-    `/api/v1/tenants/${tenantId}/mobile/login-tickets`,
+    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/mobile/login-tickets`,
     {
       redirect_url: redirectUrl,
     },

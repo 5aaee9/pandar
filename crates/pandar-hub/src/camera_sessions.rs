@@ -116,25 +116,35 @@ impl CameraSessionRegistry {
         }
     }
 
-    pub async fn push_chunk(&self, stream_id: &str, data: Bytes) {
+    pub async fn push_chunk(&self, agent_id: AgentId, stream_id: &str, data: Bytes) {
         let sender = self
             .streams
             .lock()
             .await
             .get(stream_id)
+            .filter(|handle| handle.agent_id == agent_id)
             .map(|handle| handle.sender.clone());
         if let Some(sender) = sender {
             let _ = sender.send(Ok(data)).await;
         }
     }
 
-    pub async fn close_stream(&self, stream_id: &str, success: bool, error: String) {
-        let sender = self
-            .streams
-            .lock()
-            .await
-            .remove(stream_id)
-            .map(|handle| handle.sender);
+    pub async fn close_stream(
+        &self,
+        agent_id: AgentId,
+        stream_id: &str,
+        success: bool,
+        error: String,
+    ) {
+        let sender = {
+            let mut streams = self.streams.lock().await;
+            let owned = streams
+                .get(stream_id)
+                .is_some_and(|handle| handle.agent_id == agent_id);
+            owned
+                .then(|| streams.remove(stream_id).map(|handle| handle.sender))
+                .flatten()
+        };
         if let Some(sender) = sender
             && !success
         {
@@ -226,7 +236,11 @@ mod tests {
         }
 
         registry
-            .push_chunk(&stream.stream_id.clone(), Bytes::from_static(b"frame"))
+            .push_chunk(
+                agent_id,
+                &stream.stream_id.clone(),
+                Bytes::from_static(b"frame"),
+            )
             .await;
         let chunk = stream.next().await.unwrap().unwrap();
         assert_eq!(chunk, Bytes::from_static(b"frame"));

@@ -4,6 +4,7 @@ import { useRef, useState, type FormEvent } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { ArtifactMetadata, Printer } from './dashboard-types'
+import { apiIdSegment } from './api-path'
 import { formatBytes } from './dashboard-format'
 import { DispatchMaterialMappingFields } from './dispatch-material-mapping-fields'
 import { dispatchErrorCode, prepareDispatchSubmission } from './dispatch-form-submission'
@@ -328,11 +329,11 @@ export function DispatchForm({
 }
 
 function uploadPath(tenantId: string, printerId: string) {
-  return `/api/tenants/${encodeURIComponent(tenantId)}/printers/${encodeURIComponent(printerId)}/jobs`
+  return `/api/tenants/${apiIdSegment(tenantId, 'tenant_id')}/printers/${apiIdSegment(printerId, 'printer_id')}/jobs`
 }
 
 function metadataPreviewPath(tenantId: string) {
-  return `/api/tenants/${encodeURIComponent(tenantId)}/artifact-metadata-preview`
+  return `/api/tenants/${apiIdSegment(tenantId, 'tenant_id')}/artifact-metadata-preview`
 }
 
 

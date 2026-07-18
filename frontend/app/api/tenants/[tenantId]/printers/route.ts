@@ -1,4 +1,5 @@
 import { apiHeaders } from "../../../../api-auth";
+import { apiIdSegment, invalidApiIdResponse, isApiId } from "@/app/api-path";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 
@@ -9,8 +10,11 @@ export async function GET(
   context: { params: Promise<{ tenantId: string }> },
 ): Promise<Response> {
   const { tenantId } = await context.params;
+  if (!isApiId(tenantId)) {
+    return invalidApiIdResponse();
+  }
   const upstream = await fetch(
-    `${apiUrl}/api/v1/tenants/${encodeURIComponent(tenantId)}/printers`,
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/printers`,
     {
       cache: "no-store",
       headers: await apiHeaders(),

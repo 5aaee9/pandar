@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/popover'
 
 import { controlPrinter } from './actions'
+import { apiIdSegment } from './api-path'
 import type { Printer } from './dashboard-types'
 import {
   formatTemperatureValue,
@@ -141,7 +142,7 @@ function CameraDialogControl({ printer }: { printer: Printer }) {
             className="aspect-video w-full bg-black object-contain"
             muted
             playsInline
-            src={`/api/tenants/${printer.tenant_id}/printers/${printer.id}/camera.mp4`}
+            src={`/api/tenants/${apiIdSegment(printer.tenant_id, 'tenant_id')}/printers/${apiIdSegment(printer.id, 'printer_id')}/camera.mp4`}
           />
           <button
             aria-label={t('cameraFullscreen')}

@@ -1,7 +1,7 @@
 export type AuthProvider = "clerk" | "logto" | "betterauth" | "none";
 
 export function authProviderConfig() {
-  const provider = providerValue(process.env.APP_AUTH_PROVIDER);
+  const provider = validateAuthConfiguration();
   const clerkPublishableKey =
     process.env.APP_AUTH_CLERK_PUBLISHABLE_KEY ?? null;
   const logtoEndpoint = process.env.APP_AUTH_LOGTO_ENDPOINT ?? null;
@@ -19,10 +19,31 @@ export function authProviderConfig() {
   };
 }
 
+export function validateAuthConfiguration(): AuthProvider {
+  const provider = providerValue(process.env.APP_AUTH_PROVIDER);
+  const hasApiToken = Boolean(process.env.APP_API_TOKEN);
+  const hasStaticAuthToken = Boolean(process.env.APP_AUTH_BEARER_TOKEN);
+  if (provider !== "none" && (hasApiToken || hasStaticAuthToken)) {
+    throw new Error(
+      "Static API tokens cannot be combined with external authentication",
+    );
+  }
+  if (hasApiToken && hasStaticAuthToken) {
+    throw new Error(
+      "APP_API_TOKEN and APP_AUTH_BEARER_TOKEN are mutually exclusive",
+    );
+  }
+  return provider;
+}
+
 function providerValue(value: string | undefined): AuthProvider {
-  return value === "clerk" || value === "logto" || value === "betterauth"
-    ? value
-    : "none";
+  if (!value || value === "none") {
+    return "none";
+  }
+  if (value === "clerk" || value === "logto" || value === "betterauth") {
+    return value;
+  }
+  throw new Error(`Unsupported APP_AUTH_PROVIDER: ${value}`);
 }
 
 function signInUrl(

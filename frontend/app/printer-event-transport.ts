@@ -3,6 +3,7 @@ import type {
   PrinterEventTicket,
   PrinterList,
 } from "./dashboard-types";
+import { apiIdSegment } from "./api-path";
 import { printerEventWebSocketUrl } from "./dashboard-runtime-helpers";
 
 export async function fetchAuthoritativePrinters(
@@ -11,7 +12,7 @@ export async function fetchAuthoritativePrinters(
   deadline: number,
 ): Promise<Printer[]> {
   const response = await fetch(
-    `/api/tenants/${encodeURIComponent(tenantId)}/printers`,
+    `/api/tenants/${apiIdSegment(tenantId, "tenant_id")}/printers`,
     { cache: "no-store", signal: controller.signal },
   );
   if (!response.ok) {
@@ -34,7 +35,7 @@ export async function requestPrinterEventTicket(
   signal: AbortSignal,
 ): Promise<string> {
   const response = await fetch(
-    `/api/tenants/${encodeURIComponent(tenantId)}/printer-events/ticket`,
+    `/api/tenants/${apiIdSegment(tenantId, "tenant_id")}/printer-events/ticket`,
     { method: "POST", signal },
   );
   if (!response.ok) {
@@ -54,7 +55,7 @@ export function printerEventConnectionUrl(
   const base = new URL(apiUrl);
   const basePath = base.pathname.replace(/\/$/, "");
   const url = new URL(
-    `${basePath}/api/v1/tenants/${encodeURIComponent(tenantId)}/printer-events`,
+    `${basePath}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/printer-events`,
     base,
   );
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";

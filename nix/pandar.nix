@@ -320,12 +320,13 @@
                   nats.subject = "pandar.test.control";
                   environmentFile = "/run/secrets/pandar-hub.env";
                 };
+                services.pandar.web.environmentFile = "/run/secrets/pandar-web.env";
                 services.pandar.agent = {
                   enable = true;
                   hubApiUrl = "http://127.0.0.1:8080";
                   agentId = "00000000-0000-0000-0000-000000000001";
                   tenantId = "00000000-0000-0000-0000-000000000002";
-                  credential = "test-agent-credential";
+                  environmentFile = "/run/secrets/pandar-agent.env";
                 };
                 system.stateVersion = "25.11";
               }
@@ -392,6 +393,39 @@
               }
             ];
           };
+          unsafeNixosSystem = inputs.nixpkgs.lib.nixosSystem {
+            inherit system;
+            modules = [
+              (import ./nixos-module.nix {
+                pandarAgentPackage = pandar-agent;
+                pandarAuthPackage = pandar-auth;
+                pandarHubPackage = pandar-hub;
+                pandarWebPackage = pandar-web;
+              })
+              {
+                services.pandar = {
+                  enable = true;
+                  hub = {
+                    environmentFile = pkgs.writeText "unsafe-pandar-hub.env" "test-only";
+                    extraEnvironment.PANDAR_DATABASE_URL = "postgres://secret@example/pandar";
+                  };
+                  web.extraEnvironment.APP_API_TOKEN = "test-only";
+                  agent = {
+                    enable = true;
+                    environmentFile = "/run/secrets/pandar-agent.env";
+                    extraEnvironment.PANDAR_AGENT_CREDENTIAL = "test-only";
+                  };
+                };
+                services.pandar-auth = {
+                  enable = true;
+                  environmentFile = "/run/secrets/pandar-auth.env";
+                  email.from = "Pandar <auth@example>";
+                  extraEnvironment.BETTER_AUTH_SECRET = "test-only";
+                };
+                system.stateVersion = "25.11";
+              }
+            ];
+          };
           serviceHub = serviceNixosSystem.config.systemd.services.pandar-hub;
           serviceWeb = serviceNixosSystem.config.systemd.services.pandar-web;
           serviceAgent = serviceNixosSystem.config.systemd.services.pandar-agent;
@@ -400,6 +434,56 @@
           externalNatsEnabled = if externalNixosSystem.config.services.nats.enable then "1" else "0";
           authService = authNixosSystem.config.systemd.services.pandar-auth;
           authHubPresent = if authNixosSystem.config.systemd.services ? pandar-hub then "1" else "0";
+          hubDatabaseEnvironmentPresent = if serviceHub.environment ? PANDAR_DATABASE_URL then "1" else "0";
+          agentCredentialEnvironmentPresent =
+            if serviceAgent.environment ? PANDAR_AGENT_CREDENTIAL then "1" else "0";
+          agentPrintersEnvironmentPresent = if serviceAgent.environment ? PANDAR_PRINTERS then "1" else "0";
+          hubDatabaseOptionPresent =
+            if serviceNixosSystem.options.services.pandar.hub ? databaseUrl then "1" else "0";
+          agentCredentialOptionPresent =
+            if serviceNixosSystem.options.services.pandar.agent ? credential then "1" else "0";
+          agentPrintersOptionPresent =
+            if serviceNixosSystem.options.services.pandar.agent ? printers then "1" else "0";
+          unsafeAssertionFailed =
+            message:
+            lib.any (
+              assertion: !assertion.assertion && assertion.message == message
+            ) unsafeNixosSystem.config.assertions;
+          storeEnvironmentFileRejected =
+            if
+              unsafeAssertionFailed "services.pandar.hub.environmentFile must be a runtime path outside /nix/store."
+            then
+              "1"
+            else
+              "0";
+          hubSecretEnvironmentRejected =
+            if
+              unsafeAssertionFailed "services.pandar.hub.extraEnvironment cannot contain secrets; use services.pandar.hub.environmentFile."
+            then
+              "1"
+            else
+              "0";
+          webSecretEnvironmentRejected =
+            if
+              unsafeAssertionFailed "services.pandar.web.extraEnvironment cannot contain secrets; use services.pandar.web.environmentFile."
+            then
+              "1"
+            else
+              "0";
+          agentSecretEnvironmentRejected =
+            if
+              unsafeAssertionFailed "services.pandar.agent.extraEnvironment cannot contain secrets; use services.pandar.agent.environmentFile."
+            then
+              "1"
+            else
+              "0";
+          authSecretEnvironmentRejected =
+            if
+              unsafeAssertionFailed "services.pandar-auth.extraEnvironment cannot contain secrets; use services.pandar-auth.environmentFile."
+            then
+              "1"
+            else
+              "0";
         in
         pkgs.runCommand "pandar-nixos-module-check" { } ''
           test "${serviceHub.serviceConfig.ExecStart}" = "${pandar-hub}/bin/pandar-hub"
@@ -414,9 +498,22 @@
           test "${serviceHub.environment.PANDAR_NATS_URL}" = "nats://127.0.0.1:4222"
           test "${serviceHub.environment.PANDAR_NATS_SUBJECT}" = "pandar.test.control"
           test "${serviceHub.serviceConfig.EnvironmentFile}" = "/run/secrets/pandar-hub.env"
+          test "${serviceWeb.serviceConfig.EnvironmentFile}" = "/run/secrets/pandar-web.env"
           test "${serviceWeb.environment.APP_API_URL}" = "http://127.0.0.1:8080"
           test "${serviceAgent.environment.PANDAR_HUB_GRPC_URL}" = "http://127.0.0.1:50051"
           test "${serviceAgent.environment.PANDAR_HUB_API_URL}" = "http://127.0.0.1:8080"
+          test "${serviceAgent.serviceConfig.EnvironmentFile}" = "/run/secrets/pandar-agent.env"
+          test "${hubDatabaseEnvironmentPresent}" = "0"
+          test "${agentCredentialEnvironmentPresent}" = "0"
+          test "${agentPrintersEnvironmentPresent}" = "0"
+          test "${hubDatabaseOptionPresent}" = "0"
+          test "${agentCredentialOptionPresent}" = "0"
+          test "${agentPrintersOptionPresent}" = "0"
+          test "${storeEnvironmentFileRejected}" = "1"
+          test "${hubSecretEnvironmentRejected}" = "1"
+          test "${webSecretEnvironmentRejected}" = "1"
+          test "${agentSecretEnvironmentRejected}" = "1"
+          test "${authSecretEnvironmentRejected}" = "1"
           test "${externalNatsEnabled}" = "0"
           test "${externalHub.environment.PANDAR_CONTROL_PLANE}" = "nats"
           test "${externalHub.environment.PANDAR_NATS_URL}" = "nats://broker.example:4222"
