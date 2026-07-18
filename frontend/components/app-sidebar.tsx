@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { useTranslations } from "next-intl"
 import {
   BotIcon,
@@ -63,14 +64,20 @@ export function AppSidebar({
   const signOutHref = logoutHref(auth)
 
   return (
-    <Sidebar variant="inset" collapsible="icon" {...props}>
+    <Sidebar
+      variant="inset"
+      collapsible="icon"
+      mobileTitle={t("navigation")}
+      mobileDescription={t("sidebarDescription")}
+      {...props}
+    >
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               size="lg"
               render={
-                <a href={dashboardSidebarHref("devices", query)}>
+                <Link href={dashboardSidebarHref("devices", query)} prefetch={false}>
                   <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
                     <Building2Icon className="size-4" />
                   </div>
@@ -80,35 +87,42 @@ export function AppSidebar({
                       {selectedTenant ? selectedTenant.display_name : t("noTenant")}
                     </span>
                   </div>
-                </a>
+                </Link>
               }
             />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>{t("navigation")}</SidebarGroupLabel>
-          <SidebarMenu>
-            {navItems.map((item) => {
-              const Icon = item.icon
-              return (
-                <SidebarMenuItem key={item.view}>
-                  <SidebarMenuButton
-                    isActive={activeView === item.view}
-                    tooltip={t(item.view)}
-                    render={
-                      <a href={dashboardSidebarHref(item.view, query)}>
-                        <Icon />
-                        <span>{t(item.view)}</span>
-                      </a>
-                    }
-                  />
-                </SidebarMenuItem>
-              )
-            })}
-          </SidebarMenu>
-        </SidebarGroup>
+        <nav aria-label={t("navigation")}>
+          <SidebarGroup>
+            <SidebarGroupLabel>{t("navigation")}</SidebarGroupLabel>
+            <SidebarMenu>
+              {navItems.map((item) => {
+                const Icon = item.icon
+                const isActive = activeView === item.view
+                return (
+                  <SidebarMenuItem key={item.view}>
+                    <SidebarMenuButton
+                      isActive={isActive}
+                      tooltip={t(item.view)}
+                      render={
+                        <Link
+                          aria-current={isActive ? "page" : undefined}
+                          href={dashboardSidebarHref(item.view, query)}
+                          prefetch={false}
+                        >
+                          <Icon />
+                          <span>{t(item.view)}</span>
+                        </Link>
+                      }
+                    />
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroup>
+        </nav>
 
         <SidebarGroup className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupLabel>{t("tenants")}</SidebarGroupLabel>
@@ -120,18 +134,25 @@ export function AppSidebar({
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ) : (
-              tenants.map((tenant) => (
-                <SidebarMenuItem key={tenant.id}>
-                  <SidebarMenuButton
-                    isActive={tenant.id === selectedTenant?.id}
-                    render={
-                      <a href={dashboardTenantHref(activeView, tenant.id, query)}>
-                        <span>{tenant.display_name}</span>
-                      </a>
-                    }
-                  />
-                </SidebarMenuItem>
-              ))
+              tenants.map((tenant) => {
+                const isSelected = tenant.id === selectedTenant?.id
+                return (
+                  <SidebarMenuItem key={tenant.id}>
+                    <SidebarMenuButton
+                      isActive={isSelected}
+                      render={
+                        <Link
+                          aria-current={isSelected ? "true" : undefined}
+                          href={dashboardTenantHref(activeView, tenant.id, query)}
+                          prefetch={false}
+                        >
+                          <span>{tenant.display_name}</span>
+                        </Link>
+                      }
+                    />
+                  </SidebarMenuItem>
+                )
+              })
             )}
           </SidebarMenu>
         </SidebarGroup>

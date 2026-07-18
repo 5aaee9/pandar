@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { apiHeaders, authSource } from "./api-auth";
@@ -31,7 +32,12 @@ export type DashboardPageProps = {
     command?: string | string[];
     status?: string | string[];
   }>;
+  sidebarDefaultOpen?: boolean;
 };
+
+export async function dashboardSidebarDefaultOpen() {
+  return (await cookies()).get("sidebar_state")?.value !== "false";
+}
 
 async function fetchJson<T>(
   path: string,
@@ -65,7 +71,7 @@ async function fetchJson<T>(
 
 export async function renderDashboardView(
   view: DashboardView,
-  { searchParams }: DashboardPageProps,
+  { searchParams, sidebarDefaultOpen }: DashboardPageProps,
 ) {
   const auth = await authSource();
   const authProvider = authProviderConfig();
@@ -211,6 +217,14 @@ export async function renderDashboardView(
       joinLinksResult?.error ||
       auditEventsResult?.error,
     );
+  const adminLoadError =
+    !lacksAdminRole &&
+    Boolean(
+      usersResult?.error ||
+      tenantTokensResult?.error ||
+      joinLinksResult?.error ||
+      auditEventsResult?.error,
+    );
   const canManageJobs = selectedMembership?.role !== "viewer";
   const selectedCommand = commandResult?.data ?? null;
   const commandData = parseCommandResult(selectedCommand);
@@ -241,12 +255,14 @@ export async function renderDashboardView(
       joinLinks={joinLinks}
       auditEvents={auditEvents}
       adminUnavailable={adminUnavailable}
+      adminLoadError={adminLoadError}
       canManageJobs={canManageJobs}
       actionStatus={actionStatus}
       selectedCommand={selectedCommand}
       selectedCommandId={requestedCommand}
       commandData={commandData}
       errors={errors}
+      sidebarDefaultOpen={sidebarDefaultOpen}
       auth={{
         source: auth.source,
         cookieName: auth.cookieName,

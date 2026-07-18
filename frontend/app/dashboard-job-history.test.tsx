@@ -104,7 +104,7 @@ describe('JobHistory actions', () => {
     vi.stubGlobal('fetch', fetchMock)
     const { onClearRedirect } = renderHistory()
 
-    await user.click(screen.getByRole('button', { name: 'Clear' }))
+    await user.click(screen.getByRole('button', { name: 'Clear jobs' }))
 
     expect(screen.getByRole('dialog')).toBeVisible()
     expect(
@@ -131,7 +131,7 @@ describe('JobHistory actions', () => {
   it('disables clear without a tenant or a backend-clearable terminal job', () => {
     const { rerender } = renderHistory({ selectedTenant: null })
 
-    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeDisabled()
 
     rerender(
       <NextIntlClientProvider locale="en" messages={en}>
@@ -151,7 +151,7 @@ describe('JobHistory actions', () => {
       </NextIntlClientProvider>,
     )
 
-    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeDisabled()
   })
 
   it('keeps the confirmation open and reports a failed clear request', async () => {
@@ -160,11 +160,11 @@ describe('JobHistory actions', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 403 })))
     renderHistory({ onClearRedirect })
 
-    await user.click(screen.getByRole('button', { name: 'Clear' }))
+    await user.click(screen.getByRole('button', { name: 'Clear jobs' }))
     await user.click(screen.getByRole('button', { name: 'Clear jobs' }))
 
     expect(
-      await screen.findByText('Unable to clear jobs. Check your permission and try again.'),
+      await screen.findByText("You don't have permission to clear jobs."),
     ).toBeVisible()
     expect(screen.getByRole('dialog')).toBeVisible()
     expect(onClearRedirect).not.toHaveBeenCalled()
@@ -211,7 +211,7 @@ describe('JobHistory actions', () => {
       nowMs: Date.parse('2026-07-15T00:16:00Z'),
     })
 
-    await user.click(screen.getByRole('button', { name: 'Clear' }))
+    await user.click(screen.getByRole('button', { name: 'Clear jobs' }))
 
     expect(
       screen.getByText(
@@ -238,7 +238,7 @@ describe('JobHistory actions', () => {
       nowMs: Date.parse('2026-07-15T12:00:00Z'),
     })
 
-    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeDisabled()
 
     rerender(
       <NextIntlClientProvider locale="en" messages={en}>
@@ -258,7 +258,7 @@ describe('JobHistory actions', () => {
       </NextIntlClientProvider>,
     )
 
-    expect(screen.getByRole('button', { name: 'Clear' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeEnabled()
   })
 
   it('excludes persisted stalled jobs from the active filter', async () => {
@@ -299,7 +299,7 @@ describe('JobHistory actions', () => {
     })
     const { rerender } = renderHistory({ jobs: [failedBeforePrint] })
 
-    expect(screen.getByRole('button', { name: 'Clear' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeEnabled()
 
     rerender(
       <NextIntlClientProvider locale="en" messages={en}>
@@ -319,7 +319,7 @@ describe('JobHistory actions', () => {
       </NextIntlClientProvider>,
     )
 
-    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeDisabled()
   })
 })
 

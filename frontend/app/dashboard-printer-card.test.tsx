@@ -41,43 +41,50 @@ function renderPrinterCard() {
 }
 
 describe("PrinterCard actions", () => {
-  it("uses an anchored menu with the expected ARIA contract", async () => {
+  it("uses an anchored popover with the expected ARIA contract", async () => {
     const user = userEvent.setup();
     renderPrinterCard();
 
-    const trigger = screen.getByRole("button", { name: "Details" });
-    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    const trigger = screen.getByRole("button", { name: "Actions for Printer One" });
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
 
     await user.click(trigger);
 
     expect(trigger).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("menu")).toBeVisible();
-    expect(screen.getAllByRole("menuitem")).toHaveLength(3);
+    expect(screen.getByRole("button", { name: "Edit printer" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Refresh AMS" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Delete printer" })).toBeVisible();
   });
 
   it("closes by Escape and outside interaction", async () => {
     const user = userEvent.setup();
     renderPrinterCard();
-    const trigger = screen.getByRole("button", { name: "Details" });
+    const trigger = screen.getByRole("button", { name: "Actions for Printer One" });
 
     await user.click(trigger);
     await user.keyboard("{Escape}");
-    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Edit printer" })).not.toBeInTheDocument(),
+    );
 
     await user.click(trigger);
-    expect(screen.getByRole("menu")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit printer" })).toBeVisible();
     await user.click(document.body);
-    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Edit printer" })).not.toBeInTheDocument(),
+    );
   });
 
-  it("closes the menu before opening an existing action flow", async () => {
+  it("closes the popover before opening an existing action flow", async () => {
     const user = userEvent.setup();
     renderPrinterCard();
 
-    await user.click(screen.getByRole("button", { name: "Details" }));
-    await user.click(screen.getByRole("menuitem", { name: "Edit printer" }));
+    await user.click(screen.getByRole("button", { name: "Actions for Printer One" }));
+    await user.click(screen.getByRole("button", { name: "Edit printer" }));
 
-    await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Refresh AMS" })).not.toBeInTheDocument(),
+    );
     expect(
       screen.getByRole("dialog", { name: "Edit printer" }),
     ).toBeVisible();

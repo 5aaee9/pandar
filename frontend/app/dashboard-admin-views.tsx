@@ -35,6 +35,7 @@ export function UsersView({
   userIdentities,
   joinLinks,
   adminUnavailable,
+  adminLoadError,
 }: DashboardViewContentProps) {
   return (
     <>
@@ -45,6 +46,7 @@ export function UsersView({
         userIdentities={userIdentities}
         joinLinks={joinLinks}
         unavailable={adminUnavailable}
+        loadError={adminLoadError}
       />
     </>
   );
@@ -61,6 +63,7 @@ export function SettingsView({
   tenantTokens,
   auditEvents,
   adminUnavailable,
+  adminLoadError,
   nowMs,
 }: DashboardViewContentProps) {
   return (
@@ -79,6 +82,7 @@ export function SettingsView({
         agents={agents}
         auditEvents={auditEvents}
         unavailable={adminUnavailable}
+        loadError={adminLoadError}
         nowMs={nowMs}
       />
       <RuntimeStatusPanel
@@ -136,17 +140,19 @@ function UsersAdminSection({
   userIdentities,
   joinLinks,
   unavailable,
+  loadError,
 }: {
   selectedTenant: Tenant | null;
   users: User[];
   userIdentities: UserIdentity[];
   joinLinks: JoinLink[];
   unavailable: boolean;
+  loadError: boolean;
 }) {
   const t = useTranslations("admin");
   if (!selectedTenant) {
     return (
-      <section className="overflow-hidden rounded-md border border-slate-300 bg-slate-50">
+      <section className="overflow-hidden rounded-md border border-border bg-card">
         <SectionHeader
           title={t("users")}
           subtitle={t("subtitleNone")}
@@ -156,9 +162,26 @@ function UsersAdminSection({
       </section>
     );
   }
+  if (loadError) {
+    return (
+      <section className="overflow-hidden rounded-md border border-border bg-card">
+        <SectionHeader
+          title={t("users")}
+          subtitle={t("subtitleTenant", {
+            name: selectedTenant.display_name,
+          })}
+          meta={t("metaAdmin")}
+        />
+        <EmptyState
+          title={t("loadErrorTitle")}
+          message={t("loadErrorMessage")}
+        />
+      </section>
+    );
+  }
   if (unavailable) {
     return (
-      <section className="overflow-hidden rounded-md border border-slate-300 bg-slate-50">
+      <section className="overflow-hidden rounded-md border border-border bg-card">
         <SectionHeader
           title={t("users")}
           subtitle={t("subtitleUnavailable", {
@@ -174,13 +197,13 @@ function UsersAdminSection({
     );
   }
   return (
-    <section className="overflow-hidden rounded-md border border-slate-300 bg-slate-50">
+    <section className="overflow-hidden rounded-md border border-border bg-card">
       <SectionHeader
         title={t("users")}
         subtitle={t("subtitleTenant", { name: selectedTenant.display_name })}
         meta={t("usersMeta", { count: users.length })}
       />
-      <div className="border-b border-slate-200 px-4 py-4">
+      <div className="border-b border-border px-4 py-4">
         <CreateJoinLinkForm tenantId={selectedTenant.id} />
       </div>
       <TenantUsersPanel
@@ -199,6 +222,7 @@ function SettingsAdminSection({
   agents,
   auditEvents,
   unavailable,
+  loadError,
   nowMs,
 }: {
   selectedTenant: Tenant | null;
@@ -206,12 +230,13 @@ function SettingsAdminSection({
   agents: Agent[];
   auditEvents: AuditEvent[];
   unavailable: boolean;
+  loadError: boolean;
   nowMs: number;
 }) {
   const t = useTranslations("admin");
   if (!selectedTenant) {
     return (
-      <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm">
+      <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground">
         <SectionHeader
           title={t("title")}
           subtitle={t("subtitleNone")}
@@ -221,9 +246,26 @@ function SettingsAdminSection({
       </section>
     );
   }
+  if (loadError) {
+    return (
+      <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground">
+        <SectionHeader
+          title={t("title")}
+          subtitle={t("subtitleTenant", {
+            name: selectedTenant.display_name,
+          })}
+          meta={t("metaSecrets")}
+        />
+        <EmptyState
+          title={t("loadErrorTitle")}
+          message={t("loadErrorMessage")}
+        />
+      </section>
+    );
+  }
   if (unavailable) {
     return (
-      <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm">
+      <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground">
         <SectionHeader
           title={t("title")}
           subtitle={t("subtitleUnavailable", {
@@ -239,7 +281,7 @@ function SettingsAdminSection({
     );
   }
   return (
-    <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm">
+    <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground">
       <SectionHeader
         title={t("title")}
         subtitle={t("subtitleTenant", { name: selectedTenant.display_name })}
@@ -255,7 +297,7 @@ function SettingsAdminSection({
       <div className="grid items-start gap-0 lg:grid-cols-2">
         <div className="border-b border-border lg:border-b-0 lg:border-r">
           <div className="border-b border-border bg-muted/20 p-4">
-            <div className="rounded-lg border border-border bg-background/60 p-4 shadow-xs">
+            <div className="rounded-lg border border-border bg-background/60 p-4">
               <CreateAgentPairingForm tenantId={selectedTenant.id} />
             </div>
           </div>
@@ -281,19 +323,19 @@ function LogoutPanel({ auth }: { auth: AuthMetadata }) {
   const signOutHref = logoutHref(auth);
 
   return (
-    <section className="rounded-md border border-slate-300 bg-white px-4 py-3">
+    <section className="rounded-md border border-border bg-card px-4 py-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-slate-950">
+          <h2 className="text-base font-semibold text-foreground">
             {t("logoutTitle")}
           </h2>
-          <p className="mt-0.5 text-sm text-slate-600">
+          <p className="mt-0.5 text-sm text-muted-foreground">
             {signOutHref ? t("logoutDescription") : t("logoutUnavailable")}
           </p>
         </div>
         {signOutHref ? (
           <a
-            className="inline-flex h-9 items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-medium text-white hover:bg-slate-800"
+            className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary/80"
             href={signOutHref}
           >
             {t("logout")}

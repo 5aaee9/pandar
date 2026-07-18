@@ -92,6 +92,7 @@ const baseProps: DashboardViewContentProps = {
   joinLinks: [],
   auditEvents: [],
   adminUnavailable: false,
+  adminLoadError: false,
   canManageJobs: true,
 };
 
@@ -217,9 +218,9 @@ describe("Agents view pairing guidance", () => {
       name: "Delete Online agent",
     });
     expect(offlineDelete).toHaveTextContent(/^Delete$/);
-    expect(onlineDelete).toHaveTextContent(/^Delete$/);
+    expect(onlineDelete).toHaveTextContent(/Delete/);
     expect(offlineDelete).toBeEnabled();
-    expect(onlineDelete).toBeDisabled();
+    expect(onlineDelete).toHaveAttribute("aria-disabled", "true");
     expect(onlineDelete).toHaveAccessibleDescription(
       "Online agent is online, cannot be deleted",
     );
@@ -228,21 +229,19 @@ describe("Agents view pairing guidance", () => {
     expect(screen.getByRole("dialog", { name: "Delete agent" })).toBeVisible();
     expect(
       screen.getByText(
-        "Delete Offline agent? Its reported printers, commands, jobs, and machine events will be removed.",
+        "Delete Offline agent? Its reported printers, commands, jobs, and machine events will be removed. Tenant users, tokens, and settings are kept.",
       ),
     ).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    const deleteHint = onlineDelete.parentElement;
-    expect(deleteHint).not.toBeNull();
-    await user.hover(deleteHint!);
+    await user.hover(onlineDelete);
     expect(
       await screen.findByText("Online agent is online, cannot be deleted", {
         selector: '[data-slot="hover-card-content"]',
       }),
     ).toBeVisible();
 
-    await user.click(deleteHint!);
+    await user.click(onlineDelete);
     expect(toast.warning).toHaveBeenCalledWith(
       "Online agent is online, cannot be deleted",
     );

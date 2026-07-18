@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
-import { DownloadIcon, DropletsIcon, RotateCwIcon, ThermometerIcon, UploadIcon } from 'lucide-react'
+import { CheckCircle2Icon, DownloadIcon, DropletsIcon, RotateCwIcon, ThermometerIcon, UploadIcon } from 'lucide-react'
 
 import { controlPrinter } from './actions'
 import type { Printer } from './dashboard-types'
+import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
 export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
   const t = useTranslations('inventory')
   const materials = printer.materials
@@ -40,7 +41,7 @@ export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
                 externalId: null,
                 globalTrayId: tray.global_tray_id ?? globalTrayId(unit.unit_id, tray.tray_id),
                 slotId: parseOptionalInt(tray.tray_id),
-                label: materialLabel(tray),
+                label: materialLabel(tray, t('unknownMaterial')),
                 color: tray.color,
                 multiColor: tray.multi_color,
                 remaining: percentValue(tray.remaining_estimate),
@@ -59,7 +60,7 @@ export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
               externalId: spool.external_id ?? null,
               globalTrayId: spool.global_tray_id ?? parseOptionalInt(spool.external_id),
               slotId: parseOptionalInt(spool.tray_id) ?? index,
-              label: materialLabel(spool),
+              label: materialLabel(spool, t('unknownMaterial')),
               color: spool.color,
               multiColor: spool.multi_color,
               remaining: percentValue(spool.remaining_estimate),
@@ -115,7 +116,7 @@ function MaterialUnitCard({
           <span className="truncate text-sm font-semibold text-foreground">{title}</span>
           {toolhead ? <ToolheadBadge value={toolhead} /> : null}
         </div>
-        <div className="flex shrink-0 items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
+        <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
           {humidity !== undefined && humidity !== null ? (
             <span className="inline-flex items-center gap-1">
               <DropletsIcon className="size-3" />
@@ -160,79 +161,82 @@ function MaterialSlotButton({
   active: boolean
 }) {
   const t = useTranslations('inventory')
-  const [open, setOpen] = useState(false)
-  const label = `${title} slot ${slot.slotId !== null ? slot.slotId + 1 : index + 1} ${slot.label}`
+  const labelParts = [
+    t('slotAria', {
+      title,
+      number: slot.slotId !== null ? slot.slotId + 1 : index + 1,
+      material: slot.label,
+    }),
+  ]
+  if (active) labelParts.push(t('activeTray'))
+  if (slot.remaining !== null) {
+    labelParts.push(`${t('filamentRemaining')}: ${remainingLabel(slot.remaining, t('filamentUnsupported'))}`)
+  }
+  const accessibleLabel = labelParts.join(', ')
+  const colorHex = slotColorHex(slot)
   return (
-    <div
-      className="relative"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
-      <button
-        aria-expanded={open}
-        aria-haspopup="menu"
-        aria-label={label}
-        className={`flex min-h-14 w-full flex-col justify-between rounded-md bg-background p-2 text-left transition hover:bg-background/80 ${
-          active ? 'ring-2 ring-emerald-500' : ''
+    <Popover>
+      <PopoverTrigger
+        aria-label={accessibleLabel}
+        className={`flex min-h-14 w-full flex-col justify-between rounded-md bg-background p-2 text-left transition-colors duration-150 ease-out hover:bg-accent ${
+          active ? 'ring-2 ring-success' : ''
         }`}
-        onFocus={() => setOpen(true)}
-        onClick={() => setOpen((value) => !value)}
-        type="button"
       >
         <div className="flex items-start justify-between gap-1">
           <span
+            aria-hidden="true"
             className="inline-flex size-4 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm"
             style={{ background: slotSwatch(slot) }}
           >
             {slot.slotId !== null ? slot.slotId + 1 : index + 1}
           </span>
-          {slot.toolhead ? <ToolheadBadge value={slot.toolhead} /> : null}
+          <span className="flex items-center gap-1">
+            {active ? <CheckCircle2Icon aria-hidden="true" className="size-3.5 text-success" /> : null}
+            {slot.toolhead ? <ToolheadBadge value={slot.toolhead} /> : null}
+          </span>
         </div>
         <div>
           <div className="truncate text-xs font-semibold text-foreground">{slot.label}</div>
           <FillBar value={slot.remaining} />
         </div>
-      </button>
-      {open ? (
-        <div
-          className="absolute left-0 top-full z-30 w-56 pt-1"
-          role="menu"
-        >
-          <div className="rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-md">
-            <div
-              className="rounded-sm px-2 py-2 text-center text-sm font-semibold text-white"
-              style={{ background: solidSlotColor(slot) }}
-            >
-              {colorName(slot.color)}
-            </div>
-            <div className="grid gap-1 px-2 py-2 text-xs">
-              <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">{t('filamentConfig')}</span>
-                <span className="font-medium">{slot.label}</span>
-              </div>
-              {slot.kValue ? (
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">{t('filamentKValue')}</span>
-                  <span className="font-medium text-emerald-600 dark:text-emerald-400">{slot.kValue}</span>
-                </div>
-              ) : null}
-            {slot.remaining !== null ? (
-              <div className="space-y-1">
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">{t('filamentRemaining')}</span>
-                  <span className="font-medium">{remainingLabel(slot.remaining, t('filamentUnsupported'))}</span>
-                </div>
-                <FillBar value={slot.remaining} />
-              </div>
-            ) : null}
-            </div>
-            <SlotOperationForm action="ams_reread_rfid" icon={<RotateCwIcon />} label={t('rereadRfid')} printer={printer} slot={slot} />
-            <SlotOperationForm action="ams_load_filament" icon={<DownloadIcon />} label={t('loadFilament')} printer={printer} slot={slot} />
-            <SlotOperationForm action="ams_unload_filament" icon={<UploadIcon />} label={t('unloadFilament')} printer={printer} slot={slot} />
-          </div>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-56 gap-0 p-2">
+        <div className="flex items-center gap-2 rounded-sm bg-muted px-2 py-2">
+          <span
+            aria-hidden="true"
+            className="size-5 shrink-0 rounded-sm ring-1 ring-foreground/10"
+            style={{ background: slotSwatch(slot) }}
+          />
+          <span className="font-mono text-xs font-medium text-foreground">
+            {colorHex ?? t('filamentColorUnknown')}
+          </span>
         </div>
-      ) : null}
-    </div>
+        <div className="grid gap-1 px-2 py-2 text-xs">
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">{t('filamentConfig')}</span>
+            <span className="font-medium">{slot.label}</span>
+          </div>
+          {slot.kValue ? (
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">{t('filamentKValue')}</span>
+              <span className="font-medium">{slot.kValue}</span>
+            </div>
+          ) : null}
+          {slot.remaining !== null ? (
+            <div className="space-y-1">
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">{t('filamentRemaining')}</span>
+                <span className="font-medium">{remainingLabel(slot.remaining, t('filamentUnsupported'))}</span>
+              </div>
+              <FillBar value={slot.remaining} />
+            </div>
+          ) : null}
+        </div>
+        <SlotOperationForm action="ams_reread_rfid" icon={<RotateCwIcon />} label={t('rereadRfid')} printer={printer} slot={slot} />
+        <SlotOperationForm action="ams_load_filament" icon={<DownloadIcon />} label={t('loadFilament')} printer={printer} slot={slot} />
+        <SlotOperationForm action="ams_unload_filament" icon={<UploadIcon />} label={t('unloadFilament')} printer={printer} slot={slot} />
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -263,8 +267,7 @@ function SlotOperationForm({
       {includeTarget && slot.externalId ? <input name="external_id" type="hidden" value={slot.externalId} /> : null}
       {extruderId !== null ? <input name="extruder_id" type="hidden" value={extruderId} /> : null}
       <button
-        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted [&_svg]:size-4"
-        role="menuitem"
+        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring [&_svg]:size-4"
         type="submit"
       >
         {icon}
@@ -286,20 +289,20 @@ function slotExtruderId(slot: MaterialSlot, printer: Printer) {
 
 function ToolheadBadge({ value }: { value: string }) {
   return (
-    <span className="inline-flex h-4 min-w-4 items-center justify-center rounded bg-emerald-100 px-1 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
+    <span className="inline-flex h-4 min-w-4 items-center justify-center rounded bg-muted px-1 text-[10px] font-semibold text-muted-foreground">
       {value}
     </span>
   )
 }
 
 function FillBar({ value }: { value: RemainingValue }) {
-  if (value === null) return <div className="mt-1 h-1 rounded-full bg-muted" />
+  if (value === null) return <div aria-hidden="true" className="mt-1 h-1 rounded-full bg-muted" />
   if (value === 'unsupported') {
-    return <div aria-label="Unsupported remaining progress" className="mt-1 h-1 rounded-full bg-slate-400 dark:bg-slate-600" />
+    return <div aria-hidden="true" className="mt-1 h-1 rounded-full bg-muted-foreground/30" />
   }
   return (
-    <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
-      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
+    <div aria-hidden="true" className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+      <div className="h-full rounded-full bg-success" style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
     </div>
   )
 }
@@ -310,8 +313,8 @@ function amsUnitName(unitId?: string) {
   return `AMS-${String.fromCharCode(65 + index)}`
 }
 
-function materialLabel(value: { type?: string | null; name?: string | null; filament_id?: string | null }) {
-  return value.type || value.name || value.filament_id || 'Unknown'
+function materialLabel(value: { type?: string | null; name?: string | null; filament_id?: string | null }, fallback: string) {
+  return value.type || value.name || value.filament_id || fallback
 }
 
 function percentValue(value: string | number | null | undefined) {
@@ -356,21 +359,12 @@ function slotSwatch(slot: MaterialSlot) {
 }
 
 function solidSlotColor(slot: MaterialSlot) {
-  const raw = slot.color?.trim().replace(/^#/, '').slice(0, 6)
-  return raw && /^[0-9a-fA-F]{6}$/.test(raw) ? `#${raw}` : '#64748b'
+  return slotColorHex(slot) ?? 'var(--muted-foreground)'
 }
 
-function colorName(color?: string | null) {
-  const raw = color?.trim().replace(/^#/, '').slice(0, 6).toUpperCase()
-  if (!raw) return 'Unknown'
-  const red = Number.parseInt(raw.slice(0, 2), 16)
-  const green = Number.parseInt(raw.slice(2, 4), 16)
-  const blue = Number.parseInt(raw.slice(4, 6), 16)
-  if (red >= 200 && green >= 100 && green <= 190 && blue < 120) return 'Orange'
-  if (green >= red && green >= blue) return 'Green'
-  if (red >= green && red >= blue) return 'Red'
-  if (blue >= red && blue >= green) return 'Blue'
-  return 'Filament'
+function slotColorHex(slot: MaterialSlot) {
+  const raw = slot.color?.trim().replace(/^#/, '').slice(0, 6)
+  return raw && /^[0-9a-fA-F]{6}$/.test(raw) ? `#${raw}`.toUpperCase() : null
 }
 
 function isActiveSlot(slot: MaterialSlot, active: ActiveMaterialTray) {

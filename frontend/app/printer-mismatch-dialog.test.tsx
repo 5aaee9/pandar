@@ -77,7 +77,7 @@ describe("PrinterMismatchCoordinator", () => {
       "en",
       "Build plate mismatch",
       "Detected build plate is not the same as the G-code file. Please adjust slicer settings or use the correct plate.",
-      ["Problem Solved and Resume", "Ignore this and Resume", "Stop Printing"],
+      ["Problem solved and resume", "Ignore and resume", "Stop printing"],
       "Review build plate mismatch for First",
       "Close mismatch dialog",
     ],
@@ -259,7 +259,7 @@ describe("PrinterMismatchCoordinator", () => {
   });
 
   it.each([
-    ["en", "Use the printer screen to resolve this error.", "Stop Printing"],
+    ["en", "Use the printer screen to resolve this error.", "Stop printing"],
     ["zh", "请在打印机屏幕上处理此错误。", "停止打印"],
   ] as const)("keeps unsupported occurrences informational in %s and applies the coarse inactive veto", async (locale, guidance, stopLabel) => {
     const unsupported = mismatchPrinter("p1", "Unsupported", {
@@ -295,7 +295,7 @@ describe("PrinterMismatchCoordinator", () => {
     renderCoordinator([mismatchPrinter("p1", "First")]);
 
     const dialog = await screen.findByRole("dialog");
-    const resume = within(dialog).getByRole("button", { name: "Problem Solved and Resume" });
+    const resume = within(dialog).getByRole("button", { name: "Problem solved and resume" });
     await user.click(resume);
     expect(handlePrintError).toHaveBeenCalledTimes(1);
     expect(
@@ -327,7 +327,7 @@ describe("PrinterMismatchCoordinator", () => {
 
     await user.click(
       within(await screen.findByRole("dialog")).getByRole("button", {
-        name: "Problem Solved and Resume",
+        name: "Problem solved and resume",
       }),
     );
     const dialog = await screen.findByRole("dialog");

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { Button } from '@/components/ui/button'
@@ -87,33 +87,46 @@ export function JobHistory({
   const [status, setStatus] = useState('all')
   const [clearOpen, setClearOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
-  const [clearError, setClearError] = useState(false)
+  const [clearError, setClearError] = useState<'generic' | 'permission' | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(false)
   const clearableCount = jobs.filter(isClearableJob).length
   const clearDisabled =
     !canManageJobs || !selectedTenant || clearableCount === 0 || clearing
+  const newDisabled = !selectedTenant || printers.length === 0
   const normalizedQuery = query.trim().toLowerCase()
-  const filtered = jobs.filter((job) => {
-    if (!jobMatchesStatus(job, status)) {
-      return false
-    }
-    if (normalizedQuery) {
-      const haystack = `${job.artifact.filename} ${job.id}`.toLowerCase()
-      if (!haystack.includes(normalizedQuery)) {
-        return false
-      }
-    }
-    return true
-  })
+  const filtered = useMemo(
+    () =>
+      jobs.filter((job) => {
+        if (!jobMatchesStatus(job, status)) {
+          return false
+        }
+        if (normalizedQuery) {
+          const haystack = `${job.artifact.filename} ${job.id}`.toLowerCase()
+          if (!haystack.includes(normalizedQuery)) {
+            return false
+          }
+        }
+        return true
+      }),
+    [jobs, status, normalizedQuery],
+  )
+  const printerNames = useMemo(
+    () => new Map(printers.map((printer) => [printer.id, printer.name])),
+    [printers],
+  )
+  const agentNames = useMemo(
+    () => new Map(agents.map((agent) => [agent.id, agent.name])),
+    [agents],
+  )
 
   const clearJobs = async () => {
     if (!selectedTenant) {
       return
     }
     setClearing(true)
-    setClearError(false)
+    setClearError(null)
     try {
       const response = await fetch(
         `/api/tenants/${apiIdSegment(selectedTenant.id, 'tenant_id')}/jobs`,
@@ -125,10 +138,10 @@ export function JobHistory({
           `/jobs?tenant=${encodeURIComponent(selectedTenant.id)}&status=jobs_cleared`,
         )
       } else {
-        setClearError(true)
+        setClearError(response.status === 401 || response.status === 403 ? 'permission' : 'generic')
       }
     } catch {
-      setClearError(true)
+      setClearError('generic')
     } finally {
       setClearing(false)
     }
@@ -161,7 +174,7 @@ export function JobHistory({
   }
 
   return (
-    <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
+    <section className="overflow-hidden rounded-md border border-border bg-card">
       <SectionHeader
         title={t('jobsTitle')}
         subtitle={t('jobsSubtitle')}
@@ -169,7 +182,9 @@ export function JobHistory({
           <>
             <Button
               aria-haspopup="dialog"
+              disabled={newDisabled}
               onClick={onOpenDispatch}
+              title={newDisabled ? (!selectedTenant ? t('jobsNoTenantTitle') : t('noPrintersTitle')) : undefined}
               type="button"
             >
               {t('newJob')}
@@ -177,7 +192,7 @@ export function JobHistory({
             <Button
               disabled={clearDisabled}
               onClick={() => {
-                setClearError(false)
+                setClearError(null)
                 setClearOpen(true)
               }}
               type="button"
@@ -214,47 +229,59 @@ export function JobHistory({
             ]}
           />
           {filtered.length === 0 ? (
-            <EmptyState
-              title={t('jobsNoMatchesTitle')}
-              message={t('jobsNoMatchesMessage')}
-            />
+            <div>
+              <EmptyState
+                title={t('jobsNoMatchesTitle')}
+                message={t('jobsNoMatchesMessage')}
+              />
+              <div className="flex justify-center pb-4">
+                <Button
+                  onClick={() => {
+                    setQuery('')
+                    setStatus('all')
+                  }}
+                  type="button"
+                  variant="outline"
+                >
+                  {t('clearJobFilters')}
+                </Button>
+              </div>
+            </div>
           ) : (
             <ul
-              className="divide-y divide-slate-200"
+              className="divide-y divide-border"
               aria-label={t('jobsAria')}
             >
-              {filtered.map((job) => {
-                const printer = printers.find(
-                  (candidate) => candidate.id === job.printer_id,
-                )
-                const agent = agents.find(
-                  (candidate) => candidate.id === job.agent_id,
-                )
-                return (
-                  <JobRow
-                    tenantId={selectedTenant.id}
-                    key={job.id}
-                    job={job}
-                    printerName={printer?.name}
-                    agentName={agent?.name}
-                    canDelete={canManageJobs && isClearableJob(job)}
-                    deleteUnavailableReason={
-                      canManageJobs
-                        ? t('deleteJobUnavailable')
-                        : t('deleteJobAdminOnly')
-                    }
-                    onDelete={() => {
-                      setDeleteError(false)
-                      setDeleteTarget(job)
-                    }}
-                  />
-                )
-              })}
+              {filtered.map((job) => (
+                <JobRow
+                  tenantId={selectedTenant.id}
+                  key={job.id}
+                  job={job}
+                  printerName={printerNames.get(job.printer_id)}
+                  agentName={agentNames.get(job.agent_id)}
+                  canDelete={canManageJobs && isClearableJob(job)}
+                  deleteUnavailableReason={
+                    canManageJobs
+                      ? t('deleteJobUnavailable')
+                      : t('deleteJobAdminOnly')
+                  }
+                  onDelete={() => {
+                    setDeleteError(false)
+                    setDeleteTarget(job)
+                  }}
+                />
+              ))}
             </ul>
           )}
         </>
       )}
-      <Dialog open={clearOpen} onOpenChange={setClearOpen}>
+      <Dialog
+        open={clearOpen}
+        onOpenChange={(open) => {
+          if (!open && clearing) return
+          setClearOpen(open)
+        }}
+      >
         <DialogContent closeLabel={t('cancel')} showCloseButton={!clearing}>
           <DialogHeader>
             <DialogTitle>{t('clearJobsTitle')}</DialogTitle>
@@ -263,7 +290,7 @@ export function JobHistory({
             </DialogDescription>
             {clearError ? (
               <p className="text-sm text-destructive" role="alert">
-                {t('clearJobsFailed')}
+                {clearError === 'permission' ? t('clearJobsFailedPermission') : t('clearJobsFailed')}
               </p>
             ) : null}
           </DialogHeader>
@@ -359,10 +386,10 @@ export function FilterBar({
 }) {
   const t = useTranslations('inventory')
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-2">
+    <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
       <input
         aria-label={queryPlaceholder}
-        className="min-w-40 flex-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+        className="min-w-40 flex-1 rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground"
         onChange={(event) => onQueryChange(event.target.value)}
         placeholder={queryPlaceholder}
         type="search"
@@ -370,7 +397,7 @@ export function FilterBar({
       />
       <select
         aria-label={t('filterStatusAria')}
-        className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm"
+        className="rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground"
         onChange={(event) => onStatusChange(event.target.value)}
         value={status}
       >

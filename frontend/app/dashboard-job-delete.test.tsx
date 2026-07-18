@@ -201,7 +201,7 @@ describe('JobHistory row actions', () => {
   it('disables management actions without tenant-admin capability', () => {
     renderHistory({ canManageJobs: false })
 
-    expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeDisabled()
     expect(
       screen.getByRole('button', { name: 'Delete benchy.3mf' }),
     ).toBeDisabled()
@@ -292,12 +292,13 @@ describe('JobHistory row actions', () => {
           joinLinks={[]}
           auditEvents={[]}
           adminUnavailable={true}
+          adminLoadError={false}
           canManageJobs={true}
         />
       </NextIntlClientProvider>,
     )
 
-    expect(screen.getByRole('button', { name: 'Clear' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeEnabled()
     expect(
       screen.getByRole('button', { name: 'Delete benchy.3mf' }),
     ).toBeEnabled()

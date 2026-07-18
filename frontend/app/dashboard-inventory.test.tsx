@@ -206,34 +206,34 @@ describe("PrinterInventory", () => {
     expect(chip?.parentElement).toHaveTextContent("Idle");
   });
 
-  it("opens a printer actions menu with delete", async () => {
+  it("opens a printer actions popover with delete", async () => {
     const user = userEvent.setup();
     renderWithMessages(
       <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} nowMs={0} />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Details" }));
+    await user.click(screen.getByRole("button", { name: "Actions for Office A1" }));
 
-    expect(screen.getByRole("menu")).toBeVisible();
-    expect(screen.getByRole("menuitem", { name: "Delete printer" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit printer" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Delete printer" })).toBeVisible();
   });
 
-  it("opens an edit printer dialog from the printer actions menu", async () => {
+  it("opens an edit printer dialog from the printer actions popover", async () => {
     const user = userEvent.setup();
     renderWithMessages(
       <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} nowMs={0} />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Details" }));
-    await user.click(screen.getByRole("menuitem", { name: "Edit printer" }));
+    await user.click(screen.getByRole("button", { name: "Actions for Office A1" }));
+    await user.click(screen.getByRole("button", { name: "Edit printer" }));
 
     expect(screen.getByRole("dialog")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Edit printer" })).toBeVisible();
     expect(screen.getByLabelText("Name")).toHaveValue("Office A1");
     expect(screen.getByLabelText("Printer IPv4 address")).toHaveAttribute("name", "host");
     expect(screen.getByLabelText("Printer IPv4 address")).not.toBeRequired();
-    expect(screen.getByLabelText("Access Code")).toHaveAttribute("name", "access_code");
-    expect(screen.getByLabelText("Access Code")).not.toBeRequired();
+    expect(screen.getByLabelText("Access code")).toHaveAttribute("name", "access_code");
+    expect(screen.getByLabelText("Access code")).not.toBeRequired();
 
     const form = screen.getByRole("button", { name: "Save changes" }).closest("form");
     expect(form?.querySelector('input[name="tenant_id"]')).toHaveValue("tenant-1");
@@ -258,7 +258,7 @@ describe("PrinterInventory", () => {
     expect(screen.getByLabelText("Printer IPv4 address")).toBeVisible();
   });
 
-  it("renders AMS refresh inside the printer actions menu with tenant and printer ids", async () => {
+  it("renders AMS refresh inside the printer actions popover with tenant and printer ids", async () => {
     const user = userEvent.setup();
     renderWithMessages(
       <PrinterInventory selectedTenant={tenant} printers={[printer]} agents={[agent]} nowMs={0} />,
@@ -266,9 +266,9 @@ describe("PrinterInventory", () => {
 
     expect(screen.queryByRole("button", { name: "Refresh AMS" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Details" }));
+    await user.click(screen.getByRole("button", { name: "Actions for Office A1" }));
 
-    const button = screen.getByRole("menuitem", { name: "Refresh AMS" });
+    const button = screen.getByRole("button", { name: "Refresh AMS" });
     const form = button.closest("form");
 
     expect(form).not.toBeNull();
@@ -310,9 +310,9 @@ describe("PrinterInventory", () => {
     expect(controls).toHaveClass("grid-cols-2");
     expect(controls).not.toHaveClass("sm:grid-cols-1");
 
-    const stopForm = screen.getByRole("button", { name: "Stop" }).closest("form");
-    const pauseForm = screen.getByRole("button", { name: "Pause" }).closest("form");
-    const lightForm = screen.getByRole("button", { name: "Light" }).closest("form");
+    const stopForm = screen.getByRole("button", { name: "Stop print" }).closest("form");
+    const pauseForm = screen.getByRole("button", { name: "Pause print" }).closest("form");
+    const lightForm = screen.getByRole("button", { name: "Light Off" }).closest("form");
     expect(screen.getByRole("button", { name: "View camera" })).toBeVisible();
     expect(within(card).getByRole("button", { name: "Move axes" })).toBeVisible();
     expect(stopForm?.querySelector('input[name="action"]')).toHaveValue("stop");
@@ -357,7 +357,7 @@ describe("PrinterInventory", () => {
       <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} nowMs={0} />,
     );
 
-    const lightForm = screen.getByRole("button", { name: "Light" }).closest("form");
+    const lightForm = screen.getByRole("button", { name: "Light On" }).closest("form");
     expect(lightForm?.querySelector('input[name="action"]')).toHaveValue("set_chamber_light");
     expect(lightForm?.querySelector('input[name="light_on"]')).toHaveValue("false");
   });
@@ -373,7 +373,7 @@ describe("PrinterInventory", () => {
       "zh",
     );
 
-    expect(screen.getByRole("button", { name: "灯光" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "灯光 已关闭" })).toBeVisible();
   });
 
   it("shows active nozzle switch control for dual-nozzle printers", () => {
@@ -404,7 +404,7 @@ describe("PrinterInventory", () => {
       <PrinterInventory selectedTenant={tenant} printers={[dualNozzlePrinter]} agents={[agent]} nowMs={0} />,
     );
 
-    const switchButton = screen.getByRole("button", { name: "Switch nozzle L R Nozzle" });
+    const switchButton = screen.getByRole("button", { name: "Switch to nozzle L" });
     const switchForm = switchButton.closest("form");
     const temperatureGrid = switchForm?.parentElement;
     expect(temperatureGrid).toHaveClass("grid-cols-2");
@@ -419,7 +419,7 @@ describe("PrinterInventory", () => {
     expect(switchButton).toHaveTextContent("R");
     expect(switchButton).toHaveTextContent("0.4 mm");
     expect(switchButton).toHaveTextContent("Hardened steel");
-    expect(within(switchButton).getByText("R").parentElement).toHaveClass("text-primary");
+    expect(within(switchButton).getByText("R").parentElement?.parentElement).toHaveClass("text-primary");
   });
 
   it("renders a single nozzle without a duplicate label or target temperature", () => {
@@ -452,7 +452,7 @@ describe("PrinterInventory", () => {
 
     await user.click(screen.getByRole("button", { name: "Set nozzle temperature" }));
 
-    expect(screen.getByText("Set Nozzle Temperature")).toBeVisible();
+    expect(screen.getByText("Set nozzle temperature")).toBeVisible();
     const preset = screen.getByRole("button", { name: "220 C" });
     const form = preset.closest("form");
     expect(form?.querySelector('input[name="action"]')).toHaveValue("set_hotend_temperature");
@@ -478,8 +478,8 @@ describe("PrinterInventory", () => {
 
     await user.click(screen.getByRole("button", { name: "Set nozzle temperatures" }));
 
-    expect(screen.getByText("Set Nozzle Temperatures")).toBeVisible();
-    const rightPanel = screen.getByText("Right Temp").closest("div");
+    expect(screen.getByText("Set nozzle temperatures")).toBeVisible();
+    const rightPanel = screen.getByText("Right temp").closest("div");
     expect(rightPanel).toHaveClass("border-primary");
 
     const rightOff = within(rightPanel!).getByRole("button", { name: "Off" });
@@ -488,7 +488,7 @@ describe("PrinterInventory", () => {
     expect(rightForm?.querySelector('input[name="temperature_celsius"]')).toHaveValue("0");
     expect(rightForm?.querySelector('input[name="extruder_id"]')).toHaveValue("0");
 
-    const leftPanel = screen.getByText("Left Temp").closest("div");
+    const leftPanel = screen.getByText("Left temp").closest("div");
     const leftPreset = within(leftPanel!).getByRole("button", { name: "260 C" });
     expect(leftPreset.closest("form")?.querySelector('input[name="extruder_id"]')).toHaveValue("1");
   });
@@ -506,7 +506,7 @@ describe("PrinterInventory", () => {
 
     await user.click(screen.getByRole("button", { name: "Set bed temperature" }));
 
-    expect(screen.getByText("Set Bed Temperature")).toBeVisible();
+    expect(screen.getByText("Set bed temperature")).toBeVisible();
     const preset = screen.getByRole("button", { name: "75 C" });
     const form = preset.closest("form");
     expect(form?.querySelector('input[name="action"]')).toHaveValue("set_bed_temperature");
@@ -527,7 +527,7 @@ describe("PrinterInventory", () => {
 
     await user.click(screen.getByRole("button", { name: "Set chamber temperature" }));
 
-    expect(screen.getByText("Set Chamber Temperature")).toBeVisible();
+    expect(screen.getByText("Set chamber temperature")).toBeVisible();
     const preset = screen.getByRole("button", { name: "45 C" });
     const form = preset.closest("form");
     expect(form?.querySelector('input[name="action"]')).toHaveValue("set_chamber_temperature");
@@ -592,28 +592,24 @@ describe("PrinterInventory", () => {
     expect(card).not.toHaveTextContent("AMS 0:2");
   });
 
-  it("opens an AMS slot menu on hover with RFID, load, and unload operations", async () => {
+  it("opens an AMS slot popover on click with RFID, load, and unload operations", async () => {
     const user = userEvent.setup();
     renderWithMessages(
       <PrinterInventory selectedTenant={tenant} printers={[printerWithMaterials]} agents={[agent]} nowMs={0} />,
     );
 
-    await user.hover(screen.getByRole("button", { name: "AMS-A slot 2 PETG" }));
+    await user.click(
+      screen.getByRole("button", { name: "AMS-A slot 2, PETG, Active, Remaining: 42%" }),
+    );
 
-    expect(screen.getByRole("menu")).toBeVisible();
-    expect(screen.getByText("Orange")).toBeVisible();
+    expect(screen.getByText("#FFA726")).toBeVisible();
     expect(screen.getByText("42%")).toBeVisible();
-    expect(screen.getByRole("menuitem", { name: "Re-read RFID" })).toBeVisible();
-    expect(screen.getByRole("menuitem", { name: "Load" })).toBeVisible();
-    expect(screen.getByRole("menuitem", { name: "Unload" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Re-read RFID" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Load" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Unload" })).toBeVisible();
 
-    const menu = screen.getByRole("menu");
-    expect(menu).toHaveClass("top-full");
-    expect(menu).toHaveClass("pt-1");
-    expect(menu).not.toHaveClass("mt-1");
-
-    const rereadForm = screen.getByRole("menuitem", { name: "Re-read RFID" }).closest("form");
-    const loadForm = screen.getByRole("menuitem", { name: "Load" }).closest("form");
+    const rereadForm = screen.getByRole("button", { name: "Re-read RFID" }).closest("form");
+    const loadForm = screen.getByRole("button", { name: "Load" }).closest("form");
     expect(rereadForm?.querySelector('input[name="global_tray_id"]')).toBeNull();
     expect(loadForm?.querySelector('input[name="global_tray_id"]')).toHaveValue("1");
     expect(loadForm?.querySelector('input[name="extruder_id"]')).toHaveValue("0");
@@ -643,15 +639,12 @@ describe("PrinterInventory", () => {
       <PrinterInventory selectedTenant={tenant} printers={[unsupportedPrinter]} agents={[agent]} nowMs={0} />,
     );
 
-    await user.hover(screen.getByRole("button", { name: "AMS-A slot 1 PLA" }));
+    await user.click(
+      screen.getByRole("button", { name: "AMS-A slot 1, PLA, Remaining: Unsupported" }),
+    );
 
     expect(screen.getByText("Unsupported")).toBeVisible();
     expect(screen.queryByText("-1%")).not.toBeInTheDocument();
-    for (const progress of screen.getAllByLabelText("Unsupported remaining progress")) {
-      expect(progress).toHaveClass("bg-slate-400");
-      expect(progress).toHaveClass("dark:bg-slate-600");
-      expect(progress.querySelector(".bg-emerald-500")).toBeNull();
-    }
   });
 
   it("uses the correct Chinese copy for external spool", () => {

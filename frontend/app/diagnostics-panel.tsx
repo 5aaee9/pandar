@@ -29,17 +29,17 @@ export function LinkedAgentsSection({
 }) {
   const t = useTranslations('diagnostics')
   return (
-    <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
-      <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <section className="overflow-hidden rounded-md border border-border bg-card">
+      <div className="flex flex-col gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-base font-semibold">{t('agentsTitle')}</h2>
-          <p className="mt-0.5 text-sm text-slate-600">
+          <p className="mt-0.5 text-sm text-muted-foreground">
             {selectedTenant
               ? t('agentsSubtitleTenant', { name: selectedTenant.display_name, slug: selectedTenant.slug })
               : t('agentsSubtitleNone')}
           </p>
         </div>
-        <div className="text-sm text-slate-600">{t('agentsMeta', { count: agents.length })}</div>
+        <div className="text-sm text-muted-foreground">{t('agentsMeta', { count: agents.length })}</div>
       </div>
 
       {!selectedTenant ? (
@@ -49,7 +49,7 @@ export function LinkedAgentsSection({
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+            <thead className="bg-muted/60 text-xs font-semibold text-muted-foreground">
               <tr>
                 <th className="px-4 py-2">{t('colAgent')}</th>
                 <th className="px-4 py-2">{t('colStatus')}</th>
@@ -58,27 +58,27 @@ export function LinkedAgentsSection({
                 <th className="px-4 py-2">{t('colActions')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-border">
               {agents.map((agent) => (
                 <tr key={agent.id}>
                   <td className="px-4 py-3">
-                    <div className="font-medium text-slate-950">{agent.name}</div>
-                    <div className="font-mono text-xs text-slate-600">{agent.id}</div>
+                    <div className="font-medium text-foreground">{agent.name}</div>
+                    <div className="font-mono text-xs text-muted-foreground">{agent.id}</div>
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge value={agent.status} />
                   </td>
-                  <td className="px-4 py-3 text-slate-700">
+                  <td className="px-4 py-3 text-muted-foreground">
                     <FormattedDate value={agent.created_at} />
                   </td>
                   <td className="px-4 py-3">
                     <form action={discoverPrinters} className="flex flex-wrap items-end gap-2">
                       <input name="tenant_id" type="hidden" value={selectedTenant.id} />
                       <input name="agent_id" type="hidden" value={agent.id} />
-                      <label className="flex flex-col gap-1 text-xs font-medium text-slate-500">
+                      <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
                         {t('timeout')}
                         <input
-                          className="h-9 w-20 rounded-md border border-slate-300 px-2 text-sm font-normal text-slate-950"
+                          className="h-9 w-20 rounded-md border border-input px-2 text-sm font-normal text-foreground"
                           defaultValue="5"
                           max="15"
                           min="1"
@@ -87,7 +87,8 @@ export function LinkedAgentsSection({
                         />
                       </label>
                       <button
-                        className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+                        aria-label={t('discoverFor', { name: agent.name })}
+                        className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary/80"
                         type="submit"
                       >
                         {t('discover')}
@@ -102,7 +103,7 @@ export function LinkedAgentsSection({
                         <input name="return_to" type="hidden" value="agents" />
                         <button
                           aria-label={t('refreshAgentAriaLabel', { name: agent.name })}
-                          className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-800"
+                          className="h-9 rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors duration-150 ease-out hover:bg-muted"
                           type="submit"
                         >
                           {t('refreshAgent')}
@@ -146,24 +147,24 @@ export function DiagnosticsSection({
 }) {
   const t = useTranslations('diagnostics')
   return (
-    <section className="overflow-hidden rounded-md border border-slate-300 bg-white">
-      <div className="flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <section className="overflow-hidden rounded-md border border-border bg-card">
+      <div className="flex flex-col gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-base font-semibold">{t('title')}</h2>
-          <p className="mt-0.5 text-sm text-slate-600">
+          <p className="mt-0.5 text-sm text-muted-foreground">
             {selectedCommand
               ? `${selectedCommand.kind} · ${selectedCommand.status}`
               : t('noCommand')}
           </p>
         </div>
         {selectedCommand ? (
-          <div className="font-mono text-xs text-slate-600">{selectedCommand.id}</div>
+          <div className="font-mono text-xs text-muted-foreground">{selectedCommand.id}</div>
         ) : null}
       </div>
 
       {selectedTenant && printers.length > 0 ? (
-        <div className="border-b border-slate-200">
-          <div className="divide-y divide-slate-200">
+        <div className="border-b border-border">
+          <div className="divide-y divide-border">
             {printers.map((printer) => (
               <form
                 key={printer.id}
@@ -174,15 +175,16 @@ export function DiagnosticsSection({
                 <input name="agent_id" type="hidden" value={printer.agent_id} />
                 <input name="serial_number" type="hidden" value={printer.serial_number} />
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-slate-950">
+                  <div className="truncate text-sm font-medium text-foreground">
                     {printer.name}
                   </div>
-                  <div className="truncate font-mono text-xs text-slate-600">
+                  <div className="truncate font-mono text-xs text-muted-foreground">
                     {printer.serial_number}
                   </div>
                 </div>
                 <button
-                  className="h-9 rounded-md border border-slate-300 px-3 text-sm font-medium text-slate-800"
+                  aria-label={t('diagnoseFor', { name: printer.name })}
+                  className="h-9 rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors duration-150 ease-out hover:bg-muted"
                   type="submit"
                 >
                   {t('diagnose')}
@@ -218,7 +220,7 @@ function DiscoveryResult({ result }: { result: DiscoveryResultData }) {
   ) : (
     <div className="overflow-x-auto">
       <table className="min-w-full border-collapse text-left text-sm">
-        <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+        <thead className="bg-muted/60 text-xs font-semibold text-muted-foreground">
           <tr>
             <th className="px-4 py-2">{t('colName')}</th>
             <th className="px-4 py-2">{t('colSerial')}</th>
@@ -227,16 +229,16 @@ function DiscoveryResult({ result }: { result: DiscoveryResultData }) {
             <th className="px-4 py-2">{t('colSource')}</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-200">
+        <tbody className="divide-y divide-border">
           {result.printers.map((printer) => (
             <tr key={`${printer.serial_number ?? 'unknown'}-${printer.host}`}>
-              <td className="px-4 py-3 font-medium text-slate-950">{printer.name ?? '-'}</td>
-              <td className="px-4 py-3 font-mono text-xs text-slate-700">
+              <td className="px-4 py-3 font-medium text-foreground">{printer.name ?? '-'}</td>
+              <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                 {printer.serial_number ?? '-'}
               </td>
-              <td className="px-4 py-3 font-mono text-xs text-slate-700">{printer.host}</td>
-              <td className="px-4 py-3 text-slate-700">{printer.model ?? '-'}</td>
-              <td className="px-4 py-3 text-slate-700">{printer.source ?? '-'}</td>
+              <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{printer.host}</td>
+              <td className="px-4 py-3 text-muted-foreground">{printer.model ?? '-'}</td>
+              <td className="px-4 py-3 text-muted-foreground">{printer.source ?? '-'}</td>
             </tr>
           ))}
         </tbody>
@@ -264,16 +266,16 @@ function DiagnosticResult({ result }: { result: DiagnosticResultData }) {
   const features = compatibility?.features ?? {}
   return (
     <div className="grid gap-0 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)]">
-      <div className="border-b border-slate-200 lg:border-b-0 lg:border-r">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3">
+      <div className="border-b border-border lg:border-b-0 lg:border-r">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
           <StatusBadge value={result.overall} />
-          <span className="font-mono text-xs text-slate-600">{result.serial_number}</span>
-          {result.host ? <span className="font-mono text-xs text-slate-600">{result.host}</span> : null}
-          {result.model ? <span className="text-xs text-slate-600">{result.model}</span> : null}
+          <span className="font-mono text-xs text-muted-foreground">{result.serial_number}</span>
+          {result.host ? <span className="font-mono text-xs text-muted-foreground">{result.host}</span> : null}
+          {result.model ? <span className="text-xs text-muted-foreground">{result.model}</span> : null}
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+            <thead className="bg-muted/60 text-xs font-semibold text-muted-foreground">
               <tr>
                 <th className="px-4 py-2">{t('colCheck')}</th>
                 <th className="px-4 py-2">{t('colStatus')}</th>
@@ -281,15 +283,15 @@ function DiagnosticResult({ result }: { result: DiagnosticResultData }) {
                 <th className="px-4 py-2">{t('colDetails')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-border">
               {result.checks.map((check) => (
                 <tr key={check.id}>
-                  <td className="px-4 py-3 font-mono text-xs text-slate-700">{check.id}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{check.id}</td>
                   <td className="px-4 py-3">
                     <StatusBadge value={check.status} />
                   </td>
-                  <td className="px-4 py-3 text-slate-800">{check.message}</td>
-                  <td className="px-4 py-3 text-xs text-slate-600">{check.details ?? '-'}</td>
+                  <td className="px-4 py-3 text-foreground">{check.message}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{check.details ?? '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -297,7 +299,7 @@ function DiagnosticResult({ result }: { result: DiagnosticResultData }) {
         </div>
       </div>
       <div className="px-4 py-3">
-        <h3 className="text-sm font-semibold text-slate-950">{t('compatibility')}</h3>
+        <h3 className="text-sm font-semibold text-foreground">{t('compatibility')}</h3>
         <dl className="mt-3 grid gap-2 text-sm">
           <CompatibilityRow
             label={t('model')}
@@ -349,14 +351,14 @@ function CompatibilityRow({
 }) {
   const t = useTranslations('diagnostics')
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-100 py-1.5 last:border-b-0">
-      <dt className="flex min-w-0 items-center gap-1 text-slate-700">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border py-1.5 last:border-b-0">
+      <dt className="flex min-w-0 items-center gap-1 text-muted-foreground">
         <span className="truncate">{label}</span>
         {help ? <HelpTip label={label}>{help}</HelpTip> : null}
       </dt>
-      <dd className="flex items-center gap-2 text-right text-xs font-medium text-slate-700">
+      <dd className="flex items-center gap-2 text-right text-xs font-medium text-muted-foreground">
         <Tag value={available ? t('available') : t('unavailable')} tone={available ? 'success' : 'neutral'} />
-        <span className="font-mono text-slate-500">{value}</span>
+        <span className="font-mono text-muted-foreground">{value}</span>
       </dd>
     </div>
   )

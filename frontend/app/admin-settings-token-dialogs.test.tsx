@@ -87,6 +87,7 @@ describe("tenant token dialogs", () => {
     const dialog = screen.getByRole("dialog", {
       name: "Create tenant token",
     });
+    await user.type(within(dialog).getByLabelText("Name"), "CI token");
     await user.click(
       within(dialog).getByRole("button", { name: "Create token" }),
     );
@@ -164,7 +165,7 @@ describe("tenant token dialogs", () => {
     const view = render(<TokenPanel tokens={[activeToken]} />);
     const row = screen.getByText("Studio token").closest("article")!;
 
-    await user.click(within(row).getByRole("button", { name: "Rotate" }));
+    await user.click(within(row).getByRole("button", { name: "Rotate token Studio token" }));
     const dialog = screen.getByRole("dialog", { name: "Rotate tenant token" });
     await user.click(
       within(dialog).getByRole("button", { name: "Rotate token" }),
@@ -261,7 +262,7 @@ describe("tenant token dialogs", () => {
     render(<TokenPanel tokens={[activeToken]} />);
     const row = screen.getByText("Studio token").closest("article")!;
 
-    await user.click(within(row).getByRole("button", { name: "Revoke" }));
+    await user.click(within(row).getByRole("button", { name: "Revoke token Studio token" }));
     const dialog = screen.getByRole("dialog", { name: "Revoke tenant token" });
     await user.click(
       within(dialog).getByRole("button", { name: "Revoke token" }),

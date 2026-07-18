@@ -55,7 +55,7 @@ export function PrinterCard({
   return (
     <article
       aria-label={printer.name}
-      className="rounded-md border border-border bg-card p-4 text-card-foreground shadow-sm"
+      className="rounded-md border border-border bg-card p-4 text-card-foreground"
     >
       <div className="flex items-start gap-3">
         <div className="flex size-14 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
@@ -66,7 +66,7 @@ export function PrinterCard({
             <div className="min-w-0">
               <h3 className="truncate text-base font-semibold text-foreground">{printer.name}</h3>
               <p className="truncate text-sm text-muted-foreground">
-                {printer.model ?? t('unknownModel')} · {printer.serial_number}
+                {printer.model ?? t('unknownModel')} · <span className="font-mono">{printer.serial_number}</span>
               </p>
             </div>
             <PrinterActions printer={printer} />
@@ -126,9 +126,9 @@ function PrinterActions({ printer }: { printer: Printer }) {
         <PopoverTrigger
           render={
             <button
-              aria-haspopup="menu"
-              aria-label={t('details')}
-              className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-haspopup="dialog"
+              aria-label={t('detailsFor', { name: printer.name })}
+              className="rounded-md p-1 text-muted-foreground transition-colors duration-150 ease-out hover:bg-muted hover:text-foreground"
               type="button"
             />
           }
@@ -138,17 +138,15 @@ function PrinterActions({ printer }: { printer: Printer }) {
         <PopoverContent
           align="end"
           className="w-auto min-w-36 gap-0 p-1"
-          role="menu"
           side="bottom"
           sideOffset={4}
         >
           <button
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted"
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 ease-out hover:bg-muted"
             onClick={() => {
               setMenuOpen(false)
               setEditOpen(true)
             }}
-            role="menuitem"
             type="button"
           >
             <PencilIcon className="size-4" />
@@ -158,9 +156,8 @@ function PrinterActions({ printer }: { printer: Printer }) {
             <input name="tenant_id" type="hidden" value={printer.tenant_id} />
             <input name="printer_id" type="hidden" value={printer.id} />
             <button
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted"
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 ease-out hover:bg-muted"
               onClick={() => setMenuOpen(false)}
-              role="menuitem"
               type="submit"
             >
               <RotateCwIcon className="size-4" />
@@ -169,12 +166,11 @@ function PrinterActions({ printer }: { printer: Printer }) {
           </form>
           <div className="my-1 border-t border-border" />
           <button
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive hover:bg-muted"
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive transition-colors duration-150 ease-out hover:bg-muted"
             onClick={() => {
               setMenuOpen(false)
               setConfirmOpen(true)
             }}
-            role="menuitem"
             type="button"
           >
             <TrashIcon className="size-4" />

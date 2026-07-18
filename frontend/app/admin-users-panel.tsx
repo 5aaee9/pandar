@@ -1,4 +1,4 @@
-import { useActionState } from 'react'
+import { useActionState, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { createJoinLink, revokeJoinLink, updateTenantUserRole } from './admin-actions'
@@ -9,19 +9,62 @@ import { roles, useAdminDate } from './admin-model'
 import { Input, PrimaryButton, SecretActionResult, Select, Subhead } from './admin-panel-shared'
 
 export function CreateJoinLinkForm({ tenantId }: { tenantId: string }) {
+  const [nonce, setNonce] = useState(0)
+  return (
+    <CreateJoinLinkFormInner
+      key={nonce}
+      onCreateAnother={() => setNonce((value) => value + 1)}
+      tenantId={tenantId}
+    />
+  )
+}
+
+function CreateJoinLinkFormInner({
+  tenantId,
+  onCreateAnother,
+}: {
+  tenantId: string
+  onCreateAnother: () => void
+}) {
   const t = useTranslations('admin')
   const [state, formAction, pending] = useActionState(createJoinLink, null)
+  const locked = pending || state?.ok === true
 
   return (
     <form action={formAction} className="grid gap-2">
       <input name="tenant_id" type="hidden" value={tenantId} />
-      <div className="text-sm font-semibold text-slate-950">{t('createJoinLink')}</div>
-      <Select name="role" label={t('role')} values={roles} />
-      <Input name="email_constraint" label={t('verifiedEmail')} type="email" />
-      <Input name="expires_in_seconds" label={t('ttlSeconds')} defaultValue="604800" />
-      <Input name="max_uses" label={t('maxUses')} defaultValue="1" />
-      <PrimaryButton label={pending ? t('creating') : t('createLink')} />
+      <div className="text-sm font-semibold text-foreground">{t('createJoinLink')}</div>
+      <Select name="role" label={t('role')} values={roles} defaultValue="viewer" disabled={locked} />
+      <Input name="email_constraint" label={t('verifiedEmail')} type="email" disabled={locked} />
+      <Input
+        name="expires_in_seconds"
+        label={t('ttlSeconds')}
+        defaultValue="604800"
+        min="1"
+        required
+        type="number"
+        disabled={locked}
+      />
+      <Input
+        name="max_uses"
+        label={t('maxUses')}
+        defaultValue="1"
+        min="1"
+        required
+        type="number"
+        disabled={locked}
+      />
+      {locked ? null : <PrimaryButton label={pending ? t('creating') : t('createLink')} />}
       <SecretActionResult state={state} />
+      {state?.ok ? (
+        <button
+          className="self-start text-xs font-medium text-primary underline-offset-4 hover:underline"
+          onClick={onCreateAnother}
+          type="button"
+        >
+          {t('createAnother')}
+        </button>
+      ) : null}
     </form>
   )
 }
@@ -55,6 +98,15 @@ function UsersTable({
   identities: UserIdentity[]
 }) {
   const t = useTranslations('admin')
+  const identitiesByUser = useMemo(() => {
+    const map = new Map<string, UserIdentity[]>()
+    for (const identity of identities) {
+      const current = map.get(identity.user_id) ?? []
+      current.push(identity)
+      map.set(identity.user_id, current)
+    }
+    return map
+  }, [identities])
   return (
     <div>
       <Subhead title={t('users')} meta={t('usersMeta', { count: users.length })} />
@@ -63,7 +115,7 @@ function UsersTable({
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold text-slate-600">
+            <thead className="bg-muted/60 text-xs font-semibold text-muted-foreground">
               <tr>
                 <th className="px-4 py-2">{t('colUser')}</th>
                 <th className="px-4 py-2">{t('colRole')}</th>
@@ -71,28 +123,39 @@ function UsersTable({
                 <th className="px-4 py-2">{t('colUpdate')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-border">
               {users.map((user) => {
-                const linked = identities.filter((identity) => identity.user_id === user.id)
+                const linked = identitiesByUser.get(user.id) ?? []
                 return (
                   <tr key={user.id}>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-950">{user.display_name}</div>
-                      <div className="text-slate-700">{user.email}</div>
-                      <div className="font-mono text-xs text-slate-600">{user.id}</div>
+                      <div className="font-medium text-foreground">{user.display_name}</div>
+                      <div className="text-muted-foreground">{user.email}</div>
+                      <div className="font-mono text-xs text-muted-foreground">{user.id}</div>
                     </td>
                     <td className="px-4 py-3"><Tag value={user.role} /></td>
-                    <td className="px-4 py-3 text-xs text-slate-700">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
                       {linked.length === 0 ? '-' : linked.map((identity) => identity.provider).join(', ')}
                     </td>
                     <td className="px-4 py-3">
                       <form action={updateTenantUserRole} className="flex flex-wrap gap-2">
                         <input name="tenant_id" type="hidden" value={tenantId} />
                         <input name="user_id" type="hidden" value={user.id} />
-                        <select name="role" defaultValue={user.role} className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs">
+                        <select
+                          aria-label={t('roleFor', { user: user.display_name })}
+                          name="role"
+                          defaultValue={user.role}
+                          className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+                        >
                           {roles.map((role) => <option key={role} value={role}>{role}</option>)}
                         </select>
-                        <button className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium" type="submit">{t('save')}</button>
+                        <button
+                          aria-label={t('saveRoleFor', { user: user.display_name })}
+                          className="h-8 rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors duration-150 ease-out hover:bg-muted"
+                          type="submit"
+                        >
+                          {t('save')}
+                        </button>
                       </form>
                     </td>
                   </tr>
@@ -110,30 +173,30 @@ function JoinLinksTable({ tenantId, joinLinks }: { tenantId: string; joinLinks: 
   const t = useTranslations('admin')
   const formatDate = useAdminDate()
   return (
-    <div className="border-t border-slate-200">
+    <div className="border-t border-border">
       <Subhead title={t('joinLinks')} meta={t('joinLinksMeta', { count: joinLinks.length })} />
       {joinLinks.length === 0 ? (
         <EmptyState title={t('noJoinLinksTitle')} message={t('noJoinLinksMessage')} />
       ) : (
-        <div className="divide-y divide-slate-200">
+        <div className="divide-y divide-border">
           {joinLinks.map((link) => (
             <div key={link.id} className="grid gap-3 px-4 py-3 text-sm lg:grid-cols-[minmax(0,1fr)_auto]">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <Tag value={link.role} />
-                  <span className="text-xs text-slate-600">
+                  <span className="text-xs text-muted-foreground">
                     {t('usedRatio', { used: link.used_count, max: link.max_uses })}
                   </span>
-                  {link.revoked_at ? <span className="text-xs font-medium text-red-700">{t('revoked')}</span> : null}
+                  {link.revoked_at ? <span className="text-xs font-medium text-destructive">{t('revoked')}</span> : null}
                 </div>
-                <div className="mt-1 font-mono text-xs text-slate-600">{link.id}</div>
-                <div className="mt-1 text-xs text-slate-600">
+                <div className="mt-1 font-mono text-xs text-muted-foreground">{link.id}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
                   {link.email_constraint ? t('emailConstraint', { email: link.email_constraint }) : t('anyVerifiedEmail')} · {t('expires', { date: formatDate(link.expires_at) })}
                 </div>
               </div>
               <ConfirmForm
                 action={revokeJoinLink}
-                buttonClassName="h-8 rounded-md border border-red-300 px-2 text-xs font-medium text-red-700"
+                buttonClassName="h-8 rounded-md border border-destructive/40 px-2 text-xs font-medium text-destructive transition-colors duration-150 ease-out hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
                 buttonLabel={link.revoked_at ? t('revoked') : t('revoke')}
                 disabled={Boolean(link.revoked_at)}
                 title={t('revokeJoinTitle')}

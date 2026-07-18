@@ -3,10 +3,15 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 
-const DIALOG_CLASS =
-  'pandar-dialog m-0 flex h-screen w-screen max-w-none items-center justify-center bg-transparent p-0'
-const CARD_CLASS =
-  'pandar-dialog-card w-[calc(100vw-2rem)] max-w-md rounded-lg border border-slate-300 bg-white p-5 shadow-xl'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export function ConfirmDialog({
   open,
@@ -28,40 +33,35 @@ export function ConfirmDialog({
   onCancel: () => void
 }) {
   const tCommon = useTranslations('common')
-  const ref = useRef<HTMLDialogElement>(null)
 
   return (
-    <dialog
-      ref={ref}
-      aria-label={title}
-      aria-modal="true"
-      className={`${DIALOG_CLASS} ${open ? '' : 'hidden'}`}
-      onClose={onCancel}
+    <Dialog
       open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          onCancel()
+        }
+      }}
     >
-      <div className={CARD_CLASS}>
-        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-        <p className="mt-1.5 text-sm text-slate-600">{message}</p>
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-800 hover:bg-slate-50"
-            onClick={onCancel}
-            type="button"
-          >
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{message}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button onClick={onCancel} type="button" variant="outline">
             {cancelLabel ?? tCommon('cancel')}
-          </button>
-          <button
-            className={`h-9 rounded-md border border-transparent px-3 text-sm font-medium ${
-              tone === 'danger' ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-primary text-primary-foreground hover:bg-primary/80'
-            }`}
+          </Button>
+          <Button
             onClick={onConfirm}
             type="button"
+            variant={tone === 'danger' ? 'destructive' : 'default'}
           >
             {confirmLabel ?? tCommon('confirm')}
-          </button>
-        </div>
-      </div>
-    </dialog>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -85,7 +85,7 @@ export function ConfirmForm({
   cancelLabel?: string
   tone?: 'default' | 'danger'
   buttonClassName: string
-  buttonLabel: string
+  buttonLabel: ReactNode
   buttonAriaLabel?: string
   disabled?: boolean
   children?: ReactNode

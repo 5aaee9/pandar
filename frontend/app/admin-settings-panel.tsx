@@ -1,5 +1,5 @@
-import { useActionState } from "react";
-import { KeyRoundIcon } from "lucide-react";
+import { useActionState, useState } from "react";
+import { KeyRoundIcon, ShieldCheckIcon, TriangleAlertIcon, XCircleIcon } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { FormattedDate } from "../components/formatted-date";
@@ -21,8 +21,26 @@ import {
 } from "./admin-panel-shared";
 
 export function CreateAgentPairingForm({ tenantId }: { tenantId: string }) {
+  const [nonce, setNonce] = useState(0);
+  return (
+    <CreateAgentPairingFormInner
+      key={nonce}
+      onCreateAnother={() => setNonce((value) => value + 1)}
+      tenantId={tenantId}
+    />
+  );
+}
+
+function CreateAgentPairingFormInner({
+  tenantId,
+  onCreateAnother,
+}: {
+  tenantId: string;
+  onCreateAnother: () => void;
+}) {
   const t = useTranslations("admin");
   const [state, formAction, pending] = useActionState(createAgentPairing, null);
+  const locked = pending || state?.ok === true;
 
   return (
     <form action={formAction} className="grid gap-2">
@@ -30,9 +48,20 @@ export function CreateAgentPairingForm({ tenantId }: { tenantId: string }) {
       <div className="text-sm font-semibold text-foreground">
         {t("pairAgent")}
       </div>
-      <Input name="name" label={t("agentName")} />
-      <PrimaryButton label={pending ? t("creating") : t("createPairing")} />
+      <Input name="name" label={t("agentName")} required disabled={locked} />
+      {locked ? null : (
+        <PrimaryButton label={pending ? t("creating") : t("createPairing")} />
+      )}
       <SecretActionResult state={state} />
+      {state?.ok ? (
+        <button
+          className="self-start text-xs font-medium text-primary underline-offset-4 hover:underline"
+          onClick={onCreateAnother}
+          type="button"
+        >
+          {t("createAnother")}
+        </button>
+      ) : null}
     </form>
   );
 }
@@ -105,20 +134,25 @@ function getTokenStatus(token: TenantToken, nowMs: number): TokenStatus {
 function TokenStatusBadge({ status }: { status: TokenStatus }) {
   const t = useTranslations("admin");
   const styles = {
-    active:
-      "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    expired:
-      "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    active: "border-success/40 bg-success/10 text-success",
+    expired: "border-warning/50 bg-warning/10 text-warning",
     revoked: "border-border bg-muted text-muted-foreground",
   } satisfies Record<TokenStatus, string>;
+  const icons = {
+    active: ShieldCheckIcon,
+    expired: TriangleAlertIcon,
+    revoked: XCircleIcon,
+  } satisfies Record<TokenStatus, typeof ShieldCheckIcon>;
+  const Icon = icons[status];
 
   return (
     <span
       className={
-        "inline-flex rounded-md border px-2 py-0.5 text-xs font-medium " +
+        "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium " +
         styles[status]
       }
     >
+      <Icon aria-hidden="true" className="size-3" />
       {t("tokenStatus." + status)}
     </span>
   );
@@ -169,7 +203,7 @@ function TokenFact({
 }) {
   return (
     <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
-      <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+      <dt className="text-xs font-medium text-muted-foreground">
         {label}
       </dt>
       <dd className="mt-1 text-xs font-medium text-foreground">{children}</dd>

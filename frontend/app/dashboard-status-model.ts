@@ -2,10 +2,10 @@ import type { Severity } from "./dashboard-attention";
 import type { LiveState, Translator } from "./dashboard-runtime-helpers";
 
 export const PILL_TONES: Record<Severity, string> = {
-  success: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  warning: "border-amber-200 bg-amber-50 text-amber-800",
-  critical: "border-red-200 bg-red-50 text-red-800",
-  info: "border-slate-200 bg-slate-100 text-slate-700",
+  success: "border-success/40 bg-success/10 text-success",
+  warning: "border-warning/50 bg-warning/10 text-warning",
+  critical: "border-destructive/40 bg-destructive/10 text-destructive",
+  info: "border-border bg-muted text-muted-foreground",
 };
 
 const TONES: Record<
@@ -19,32 +19,32 @@ const TONES: Record<
   }
 > = {
   critical: {
-    border: "border-red-200 dark:border-red-900/60",
-    surface: "bg-red-50 dark:bg-red-950/30",
-    ink: "text-red-900 dark:text-red-50",
-    sub: "text-red-800 dark:text-red-200/80",
-    separator: "lg:before:bg-red-200 dark:lg:before:bg-red-900/60",
+    border: "border-destructive/40",
+    surface: "bg-destructive/10",
+    ink: "text-destructive",
+    sub: "text-foreground/80",
+    separator: "lg:before:bg-destructive/30",
   },
   warning: {
-    border: "border-amber-200 dark:border-amber-900/60",
-    surface: "bg-amber-50 dark:bg-amber-950/30",
-    ink: "text-amber-900 dark:text-amber-50",
-    sub: "text-amber-800 dark:text-amber-200/80",
-    separator: "lg:before:bg-amber-200 dark:lg:before:bg-amber-900/60",
+    border: "border-warning/50",
+    surface: "bg-warning/10",
+    ink: "text-warning",
+    sub: "text-foreground/80",
+    separator: "lg:before:bg-warning/40",
   },
   success: {
-    border: "border-emerald-200 dark:border-emerald-900/60",
-    surface: "bg-emerald-50 dark:bg-emerald-950/30",
-    ink: "text-emerald-900 dark:text-emerald-50",
-    sub: "text-emerald-800 dark:text-emerald-200/80",
-    separator: "lg:before:bg-emerald-200 dark:lg:before:bg-emerald-900/60",
+    border: "border-success/40",
+    surface: "bg-success/10",
+    ink: "text-success",
+    sub: "text-foreground/80",
+    separator: "lg:before:bg-success/30",
   },
   info: {
-    border: "border-slate-200 dark:border-border",
-    surface: "bg-white dark:bg-card",
-    ink: "text-slate-900 dark:text-foreground",
-    sub: "text-slate-600 dark:text-muted-foreground",
-    separator: "lg:before:bg-slate-200 dark:lg:before:bg-border",
+    border: "border-border",
+    surface: "bg-card",
+    ink: "text-foreground",
+    sub: "text-muted-foreground",
+    separator: "lg:before:bg-border",
   },
 };
 

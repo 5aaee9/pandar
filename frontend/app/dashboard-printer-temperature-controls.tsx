@@ -30,6 +30,7 @@ import {
 
 import { controlPrinter } from './actions'
 import { apiIdSegment } from './api-path'
+import { ConfirmForm } from './confirm-dialog'
 import type { Printer } from './dashboard-types'
 import {
   formatTemperatureValue,
@@ -87,14 +88,20 @@ export function PrinterControlsPanel({ printer }: { printer: Printer }) {
     <div className="mt-4 space-y-2">
       <div className="text-xs font-medium text-muted-foreground">{t('controlsLabel')}</div>
       <div aria-label={t('controlsLabel')} className="grid grid-cols-2 gap-2" role="group">
-        <PrinterInlineControl
-          action="stop"
-          enabled={controlsEnabled.stop}
-          icon={<SquareIcon />}
-          label={t('stopPrint')}
-          printer={printer}
-          tone="danger"
-        />
+        <ConfirmForm
+          action={controlPrinter}
+          buttonAriaLabel={t('stopPrint')}
+          buttonClassName="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors duration-150 ease-out disabled:bg-muted/60 disabled:text-muted-foreground enabled:bg-destructive/10 enabled:text-destructive enabled:hover:bg-destructive/20 dark:enabled:bg-destructive/20 dark:enabled:hover:bg-destructive/30 [&_svg]:size-4"
+          buttonLabel={<><SquareIcon />{t('stopPrint')}</>}
+          confirmLabel={t('stopPrint')}
+          disabled={!controlsEnabled.stop}
+          message={t('stopPrintMessage')}
+          title={t('stopPrintTitle')}
+        >
+          <input name="tenant_id" type="hidden" value={printer.tenant_id} />
+          <input name="printer_id" type="hidden" value={printer.id} />
+          <input name="action" type="hidden" value="stop" />
+        </ConfirmForm>
         <PrinterInlineControl
           action="pause"
           enabled={controlsEnabled.pause}
@@ -109,7 +116,9 @@ export function PrinterControlsPanel({ printer }: { printer: Printer }) {
           icon={<LightbulbIcon />}
           label={t('lightControl')}
           lightOn={printer.chamber_light_on === true ? false : true}
+          pressed={printer.chamber_light_on === true}
           printer={printer}
+          stateLabel={printer.chamber_light_on === true ? t('lightStateOn') : t('lightStateOff')}
           tone="neutral"
         />
         <CameraDialogControl printer={printer} />
@@ -273,6 +282,8 @@ function PrinterInlineControl({
   icon,
   enabled,
   lightOn,
+  pressed,
+  stateLabel,
   tone,
 }: {
   printer: Printer
@@ -281,13 +292,15 @@ function PrinterInlineControl({
   icon: ReactNode
   enabled: boolean
   lightOn?: boolean
+  pressed?: boolean
+  stateLabel?: string
   tone: 'danger' | 'warning' | 'neutral'
 }) {
   const toneClass = {
     danger:
-      'enabled:bg-red-500/15 enabled:text-red-700 enabled:hover:bg-red-500/25 dark:enabled:text-red-300',
+      'enabled:bg-destructive/10 enabled:text-destructive enabled:hover:bg-destructive/20 dark:enabled:bg-destructive/20 dark:enabled:hover:bg-destructive/30',
     warning:
-      'enabled:bg-yellow-500/20 enabled:text-yellow-800 enabled:hover:bg-yellow-500/30 dark:enabled:text-yellow-200',
+      'enabled:bg-warning/15 enabled:text-warning enabled:hover:bg-warning/25',
     neutral:
       'enabled:bg-primary/10 enabled:text-primary enabled:hover:bg-primary/15 dark:enabled:bg-primary/20',
   }[tone]
@@ -299,12 +312,15 @@ function PrinterInlineControl({
       <input name="action" type="hidden" value={action} />
       {lightOn !== undefined ? <input name="light_on" type="hidden" value={String(lightOn)} /> : null}
       <button
-        className={`inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition disabled:bg-muted/60 disabled:text-muted-foreground ${toneClass} [&_svg]:size-4`}
+        aria-label={stateLabel ? `${label} ${stateLabel}` : undefined}
+        aria-pressed={pressed}
+        className={`inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors duration-150 ease-out disabled:bg-muted/60 disabled:text-muted-foreground ${toneClass} [&_svg]:size-4`}
         disabled={!enabled}
         type="submit"
       >
         {icon}
         {label}
+        {stateLabel ? <span className="text-xs font-normal opacity-75">{` ${stateLabel}`}</span> : null}
       </button>
     </form>
   )
@@ -326,7 +342,7 @@ function printerTemperatures(printer: Printer, t: ReturnType<typeof useTranslati
       title: t('bedTemperature'),
       subtitle: null,
       value: temperaturePair(printer.bed_temperature_celsius, printer.bed_target_temperature_celsius),
-      tone: 'text-blue-500',
+      tone: 'text-muted-foreground',
       action: 'set_bed_temperature',
       ariaLabel: t('setBedTemperature'),
       popoverTitle: t('setBedTemperatureTitle'),
@@ -338,7 +354,7 @@ function printerTemperatures(printer: Printer, t: ReturnType<typeof useTranslati
       title: t('chamberTemperature'),
       subtitle: null,
       value: formatTemperatureValue(printer.chamber_temperature_celsius),
-      tone: 'text-emerald-500',
+      tone: 'text-muted-foreground',
       action: 'set_chamber_temperature',
       ariaLabel: t('setChamberTemperature'),
       popoverTitle: t('setChamberTemperatureTitle'),

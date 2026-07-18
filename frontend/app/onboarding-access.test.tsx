@@ -28,15 +28,14 @@ describe("tenant onboarding access", () => {
     const trigger = screen.getByRole("button", {
       name: "Select tenant access action",
     });
-    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
     await user.click(trigger);
 
-    expect(screen.getByRole("menu")).toBeVisible();
     expect(
-      screen.getByRole("menuitem", { name: /create tenant/i }),
+      screen.getByRole("button", { name: /create tenant/i }),
     ).toBeVisible();
     expect(
-      screen.getByRole("menuitem", { name: /join tenant/i }),
+      screen.getByRole("link", { name: /join tenant/i }),
     ).toHaveAttribute("href", "/join");
   });
 
@@ -52,7 +51,7 @@ describe("tenant onboarding access", () => {
     await user.click(
       screen.getByRole("button", { name: "Select tenant access action" }),
     );
-    await user.click(screen.getByRole("menuitem", { name: /create tenant/i }));
+    await user.click(screen.getByRole("button", { name: /create tenant/i }));
 
     expect(
       screen.getByRole("dialog", { name: /create tenant/i }),

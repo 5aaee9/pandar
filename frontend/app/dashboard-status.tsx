@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl'
 
 import { refreshPrinters } from './actions'
 import { reprintJob, retryDispatchJob } from './job-actions'
+import { dashboardSidebarHref } from './dashboard-shell'
 import type { AttentionItem, Severity, TextKey } from './dashboard-attention'
 import type { Tenant } from './dashboard-types'
 
@@ -16,12 +17,12 @@ export function StatusIcon({ severity, className }: { severity: Severity; classN
   } as const
   const color =
     severity === 'critical'
-      ? 'text-red-600'
+      ? 'text-destructive'
       : severity === 'warning'
-        ? 'text-amber-600'
+        ? 'text-warning'
         : severity === 'success'
-          ? 'text-emerald-600'
-          : 'text-slate-500'
+          ? 'text-success'
+          : 'text-muted-foreground'
   if (severity === 'success') {
     return (
       <svg {...common} className={`${className ?? ''} ${color}`}>
@@ -70,28 +71,37 @@ export function StatCell({
   separatorClassName,
   state,
 }: {
-  href: string
+  href?: string
   label: string
   value: string
   note: string | null
   separatorClassName?: string
   state: Severity
 }) {
+  const content = (
+    <>
+      <div className="flex items-center gap-1.5">
+        <StatusIcon severity={state} className="h-3.5 w-3.5" />
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
+      <div className="mt-0.5 font-medium text-foreground">{value}</div>
+      {note ? <div className="mt-0.5 text-xs text-muted-foreground">{note}</div> : null}
+    </>
+  )
   return (
     <div
       className={`relative ${separatorClassName ? `lg:before:absolute lg:before:bottom-2 lg:before:left-2 lg:before:top-2 lg:before:w-px lg:before:content-[''] ${separatorClassName}` : ''}`}
     >
-      <a
-        href={href}
-        className={`block rounded-md px-3 py-1 transition-colors hover:bg-slate-100/70 dark:hover:bg-white/10 ${separatorClassName ? 'lg:ml-4' : ''}`}
-      >
-        <div className="flex items-center gap-1.5">
-          <StatusIcon severity={state} className="h-3.5 w-3.5" />
-          <span className="text-xs text-slate-600 dark:text-muted-foreground">{label}</span>
-        </div>
-        <div className="mt-0.5 font-medium text-slate-900 dark:text-foreground">{value}</div>
-        {note ? <div className="mt-0.5 text-xs text-slate-600 dark:text-muted-foreground">{note}</div> : null}
-      </a>
+      {href ? (
+        <a
+          href={href}
+          className={`block rounded-md px-3 py-1 transition-colors duration-150 ease-out hover:bg-accent ${separatorClassName ? 'lg:ml-4' : ''}`}
+        >
+          {content}
+        </a>
+      ) : (
+        <div className={`px-3 py-1 ${separatorClassName ? 'lg:ml-4' : ''}`}>{content}</div>
+      )}
     </div>
   )
 }
@@ -113,25 +123,25 @@ export function AttentionRow({
   tenant: Tenant | null
 }) {
   return (
-    <li className={`px-4 py-3 ${zebra ? 'bg-slate-50/60' : ''}`}>
+    <li className={`px-4 py-3 ${zebra ? 'bg-muted/60' : ''}`}>
       {showGroup ? (
-        <div className="mb-2 text-xs font-semibold text-slate-700">{item.agentName}</div>
+        <div className="mb-2 text-xs font-semibold text-muted-foreground">{item.agentName}</div>
       ) : null}
       <div className="flex flex-wrap items-center gap-3">
         <StatusIcon severity={item.severity} className="h-4 w-4 shrink-0" />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-slate-900">
+          <div className="truncate text-sm font-medium text-foreground">
             <AttentionText textKey={item.titleKey} />
           </div>
-          <div className="truncate text-xs text-slate-600">
+          <div className="truncate text-xs text-muted-foreground">
             <AttentionText textKey={item.labelKey} />
           </div>
         </div>
-        <code className="hidden shrink-0 font-mono text-xs text-slate-600 sm:block">{item.mono}</code>
+        <code className="hidden shrink-0 font-mono text-xs text-muted-foreground sm:block">{item.mono}</code>
         <AttentionAction item={item} tenant={tenant} />
       </div>
       {item.detailKey ? (
-        <div className="mt-2 break-words text-xs text-red-700 sm:ml-7 dark:text-red-300">
+        <div className="mt-2 break-words text-xs text-destructive sm:ml-7">
           <AttentionText textKey={item.detailKey} />
         </div>
       ) : null}
@@ -141,9 +151,12 @@ export function AttentionRow({
 
 function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant | null }) {
   const tAct = useTranslations('overview.action')
+  const sectionHref = item.sectionId === 'printers'
+    ? '#printers'
+    : dashboardSidebarHref('jobs', { tenant: tenant?.id })
   if (!tenant) {
     return (
-      <a href={`#${item.sectionId}`} className="text-xs font-medium text-primary hover:underline">
+      <a href={sectionHref} className="text-xs font-medium text-primary hover:underline">
         {tAct('view')}
       </a>
     )
@@ -155,7 +168,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
         <input name="tenant_id" type="hidden" value={tenant.id} />
         <input name="agent_id" type="hidden" value={item.agentId} />
         <button
-          className={`h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-medium text-slate-800 hover:bg-slate-50`}
+          className={`h-8 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground transition-colors duration-150 ease-out hover:bg-accent`}
           type="submit"
         >
           {tAct('refresh')}
@@ -195,7 +208,7 @@ function AttentionAction({ item, tenant }: { item: AttentionItem; tenant: Tenant
   }
 
   return (
-    <a href={`#${item.sectionId}`} className="text-xs font-medium text-primary hover:underline">
+    <a href={sectionHref} className="text-xs font-medium text-primary hover:underline">
       {tAct('view')}
     </a>
   )

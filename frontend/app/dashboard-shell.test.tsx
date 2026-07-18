@@ -148,7 +148,7 @@ describe("DashboardShellHeader", () => {
 
     expect(screen.getByRole("heading", { name: "Agents" })).toBeVisible();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "EN" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "English" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "中文" })).not.toBeInTheDocument();
   });
 
@@ -187,8 +187,8 @@ describe("FleetStatusStrip", () => {
     );
 
     expect(screen.getByRole("region", { name: "Fleet status" })).toHaveClass(
-      "dark:border-emerald-900/60",
-      "dark:bg-emerald-950/30",
+      "border-success/40",
+      "bg-success/10",
     );
     expect(screen.getByRole("region", { name: "Fleet status" }).firstElementChild).not.toHaveClass(
       "sm:flex-row",
@@ -198,12 +198,12 @@ describe("FleetStatusStrip", () => {
       "lg:flex-row",
       "lg:items-center",
     );
-    expect(screen.getByText("0/0 online").closest("[aria-hidden]")).not.toHaveClass(
+    expect(screen.getByText("0/0 online").closest(".grid")).not.toHaveClass(
       "sm:grid-cols-3",
       "sm:gap-0",
       "sm:pl-5",
     );
-    expect(screen.getByText("0/0 online").closest("[aria-hidden]")).toHaveClass(
+    expect(screen.getByText("0/0 online").closest(".grid")).toHaveClass(
       "sm:grid-cols-2",
       "lg:grid-cols-3",
       "lg:gap-0",
@@ -228,8 +228,7 @@ describe("FleetStatusStrip", () => {
         "lg:before:top-2",
         "lg:before:bottom-2",
         "lg:before:w-px",
-        "lg:before:bg-emerald-200",
-        "dark:lg:before:bg-emerald-900/60",
+        "lg:before:bg-success/30",
       );
     }
     expect(screen.getByRole("link", { name: "Agents 1/1 connected" }).parentElement).not.toHaveClass(
@@ -242,8 +241,8 @@ describe("FleetStatusStrip", () => {
       "lg:before:absolute",
       "lg:before:w-px",
     );
-    expect(screen.getByText("0/0 online")).toHaveClass("dark:text-foreground");
-    expect(screen.getByText("Printers")).toHaveClass("dark:text-muted-foreground");
+    expect(screen.getByText("0/0 online")).toHaveClass("text-foreground");
+    expect(screen.getByText("Printers")).toHaveClass("text-muted-foreground");
   });
 });
 
@@ -360,12 +359,13 @@ describe("SettingsView", () => {
         joinLinks={[]}
         auditEvents={[]}
         adminUnavailable={false}
+        adminLoadError={false}
         canManageJobs={true}
       />,
     );
 
     expect(screen.getByRole("heading", { name: "Language" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "EN" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "English" })).toBeVisible();
     expect(screen.getByRole("button", { name: "中文" })).toBeVisible();
   });
 
@@ -401,6 +401,7 @@ describe("SettingsView", () => {
         joinLinks={[]}
         auditEvents={[]}
         adminUnavailable={false}
+        adminLoadError={false}
         canManageJobs={true}
       />,
     );

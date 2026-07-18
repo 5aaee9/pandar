@@ -1,7 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
-import { ArrowLeftRightIcon, ThermometerIcon } from 'lucide-react'
+import { ArrowLeftRightIcon, CheckCircle2Icon, ThermometerIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -34,15 +34,15 @@ export function NozzleTemperatureCard({
     <Popover>
       <PopoverTrigger
         aria-label={nozzles.length > 1 ? t('setNozzleTemperatures') : t('setNozzleTemperature')}
-        className="flex min-h-16 flex-col items-center justify-center rounded-md bg-muted/50 px-3 py-2 text-center transition hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex min-h-16 flex-col items-center justify-center rounded-md bg-muted/50 px-3 py-2 text-center transition-colors duration-150 ease-out hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         type="button"
       >
-        <ThermometerIcon className="size-4 text-orange-500" />
+        <ThermometerIcon className="size-4 text-muted-foreground" />
         <div className="mt-1 text-xs font-medium text-muted-foreground">{t('nozzleTemperature')}</div>
         {nozzle.label ? <div className="text-xs font-medium text-muted-foreground">{nozzle.label}</div> : null}
         <div className="text-sm font-semibold text-foreground">{nozzle.value}</div>
       </PopoverTrigger>
-      <PopoverContent className={nozzles.length > 1 ? 'w-[24rem]' : 'w-72'} sideOffset={8}>
+      <PopoverContent className={nozzles.length > 1 ? 'w-[min(24rem,calc(100vw-2rem))]' : 'w-72'} sideOffset={8}>
         <PopoverTitle className="text-center text-base font-semibold">
           {nozzles.length > 1 ? t('setNozzleTemperaturesTitle') : t('setNozzleTemperatureTitle')}
         </PopoverTitle>
@@ -68,18 +68,26 @@ export function NozzleSwitchControl({ printer }: { printer: Printer }) {
       <input name="action" type="hidden" value="select_extruder" />
       <input name="extruder_id" type="hidden" value={extruderIdForNozzle(targetNozzle)} />
       <button
-        aria-label={`${t('switchNozzle')} ${nozzles.map((nozzle) => nozzle.label).join(' ')} ${t('nozzleTemperature')}`}
-        className="flex h-full min-h-16 w-full flex-col items-center justify-center rounded-md bg-muted/50 px-3 py-2 text-center transition hover:bg-muted"
+        aria-label={t('switchNozzleTo', { nozzle: targetNozzle })}
+        className="flex h-full min-h-16 w-full flex-col items-center justify-center rounded-md bg-muted/50 px-3 py-2 text-center transition-colors duration-150 ease-out hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         type="submit"
       >
-        <ArrowLeftRightIcon className="size-4 text-yellow-500" />
+        <ArrowLeftRightIcon className="size-4 text-muted-foreground" />
         <div className="mt-1 flex items-start justify-center gap-2 text-xs font-semibold">
           {nozzles.map((nozzle) => (
             <span
               className={`flex flex-col items-center ${nozzle.label === activeNozzle ? 'text-primary' : 'text-muted-foreground'}`}
               key={nozzle.label}
             >
-              <span>{nozzle.label}</span>
+              <span className="flex items-center gap-1">
+                <span>{nozzle.label}</span>
+                {nozzle.label === activeNozzle ? (
+                  <>
+                    <CheckCircle2Icon aria-hidden="true" className="size-3 text-success" />
+                    <span className="sr-only">{t('activeNozzle')}</span>
+                  </>
+                ) : null}
+              </span>
               <NozzleInfo nozzle={nozzle} />
             </span>
           ))}
@@ -95,7 +103,7 @@ function NozzleInfo({ nozzle }: { nozzle: ReturnType<typeof presentNozzles>[numb
   if (details.length === 0) {
     return null
   }
-  return <span className="mt-0.5 text-[0.625rem] font-medium leading-tight text-muted-foreground">{details.join(' ')}</span>
+  return <span className="mt-0.5 text-xs font-medium leading-tight text-muted-foreground">{details.join(' ')}</span>
 }
 
 function NozzleTemperatureMenu({
@@ -138,12 +146,20 @@ function NozzleTemperaturePanel({
   const title = nozzle.label === 'L' ? t('leftNozzleTemp') : nozzle.label === 'R' ? t('rightNozzleTemp') : null
 
   return (
-    <div className={`space-y-2 rounded-md border p-2 ${active ? 'border-primary text-primary' : 'border-border'}`}>
+    <div className={`space-y-2 rounded-md border p-2 ${active ? 'border-primary' : 'border-border'}`}>
       {title ? (
         <span className="flex items-center justify-between text-sm font-semibold">
           {title}
-          <span className="text-xs font-medium text-muted-foreground">
-            {formatTemperatureValue(nozzle.current_celsius)}
+          <span className="flex items-center gap-2">
+            {active ? (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
+                <CheckCircle2Icon aria-hidden="true" className="size-3" />
+                {t('activeNozzle')}
+              </span>
+            ) : null}
+            <span className="text-xs font-medium text-muted-foreground">
+              {formatTemperatureValue(nozzle.current_celsius)}
+            </span>
           </span>
         </span>
       ) : null}

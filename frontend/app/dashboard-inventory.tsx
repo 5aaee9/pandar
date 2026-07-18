@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
 import { PlusIcon, PrinterIcon } from 'lucide-react'
 
@@ -55,25 +55,33 @@ export function PrinterInventory({
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
   const normalizedQuery = query.trim().toLowerCase()
-  const filtered = printers.filter((printer) => {
-    const needsAttention = OFFLINE_PRINTER_STATUSES.has(printer.status.toLowerCase())
-    if (status === 'online' && needsAttention) {
-      return false
-    }
-    if (status === 'attention' && !needsAttention) {
-      return false
-    }
-    if (normalizedQuery) {
-      const haystack = `${printer.name} ${printer.serial_number}`.toLowerCase()
-      if (!haystack.includes(normalizedQuery)) {
-        return false
-      }
-    }
-    return true
-  })
+  const filtered = useMemo(
+    () =>
+      printers.filter((printer) => {
+        const needsAttention = OFFLINE_PRINTER_STATUSES.has(printer.status.toLowerCase())
+        if (status === 'online' && needsAttention) {
+          return false
+        }
+        if (status === 'attention' && !needsAttention) {
+          return false
+        }
+        if (normalizedQuery) {
+          const haystack = `${printer.name} ${printer.serial_number}`.toLowerCase()
+          if (!haystack.includes(normalizedQuery)) {
+            return false
+          }
+        }
+        return true
+      }),
+    [printers, status, normalizedQuery],
+  )
+  const agentNames = useMemo(
+    () => new Map(agents.map((agent) => [agent.id, agent.name])),
+    [agents],
+  )
 
   return (
-    <section className="space-y-4">
+    <section id="printers" className="scroll-mt-20 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold text-foreground">{t('printersTitle')}</h2>
         {selectedTenant && printers.length > 0 ? (
@@ -116,10 +124,10 @@ export function PrinterInventory({
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {filtered.map((printer) => {
                 const material = formatPrinterMaterials(printer, tMat, formatDate)
-                const agent = agents.find((candidate) => candidate.id === printer.agent_id)
+                const agentName = agentNames.get(printer.agent_id)
                 return (
                   <PrinterCard
-                    agentName={agent?.name ?? t('unknownAgent')}
+                    agentName={agentName ?? t('unknownAgent')}
                     key={printer.id}
                     materialDetail={material.detail}
                     nowMs={nowMs}
@@ -149,7 +157,7 @@ function LinkPrinterDialog({
         <PlusIcon className="size-4" />
         {t('submit')}
       </DialogTrigger>
-      <DialogContent closeLabel="Close" className="sm:max-w-xl">
+      <DialogContent closeLabel={t('closeDialog')} className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{t('title')}</DialogTitle>
           <DialogDescription>{t('subtitleTenant', { name: selectedTenant.display_name })}</DialogDescription>

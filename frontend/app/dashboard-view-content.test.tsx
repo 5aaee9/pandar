@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import zh from "../messages/zh.json";
 import { DashboardViewContent } from "./dashboard-view-content";
-import type { AuthMetadata, Tenant, TenantToken } from "./dashboard-types";
+import type { AuthMetadata, Printer, Tenant, TenantToken } from "./dashboard-types";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -36,6 +36,19 @@ const tenant: Tenant = {
   slug: "tenant-one",
   display_name: "Tenant One",
   created_at: "2026-06-30T00:00:00Z",
+};
+
+const printer: Printer = {
+  id: "printer-1",
+  tenant_id: "t1",
+  agent_id: "agent-1",
+  serial_number: "SN1",
+  name: "Office A1",
+  model: "X1C",
+  status: "idle",
+  last_seen_at: "2026-07-02T00:00:00Z",
+  created_at: "2026-07-02T00:00:00Z",
+  materials: null,
 };
 
 const nowMs = Date.parse("2026-07-17T00:00:00Z");
@@ -117,6 +130,7 @@ describe("DashboardViewContent", () => {
     joinLinks: [],
     auditEvents: [],
     adminUnavailable: false,
+    adminLoadError: false,
     canManageJobs: true,
   };
 
@@ -151,7 +165,9 @@ describe("DashboardViewContent", () => {
 
   it("opens the dispatch form in a dialog from jobs", async () => {
     const user = userEvent.setup();
-    renderWithMessages(<DashboardViewContent {...baseProps} view="jobs" />);
+    renderWithMessages(
+      <DashboardViewContent {...baseProps} view="jobs" printers={[printer]} />,
+    );
 
     const jobsHeading = screen.getByRole("heading", { name: "Print jobs" });
     expect(jobsHeading).toBeVisible();
@@ -164,12 +180,12 @@ describe("DashboardViewContent", () => {
     expect(
       within(jobsHeading.parentElement!.parentElement!).queryByText("0 jobs"),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Clear" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Clear jobs" })).toBeDisabled();
     expect(
       screen.queryByRole("heading", { name: "Printer inventory" }),
     ).not.toBeInTheDocument();
 
-    const newButton = screen.getByRole("button", { name: "New" });
+    const newButton = screen.getByRole("button", { name: "New print job" });
     expect(newButton).toHaveAttribute("aria-haspopup", "dialog");
 
     await user.click(newButton);
@@ -218,25 +234,25 @@ describe("DashboardViewContent", () => {
     expect(pastRow).toHaveAttribute("data-token-status", "expired");
     expect(revokedRow).toHaveAttribute("data-token-status", "revoked");
     expect(within(futureRow).getByText("Active")).toHaveClass(
-      "dark:text-emerald-300",
+      "text-success",
     );
     expect(within(pastRow).getByText("Expired")).toHaveClass(
-      "dark:text-amber-300",
+      "text-warning",
     );
     expect(within(revokedRow).getByText("Revoked")).toHaveClass(
       "text-muted-foreground",
     );
     expect(
-      within(futureRow).getByRole("button", { name: "Rotate" }),
+      within(futureRow).getByRole("button", { name: "Rotate token Future token" }),
     ).toBeVisible();
     expect(
-      within(futureRow).getByRole("button", { name: "Revoke" }),
+      within(futureRow).getByRole("button", { name: "Revoke token Future token" }),
     ).toHaveClass("text-destructive", "bg-destructive/10");
     expect(
-      within(pastRow).getByRole("button", { name: "Rotate" }),
+      within(pastRow).getByRole("button", { name: "Rotate token Past token" }),
     ).toBeVisible();
     expect(
-      within(pastRow).getByRole("button", { name: "Revoke" }),
+      within(pastRow).getByRole("button", { name: "Revoke token Past token" }),
     ).toBeVisible();
     expect(within(revokedRow).queryByRole("button")).not.toBeInTheDocument();
 
@@ -288,7 +304,7 @@ describe("DashboardViewContent", () => {
     );
 
     const row = screen.getByText("Future token").closest("article")!;
-    await user.click(within(row).getByRole("button", { name: "Rotate" }));
+    await user.click(within(row).getByRole("button", { name: "Rotate token Future token" }));
 
     const dialog = screen.getByRole("dialog", { name: "Rotate tenant token" });
     expect(within(dialog).getByLabelText("Expires at")).toHaveValue(
@@ -309,9 +325,9 @@ describe("DashboardViewContent", () => {
     );
 
     const row = screen.getByText("Past token").closest("article")!;
-    expect(within(row).getByRole("button", { name: "Revoke" })).toBeVisible();
+    expect(within(row).getByRole("button", { name: "Revoke token Past token" })).toBeVisible();
 
-    await user.click(within(row).getByRole("button", { name: "Rotate" }));
+    await user.click(within(row).getByRole("button", { name: "Rotate token Past token" }));
 
     const dialog = screen.getByRole("dialog", { name: "Rotate tenant token" });
     expect(within(dialog).getByLabelText("Expires at")).toHaveValue("");

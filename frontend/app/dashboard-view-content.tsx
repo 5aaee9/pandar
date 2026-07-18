@@ -55,6 +55,7 @@ export type DashboardViewContentProps = {
   joinLinks: JoinLink[];
   auditEvents: AuditEvent[];
   adminUnavailable: boolean;
+  adminLoadError: boolean;
   canManageJobs: boolean;
 };
 

@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 
 import { formatLayers, formatProgress, formatRemaining } from "./job-format";
+import { statusMeta } from "./dashboard-attention";
 import type { PrinterPrintState } from "./printer-live-types";
 
 type PrintPresentation =
@@ -23,6 +24,8 @@ export function PrinterPrintStatus({
 }) {
   const t = useTranslations("printMonitor");
   const tJob = useTranslations("jobFormat");
+  const tTokens = useTranslations("tokens");
+  const tokenTranslator = (k: string) => (tTokens.has(k) ? tTokens(k) : undefined);
   const presentation =
     COARSE_VETO.has(coarseStatus.toUpperCase()) || !print
       ? null
@@ -35,7 +38,7 @@ export function PrinterPrintStatus({
           {t("statusLabel")}
         </div>
         <div className="mt-0.5 text-sm font-medium text-foreground">
-          {coarseStatus}
+          {statusMeta(coarseStatus, tokenTranslator).label}
         </div>
       </div>
     );

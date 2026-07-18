@@ -46,6 +46,7 @@ type DashboardRuntimeProps = {
   joinLinks: JoinLink[];
   auditEvents: AuditEvent[];
   adminUnavailable: boolean;
+  adminLoadError: boolean;
   canManageJobs: boolean;
   actionStatus?: string;
   selectedCommand: Command | null;
@@ -53,6 +54,7 @@ type DashboardRuntimeProps = {
   commandData: CommandResultData | null;
   errors: string[];
   auth: AuthMetadata;
+  sidebarDefaultOpen?: boolean;
 };
 
 export function DashboardRuntime({
@@ -69,6 +71,7 @@ export function DashboardRuntime({
   joinLinks,
   auditEvents,
   adminUnavailable,
+  adminLoadError,
   canManageJobs,
   actionStatus,
   selectedCommand,
@@ -76,6 +79,7 @@ export function DashboardRuntime({
   commandData,
   errors,
   auth,
+  sidebarDefaultOpen,
 }: DashboardRuntimeProps) {
   const runtime = useDashboardRuntimeEvents({
     apiUrl,
@@ -112,7 +116,7 @@ export function DashboardRuntime({
   };
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={sidebarDefaultOpen}>
       <AppSidebar
         activeView={view}
         auth={auth}
@@ -120,13 +124,19 @@ export function DashboardRuntime({
         selectedTenant={selectedTenant}
         tenants={tenants}
       />
-      <SidebarInset className="min-h-svh bg-slate-100 text-slate-950">
+      <SidebarInset className="min-h-svh bg-muted text-foreground">
         <DashboardShellHeader view={view} />
-        <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8">
+        <main
+          id="main-content"
+          className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8"
+        >
           <ActionStatusToast status={actionStatus} />
 
           {errors.length > 0 ? (
-            <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive dark:bg-destructive/20"
+            >
               {tErr("errorsIncomplete")} {errors.join("; ")}.
             </div>
           ) : null}
@@ -154,6 +164,7 @@ export function DashboardRuntime({
             joinLinks={joinLinks}
             auditEvents={auditEvents}
             adminUnavailable={adminUnavailable}
+            adminLoadError={adminLoadError}
             canManageJobs={canManageJobs}
           />
         </main>

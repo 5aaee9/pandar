@@ -22,7 +22,9 @@ import {
 } from "./dispatch-material-mapping";
 
 export function DispatchMaterialSlotMenu({
+  errorId,
   filament,
+  invalid = false,
   materialName,
   model,
   onSelect,
@@ -30,7 +32,9 @@ export function DispatchMaterialSlotMenu({
   slots,
   useAms,
 }: {
+  errorId?: string;
   filament: ProjectFilament;
+  invalid?: boolean;
   materialName: string;
   model: string | null;
   onSelect: (slotKey: string) => void;
@@ -54,8 +58,10 @@ export function DispatchMaterialSlotMenu({
       <PopoverTrigger
         render={
           <Button
+            aria-describedby={invalid ? errorId : undefined}
+            aria-invalid={invalid || undefined}
             aria-label={t("mapMaterial", { material: materialName })}
-            className="h-auto min-h-11 w-full justify-between rounded-md border-slate-300 bg-white px-2.5 py-2 text-slate-950 hover:bg-slate-50"
+            className="h-auto min-h-11 w-full justify-between rounded-md px-2.5 py-2"
             type="button"
             variant="outline"
           />
@@ -66,26 +72,26 @@ export function DispatchMaterialSlotMenu({
             <MaterialColorSwatch color={selected.color} colors={selected.multiColor} />
             <span className="min-w-0 text-left">
               <span className="block truncate text-sm font-medium">{slotCode(selected)}</span>
-              <span className="block truncate text-xs font-normal text-slate-500">
+              <span className="block truncate text-xs font-normal text-muted-foreground">
                 {slotMaterialName(selected, t)}
               </span>
             </span>
           </span>
         ) : (
-          <span className="text-sm font-normal text-slate-500">{t("unmapped")}</span>
+          <span className="text-sm font-normal text-muted-foreground">{t("unmapped")}</span>
         )}
-        <ChevronDown className="size-4 shrink-0 text-slate-500" />
+        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
       </PopoverTrigger>
       <PopoverContent
         align="start"
         className="max-h-[min(34rem,calc(100vh-3rem))] w-[min(36rem,calc(100vw-2rem))] gap-0 overflow-y-auto p-0"
         sideOffset={6}
       >
-        <div className="border-b border-slate-200 px-4 py-3">
+        <div className="border-b border-border px-4 py-3">
           <PopoverTitle className="text-base font-semibold">
             {t("selectFilamentForNozzle", { nozzle })}
           </PopoverTitle>
-          <p className="mt-1 text-xs text-slate-500">{t("materialMatchingHint")}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{t("materialMatchingHint")}</p>
         </div>
         <div className="grid gap-0 sm:grid-cols-2">
           {sections.map((section) => (
@@ -100,9 +106,9 @@ export function DispatchMaterialSlotMenu({
             />
           ))}
         </div>
-        <div className="border-t border-slate-200 p-2">
+        <div className="border-t border-border p-2">
           <button
-            className="w-full rounded-md px-3 py-2 text-left text-sm text-slate-600 hover:bg-slate-100"
+            className="w-full rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors duration-150 ease-out hover:bg-muted"
             onClick={() => select("")}
             type="button"
           >
@@ -135,16 +141,16 @@ function MaterialSection({
 
   return (
     <section className={cn(
-      "min-w-0 border-slate-200 px-3 py-3 sm:border-r sm:last:border-r-0",
+      "min-w-0 border-border px-3 py-3 sm:border-r sm:last:border-r-0",
       section.id === "LR" && "sm:col-span-2 sm:border-r-0",
     )}>
       {section.id !== "LR" ? (
-        <h3 className="mb-2 text-sm font-semibold text-slate-900">{sectionTitle(section.id, t)}</h3>
+        <h3 className="mb-2 text-sm font-semibold text-foreground">{sectionTitle(section.id, t)}</h3>
       ) : null}
       <div className={cn("grid gap-3", section.id === "LR" && "sm:grid-cols-2")}>
         {amsGroups.map(([unitId, unitSlots]) => (
           <div key={unitId}>
-            <div className="mb-1 text-xs font-medium text-slate-500">
+            <div className="mb-1 text-xs font-medium text-muted-foreground">
               {amsUnitName(unitSlots[0])}
             </div>
             <div className="grid grid-cols-4 gap-1.5">
@@ -165,7 +171,7 @@ function MaterialSection({
         {external.length > 0 ? (
           <div>
             {section.id !== "LR" ? (
-              <div className="mb-1 text-xs font-medium text-slate-500">{t("external")}</div>
+              <div className="mb-1 text-xs font-medium text-muted-foreground">{t("external")}</div>
             ) : null}
             <div className="flex gap-1.5">
               {external.map((slot) => (
@@ -206,35 +212,43 @@ function MaterialSlotButton({
   const ineligibility = slotIneligibility(filament, slot, slots, useAms);
   const reason = ineligibility ? ineligibilityText(ineligibility, t) : null;
   const material = slotMaterialName(slot, t);
+  const remainingLabel = slot.remainingEstimate !== null
+    ? t("filamentRemainingPercent", {
+        percent: Math.max(0, Math.min(100, slot.remainingEstimate)),
+      })
+    : null;
 
   return (
     <button
-      aria-label={[slotCode(slot), material, reason].filter(Boolean).join(", ")}
+      aria-disabled={ineligibility !== null}
+      aria-label={[slotCode(slot), material, remainingLabel, reason].filter(Boolean).join(", ")}
       aria-pressed={selected}
       className={cn(
-        "relative min-w-0 overflow-hidden rounded-md border bg-white text-left transition-colors",
-        selected ? "border-primary ring-2 ring-primary/20" : "border-slate-300",
+        "relative min-w-0 overflow-hidden rounded-md border bg-background text-left transition-colors duration-150 ease-out",
+        selected ? "border-primary ring-2 ring-primary/20" : "border-border",
         ineligibility
           ? "cursor-not-allowed opacity-40"
-          : "hover:border-slate-500 hover:bg-slate-50",
+          : "hover:border-foreground/40 hover:bg-muted",
         slot.kind === "external" ? "w-14" : "w-full",
       )}
-      disabled={ineligibility !== null}
-      onClick={() => onSelect(slot.key)}
+      onClick={() => {
+        if (ineligibility) return
+        onSelect(slot.key)
+      }}
       title={reason ?? undefined}
       type="button"
     >
       <MaterialColorStrip color={slot.color} colors={slot.multiColor} />
       <span className="block px-1.5 pb-1.5 pt-1">
         <span className="flex items-start justify-between gap-1">
-          <span className="truncate text-xs font-semibold text-slate-950">{slotCode(slot)}</span>
+          <span className="truncate text-xs font-semibold text-foreground">{slotCode(slot)}</span>
           {selected ? <Check className="size-3 shrink-0 text-primary" /> : null}
         </span>
-        <span className="block truncate text-[10px] leading-4 text-slate-600">{material}</span>
+        <span className="block truncate text-xs leading-4 text-muted-foreground">{material}</span>
         {slot.remainingEstimate !== null ? (
-          <span className="mt-1 block h-0.5 overflow-hidden rounded bg-slate-200">
+          <span aria-hidden="true" className="mt-1 block h-0.5 overflow-hidden rounded bg-muted">
             <span
-              className="block h-full bg-slate-500"
+              className="block h-full bg-muted-foreground/50"
               style={{ width: Math.max(0, Math.min(100, slot.remainingEstimate)) + "%" }}
             />
           </span>
@@ -255,7 +269,7 @@ export function MaterialColorSwatch({
   return (
     <span
       aria-hidden="true"
-      className="flex size-6 shrink-0 overflow-hidden rounded-full border border-slate-300 bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%,transparent_75%,#e2e8f0_75%),linear-gradient(45deg,#e2e8f0_25%,white_25%,white_75%,#e2e8f0_75%)] bg-size-[8px_8px] bg-position-[0_0,4px_4px]"
+      className="flex size-6 shrink-0 overflow-hidden rounded-full border border-border bg-[linear-gradient(45deg,#e2e8f0_25%,transparent_25%,transparent_75%,#e2e8f0_75%),linear-gradient(45deg,#e2e8f0_25%,white_25%,white_75%,#e2e8f0_75%)] bg-size-[8px_8px] bg-position-[0_0,4px_4px]"
     >
       {displayColors.map((displayColor, index) => (
         <span className="h-full flex-1" key={displayColor + index} style={{ backgroundColor: displayColor }} />

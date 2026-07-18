@@ -51,6 +51,8 @@ The palette is a neutral OKLCH system. The app background, cards, and popovers a
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.508 0.118 165.612);
+  --warning: oklch(0.555 0.163 48.998);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
@@ -86,6 +88,8 @@ The palette is a neutral OKLCH system. The app background, cards, and popovers a
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.845 0.143 164.978);
+  --warning: oklch(0.905 0.182 98.217);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
@@ -109,8 +113,8 @@ The palette is a neutral OKLCH system. The app background, cards, and popovers a
 
 These are first-class because operational state is the product. Each is always paired with an icon and/or text label — never color alone (WCAG 2.2 AA).
 
-- **Positive / Running / Online**: neutral success treatment with an icon and explicit label.
-- **Warning / Degraded**: warning treatment with icon and label; hue is secondary to text.
+- **Positive / Running / Online**: `--success` (emerald-700 light, emerald-300 dark — both ≥4.5:1 on their surfaces) with an icon and explicit label.
+- **Warning / Degraded**: `--warning` (amber-700 light, amber-300 dark) with icon and label; hue is secondary to text.
 - **Danger / Failed / Error / Offline**: `--destructive`, used sparingly and only for real failure.
 - **Idle / Neutral**: muted neutral, the default resting state.
 

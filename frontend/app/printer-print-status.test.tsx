@@ -134,15 +134,19 @@ describe("PrinterPrintStatus", () => {
     expect(screen.getByText("Layers -/100")).toBeVisible();
   });
 
-  it.each(["IDLE", "OFFLINE", "FAILED"])(
+  it.each([
+    ["IDLE", "Idle"],
+    ["OFFLINE", "Offline"],
+    ["FAILED", "Failed"],
+  ])(
     "lets coarse %s veto stale live and finished content",
-    (coarseStatus) => {
+    (coarseStatus, displayLabel) => {
       renderStatus(
         { ...basePrint, gcode_state: "FINISH", progress_percent: 100 },
         coarseStatus,
       );
 
-      expect(screen.getByText(coarseStatus)).toBeVisible();
+      expect(screen.getByText(displayLabel)).toBeVisible();
       expect(screen.queryByText("Finished")).not.toBeInTheDocument();
       expect(screen.queryByText("Benchy")).not.toBeInTheDocument();
       expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
@@ -151,7 +155,7 @@ describe("PrinterPrintStatus", () => {
 
   it("falls back to the existing coarse status when enriched state is absent or unknown", () => {
     const rendered = renderStatus(null, "READY");
-    expect(screen.getByText("READY")).toBeVisible();
+    expect(screen.getByText("Ready")).toBeVisible();
 
     rendered.rerender(
       <NextIntlClientProvider locale="en" messages={en}>
@@ -161,14 +165,14 @@ describe("PrinterPrintStatus", () => {
         />
       </NextIntlClientProvider>,
     );
-    expect(screen.getByText("RUNNING")).toBeVisible();
+    expect(screen.getByText("Running")).toBeVisible();
     expect(screen.queryByText("0%")).not.toBeInTheDocument();
   });
 
   it("does not widen the exact display aliases with case normalization", () => {
     renderStatus({ ...basePrint, gcode_state: "printing" }, "RUNNING");
 
-    expect(screen.getByText("RUNNING")).toBeVisible();
+    expect(screen.getByText("Running")).toBeVisible();
     expect(screen.queryByText("Printing")).not.toBeInTheDocument();
     expect(screen.queryByText("Benchy")).not.toBeInTheDocument();
   });

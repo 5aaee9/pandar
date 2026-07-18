@@ -1,6 +1,6 @@
 'use client'
 
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { useRouter } from 'next/navigation'
 import { useTransition } from 'react'
 
@@ -14,6 +14,7 @@ const LABELS: Record<Locale, string> = {
 
 export function LanguageSwitcher() {
   const active = useLocale() as Locale
+  const t = useTranslations('dashboardShell')
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
@@ -33,12 +34,18 @@ export function LanguageSwitcher() {
   }
 
   return (
-    <div className="inline-flex items-center gap-1 rounded-md border border-border bg-background p-0.5">
+    <div
+      aria-label={t('languageTitle')}
+      className="inline-flex items-center gap-1 rounded-md border border-border bg-background p-0.5"
+      role="group"
+    >
       {locales.map((locale) => {
         const isActive = locale === active
         return (
           <button
             key={locale}
+            aria-label={locale === 'en' ? 'English' : '中文'}
+            aria-pressed={isActive}
             className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
               isActive
                 ? 'bg-primary text-primary-foreground'

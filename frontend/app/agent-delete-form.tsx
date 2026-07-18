@@ -8,7 +8,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/h
 import { ConfirmForm } from './confirm-dialog'
 
 const DELETE_BUTTON_CLASS =
-  'h-9 rounded-md border border-red-300 px-3 text-sm font-medium text-red-700 disabled:pointer-events-none disabled:border-slate-200 disabled:text-slate-400'
+  'h-9 rounded-md border border-destructive/40 px-3 text-sm font-medium text-destructive transition-colors duration-150 ease-out hover:bg-destructive/10 disabled:pointer-events-none disabled:border-border disabled:text-muted-foreground'
 
 export function AgentDeleteForm({
   action,
@@ -38,13 +38,32 @@ export function AgentDeleteForm({
       <HoverCard>
         <HoverCardTrigger
           delay={0}
-          render={<span className="inline-flex cursor-not-allowed" onClick={() => toast.warning(disabledMessage)} />}
+          render={
+            <span
+              aria-describedby={disabledMessageId}
+              aria-disabled="true"
+              aria-label={buttonAriaLabel}
+              className="inline-flex cursor-not-allowed"
+              onClick={(event) => {
+              event.preventDefault()
+              toast.warning(disabledMessage)
+            }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  toast.warning(disabledMessage)
+                }
+              }}
+              role="button"
+              tabIndex={0}
+            />
+          }
         >
           <button
-            aria-describedby={disabledMessageId}
-            aria-label={buttonAriaLabel}
+            aria-hidden="true"
             className={DELETE_BUTTON_CLASS}
             disabled
+            tabIndex={-1}
             type="button"
           >
             {buttonLabel}
@@ -53,7 +72,7 @@ export function AgentDeleteForm({
             {disabledMessage}
           </span>
         </HoverCardTrigger>
-        <HoverCardContent align="end" className="w-auto max-w-xs text-sm text-slate-700" side="top">
+        <HoverCardContent align="end" className="w-auto max-w-xs text-sm text-foreground" side="top">
           {disabledMessage}
         </HoverCardContent>
       </HoverCard>

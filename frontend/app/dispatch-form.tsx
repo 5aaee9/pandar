@@ -1,10 +1,11 @@
 'use client'
 
-import { useRef, useState, type FormEvent } from 'react'
+import { useId, useRef, useState, type FormEvent } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import type { ArtifactMetadata, Printer } from './dashboard-types'
 import { apiIdSegment } from './api-path'
+import { ConfirmDialog } from './confirm-dialog'
 import { formatBytes } from './dashboard-format'
 import { DispatchMaterialMappingFields } from './dispatch-material-mapping-fields'
 import { dispatchErrorCode, prepareDispatchSubmission } from './dispatch-form-submission'
@@ -18,13 +19,6 @@ type DispatchTenant = {
 type DispatchPrinter = Pick<Printer, 'id' | 'name' | 'serial_number' | 'model' | 'materials'>
 
 const maxArtifactBytes = 268435456
-const backendErrorCodes = [
-  'artifact_empty',
-  'artifact_invalid_upload',
-  'artifact_invalid_plate',
-  'artifact_too_large',
-  'printer_not_found',
-]
 
 export function DispatchForm({
   selectedTenant,
@@ -57,9 +51,12 @@ export function DispatchForm({
     metadata: null,
   })
   const [submitting, setSubmitting] = useState(false)
+  const [submitFailed, setSubmitFailed] = useState(false)
+  const [mismatchFormData, setMismatchFormData] = useState<FormData | null>(null)
   const [materialMappingValid, setMaterialMappingValid] = useState(true)
   const [useAms, setUseAms] = useState(true)
   const previewRequestRef = useRef(0)
+  const fileStatusId = useId()
 
   const selectedPrinterId = printers.some((printer) => printer.id === preferredPrinterId)
     ? preferredPrinterId
@@ -140,21 +137,9 @@ export function DispatchForm({
     }
   }
 
-  const submitPrintJob = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (
-      !selectedTenant ||
-      artifact.state !== 'ready' ||
-      plateId === null ||
-      !selectedPrinterId ||
-      !materialMappingValid
-    ) {
-      return
-    }
-
-    const submission = prepareDispatchSubmission(new FormData(event.currentTarget), () =>
-      window.confirm(t('externalMaterialMismatchWarning')),
-    )
+  const uploadSubmission = async (formData: FormData) => {
+    if (!selectedTenant) return
+    const submission = prepareDispatchSubmission(formData, () => true)
     if (!submission) return
     setSubmitting(true)
 
@@ -167,8 +152,38 @@ export function DispatchForm({
       onRedirect(
         `/jobs?tenant=${encodeURIComponent(selectedTenant.id)}&status=${encodeURIComponent(status)}`,
       )
+    } catch {
+      setSubmitFailed(true)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const submitPrintJob = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (
+      !selectedTenant ||
+      artifact.state !== 'ready' ||
+      plateId === null ||
+      !selectedPrinterId ||
+      !materialMappingValid
+    ) {
+      return
+    }
+
+    setSubmitFailed(false)
+    const formData = new FormData(event.currentTarget)
+    let mismatch = false
+    const submission = prepareDispatchSubmission(formData, () => {
+      mismatch = true
+      return false
+    })
+    if (submission) {
+      void uploadSubmission(formData)
+      return
+    }
+    if (mismatch) {
+      setMismatchFormData(formData)
     }
   }
 
@@ -190,75 +205,72 @@ export function DispatchForm({
   }
 
   return (
-    <form
-      action={uploadPath(selectedTenant.id, selectedPrinterId)}
-      className="grid gap-4 lg:grid-cols-2"
-      encType="multipart/form-data"
-      method="post"
-      onSubmit={(event) => void submitPrintJob(event)}
-    >
-      <label className="flex flex-col gap-1 text-sm lg:col-span-2">
-        <span className="text-xs font-medium text-slate-500">{t('printer')}</span>
-        <select
-          name="printer_id"
-          className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
-          onChange={(event) => setPreferredPrinterId(event.currentTarget.value)}
-          required
-          value={selectedPrinterId}
-        >
-          {printers.map((printer) => (
-            <option key={printer.id} value={printer.id}>
-              {printer.name} ({printer.serial_number})
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-sm lg:col-span-2">
-        <span className="text-xs font-medium text-slate-500">{t('artifact')}</span>
-        <input
-          accept=".3mf,.gcode,.gcode.3mf,application/octet-stream,model/3mf"
-          className="rounded-md border border-slate-300 px-2 py-2 text-sm text-slate-950 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium"
-          name="file"
-          onChange={(event) => selectArtifact(event.currentTarget.files?.[0] ?? null)}
-          type="file"
-          required
-        />
-        <span className="text-xs text-slate-600">{t('maxSize', { size: formatBytes(maxArtifactBytes, num) })}</span>
-      </label>
-      <input name="use_ams" type="hidden" value={String(useAms)} />
-      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 lg:col-span-2">
-        <div className="font-medium text-slate-950">
-          {selectedFilename || t('noArtifact')}
-        </div>
-        <div className="mt-1 text-xs">
-          {artifact.state === 'ready'
-            ? t('readySize', { size: formatBytes(artifact.size, num) })
-            : artifact.state === 'too_large'
-              ? t('tooLargeSize', { size: formatBytes(artifact.size, num) })
-              : t('chooseFile')}
-        </div>
-        <MetadataPreview plateId={plateId} preview={metadataPreview} />
-        <details className="mt-2 text-xs text-slate-600">
-          <summary className="cursor-pointer select-none text-slate-500">{t('errorCodes')}</summary>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {backendErrorCodes.map((code) => (
-              <code key={code} className="rounded bg-white px-1.5 py-0.5 text-slate-600">
-                {code}
-              </code>
+    <>
+      <form
+        action={uploadPath(selectedTenant.id, selectedPrinterId)}
+        className="grid gap-4 lg:grid-cols-2"
+        encType="multipart/form-data"
+        method="post"
+        onSubmit={(event) => submitPrintJob(event)}
+      >
+        <label className="flex flex-col gap-1 text-sm lg:col-span-2">
+          <span className="text-xs font-medium text-muted-foreground">{t('printer')}</span>
+          <select
+            name="printer_id"
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+            onChange={(event) => setPreferredPrinterId(event.currentTarget.value)}
+            required
+            value={selectedPrinterId}
+          >
+            {printers.map((printer) => (
+              <option key={printer.id} value={printer.id}>
+                {printer.name} ({printer.serial_number})
+              </option>
             ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm lg:col-span-2">
+          <span className="text-xs font-medium text-muted-foreground">{t('artifact')}</span>
+          <input
+            accept=".3mf,.gcode,.gcode.3mf,application/octet-stream,model/3mf"
+            aria-describedby={fileStatusId}
+            aria-invalid={artifact.state === 'too_large'}
+            className="rounded-md border border-input px-2 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium"
+            name="file"
+            onChange={(event) => selectArtifact(event.currentTarget.files?.[0] ?? null)}
+            type="file"
+            required
+          />
+          <span className="text-xs text-muted-foreground">{t('maxSize', { size: formatBytes(maxArtifactBytes, num) })}</span>
+        </label>
+        <input name="use_ams" type="hidden" value={String(useAms)} />
+        <div className="rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground lg:col-span-2">
+          <div className="font-medium text-foreground">
+            {selectedFilename || t('noArtifact')}
           </div>
-        </details>
-      </div>
+          <div
+            className="mt-1 text-xs"
+            id={fileStatusId}
+            role={artifact.state === 'too_large' ? 'alert' : undefined}
+          >
+            {artifact.state === 'ready'
+              ? t('readySize', { size: formatBytes(artifact.size, num) })
+              : artifact.state === 'too_large'
+                ? t('tooLargeSize', { size: formatBytes(artifact.size, num) })
+                : t('chooseFile')}
+          </div>
+          <MetadataPreview plateId={plateId} preview={metadataPreview} />
+        </div>
       {plateId !== null && metadataPreview.state !== 'idle' && metadataPreview.state !== 'loading' ? (
         <div className="flex flex-col gap-1 text-sm lg:col-span-2" data-motion="dispatch-unlocked">
-          <span className="flex items-center gap-1 text-xs font-medium text-slate-500">
+          <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
             {t('plate')}
             <HelpTip label={t('plate')}>{t('plateHelp')}</HelpTip>
           </span>
           {parsedPlates.length > 0 ? (
             <select
               aria-label={t('plate')}
-              className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-950"
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
               name="plate_id"
               onChange={(event) => setPlateId(Number(event.currentTarget.value))}
               required
@@ -273,7 +285,7 @@ export function DispatchForm({
           ) : (
             <input
               aria-label={t('plate')}
-              className="h-9 rounded-md border border-slate-300 px-2 text-sm text-slate-950"
+              className="h-9 rounded-md border border-input px-2 text-sm text-foreground"
               min="1"
               name="plate_id"
               onChange={(event) => setPlateId(Number(event.currentTarget.value))}
@@ -293,7 +305,7 @@ export function DispatchForm({
           useAms={useAms}
         />
       ) : null}
-      <div className="flex flex-wrap gap-4 text-sm text-slate-700 lg:col-span-2">
+      <div className="flex flex-wrap gap-4 text-sm text-muted-foreground lg:col-span-2">
         <span className="flex items-center gap-1.5">
           <label className="flex items-center gap-2">
             <input
@@ -310,9 +322,17 @@ export function DispatchForm({
         key={selectedPrinter ? selectedPrinter.id + ':' + (selectedPrinter.model ?? 'unknown') : 'unknown'}
         model={selectedPrinter?.model ?? null}
       />
+      {submitFailed ? (
+        <div
+          className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive dark:bg-destructive/20 lg:col-span-2"
+          role="alert"
+        >
+          {t('submitFailed')}
+        </div>
+      ) : null}
       <div className="lg:col-span-2">
         <button
-          className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:bg-slate-300 disabled:text-white"
+          className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary/80 disabled:bg-muted disabled:text-muted-foreground"
           disabled={
             artifact.state !== 'ready' ||
             plateId === null ||
@@ -325,6 +345,23 @@ export function DispatchForm({
         </button>
       </div>
     </form>
+    <ConfirmDialog
+      open={mismatchFormData !== null}
+      title={t('externalMaterialMismatchTitle')}
+      message={t('externalMaterialMismatchWarning')}
+      confirmLabel={t('dispatch')}
+      cancelLabel={t('reviewMapping')}
+      tone="default"
+      onConfirm={() => {
+        const pending = mismatchFormData
+        setMismatchFormData(null)
+        if (pending) {
+          void uploadSubmission(pending)
+        }
+      }}
+      onCancel={() => setMismatchFormData(null)}
+    />
+  </>
   )
 }
 
@@ -352,13 +389,13 @@ function MetadataPreview({
     return null
   }
   if (preview.state === 'loading') {
-    return <div className="mt-2 text-xs text-slate-600">{t('readingMetadata')}</div>
+    return <div className="mt-2 text-xs text-muted-foreground" role="status">{t('readingMetadata')}</div>
   }
   if (preview.state === 'unavailable') {
-    return <div className="mt-2 text-xs text-slate-600">{t('metadataUnavailableFound')}</div>
+    return <div className="mt-2 text-xs text-muted-foreground" role="status">{t('metadataUnavailableFound')}</div>
   }
   if (preview.state === 'error' || !preview.metadata) {
-    return <div className="mt-2 text-xs text-slate-600">{t('metadataUnavailable')}</div>
+    return <div className="mt-2 text-xs text-muted-foreground" role="status">{t('metadataUnavailable')}</div>
   }
 
   const metadata = preview.metadata
@@ -368,20 +405,20 @@ function MetadataPreview({
     metadata.plates[0]
 
   return (
-    <div className="mt-2 grid gap-1 text-xs text-slate-700 sm:grid-cols-3">
+    <div className="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
       <div className="min-w-0">
-        <span className="text-slate-500">{t('project')} </span>
-        <span className="font-medium text-slate-900">{metadata.display_name}</span>
+        <span className="text-muted-foreground">{t('project')} </span>
+        <span className="font-medium text-foreground">{metadata.display_name}</span>
       </div>
       <div>
-        <span className="text-slate-500">{t('plateLabel')} </span>
-        <span className="font-medium text-slate-900">
+        <span className="text-muted-foreground">{t('plateLabel')} </span>
+        <span className="font-medium text-foreground">
           {primaryPlate?.plate_id ?? '-'}
         </span>
       </div>
       <div className="truncate">
-        <span className="text-slate-500">{t('objects')} </span>
-        <span className="font-medium text-slate-900">
+        <span className="text-muted-foreground">{t('objects')} </span>
+        <span className="font-medium text-foreground">
           {primaryPlate?.objects.length ? primaryPlate.objects.join(', ') : '-'}
         </span>
       </div>
@@ -392,8 +429,8 @@ function MetadataPreview({
 function DispatchEmptyState({ title, message }: { title: string; message: string }) {
   return (
     <div className="px-4 py-12 text-center">
-      <div className="text-sm font-semibold text-slate-950">{title}</div>
-      <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">{message}</p>
+      <div className="text-sm font-semibold text-foreground">{title}</div>
+      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{message}</p>
     </div>
   )
 }

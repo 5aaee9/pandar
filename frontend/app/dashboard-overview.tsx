@@ -48,10 +48,9 @@ export function FleetStatusStrip({
         </div>
         <div
           className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-0 lg:pl-5"
-          aria-hidden={fleetEmpty}
         >
           <StatCell
-            href="#printers"
+            href={fleetEmpty ? undefined : '#printers'}
             label={tStat('printers')}
             value={fleetEmpty ? tStat('dash') : tStat('printersValue', { online: health.printersOnline, total: health.printersTotal })}
             note={health.printersTotal - health.printersOnline > 0 ? tStat('printersNote', { count: health.printersTotal - health.printersOnline }) : null}
@@ -59,7 +58,7 @@ export function FleetStatusStrip({
             state={health.printersOnline < health.printersTotal ? 'warning' : 'success'}
           />
           <StatCell
-            href={dashboardSidebarHref('agents', dashboardQuery)}
+            href={fleetEmpty ? undefined : dashboardSidebarHref('agents', dashboardQuery)}
             label={tStat('agents')}
             value={fleetEmpty ? tStat('dash') : tStat('agentsValue', { connected: health.agentsConnected, total: health.agentsTotal })}
             note={health.agentsTotal - health.agentsConnected > 0 ? tStat('agentsNote', { count: health.agentsTotal - health.agentsConnected }) : null}
@@ -67,7 +66,7 @@ export function FleetStatusStrip({
             state={health.agentsConnected < health.agentsTotal ? 'warning' : 'success'}
           />
           <StatCell
-            href={dashboardSidebarHref('jobs', dashboardQuery)}
+            href={fleetEmpty ? undefined : dashboardSidebarHref('jobs', dashboardQuery)}
             label={tStat('activeJobs')}
             value={fleetEmpty ? tStat('dash') : tStat('activeJobsValue', { count: health.jobsActive })}
             note={health.jobsFailed > 0 ? tStat('activeJobsNote', { count: health.jobsFailed }) : null}

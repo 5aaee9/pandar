@@ -61,11 +61,11 @@ describe("DispatchMaterialSlotMenu", () => {
     const dynamicSection = getByText("AMS(1)").closest("section");
     expect(dynamicSection).toHaveClass("sm:col-span-2");
     expect(getByRole("button", {
-      name: "Ext-L, PLA, External spools are unavailable while Filament Track Switch routing is active.",
-    })).toBeDisabled();
+      name: /Ext-L, PLA, Remaining \d+%, External spools are unavailable while Filament Track Switch routing is active\./,
+    })).toHaveAttribute("aria-disabled", "true");
     expect(getByRole("button", {
-      name: "Ext-R, PLA, External spools are unavailable while Filament Track Switch routing is active.",
-    })).toBeDisabled();
+      name: /Ext-R, PLA, Remaining \d+%, External spools are unavailable while Filament Track Switch routing is active\./,
+    })).toHaveAttribute("aria-disabled", "true");
   });
 });
 

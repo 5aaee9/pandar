@@ -1,4 +1,4 @@
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import { PlusIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -42,6 +42,7 @@ function CreateTenantTokenDialogSession({
   onClosed: () => void;
 }) {
   const t = useTranslations("admin");
+  const helpId = useId();
   const [open, setOpen] = useState(false);
   const [state, formAction, pending] = useActionState(createTenantToken, null);
   const completed = state?.ok && state.kind === "tenant_token";
@@ -81,24 +82,26 @@ function CreateTenantTokenDialogSession({
         >
           <input name="tenant_id" type="hidden" value={tenantId} />
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input disabled={completed} name="name" label={t("name")} />
+            <Input disabled={completed} name="name" label={t("name")} required />
             <Input
               defaultValue="*"
+              describedBy={`${helpId}-scopes`}
               disabled={completed}
               name="scopes"
               label={t("scopes")}
             />
           </div>
-          <p className="-mt-2 text-xs text-muted-foreground">
+          <p className="-mt-2 text-xs text-muted-foreground" id={`${helpId}-scopes`}>
             {t("scopesHelp")}
           </p>
           <Input
             name="expires_at"
             label={t("expiresAt")}
+            describedBy={`${helpId}-expires`}
             disabled={completed}
             placeholder="2026-12-31T00:00:00Z"
           />
-          <p className="-mt-2 text-xs text-muted-foreground">
+          <p className="-mt-2 text-xs text-muted-foreground" id={`${helpId}-expires`}>
             {t("expiresAtHelp")}
           </p>
           <SecretActionResult state={state} />
@@ -186,6 +189,7 @@ function RotateTenantTokenDialogSession({
         <DialogTrigger
           render={
             <Button
+              aria-label={t("rotateFor", { name: token.name })}
               className="flex-1 md:flex-none"
               size="sm"
               variant="outline"
@@ -202,7 +206,9 @@ function RotateTenantTokenDialogSession({
       >
         <DialogHeader>
           <DialogTitle>{t("rotateTokenTitle")}</DialogTitle>
-          <DialogDescription>{t("rotateTokenMessage")}</DialogDescription>
+          <DialogDescription>
+            {t("rotateTokenMessage", { name: token.name })}
+          </DialogDescription>
         </DialogHeader>
         <form
           action={formAction}
@@ -280,6 +286,7 @@ export function RevokeTenantTokenDialog({
       <DialogTrigger
         render={
           <Button
+            aria-label={t("revokeFor", { name: token.name })}
             className="flex-1 md:flex-none"
             size="sm"
             variant="destructive"
@@ -295,7 +302,9 @@ export function RevokeTenantTokenDialog({
       >
         <DialogHeader>
           <DialogTitle>{t("revokeTokenTitle")}</DialogTitle>
-          <DialogDescription>{t("revokeTokenMessage")}</DialogDescription>
+          <DialogDescription>
+            {t("revokeTokenMessage", { name: token.name })}
+          </DialogDescription>
         </DialogHeader>
         <form
           action={revokeTenantToken}

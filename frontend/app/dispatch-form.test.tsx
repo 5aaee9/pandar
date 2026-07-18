@@ -1,5 +1,5 @@
 import { NextIntlClientProvider } from "next-intl";
-import { fireEvent, render, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,16 +26,16 @@ describe("DispatchForm", () => {
     const timelapse = within(screenGroup(container, "Timelapse"));
     expect(timelapse.getByRole("radio", { name: "On" })).toBeChecked();
 
-    const bedLeveling = within(screenGroup(container, "Auto Bed Leveling"));
+    const bedLeveling = within(screenGroup(container, "Auto bed leveling"));
     expect(bedLeveling.getByRole("radio", { name: "Auto" })).toBeChecked();
 
     const flowCalibration = within(
-      screenGroup(container, "Flow Dynamics Calibration"),
+      screenGroup(container, "Flow dynamics calibration"),
     );
     expect(flowCalibration.getByRole("radio", { name: "Auto" })).toBeChecked();
 
     const nozzleOffset = within(
-      screenGroup(container, "Nozzle Offset Calibration"),
+      screenGroup(container, "Nozzle offset calibration"),
     );
     expect(nozzleOffset.getByRole("radio", { name: "Off" })).toBeChecked();
     expect(container.querySelector('input[name="bed_leveling"]')).toHaveValue("false");
@@ -86,7 +86,7 @@ describe("DispatchForm", () => {
     );
 
     expect(
-      within(screenGroup(container, "Flow Dynamics Calibration")).getByRole(
+      within(screenGroup(container, "Flow dynamics calibration")).getByRole(
         "radio",
         { name: "Auto" },
       ),
@@ -97,12 +97,12 @@ describe("DispatchForm", () => {
       "a1",
     );
 
-    const flow = within(screenGroup(container, "Flow Dynamics Calibration"));
+    const flow = within(screenGroup(container, "Flow dynamics calibration"));
     expect(flow.queryByRole("radio", { name: "Auto" })).not.toBeInTheDocument();
     expect(flow.getByRole("radio", { name: "On" })).toBeChecked();
     expect(
       Array.from(container.querySelectorAll("fieldset")).some(
-        (field) => field.querySelector("legend")?.textContent === "Nozzle Offset Calibration",
+        (field) => field.querySelector("legend")?.textContent === "Nozzle offset calibration",
       ),
     ).toBe(false);
 
@@ -409,24 +409,24 @@ describe("DispatchForm", () => {
     expect(getByText("AMS(2)")).toBeInTheDocument();
     expect(getByText("AMS(1)")).toBeInTheDocument();
     expect(getByRole("button", {
-      name: "B1, PLA, This source cannot feed the selected nozzle.",
-    })).toBeDisabled();
+      name: /B1, PLA,.*This source cannot feed the selected nozzle\./,
+    })).toHaveAttribute("aria-disabled", "true");
 
     const transparentExternal = getByRole("button", {
-      name: "Ext-L, PLA, This source cannot feed the selected nozzle.",
+      name: /Ext-L, PLA,.*This source cannot feed the selected nozzle\./,
     });
     expect(transparentExternal.querySelector('[style*="background-color"]'))
       .toHaveStyle({ backgroundColor: "#00000000" });
     expect(getByText("AMS HT (1)")).toBeInTheDocument();
     expect(getByRole("button", {
-      name: "HT-A, PETG, The installed AMS material type does not match the project material.",
-    })).toBeDisabled();
+      name: /HT-A, PETG,.*The installed AMS material type does not match the project material\./,
+    })).toHaveAttribute("aria-disabled", "true");
     await user.click(getByRole("button", { name: "Unmapped" }));
     await waitFor(() => {
       expect(container.querySelector('input[name="material_mapping_valid"]'))
         .toHaveValue("false");
     });
-    expect(getByRole("button", { name: "Dispatch" })).toBeDisabled();
+    expect(getByRole("button", { name: "Dispatch print job" })).toBeDisabled();
     expect(getByText(
       "Select a compatible filament source for every required material before dispatch.",
     )).toBeInTheDocument();
@@ -457,9 +457,16 @@ describe("DispatchForm", () => {
       );
     });
 
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     fireEvent.submit(container.querySelector("form") as HTMLFormElement);
-    expect(confirm).toHaveBeenCalledWith("The external spool material type does not match the project. Dispatch anyway?");
+    const mismatchDialog = await screen.findByRole("dialog", {
+      name: "Dispatch with material mismatch?",
+    });
+    expect(mismatchDialog).toHaveTextContent(
+      "The external spool material type does not match the project. Dispatch anyway?",
+    );
+    await user.click(
+      within(mismatchDialog).getByRole("button", { name: "Dispatch print job" }),
+    );
     await waitFor(() => expect(onRedirect).toHaveBeenCalled());
     const upload = vi.mocked(fetch).mock.calls.at(-1)?.[1]?.body;
     expect(upload).toBeInstanceOf(FormData);

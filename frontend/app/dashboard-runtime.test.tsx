@@ -72,6 +72,7 @@ function renderRuntime(
         joinLinks={[]}
         auditEvents={[]}
         adminUnavailable={false}
+        adminLoadError={false}
         canManageJobs={true}
         actionStatus={options.actionStatus}
         selectedCommand={null}
