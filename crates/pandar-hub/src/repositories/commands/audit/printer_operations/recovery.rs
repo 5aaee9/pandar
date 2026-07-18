@@ -13,7 +13,7 @@ use crate::{
         RepositoryError, RepositoryResult, begin_current_agent_transaction,
         commands::{CommandRepository, ownership},
     },
-    routes::printer_operations::plate_mismatch::{BUILD_PLATE_MISMATCH, supports},
+    routes::printer_operations::plate_mismatch::supports,
 };
 
 #[derive(Debug, Clone)]
@@ -70,12 +70,12 @@ async fn create_web_print_error_sent_with_audit(
     };
     validate_agent(&tx, tenant_id, &input).await?;
     let printer = locked_printer(&tx, tenant_id, printer_id, input.expected_agent_id).await?;
-    validate_printer(&printer, &input)?;
+    let print_error = validate_printer(&printer, &input)?;
     ensure_no_inflight_native_recovery(&tx, tenant_id, printer_id).await?;
 
     let operation = PrinterOperationKind::HandlePrintError {
         error_action: input.action,
-        print_error: BUILD_PLATE_MISMATCH,
+        print_error,
         printer_job_id: printer.print_job_id.clone().unwrap_or_default(),
         sequence_id: 0,
     };
@@ -147,7 +147,11 @@ async fn locked_printer(
 fn validate_printer(
     printer: &printers::Model,
     input: &WebPrintErrorRecovery,
-) -> RepositoryResult<()> {
+) -> RepositoryResult<u32> {
+    let print_error = printer
+        .print_error
+        .and_then(|value| u32::try_from(value).ok())
+        .ok_or(RepositoryError::PrinterControlUnavailable)?;
     let matching_generation = i64::try_from(input.error_generation)
         .ok()
         .is_some_and(|generation| generation == printer.print_error_generation);
@@ -158,14 +162,13 @@ fn validate_printer(
     let inactive_coarse_state = ["IDLE", "OFFLINE", "FAILED"]
         .iter()
         .any(|state| printer.status.eq_ignore_ascii_case(state));
-    if printer.print_error != Some(BUILD_PLATE_MISMATCH as i32)
-        || !matching_generation
+    if !matching_generation
         || printer.print_error_task_generation != Some(printer.print_task_generation)
         || printer.print_error_received_at.is_none()
         || printer.print_error_session_id.as_deref() != Some(&input.expected_session_id)
         || !active_native_state
         || inactive_coarse_state
-        || !supports(&printer.serial_number, input.action)
+        || !supports(&printer.serial_number, print_error, input.action)
     {
         return Err(RepositoryError::PrinterControlUnavailable);
     }
@@ -184,7 +187,7 @@ fn validate_printer(
             return Err(RepositoryError::PrinterControlUnavailable);
         }
     }
-    Ok(())
+    Ok(print_error)
 }
 
 pub(super) async fn ensure_no_inflight_native_recovery(

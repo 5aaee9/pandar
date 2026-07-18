@@ -26,8 +26,9 @@ import {
 import type { Printer } from "./dashboard-types";
 import {
   availablePlateMismatchActions,
-  BUILD_PLATE_MISMATCH,
+  plateRecoveryIssue,
   type PlateMismatchAction,
+  type PlateRecoveryIssueKind,
 } from "./plate-mismatch-actions";
 import {
   handlePrintError,
@@ -51,7 +52,7 @@ export function PrinterMismatchCoordinator({
   const occurrences = useMemo(
     () =>
       printers.flatMap((printer) =>
-        isBuildPlateMismatch(printer)
+        printerPlateRecoveryIssue(printer)
           ? [{ key: mismatchOccurrenceKey(printer), printer }]
           : [],
       ),
@@ -124,15 +125,17 @@ export function PrinterMismatchCoordinator({
 export function PrinterMismatchWarning({ printer }: { printer: Printer }) {
   const t = useTranslations("printMonitor");
   const coordinator = useContext(MismatchContext);
-  if (!isBuildPlateMismatch(printer)) {
+  const issue = printerPlateRecoveryIssue(printer);
+  if (!issue) {
     return null;
   }
+  const copy = plateRecoveryCopy(issue.kind);
   const key = mismatchOccurrenceKey(printer);
   return (
     <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-      <div className="font-medium">{t("mismatchTitle")}</div>
+      <div className="font-medium">{t(copy.title)}</div>
       <button
-        aria-label={t("reviewMismatch", { name: printer.name })}
+        aria-label={t(copy.review, { name: printer.name })}
         className="mt-1 text-xs font-medium underline underline-offset-2"
         onClick={() => coordinator?.open(key)}
         type="button"
@@ -160,12 +163,18 @@ export function PrinterMismatchDialog({
     IDLE_ACTION_STATE,
   );
   const actions = availablePlateMismatchActions(printer);
+  const issue = printerPlateRecoveryIssue(printer);
 
   useEffect(() => {
     if (state.status === "sent") {
       onSent();
     }
   }, [onSent, state.status]);
+
+  if (!issue) {
+    return null;
+  }
+  const copy = plateRecoveryCopy(issue.kind);
 
   return (
     <Dialog
@@ -178,7 +187,7 @@ export function PrinterMismatchDialog({
     >
       <DialogContent className="sm:max-w-md" showCloseButton={false}>
         <Button
-          aria-label={t("closeMismatch")}
+          aria-label={t(copy.close)}
           className="absolute right-2 top-2"
           disabled={pending}
           onClick={onDismiss}
@@ -189,13 +198,13 @@ export function PrinterMismatchDialog({
           <XIcon />
         </Button>
         <DialogHeader>
-          <DialogTitle>{t("mismatchTitle")}</DialogTitle>
+          <DialogTitle>{t(copy.title)}</DialogTitle>
           <DialogDescription>{printer.name}</DialogDescription>
         </DialogHeader>
         <div className="rounded-md bg-muted px-3 py-2 font-mono text-sm font-medium">
-          0500-8051
+          {issue.code}
         </div>
-        <p className="text-sm text-muted-foreground">{t("mismatchExplanation")}</p>
+        <p className="text-sm text-muted-foreground">{t(copy.explanation)}</p>
         {state.status === "error" ? (
           <p className="text-sm text-destructive" role="alert">
             {state.error}
@@ -247,8 +256,57 @@ function actionLabel(
   }
 }
 
-function isBuildPlateMismatch(printer: Printer): boolean {
-  return printer.print?.print_error === BUILD_PLATE_MISMATCH;
+function printerPlateRecoveryIssue(printer: Printer) {
+  return plateRecoveryIssue(printer.serial_number, printer.print?.print_error);
+}
+
+const PLATE_RECOVERY_COPY = {
+  mismatch: {
+    close: "closeMismatch",
+    explanation: "mismatchExplanation",
+    review: "reviewMismatch",
+    title: "mismatchTitle",
+  },
+  missing: {
+    close: "closePlateRecovery",
+    explanation: "plateMissingExplanation",
+    review: "reviewPlateRecovery",
+    title: "plateMissingTitle",
+  },
+  "marker-not-detected": {
+    close: "closePlateMarker",
+    explanation: "plateMarkerExplanation",
+    review: "reviewPlateMarker",
+    title: "plateMarkerTitle",
+  },
+  "unknown-type": {
+    close: "closePlateRecovery",
+    explanation: "plateUnknownExplanation",
+    review: "reviewPlateRecovery",
+    title: "plateUnknownTitle",
+  },
+  misaligned: {
+    close: "closePlateRecovery",
+    explanation: "plateOffsetExplanation",
+    review: "reviewPlateRecovery",
+    title: "plateOffsetTitle",
+  },
+  "collision-risk": {
+    close: "closePlateRecovery",
+    explanation: "plateCollisionExplanation",
+    review: "reviewPlateRecovery",
+    title: "plateCollisionTitle",
+  },
+  "encoder-board-missing": {
+    close: "closePlateRecovery",
+    explanation: "encoderBoardMissingExplanation",
+    review: "reviewPlateRecovery",
+    title: "encoderBoardMissingTitle",
+  },
+} as const;
+
+function plateRecoveryCopy(kind: PlateRecoveryIssueKind) {
+  return PLATE_RECOVERY_COPY[kind];
 }
 
 function mismatchOccurrenceKey(printer: Printer): string {

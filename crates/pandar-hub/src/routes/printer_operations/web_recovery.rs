@@ -1,8 +1,6 @@
 use pandar_core::{CommandRecord, TenantId};
 
-use super::{
-    PrinterOperationRequest, TenantPrinterOperation, live, plate_mismatch::BUILD_PLATE_MISMATCH,
-};
+use super::{PrinterOperationRequest, TenantPrinterOperation, live};
 use crate::{
     AppState,
     protocol::agent::v1::AgentCapability,
@@ -81,11 +79,7 @@ async fn dispatch(
         .map_err(web_recovery_error)?;
     debug_assert!(matches!(
         &persisted.operation,
-        crate::repositories::PrinterOperationKind::HandlePrintError {
-            print_error: BUILD_PLATE_MISMATCH,
-            sequence_id: 0,
-            ..
-        }
+        crate::repositories::PrinterOperationKind::HandlePrintError { sequence_id: 0, .. }
     ));
     if let Err(error) =
         live::dispatch_persisted_live_command(state, &persisted, token, capability).await

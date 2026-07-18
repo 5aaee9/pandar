@@ -39,6 +39,13 @@ const printer: Printer = {
   print,
 };
 
+const additionalPlateRecoveryCatalog = [
+  [83_918_945, ["093", "094", "20P", "22E", "239", "31B"], ["ignore", "resume"]],
+  [83_918_988, ["093", "094", "20P", "22E", "239", "31B"], ["ignore", "resume"]],
+  [83_919_003, ["093", "094", "20P", "22E", "239", "31B"], ["ignore", "resume"]],
+  [83_919_008, ["093", "094", "20P", "239", "31B"], ["resume", "ignore"]],
+] as const;
+
 describe("plateMismatchActions", () => {
   it.each(["093", "094", "20P", "22E", "239", "31B"])(
     "uses native Resume, Ignore, Stop order for family %s",
@@ -48,6 +55,38 @@ describe("plateMismatchActions", () => {
         "ignore",
         "stop",
       ]);
+    },
+  );
+
+  it.each(additionalPlateRecoveryCatalog)(
+    "uses the Studio runtime action catalog for plate error %s",
+    (printError, families, expectedActions) => {
+      for (const family of families) {
+        expect(
+          plateMismatchActions(`${family.toLowerCase()}-serial`, {
+            ...print,
+            print_error: printError,
+          }),
+        ).toEqual(expectedActions);
+      }
+    },
+  );
+
+  it("does not invent visual encoder actions for the unsupported 22E family", () => {
+    expect(
+      plateMismatchActions("22E123", { ...print, print_error: 83_919_008 }),
+    ).toEqual([]);
+  });
+
+  it.each(["093", "094", "20P", "22E", "239", "31B"])(
+    "uses native Ignore, Resume order for build plate marker errors on family %s",
+    (family) => {
+      expect(
+        plateMismatchActions(`${family.toLowerCase()}-serial`, {
+          ...print,
+          print_error: 83_918_946,
+        }),
+      ).toEqual(["ignore", "resume"]);
     },
   );
 

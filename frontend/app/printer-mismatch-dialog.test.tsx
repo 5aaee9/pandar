@@ -108,6 +108,120 @@ describe("PrinterMismatchCoordinator", () => {
     },
   );
 
+  it("uses the packaged 094 copy for an unknown build plate type", async () => {
+    const printer = mismatchPrinter("p1", "First", {
+      serial_number: "094123",
+      print: {
+        ...mismatchPrinter("p1", "First").print!,
+        print_error: 83_918_946,
+      },
+    });
+    renderCoordinator([printer]);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByRole("heading", { name: "Build plate type unknown" }),
+    ).toBeVisible();
+    expect(within(dialog).getByText("0500-8062")).toBeVisible();
+    expect(
+      within(dialog).getByText(
+        "The printer could not identify the build plate type. Install the correct plate before continuing.",
+      ),
+    ).toBeVisible();
+  });
+
+  it.each([
+    [
+      83_918_945,
+      "Build plate not detected",
+      "0500-8061",
+      "No build plate was detected. Place it correctly on the heatbed before continuing.",
+      ["Ignore and resume", "Problem solved and resume"],
+    ],
+    [
+      83_918_988,
+      "Build plate is misaligned",
+      "0500-808C",
+      "The build plate is offset or has debris beneath it. Align it with the heatbed and clear the plate before continuing.",
+      ["Ignore and resume", "Problem solved and resume"],
+    ],
+    [
+      83_919_003,
+      "Build plate position may cause a collision",
+      "0500-809B",
+      "The build plate may collide with the waste chute. Reposition it and align it with the heatbed before continuing.",
+      ["Ignore and resume", "Problem solved and resume"],
+    ],
+    [
+      83_919_008,
+      "Visual encoder board not detected",
+      "0500-80A0",
+      "Check that the visual encoder board is installed, aligned at all four corners, and that its positioning marks are visible.",
+      ["Problem solved and resume", "Ignore and resume"],
+    ],
+  ] as const)(
+    "renders additional Studio plate recovery error %s",
+    async (printError, title, code, explanation, labels) => {
+      const printer = mismatchPrinter("p1", "First", {
+        print: {
+          ...mismatchPrinter("p1", "First").print!,
+          print_error: printError,
+        },
+      });
+      renderCoordinator([printer]);
+
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByRole("heading", { name: title })).toBeVisible();
+      expect(within(dialog).getByText(code)).toBeVisible();
+      expect(within(dialog).getByText(explanation)).toBeVisible();
+      const actionButtons = within(dialog)
+        .getAllByRole("button")
+        .filter((button) => button.getAttribute("name") === "error_action");
+      expect(actionButtons.map((button) => button.textContent)).toEqual(labels);
+    },
+  );
+
+  it.each([
+    [
+      "en",
+      "Build plate marker not detected",
+      "The print plate marker was not detected. Make sure the plate is aligned on all four corners and its marker is visible.",
+      ["Ignore and resume", "Problem solved and resume"],
+      "Review build plate marker issue for First",
+      "Close build plate marker dialog",
+    ],
+    [
+      "zh",
+      "未检测到打印板标记",
+      "未检测到打印板标记。请确认打印板四角已正确对齐热床且标记清晰可见。",
+      ["忽略此问题，继续", "问题已解决，继续"],
+      "查看 First 的打印板标记问题",
+      "关闭打印板标记对话框",
+    ],
+  ] as const)(
+    "renders native marker details and ordered actions in %s",
+    async (locale, title, explanation, labels, warningLabel, closeLabel) => {
+      const printer = mismatchPrinter("p1", "First", {
+        print: {
+          ...mismatchPrinter("p1", "First").print!,
+          print_error: 83_918_946,
+        },
+      });
+      renderCoordinator([printer], locale);
+
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByRole("heading", { name: title })).toBeVisible();
+      expect(within(dialog).getByText("0500-8062")).toBeVisible();
+      expect(within(dialog).getByText(explanation)).toBeVisible();
+      const actionButtons = within(dialog)
+        .getAllByRole("button")
+        .filter((button) => button.getAttribute("name") === "error_action");
+      expect(actionButtons.map((button) => button.textContent)).toEqual(labels);
+      expect(within(dialog).getByRole("button", { name: closeLabel })).toBeVisible();
+      expect(screen.getByRole("button", { name: warningLabel, hidden: true })).toBeVisible();
+    },
+  );
+
   it("auto-opens once, preserves dismissal across reconnect, reopens inline, and opens a higher generation", async () => {
     const printer = mismatchPrinter("p1", "First");
     const rendered = renderCoordinator([printer]);

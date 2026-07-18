@@ -15,6 +15,8 @@ use crate::{
 
 const ERROR_GENERATION: u64 = 9;
 const BUILD_PLATE_MISMATCH: u32 = 83_918_929;
+const BUILD_PLATE_MARKER_NOT_DETECTED: u32 = 83_918_946;
+const BUILD_PLATE_OFFSET: u32 = 83_918_988;
 
 mod single_flight;
 
@@ -162,6 +164,102 @@ async fn tenant_recovery_catalog_is_exactly_six_families_and_three_actions() {
         assert_unavailable(status, body);
         assert_eq!(fixture.state.commands().count().await.unwrap(), 0);
     }
+}
+
+#[tokio::test]
+async fn tenant_recovery_uses_native_build_plate_marker_actions_and_error_code() {
+    for (action, expected) in [
+        ("ignore", PrintErrorAction::Ignore),
+        ("resume", PrintErrorAction::Resume),
+    ] {
+        let fixture = RecoveryFixture::new(
+            &format!("marker-{action}"),
+            "20P123456789",
+            [AgentCapability::HandlePrintErrorSequenceZeroPubackOnly],
+        )
+        .await;
+        mutate_printer(
+            &fixture,
+            RecoveryMutation::PrintError(Some(BUILD_PLATE_MARKER_NOT_DETECTED as i32)),
+        )
+        .await;
+
+        let (status, body) = fixture.request(action, ERROR_GENERATION).await;
+
+        assert_eq!(status, StatusCode::OK, "{action}: {body}");
+        let response = decode::<CommandResponse>(body);
+        let command = fixture
+            .state
+            .commands()
+            .get_for_tenant(fixture.tenant_id, CommandId::parse(&response.id).unwrap())
+            .await
+            .unwrap()
+            .unwrap();
+        let payload: PrinterOperationPayload = serde_json::from_str(&command.payload_json).unwrap();
+        assert!(matches!(
+            payload.operation,
+            PrinterOperationKind::HandlePrintError {
+                error_action,
+                print_error: BUILD_PLATE_MARKER_NOT_DETECTED,
+                sequence_id: 0,
+                ..
+            } if error_action == expected
+        ));
+    }
+
+    let fixture = RecoveryFixture::new(
+        "marker-stop-rejected",
+        "20P123456789",
+        [AgentCapability::HandlePrintErrorSequenceZeroPubackOnly],
+    )
+    .await;
+    mutate_printer(
+        &fixture,
+        RecoveryMutation::PrintError(Some(BUILD_PLATE_MARKER_NOT_DETECTED as i32)),
+    )
+    .await;
+
+    let (status, body) = fixture.request("stop", ERROR_GENERATION).await;
+
+    assert_unavailable(status, body);
+    assert_eq!(fixture.state.commands().count().await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn tenant_recovery_preserves_additional_server_owned_plate_error() {
+    let fixture = RecoveryFixture::new(
+        "plate-offset-ignore",
+        "20P123456789",
+        [AgentCapability::HandlePrintErrorSequenceZeroPubackOnly],
+    )
+    .await;
+    mutate_printer(
+        &fixture,
+        RecoveryMutation::PrintError(Some(BUILD_PLATE_OFFSET as i32)),
+    )
+    .await;
+
+    let (status, body) = fixture.request("ignore", ERROR_GENERATION).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let response = decode::<CommandResponse>(body);
+    let command = fixture
+        .state
+        .commands()
+        .get_for_tenant(fixture.tenant_id, CommandId::parse(&response.id).unwrap())
+        .await
+        .unwrap()
+        .unwrap();
+    let payload: PrinterOperationPayload = serde_json::from_str(&command.payload_json).unwrap();
+    assert!(matches!(
+        payload.operation,
+        PrinterOperationKind::HandlePrintError {
+            error_action: PrintErrorAction::Ignore,
+            print_error: BUILD_PLATE_OFFSET,
+            sequence_id: 0,
+            ..
+        }
+    ));
 }
 
 #[tokio::test]
