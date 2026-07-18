@@ -3,7 +3,7 @@ import { KeyRoundIcon } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 
 import { FormattedDate } from "../components/formatted-date";
-import { createAgentPairing } from "./actions";
+import { createAgentPairing } from "./admin-actions";
 import {
   CreateTenantTokenDialog,
   RevokeTenantTokenDialog,

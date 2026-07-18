@@ -1,6 +1,6 @@
 import { getTranslations } from 'next-intl/server'
 
-import { createTenantFromExternal } from './actions'
+import { createTenantFromExternal } from './admin-actions'
 import { authProviderConfig } from './auth-provider'
 import type { MeResponse } from './dashboard-types'
 import { EmptyState, SectionHeader } from './dashboard-ui'

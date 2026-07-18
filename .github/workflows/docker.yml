@@ -164,8 +164,8 @@ jobs:
       - name: Lint chart
         run: helm lint docs/deployment/kubernetes --set hub.accessCodeEncryption.existingSecret=pandar-hub-secrets
 
-      - name: Render chart
-        run: helm template pandar docs/deployment/kubernetes --set hub.accessCodeEncryption.existingSecret=pandar-hub-secrets >/tmp/pandar-chart.yaml
+      - name: Verify deployment security defaults
+        run: scripts/check-deployment-security.sh
 
       - name: Package chart
         run: |

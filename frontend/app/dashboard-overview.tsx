@@ -16,7 +16,6 @@ export function FleetStatusStrip({
   attentionCount,
   topSeverity,
   liveState,
-  lastEventAt,
   fleetEmpty,
   tenantId,
 }: {

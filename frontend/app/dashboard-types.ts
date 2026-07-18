@@ -191,6 +191,7 @@ export type AgentList = {
 
 export type UserList = {
   users: User[];
+  identities: UserIdentity[];
 };
 
 export type UserIdentityList = {

@@ -9,6 +9,7 @@
     "build:auth": "npm run build --workspace pandar-auth",
     "test:web": "npm run test --workspace pandar-web",
     "test:auth": "npm run test --workspace pandar-auth",
+    "lint:web": "npm run lint --workspace pandar-web",
     "typecheck:web": "npm run typecheck --workspace pandar-web",
     "typecheck:auth": "npm run typecheck --workspace pandar-auth"
   }

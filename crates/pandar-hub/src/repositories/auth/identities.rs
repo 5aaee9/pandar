@@ -80,6 +80,23 @@ impl AuthRepository {
         authenticated_from_models(identity_token(identity), user).map(Some)
     }
 
+    pub async fn list_external_identities_for_tenant(
+        &self,
+        tenant_id: TenantId,
+    ) -> RepositoryResult<Vec<UserIdentity>> {
+        let connection = self.database.sea_orm_connection();
+        user_identities::Entity::find()
+            .filter(user_identities::Column::TenantId.eq(tenant_id.to_string()))
+            .order_by_asc(user_identities::Column::CreatedAt)
+            .order_by_asc(user_identities::Column::Id)
+            .all(&connection)
+            .await
+            .context("failed to list tenant external identities")?
+            .into_iter()
+            .map(user_identity_from_model)
+            .collect()
+    }
+
     pub async fn list_external_identities_for_user(
         &self,
         tenant_id: TenantId,

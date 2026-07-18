@@ -24,6 +24,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
     spec:
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       serviceAccountName: {{ include "pandar.serviceAccountName" . }}
       {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
@@ -81,8 +82,9 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if or .Values.hub.persistence.data.enabled .Values.hub.persistence.spool.enabled }}
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
             {{- if .Values.hub.persistence.data.enabled }}
             - name: data
               mountPath: /data
@@ -91,9 +93,9 @@ spec:
             - name: spool
               mountPath: /spool
             {{- end }}
-          {{- end }}
-      {{- if or .Values.hub.persistence.data.enabled .Values.hub.persistence.spool.enabled }}
       volumes:
+        - name: tmp
+          emptyDir: {}
         {{- if .Values.hub.persistence.data.enabled }}
         - name: data
           persistentVolumeClaim:
@@ -104,7 +106,6 @@ spec:
           persistentVolumeClaim:
             claimName: {{ default (printf "%s-hub-spool" (include "pandar.fullname" .)) .Values.hub.persistence.spool.existingClaim }}
         {{- end }}
-      {{- end }}
       {{- with .Values.hub.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

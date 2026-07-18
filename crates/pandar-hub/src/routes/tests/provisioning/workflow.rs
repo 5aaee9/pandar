@@ -18,9 +18,10 @@ struct UserResponse {
 #[derive(Debug, Deserialize)]
 struct UserListResponse {
     users: Vec<UserResponse>,
+    identities: Vec<UserIdentityResponse>,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 struct UserIdentityResponse {
     provider: String,
     subject: String,
@@ -121,6 +122,7 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     assert_eq!(status, StatusCode::OK);
     let users = decode::<UserListResponse>(users);
     assert_eq!(users.users.len(), 2);
+    assert!(users.identities.is_empty());
 
     let (status, updated) = request_as(
         app.clone(),
@@ -157,7 +159,19 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     .await;
     assert_eq!(status, StatusCode::OK);
     let identities = decode::<UserIdentityListResponse>(identities);
-    assert_eq!(identities.identities, vec![identity]);
+    assert_eq!(identities.identities, vec![identity.clone()]);
+
+    let (status, users) = request_as(
+        app.clone(),
+        Method::GET,
+        &format!("/api/v1/tenants/{tenant_id}/users"),
+        None,
+        &admin_token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let users = decode::<UserListResponse>(users);
+    assert_eq!(users.identities, vec![identity]);
 
     let (status, token) = request_as(
         app.clone(),

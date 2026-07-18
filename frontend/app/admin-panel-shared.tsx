@@ -1,6 +1,6 @@
 import { useTranslations } from "next-intl";
 
-import type { SecretActionState } from "./actions";
+import type { SecretActionState } from "./action-state";
 
 export function SecretActionResult({ state }: { state: SecretActionState }) {
   const t = useTranslations("admin");

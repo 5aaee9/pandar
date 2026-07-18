@@ -18,8 +18,7 @@ export function NeedsAttention({
     return null
   }
 
-  let lastAgent = ''
-  let groupIndex = -1
+  const groupedItems = groupAttentionItems(items)
 
   return (
     <section
@@ -36,23 +35,29 @@ export function NeedsAttention({
         <span className="text-xs text-slate-600">{tAtt('groupedByAgent')}</span>
       </div>
       <ul className="divide-y divide-slate-200">
-        {items.map((item) => {
-          const showGroup = item.agentName !== lastAgent
-          if (showGroup) {
-            lastAgent = item.agentName
-            groupIndex += 1
-          }
-          return (
-            <AttentionRow
-              key={item.id}
-              item={item}
-              showGroup={showGroup}
-              zebra={groupIndex % 2 === 1}
-              tenant={selectedTenant}
-            />
-          )
-        })}
+        {groupedItems.map(({ item, showGroup, zebra }) => (
+          <AttentionRow
+            key={item.id}
+            item={item}
+            showGroup={showGroup}
+            zebra={zebra}
+            tenant={selectedTenant}
+          />
+        ))}
       </ul>
     </section>
   )
+}
+
+function groupAttentionItems(items: AttentionItem[]) {
+  let lastAgent = ''
+  let groupIndex = -1
+  return items.map((item) => {
+    const showGroup = item.agentName !== lastAgent
+    if (showGroup) {
+      lastAgent = item.agentName
+      groupIndex += 1
+    }
+    return { item, showGroup, zebra: groupIndex % 2 === 1 }
+  })
 }

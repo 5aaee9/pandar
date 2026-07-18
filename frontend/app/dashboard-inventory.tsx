@@ -4,7 +4,6 @@ import { useState, type ReactNode } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
 import { PlusIcon, PrinterIcon } from 'lucide-react'
 
-import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -23,7 +22,6 @@ import {
 } from '@/components/ui/empty'
 import { OFFLINE_PRINTER_STATUSES } from './dashboard-attention'
 import type { Agent, Printer, Tenant } from './dashboard-types'
-import { EmptyState } from './dashboard-ui'
 import { formatPrinterMaterials } from './dashboard-runtime-helpers'
 import { FilterBar } from './dashboard-job-history'
 import { PrinterCard } from './dashboard-printer-card'

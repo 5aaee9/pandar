@@ -2,7 +2,7 @@ import type { AuthMetadata, Job, Printer, PrinterEvent } from "./dashboard-types
 import { createDashboardRuntimeEventHandler, printerOfflineNotifications, type CommandResultTranslator } from "./dashboard-runtime-event-notifications";
 import type { LiveState, RuntimeNotification } from "./dashboard-runtime-helpers";
 import { fetchAuthoritativePrinters, printerEventConnectionUrl, requestPrinterEventTicket } from "./printer-event-transport";
-import { clearEnrichedPrinterState, mergePrinterEvent, replayPrinterEvents, replacePrinterInventory } from "./printer-reconciliation";
+import { clearEnrichedPrinterState, replayPrinterEvents, replacePrinterInventory } from "./printer-reconciliation";
 
 const retryDelays = [1_000, 2_000, 5_000, 10_000];
 const reconciliationIntervalMs = 30_000;

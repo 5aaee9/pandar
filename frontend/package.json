@@ -9,7 +9,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint . --max-warnings=0"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -35,6 +35,8 @@
     "@types/node": "25.0.2",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.9",
     "jsdom": "^29.1.1",
     "tailwindcss": "4.3.1",
     "typescript": "5.9.3",

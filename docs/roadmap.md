@@ -1067,6 +1067,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Resolved X2D MQTT topic identity from the printer certificate common name while preserving its distinct inventory serial in Hub data, with retrying background report subscription.
 - Displayed the Hub-provided dispatch or print failure cause directly in each Devices "Needs attention" job row, with localized reason labels and wrapping text so operators can diagnose failures without opening the Jobs view.
 - Matched Bambu Studio print dispatch options by model, carrying Timelapse plus paired Auto/On/Off bed-leveling, flow-dynamics, and nozzle-offset values through Web, Hub, gRPC, Agent, MQTT, and the Studio plugin ABI; migrated existing queued commands and corrected N6/X2D capability handling.
+- Restored Next 16 frontend linting with ESLint, extended the 400-line production-module guard to C/C++ and TypeScript/TSX, split the oversized Studio shim and dashboard/action modules, loaded dashboard resources by view with batched user identities, and hardened Docker/Helm defaults for non-root read-only workloads without ServiceAccount tokens.
 
 Exit criteria:
 

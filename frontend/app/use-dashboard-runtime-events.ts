@@ -22,6 +22,7 @@ import {
 type DashboardRuntimeEventsArgs = {
   apiUrl: string;
   auth: Pick<AuthMetadata, "source">;
+  enabled?: boolean;
   selectedTenant: Tenant | null;
   initialPrinters: Printer[];
   initialJobs: Job[];
@@ -69,6 +70,7 @@ function runtimeReducer(state: RuntimeState, action: RuntimeAction): RuntimeStat
 export function useDashboardRuntimeEvents({
   apiUrl,
   auth,
+  enabled = true,
   selectedTenant,
   initialPrinters,
   initialJobs,
@@ -88,8 +90,6 @@ export function useDashboardRuntimeEvents({
   const liveJobUpdatesRef = useRef(new Map<string, Job>());
   const printersRef = useRef(state.printers);
   const jobsRef = useRef(state.jobs);
-  printersRef.current = state.printers;
-  jobsRef.current = state.jobs;
   const translateCommandResult = useTranslations("runtime.commandResult");
   const retry = useCallback(() => coordinatorRef.current?.retry(), []);
 
@@ -127,7 +127,7 @@ export function useDashboardRuntimeEvents({
   }, [initialJobs, initialPrinters, tenantId]);
 
   useEffect(() => {
-    if (tenantId === null) {
+    if (!enabled || tenantId === null) {
       coordinatorRef.current = null;
       return;
     }
@@ -173,6 +173,7 @@ export function useDashboardRuntimeEvents({
   }, [
     apiUrl,
     auth.source,
+    enabled,
     tenantId,
     translateCommandResult,
   ]);

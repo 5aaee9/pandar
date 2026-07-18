@@ -11,7 +11,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
-import type { SecretActionState } from "./actions";
+import type { SecretActionState } from "./action-state";
 import { SecretActionResult } from "./admin-panel-shared";
 import { TenantSecretsPanel } from "./admin-settings-panel";
 import type { Tenant, TenantToken } from "./dashboard-types";
@@ -23,7 +23,7 @@ const actionMocks = vi.hoisted(() => ({
   rotateTenantToken: vi.fn(),
 }));
 
-vi.mock("./actions", () => actionMocks);
+vi.mock("./admin-actions", () => actionMocks);
 
 const tenant: Tenant = {
   id: "tenant-1",

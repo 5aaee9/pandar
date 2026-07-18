@@ -34,7 +34,9 @@ helm install pandar oci://ghcr.io/5aaee9/pandar/chart/pandar \
   --set hub.accessCodeEncryption.existingSecret=pandar-hub-secrets
 ```
 
-The default values run a single Hub replica with SQLite at `/data/pandar.db` and filesystem artifacts under `/spool`, both backed by PVCs. For production PostgreSQL, provide `PANDAR_DATABASE_URL` through an existing Secret:
+The default values run a single Hub replica with SQLite at `/data/pandar.db` and filesystem artifacts under `/spool`, both backed by PVCs. Both images and workloads run as non-root users, drop Linux capabilities, prohibit privilege escalation, use the runtime-default seccomp profile, and mount only the required writable cache, temporary, and persistence paths over a read-only root filesystem. ServiceAccount token automounting defaults to disabled because neither workload calls the Kubernetes API.
+
+For production PostgreSQL, provide `PANDAR_DATABASE_URL` through an existing Secret:
 
 ```sh
 kubectl create secret generic pandar-database \

@@ -379,6 +379,12 @@ async fn external_identities_can_be_listed_for_user() {
         auth.list_external_identities_for_user(tenant.id, &user.id)
             .await
             .unwrap(),
+        vec![identity.clone()]
+    );
+    assert_eq!(
+        auth.list_external_identities_for_tenant(tenant.id)
+            .await
+            .unwrap(),
         vec![identity]
     );
     assert!(

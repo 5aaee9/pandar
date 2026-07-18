@@ -17,7 +17,7 @@ import {
   createTenantToken,
   revokeTenantToken,
   rotateTenantToken,
-} from "./actions";
+} from "./admin-actions";
 import { Input, PrimaryButton, SecretActionResult } from "./admin-panel-shared";
 import type { TenantToken } from "./dashboard-types";
 

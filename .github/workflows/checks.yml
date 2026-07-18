@@ -37,6 +37,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint Web
+        run: npm run lint:web
+
       - name: Run Web tests
         run: npm run test:web
 
@@ -66,8 +69,8 @@ jobs:
       - name: Lint chart
         run: helm lint docs/deployment/kubernetes --set hub.accessCodeEncryption.existingSecret=pandar-hub-secrets
 
-      - name: Render chart
-        run: helm template pandar docs/deployment/kubernetes --set hub.accessCodeEncryption.existingSecret=pandar-hub-secrets >/tmp/pandar-chart.yaml
+      - name: Verify deployment security defaults
+        run: scripts/check-deployment-security.sh
 
   nix-quality-checks:
     name: Nix quality checks

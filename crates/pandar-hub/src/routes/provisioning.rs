@@ -28,6 +28,7 @@ pub(super) struct UserResponse {
 #[derive(Debug, Serialize)]
 pub(super) struct UserListResponse {
     users: Vec<UserResponse>,
+    identities: Vec<UserIdentityResponse>,
 }
 
 #[derive(Debug, Serialize)]

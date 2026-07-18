@@ -88,7 +88,9 @@ function normalizeAuthoritativePrinter(printer: Printer): Printer {
 }
 
 function withoutEnrichedState(printer: Printer): Printer {
-  const { state_revision: _stateRevision, print: _print, ...coarse } = printer;
+  const coarse = { ...printer };
+  delete coarse.state_revision;
+  delete coarse.print;
   return coarse;
 }
 

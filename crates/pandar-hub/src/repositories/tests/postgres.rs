@@ -37,6 +37,50 @@ pub(super) async fn clear_postgres(database: &Database) {
 }
 
 #[tokio::test]
+async fn postgres_tenant_identity_listing_matches_sqlite_when_configured() {
+    let Some(database) = postgres_database().await else {
+        return;
+    };
+    let tenants = TenantRepository::new(database.clone());
+    let auth = AuthRepository::new(database);
+    let tenant = tenants
+        .create("identity-list", "Identity List")
+        .await
+        .unwrap();
+    let other_tenant = tenants
+        .create("other-identity-list", "Other Identity List")
+        .await
+        .unwrap();
+    let user = auth
+        .create_user(tenant.id, "viewer@example.test", "Viewer", UserRole::Viewer)
+        .await
+        .unwrap();
+    let other_user = auth
+        .create_user(
+            other_tenant.id,
+            "other@example.test",
+            "Other",
+            UserRole::Viewer,
+        )
+        .await
+        .unwrap();
+    let identity = auth
+        .link_external_identity(tenant.id, &user.id, "clerk", "user_123")
+        .await
+        .unwrap();
+    auth.link_external_identity(other_tenant.id, &other_user.id, "clerk", "other_user_123")
+        .await
+        .unwrap();
+
+    assert_eq!(
+        auth.list_external_identities_for_tenant(tenant.id)
+            .await
+            .unwrap(),
+        vec![identity]
+    );
+}
+
+#[tokio::test]
 async fn postgres_material_patch_outcomes_match_sqlite_when_configured() {
     let Some(database) = postgres_database().await else {
         return;

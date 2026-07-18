@@ -14,7 +14,7 @@ import { useFormatter, useTranslations } from 'next-intl'
 
 import { FormattedDate } from '../components/formatted-date'
 import { Button } from '@/components/ui/button'
-import { reprintJob } from './actions'
+import { reprintJob } from './job-actions'
 import { formatBytes } from './dashboard-format'
 import {
   formatArtifactMetadata,
@@ -31,19 +31,6 @@ const REPRINTABLE_PRINT_STATUSES = new Set([
   'failed',
   'cancelled',
 ])
-
-function useLocaleDate() {
-  const format = useFormatter()
-  return (value: string) => {
-    const d = new Date(value)
-    if (Number.isNaN(d.getTime())) return value
-    return format.dateTime(d, {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-      timeZone: 'UTC',
-    })
-  }
-}
 
 export function JobRow({
   job,
@@ -67,7 +54,6 @@ export function JobRow({
   const tRec = useTranslations('recovery.state')
   const tJf = useTranslations('jobFormat')
   const tMonitor = useTranslations('printMonitor')
-  const formatDate = useLocaleDate()
   const format = useFormatter()
   const titleId = useId()
   const num = (n: number) => format.number(n)
@@ -222,7 +208,7 @@ export function JobRow({
           </summary>
           <dl className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
             <DetailItem label={t('projectLabel')} wide>
-              {formatArtifactMetadata(job, tMat, formatDate)}
+              {formatArtifactMetadata(job, tMat)}
             </DetailItem>
             <DetailItem label={t('artifactLabel')}>
               {job.artifact.content_type} ·{' '}

@@ -1,10 +1,10 @@
-import { redirect } from 'next/navigation'
+import { redirect } from "next/navigation";
 
-import { apiHeaders, authSource } from './api-auth'
-import { dashboardAuthRedirectTarget } from './auth-redirect'
-import { authProviderConfig } from './auth-provider'
-import { apiIdSegment } from './api-path'
-import { parseCommandResult } from './command-result-parser'
+import { apiHeaders, authSource } from "./api-auth";
+import { dashboardAuthRedirectTarget } from "./auth-redirect";
+import { authProviderConfig } from "./auth-provider";
+import { apiIdSegment } from "./api-path";
+import { parseCommandResult } from "./command-result-parser";
 import type {
   AgentList,
   AuditEventList,
@@ -14,82 +14,88 @@ import type {
   JobList,
   MeResponse,
   PrinterList,
-  Summary,
   TenantList,
   TenantTokenList,
-  UserIdentityList,
   UserList,
-} from './dashboard-types'
-import { DashboardRuntime } from './dashboard-runtime'
-import type { DashboardView } from './dashboard-shell'
-import { OnboardingPanel } from './onboarding-panel'
+} from "./dashboard-types";
+import { DashboardRuntime } from "./dashboard-runtime";
+import type { DashboardView } from "./dashboard-shell";
+import { OnboardingPanel } from "./onboarding-panel";
 
-const apiUrl = process.env.APP_API_URL ?? 'http://localhost:8080'
-const configuredTenantId = process.env.APP_TENANT_ID
+const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
+const configuredTenantId = process.env.APP_TENANT_ID;
 
 export type DashboardPageProps = {
   searchParams?: Promise<{
-    tenant?: string | string[]
-    command?: string | string[]
-    status?: string | string[]
-  }>
-}
+    tenant?: string | string[];
+    command?: string | string[];
+    status?: string | string[];
+  }>;
+};
 
-async function fetchJson<T>(path: string, label: string): Promise<FetchResult<T>> {
+async function fetchJson<T>(
+  path: string,
+  label: string,
+): Promise<FetchResult<T>> {
   try {
     const response = await fetch(`${apiUrl}${path}`, {
-      cache: 'no-store',
+      cache: "no-store",
       headers: await apiHeaders(),
-    })
+    });
     if (!response.ok) {
-      return { data: null, error: `${label} returned ${response.status}`, status: response.status }
+      return {
+        data: null,
+        error: `${label} returned ${response.status}`,
+        status: response.status,
+      };
     }
 
-    return { data: (await response.json()) as T, error: null, status: response.status }
+    return {
+      data: (await response.json()) as T,
+      error: null,
+      status: response.status,
+    };
   } catch (error) {
     return {
       data: null,
-      error: `${label} failed: ${error instanceof Error ? error.message : 'unknown error'}`,
-    }
+      error: `${label} failed: ${error instanceof Error ? error.message : "unknown error"}`,
+    };
   }
 }
 
-export async function renderDashboardView(view: DashboardView, { searchParams }: DashboardPageProps) {
-  const auth = await authSource()
-  const authProvider = authProviderConfig()
+export async function renderDashboardView(
+  view: DashboardView,
+  { searchParams }: DashboardPageProps,
+) {
+  const auth = await authSource();
+  const authProvider = authProviderConfig();
   const initialRedirect = dashboardAuthRedirectTarget({
     source: auth.source,
     provider: authProvider,
-  })
+  });
   if (initialRedirect) {
-    redirect(initialRedirect)
+    redirect(initialRedirect);
   }
 
-  const useExternalOnboarding = auth.provider !== 'none' && !configuredTenantId
-  const [summaryResult, tenantsResult, meResult] = await Promise.all([
-    configuredTenantId || useExternalOnboarding
-      ? Promise.resolve<FetchResult<Summary>>({
-          data: null,
-          error: null,
-        })
-      : fetchJson<Summary>('/api/v1/summary', 'Summary'),
+  const useExternalOnboarding = auth.provider !== "none" && !configuredTenantId;
+  const [tenantsResult, meResult] = await Promise.all([
     configuredTenantId || useExternalOnboarding
       ? Promise.resolve<FetchResult<TenantList>>({
           data: { tenants: [] },
           error: null,
         })
-      : fetchJson<TenantList>('/api/v1/tenants', 'Tenants'),
-    auth.provider === 'none'
+      : fetchJson<TenantList>("/api/v1/tenants", "Tenants"),
+    auth.provider === "none"
       ? Promise.resolve<FetchResult<MeResponse>>({ data: null, error: null })
-      : fetchJson<MeResponse>('/api/v1/me', 'Current identity'),
-  ])
+      : fetchJson<MeResponse>("/api/v1/me", "Current identity"),
+  ]);
   const meRedirect = dashboardAuthRedirectTarget({
     source: auth.source,
     provider: authProvider,
     meStatus: meResult.status,
-  })
+  });
   if (meRedirect) {
-    redirect(meRedirect)
+    redirect(meRedirect);
   }
 
   const externalTenants =
@@ -97,97 +103,125 @@ export async function renderDashboardView(view: DashboardView, { searchParams }:
       id: tenant.tenant_id,
       slug: tenant.tenant_slug,
       display_name: tenant.display_name,
-      created_at: '',
-    })) ?? []
-  const tenants = auth.provider === 'none' ? (tenantsResult.data?.tenants ?? []) : externalTenants
-  const params = await searchParams
-  const requestedTenant = firstParam(params?.tenant)
-  const requestedCommand = firstParam(params?.command)
-  const actionStatus = firstParam(params?.status)
+      created_at: "",
+    })) ?? [];
+  const tenants =
+    auth.provider === "none"
+      ? (tenantsResult.data?.tenants ?? [])
+      : externalTenants;
+  const params = await searchParams;
+  const requestedTenant = firstParam(params?.tenant);
+  const requestedCommand = firstParam(params?.command);
+  const actionStatus = firstParam(params?.status);
   const selectedTenant = configuredTenantId
     ? {
         id: configuredTenantId,
         slug: configuredTenantId,
         display_name: configuredTenantId,
-        created_at: '',
+        created_at: "",
       }
-    : tenants.find((tenant) => tenant.id === requestedTenant) ?? tenants[0] ?? null
+    : (tenants.find((tenant) => tenant.id === requestedTenant) ??
+      tenants[0] ??
+      null);
   const selectedTenantSegment = selectedTenant
-    ? apiIdSegment(selectedTenant.id, 'tenant_id')
-    : null
-  const printersResult = selectedTenantSegment
-    ? await fetchJson<PrinterList>(
-        `/api/v1/tenants/${selectedTenantSegment}/printers`,
-        'Printers',
-      )
-    : null
-  const agentsResult = selectedTenantSegment
-    ? await fetchJson<AgentList>(`/api/v1/tenants/${selectedTenantSegment}/agents`, 'Agents')
-    : null
-  const jobsResult = selectedTenantSegment
-    ? await fetchJson<JobList>(`/api/v1/tenants/${selectedTenantSegment}/jobs`, 'Jobs')
-    : null
-  const [usersResult, tenantTokensResult, joinLinksResult, auditEventsResult] = selectedTenantSegment
-    ? await Promise.all([
-        fetchJson<UserList>(`/api/v1/tenants/${selectedTenantSegment}/users`, 'Users'),
-        fetchJson<TenantTokenList>(
-          `/api/v1/tenants/${selectedTenantSegment}/tenant-tokens`,
-          'Tenant tokens',
-        ),
-        fetchJson<JoinLinkList>(
-          `/api/v1/tenants/${selectedTenantSegment}/join-links`,
-          'Join links',
-        ),
-        fetchJson<AuditEventList>(
-          `/api/v1/tenants/${selectedTenantSegment}/audit-events?limit=20`,
-          'Audit events',
-        ),
-      ])
-    : [null, null, null, null]
-  const commandResult =
-    selectedTenantSegment && requestedCommand
-      ? await fetchJson<Command>(
-          `/api/v1/tenants/${selectedTenantSegment}/commands/${apiIdSegment(requestedCommand, 'command_id')}`,
-          'Command',
+    ? apiIdSegment(selectedTenant.id, "tenant_id")
+    : null;
+  const loadFleet = view !== "users";
+  const loadJobs = view === "devices" || view === "jobs";
+  const loadUsers = view === "users";
+  const loadJoinLinks = view === "users";
+  const loadSettingsAdmin = view === "settings";
+  const [
+    printersResult,
+    agentsResult,
+    jobsResult,
+    usersResult,
+    tenantTokensResult,
+    joinLinksResult,
+    auditEventsResult,
+  ] = await Promise.all([
+    selectedTenantSegment && loadFleet
+      ? fetchJson<PrinterList>(
+          `/api/v1/tenants/${selectedTenantSegment}/printers`,
+          "Printers",
         )
-      : null
-  const printers = printersResult?.data?.printers ?? []
-  const agents = agentsResult?.data?.agents ?? []
-  const jobs = jobsResult?.data?.jobs ?? []
-  const users = usersResult?.data?.users ?? []
-  const tenantTokens = tenantTokensResult?.data?.tenant_tokens ?? []
-  const joinLinks = joinLinksResult?.data?.join_links ?? []
-  const auditEvents = auditEventsResult?.data?.audit_events ?? []
-  const identityResults = selectedTenantSegment
-    ? await Promise.all(
-        users.map((user) =>
-          fetchJson<UserIdentityList>(
-            `/api/v1/tenants/${selectedTenantSegment}/users/${apiIdSegment(user.id, 'user_id')}/identities`,
-            `Identities for ${user.email}`,
-          ),
-        ),
-      )
-    : []
-  const userIdentities = identityResults.flatMap((result) => result.data?.identities ?? [])
-  const adminUnavailable = Boolean(
-    usersResult?.error ||
+      : null,
+    selectedTenantSegment && loadFleet
+      ? fetchJson<AgentList>(
+          `/api/v1/tenants/${selectedTenantSegment}/agents`,
+          "Agents",
+        )
+      : null,
+    selectedTenantSegment && loadJobs
+      ? fetchJson<JobList>(
+          `/api/v1/tenants/${selectedTenantSegment}/jobs`,
+          "Jobs",
+        )
+      : null,
+    selectedTenantSegment && loadUsers
+      ? fetchJson<UserList>(
+          `/api/v1/tenants/${selectedTenantSegment}/users`,
+          "Users",
+        )
+      : null,
+    selectedTenantSegment && loadSettingsAdmin
+      ? fetchJson<TenantTokenList>(
+          `/api/v1/tenants/${selectedTenantSegment}/tenant-tokens`,
+          "Tenant tokens",
+        )
+      : null,
+    selectedTenantSegment && loadJoinLinks
+      ? fetchJson<JoinLinkList>(
+          `/api/v1/tenants/${selectedTenantSegment}/join-links`,
+          "Join links",
+        )
+      : null,
+    selectedTenantSegment && loadSettingsAdmin
+      ? fetchJson<AuditEventList>(
+          `/api/v1/tenants/${selectedTenantSegment}/audit-events?limit=20`,
+          "Audit events",
+        )
+      : null,
+  ]);
+  const commandResult =
+    selectedTenantSegment && requestedCommand && view === "agents"
+      ? await fetchJson<Command>(
+          `/api/v1/tenants/${selectedTenantSegment}/commands/${apiIdSegment(requestedCommand, "command_id")}`,
+          "Command",
+        )
+      : null;
+  const printers = printersResult?.data?.printers ?? [];
+  const agents = agentsResult?.data?.agents ?? [];
+  const jobs = jobsResult?.data?.jobs ?? [];
+  const users = usersResult?.data?.users ?? [];
+  const userIdentities = usersResult?.data?.identities ?? [];
+  const tenantTokens = tenantTokensResult?.data?.tenant_tokens ?? [];
+  const joinLinks = joinLinksResult?.data?.join_links ?? [];
+  const auditEvents = auditEventsResult?.data?.audit_events ?? [];
+  const selectedMembership = meResult.data?.tenants.find(
+    (tenant) => tenant.tenant_id === selectedTenant?.id,
+  );
+  const lacksAdminRole =
+    auth.provider !== "none" && selectedMembership?.role !== "tenant_admin";
+  const adminUnavailable =
+    lacksAdminRole ||
+    Boolean(
+      usersResult?.error ||
       tenantTokensResult?.error ||
       joinLinksResult?.error ||
-      auditEventsResult?.error ||
-      identityResults.some((result) => result.error),
-  )
-  const canManageJobs = !usersResult?.error
-  const selectedCommand = commandResult?.data ?? null
-  const commandData = parseCommandResult(selectedCommand)
+      auditEventsResult?.error,
+    );
+  const canManageJobs = selectedMembership?.role !== "viewer";
+  const selectedCommand = commandResult?.data ?? null;
+  const commandData = parseCommandResult(selectedCommand);
   const errors = [
-    summaryResult.error,
     tenantsResult.error,
     meResult.error && tenants.length === 0 ? meResult.error : null,
     printersResult?.error,
     agentsResult?.error,
     jobsResult?.error,
     commandResult?.error,
-  ].filter((error): error is string => Boolean(error))
+  ].filter((error): error is string => Boolean(error));
 
   return meResult.data && tenants.length === 0 ? (
     <OnboardingPanel me={meResult.data} />
@@ -196,7 +230,6 @@ export async function renderDashboardView(view: DashboardView, { searchParams }:
       apiUrl={apiUrl}
       configuredTenantId={configuredTenantId}
       view={view}
-      summary={summaryResult.data}
       tenants={tenants}
       selectedTenant={selectedTenant}
       initialPrinters={printers}
@@ -222,9 +255,9 @@ export async function renderDashboardView(view: DashboardView, { searchParams }:
         signOutUrl: authProvider.signOutUrl,
       }}
     />
-  )
+  );
 }
 
 export function firstParam(value?: string | string[]) {
-  return Array.isArray(value) ? value[0] : value
+  return Array.isArray(value) ? value[0] : value;
 }

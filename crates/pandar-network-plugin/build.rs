@@ -67,7 +67,19 @@ fn main() {
     }
     println!("cargo:rustc-link-arg-cdylib={}", shim_object.display());
     println!("cargo:rerun-if-changed=src/shim.cpp");
-    println!("cargo:rerun-if-changed=src/studio_materials.hpp");
+    for header in [
+        "shim_abi_content.hpp",
+        "shim_abi_operations.hpp",
+        "shim_abi_user.hpp",
+        "shim_file_transfer.hpp",
+        "shim_firmware.hpp",
+        "shim_state.hpp",
+        "shim_status.hpp",
+        "shim_types.hpp",
+        "studio_materials.hpp",
+    ] {
+        println!("cargo:rerun-if-changed=src/{header}");
+    }
 }
 
 fn expected_abi_symbols(manifest_dir: &str) -> Vec<String> {

@@ -61,7 +61,6 @@ function renderRuntime(
       <DashboardRuntime
         apiUrl="http://localhost:8080"
         view={options.view ?? "devices"}
-        summary={null}
         tenants={options.tenants ?? [tenant]}
         selectedTenant={tenant}
         initialPrinters={[]}

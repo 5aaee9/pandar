@@ -41,15 +41,17 @@ pub(in crate::routes) async fn list_users(
 ) -> Result<Json<UserListResponse>, ApiError> {
     let tenant_id = parse_tenant_id(&tenant_id)?;
     auth::authorize_tenant(&state, &headers, tenant_id, UserRole::TenantAdmin).await?;
-    let users = state
-        .auth()
-        .list_users_for_tenant(tenant_id)
-        .await?
+    let (users, identities) = tokio::try_join!(
+        state.auth().list_users_for_tenant(tenant_id),
+        state.auth().list_external_identities_for_tenant(tenant_id),
+    )?;
+    let users = users.into_iter().map(UserResponse::from).collect();
+    let identities = identities
         .into_iter()
-        .map(UserResponse::from)
+        .map(UserIdentityResponse::from)
         .collect();
 
-    Ok(Json(UserListResponse { users }))
+    Ok(Json(UserListResponse { users, identities }))
 }
 
 pub(in crate::routes) async fn create_user(

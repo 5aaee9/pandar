@@ -3,36 +3,37 @@ use std::{fs, path::Path};
 const MAX_PRODUCTION_MODULE_LINES: usize = 400;
 
 #[test]
-fn workspace_production_rust_modules_stay_under_line_limit() {
+fn workspace_production_modules_stay_under_line_limit() {
     let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
         .expect("pandar-core should live under crates/");
     let mut oversized = Vec::new();
     collect_oversized_modules(&workspace.join("crates"), &mut oversized);
+    collect_oversized_modules(&workspace.join("frontend"), &mut oversized);
 
     assert!(
         oversized.is_empty(),
-        "production Rust modules exceed {MAX_PRODUCTION_MODULE_LINES} lines:\n{}",
+        "production modules exceed {MAX_PRODUCTION_MODULE_LINES} lines:\n{}",
         oversized.join("\n")
     );
 }
 
 fn collect_oversized_modules(dir: &Path, oversized: &mut Vec<String>) {
-    for entry in fs::read_dir(dir).expect("workspace crates should be readable") {
-        let entry = entry.expect("workspace crate entry should be readable");
+    for entry in fs::read_dir(dir).expect("workspace source directory should be readable") {
+        let entry = entry.expect("workspace source entry should be readable");
         let path = entry.path();
         if path.is_dir() {
-            collect_oversized_modules(&path, oversized);
+            if !is_ignored_directory(&path) {
+                collect_oversized_modules(&path, oversized);
+            }
             continue;
         }
-        if path.extension().and_then(|extension| extension.to_str()) != Some("rs")
-            || is_test_source(&path)
-        {
+        if !is_production_module(&path) {
             continue;
         }
 
-        let source = fs::read_to_string(&path).expect("Rust source should be readable");
+        let source = fs::read_to_string(&path).expect("production source should be readable");
         let line_count = source.lines().count();
         if line_count > MAX_PRODUCTION_MODULE_LINES {
             oversized.push(format!("{}: {line_count}", path.display()));
@@ -40,12 +41,41 @@ fn collect_oversized_modules(dir: &Path, oversized: &mut Vec<String>) {
     }
 }
 
+fn is_production_module(path: &Path) -> bool {
+    let extension = path.extension().and_then(|extension| extension.to_str());
+    matches!(
+        extension,
+        Some("rs" | "c" | "cpp" | "cc" | "cxx" | "h" | "hpp" | "ts" | "tsx")
+    ) && !is_test_source(path)
+}
+
+#[test]
+fn c_sources_are_production_modules() {
+    assert!(is_production_module(Path::new("module.c")));
+}
+
+fn is_ignored_directory(path: &Path) -> bool {
+    matches!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some("node_modules" | ".next" | "dist" | "out" | "target")
+    )
+}
+
 fn is_test_source(path: &Path) -> bool {
-    path.components()
-        .any(|component| component.as_os_str() == "tests")
-        || path.file_name().and_then(|name| name.to_str()) == Some("tests.rs")
-        || path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.ends_with("_test.rs"))
+    if path.components().any(|component| {
+        matches!(
+            component.as_os_str().to_str(),
+            Some("tests" | "test" | "__tests__")
+        )
+    }) {
+        return true;
+    }
+
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    name == "tests.rs"
+        || name.ends_with("_test.rs")
+        || name.contains(".test.")
+        || name.contains(".spec.")
 }

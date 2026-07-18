@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useMemo } from 'react'
-import { useTranslations } from 'next-intl'
+import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 
-import { AppSidebar } from '../components/app-sidebar'
-import { SidebarInset, SidebarProvider } from '../components/ui/sidebar'
+import { AppSidebar } from "../components/app-sidebar";
+import { SidebarInset, SidebarProvider } from "../components/ui/sidebar";
 import type {
   Agent,
   AuthMetadata,
@@ -14,44 +14,46 @@ import type {
   Job,
   JoinLink,
   Printer,
-  Summary,
   Tenant,
   TenantToken,
   User,
   UserIdentity,
-} from './dashboard-types'
-import { DashboardViewContent } from './dashboard-view-content'
-import { computeAttention, computeHealth, maxSeverity } from './dashboard-attention'
-import { DashboardShellHeader } from './dashboard-shell-header'
-import type { DashboardQuery, DashboardView } from './dashboard-shell'
-import { ActionStatusToast } from './action-status-toast'
-import { useDashboardClock } from './use-dashboard-clock'
-import { useDashboardRuntimeEvents } from './use-dashboard-runtime-events'
+} from "./dashboard-types";
+import { DashboardViewContent } from "./dashboard-view-content";
+import {
+  computeAttention,
+  computeHealth,
+  maxSeverity,
+} from "./dashboard-attention";
+import { DashboardShellHeader } from "./dashboard-shell-header";
+import type { DashboardQuery, DashboardView } from "./dashboard-shell";
+import { ActionStatusToast } from "./action-status-toast";
+import { useDashboardClock } from "./use-dashboard-clock";
+import { useDashboardRuntimeEvents } from "./use-dashboard-runtime-events";
 
 type DashboardRuntimeProps = {
-  apiUrl: string
-  configuredTenantId?: string
-  view: DashboardView
-  summary: Summary | null
-  tenants: Tenant[]
-  selectedTenant: Tenant | null
-  initialPrinters: Printer[]
-  agents: Agent[]
-  initialJobs: Job[]
-  users: User[]
-  userIdentities: UserIdentity[]
-  tenantTokens: TenantToken[]
-  joinLinks: JoinLink[]
-  auditEvents: AuditEvent[]
-  adminUnavailable: boolean
-  canManageJobs: boolean
-  actionStatus?: string
-  selectedCommand: Command | null
-  selectedCommandId?: string
-  commandData: CommandResultData | null
-  errors: string[]
-  auth: AuthMetadata
-}
+  apiUrl: string;
+  configuredTenantId?: string;
+  view: DashboardView;
+  tenants: Tenant[];
+  selectedTenant: Tenant | null;
+  initialPrinters: Printer[];
+  agents: Agent[];
+  initialJobs: Job[];
+  users: User[];
+  userIdentities: UserIdentity[];
+  tenantTokens: TenantToken[];
+  joinLinks: JoinLink[];
+  auditEvents: AuditEvent[];
+  adminUnavailable: boolean;
+  canManageJobs: boolean;
+  actionStatus?: string;
+  selectedCommand: Command | null;
+  selectedCommandId?: string;
+  commandData: CommandResultData | null;
+  errors: string[];
+  auth: AuthMetadata;
+};
 
 export function DashboardRuntime({
   apiUrl,
@@ -78,28 +80,36 @@ export function DashboardRuntime({
   const runtime = useDashboardRuntimeEvents({
     apiUrl,
     auth,
+    enabled: view !== "users",
     selectedTenant,
     initialPrinters,
     initialJobs,
-  })
-  const printers = runtime.printers
-  const jobs = runtime.jobs
-  const nowMs = useDashboardClock(printers)
+  });
+  const printers = runtime.printers;
+  const jobs = runtime.jobs;
+  const nowMs = useDashboardClock(printers);
 
-  const fleetEmpty = printers.length === 0 && agents.length === 0 && jobs.length === 0
-  const health = useMemo(() => computeHealth(agents, printers, jobs), [agents, printers, jobs])
+  const fleetEmpty =
+    printers.length === 0 && agents.length === 0 && jobs.length === 0;
+  const health = useMemo(
+    () => computeHealth(agents, printers, jobs),
+    [agents, printers, jobs],
+  );
   const attentionItems = useMemo(
     () => computeAttention({ agents, printers, jobs, nowMs }),
     [agents, printers, jobs, nowMs],
-  )
-  const topSeverity = useMemo(() => maxSeverity(attentionItems), [attentionItems])
+  );
+  const topSeverity = useMemo(
+    () => maxSeverity(attentionItems),
+    [attentionItems],
+  );
 
-  const tErr = useTranslations('runtime.notification')
+  const tErr = useTranslations("runtime.notification");
   const dashboardQuery: DashboardQuery = {
     tenant: selectedTenant?.id,
-    command: view === 'agents' ? selectedCommandId : undefined,
-    status: view === 'jobs' ? actionStatus : undefined,
-  }
+    command: view === "agents" ? selectedCommandId : undefined,
+    status: view === "jobs" ? actionStatus : undefined,
+  };
 
   return (
     <SidebarProvider>
@@ -117,7 +127,7 @@ export function DashboardRuntime({
 
           {errors.length > 0 ? (
             <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-950">
-              {tErr('errorsIncomplete')} {errors.join('; ')}.
+              {tErr("errorsIncomplete")} {errors.join("; ")}.
             </div>
           ) : null}
 
@@ -149,5 +159,5 @@ export function DashboardRuntime({
         </main>
       </SidebarInset>
     </SidebarProvider>
-  )
+  );
 }

@@ -1,6 +1,6 @@
 import { getTranslations } from "next-intl/server";
 
-import { acceptJoinLink } from "../actions";
+import { acceptJoinLink } from "../admin-actions";
 import { authProviderConfig } from "../auth-provider";
 import { SectionHeader } from "../dashboard-ui";
 import { LanguageSwitcher } from "../../components/language-switcher";

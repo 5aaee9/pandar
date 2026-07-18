@@ -25,9 +25,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-COPY --from=builder /app/frontend/.next/standalone ./
-COPY --from=builder /app/frontend/.next/static ./frontend/.next/static
-COPY --from=builder /app/frontend/public ./frontend/public
+COPY --chown=1000:1000 --from=builder /app/frontend/.next/standalone ./
+COPY --chown=1000:1000 --from=builder /app/frontend/.next/static ./frontend/.next/static
+COPY --chown=1000:1000 --from=builder /app/frontend/public ./frontend/public
 
+USER 1000:1000
 EXPOSE 3000
 CMD ["node", "frontend/server.js"]

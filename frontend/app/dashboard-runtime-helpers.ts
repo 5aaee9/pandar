@@ -41,7 +41,7 @@ const enLiveState: Record<LiveState, string> = {
 
 export function formatLiveState(
   state: LiveState,
-  t: Translator = (k) => enLiveState[state],
+  t: Translator = () => enLiveState[state],
 ): string {
   switch (state) {
     case "live":
@@ -83,7 +83,7 @@ const enAuthSource: Record<AuthMetadata["source"], string> = {
 
 export function formatAuthSource(
   source: AuthMetadata["source"],
-  t: Translator = (k) => enAuthSource[source],
+  t: Translator = () => enAuthSource[source],
 ): string {
   return t(source);
 }
@@ -229,7 +229,6 @@ export function formatJobMaterial(
 export function formatArtifactMetadata(
   job: Job,
   t: Translator = enMaterial,
-  formatDate: DateFmt = formatDateDefault,
 ): string {
   const metadata = job.artifact.metadata;
   if (!metadata) {

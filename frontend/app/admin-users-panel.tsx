@@ -1,7 +1,7 @@
 import { useActionState } from 'react'
 import { useTranslations } from 'next-intl'
 
-import { createJoinLink, revokeJoinLink, updateTenantUserRole } from './actions'
+import { createJoinLink, revokeJoinLink, updateTenantUserRole } from './admin-actions'
 import type { JoinLink, Tenant, User, UserIdentity } from './dashboard-types'
 import { EmptyState, Tag } from './dashboard-ui'
 import { ConfirmForm } from './confirm-dialog'

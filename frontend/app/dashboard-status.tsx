@@ -2,7 +2,8 @@
 
 import { useTranslations } from 'next-intl'
 
-import { refreshPrinters, reprintJob, retryDispatchJob } from './actions'
+import { refreshPrinters } from './actions'
+import { reprintJob, retryDispatchJob } from './job-actions'
 import type { AttentionItem, Severity, TextKey } from './dashboard-attention'
 import type { Tenant } from './dashboard-types'
 
