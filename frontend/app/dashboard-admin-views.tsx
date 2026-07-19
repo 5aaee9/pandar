@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { LogOutIcon } from "lucide-react";
 
 import { LanguageSwitcher } from "../components/language-switcher";
 import { ThemeSwitcher } from "../components/theme-switcher";
@@ -97,6 +98,32 @@ export function SettingsView({
   );
 }
 
+function PreferencePanel({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-md border border-border bg-card px-4 py-3 transition-colors duration-150 ease-out hover:border-border/80">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-card-foreground">
+            {title}
+          </h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {description}
+          </p>
+        </div>
+        {children}
+      </div>
+    </section>
+  );
+}
+
 function LanguageSettingsPanel() {
   const t = useTranslations("dashboardShell");
   return (
@@ -112,32 +139,6 @@ function ThemeSettingsPanel() {
     <PreferencePanel title={t("themeTitle")} description={t("themeDescription")}>
       <ThemeSwitcher />
     </PreferencePanel>
-  );
-}
-
-function PreferencePanel({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-md border border-border bg-card px-4 py-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-card-foreground">
-            {title}
-          </h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {description}
-          </p>
-        </div>
-        {children}
-      </div>
-    </section>
   );
 }
 
@@ -171,7 +172,7 @@ function UsersAdminSection({
             subtitle={t("subtitleTenant", { name: tenant.display_name })}
             meta={t("usersMeta", { count: users.length })}
           />
-          <div className="border-b border-border px-4 py-4">
+          <div className="border-b border-border bg-muted/20 px-4 py-4">
             <CreateJoinLinkForm tenantId={tenant.id} />
           </div>
           <TenantUsersPanel
@@ -212,7 +213,7 @@ function SettingsAdminSection({
       unavailable={unavailable}
     >
       {(tenant) => (
-        <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground">
+        <section className="overflow-hidden rounded-md border border-border bg-card text-card-foreground">
           <SectionHeader
             title={t("title")}
             subtitle={t("subtitleTenant", { name: tenant.display_name })}
@@ -228,7 +229,7 @@ function SettingsAdminSection({
           <div className="grid items-start gap-0 lg:grid-cols-2">
             <div className="border-b border-border lg:border-b-0 lg:border-r">
               <div className="border-b border-border bg-muted/20 p-4">
-                <div className="rounded-lg border border-border bg-background/60 p-4">
+                <div className="rounded-md border border-border bg-background p-4">
                   <CreateAgentPairingForm tenantId={tenant.id} />
                 </div>
               </div>
@@ -256,7 +257,7 @@ function LogoutPanel({ auth }: { auth: AuthMetadata }) {
   const signOutHref = logoutHref(auth);
 
   return (
-    <section className="rounded-md border border-border bg-card px-4 py-3">
+    <section className="rounded-md border border-border bg-card px-4 py-3 transition-colors duration-150 ease-out hover:border-border/80">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-foreground">
@@ -268,9 +269,10 @@ function LogoutPanel({ auth }: { auth: AuthMetadata }) {
         </div>
         {signOutHref ? (
           <a
-            className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary/80"
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary/80 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             href={signOutHref}
           >
+            <LogOutIcon aria-hidden="true" className="size-4" />
             {t("logout")}
           </a>
         ) : null}

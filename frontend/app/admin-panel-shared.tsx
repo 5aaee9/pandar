@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import type { SecretActionState } from "./action-state";
 
 function CopyButton({ label, value }: { label: string; value: string }) {
@@ -94,6 +95,24 @@ export function SecretActionResult({ state }: { state: SecretActionState }) {
   );
 }
 
+export function FormField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="grid gap-1 text-sm">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const inputClassName =
+  "h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60";
+
 export function Input({
   name,
   label,
@@ -116,11 +135,10 @@ export function Input({
   type?: string;
 }) {
   return (
-    <label className="grid gap-1 text-sm">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+    <FormField label={label}>
       <input
         aria-describedby={describedBy}
-        className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
+        className={inputClassName}
         defaultValue={defaultValue}
         disabled={disabled}
         min={min}
@@ -129,7 +147,7 @@ export function Input({
         required={required}
         type={type}
       />
-    </label>
+    </FormField>
   );
 }
 
@@ -147,10 +165,9 @@ export function Select({
   disabled?: boolean;
 }) {
   return (
-    <label className="grid gap-1 text-sm">
-      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+    <FormField label={label}>
       <select
-        className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
+        className={inputClassName}
         defaultValue={defaultValue}
         disabled={disabled}
         name={name}
@@ -161,7 +178,7 @@ export function Select({
           </option>
         ))}
       </select>
-    </label>
+    </FormField>
   );
 }
 
@@ -173,13 +190,9 @@ export function PrimaryButton({
   disabled?: boolean;
 }) {
   return (
-    <button
-      className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary/80 disabled:cursor-not-allowed disabled:opacity-50"
-      disabled={disabled}
-      type="submit"
-    >
+    <Button className="h-9 px-3" disabled={disabled} size="default" type="submit">
       {label}
-    </button>
+    </Button>
   );
 }
 

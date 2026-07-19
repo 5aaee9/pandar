@@ -1,5 +1,6 @@
 import { useActionState, useState } from "react";
 import { useTranslations } from "next-intl";
+import { UserPlusIcon } from "lucide-react";
 
 import { FormattedDate } from "../components/formatted-date";
 import { createAgentPairing } from "./admin-actions";
@@ -36,7 +37,7 @@ function CreateAgentPairingFormInner({
   const locked = pending || state?.ok === true;
 
   return (
-    <form action={formAction} className="grid gap-2">
+    <form action={formAction} className="grid gap-3">
       <input name="tenant_id" type="hidden" value={tenantId} />
       <div className="text-sm font-semibold text-foreground">
         {t("pairAgent")}
@@ -48,10 +49,11 @@ function CreateAgentPairingFormInner({
       <SecretActionResult state={state} />
       {state?.ok ? (
         <button
-          className="self-start text-xs font-medium text-primary underline-offset-4 hover:underline"
+          className="inline-flex items-center gap-1 self-start text-xs font-medium text-primary underline-offset-4 transition-colors duration-150 ease-out hover:text-primary/80 hover:underline"
           onClick={onCreateAnother}
           type="button"
         >
+          <UserPlusIcon aria-hidden="true" className="size-3" />
           {t("createAnother")}
         </button>
       ) : null}
@@ -110,7 +112,7 @@ function AgentsList({ agents }: { agents: Agent[] }) {
           agents.map((agent) => (
             <div
               key={agent.id}
-              className="rounded-md border border-border bg-background/50 px-3 py-2 text-sm"
+              className="rounded-md border border-border bg-muted/20 px-3 py-2 text-sm transition-colors duration-150 ease-out hover:bg-muted/40"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-foreground">
