@@ -14,6 +14,7 @@ mod mapping;
 mod recovery;
 mod repository;
 pub(super) mod stalled;
+pub(super) mod submission_correlation;
 mod transitions;
 
 pub(super) fn create_input(

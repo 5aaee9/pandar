@@ -1,10 +1,13 @@
+use std::collections::HashSet;
+
 use anyhow::Context;
-use pandar_core::{JobId, PrintStatus, TenantId};
+use pandar_core::{CommandStatus, JobId, JobStatus, PrintStatus, TenantId};
 use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
+use serde::Deserialize;
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
-    entities::{jobs, printers},
+    entities::{commands, jobs, printers},
     printer_secrets::PrinterAccessCodeCipher,
     repositories::{
         JobWithArtifact, PrinterLiveStatus, RepositoryResult,
@@ -18,6 +21,29 @@ use super::ApplyPrintReport;
 pub(super) struct PrinterMatch {
     pub(super) id: String,
     pub(super) live_status: PrinterLiveStatus,
+}
+
+#[derive(Deserialize)]
+struct PersistedPrintProjectResult {
+    #[serde(rename = "type")]
+    kind: String,
+    mqtt: PersistedPrintProjectMqtt,
+}
+
+#[derive(Deserialize)]
+struct PersistedPrintProjectMqtt {
+    payload: PersistedProjectFileEnvelope,
+}
+
+#[derive(Deserialize)]
+struct PersistedProjectFileEnvelope {
+    print: PersistedProjectFileIdentity,
+}
+
+#[derive(Deserialize)]
+struct PersistedProjectFileIdentity {
+    command: String,
+    task_id: String,
 }
 
 pub(super) async fn printer_for_serial<C>(
@@ -60,6 +86,12 @@ where
     {
         return Ok(Some(job));
     }
+    let mut submission_matches = jobs_by_submission_id(connection, input, printer).await?;
+    match submission_matches.len() {
+        1 => return Ok(submission_matches.pop()),
+        2.. => return Ok(None),
+        0 => {}
+    }
     if let Some(job) =
         job_by_artifact(connection, input, printer, input.artifact_id.as_deref()).await?
     {
@@ -94,6 +126,77 @@ where
         .await?
         .into_iter()
         .next())
+}
+
+async fn jobs_by_submission_id<C>(
+    connection: &C,
+    input: &ApplyPrintReport,
+    printer: &PrinterMatch,
+) -> RepositoryResult<Vec<JobWithArtifact>>
+where
+    C: ConnectionTrait,
+{
+    let Some(task_id) = input.task_id.as_deref() else {
+        return Ok(Vec::new());
+    };
+    let job_models = jobs::Entity::find()
+        .filter(jobs::Column::TenantId.eq(input.tenant_id.to_string()))
+        .filter(jobs::Column::AgentId.eq(input.agent_id.to_string()))
+        .filter(jobs::Column::PrinterId.eq(&printer.id))
+        .filter(jobs::Column::PrintStatus.is_in(["pending", "stalled", "running"]))
+        .all(connection)
+        .await
+        .context("failed to list print submission report candidates")?
+        .into_iter()
+        .filter(|job| job.status == JobStatus::Succeeded.as_str())
+        .collect::<Vec<_>>();
+    if job_models.is_empty() {
+        return Ok(Vec::new());
+    }
+    let command_models = commands::Entity::find()
+        .filter(
+            commands::Column::Id.is_in(
+                job_models
+                    .iter()
+                    .map(|job| job.command_id.clone())
+                    .collect::<Vec<_>>(),
+            ),
+        )
+        .filter(commands::Column::TenantId.eq(input.tenant_id.to_string()))
+        .filter(commands::Column::AgentId.eq(input.agent_id.to_string()))
+        .filter(commands::Column::PrinterId.eq(&printer.id))
+        .filter(commands::Column::Kind.eq("print_project_file"))
+        .filter(commands::Column::Status.eq(CommandStatus::Succeeded.as_str()))
+        .filter(commands::Column::ResultJson.is_not_null())
+        .all(connection)
+        .await
+        .context("failed to load print command results for report correlation")?;
+    let matching_command_ids = command_models
+        .into_iter()
+        .filter_map(|command| {
+            let result_json = command.result_json.as_deref()?;
+            let result = match serde_json::from_str::<PersistedPrintProjectResult>(result_json) {
+                Ok(result) => result,
+                Err(error) => {
+                    tracing::warn!(
+                        command_id = %command.id,
+                        error = %format!("{error:#}"),
+                        "ignored invalid print command result during report correlation"
+                    );
+                    return None;
+                }
+            };
+            (result.kind == "print_project_file"
+                && result.mqtt.payload.print.command == "project_file"
+                && result.mqtt.payload.print.task_id == task_id)
+                .then_some(command.id)
+        })
+        .collect::<HashSet<_>>();
+    let matches = job_models
+        .into_iter()
+        .filter(|job| matching_command_ids.contains(&job.command_id))
+        .collect::<Vec<_>>();
+    hydrate_jobs_with_artifacts(connection, matches).await
 }
 
 async fn job_by_id_for_printer<C>(
@@ -172,8 +275,20 @@ async fn active_file_candidates<C>(
 where
     C: ConnectionTrait,
 {
+    let job_models = active_job_models(connection, input, printer).await?;
+    hydrate_jobs_with_artifacts(connection, job_models).await
+}
+
+async fn active_job_models<C>(
+    connection: &C,
+    input: &ApplyPrintReport,
+    printer: &PrinterMatch,
+) -> RepositoryResult<Vec<jobs::Model>>
+where
+    C: ConnectionTrait,
+{
     let cutoff = cutoff_observed_at(&input.observed_at)?;
-    let job_models = jobs::Entity::find()
+    jobs::Entity::find()
         .filter(jobs::Column::TenantId.eq(input.tenant_id.to_string()))
         .filter(jobs::Column::AgentId.eq(input.agent_id.to_string()))
         .filter(jobs::Column::PrinterId.eq(&printer.id))
@@ -181,9 +296,8 @@ where
         .filter(jobs::Column::CreatedAt.gte(cutoff))
         .all(connection)
         .await
-        .context("failed to list active-file print report candidates")?;
-
-    hydrate_jobs_with_artifacts(connection, job_models).await
+        .context("failed to list active print report candidates")
+        .map_err(Into::into)
 }
 
 fn single_file_match(

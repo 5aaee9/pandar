@@ -43,6 +43,22 @@ async fn postgres_pending_print_jobs_become_stalled_when_configured() {
 }
 
 #[tokio::test]
+async fn postgres_print_report_correlates_bambu_submission_id_when_configured() {
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
+    };
+
+    crate::repositories::tests::jobs::submission_correlation::exercise_submission_id_correlation(
+        database.clone(),
+        TenantRepository::new(database.clone()),
+        AgentRepository::new(database.clone()),
+        JobRepository::new(database),
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn postgres_deletes_one_clearable_job_when_configured() {
     let Some(database) = postgres_database().await else {
         eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
