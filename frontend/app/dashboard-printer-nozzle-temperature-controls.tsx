@@ -150,19 +150,15 @@ function NozzleTemperaturePanel({
       {title ? (
         <span className="flex items-center justify-between text-sm font-semibold">
           {title}
-          <span className="flex items-center gap-2">
-            {active ? (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
-                <CheckCircle2Icon aria-hidden="true" className="size-3" />
-                {t('activeNozzle')}
-              </span>
-            ) : null}
-            <span className="text-xs font-medium text-muted-foreground">
-              {formatTemperatureValue(nozzle.current_celsius)}
+          {active ? (
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
+              <CheckCircle2Icon aria-hidden="true" className="size-3" />
+              {t('activeNozzle')}
             </span>
-          </span>
+          ) : null}
         </span>
       ) : null}
+      <TemperatureReading current={nozzle.current_celsius} target={nozzle.target_celsius} />
       <div className="grid grid-cols-2 gap-1.5">
         {NOZZLE_TEMPERATURE_PRESETS.map((temperature) => (
           <TemperaturePresetButton
@@ -174,6 +170,24 @@ function NozzleTemperaturePanel({
         ))}
       </div>
       <CustomTemperatureForm extruderId={extruderId} printer={printer} />
+    </div>
+  )
+}
+
+export function TemperatureReading({
+  current,
+  target,
+}: {
+  current?: string | null
+  target?: string | null
+}) {
+  const t = useTranslations('inventory')
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs font-medium text-muted-foreground">
+      <span>{`${t('currentTemperature')} ${formatTemperatureValue(current)}`}</span>
+      {hasActiveTargetTemperature(target) ? (
+        <span>{`${t('targetTemperature')} ${formatTemperatureValue(target)}`}</span>
+      ) : null}
     </div>
   )
 }
@@ -323,4 +337,12 @@ export function formatTemperatureValue(value?: string | null, suffix = true) {
   const parsed = Number(value)
   const text = Number.isFinite(parsed) ? `${Math.round(parsed)}` : value
   return suffix ? `${text}°C` : `${text}°`
+}
+
+export function hasActiveTargetTemperature(value?: string | null) {
+  if (!value) {
+    return false
+  }
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0
 }

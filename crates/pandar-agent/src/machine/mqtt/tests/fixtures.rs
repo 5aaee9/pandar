@@ -145,6 +145,16 @@ struct PrintTemperature<'a> {
 }
 
 #[derive(Serialize)]
+struct ChamberTargetReport {
+    print: ChamberTarget,
+}
+
+#[derive(Serialize)]
+struct ChamberTarget {
+    ctt: u32,
+}
+
+#[derive(Serialize)]
 struct AmsPrintReport<'a> {
     print: AmsPrint<'a>,
 }
@@ -335,6 +345,12 @@ pub(super) fn print_temperature_report(
             bed_temper,
             chamber_temper,
         },
+    })
+}
+
+pub(super) fn chamber_target_report(ctt: u32) -> Value {
+    value(ChamberTargetReport {
+        print: ChamberTarget { ctt },
     })
 }
 

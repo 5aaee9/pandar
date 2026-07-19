@@ -26,6 +26,7 @@ pub struct MachineSnapshot {
     pub bed_temperature_celsius: Option<String>,
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
+    pub chamber_target_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
     pub device_features: Option<BambuDeviceFeatures>,
 }

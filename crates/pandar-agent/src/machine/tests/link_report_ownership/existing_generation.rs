@@ -35,6 +35,7 @@ async fn firmware_runtime_existing_generation_link_retries_invalidation_before_m
                     bed_temperature_celsius: None,
                     bed_target_temperature_celsius: None,
                     chamber_temperature_celsius: None,
+                    chamber_target_temperature_celsius: None,
                     chamber_light_on: None,
                     device_features: None,
                 },

@@ -41,6 +41,7 @@ pub struct PrinterEventPrinter {
     pub bed_temperature_celsius: Option<String>,
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
+    pub chamber_target_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
     pub materials: Option<PrinterEventMaterials>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -128,6 +129,7 @@ pub fn printer_event_printer(
         bed_temperature_celsius: printer.bed_temperature_celsius,
         bed_target_temperature_celsius: printer.bed_target_temperature_celsius,
         chamber_temperature_celsius: printer.chamber_temperature_celsius,
+        chamber_target_temperature_celsius: printer.chamber_target_temperature_celsius,
         chamber_light_on: printer.chamber_light_on,
         materials: materials.map(PrinterEventMaterials::from),
         state_revision: Some(state_revision),

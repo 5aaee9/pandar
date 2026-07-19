@@ -37,6 +37,7 @@ fn snapshot_has_temperature_telemetry(snapshot: &MachineSnapshot) -> bool {
         || snapshot.bed_temperature_celsius.is_some()
         || snapshot.bed_target_temperature_celsius.is_some()
         || snapshot.chamber_temperature_celsius.is_some()
+        || snapshot.chamber_target_temperature_celsius.is_some()
         || snapshot.chamber_light_on.is_some()
 }
 

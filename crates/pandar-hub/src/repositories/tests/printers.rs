@@ -25,6 +25,7 @@ fn snapshot(
         bed_temperature_celsius: None,
         bed_target_temperature_celsius: None,
         chamber_temperature_celsius: None,
+        chamber_target_temperature_celsius: None,
         chamber_light_on: None,
         connection_authoritative: false,
     }
@@ -66,18 +67,16 @@ async fn printer_repository_upserts_and_lists_for_tenant() {
         )
         .await
         .unwrap();
+    let mut updated_snapshot = snapshot(
+        "SN-001",
+        "Renamed Printer",
+        Some("X1 Carbon"),
+        "printing",
+        "2026-06-21T01:00:00Z",
+    );
+    updated_snapshot.chamber_target_temperature_celsius = Some("45".to_owned());
     let updated = printers
-        .upsert_snapshot(
-            acme.id,
-            acme_agent.id,
-            snapshot(
-                "SN-001",
-                "Renamed Printer",
-                Some("X1 Carbon"),
-                "printing",
-                "2026-06-21T01:00:00Z",
-            ),
-        )
+        .upsert_snapshot(acme.id, acme_agent.id, updated_snapshot)
         .await
         .unwrap();
     printers
@@ -100,6 +99,10 @@ async fn printer_repository_upserts_and_lists_for_tenant() {
     assert_eq!(updated.name, "First Printer");
     assert_eq!(updated.model.as_deref(), Some("X1 Carbon"));
     assert_eq!(updated.status, "printing");
+    assert_eq!(
+        updated.chamber_target_temperature_celsius.as_deref(),
+        Some("45")
+    );
     assert_eq!(updated.last_seen_at, "2026-06-21T01:00:00Z");
     assert_eq!(printers.count().await.unwrap(), 2);
     assert_eq!(

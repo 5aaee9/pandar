@@ -34,14 +34,18 @@ import { ConfirmForm } from './confirm-dialog'
 import type { Printer } from './dashboard-types'
 import {
   formatTemperatureValue,
+  hasActiveTargetTemperature,
   NozzleSwitchControl,
   NozzleTemperatureCard,
   presentNozzles,
+  TemperatureReading,
 } from './dashboard-printer-nozzle-temperature-controls'
 
 type TemperatureControl = {
   title: string
   subtitle: string | null
+  current: string
+  target: string | null
   value: string
   tone: string
   action: string
@@ -65,6 +69,8 @@ export function PrinterTemperatureControls({ printer }: { printer: Printer }) {
         <TemperatureCard
           key={temperature.title}
           subtitle={temperature.subtitle}
+          current={temperature.current}
+          target={temperature.target}
           title={temperature.title}
           tone={temperature.tone}
           value={temperature.value}
@@ -176,6 +182,8 @@ function TemperatureCard({
   presets,
   title,
   subtitle,
+  current,
+  target,
   value,
   tone,
 }: {
@@ -186,6 +194,8 @@ function TemperatureCard({
   presets: readonly number[]
   title: string
   subtitle: string | null
+  current: string
+  target: string | null
   value: string
   tone: string
 }) {
@@ -203,7 +213,10 @@ function TemperatureCard({
       </PopoverTrigger>
       <PopoverContent className="w-72" sideOffset={8}>
         <PopoverTitle className="text-center text-base font-semibold">{popoverTitle}</PopoverTitle>
-        <TemperatureMenu action={action} presets={presets} printer={printer} />
+        <div className="mt-2 space-y-3">
+          <TemperatureReading current={current} target={target} />
+          <TemperatureMenu action={action} presets={presets} printer={printer} />
+        </div>
       </PopoverContent>
     </Popover>
   )
@@ -341,6 +354,8 @@ function printerTemperatures(printer: Printer, t: ReturnType<typeof useTranslati
     temperatures.push({
       title: t('bedTemperature'),
       subtitle: null,
+      current: printer.bed_temperature_celsius,
+      target: printer.bed_target_temperature_celsius ?? null,
       value: temperaturePair(printer.bed_temperature_celsius, printer.bed_target_temperature_celsius),
       tone: 'text-muted-foreground',
       action: 'set_bed_temperature',
@@ -353,6 +368,8 @@ function printerTemperatures(printer: Printer, t: ReturnType<typeof useTranslati
     temperatures.push({
       title: t('chamberTemperature'),
       subtitle: null,
+      current: printer.chamber_temperature_celsius,
+      target: printer.chamber_target_temperature_celsius ?? null,
       value: formatTemperatureValue(printer.chamber_temperature_celsius),
       tone: 'text-muted-foreground',
       action: 'set_chamber_temperature',
@@ -369,12 +386,4 @@ function temperaturePair(current?: string | null, target?: string | null) {
     return `${formatTemperatureValue(current, false)} / ${formatTemperatureValue(target, false)}`
   }
   return formatTemperatureValue(current)
-}
-
-function hasActiveTargetTemperature(value?: string | null) {
-  if (!value) {
-    return false
-  }
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed !== 0 : value.trim() !== ''
 }

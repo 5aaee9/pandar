@@ -30,19 +30,20 @@ pub(crate) async fn upsert_snapshot(
                      access_code_encrypted, name, model, status,
                      last_seen_at, created_at, nozzle_temperatures_json,
                      active_nozzle, bed_temperature_celsius, bed_target_temperature_celsius,
-                     chamber_temperature_celsius, chamber_light_on, bambu_fun_bits,
+                     chamber_temperature_celsius, chamber_target_temperature_celsius,
+                     chamber_light_on, bambu_fun_bits,
                      bambu_fun_session_id, state_revision
                   )
-                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, 1)
+                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, 1)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
                      host = CASE
-                         WHEN ?19 THEN excluded.host
+                         WHEN ?20 THEN excluded.host
                          ELSE COALESCE(printers.host, excluded.host)
                      END,
                      access_code = NULL,
                      access_code_encrypted = CASE
-                         WHEN ?19 THEN excluded.access_code_encrypted
+                         WHEN ?20 THEN excluded.access_code_encrypted
                          ELSE COALESCE(printers.access_code_encrypted, excluded.access_code_encrypted)
                      END,
                      model = excluded.model,
@@ -53,6 +54,7 @@ pub(crate) async fn upsert_snapshot(
                      bed_temperature_celsius = excluded.bed_temperature_celsius,
                      bed_target_temperature_celsius = excluded.bed_target_temperature_celsius,
                      chamber_temperature_celsius = excluded.chamber_temperature_celsius,
+                     chamber_target_temperature_celsius = excluded.chamber_target_temperature_celsius,
                      chamber_light_on = excluded.chamber_light_on,
                      bambu_fun_bits = COALESCE(excluded.bambu_fun_bits, printers.bambu_fun_bits),
                      bambu_fun_session_id = CASE
@@ -76,6 +78,7 @@ pub(crate) async fn upsert_snapshot(
                         snapshot.bed_temperature_celsius.clone().into(),
                         snapshot.bed_target_temperature_celsius.clone().into(),
                         snapshot.chamber_temperature_celsius.clone().into(),
+                        snapshot.chamber_target_temperature_celsius.clone().into(),
                         snapshot.chamber_light_on.into(),
                         bambu_fun_bits.clone().into(),
                         bambu_fun_session_id.clone().into(),
@@ -96,19 +99,20 @@ pub(crate) async fn upsert_snapshot(
                      access_code_encrypted, name, model, status,
                      last_seen_at, created_at, nozzle_temperatures_json,
                      active_nozzle, bed_temperature_celsius, bed_target_temperature_celsius,
-                     chamber_temperature_celsius, chamber_light_on, bambu_fun_bits,
+                     chamber_temperature_celsius, chamber_target_temperature_celsius,
+                     chamber_light_on, bambu_fun_bits,
                      bambu_fun_session_id, state_revision
                   )
-                 VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $8, $9, $10, $10, $11, $12, $13, $14, $15, $16, $17, $18, 1)
+                 VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $8, $9, $10, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, 1)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
                      host = CASE
-                         WHEN $19 THEN excluded.host
+                         WHEN $20 THEN excluded.host
                          ELSE COALESCE(printers.host, excluded.host)
                      END,
                      access_code = NULL,
                      access_code_encrypted = CASE
-                         WHEN $19 THEN excluded.access_code_encrypted
+                         WHEN $20 THEN excluded.access_code_encrypted
                          ELSE COALESCE(printers.access_code_encrypted, excluded.access_code_encrypted)
                      END,
                      model = excluded.model,
@@ -119,6 +123,7 @@ pub(crate) async fn upsert_snapshot(
                      bed_temperature_celsius = excluded.bed_temperature_celsius,
                      bed_target_temperature_celsius = excluded.bed_target_temperature_celsius,
                      chamber_temperature_celsius = excluded.chamber_temperature_celsius,
+                     chamber_target_temperature_celsius = excluded.chamber_target_temperature_celsius,
                      chamber_light_on = excluded.chamber_light_on,
                      bambu_fun_bits = COALESCE(excluded.bambu_fun_bits, printers.bambu_fun_bits),
                      bambu_fun_session_id = CASE
@@ -142,6 +147,7 @@ pub(crate) async fn upsert_snapshot(
                         snapshot.bed_temperature_celsius.clone().into(),
                         snapshot.bed_target_temperature_celsius.clone().into(),
                         snapshot.chamber_temperature_celsius.clone().into(),
+                        snapshot.chamber_target_temperature_celsius.clone().into(),
                         snapshot.chamber_light_on.into(),
                         bambu_fun_bits.into(),
                         bambu_fun_session_id.into(),

@@ -49,6 +49,9 @@ pub async fn handle_snapshot(
         bed_temperature_celsius: trim_optional(snapshot.bed_temperature_celsius),
         bed_target_temperature_celsius: trim_optional(snapshot.bed_target_temperature_celsius),
         chamber_temperature_celsius: trim_optional(snapshot.chamber_temperature_celsius),
+        chamber_target_temperature_celsius: trim_optional(
+            snapshot.chamber_target_temperature_celsius,
+        ),
         chamber_light_on: snapshot.chamber_light_on,
         connection_authoritative: snapshot.connection_authoritative,
     };

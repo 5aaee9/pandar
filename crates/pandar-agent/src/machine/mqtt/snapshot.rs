@@ -30,7 +30,7 @@ pub(crate) fn snapshot_from_parsed_report(
         .unwrap_or_else(|| "unknown".to_owned());
     let (packed_bed_temperature, packed_bed_target_temperature) =
         packed_temperature_pair(print.and_then(|print| print.device.bed_temp.as_ref()));
-    let (packed_chamber_temperature, _) =
+    let (packed_chamber_temperature, packed_chamber_target_temperature) =
         packed_temperature_pair(print.and_then(|print| print.device.ctc.info.temp.as_ref()));
 
     MachineSnapshot {
@@ -57,6 +57,9 @@ pub(crate) fn snapshot_from_parsed_report(
             print.and_then(|print| print.chamber_temper.as_ref()),
         )
         .or(packed_chamber_temperature),
+        chamber_target_temperature_celsius: packed_chamber_target_temperature.or_else(|| {
+            temperature_string(print.and_then(|print| print.chamber_target_temper.as_ref()))
+        }),
         chamber_light_on: chamber_light_on_from_report(print),
         device_features: report
             .and_then(|report| device_feature_observation(&endpoint.serial, report).ok())
@@ -86,6 +89,8 @@ pub(super) struct SnapshotPrint {
     bed_target_temper: Option<TemperatureValue>,
     #[serde(default, alias = "chamber_temp", alias = "chamber_temperature")]
     chamber_temper: Option<TemperatureValue>,
+    #[serde(default, rename = "ctt")]
+    chamber_target_temper: Option<TemperatureValue>,
     #[serde(default, alias = "nozzle_temp", alias = "nozzle_temperature")]
     nozzle_temper: Option<TemperatureValue>,
     #[serde(

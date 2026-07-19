@@ -31,6 +31,8 @@ pub(super) struct SnapshotPrintFixture {
     pub(super) bed_target_temper: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) chamber_temper: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) ctt: Option<i64>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(super) lights_report: Vec<LightReportFixture>,
     #[serde(skip_serializing_if = "Option::is_none")]

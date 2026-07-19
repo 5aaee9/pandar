@@ -46,6 +46,7 @@ struct EventPrinter {
     tenant_id: String,
     agent_id: String,
     serial_number: String,
+    chamber_target_temperature_celsius: Option<String>,
     state_revision: u64,
     print: EventPrint,
 }
@@ -782,6 +783,10 @@ async fn printer_events_websocket_receives_snapshot_from_grpc_stream() {
     assert_eq!(printer.tenant_id, tenant.id.to_string());
     assert_eq!(printer.agent_id, agent.id.to_string());
     assert_eq!(printer.serial_number, "SN-001");
+    assert_eq!(
+        printer.chamber_target_temperature_celsius.as_deref(),
+        Some("45")
+    );
     drop(stream);
 }
 
@@ -1317,6 +1322,7 @@ fn snapshot_event(tenant_id: TenantId, agent_id: AgentId) -> AgentEvent {
             bed_temperature_celsius: String::new(),
             bed_target_temperature_celsius: String::new(),
             chamber_temperature_celsius: String::new(),
+            chamber_target_temperature_celsius: "45".to_owned(),
             chamber_light_on: None,
             device_features: None,
             connection_authoritative: false,

@@ -148,6 +148,9 @@ fn printer_snapshot_event_with_connection_authority(
                 .bed_target_temperature_celsius
                 .unwrap_or_default(),
             chamber_temperature_celsius: snapshot.chamber_temperature_celsius.unwrap_or_default(),
+            chamber_target_temperature_celsius: snapshot
+                .chamber_target_temperature_celsius
+                .unwrap_or_default(),
             active_nozzle: snapshot.active_nozzle.unwrap_or_default(),
             chamber_light_on: snapshot.chamber_light_on,
             device_features: snapshot

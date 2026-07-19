@@ -50,6 +50,7 @@ pub(super) fn printer_from_model(
             bed_temperature_celsius: model.bed_temperature_celsius,
             bed_target_temperature_celsius: model.bed_target_temperature_celsius,
             chamber_temperature_celsius: model.chamber_temperature_celsius,
+            chamber_target_temperature_celsius: model.chamber_target_temperature_celsius,
             chamber_light_on: model.chamber_light_on,
             bambu_device_features: model
                 .bambu_fun_bits

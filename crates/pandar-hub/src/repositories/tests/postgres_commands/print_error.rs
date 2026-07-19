@@ -664,6 +664,7 @@ fn reassigned_snapshot(serial_number: String) -> PrinterSnapshotUpsert {
         bed_temperature_celsius: None,
         bed_target_temperature_celsius: None,
         chamber_temperature_celsius: None,
+        chamber_target_temperature_celsius: None,
         chamber_light_on: None,
         connection_authoritative: false,
     }

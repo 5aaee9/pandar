@@ -21,6 +21,7 @@ pub struct Model {
     pub bed_temperature_celsius: Option<String>,
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
+    pub chamber_target_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
     pub bambu_fun_bits: Option<String>,
     pub bambu_fun_session_id: Option<String>,

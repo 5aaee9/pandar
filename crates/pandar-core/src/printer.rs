@@ -20,6 +20,7 @@ pub struct Printer {
     pub bed_temperature_celsius: Option<String>,
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
+    pub chamber_target_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
     #[serde(skip_serializing, skip_deserializing)]
     pub bambu_device_features: Option<BambuDeviceFeatures>,
@@ -45,6 +46,7 @@ pub struct PrinterParts {
     pub bed_temperature_celsius: Option<String>,
     pub bed_target_temperature_celsius: Option<String>,
     pub chamber_temperature_celsius: Option<String>,
+    pub chamber_target_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
     pub bambu_device_features: Option<BambuDeviceFeatures>,
     pub bambu_device_features_session_id: Option<String>,
@@ -83,6 +85,7 @@ impl Printer {
             bed_temperature_celsius: parts.bed_temperature_celsius,
             bed_target_temperature_celsius: parts.bed_target_temperature_celsius,
             chamber_temperature_celsius: parts.chamber_temperature_celsius,
+            chamber_target_temperature_celsius: parts.chamber_target_temperature_celsius,
             chamber_light_on: parts.chamber_light_on,
             bambu_device_features: parts.bambu_device_features,
             bambu_device_features_session_id: parts.bambu_device_features_session_id,

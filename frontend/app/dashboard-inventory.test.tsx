@@ -443,7 +443,7 @@ describe("PrinterInventory", () => {
     const user = userEvent.setup();
     const heatingPrinter: Printer = {
       ...printer,
-      nozzle_temperatures: [{ label: null, current_celsius: "27", target_celsius: "0" }],
+      nozzle_temperatures: [{ label: null, current_celsius: "27", target_celsius: "220" }],
     };
 
     renderWithMessages(
@@ -453,6 +453,8 @@ describe("PrinterInventory", () => {
     await user.click(screen.getByRole("button", { name: "Set nozzle temperature" }));
 
     expect(screen.getByText("Set nozzle temperature")).toBeVisible();
+    expect(screen.getByText("Current 27°C")).toBeVisible();
+    expect(screen.getByText("Target 220°C")).toBeVisible();
     const preset = screen.getByRole("button", { name: "220 C" });
     const form = preset.closest("form");
     expect(form?.querySelector('input[name="action"]')).toHaveValue("set_hotend_temperature");
@@ -489,8 +491,15 @@ describe("PrinterInventory", () => {
     expect(rightForm?.querySelector('input[name="extruder_id"]')).toHaveValue("0");
 
     const leftPanel = screen.getByText("Left temp").closest("div");
+    expect(within(leftPanel!).getByText("Current 41°C")).toBeVisible();
+    expect(within(leftPanel!).getByText("Target 220°C")).toBeVisible();
+    expect(within(leftPanel!).getAllByText(/41°C/)).toHaveLength(1);
     const leftPreset = within(leftPanel!).getByRole("button", { name: "260 C" });
     expect(leftPreset.closest("form")?.querySelector('input[name="extruder_id"]')).toHaveValue("1");
+
+    expect(within(rightPanel!).getByText("Current 42°C")).toBeVisible();
+    expect(within(rightPanel!).queryByText(/Target/)).not.toBeInTheDocument();
+    expect(within(rightPanel!).getAllByText(/42°C/)).toHaveLength(1);
   });
 
   it("opens bed temperature controls with bed presets", async () => {
@@ -498,6 +507,7 @@ describe("PrinterInventory", () => {
     const heatingPrinter: Printer = {
       ...printer,
       bed_temperature_celsius: "24",
+      bed_target_temperature_celsius: "75",
     };
 
     renderWithMessages(
@@ -507,6 +517,8 @@ describe("PrinterInventory", () => {
     await user.click(screen.getByRole("button", { name: "Set bed temperature" }));
 
     expect(screen.getByText("Set bed temperature")).toBeVisible();
+    expect(screen.getByText("Current 24°C")).toBeVisible();
+    expect(screen.getByText("Target 75°C")).toBeVisible();
     const preset = screen.getByRole("button", { name: "75 C" });
     const form = preset.closest("form");
     expect(form?.querySelector('input[name="action"]')).toHaveValue("set_bed_temperature");
@@ -519,6 +531,7 @@ describe("PrinterInventory", () => {
     const heatingPrinter: Printer = {
       ...printer,
       chamber_temperature_celsius: "25",
+      chamber_target_temperature_celsius: "45",
     };
 
     renderWithMessages(
@@ -528,6 +541,8 @@ describe("PrinterInventory", () => {
     await user.click(screen.getByRole("button", { name: "Set chamber temperature" }));
 
     expect(screen.getByText("Set chamber temperature")).toBeVisible();
+    expect(screen.getByText("Current 25°C")).toBeVisible();
+    expect(screen.getByText("Target 45°C")).toBeVisible();
     const preset = screen.getByRole("button", { name: "45 C" });
     const form = preset.closest("form");
     expect(form?.querySelector('input[name="action"]')).toHaveValue("set_chamber_temperature");
@@ -535,7 +550,8 @@ describe("PrinterInventory", () => {
     expect(screen.getByPlaceholderText("Custom")).toBeVisible();
   });
 
-  it("hides zero bed target temperature", () => {
+  it("hides zero bed target temperature from the card and menu", async () => {
+    const user = userEvent.setup();
     const heatingPrinter: Printer = {
       ...printer,
       bed_temperature_celsius: "26",
@@ -550,6 +566,11 @@ describe("PrinterInventory", () => {
     expect(card).toHaveTextContent("Bed");
     expect(card).toHaveTextContent("26°C");
     expect(card).not.toHaveTextContent("26° / 0°");
+
+    await user.click(screen.getByRole("button", { name: "Set bed temperature" }));
+
+    expect(screen.getByText("Current 26°C")).toBeVisible();
+    expect(screen.queryByText(/^Target /)).not.toBeInTheDocument();
   });
 
   it("replaces the filament summary with AMS and external slot loading details", () => {

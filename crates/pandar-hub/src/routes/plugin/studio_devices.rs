@@ -49,6 +49,7 @@ pub(super) struct PluginPrinterResponse {
     bed_temperature_celsius: Option<String>,
     bed_target_temperature_celsius: Option<String>,
     chamber_temperature_celsius: Option<String>,
+    chamber_target_temperature_celsius: Option<String>,
     chamber_light_on: Option<bool>,
     materials: Option<PrinterEventMaterials>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -137,6 +138,7 @@ pub(super) async fn plugin_printer_devices(
             bed_temperature_celsius: printer.bed_temperature_celsius,
             bed_target_temperature_celsius: printer.bed_target_temperature_celsius,
             chamber_temperature_celsius: printer.chamber_temperature_celsius,
+            chamber_target_temperature_celsius: printer.chamber_target_temperature_celsius,
             chamber_light_on: printer.chamber_light_on,
             materials: materials_by_printer_id.remove(&printer.id),
             firmware,

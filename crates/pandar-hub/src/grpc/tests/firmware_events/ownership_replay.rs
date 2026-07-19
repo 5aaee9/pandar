@@ -287,6 +287,7 @@ fn snapshot_event(
             bed_temperature_celsius: String::new(),
             bed_target_temperature_celsius: String::new(),
             chamber_temperature_celsius: String::new(),
+            chamber_target_temperature_celsius: String::new(),
             active_nozzle: String::new(),
             chamber_light_on: None,
             device_features: None,

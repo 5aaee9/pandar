@@ -1078,6 +1078,7 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Displayed the Hub-provided dispatch or print failure cause directly in each Devices "Needs attention" job row, with localized reason labels and wrapping text so operators can diagnose failures without opening the Jobs view.
 - Matched Bambu Studio print dispatch options by model, carrying Timelapse plus paired Auto/On/Off bed-leveling, flow-dynamics, and nozzle-offset values through Web, Hub, gRPC, Agent, MQTT, and the Studio plugin ABI; migrated existing queued commands and corrected N6/X2D capability handling.
 - Restored Next 16 frontend linting with ESLint, extended the 400-line production-module guard to C/C++ and TypeScript/TSX, split the oversized Studio shim and dashboard/action modules, loaded dashboard resources by view with batched user identities, and hardened Docker/Helm defaults for non-root read-only workloads without ServiceAccount tokens.
+- Added current and active-target readouts to the nozzle, bed, and chamber temperature dropdowns; chamber targets now flow from Bambu Studio's legacy `ctt` and V2 packed MQTT reports through gRPC, SQLite/PostgreSQL persistence, and dashboard events, while zero targets remain represented as off.
 
 Exit criteria:
 
@@ -1094,6 +1095,7 @@ Exit criteria:
 ## Immediate Next
 
 - Run fresh native firmware-update workspace delivery verification, create the single approved implementation commit, push `main`, and confirm remote readback without running a live firmware command.
+- Validate the chamber target readout against a real printer while chamber heating is safely active.
 - Replace process-local native-recovery ownership with a durable or broker-mediated cross-Hub owner/lease and cleanup protocol, then validate multi-Hub Web recovery before lifting the single-active-Hub restriction.
 - Continue splitting oversized dedicated Rust test suites into smaller topic files while preserving shared fixtures and helpers.
 - Provide Bambu Studio installations and matching plugin artifacts, then run Phase 23 real compatibility testing on Linux, Windows, and macOS.

@@ -266,6 +266,7 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
                 device_features: None,
             },
@@ -281,6 +282,7 @@ async fn configured_refresh_printers_refreshes_endpoints_sequentially() {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
                 device_features: None,
             },
@@ -1981,6 +1983,7 @@ mod runtime {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
                 device_features: None,
             }]
@@ -2040,6 +2043,7 @@ mod runtime {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
                 device_features: None,
             }]
@@ -2103,6 +2107,7 @@ mod runtime {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
                 device_features: None,
             }]
@@ -2456,6 +2461,7 @@ mod runtime {
                 bed_temperature_celsius: None,
                 bed_target_temperature_celsius: None,
                 chamber_temperature_celsius: None,
+                chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
                 device_features: None,
             }]

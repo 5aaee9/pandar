@@ -26,6 +26,7 @@ fn report_maps_to_snapshot_uses_configured_model() {
             bed_temperature_celsius: None,
             bed_target_temperature_celsius: None,
             chamber_temperature_celsius: None,
+            chamber_target_temperature_celsius: None,
             chamber_light_on: None,
             device_features: None,
         }
@@ -93,6 +94,7 @@ fn report_maps_temperatures_to_snapshot() {
         bed_temper: Some(60),
         bed_target_temper: Some(65),
         chamber_temper: Some(32),
+        ctt: Some(45),
         ..Default::default()
     });
 
@@ -115,6 +117,10 @@ fn report_maps_temperatures_to_snapshot() {
         Some("65")
     );
     assert_eq!(snapshot.chamber_temperature_celsius.as_deref(), Some("32"));
+    assert_eq!(
+        snapshot.chamber_target_temperature_celsius.as_deref(),
+        Some("45")
+    );
 }
 
 #[test]
@@ -205,6 +211,10 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
         Some("65")
     );
     assert_eq!(snapshot.chamber_temperature_celsius.as_deref(), Some("32"));
+    assert_eq!(
+        snapshot.chamber_target_temperature_celsius.as_deref(),
+        Some("45")
+    );
 }
 
 #[test]

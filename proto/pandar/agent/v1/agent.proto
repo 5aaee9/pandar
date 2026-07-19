@@ -63,6 +63,7 @@ message PrinterSnapshot {
   string access_code = 12;
   PrinterDeviceFeatures device_features = 13;
   bool connection_authoritative = 14;
+  string chamber_target_temperature_celsius = 15;
 }
 
 message PrinterDeviceFeatures {

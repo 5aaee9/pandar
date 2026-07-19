@@ -325,6 +325,8 @@
     "leftNozzleTemp": "Left temp",
     "rightNozzleTemp": "Right temp",
     "temperatureOff": "Off",
+    "currentTemperature": "Current",
+    "targetTemperature": "Target",
     "customTemperature": "Custom",
     "setTemperature": "Set",
     "switchNozzle": "Switch nozzle",

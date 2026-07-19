@@ -35,6 +35,7 @@ export type Printer = {
   bed_temperature_celsius?: string | null;
   bed_target_temperature_celsius?: string | null;
   chamber_temperature_celsius?: string | null;
+  chamber_target_temperature_celsius?: string | null;
   chamber_light_on?: boolean | null;
   materials: PrinterMaterials | null;
   state_revision?: number;

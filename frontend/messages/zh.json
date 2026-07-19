@@ -322,6 +322,8 @@
     "leftNozzleTemp": "左喷嘴温度",
     "rightNozzleTemp": "右喷嘴温度",
     "temperatureOff": "关闭",
+    "currentTemperature": "当前",
+    "targetTemperature": "目标",
     "customTemperature": "自定义",
     "setTemperature": "设定",
     "switchNozzle": "切换喷嘴",
