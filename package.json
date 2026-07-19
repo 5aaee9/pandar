@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": ["frontend", "frontend/auth", "frontend/plugin-local"],
+  "overrides": {
+    "lodash": "4.18.1",
+    "postcss": "8.5.20"
+  },
   "scripts": {
     "build:plugin-local": "npm run build --workspace pandar-plugin-local",
     "build:web": "npm run build:plugin-local && npm run build --workspace pandar-web",

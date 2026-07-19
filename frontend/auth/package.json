@@ -10,13 +10,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@better-auth/passkey": "1.6.22",
-    "auth": "1.6.22",
-    "better-auth": "1.6.22",
+    "@better-auth/passkey": "1.6.23",
+    "auth": "1.6.23",
+    "better-auth": "1.6.23",
     "better-sqlite3": "^12.4.1",
     "class-variance-authority": "0.7.1",
     "lucide-react": "1.22.0",
-    "next": "16.2.9",
+    "next": "16.2.10",
     "nodemailer": "^9.0.1",
     "radix-ui": "^1.6.0",
     "react": "19.2.3",

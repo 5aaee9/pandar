@@ -30,7 +30,7 @@ Install a release chart:
 
 ```sh
 helm install pandar oci://ghcr.io/5aaee9/pandar/chart/pandar \
-  --version 0.1.1 \
+  --version 0.1.0 \
   --set hub.accessCodeEncryption.existingSecret=pandar-hub-secrets
 ```
 
@@ -43,7 +43,7 @@ kubectl create secret generic pandar-database \
   --from-literal=PANDAR_DATABASE_URL='postgres://pandar:password@postgres:5432/pandar'
 
 helm upgrade --install pandar oci://ghcr.io/5aaee9/pandar/chart/pandar \
-  --version 0.1.1 \
+  --version 0.1.0 \
   --set hub.database.existingSecret=pandar-database \
   --set hub.accessCodeEncryption.existingSecret=pandar-hub-secrets
 ```
@@ -52,7 +52,7 @@ If the API is exposed outside the cluster, set `web.appApiUrl` to the public Hub
 
 ```sh
 helm upgrade --install pandar oci://ghcr.io/5aaee9/pandar/chart/pandar \
-  --version 0.1.1 \
+  --version 0.1.0 \
   --set hub.accessCodeEncryption.existingSecret=pandar-hub-secrets \
   --set web.appApiUrl=https://api.example.com
 ```
@@ -62,6 +62,6 @@ codes undecryptable and prevents Hub startup. Restore the same Secret on every
 Hub replica; key rotation requires re-encrypting stored envelopes before the old
 key is removed.
 
-When `hub.image.tag` and `web.image.tag` are empty, the chart uses the packaged `appVersion` as the image tag. Main-branch packages use `appVersion: main`; release packages use the Git tag, for example `v0.1.1`.
+When `hub.image.tag` and `web.image.tag` are empty, the chart uses the packaged `appVersion` as the image tag. Main-branch packages use `appVersion: main`; release packages use the Git tag, for example `v0.1.0`.
 
-Main-branch CI packages the chart as `<Chart.yaml version>-main`, falling back to `0.1.0-main` only if no chart version can be read. Tag CI packages release charts from the tag, for example `v0.1.1` publishes chart version `0.1.1`.
+Main-branch CI packages the chart as `<Chart.yaml version>-main`, falling back to `0.1.0-main` only if no chart version can be read. Tag CI packages release charts from the tag, for example `v0.1.0` publishes chart version `0.1.0`.

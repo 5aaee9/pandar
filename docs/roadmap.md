@@ -15,6 +15,7 @@
 
 ## Completed
 
+- Prepared the `0.1.0` release metadata and operator handoff: all Rust, Web/Auth, Android, npm lockfile, Nix package, Helm, and changelog versions are checked through one tag-aware release gate; Cargo metadata points to the canonical `5aaee9/pandar` repository; Next.js and Better Auth use current patch releases with patched Lodash/PostCSS transitive resolutions and a clean production npm audit, while the Nix Auth package preserves npm's workspace-nested runtime dependencies for migration; the changelog, README release entry, installation artifact coordinates, Helm examples, and maintainer runbook describe the exact `v0.1.0` publication and its unsigned/cross-platform limitations; and GitHub Releases generate notes while remaining gated on the tagged commit's successful Checks run. The tag itself is intentionally not created by this preparation change.
 - Split the Settings tenant-token list into its own frontend module without changing behavior, restoring the workspace's enforced 400-line production-module limit.
 - Refactored Settings and Users admin views: extracted a shared `AdminSectionGuard` for the no-tenant / load-error / restricted states, unified `LanguageSettingsPanel` and `ThemeSettingsPanel` behind a `PreferencePanel` wrapper, and fixed the non-null-assertion risk by switching to a function-based render prop so `children` only evaluates when a tenant exists.
 - Visual polish pass on Settings and Users: unified all raw buttons onto the shared `Button` primitive, replaced hard-coded `slate-*` colors with semantic theme tokens in `TenantSettings` and `RuntimeStatusPanel`, added table row hover states and Lucide icons for clarity, and added focus-visible rings to all interactive elements.
@@ -1094,14 +1095,15 @@ Exit criteria:
 
 ## Immediate Next
 
+- Merge the reviewed release-preparation commit to `main`, confirm its GitHub `Checks` workflow passes, then create and push the annotated `v0.1.0` tag by following `docs/releasing.md`; do not treat the release as complete until all six archive jobs, both container images, the Helm chart, and post-publication checks pass.
 - Run fresh native firmware-update workspace delivery verification, create the single approved implementation commit, push `main`, and confirm remote readback without running a live firmware command.
 - Validate the chamber target readout against a real printer while chamber heating is safely active.
 - Replace process-local native-recovery ownership with a durable or broker-mediated cross-Hub owner/lease and cleanup protocol, then validate multi-Hub Web recovery before lifting the single-active-Hub restriction.
 - Continue splitting oversized dedicated Rust test suites into smaller topic files while preserving shared fixtures and helpers.
 - Provide Bambu Studio installations and matching plugin artifacts, then run Phase 23 real compatibility testing on Linux, Windows, and macOS.
-- Produce a tag/release artifact, then validate it while running Phase 23 so Phase 24 can use the same platform evidence.
+- Validate the `v0.1.0` tagged artifact while running Phase 23 so Phase 24 can use the same platform evidence.
 - Record real Bambu Studio plugin compatibility evidence for Phase 23.
-- Produce or select a tagged GitHub Release archive, then record live release artifact install evidence for Phase 24 target families that are still unverified.
+- Select a published `v0.1.0` GitHub Release archive, then record live release artifact install evidence for Phase 24 target families that are still unverified.
 - Run Phase 27 pause/resume/stop/print-speed and Phase 29 home/move/hotend hardware probes only after a safe printer state and agent-local LAN credentials are available.
 - Keep virtual-printer/proxy behavior deferred until plugin compatibility, scaled artifact storage, and operator recovery workflows are stable.
 

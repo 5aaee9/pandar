@@ -1,5 +1,11 @@
 # Release Installation
 
+Release `v0.1.0` will be published at <https://github.com/5aaee9/pandar/releases/tag/v0.1.0>. The tag also publishes these service artifacts:
+
+- `ghcr.io/5aaee9/pandar/hub:v0.1.0`
+- `ghcr.io/5aaee9/pandar/web:v0.1.0`
+- Helm chart `0.1.0` at `oci://ghcr.io/5aaee9/pandar/chart/pandar`
+
 ## Release Archive Selection
 
 Select the archive that matches the operator host OS and CPU architecture:
@@ -59,7 +65,7 @@ The release archive provides the operator CLI and Bambu Studio plugin library. D
 
 The hub needs `PANDAR_DATABASE_URL` and `PANDAR_PRINTER_ACCESS_CODE_KEY`. The latter is the unpadded base64url encoding of exactly 32 random bytes (`openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`) and encrypts persisted Bambu access codes with versioned AES-256-GCM envelopes. Use the same key on every Hub replica and retain it with database backups; a missing or incorrect key prevents startup. The frontend needs `APP_API_URL`, `APP_BASE_URL`, and provider metadata when external auth is used. The agent needs `PANDAR_HUB_GRPC_URL`, tenant and agent IDs, an agent credential, and any `PANDAR_PRINTERS` entries for local machines.
 
-For Clerk, Logto, or Better Auth deployments, configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, optional audience, and allowed algorithms. Configure `pandar-web` with `APP_AUTH_PROVIDER` and the matching provider metadata, and leave `APP_API_TOKEN` and `APP_AUTH_BEARER_TOKEN` unset. Unknown Web provider values and external-auth/static-token combinations fail startup. Better Auth 1.6.22 uses `keyPairConfig.alg = "RS256"` for RSA JWT signing, matching Pandar's `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` verifier setting.
+For Clerk, Logto, or Better Auth deployments, configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, optional audience, and allowed algorithms. Configure `pandar-web` with `APP_AUTH_PROVIDER` and the matching provider metadata, and leave `APP_API_TOKEN` and `APP_AUTH_BEARER_TOKEN` unset. Unknown Web provider values and external-auth/static-token combinations fail startup. Better Auth 1.6.23 uses `keyPairConfig.alg = "RS256"` for RSA JWT signing, matching Pandar's `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` verifier setting.
 
 For local development or explicitly trusted single-user deployments, `PANDAR_HUB_NO_AUTH=true` disables hub HTTP/WebSocket bearer authentication and role checks and emits a startup warning. Do not enable it on an untrusted network. Agent reverse gRPC authentication remains credential-based.
 

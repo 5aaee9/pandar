@@ -116,7 +116,7 @@ Evidence from Clerk, Logto, and Better Auth documentation:
 
 - Clerk session tokens can be verified by backends with a public key or JWKS, expected signing algorithm, token expiration/not-before checks, and optional authorized-party checks for trusted frontend origins.
 - Logto access tokens for APIs are JWTs validated through JWKS, issuer, audience/API resource, expiration, and scope or organization-context checks.
-- Better Auth's JWT plugin exposes JWT/JWKS material. Better Auth 1.6.22 uses the JWA algorithm value `RS256` for RSA key generation, matching Pandar's `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` verifier setting.
+- Better Auth's JWT plugin exposes JWT/JWKS material. Better Auth 1.6.23 uses the JWA algorithm value `RS256` for RSA key generation, matching Pandar's `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` verifier setting.
 - Both providers supply authentication identity. Pandar should not use provider organizations as the tenant authorization source unless a future phase explicitly defines a synchronization model.
 
 Pandar's contract:

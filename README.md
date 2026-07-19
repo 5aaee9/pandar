@@ -14,10 +14,19 @@ pandar-agent -(MQTT + machine file transfer)-> Bambu machines
 
 ## Documentation
 
+- [0.1.0 changelog](CHANGELOG.md): release highlights, distribution channels, and known limitations.
+- [Release installation](docs/release-installation.md): archive selection, checksum verification, deployment, and plugin replacement.
+- [Maintainer release runbook](docs/releasing.md): version checks, quality gates, tagging, and publication verification.
 - [Architecture](docs/architecture.md): component boundaries, reference-derived machine behavior, data model, and protocol notes.
 - [Development and deployment notes](docs/development.md): environment variables, local setup, auth/provisioning examples, live WebSocket notes, and verification commands.
 - [NixOS module options](docs/deployment/nixos/options.md): generated `services.pandar` deployment options for hub, web, and agent services.
 - [Roadmap](docs/roadmap.md): completed phases and planned next phases.
+
+## Planned release 0.1.0
+
+The planned `v0.1.0` tag will publish desktop CLI/plugin archives on [GitHub Releases](https://github.com/5aaee9/pandar/releases/tag/v0.1.0), Hub and Web images as `ghcr.io/5aaee9/pandar/hub:v0.1.0` and `ghcr.io/5aaee9/pandar/web:v0.1.0`, and Helm chart `0.1.0` at `oci://ghcr.io/5aaee9/pandar/chart/pandar`.
+
+Desktop archives will be unsigned and accompanied by SHA-256 sidecars. Read the [installation guide](docs/release-installation.md) and [current compatibility evidence](docs/compatibility/release-artifacts.md) before production use.
 
 ## Workspace
 

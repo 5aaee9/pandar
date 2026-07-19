@@ -283,7 +283,7 @@ If `PANDAR_EXTERNAL_AUTH_PROVIDER` is unset, external identity auth is disabled.
 
 For no-auth local development, set `PANDAR_HUB_NO_AUTH=true` on `pandar-hub` and leave `APP_AUTH_PROVIDER`, `APP_API_TOKEN`, and `APP_AUTH_BEARER_TOKEN` unset on `pandar-web`. This exposes all hub HTTP/WebSocket tenant and bootstrap APIs without a bearer token, so do not use it on an untrusted network.
 
-Better Auth is supported through the same external JWT/JWKS contract. Configure Better Auth 1.6.22's JWT plugin with `keyPairConfig.alg = "RS256"` and configure Pandar verification with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. Better Auth delegates key generation to `jose`, where the RSA signing algorithm value is `RS256`; Pandar's smoke check signs a token and confirms the JWT header is `alg: "RS256"` and the JWKS key is `kty: "RSA"`. Pandar expects a stable `sub` plus verified email claims before creating tenant-local user projections.
+Better Auth is supported through the same external JWT/JWKS contract. Configure Better Auth 1.6.23's JWT plugin with `keyPairConfig.alg = "RS256"` and configure Pandar verification with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. Better Auth delegates key generation to `jose`, where the RSA signing algorithm value is `RS256`; Pandar's smoke check signs a token and confirms the JWT header is `alg: "RS256"` and the JWKS key is `kty: "RSA"`. Pandar expects a stable `sub` plus verified email claims before creating tenant-local user projections.
 
 Self-hosted Better Auth issuer development lives under `frontend/auth/`:
 
