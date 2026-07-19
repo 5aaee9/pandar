@@ -4,6 +4,7 @@ import { UserPlusIcon } from "lucide-react";
 
 import { FormattedDate } from "../components/formatted-date";
 import { createAgentPairing } from "./admin-actions";
+import { rowHoverClasses } from "../lib/utils";
 import {
   Input,
   PrimaryButton,
@@ -112,7 +113,7 @@ function AgentsList({ agents }: { agents: Agent[] }) {
           agents.map((agent) => (
             <div
               key={agent.id}
-              className="rounded-md border border-border bg-muted/20 px-3 py-2 text-sm transition-colors duration-150 ease-out hover:bg-muted/40"
+              className={`rounded-md border border-border bg-muted/20 px-3 py-2 text-sm ${rowHoverClasses}`}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-foreground">

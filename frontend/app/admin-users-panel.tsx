@@ -3,6 +3,14 @@ import { useTranslations } from 'next-intl'
 import { LinkIcon, TrashIcon } from 'lucide-react'
 
 import { createJoinLink, revokeJoinLink, updateTenantUserRole } from './admin-actions'
+import {
+  actionButtonSm,
+  actionButtonSmDanger,
+  inputSmClasses,
+  monoIdClasses,
+  rowHoverClasses,
+  tableScrollClasses,
+} from '../lib/utils'
 import type { JoinLink, Tenant, User, UserIdentity } from './dashboard-types'
 import { EmptyState, Tag } from './dashboard-ui'
 import { ConfirmForm } from './confirm-dialog'
@@ -117,7 +125,7 @@ function UsersTable({
       {users.length === 0 ? (
         <EmptyState title={t('noUsersTitle')} message={t('noUsersMessage')} />
       ) : (
-        <div className="overflow-x-auto">
+        <div className={tableScrollClasses}>
           <table className="min-w-full text-left text-sm">
             <thead className="bg-muted/60 text-xs font-semibold text-muted-foreground">
               <tr>
@@ -131,11 +139,11 @@ function UsersTable({
               {users.map((user) => {
                 const linked = identitiesByUser.get(user.id) ?? []
                 return (
-                  <tr key={user.id} className="transition-colors duration-150 ease-out hover:bg-muted/40">
+                  <tr key={user.id} className={rowHoverClasses}>
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground">{user.display_name}</div>
                       <div className="text-muted-foreground">{user.email}</div>
-                      <div className="font-mono text-xs text-muted-foreground">{user.id}</div>
+                      <div className={monoIdClasses}>{user.id}</div>
                     </td>
                     <td className="px-4 py-3"><Tag value={user.role} /></td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
@@ -149,13 +157,13 @@ function UsersTable({
                           aria-label={t('roleFor', { user: user.display_name })}
                           name="role"
                           defaultValue={user.role}
-                          className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60"
+                          className={inputSmClasses}
                         >
                           {roles.map((role) => <option key={role} value={role}>{role}</option>)}
                         </select>
                         <button
                           aria-label={t('saveRoleFor', { user: user.display_name })}
-                          className="h-8 rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors duration-150 ease-out hover:bg-muted focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                          className={actionButtonSm}
                           type="submit"
                         >
                           {t('save')}
@@ -186,7 +194,7 @@ function JoinLinksTable({ tenantId, joinLinks }: { tenantId: string; joinLinks: 
           {joinLinks.map((link) => (
             <div
               key={link.id}
-              className="grid gap-3 px-4 py-3 text-sm transition-colors duration-150 ease-out hover:bg-muted/40 lg:grid-cols-[minmax(0,1fr)_auto]"
+              className={`grid gap-3 px-4 py-3 text-sm ${rowHoverClasses} lg:grid-cols-[minmax(0,1fr)_auto]`}
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -201,14 +209,14 @@ function JoinLinksTable({ tenantId, joinLinks }: { tenantId: string; joinLinks: 
                     </span>
                   ) : null}
                 </div>
-                <div className="mt-1.5 font-mono text-xs text-muted-foreground">{link.id}</div>
+                <div className={`mt-1.5 ${monoIdClasses}`}>{link.id}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
                   {link.email_constraint ? t('emailConstraint', { email: link.email_constraint }) : t('anyVerifiedEmail')} · {t('expires', { date: formatDate(link.expires_at) })}
                 </div>
               </div>
               <ConfirmForm
                 action={revokeJoinLink}
-                buttonClassName="h-8 rounded-md border border-destructive/40 px-2 text-xs font-medium text-destructive transition-colors duration-150 ease-out hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+                buttonClassName={actionButtonSmDanger}
                 buttonLabel={link.revoked_at ? t('revoked') : t('revoke')}
                 disabled={Boolean(link.revoked_at)}
                 title={t('revokeJoinTitle')}

@@ -5,6 +5,7 @@ import { LogOutIcon } from "lucide-react";
 
 import { LanguageSwitcher } from "../components/language-switcher";
 import { ThemeSwitcher } from "../components/theme-switcher";
+import { cardPanelClasses } from "../lib/utils";
 import { AdminSectionGuard } from "./admin-section-states";
 import {
   CreateAgentPairingForm,
@@ -108,7 +109,7 @@ function PreferencePanel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-md border border-border bg-card px-4 py-3 transition-colors duration-150 ease-out hover:border-border/80">
+    <section className={cardPanelClasses}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-card-foreground">
@@ -257,7 +258,7 @@ function LogoutPanel({ auth }: { auth: AuthMetadata }) {
   const signOutHref = logoutHref(auth);
 
   return (
-    <section className="rounded-md border border-border bg-card px-4 py-3 transition-colors duration-150 ease-out hover:border-border/80">
+    <section className={cardPanelClasses}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-foreground">
