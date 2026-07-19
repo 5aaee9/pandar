@@ -24,8 +24,14 @@ describe("DispatchForm", () => {
       </NextIntlClientProvider>,
     );
 
+    expect(screen.getByRole("region", { name: "Print options" })).toBeVisible();
     const timelapse = within(screenGroup(container, "Timelapse"));
-    expect(timelapse.getByRole("radio", { name: "On" })).toBeChecked();
+    const timelapseOn = timelapse.getByRole("radio", { name: "On" });
+    expect(timelapseOn).toBeChecked();
+    expect(timelapseOn.nextElementSibling?.querySelector("svg")).toBeInTheDocument();
+    expect(
+      timelapse.getByRole("radio", { name: "Off" }).nextElementSibling?.querySelector("svg"),
+    ).not.toBeInTheDocument();
 
     const bedLeveling = within(screenGroup(container, "Auto bed leveling"));
     expect(bedLeveling.getByRole("radio", { name: "Auto" })).toBeChecked();

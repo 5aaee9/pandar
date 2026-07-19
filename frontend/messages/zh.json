@@ -464,6 +464,7 @@
     "modeAuto": "自动",
     "modeOn": "开启",
     "modeOff": "关闭",
+    "printOptions": "打印选项",
     "autoBedLeveling": "自动热床调平",
     "autoBedLevelingHelp": "打印前检查热床平整度。自动模式会在热床已平整时跳过调平。",
     "flowCali": "流量动态校准",

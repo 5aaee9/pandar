@@ -3,6 +3,7 @@
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { useTranslations } from 'next-intl'
 
+import { Button } from '@/components/ui/button'
 import type { ArtifactMetadata, Job, Printer } from './dashboard-types'
 import { apiIdSegment } from './api-path'
 import { ConfirmDialog } from './confirm-dialog'
@@ -312,20 +313,22 @@ export function DispatchForm({
         </div>
       ) : null}
       <div className="lg:col-span-2">
-        <button
-          className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary/80 disabled:bg-muted disabled:text-muted-foreground"
+        <Button
+          aria-busy={submitting}
+          className="w-full sm:w-auto"
           disabled={
             artifact.state !== 'ready' ||
             plateId === null ||
             submitting ||
             !materialMappingValid
           }
+          size="lg"
           type="submit"
         >
           {submitting
             ? sourceJob ? t('reprinting') : t('dispatching')
             : sourceJob ? t('reprint') : t('dispatch')}
-        </button>
+        </Button>
       </div>
     </form>
     <ConfirmDialog

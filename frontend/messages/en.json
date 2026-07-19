@@ -467,6 +467,7 @@
     "modeAuto": "Auto",
     "modeOn": "On",
     "modeOff": "Off",
+    "printOptions": "Print options",
     "autoBedLeveling": "Auto bed leveling",
     "autoBedLevelingHelp": "Check the bed before printing. Auto skips leveling when the surface is already flat.",
     "flowCali": "Flow dynamics calibration",

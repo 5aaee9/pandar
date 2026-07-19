@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 
 import { LanguageSwitcher } from "../components/language-switcher";
 import { ThemeSwitcher } from "../components/theme-switcher";
+import { AdminSectionGuard } from "./admin-section-states";
 import {
   CreateAgentPairingForm,
   TenantAuditPanel,
@@ -26,7 +27,7 @@ import {
   TenantSettings,
 } from "./dashboard-runtime-sections";
 import { logoutHref } from "./dashboard-shell";
-import { EmptyState, SectionHeader } from "./dashboard-ui";
+import { SectionHeader } from "./dashboard-ui";
 
 export function UsersView({
   auth,
@@ -99,36 +100,42 @@ export function SettingsView({
 function LanguageSettingsPanel() {
   const t = useTranslations("dashboardShell");
   return (
-    <section className="rounded-md border border-border bg-card px-4 py-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold text-card-foreground">
-            {t("languageTitle")}
-          </h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            {t("languageDescription")}
-          </p>
-        </div>
-        <LanguageSwitcher />
-      </div>
-    </section>
+    <PreferencePanel title={t("languageTitle")} description={t("languageDescription")}>
+      <LanguageSwitcher />
+    </PreferencePanel>
   );
 }
 
 function ThemeSettingsPanel() {
   const t = useTranslations("dashboardShell");
   return (
+    <PreferencePanel title={t("themeTitle")} description={t("themeDescription")}>
+      <ThemeSwitcher />
+    </PreferencePanel>
+  );
+}
+
+function PreferencePanel({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
     <section className="rounded-md border border-border bg-card px-4 py-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-base font-semibold text-card-foreground">
-            {t("themeTitle")}
+            {title}
           </h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {t("themeDescription")}
+            {description}
           </p>
         </div>
-        <ThemeSwitcher />
+        {children}
       </div>
     </section>
   );
@@ -150,69 +157,32 @@ function UsersAdminSection({
   loadError: boolean;
 }) {
   const t = useTranslations("admin");
-  if (!selectedTenant) {
-    return (
-      <section className="overflow-hidden rounded-md border border-border bg-card">
-        <SectionHeader
-          title={t("users")}
-          subtitle={t("subtitleNone")}
-          meta={t("metaAdmin")}
-        />
-        <EmptyState title={t("noTenantTitle")} message={t("noTenantMessage")} />
-      </section>
-    );
-  }
-  if (loadError) {
-    return (
-      <section className="overflow-hidden rounded-md border border-border bg-card">
-        <SectionHeader
-          title={t("users")}
-          subtitle={t("subtitleTenant", {
-            name: selectedTenant.display_name,
-          })}
-          meta={t("metaAdmin")}
-        />
-        <EmptyState
-          title={t("loadErrorTitle")}
-          message={t("loadErrorMessage")}
-        />
-      </section>
-    );
-  }
-  if (unavailable) {
-    return (
-      <section className="overflow-hidden rounded-md border border-border bg-card">
-        <SectionHeader
-          title={t("users")}
-          subtitle={t("subtitleUnavailable", {
-            name: selectedTenant.display_name,
-          })}
-          meta={t("metaRestricted")}
-        />
-        <EmptyState
-          title={t("unavailableTitle")}
-          message={t("unavailableMessage")}
-        />
-      </section>
-    );
-  }
   return (
-    <section className="overflow-hidden rounded-md border border-border bg-card">
-      <SectionHeader
-        title={t("users")}
-        subtitle={t("subtitleTenant", { name: selectedTenant.display_name })}
-        meta={t("usersMeta", { count: users.length })}
-      />
-      <div className="border-b border-border px-4 py-4">
-        <CreateJoinLinkForm tenantId={selectedTenant.id} />
-      </div>
-      <TenantUsersPanel
-        selectedTenant={selectedTenant}
-        users={users}
-        userIdentities={userIdentities}
-        joinLinks={joinLinks}
-      />
-    </section>
+    <AdminSectionGuard
+      title={t("users")}
+      selectedTenant={selectedTenant}
+      loadError={loadError}
+      unavailable={unavailable}
+    >
+      {(tenant) => (
+        <section className="overflow-hidden rounded-md border border-border bg-card">
+          <SectionHeader
+            title={t("users")}
+            subtitle={t("subtitleTenant", { name: tenant.display_name })}
+            meta={t("usersMeta", { count: users.length })}
+          />
+          <div className="border-b border-border px-4 py-4">
+            <CreateJoinLinkForm tenantId={tenant.id} />
+          </div>
+          <TenantUsersPanel
+            selectedTenant={tenant}
+            users={users}
+            userIdentities={userIdentities}
+            joinLinks={joinLinks}
+          />
+        </section>
+      )}
+    </AdminSectionGuard>
   );
 }
 
@@ -234,87 +204,50 @@ function SettingsAdminSection({
   nowMs: number;
 }) {
   const t = useTranslations("admin");
-  if (!selectedTenant) {
-    return (
-      <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground">
-        <SectionHeader
-          title={t("title")}
-          subtitle={t("subtitleNone")}
-          meta={t("metaSecrets")}
-        />
-        <EmptyState title={t("noTenantTitle")} message={t("noTenantMessage")} />
-      </section>
-    );
-  }
-  if (loadError) {
-    return (
-      <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground">
-        <SectionHeader
-          title={t("title")}
-          subtitle={t("subtitleTenant", {
-            name: selectedTenant.display_name,
-          })}
-          meta={t("metaSecrets")}
-        />
-        <EmptyState
-          title={t("loadErrorTitle")}
-          message={t("loadErrorMessage")}
-        />
-      </section>
-    );
-  }
-  if (unavailable) {
-    return (
-      <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground">
-        <SectionHeader
-          title={t("title")}
-          subtitle={t("subtitleUnavailable", {
-            name: selectedTenant.display_name,
-          })}
-          meta={t("metaRestricted")}
-        />
-        <EmptyState
-          title={t("unavailableTitle")}
-          message={t("unavailableMessage")}
-        />
-      </section>
-    );
-  }
   return (
-    <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground">
-      <SectionHeader
-        title={t("title")}
-        subtitle={t("subtitleTenant", { name: selectedTenant.display_name })}
-        meta={t("metaSecrets")}
-      />
-      <div className="border-b border-border">
-        <TenantSecretsPanel
-          selectedTenant={selectedTenant}
-          tenantTokens={tenantTokens}
-          nowMs={nowMs}
-        />
-      </div>
-      <div className="grid items-start gap-0 lg:grid-cols-2">
-        <div className="border-b border-border lg:border-b-0 lg:border-r">
-          <div className="border-b border-border bg-muted/20 p-4">
-            <div className="rounded-lg border border-border bg-background/60 p-4">
-              <CreateAgentPairingForm tenantId={selectedTenant.id} />
+    <AdminSectionGuard
+      title={t("title")}
+      selectedTenant={selectedTenant}
+      loadError={loadError}
+      unavailable={unavailable}
+    >
+      {(tenant) => (
+        <section className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground">
+          <SectionHeader
+            title={t("title")}
+            subtitle={t("subtitleTenant", { name: tenant.display_name })}
+            meta={t("metaSecrets")}
+          />
+          <div className="border-b border-border">
+            <TenantSecretsPanel
+              selectedTenant={tenant}
+              tenantTokens={tenantTokens}
+              nowMs={nowMs}
+            />
+          </div>
+          <div className="grid items-start gap-0 lg:grid-cols-2">
+            <div className="border-b border-border lg:border-b-0 lg:border-r">
+              <div className="border-b border-border bg-muted/20 p-4">
+                <div className="rounded-lg border border-border bg-background/60 p-4">
+                  <CreateAgentPairingForm tenantId={tenant.id} />
+                </div>
+              </div>
+              <TenantSecretsPanel
+                selectedTenant={tenant}
+                agents={agents}
+                nowMs={nowMs}
+              />
+            </div>
+            <div className="min-w-0">
+              <TenantAuditPanel
+                selectedTenant={tenant}
+                auditEvents={auditEvents}
+              />
             </div>
           </div>
-          <TenantSecretsPanel
-            selectedTenant={selectedTenant}
-            agents={agents}
-            nowMs={nowMs}
-          />
-        </div>
-        <div className="min-w-0">
-          <TenantAuditPanel
-            selectedTenant={selectedTenant}
-            auditEvents={auditEvents}
-          />
-        </div>
-      </div>
-    </section>
+        </section>
+      )}
+    </AdminSectionGuard>
   );
 }
 
