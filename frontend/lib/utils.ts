@@ -42,3 +42,9 @@ export const badgeClasses =
 
 /** Scrollable table container. */
 export const tableScrollClasses = "overflow-x-auto";
+
+/** Muted background for section headers and form panels. */
+export const mutedBgClasses = "bg-muted/20";
+
+/** Muted background for subsection headers. */
+export const mutedBgSubtleClasses = "bg-muted/30";

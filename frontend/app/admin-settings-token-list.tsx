@@ -2,6 +2,7 @@ import { KeyRoundIcon, ShieldCheckIcon, TriangleAlertIcon, XCircleIcon } from "l
 import { useLocale, useTranslations } from "next-intl";
 
 import { FormattedDate } from "../components/formatted-date";
+import { mutedBgClasses } from "../lib/utils";
 import { useAdminDate } from "./admin-model";
 import {
   CreateTenantTokenDialog,
@@ -153,7 +154,7 @@ export function TenantTokensTable({
 
   return (
     <div>
-      <div className="flex flex-col gap-4 border-b border-border bg-muted/20 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className={`flex flex-col gap-4 border-b border-border ${mutedBgClasses} px-4 py-4 sm:flex-row sm:items-center sm:justify-between`}>
         <div className="flex items-center gap-2">
           <span className="flex size-8 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground">
             <KeyRoundIcon className="size-4" />

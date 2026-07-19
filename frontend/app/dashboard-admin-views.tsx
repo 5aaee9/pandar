@@ -5,7 +5,7 @@ import { LogOutIcon } from "lucide-react";
 
 import { LanguageSwitcher } from "../components/language-switcher";
 import { ThemeSwitcher } from "../components/theme-switcher";
-import { cardPanelClasses } from "../lib/utils";
+import { cardPanelClasses, mutedBgClasses } from "../lib/utils";
 import { AdminSectionGuard } from "./admin-section-states";
 import {
   CreateAgentPairingForm,
@@ -173,7 +173,7 @@ function UsersAdminSection({
             subtitle={t("subtitleTenant", { name: tenant.display_name })}
             meta={t("usersMeta", { count: users.length })}
           />
-          <div className="border-b border-border bg-muted/20 px-4 py-4">
+          <div className={`border-b border-border ${mutedBgClasses} px-4 py-4`}>
             <CreateJoinLinkForm tenantId={tenant.id} />
           </div>
           <TenantUsersPanel
@@ -229,7 +229,7 @@ function SettingsAdminSection({
           </div>
           <div className="grid items-start gap-0 lg:grid-cols-2">
             <div className="border-b border-border lg:border-b-0 lg:border-r">
-              <div className="border-b border-border bg-muted/20 p-4">
+              <div className={`border-b border-border ${mutedBgClasses} p-4`}>
                 <div className="rounded-md border border-border bg-background p-4">
                   <CreateAgentPairingForm tenantId={tenant.id} />
                 </div>
