@@ -60,7 +60,13 @@ export const getMembershipForRequest = cache(async (tenantId: string) => {
 });
 
 export const getAuthForRequest = cache(async () => {
-  return await authSource();
+  const auth = await authSource();
+  const authProvider = authProviderConfig();
+  return {
+    ...auth,
+    signInUrl: authProvider.signInUrl,
+    signOutUrl: authProvider.signOutUrl,
+  };
 });
 
 export function resolveEffectiveTenants(
@@ -364,4 +370,18 @@ export async function renderDashboardView(
 
 export function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+export async function loadDevicesRoute(tenantId: string) {
+  const [printersResult, agentsResult, jobsResult] = await Promise.all([
+    fetchJson<PrinterList>(`/api/v1/tenants/${tenantId}/printers`, "Printers"),
+    fetchJson<AgentList>(`/api/v1/tenants/${tenantId}/agents`, "Agents"),
+    fetchJson<JobList>(`/api/v1/tenants/${tenantId}/jobs`, "Jobs"),
+  ]);
+  return {
+    printers: printersResult.data?.printers ?? [],
+    agents: agentsResult.data?.agents ?? [],
+    jobs: jobsResult.data?.jobs ?? [],
+    error: printersResult.error ?? agentsResult.error ?? jobsResult.error,
+  };
 }
