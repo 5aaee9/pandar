@@ -42,9 +42,13 @@ measure_route() {
   local route=$1
   local build_dir=$2
   
-  local manifest_file="$build_dir/server/app/$route/page/build-manifest.json"
+  # Try route group path first, fallback to direct path
+  local manifest_file="$build_dir/server/app/(dashboard)/$route/page/build-manifest.json"
   if [[ ! -f "$manifest_file" ]]; then
-    log_error "Build manifest not found: $manifest_file"
+    manifest_file="$build_dir/server/app/$route/page/build-manifest.json"
+  fi
+  if [[ ! -f "$manifest_file" ]]; then
+    log_error "Build manifest not found for route: $route"
     return 1
   fi
   
@@ -60,6 +64,8 @@ measure_route() {
       local size
       size=$(gzip -9 -c "$file_path" | wc -c)
       js_size=$((js_size + size))
+    else
+      log_warn "Chunk file not found: $file_path"
     fi
   done
   
