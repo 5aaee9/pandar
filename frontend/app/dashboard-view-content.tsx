@@ -7,7 +7,19 @@ import { SettingsView, UsersView } from "./dashboard-admin-views";
 import type { AttentionItem, Health, Severity } from "./dashboard-attention";
 import { JobHistory, PrinterInventory } from "./dashboard-inventory";
 import { FleetStatusStrip } from "./dashboard-overview";
-import { DiagnosticsSection } from "./diagnostics-section";
+import dynamic from "next/dynamic";
+
+const DiagnosticsSection = dynamic(
+  () => import("./diagnostics-section").then((mod) => mod.DiagnosticsSection),
+  {
+    loading: () => (
+      <div className="rounded-md border border-border bg-card p-4">
+        <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+        <div className="mt-2 h-3 w-48 animate-pulse rounded bg-muted" />
+      </div>
+    ),
+  }
+);
 import { LinkedAgentsSection } from "./diagnostics-panel";
 import { DispatchDialog } from "./dispatch-dialog";
 import type {

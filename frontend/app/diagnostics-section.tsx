@@ -1,6 +1,5 @@
 import { useTranslations } from 'next-intl'
 
-import { FormattedDate } from '../components/formatted-date'
 import {
   diagnosePrinter,
 } from './actions'
