@@ -54,25 +54,23 @@ export function Tag({ value, tone = 'neutral' }: { value: string; tone?: keyof t
 export function HelpTip({ label, children }: { label: string; children: ReactNode }) {
   const tCommon = useTranslations('common')
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              aria-label={tCommon('moreAbout', { label })}
-              className="h-4 w-4 rounded-full p-0 text-[10px] leading-none"
-              size="icon-xs"
-              variant="outline"
-            >
-              ?
-            </Button>
-          }
-        />
-        <TooltipContent side="top" className="max-w-xs">
-          {children}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            aria-label={tCommon('moreAbout', { label })}
+            className="h-4 w-4 rounded-full p-0 text-[10px] leading-none"
+            size="icon-xs"
+            variant="outline"
+          >
+            ?
+          </Button>
+        }
+      />
+      <TooltipContent side="top" className="max-w-xs">
+        {children}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
