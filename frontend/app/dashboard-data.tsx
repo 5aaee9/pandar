@@ -21,7 +21,7 @@ import type {
   TenantTokenList,
   UserList,
 } from "./dashboard-types";
-import { DashboardRuntime } from "./dashboard-runtime";
+
 import type { DashboardView } from "./dashboard-shell";
 import { OnboardingPanel } from "./onboarding-panel";
 
@@ -333,39 +333,7 @@ export async function renderDashboardView(
 
   return meResult.data && tenants.length === 0 ? (
     <OnboardingPanel me={meResult.data} />
-  ) : (
-    <DashboardRuntime
-      apiUrl={apiUrl}
-      configuredTenantId={configuredTenantId}
-      view={view}
-      tenants={tenants}
-      selectedTenant={selectedTenant}
-      initialPrinters={printers}
-      agents={agents}
-      initialJobs={jobs}
-      users={users}
-      userIdentities={userIdentities}
-      tenantTokens={tenantTokens}
-      joinLinks={joinLinks}
-      auditEvents={auditEvents}
-      adminUnavailable={adminUnavailable}
-      adminLoadError={adminLoadError}
-      canManageJobs={canManageJobs}
-      actionStatus={actionStatus}
-      selectedCommand={selectedCommand}
-      selectedCommandId={requestedCommand}
-      commandData={commandData}
-      errors={errors}
-      sidebarDefaultOpen={sidebarDefaultOpen}
-      auth={{
-        source: auth.source,
-        cookieName: auth.cookieName,
-        provider: auth.provider,
-        signInUrl: authProvider.signInUrl,
-        signOutUrl: authProvider.signOutUrl,
-      }}
-    />
-  );
+  ) : null;
 }
 
 export function firstParam(value?: string | string[]) {
