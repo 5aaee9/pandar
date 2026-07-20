@@ -13,7 +13,6 @@ import { DashboardShellProvider } from "../dashboard-shell-provider";
 import { DashboardShellLayout } from "../dashboard-shell-layout";
 import { OnboardingPanel } from "../onboarding-panel";
 
-const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 const configuredTenantId = process.env.APP_TENANT_ID;
 
 export default async function DashboardLayout({

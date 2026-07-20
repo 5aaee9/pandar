@@ -70,6 +70,9 @@ export type DashboardViewContentProps = {
   adminUnavailable: boolean;
   adminLoadError: boolean;
   canManageJobs: boolean;
+  settingsStaticPanels?: React.ReactNode;
+  tenantSettingsStatic?: React.ReactNode;
+  usersStaticPanels?: React.ReactNode;
 };
 
 export function DashboardViewContent(props: DashboardViewContentProps) {

@@ -385,3 +385,63 @@ export async function loadDevicesRoute(tenantId: string) {
     error: printersResult.error ?? agentsResult.error ?? jobsResult.error,
   };
 }
+
+export async function loadJobsRoute(tenantId: string) {
+  const [jobsResult, printersResult, agentsResult] = await Promise.all([
+    fetchJson<JobList>(`/api/v1/tenants/${tenantId}/jobs`, "Jobs"),
+    fetchJson<PrinterList>(`/api/v1/tenants/${tenantId}/printers`, "Printers"),
+    fetchJson<AgentList>(`/api/v1/tenants/${tenantId}/agents`, "Agents"),
+  ]);
+  return {
+    jobs: jobsResult.data?.jobs ?? [],
+    printers: printersResult.data?.printers ?? [],
+    agents: agentsResult.data?.agents ?? [],
+    error: jobsResult.error ?? printersResult.error ?? agentsResult.error,
+  };
+}
+
+export async function loadAgentsRoute(tenantId: string, commandId: string | null) {
+  const [agentsResult, printersResult, commandResult] = await Promise.all([
+    fetchJson<AgentList>(`/api/v1/tenants/${tenantId}/agents`, "Agents"),
+    fetchJson<PrinterList>(`/api/v1/tenants/${tenantId}/printers`, "Printers"),
+    commandId
+      ? fetchJson<Command>(`/api/v1/tenants/${tenantId}/commands/${commandId}`, "Command")
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+  return {
+    agents: agentsResult.data?.agents ?? [],
+    printers: printersResult.data?.printers ?? [],
+    command: commandResult.data ?? null,
+    commandData: commandResult.data ? parseCommandResult(commandResult.data) : null,
+    error: agentsResult.error ?? printersResult.error ?? commandResult.error,
+  };
+}
+
+export async function loadUsersRoute(tenantId: string) {
+  const [usersResult, joinLinksResult] = await Promise.all([
+    fetchJson<UserList>(`/api/v1/tenants/${tenantId}/users`, "Users"),
+    fetchJson<JoinLinkList>(`/api/v1/tenants/${tenantId}/join-links`, "Join links"),
+  ]);
+  return {
+    users: usersResult.data?.users ?? [],
+    identities: usersResult.data?.identities ?? [],
+    joinLinks: joinLinksResult.data?.join_links ?? [],
+    adminError: usersResult.error ?? joinLinksResult.error,
+  };
+}
+
+export async function loadSettingsRoute(tenantId: string) {
+  const [tenantTokensResult, agentsResult, printersResult, auditEventsResult] = await Promise.all([
+    fetchJson<TenantTokenList>(`/api/v1/tenants/${tenantId}/tenant-tokens`, "Tenant tokens"),
+    fetchJson<AgentList>(`/api/v1/tenants/${tenantId}/agents`, "Agents"),
+    fetchJson<PrinterList>(`/api/v1/tenants/${tenantId}/printers`, "Printers"),
+    fetchJson<AuditEventList>(`/api/v1/tenants/${tenantId}/audit-events?limit=20`, "Audit events"),
+  ]);
+  return {
+    tenantTokens: tenantTokensResult.data?.tenant_tokens ?? [],
+    agents: agentsResult.data?.agents ?? [],
+    printers: printersResult.data?.printers ?? [],
+    auditEvents: auditEventsResult.data?.audit_events ?? [],
+    adminError: tenantTokensResult.error ?? auditEventsResult.error,
+  };
+}
