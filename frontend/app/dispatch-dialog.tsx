@@ -10,7 +10,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { Job, Printer, Tenant } from './dashboard-types'
-import { DispatchForm } from './dispatch-form'
+import dynamic from 'next/dynamic'
+
+const DispatchForm = dynamic(
+  () => import('./dispatch-form').then((mod) => mod.DispatchForm),
+  {
+    loading: () => (
+      <div className="rounded-md border border-border bg-card p-4">
+        <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+        <div className="mt-2 h-3 w-48 animate-pulse rounded bg-muted" />
+      </div>
+    ),
+  }
+)
 
 export function DispatchDialog({
   open,
