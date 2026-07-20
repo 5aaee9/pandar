@@ -7,7 +7,8 @@ import { SettingsView, UsersView } from "./dashboard-admin-views";
 import type { AttentionItem, Health, Severity } from "./dashboard-attention";
 import { JobHistory, PrinterInventory } from "./dashboard-inventory";
 import { FleetStatusStrip } from "./dashboard-overview";
-import { DiagnosticsSection, LinkedAgentsSection } from "./diagnostics-panel";
+import { DiagnosticsSection } from "./diagnostics-section";
+import { LinkedAgentsSection } from "./diagnostics-panel";
 import { DispatchDialog } from "./dispatch-dialog";
 import type {
   Agent,
