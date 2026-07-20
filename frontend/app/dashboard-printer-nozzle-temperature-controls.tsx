@@ -1,4 +1,4 @@
-'use client'
+
 
 import { useTranslations } from 'next-intl'
 import { ArrowLeftRightIcon, CheckCircle2Icon, ThermometerIcon } from 'lucide-react'
