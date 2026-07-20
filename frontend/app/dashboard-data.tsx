@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -15,6 +16,7 @@ import type {
   JobList,
   MeResponse,
   PrinterList,
+  Tenant,
   TenantList,
   TenantTokenList,
   UserList,
@@ -25,6 +27,92 @@ import { OnboardingPanel } from "./onboarding-panel";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 const configuredTenantId = process.env.APP_TENANT_ID;
+
+export const getTenantsForRequest = cache(async () => {
+  const auth = await authSource();
+  const useExternalOnboarding = auth.provider !== "none" && !configuredTenantId;
+
+  if (configuredTenantId || useExternalOnboarding) {
+    return { tenants: [], error: null };
+  }
+
+  const result = await fetchJson<TenantList>("/api/v1/tenants", "Tenants");
+  return { tenants: result.data?.tenants ?? [], error: result.error };
+});
+
+export const getIdentityForRequest = cache(async () => {
+  const auth = await authSource();
+  if (auth.provider === "none") {
+    return { me: null, error: null, status: null };
+  }
+
+  const result = await fetchJson<MeResponse>("/api/v1/me", "Current identity");
+  return { me: result.data, error: result.error, status: result.status };
+});
+
+export const getMembershipForRequest = cache(async (tenantId: string) => {
+  const { me, error: identityError } = await getIdentityForRequest();
+  if (identityError) {
+    return { role: null, error: identityError };
+  }
+  const membership = me?.tenants.find((t) => t.tenant_id === tenantId);
+  return { role: membership?.role ?? null, error: null };
+});
+
+export const getAuthForRequest = cache(async () => {
+  return await authSource();
+});
+
+export function resolveEffectiveTenants(
+  tenants: Tenant[],
+  identity: MeResponse | null,
+  configuredTenantId: string | undefined,
+  authProvider: string,
+): Tenant[] {
+  if (configuredTenantId) {
+    return [{
+      id: configuredTenantId,
+      slug: configuredTenantId,
+      display_name: configuredTenantId,
+      created_at: "",
+    }];
+  }
+
+  if (authProvider === "none") {
+    return tenants;
+  }
+
+  const externalTenants = identity?.tenants.map((tenant) => ({
+    id: tenant.tenant_id,
+    slug: tenant.tenant_slug,
+    display_name: tenant.display_name,
+    created_at: "",
+  })) ?? [];
+
+  if (externalTenants.length > 0) {
+    return externalTenants;
+  }
+
+  return tenants;
+}
+
+export function resolveSelectedTenant(
+  searchParams: { tenant?: string | string[] },
+  effectiveTenants: Tenant[],
+): Tenant | null {
+  const tenantParam = Array.isArray(searchParams.tenant)
+    ? searchParams.tenant[0]
+    : searchParams.tenant;
+
+  if (tenantParam) {
+    const found = effectiveTenants.find((t) => t.id === tenantParam);
+    if (found) {
+      return found;
+    }
+  }
+
+  return effectiveTenants[0] ?? null;
+}
 
 export type DashboardPageProps = {
   searchParams?: Promise<{
