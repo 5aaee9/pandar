@@ -115,6 +115,8 @@ export async function createTenantFromExternal(formData: FormData) {
     redirect(`/?status=${encodeURIComponent(await errorCode(response))}`);
   }
   const body = (await response.json()) as { tenant: Tenant };
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/(dashboard)", "layout");
   redirect(
     `/?tenant=${encodeURIComponent(body.tenant.id)}&status=tenant_created`,
   );
@@ -179,6 +181,8 @@ export async function acceptJoinLink(formData: FormData) {
     redirect(`/?status=${encodeURIComponent(await errorCode(response))}`);
   }
   const body = (await response.json()) as { tenant: Tenant };
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath("/(dashboard)", "layout");
   redirect(
     `/?tenant=${encodeURIComponent(body.tenant.id)}&status=join_link_accepted`,
   );
@@ -215,6 +219,10 @@ export async function updateTenantUserRole(formData: FormData) {
       body: JSON.stringify({ role: stringField(formData, "role") }),
     },
   );
+  if (response.ok) {
+    const { revalidatePath } = await import("next/cache");
+    revalidatePath("/(dashboard)", "layout");
+  }
   redirect(
     statusUrl(
       tenantId,
