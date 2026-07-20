@@ -4,6 +4,7 @@ import { linkPrinter } from './actions'
 import type { Agent, Tenant } from './dashboard-types'
 import { EmptyState } from './dashboard-ui'
 import { cn } from '@/lib/utils'
+import { inputClasses } from '@/lib/utils'
 
 export function LinkPrinterForm({
   selectedTenant,
@@ -66,7 +67,7 @@ export function LinkPrinterMachineForm({
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-xs font-medium text-muted-foreground">{t('agent')}</span>
         <select
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+          className={inputClasses}
           defaultValue={defaultAgent.id}
           name="agent_id"
           required
@@ -81,7 +82,7 @@ export function LinkPrinterMachineForm({
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-xs font-medium text-muted-foreground">{t('type')}</span>
         <select
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+          className={inputClasses}
           defaultValue="BambuLab"
           name="type"
           required
@@ -92,7 +93,7 @@ export function LinkPrinterMachineForm({
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-xs font-medium text-muted-foreground">{t('host')}</span>
         <input
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+          className={inputClasses}
           name="host"
           required
           type="text"
@@ -102,7 +103,7 @@ export function LinkPrinterMachineForm({
         <span className="text-xs font-medium text-muted-foreground">{t('accessCode')}</span>
         <input
           autoComplete="off"
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+          className={inputClasses}
           name="access_code"
           required
           type="password"
@@ -111,7 +112,7 @@ export function LinkPrinterMachineForm({
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-xs font-medium text-muted-foreground">{t('name')}</span>
         <input
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+          className={inputClasses}
           name="name"
           type="text"
         />

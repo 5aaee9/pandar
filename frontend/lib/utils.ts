@@ -48,3 +48,7 @@ export const mutedBgClasses = "bg-muted/20";
 
 /** Muted background for subsection headers. */
 export const mutedBgSubtleClasses = "bg-muted/30";
+
+/** Standard form input/select styling (h-9, full width, theme colors). */
+export const inputClasses =
+  "h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60";

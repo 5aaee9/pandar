@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { mutedBgSubtleClasses } from "../lib/utils";
+import { inputClasses, mutedBgSubtleClasses } from "../lib/utils";
 import type { SecretActionState } from "./action-state";
 
 function CopyButton({ label, value }: { label: string; value: string }) {
@@ -111,9 +111,6 @@ export function FormField({
   );
 }
 
-const inputClassName =
-  "h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground shadow-xs outline-none transition-[color,box-shadow] placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60";
-
 export function Input({
   name,
   label,
@@ -139,7 +136,7 @@ export function Input({
     <FormField label={label}>
       <input
         aria-describedby={describedBy}
-        className={inputClassName}
+        className={inputClasses}
         defaultValue={defaultValue}
         disabled={disabled}
         min={min}
@@ -168,7 +165,7 @@ export function Select({
   return (
     <FormField label={label}>
       <select
-        className={inputClassName}
+        className={inputClasses}
         defaultValue={defaultValue}
         disabled={disabled}
         name={name}

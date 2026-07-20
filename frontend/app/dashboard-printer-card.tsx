@@ -26,6 +26,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { inputClasses } from '@/lib/utils'
 import { deletePrinter, refreshPrinterMaterials, updatePrinter } from './actions'
 import type { Printer } from './dashboard-types'
 import { PrinterAxisControls } from './dashboard-printer-axis-controls'
@@ -206,7 +207,7 @@ function PrinterActions({ printer }: { printer: Printer }) {
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium text-muted-foreground">{t('editPrinterName')}</span>
               <input
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                className={inputClasses}
                 defaultValue={printer.name}
                 name="name"
                 required
@@ -216,7 +217,7 @@ function PrinterActions({ printer }: { printer: Printer }) {
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-xs font-medium text-muted-foreground">{t('editPrinterHost')}</span>
               <input
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                className={inputClasses}
                 name="host"
                 type="text"
               />
@@ -225,7 +226,7 @@ function PrinterActions({ printer }: { printer: Printer }) {
               <span className="text-xs font-medium text-muted-foreground">{t('editPrinterAccessCode')}</span>
               <input
                 autoComplete="off"
-                className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                className={inputClasses}
                 name="access_code"
                 type="password"
               />

@@ -4,6 +4,7 @@ import { useId, useRef, useState, type FormEvent } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { Button } from '@/components/ui/button'
+import { inputClasses } from '@/lib/utils'
 import type { ArtifactMetadata, Job, Printer } from './dashboard-types'
 import { apiIdSegment } from './api-path'
 import { ConfirmDialog } from './confirm-dialog'
@@ -221,7 +222,7 @@ export function DispatchForm({
           <span className="text-xs font-medium text-muted-foreground">{t('printer')}</span>
           <select
             name="printer_id"
-            className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+            className={inputClasses}
             onChange={(event) => setPreferredPrinterId(event.currentTarget.value)}
             required
             value={selectedPrinterId}
@@ -252,7 +253,7 @@ export function DispatchForm({
           {parsedPlates.length > 0 ? (
             <select
               aria-label={t('plate')}
-              className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+              className={inputClasses}
               name="plate_id"
               onChange={(event) => setPlateId(Number(event.currentTarget.value))}
               required
@@ -267,7 +268,7 @@ export function DispatchForm({
           ) : (
             <input
               aria-label={t('plate')}
-              className="h-9 rounded-md border border-input px-2 text-sm text-foreground"
+              className={inputClasses}
               min="1"
               name="plate_id"
               onChange={(event) => setPlateId(Number(event.currentTarget.value))}
