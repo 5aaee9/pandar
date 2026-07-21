@@ -162,7 +162,7 @@ async function fetchJson<T>(
 
 export async function renderDashboardView(
   view: DashboardView,
-  { searchParams, sidebarDefaultOpen }: DashboardPageProps,
+  { searchParams }: DashboardPageProps,
 ) {
   const auth = await authSource();
   const authProvider = authProviderConfig();
@@ -200,7 +200,6 @@ export async function renderDashboardView(
   const params = await searchParams;
   const requestedTenant = firstParam(params?.tenant);
   const requestedCommand = firstParam(params?.command);
-  const actionStatus = firstParam(params?.status);
   const selectedTenant = configuredTenantId
     ? { id: configuredTenantId, slug: configuredTenantId, display_name: configuredTenantId, created_at: "" }
     : (tenants.find((tenant) => tenant.id === requestedTenant) ?? tenants[0] ?? null);
@@ -211,13 +210,13 @@ export async function renderDashboardView(
   const loadJoinLinks = view === "users";
   const loadSettingsAdmin = view === "settings";
   const [
-    printersResult,
-    agentsResult,
-    jobsResult,
-    usersResult,
-    tenantTokensResult,
-    joinLinksResult,
-    auditEventsResult,
+    _printersResult,
+    _agentsResult,
+    _jobsResult,
+    _usersResult,
+    _tenantTokensResult,
+    _joinLinksResult,
+    _auditEventsResult,
   ] = await Promise.all([
     selectedTenantSegment && loadFleet ? fetchJson<PrinterList>(`/api/v1/tenants/${selectedTenantSegment}/printers`, "Printers") : null,
     selectedTenantSegment && loadFleet ? fetchJson<AgentList>(`/api/v1/tenants/${selectedTenantSegment}/agents`, "Agents") : null,
@@ -227,32 +226,9 @@ export async function renderDashboardView(
     selectedTenantSegment && loadJoinLinks ? fetchJson<JoinLinkList>(`/api/v1/tenants/${selectedTenantSegment}/join-links`, "Join links") : null,
     selectedTenantSegment && loadSettingsAdmin ? fetchJson<AuditEventList>(`/api/v1/tenants/${selectedTenantSegment}/audit-events?limit=20`, "Audit events") : null,
   ]);
-  const commandResult = selectedTenantSegment && requestedCommand && view === "agents"
-    ? await fetchJson<Command>(`/api/v1/tenants/${selectedTenantSegment}/commands/${apiIdSegment(requestedCommand, "command_id")}`, "Command")
-    : null;
-  const printers = printersResult?.data?.printers ?? [];
-  const agents = agentsResult?.data?.agents ?? [];
-  const jobs = jobsResult?.data?.jobs ?? [];
-  const users = usersResult?.data?.users ?? [];
-  const userIdentities = usersResult?.data?.identities ?? [];
-  const tenantTokens = tenantTokensResult?.data?.tenant_tokens ?? [];
-  const joinLinks = joinLinksResult?.data?.join_links ?? [];
-  const auditEvents = auditEventsResult?.data?.audit_events ?? [];
-  const selectedMembership = meResult.data?.tenants.find((tenant) => tenant.tenant_id === selectedTenant?.id);
-  const lacksAdminRole = auth.provider !== "none" && selectedMembership?.role !== "tenant_admin";
-  const adminUnavailable = lacksAdminRole || Boolean(usersResult?.error || tenantTokensResult?.error || joinLinksResult?.error || auditEventsResult?.error);
-  const adminLoadError = !lacksAdminRole && Boolean(usersResult?.error || tenantTokensResult?.error || joinLinksResult?.error || auditEventsResult?.error);
-  const canManageJobs = selectedMembership?.role !== "viewer";
-  const selectedCommand = commandResult?.data ?? null;
-  const commandData = parseCommandResult(selectedCommand);
-  const errors = [
-    tenantsResult.error,
-    meResult.error && tenants.length === 0 ? meResult.error : null,
-    printersResult?.error,
-    agentsResult?.error,
-    jobsResult?.error,
-    commandResult?.error,
-  ].filter((error): error is string => Boolean(error));
+  await (selectedTenantSegment && requestedCommand && view === "agents"
+    ? fetchJson<Command>(`/api/v1/tenants/${selectedTenantSegment}/commands/${apiIdSegment(requestedCommand, "command_id")}`, "Command")
+    : Promise.resolve(null));
 
   return meResult.data && tenants.length === 0 ? <OnboardingPanel me={meResult.data} /> : null;
 }

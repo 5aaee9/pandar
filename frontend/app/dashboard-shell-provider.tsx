@@ -10,7 +10,6 @@ import { usePathname, useSearchParams } from "next/navigation";
 
 import type { Tenant } from "./dashboard-types";
 import type { DashboardView } from "./dashboard-shell";
-import { useDashboardShellStore } from "./dashboard-shell-store";
 
 export type DashboardShellContextValue = {
   shellView: DashboardView;

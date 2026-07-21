@@ -1,10 +1,11 @@
 import { NextIntlClientProvider } from 'next-intl'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import en from '../messages/en.json'
 import { JobHistory } from './dashboard-job-history'
+import { useDashboardFilterStore } from './dashboard-filter-store'
 import type { Job, Tenant } from './dashboard-types'
 
 const tenant: Tenant = {
@@ -94,6 +95,10 @@ function renderHistory({
 }
 
 describe('JobHistory actions', () => {
+  beforeEach(() => {
+    useDashboardFilterStore.getState().reset()
+  })
+
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
@@ -328,6 +333,10 @@ describe('JobHistory actions', () => {
 })
 
 describe('JobHistory rows', () => {
+  beforeEach(() => {
+    useDashboardFilterStore.getState().reset()
+  })
+
   it('replaces empty print metrics with the recovery state', () => {
     renderHistory({
       jobs: [

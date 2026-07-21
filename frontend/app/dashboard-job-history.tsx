@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useDashboardFilterStore } from './dashboard-filter-store'
 import { useTranslations } from 'next-intl'
 
 import { Button } from '@/components/ui/button'
@@ -86,8 +87,11 @@ export function JobHistory({
   onDeleteRedirect?: (url: string) => void
 }) {
   const t = useTranslations('inventory')
-  const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('all')
+  const query = useDashboardFilterStore((state) => state.query)
+  const status = useDashboardFilterStore((state) => state.status)
+  const setQuery = useDashboardFilterStore((state) => state.setQuery)
+  const setStatus = useDashboardFilterStore((state) => state.setStatus)
+  const reset = useDashboardFilterStore((state) => state.reset)
   const [clearOpen, setClearOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [clearError, setClearError] = useState<'generic' | 'permission' | null>(null)
@@ -239,10 +243,7 @@ export function JobHistory({
               />
               <div className="flex justify-center pb-4">
                 <Button
-                  onClick={() => {
-                    setQuery('')
-                    setStatus('all')
-                  }}
+                  onClick={reset}
                   type="button"
                   variant="outline"
                 >
