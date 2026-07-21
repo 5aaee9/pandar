@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import type { Job, Printer, Tenant } from "./dashboard-types";
 import type { DashboardView } from "./dashboard-shell";
-import { useDashboardShell } from "./dashboard-shell-provider";
+import { useDashboardShellStore } from "./dashboard-shell-store";
 
 export function DashboardRouteConsumer({
   view,
@@ -24,7 +24,10 @@ export function DashboardRouteConsumer({
     tenant: Tenant | null;
   }) => ReactNode;
 }) {
-  const { livePrinters, liveJobs, liveView, liveTenantId } = useDashboardShell();
+  const livePrinters = useDashboardShellStore((state) => state.livePrinters);
+  const liveJobs = useDashboardShellStore((state) => state.liveJobs);
+  const liveView = useDashboardShellStore((state) => state.liveView);
+  const liveTenantId = useDashboardShellStore((state) => state.liveTenantId);
 
   const isLiveDataValid =
     liveView === view && liveTenantId === selectedTenant?.id;

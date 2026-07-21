@@ -1,7 +1,7 @@
 "use client";
 
 import type { Printer, Tenant } from "./dashboard-types";
-import { useDashboardShell } from "./dashboard-shell-provider";
+import { useDashboardShellStore } from "./dashboard-shell-store";
 
 export function TenantSettingsLivePrinters({
   initialPrinters,
@@ -10,7 +10,8 @@ export function TenantSettingsLivePrinters({
   initialPrinters: Printer[];
   selectedTenant: Tenant | null;
 }) {
-  const { livePrinters, liveTenantId } = useDashboardShell();
+  const livePrinters = useDashboardShellStore((state) => state.livePrinters);
+  const liveTenantId = useDashboardShellStore((state) => state.liveTenantId);
   const isLiveDataValid = liveTenantId === selectedTenant?.id;
   const printers = isLiveDataValid ? livePrinters : initialPrinters;
 

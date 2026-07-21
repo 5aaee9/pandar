@@ -4,7 +4,7 @@ import { useEffect, useMemo } from "react";
 
 import type { Job, Printer, Tenant } from "./dashboard-types";
 import type { DashboardView } from "./dashboard-shell";
-import { useDashboardShell } from "./dashboard-shell-provider";
+import { useDashboardShellStore } from "./dashboard-shell-store";
 
 export function DashboardRouteRegistrar({
   view,
@@ -25,7 +25,8 @@ export function DashboardRouteRegistrar({
   initialPrinters: Printer[];
   initialJobs: Job[];
 }) {
-  const { registerRouteData, unregisterRouteData } = useDashboardShell();
+  const registerRouteData = useDashboardShellStore((state) => state.registerRouteData);
+  const unregisterRouteData = useDashboardShellStore((state) => state.unregisterRouteData);
 
   const memoizedErrors = useMemo(() => errors, [errors]);
   const memoizedPrinters = useMemo(() => initialPrinters, [initialPrinters]);

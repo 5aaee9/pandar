@@ -8,6 +8,7 @@ import type { AuthMetadata, Tenant } from "./dashboard-types";
 import { DashboardShellHeader } from "./dashboard-shell-header";
 import { ActionStatusToast } from "./action-status-toast";
 import { useDashboardShell } from "./dashboard-shell-provider";
+import { useDashboardShellStore } from "./dashboard-shell-store";
 
 export function DashboardShellLayout({
   children,
@@ -20,12 +21,9 @@ export function DashboardShellLayout({
   tenants: Tenant[];
   auth: AuthMetadata;
 }) {
-  const {
-    shellView,
-    shellTenant,
-    actionToast,
-    errorBanner,
-  } = useDashboardShell();
+  const { shellView, shellTenant } = useDashboardShell();
+  const actionToast = useDashboardShellStore((state) => state.actionToast);
+  const errorBanner = useDashboardShellStore((state) => state.errorBanner);
 
   return (
     <SidebarProvider defaultOpen={sidebarDefaultOpen}>
