@@ -129,13 +129,14 @@ export function PrinterInventory({
                 const material = formatPrinterMaterials(printer, tMat, formatDate)
                 const agentName = agentNames.get(printer.agent_id)
                 return (
-                  <PrinterCard
-                    agentName={agentName ?? t('unknownAgent')}
-                    key={printer.id}
-                    materialDetail={material.detail}
-                    nowMs={nowMs}
-                    printer={printer}
-                  />
+                  <div key={printer.id} className="content-visibility-auto">
+                    <PrinterCard
+                      agentName={agentName ?? t('unknownAgent')}
+                      materialDetail={material.detail}
+                      nowMs={nowMs}
+                      printer={printer}
+                    />
+                  </div>
                 )
               })}
             </div>

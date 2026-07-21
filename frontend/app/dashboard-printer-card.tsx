@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import dynamic from 'next/dynamic'
 import {
   BoxIcon,
   BotIcon,
@@ -31,15 +32,48 @@ import { deletePrinter, refreshPrinterMaterials, updatePrinter } from './actions
 import type { Printer } from './dashboard-types'
 import { PrinterAxisControls } from './dashboard-printer-axis-controls'
 import { PrinterMaterialsPanel } from './dashboard-printer-materials'
-import {
-  PrinterControlsPanel,
-  PrinterTemperatureControls,
-} from './dashboard-printer-temperature-controls'
 import { StatusBadge } from './dashboard-ui'
 import { ConfirmDialog } from './confirm-dialog'
 import { PrinterMismatchWarning } from './printer-mismatch-dialog'
 import { PrinterPrintStatus } from './printer-print-status'
 import { PrinterLastSeen } from './printer-last-seen'
+
+const PrinterTemperatureControls = dynamic(
+  () =>
+    import('./dashboard-printer-temperature-controls').then(
+      (mod) => mod.PrinterTemperatureControls,
+    ),
+  {
+    loading: () => (
+      <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-[1fr_1fr_1fr_5rem]">
+        <div className="h-16 animate-pulse rounded-md bg-muted/50" />
+        <div className="h-16 animate-pulse rounded-md bg-muted/50" />
+        <div className="h-16 animate-pulse rounded-md bg-muted/50" />
+        <div className="h-16 animate-pulse rounded-md bg-muted/50" />
+      </div>
+    ),
+  },
+)
+
+const PrinterControlsPanel = dynamic(
+  () =>
+    import('./dashboard-printer-temperature-controls').then(
+      (mod) => mod.PrinterControlsPanel,
+    ),
+  {
+    loading: () => (
+      <div className="mt-4 space-y-2">
+        <div className="h-3 w-16 animate-pulse rounded bg-muted" />
+        <div className="grid grid-cols-2 gap-2">
+          <div className="h-8 animate-pulse rounded-md bg-muted/50" />
+          <div className="h-8 animate-pulse rounded-md bg-muted/50" />
+          <div className="h-8 animate-pulse rounded-md bg-muted/50" />
+          <div className="h-8 animate-pulse rounded-md bg-muted/50" />
+        </div>
+      </div>
+    ),
+  },
+)
 
 export function PrinterCard({
   printer,

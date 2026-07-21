@@ -257,23 +257,24 @@ export function JobHistory({
               aria-label={t('jobsAria')}
             >
               {filtered.map((job) => (
-                <JobRow
-                  key={job.id}
-                  job={job}
-                  printerName={printerNames.get(job.printer_id)}
-                  agentName={agentNames.get(job.agent_id)}
-                  canDelete={canManageJobs && isClearableJob(job)}
-                  deleteUnavailableReason={
-                    canManageJobs
-                      ? t('deleteJobUnavailable')
-                      : t('deleteJobAdminOnly')
-                  }
-                  onDelete={() => {
-                    setDeleteError(false)
-                    setDeleteTarget(job)
-                  }}
-                  onReprint={() => onOpenReprint(job)}
-                />
+                <li key={job.id} className="content-visibility-auto">
+                  <JobRow
+                    job={job}
+                    printerName={printerNames.get(job.printer_id)}
+                    agentName={agentNames.get(job.agent_id)}
+                    canDelete={canManageJobs && isClearableJob(job)}
+                    deleteUnavailableReason={
+                      canManageJobs
+                        ? t('deleteJobUnavailable')
+                        : t('deleteJobAdminOnly')
+                    }
+                    onDelete={() => {
+                      setDeleteError(false)
+                      setDeleteTarget(job)
+                    }}
+                    onReprint={() => onOpenReprint(job)}
+                  />
+                </li>
               ))}
             </ul>
           )}

@@ -16,6 +16,11 @@
   box-sizing: border-box;
 }
 
+.content-visibility-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+}
+
 html {
   background: var(--background);
 }
