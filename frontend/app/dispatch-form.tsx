@@ -22,6 +22,7 @@ import {
   reprintRequestBody,
 } from './dispatch-form-submission'
 import { DispatchPrintOptions } from './dispatch-print-options'
+import { DispatchEmptyState } from './dispatch-form-empty-state'
 import { HelpTip } from './dashboard-ui'
 
 type DispatchTenant = {
@@ -396,13 +397,4 @@ function sourceMetadataPreview(sourceJob?: Job | null): MetadataPreviewState {
   return sourceJob.artifact.metadata
     ? { state: 'ready', metadata: sourceJob.artifact.metadata }
     : { state: 'unavailable', metadata: null }
-}
-
-function DispatchEmptyState({ title, message }: { title: string; message: string }) {
-  return (
-    <div className="px-4 py-12 text-center">
-      <div className="text-sm font-semibold text-foreground">{title}</div>
-      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">{message}</p>
-    </div>
-  )
 }
