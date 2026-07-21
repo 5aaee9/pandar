@@ -6,14 +6,11 @@ import {
   ChevronDownIcon,
   ClockIcon,
   LayersIcon,
-  RotateCcwIcon,
   PrinterIcon,
-  Trash2Icon,
 } from 'lucide-react'
 import { useFormatter, useTranslations } from 'next-intl'
 
 import { FormattedDate } from '../components/formatted-date'
-import { Button } from '@/components/ui/button'
 import { formatBytes } from './dashboard-format'
 import {
   formatArtifactMetadata,
@@ -23,13 +20,7 @@ import {
 import type { Job } from './dashboard-types'
 import { StatusBadge } from './dashboard-ui'
 import { formatLayers, formatRemaining } from './job-format'
-
-const REPRINTABLE_PRINT_STATUSES = new Set([
-  'stalled',
-  'completed',
-  'failed',
-  'cancelled',
-])
+import { JobRowActions } from './dashboard-job-row-actions'
 
 export function JobRow({
   job,
@@ -57,7 +48,6 @@ export function JobRow({
   const titleId = useId()
   const num = (n: number) => format.number(n)
   const updated = job.print.updated_at ?? job.updated_at
-  const deleteHelpId = useId()
   const currentLayer = job.print.current_layer ?? job.print.last_layer ?? null
   const progressValue =
     job.print.progress_percent ?? job.print.last_progress_percent ?? null
@@ -65,9 +55,6 @@ export function JobRow({
     progressValue === null ? null : Math.min(100, Math.max(0, progressValue))
   const hasLayers = currentLayer !== null
   const hasRemaining = job.print.remaining_time_minutes !== null
-  const canReprint = REPRINTABLE_PRINT_STATUSES.has(
-    job.print.status.toLowerCase(),
-  )
 
   return (
     <li className="px-4 py-4 transition-colors hover:bg-muted/30">
@@ -90,41 +77,13 @@ export function JobRow({
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <StatusPill label={t('dispatch')} value={job.status} />
             <StatusPill label={t('print')} value={job.print.status} />
-            {canReprint ? (
-              <Button
-                aria-haspopup="dialog"
-                aria-label={t('reprintJobAriaLabel', {
-                  filename: job.artifact.filename,
-                })}
-                onClick={onReprint}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                <RotateCcwIcon aria-hidden="true" />
-                {t('reprintJob')}
-              </Button>
-            ) : null}
-            <Button
-              aria-describedby={canDelete ? undefined : deleteHelpId}
-              aria-haspopup="dialog"
-              aria-label={t('deleteJobAriaLabel', {
-                filename: job.artifact.filename,
-              })}
-              disabled={!canDelete}
-              onClick={onDelete}
-              size="sm"
-              type="button"
-              variant="destructive"
-            >
-              <Trash2Icon aria-hidden="true" />
-              {t('deleteJob')}
-            </Button>
-            {!canDelete ? (
-              <span className="sr-only" id={deleteHelpId}>
-                {deleteUnavailableReason}
-              </span>
-            ) : null}
+            <JobRowActions
+              job={job}
+              canDelete={canDelete}
+              deleteUnavailableReason={deleteUnavailableReason}
+              onDelete={onDelete}
+              onReprint={onReprint}
+            />
           </div>
         </div>
 
