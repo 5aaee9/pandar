@@ -1,4 +1,5 @@
 import { NextIntlClientProvider } from 'next-intl'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +8,15 @@ import en from '../messages/en.json'
 import { JobHistory } from './dashboard-job-history'
 import { useDashboardFilterStore } from './dashboard-filter-store'
 import type { Job, Tenant } from './dashboard-types'
+
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  })
+}
 
 const tenant: Tenant = {
   id: 'tenant-1',
@@ -78,18 +88,20 @@ function renderHistory({
   return {
     onClearRedirect,
     ...render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <JobHistory
-          agents={[]}
-          jobs={jobs}
-          nowMs={nowMs}
-          onClearRedirect={onClearRedirect}
-          onOpenDispatch={vi.fn()}
-          onOpenReprint={vi.fn()}
-          printers={[]}
-          selectedTenant={selectedTenant}
-        />
-      </NextIntlClientProvider>,
+      <QueryClientProvider client={createTestQueryClient()}>
+        <NextIntlClientProvider locale="en" messages={en}>
+          <JobHistory
+            agents={[]}
+            jobs={jobs}
+            nowMs={nowMs}
+            onClearRedirect={onClearRedirect}
+            onOpenDispatch={vi.fn()}
+            onOpenReprint={vi.fn()}
+            printers={[]}
+            selectedTenant={selectedTenant}
+          />
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
     ),
   }
 }
@@ -140,22 +152,24 @@ describe('JobHistory actions', () => {
     expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeDisabled()
 
     rerender(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <JobHistory
-          agents={[]}
-          jobs={[
-            job({
-              status: 'queued',
-              command: { id: 'command-1', kind: 'start_print', status: 'queued' },
-            }),
-          ]}
-          nowMs={0}
-          onOpenDispatch={vi.fn()}
-          onOpenReprint={vi.fn()}
-          printers={[]}
-          selectedTenant={tenant}
-        />
-      </NextIntlClientProvider>,
+      <QueryClientProvider client={createTestQueryClient()}>
+        <NextIntlClientProvider locale="en" messages={en}>
+          <JobHistory
+            agents={[]}
+            jobs={[
+              job({
+                status: 'queued',
+                command: { id: 'command-1', kind: 'start_print', status: 'queued' },
+              }),
+            ]}
+            nowMs={0}
+            onOpenDispatch={vi.fn()}
+            onOpenReprint={vi.fn()}
+            printers={[]}
+            selectedTenant={tenant}
+          />
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
     )
 
     expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeDisabled()
@@ -248,22 +262,24 @@ describe('JobHistory actions', () => {
     expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeDisabled()
 
     rerender(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <JobHistory
-          agents={[]}
-          jobs={[
-            job({
-              ...pending,
-              print: { ...pending.print, status: 'stalled' },
-            }),
-          ]}
-          nowMs={Date.parse('2026-07-15T00:00:00Z')}
-          onOpenDispatch={vi.fn()}
-          onOpenReprint={vi.fn()}
-          printers={[]}
-          selectedTenant={tenant}
-        />
-      </NextIntlClientProvider>,
+      <QueryClientProvider client={createTestQueryClient()}>
+        <NextIntlClientProvider locale="en" messages={en}>
+          <JobHistory
+            agents={[]}
+            jobs={[
+              job({
+                ...pending,
+                print: { ...pending.print, status: 'stalled' },
+              }),
+            ]}
+            nowMs={Date.parse('2026-07-15T00:00:00Z')}
+            onOpenDispatch={vi.fn()}
+            onOpenReprint={vi.fn()}
+            printers={[]}
+            selectedTenant={tenant}
+          />
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
     )
 
     expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeEnabled()
@@ -310,22 +326,24 @@ describe('JobHistory actions', () => {
     expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeEnabled()
 
     rerender(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <JobHistory
-          agents={[]}
-          jobs={[
-            job({
-              ...failedBeforePrint,
-              print: { ...failedBeforePrint.print, progress_percent: 1 },
-            }),
-          ]}
-          nowMs={0}
-          onOpenDispatch={vi.fn()}
-          onOpenReprint={vi.fn()}
-          printers={[]}
-          selectedTenant={tenant}
-        />
-      </NextIntlClientProvider>,
+      <QueryClientProvider client={createTestQueryClient()}>
+        <NextIntlClientProvider locale="en" messages={en}>
+          <JobHistory
+            agents={[]}
+            jobs={[
+              job({
+                ...failedBeforePrint,
+                print: { ...failedBeforePrint.print, progress_percent: 1 },
+              }),
+            ]}
+            nowMs={0}
+            onOpenDispatch={vi.fn()}
+            onOpenReprint={vi.fn()}
+            printers={[]}
+            selectedTenant={tenant}
+          />
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
     )
 
     expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeDisabled()

@@ -1,4 +1,5 @@
 import { NextIntlClientProvider } from 'next-intl'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +8,15 @@ import en from '../messages/en.json'
 import { JobHistory } from './dashboard-job-history'
 import type { Job, Tenant } from './dashboard-types'
 import { DashboardViewContent } from './dashboard-view-content'
+
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  })
+}
 
 const tenant: Tenant = {
   id: 'tenant-1',
@@ -79,19 +89,21 @@ function renderHistory({
     onDeleteRedirect,
     onOpenReprint,
     ...render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <JobHistory
-          canManageJobs={canManageJobs}
-          agents={[]}
-          jobs={jobs}
-          nowMs={Date.parse('2026-07-15T01:00:00Z')}
-          onDeleteRedirect={onDeleteRedirect}
-          onOpenDispatch={vi.fn()}
-          onOpenReprint={onOpenReprint}
-          printers={[]}
-          selectedTenant={tenant}
-        />
-      </NextIntlClientProvider>,
+      <QueryClientProvider client={createTestQueryClient()}>
+        <NextIntlClientProvider locale="en" messages={en}>
+          <JobHistory
+            canManageJobs={canManageJobs}
+            agents={[]}
+            jobs={jobs}
+            nowMs={Date.parse('2026-07-15T01:00:00Z')}
+            onDeleteRedirect={onDeleteRedirect}
+            onOpenDispatch={vi.fn()}
+            onOpenReprint={onOpenReprint}
+            printers={[]}
+            selectedTenant={tenant}
+          />
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
     ),
   }
 }
@@ -262,47 +274,49 @@ describe('JobHistory row actions', () => {
 
   it('keeps job management enabled for an authorized app API token', () => {
     render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <DashboardViewContent
-          view="jobs"
-          auth={{
-            source: 'app_api_token',
-            cookieName: 'pandar_auth',
-            provider: 'none',
-            signInUrl: null,
-            signOutUrl: null,
-          }}
-          selectedTenant={tenant}
-          health={{
-            printersTotal: 0,
-            printersOnline: 0,
-            agentsTotal: 0,
-            agentsConnected: 0,
-            jobsActive: 0,
-            jobsFailed: 0,
-          }}
-          attentionItems={[]}
-          topSeverity={null}
-          liveState="idle"
-          lastEventAt={null}
-          fleetEmpty={false}
-          printers={[]}
-          agents={[]}
-          jobs={[job()]}
-          nowMs={Date.parse('2026-07-15T01:00:00Z')}
-          selectedCommand={null}
-          commandData={null}
-          notifications={[]}
-          users={[]}
-          userIdentities={[]}
-          tenantTokens={[]}
-          joinLinks={[]}
-          auditEvents={[]}
-          adminUnavailable={true}
-          adminLoadError={false}
-          canManageJobs={true}
-        />
-      </NextIntlClientProvider>,
+      <QueryClientProvider client={createTestQueryClient()}>
+        <NextIntlClientProvider locale="en" messages={en}>
+          <DashboardViewContent
+            view="jobs"
+            auth={{
+              source: 'app_api_token',
+              cookieName: 'pandar_auth',
+              provider: 'none',
+              signInUrl: null,
+              signOutUrl: null,
+            }}
+            selectedTenant={tenant}
+            health={{
+              printersTotal: 0,
+              printersOnline: 0,
+              agentsTotal: 0,
+              agentsConnected: 0,
+              jobsActive: 0,
+              jobsFailed: 0,
+            }}
+            attentionItems={[]}
+            topSeverity={null}
+            liveState="idle"
+            lastEventAt={null}
+            fleetEmpty={false}
+            printers={[]}
+            agents={[]}
+            jobs={[job()]}
+            nowMs={Date.parse('2026-07-15T01:00:00Z')}
+            selectedCommand={null}
+            commandData={null}
+            notifications={[]}
+            users={[]}
+            userIdentities={[]}
+            tenantTokens={[]}
+            joinLinks={[]}
+            auditEvents={[]}
+            adminUnavailable={true}
+            adminLoadError={false}
+            canManageJobs={true}
+          />
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
     )
 
     expect(screen.getByRole('button', { name: 'Clear jobs' })).toBeEnabled()

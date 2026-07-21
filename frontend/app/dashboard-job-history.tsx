@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useDashboardFilterStore } from './dashboard-filter-store'
 import { useTranslations } from 'next-intl'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -87,17 +88,67 @@ export function JobHistory({
   onDeleteRedirect?: (url: string) => void
 }) {
   const t = useTranslations('inventory')
+  const queryClient = useQueryClient()
   const query = useDashboardFilterStore((state) => state.query)
   const status = useDashboardFilterStore((state) => state.status)
   const setQuery = useDashboardFilterStore((state) => state.setQuery)
   const setStatus = useDashboardFilterStore((state) => state.setStatus)
   const reset = useDashboardFilterStore((state) => state.reset)
   const [clearOpen, setClearOpen] = useState(false)
-  const [clearing, setClearing] = useState(false)
   const [clearError, setClearError] = useState<'generic' | 'permission' | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null)
-  const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(false)
+
+  const clearMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(
+        `/api/tenants/${apiIdSegment(selectedTenant!.id, 'tenant_id')}/jobs`,
+        { method: 'DELETE' },
+      )
+      if (!response.ok) {
+        throw { status: response.status }
+      }
+      return response
+    },
+    onSuccess: () => {
+      setClearOpen(false)
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      onClearRedirect(
+        `/jobs?tenant=${encodeURIComponent(selectedTenant!.id)}&status=jobs_cleared`,
+      )
+    },
+    onError: (error: { status?: number }) => {
+      setClearError(
+        error.status === 401 || error.status === 403 ? 'permission' : 'generic',
+      )
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (jobId: string) => {
+      const response = await fetch(
+        `/api/tenants/${apiIdSegment(selectedTenant!.id, 'tenant_id')}/jobs/${apiIdSegment(jobId, 'job_id')}`,
+        { method: 'DELETE' },
+      )
+      if (!response.ok) {
+        throw new Error('delete failed')
+      }
+      return response
+    },
+    onSuccess: () => {
+      setDeleteTarget(null)
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      onDeleteRedirect(
+        `/jobs?tenant=${encodeURIComponent(selectedTenant!.id)}&status=job_deleted`,
+      )
+    },
+    onError: () => {
+      setDeleteError(true)
+    },
+  })
+
+  const clearing = clearMutation.isPending
+  const deleting = deleteMutation.isPending
   const clearableCount = jobs.filter(isClearableJob).length
   const clearDisabled =
     !canManageJobs || !selectedTenant || clearableCount === 0 || clearing
@@ -128,56 +179,20 @@ export function JobHistory({
     [agents],
   )
 
-  const clearJobs = async () => {
+  const clearJobs = () => {
     if (!selectedTenant) {
       return
     }
-    setClearing(true)
     setClearError(null)
-    try {
-      const response = await fetch(
-        `/api/tenants/${apiIdSegment(selectedTenant.id, 'tenant_id')}/jobs`,
-        { method: 'DELETE' },
-      )
-      if (response.ok) {
-        setClearOpen(false)
-        onClearRedirect(
-          `/jobs?tenant=${encodeURIComponent(selectedTenant.id)}&status=jobs_cleared`,
-        )
-      } else {
-        setClearError(response.status === 401 || response.status === 403 ? 'permission' : 'generic')
-      }
-    } catch {
-      setClearError('generic')
-    } finally {
-      setClearing(false)
-    }
+    clearMutation.mutate()
   }
 
-  const deleteJob = async () => {
+  const deleteJob = () => {
     if (!selectedTenant || !deleteTarget) {
       return
     }
-    setDeleting(true)
     setDeleteError(false)
-    try {
-      const response = await fetch(
-        `/api/tenants/${apiIdSegment(selectedTenant.id, 'tenant_id')}/jobs/${apiIdSegment(deleteTarget.id, 'job_id')}`,
-        { method: 'DELETE' },
-      )
-      if (response.ok) {
-        setDeleteTarget(null)
-        onDeleteRedirect(
-          `/jobs?tenant=${encodeURIComponent(selectedTenant.id)}&status=job_deleted`,
-        )
-      } else {
-        setDeleteError(true)
-      }
-    } catch {
-      setDeleteError(true)
-    } finally {
-      setDeleting(false)
-    }
+    deleteMutation.mutate(deleteTarget.id)
   }
 
   return (
@@ -310,7 +325,7 @@ export function JobHistory({
             </Button>
             <Button
               disabled={clearing}
-              onClick={() => void clearJobs()}
+              onClick={clearJobs}
               type="button"
               variant="destructive"
             >
@@ -361,7 +376,7 @@ export function JobHistory({
             </Button>
             <Button
               disabled={deleting}
-              onClick={() => void deleteJob()}
+              onClick={deleteJob}
               type="button"
               variant="destructive"
             >

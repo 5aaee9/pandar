@@ -1,4 +1,5 @@
 import { NextIntlClientProvider } from "next-intl";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -12,14 +13,25 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+}
+
 function renderWithMessages(children: React.ReactNode, locale = "en") {
   return render(
-    <NextIntlClientProvider
-      locale={locale}
-      messages={locale === "zh" ? zh : en}
-    >
-      {children}
-    </NextIntlClientProvider>,
+    <QueryClientProvider client={createTestQueryClient()}>
+      <NextIntlClientProvider
+        locale={locale}
+        messages={locale === "zh" ? zh : en}
+      >
+        {children}
+      </NextIntlClientProvider>
+    </QueryClientProvider>,
   );
 }
 
