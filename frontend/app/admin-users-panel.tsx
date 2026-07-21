@@ -139,38 +139,14 @@ function UsersTable({
               {users.map((user) => {
                 const linked = identitiesByUser.get(user.id) ?? []
                 return (
-                  <tr key={user.id} className={rowHoverClasses}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">{user.display_name}</div>
-                      <div className="text-muted-foreground">{user.email}</div>
-                      <div className={monoIdClasses}>{user.id}</div>
-                    </td>
-                    <td className="px-4 py-3"><Tag value={user.role} /></td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {linked.length === 0 ? '-' : linked.map((identity) => identity.provider).join(', ')}
-                    </td>
-                    <td className="px-4 py-3">
-                      <form action={updateTenantUserRole} className="flex items-center gap-2">
-                        <input name="tenant_id" type="hidden" value={tenantId} />
-                        <input name="user_id" type="hidden" value={user.id} />
-                        <select
-                          aria-label={t('roleFor', { user: user.display_name })}
-                          name="role"
-                          defaultValue={user.role}
-                          className={inputSmClasses}
-                        >
-                          {roles.map((role) => <option key={role} value={role}>{role}</option>)}
-                        </select>
-                        <button
-                          aria-label={t('saveRoleFor', { user: user.display_name })}
-                          className={actionButtonSm}
-                          type="submit"
-                        >
-                          {t('save')}
-                        </button>
-                      </form>
-                    </td>
-                  </tr>
+                  <UserRow
+                    key={user.id}
+                    tenantId={tenantId}
+                    user={user}
+                    linked={linked}
+                    roles={roles}
+                    t={t}
+                  />
                 )
               })}
             </tbody>
@@ -178,6 +154,55 @@ function UsersTable({
         </div>
       )}
     </div>
+  )
+}
+
+function UserRow({
+  tenantId,
+  user,
+  linked,
+  roles,
+  t,
+}: {
+  tenantId: string
+  user: User
+  linked: UserIdentity[]
+  roles: string[]
+  t: ReturnType<typeof useTranslations>
+}) {
+  return (
+    <tr key={user.id} className={rowHoverClasses}>
+      <td className="px-4 py-3">
+        <div className="font-medium text-foreground">{user.display_name}</div>
+        <div className="text-muted-foreground">{user.email}</div>
+        <div className={monoIdClasses}>{user.id}</div>
+      </td>
+      <td className="px-4 py-3"><Tag value={user.role} /></td>
+      <td className="px-4 py-3 text-xs text-muted-foreground">
+        {linked.length === 0 ? '-' : linked.map((identity) => identity.provider).join(', ')}
+      </td>
+      <td className="px-4 py-3">
+        <form action={updateTenantUserRole} className="flex items-center gap-2">
+          <input name="tenant_id" type="hidden" value={tenantId} />
+          <input name="user_id" type="hidden" value={user.id} />
+          <select
+            aria-label={t('roleFor', { user: user.display_name })}
+            name="role"
+            defaultValue={user.role}
+            className={inputSmClasses}
+          >
+            {roles.map((role) => <option key={role} value={role}>{role}</option>)}
+          </select>
+          <button
+            aria-label={t('saveRoleFor', { user: user.display_name })}
+            className={actionButtonSm}
+            type="submit"
+          >
+            {t('save')}
+          </button>
+        </form>
+      </td>
+    </tr>
   )
 }
 
