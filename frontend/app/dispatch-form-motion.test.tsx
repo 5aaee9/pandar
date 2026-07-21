@@ -1,10 +1,30 @@
 import { NextIntlClientProvider } from "next-intl";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
 import { DispatchForm } from "./dispatch-form";
+
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+}
+
+function renderDispatchForm(props: Parameters<typeof DispatchForm>[0]) {
+  return render(
+    <QueryClientProvider client={createTestQueryClient()}>
+      <NextIntlClientProvider locale="en" messages={en}>
+        <DispatchForm {...props} />
+      </NextIntlClientProvider>
+    </QueryClientProvider>,
+  );
+}
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -67,11 +87,10 @@ describe("DispatchForm motion boundaries", () => {
     const user = userEvent.setup();
     const preview = deferred<Response>();
     vi.stubGlobal("fetch", vi.fn(() => preview.promise));
-    const { container } = render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <DispatchForm selectedTenant={{ id: "tenant-1" }} printers={printers} />
-      </NextIntlClientProvider>,
-    );
+    const { container } = renderDispatchForm({
+      selectedTenant: { id: "tenant-1" },
+      printers,
+    });
 
     expect(container.querySelectorAll('[data-motion="dispatch-unlocked"]')).toHaveLength(0);
 
@@ -94,11 +113,10 @@ describe("DispatchForm motion boundaries", () => {
       "fetch",
       vi.fn(async () => Response.json({ metadata })),
     );
-    const { container } = render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <DispatchForm selectedTenant={{ id: "tenant-1" }} printers={printers} />
-      </NextIntlClientProvider>,
-    );
+    const { container } = renderDispatchForm({
+      selectedTenant: { id: "tenant-1" },
+      printers,
+    });
 
     await user.upload(
       container.querySelector('input[type="file"]') as HTMLInputElement,

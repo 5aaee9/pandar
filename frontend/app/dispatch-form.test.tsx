@@ -1,4 +1,5 @@
 import { NextIntlClientProvider } from "next-intl";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +7,25 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import { DispatchForm } from "./dispatch-form";
 import type { Job } from "./dashboard-types";
+
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+}
+
+function renderDispatchForm(props: Parameters<typeof DispatchForm>[0]) {
+  return render(
+    <QueryClientProvider client={createTestQueryClient()}>
+      <NextIntlClientProvider locale="en" messages={en}>
+        <DispatchForm {...props} />
+      </NextIntlClientProvider>
+    </QueryClientProvider>,
+  );
+}
 
 describe("DispatchForm", () => {
   afterEach(() => {
@@ -15,14 +35,10 @@ describe("DispatchForm", () => {
 
   it("matches Bambu Studio print option modes and defaults", async () => {
     const user = userEvent.setup();
-    const { container } = render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <DispatchForm
-          selectedTenant={{ id: "tenant-1" }}
-          printers={[{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null }]}
-        />
-      </NextIntlClientProvider>,
-    );
+    const { container } = renderDispatchForm({
+      selectedTenant: { id: "tenant-1" },
+      printers: [{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null }],
+    });
 
     expect(screen.getByRole("region", { name: "Print options" })).toBeVisible();
     const timelapse = within(screenGroup(container, "Timelapse"));
@@ -68,29 +84,25 @@ describe("DispatchForm", () => {
   });
   it("resets modes when the selected printer profile changes", async () => {
     const user = userEvent.setup();
-    const { container } = render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <DispatchForm
-          selectedTenant={{ id: "tenant-1" }}
-          printers={[
-            {
-              id: "x2d",
-              name: "X2D",
-              serial_number: "SN-X2D",
-              model: "N6",
-              materials: null,
-            },
-            {
-              id: "a1",
-              name: "A1",
-              serial_number: "SN-A1",
-              model: "A1",
-              materials: null,
-            },
-          ]}
-        />
-      </NextIntlClientProvider>,
-    );
+    const { container } = renderDispatchForm({
+      selectedTenant: { id: "tenant-1" },
+      printers: [
+        {
+          id: "x2d",
+          name: "X2D",
+          serial_number: "SN-X2D",
+          model: "N6",
+          materials: null,
+        },
+        {
+          id: "a1",
+          name: "A1",
+          serial_number: "SN-A1",
+          model: "A1",
+          materials: null,
+        },
+      ],
+    });
 
     expect(
       within(screenGroup(container, "Flow dynamics calibration")).getByRole(
@@ -122,22 +134,18 @@ describe("DispatchForm", () => {
   });
 
   it("submits conservative safe-off values for an unknown printer model", () => {
-    const { container } = render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <DispatchForm
-          selectedTenant={{ id: "tenant-1" }}
-          printers={[
-            {
-              id: "unknown",
-              name: "Unknown",
-              serial_number: "SN-UNKNOWN",
-              model: null,
-              materials: null,
-            },
-          ]}
-        />
-      </NextIntlClientProvider>,
-    );
+    const { container } = renderDispatchForm({
+      selectedTenant: { id: "tenant-1" },
+      printers: [
+        {
+          id: "unknown",
+          name: "Unknown",
+          serial_number: "SN-UNKNOWN",
+          model: null,
+          materials: null,
+        },
+      ],
+    });
 
     expect(container.querySelectorAll("fieldset")).toHaveLength(0);
     expect(container.querySelector("section")).not.toBeInTheDocument();
@@ -163,15 +171,11 @@ describe("DispatchForm", () => {
       ),
     );
 
-    const { container } = render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <DispatchForm
-          selectedTenant={{ id: "tenant-1" }}
-          printers={[{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null }]}
-          onRedirect={onRedirect}
-        />
-      </NextIntlClientProvider>,
-    );
+    const { container } = renderDispatchForm({
+      selectedTenant: { id: "tenant-1" },
+      printers: [{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null }],
+      onRedirect,
+    });
     const fileInput = container.querySelector('input[type="file"]');
     expect(fileInput).toBeInstanceOf(HTMLInputElement);
     expect(container.querySelector('[name="plate_id"]')).toBeNull();
@@ -233,41 +237,37 @@ describe("DispatchForm", () => {
       },
     } as unknown as Job;
 
-    const { container } = render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <DispatchForm
-          selectedTenant={{ id: "tenant-1" }}
-          onRedirect={onRedirect}
-          sourceJob={sourceJob}
-          printers={[
-            { id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null },
-            {
-              id: "printer-2",
-              name: "Printer Two",
-              serial_number: "SN2",
-              model: "N6",
-              materials: {
-                filament_switch_installed: true,
-                observed_at: "2026-07-18T00:00:00Z",
-                active_tray: null,
-                ams_units: [{
-                  unit_id: "0",
-                  toolhead: "R",
-                  trays: [{
-                    tray_id: "0",
-                    global_tray_id: 0,
-                    type: "PLA",
-                    color: "00FF00",
-                    exists: true,
-                  }],
-                }],
-                external_spools: [],
-              },
-            },
-          ]}
-        />
-      </NextIntlClientProvider>,
-    );
+    const { container } = renderDispatchForm({
+      selectedTenant: { id: "tenant-1" },
+      onRedirect,
+      sourceJob,
+      printers: [
+        { id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null },
+        {
+          id: "printer-2",
+          name: "Printer Two",
+          serial_number: "SN2",
+          model: "N6",
+          materials: {
+            filament_switch_installed: true,
+            observed_at: "2026-07-18T00:00:00Z",
+            active_tray: null,
+            ams_units: [{
+              unit_id: "0",
+              toolhead: "R",
+              trays: [{
+                tray_id: "0",
+                global_tray_id: 0,
+                type: "PLA",
+                color: "00FF00",
+                exists: true,
+              }],
+            }],
+            external_spools: [],
+          },
+        },
+      ],
+    });
 
     expect(container.querySelector('input[type="file"]')).toBeNull();
     expect(screen.getByText("benchy.3mf")).toBeVisible();
@@ -317,14 +317,10 @@ describe("DispatchForm", () => {
     });
     vi.stubGlobal("fetch", vi.fn(() => previewResponse));
 
-    const { container, getByText } = render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <DispatchForm
-          selectedTenant={{ id: "tenant-1" }}
-          printers={[{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null }]}
-        />
-      </NextIntlClientProvider>,
-    );
+    const { container, getByText } = renderDispatchForm({
+      selectedTenant: { id: "tenant-1" },
+      printers: [{ id: "printer-1", name: "Printer One", serial_number: "SN1", model: "N6", materials: null }],
+    });
 
     expect(container.querySelector('[name="plate_id"]')).toBeNull();
     expect(container.querySelector('button[type="submit"]')).toBeDisabled();
@@ -435,12 +431,10 @@ describe("DispatchForm", () => {
       }),
     );
 
-    const { container, findByRole, getByRole, getByText } = render(
-      <NextIntlClientProvider locale="en" messages={en}>
-        <DispatchForm
-          selectedTenant={{ id: "tenant-1" }}
-          onRedirect={onRedirect}
-          printers={[{
+    const { container, findByRole, getByRole, getByText } = renderDispatchForm({
+      selectedTenant: { id: "tenant-1" },
+      onRedirect,
+      printers: [{
             id: "printer-1",
             name: "Printer One",
             serial_number: "SN1",
@@ -498,10 +492,8 @@ describe("DispatchForm", () => {
                   exists: true,
                 }],
             },
-          }]}
-        />
-      </NextIntlClientProvider>,
-    );
+          }],
+    });
 
     await user.upload(
       container.querySelector('input[type="file"]') as HTMLInputElement,

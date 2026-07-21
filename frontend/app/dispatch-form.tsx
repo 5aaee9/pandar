@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState, type FormEvent } from 'react'
 import { useTranslations } from 'next-intl'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
 import { inputClasses } from '@/lib/utils'
@@ -41,19 +42,52 @@ export function DispatchForm({
   onRedirect?: (url: string) => void
 }) {
   const t = useTranslations('dispatch')
+  const queryClient = useQueryClient()
   const [preferredPrinterId, setPreferredPrinterId] = useState(sourceJob?.printer_id ?? '')
   const [plateId, setPlateId] = useState<number | null>(() => sourcePlateId(sourceJob))
   const [artifact, setArtifact] = useState<DispatchArtifactState>(() => sourceArtifact(sourceJob))
   const [metadataPreview, setMetadataPreview] = useState<MetadataPreviewState>(() =>
     sourceMetadataPreview(sourceJob),
   )
-  const [submitting, setSubmitting] = useState(false)
   const [submitFailed, setSubmitFailed] = useState(false)
   const [mismatchFormData, setMismatchFormData] = useState<FormData | null>(null)
   const [materialMappingValid, setMaterialMappingValid] = useState(true)
   const [useAms, setUseAms] = useState(true)
   const previewRequestRef = useRef(0)
   const fileStatusId = useId()
+
+  const dispatchMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const response = sourceJob
+        ? await fetch(reprintPath(selectedTenant!.id, sourceJob.id), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(reprintRequestBody(formData)),
+          })
+        : await fetch(uploadPath(selectedTenant!.id, String(formData.get('printer_id'))), {
+            method: 'POST',
+            body: formData,
+          })
+      if (!response.ok) {
+        const code = await dispatchErrorCode(response)
+        throw { status: response.status, code }
+      }
+      return response
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      onRedirect(
+        `/jobs?tenant=${encodeURIComponent(selectedTenant!.id)}&status=${encodeURIComponent(
+          sourceJob ? 'reprint_queued' : 'job_created',
+        )}`,
+      )
+    },
+    onError: () => {
+      setSubmitFailed(true)
+    },
+  })
+
+  const submitting = dispatchMutation.isPending
 
   const selectedPrinterId = printers.some((printer) => printer.id === preferredPrinterId)
     ? preferredPrinterId
@@ -134,32 +168,10 @@ export function DispatchForm({
     }
   }
 
-  const sendSubmission = async (formData: FormData) => {
+  const sendSubmission = (formData: FormData) => {
     if (!selectedTenant) return
-    setSubmitting(true)
-
-    try {
-      const response = sourceJob
-        ? await fetch(reprintPath(selectedTenant.id, sourceJob.id), {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(reprintRequestBody(formData)),
-          })
-        : await fetch(uploadPath(selectedTenant.id, String(formData.get('printer_id'))), {
-            method: 'POST',
-            body: formData,
-          })
-      const status = response.ok
-        ? sourceJob ? 'reprint_queued' : 'job_created'
-        : await dispatchErrorCode(response)
-      onRedirect(
-        `/jobs?tenant=${encodeURIComponent(selectedTenant.id)}&status=${encodeURIComponent(status)}`,
-      )
-    } catch {
-      setSubmitFailed(true)
-    } finally {
-      setSubmitting(false)
-    }
+    setSubmitFailed(false)
+    dispatchMutation.mutate(formData)
   }
 
   const submitPrintJob = (event: FormEvent<HTMLFormElement>) => {
@@ -182,7 +194,7 @@ export function DispatchForm({
       return false
     })
     if (submission) {
-      void sendSubmission(submission.formData)
+      sendSubmission(submission.formData)
       return
     }
     if (mismatch) {
