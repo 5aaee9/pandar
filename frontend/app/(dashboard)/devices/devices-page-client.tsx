@@ -28,7 +28,8 @@ export function DevicesPageClient({
         jobs: jobs.jobs,
       };
     },
-    staleTime: 30 * 1000,
+    staleTime: 10 * 1000,
+    refetchInterval: 30 * 1000,
   });
 
   if (isLoading) {

@@ -31,7 +31,7 @@ export function UsersPageClient({
         joinLinks: joinLinks.join_links,
       };
     },
-    staleTime: 30 * 1000,
+    staleTime: 60 * 1000,
   });
 
   if (isLoading) {

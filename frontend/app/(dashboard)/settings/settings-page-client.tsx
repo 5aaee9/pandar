@@ -36,7 +36,7 @@ export function SettingsPageClient({
         auditEvents: auditEvents.audit_events,
       };
     },
-    staleTime: 30 * 1000,
+    staleTime: 60 * 1000,
   });
 
   const adminUnavailable =

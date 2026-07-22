@@ -35,6 +35,7 @@ export function AgentsPageClient({
       };
     },
     staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
   });
 
   if (isLoading) {
