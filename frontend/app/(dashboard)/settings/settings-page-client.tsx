@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "../../api-client";
 import { DashboardViewContent } from "../../dashboard-view-content";
+import { QueryErrorBoundary } from "../../query-error-boundary";
 import type { AuthMetadata, Tenant } from "../../dashboard-types";
 
 export function SettingsPageClient({
@@ -70,7 +71,8 @@ export function SettingsPageClient({
   };
 
   return (
-    <DashboardViewContent
+    <QueryErrorBoundary>
+      <DashboardViewContent
       view="settings"
       auth={auth}
       selectedTenant={selectedTenant}
@@ -105,5 +107,6 @@ export function SettingsPageClient({
       settingsStaticPanels={settingsStaticPanels}
       tenantSettingsStatic={tenantSettingsStatic}
     />
+    </QueryErrorBoundary>
   );
 }

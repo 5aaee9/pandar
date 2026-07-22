@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "../../api-client";
 import { DashboardViewContent } from "../../dashboard-view-content";
+import { QueryErrorBoundary } from "../../query-error-boundary";
 import type { AuthMetadata, Tenant } from "../../dashboard-types";
 
 export function DevicesPageClient({
@@ -49,7 +50,8 @@ export function DevicesPageClient({
   const { printers, agents, jobs } = data ?? { printers: [], agents: [], jobs: [] };
 
   return (
-    <DashboardViewContent
+    <QueryErrorBoundary>
+      <DashboardViewContent
       view="devices"
       auth={auth}
       selectedTenant={selectedTenant}
@@ -82,5 +84,6 @@ export function DevicesPageClient({
       adminLoadError={false}
       canManageJobs={true}
     />
+    </QueryErrorBoundary>
   );
 }

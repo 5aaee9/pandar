@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "../../api-client";
 import { DashboardViewContent } from "../../dashboard-view-content";
+import { QueryErrorBoundary } from "../../query-error-boundary";
 import type { AuthMetadata, Tenant } from "../../dashboard-types";
 
 export function UsersPageClient({
@@ -52,7 +53,8 @@ export function UsersPageClient({
   const { users, identities, joinLinks } = data ?? { users: [], identities: [], joinLinks: [] };
 
   return (
-    <DashboardViewContent
+    <QueryErrorBoundary>
+      <DashboardViewContent
       view="users"
       auth={auth}
       selectedTenant={selectedTenant}
@@ -85,5 +87,6 @@ export function UsersPageClient({
       adminLoadError={adminLoadError}
       canManageJobs={true}
     />
+    </QueryErrorBoundary>
   );
 }
