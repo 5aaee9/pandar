@@ -82,7 +82,7 @@ pub(crate) async fn exercise_atomic_revisions(database: Database) {
                 access_code: None,
                 name: "Ignored Snapshot Name".to_owned(),
                 model: Some("A1".to_owned()),
-                status: "RUNNING".to_owned(),
+                status: Some("RUNNING".to_owned()),
                 observed_at: "2026-07-10T12:01:00Z".to_owned(),
                 nozzle_temperatures: Vec::new(),
                 active_nozzle: None,
@@ -92,6 +92,7 @@ pub(crate) async fn exercise_atomic_revisions(database: Database) {
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
                 connection_authoritative: false,
+                telemetry_authoritative: true,
             },
         )
         .await

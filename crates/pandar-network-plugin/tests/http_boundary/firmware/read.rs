@@ -27,7 +27,7 @@ fn firmware_http_catalog_uses_typed_state_and_exact_studio_envelope() {
     let session = FirmwarePluginSession::new(hub, "token".into(), 1);
 
     let catalog: serde_json::Value =
-        serde_json::from_str(&session.catalog_json("SERIAL", "printer-1").unwrap()).unwrap();
+        serde_json::from_str(&session.catalog_json("SERIAL", "printer-1", 1).unwrap()).unwrap();
     let requests = server.join().unwrap();
 
     assert_eq!(requests.len(), 1);
@@ -55,7 +55,7 @@ fn firmware_http_live_refresh_preserves_sequence_and_order_or_renders_typed_fail
     let (hub, server) = mock_hub(vec![Action::json("200 OK", response)]);
     let session = FirmwarePluginSession::new(hub, "token".into(), 1);
     let success: serde_json::Value =
-        serde_json::from_str(&session.refresh_version_json("printer-1", "0009")).unwrap();
+        serde_json::from_str(&session.refresh_version_json("printer-1", "0009", 1)).unwrap();
     let requests = server.join().unwrap();
     assert_eq!(requests.len(), 1);
     assert!(requests[0].starts_with("POST /api/v1/plugin/printers/printer-1/firmware/refresh "));
@@ -73,7 +73,7 @@ fn firmware_http_live_refresh_preserves_sequence_and_order_or_renders_typed_fail
     )]);
     let session = FirmwarePluginSession::new(hub, "token".into(), 1);
     let failure: serde_json::Value =
-        serde_json::from_str(&session.refresh_version_json("printer-1", "0009")).unwrap();
+        serde_json::from_str(&session.refresh_version_json("printer-1", "0009", 1)).unwrap();
     assert_eq!(server.join().unwrap().len(), 1);
     assert_eq!(
         failure,
@@ -90,7 +90,7 @@ fn firmware_http_live_refresh_preserves_sequence_and_order_or_renders_typed_fail
     let (hub, server) = mock_hub(vec![Action::json("200 OK", empty_response)]);
     let session = FirmwarePluginSession::new(hub, "token".into(), 1);
     let empty: serde_json::Value =
-        serde_json::from_str(&session.refresh_version_json("printer-1", "empty-001")).unwrap();
+        serde_json::from_str(&session.refresh_version_json("printer-1", "empty-001", 1)).unwrap();
     assert_eq!(server.join().unwrap().len(), 1);
     assert_eq!(
         empty,
@@ -111,7 +111,7 @@ fn firmware_http_oversized_input_is_rejected_before_hub_contact() {
         "x".repeat(PLUGIN_JSON_BODY_LIMIT)
     );
 
-    let result = session.send("SERIAL", "printer-1", &oversized, FirmwareTunnel::Cloud);
+    let result = session.send("SERIAL", "printer-1", &oversized, FirmwareTunnel::Cloud, 1);
 
     assert_eq!(result.outcome, FirmwareSendOutcome::PrePublishFailure);
     assert!(listener.accept().is_err(), "oversized input contacted Hub");
@@ -137,7 +137,7 @@ fn firmware_http_rejects_declared_oversized_response_before_reading_body() {
     let session = FirmwarePluginSession::new(hub, "token".into(), 1);
     let started = Instant::now();
 
-    let error = session.catalog_json("SERIAL", "printer-1").unwrap_err();
+    let error = session.catalog_json("SERIAL", "printer-1", 1).unwrap_err();
     let client_elapsed = started.elapsed();
     let server_elapsed = server.join().unwrap();
 
@@ -169,7 +169,7 @@ fn firmware_http_rejects_chunked_oversized_response_before_terminal_chunk() {
     let session = FirmwarePluginSession::new(hub, "token".into(), 1);
     let started = Instant::now();
 
-    let error = session.catalog_json("SERIAL", "printer-1").unwrap_err();
+    let error = session.catalog_json("SERIAL", "printer-1", 1).unwrap_err();
     let client_elapsed = started.elapsed();
     let server_elapsed = server.join().unwrap();
 

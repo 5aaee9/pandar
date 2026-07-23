@@ -2,7 +2,10 @@ use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{AgentId, CommandId, CoreError, JobId, TenantId, required};
+use crate::{
+    AgentId, CommandId, CoreError, JobId, StudioPrintMetadata, StudioSubmissionId, TenantId,
+    required,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum JobStatus {
@@ -11,6 +14,7 @@ pub enum JobStatus {
     Acknowledged,
     Succeeded,
     Failed,
+    Cancelled,
 }
 
 impl JobStatus {
@@ -21,6 +25,7 @@ impl JobStatus {
             Self::Acknowledged => "acknowledged",
             Self::Succeeded => "succeeded",
             Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
         }
     }
 }
@@ -41,6 +46,7 @@ impl FromStr for JobStatus {
             "acknowledged" => Ok(Self::Acknowledged),
             "succeeded" => Ok(Self::Succeeded),
             "failed" => Ok(Self::Failed),
+            "cancelled" => Ok(Self::Cancelled),
             value => Err(CoreError::InvalidJobStatus(value.to_string())),
         }
     }
@@ -225,6 +231,9 @@ pub struct Job {
     pub agent_id: AgentId,
     pub artifact_id: String,
     pub command_id: CommandId,
+    pub studio_submission_id: StudioSubmissionId,
+    pub plate_index: u32,
+    pub studio_metadata: Option<StudioPrintMetadata>,
     pub status: JobStatus,
     pub error: Option<String>,
     pub print: JobPrintState,
@@ -265,6 +274,9 @@ pub struct JobParts {
     pub agent_id: AgentId,
     pub artifact_id: String,
     pub command_id: CommandId,
+    pub studio_submission_id: i64,
+    pub plate_index: u32,
+    pub studio_metadata_json: Option<String>,
     pub status: String,
     pub error: Option<String>,
     pub print_status: String,
@@ -292,6 +304,14 @@ impl Job {
     pub fn from_parts(parts: JobParts) -> Result<Self, CoreError> {
         required(&parts.printer_id, CoreError::EmptyJobPrinterId)?;
         required(&parts.artifact_id, CoreError::EmptyJobArtifactId)?;
+        let studio_submission_id = StudioSubmissionId::try_from(parts.studio_submission_id)?;
+        let studio_metadata = parts
+            .studio_metadata_json
+            .map(|value| {
+                serde_json::from_str(&value)
+                    .map_err(|err| CoreError::InvalidStudioPrintMetadata(err.to_string()))
+            })
+            .transpose()?;
 
         Ok(Self {
             id: parts.id,
@@ -300,6 +320,9 @@ impl Job {
             agent_id: parts.agent_id,
             artifact_id: parts.artifact_id,
             command_id: parts.command_id,
+            studio_submission_id,
+            plate_index: parts.plate_index,
+            studio_metadata,
             status: parts.status.parse()?,
             error: parts.error,
             print: JobPrintState {

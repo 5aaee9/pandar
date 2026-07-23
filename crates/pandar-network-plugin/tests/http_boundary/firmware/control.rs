@@ -26,6 +26,7 @@ fn firmware_http_prepare_is_url_free_execute_is_exact_and_never_retried() {
         "printer-1",
         &start_message(),
         FirmwareTunnel::Cloud,
+        1,
         &mut diagnostics,
     );
     let requests = server.join().unwrap();
@@ -74,6 +75,7 @@ fn firmware_http_failure_before_prepare_completes_is_safe_abi_failure() {
         "printer-1",
         &start_message(),
         FirmwareTunnel::Cloud,
+        1,
         &mut diagnostics,
     );
 
@@ -97,6 +99,7 @@ fn firmware_http_ambiguity_after_prepared_token_is_success_without_retry_or_call
             "printer-1",
             &start_message(),
             FirmwareTunnel::Local,
+            2,
             &mut diagnostics,
         );
         let requests = server.join().unwrap();
@@ -125,6 +128,7 @@ fn firmware_http_only_typed_execute_pre_publish_failure_is_abi_failure() {
         "printer-1",
         &start_message(),
         FirmwareTunnel::Cloud,
+        3,
         &mut diagnostics,
     );
     let requests = server.join().unwrap();
@@ -152,6 +156,7 @@ fn firmware_http_5xx_or_malformed_execute_response_is_outcome_unknown() {
             "printer-1",
             &start_message(),
             FirmwareTunnel::Cloud,
+            3,
             &mut diagnostics,
         );
         assert_eq!(server.join().unwrap().len(), 2);
@@ -177,12 +182,13 @@ fn firmware_http_acknowledgement_and_rejection_queue_exact_origin_callback() {
             "printer-1",
             &start_message(),
             FirmwareTunnel::Cloud,
+            4,
         );
         assert_eq!(server.join().unwrap().len(), 2);
         assert_eq!(response.outcome, expected);
         let token = response.callback_token.expect("real acknowledgement token");
         let handoff = Instant::now();
-        assert!(session.return_handoff_at(token, 44, handoff));
+        assert!(session.return_handoff_at(token, 44, 0, 0, handoff));
         let callback = session
             .take_ready_callback_at(handoff + Duration::from_millis(1_100))
             .unwrap();
@@ -210,6 +216,7 @@ fn firmware_http_published_without_ack_is_success_without_callback() {
         "printer-1",
         &start_message(),
         FirmwareTunnel::Cloud,
+        5,
     );
     assert_eq!(server.join().unwrap().len(), 2);
     assert_eq!(

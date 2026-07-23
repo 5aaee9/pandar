@@ -128,7 +128,7 @@ fn printer_snapshot_event_with_connection_authority(
             host: snapshot.host.unwrap_or_default(),
             access_code: snapshot.access_code.unwrap_or_default(),
             name: snapshot.name,
-            state: snapshot.state,
+            state: snapshot.state.unwrap_or_default(),
             model: snapshot.model.unwrap_or_default(),
             nozzle_temperatures: snapshot
                 .nozzle_temperatures
@@ -159,6 +159,7 @@ fn printer_snapshot_event_with_connection_authority(
                     bambu_fun_bits: features.bits(),
                 }),
             connection_authoritative,
+            telemetry_authoritative: snapshot.telemetry_authoritative,
         }),
     )
 }

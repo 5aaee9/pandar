@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use super::{
+    capabilities::{sdcard_available, studio_cfg, studio_fun},
     input::{NozzleTemperature, PrinterStatus},
     materials::{AmsPayload, virtual_slots},
     scalar::{JsonNumber, json_number_or_zero, packed_temperature, text, text_if_present},
@@ -15,7 +16,8 @@ pub(super) struct StudioTelemetry {
     aux: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stat: Option<String>,
-    gcode_state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gcode_state: Option<String>,
     mc_percent: u8,
     mc_remaining_time: u32,
     layer_num: u32,
@@ -31,9 +33,11 @@ pub(super) struct StudioTelemetry {
     gcode_file: String,
     subtask_name: String,
     hms: Vec<super::input::PrinterHms>,
-    printer_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    printer_type: Option<String>,
     support_chamber: bool,
     support_chamber_temp_display: bool,
+    sdcard: bool,
     bed_temper: JsonNumber,
     bed_target_temper: JsonNumber,
     nozzle_type: String,
@@ -45,6 +49,7 @@ pub(super) struct StudioTelemetry {
     nozzle_temper2: JsonNumber,
     nozzle_target_temper2: JsonNumber,
     chamber_temper: JsonNumber,
+    ctt: JsonNumber,
     lights_report: Vec<LightReport>,
     device: DeviceBlock,
     ams: AmsPayload,
@@ -59,6 +64,9 @@ impl From<&PrinterStatus> for StudioTelemetry {
         let bed_current = json_number_or_zero(text(&printer.bed_temperature_celsius));
         let bed_target = json_number_or_zero(text(&printer.bed_target_temperature_celsius));
         let chamber_current = json_number_or_zero(text(&printer.chamber_temperature_celsius));
+        let chamber_target = json_number_or_zero(text(&printer.chamber_target_temperature_celsius));
+        let supports_chamber = text_if_present(&printer.chamber_temperature_celsius).is_some()
+            && text_if_present(&printer.chamber_target_temperature_celsius).is_some();
         let nozzle_current = json_number_or_zero(
             main_nozzle.map_or(String::new(), |nozzle| text(&nozzle.current_celsius)),
         );
@@ -71,18 +79,23 @@ impl From<&PrinterStatus> for StudioTelemetry {
         let auxiliary_nozzle_target = json_number_or_zero(
             auxiliary_nozzle.map_or(String::new(), |nozzle| text(&nozzle.target_celsius)),
         );
-        let light_mode = if printer.chamber_light_on.unwrap_or_default() {
-            "on"
-        } else {
-            "off"
-        };
+        let lights_report = printer
+            .chamber_light_on
+            .map(|on| LightReport {
+                node: "chamber_light",
+                mode: if on { "on" } else { "off" }.to_owned(),
+            })
+            .into_iter()
+            .collect();
 
         Self {
-            cfg: printer
-                .materials
-                .as_ref()
-                .and_then(|materials| materials.cfg.clone()),
-            fun: printer.fun.clone().unwrap_or_else(|| "0".to_owned()),
+            cfg: studio_cfg(
+                printer
+                    .materials
+                    .as_ref()
+                    .and_then(|materials| materials.cfg.as_deref()),
+            ),
+            fun: studio_fun(printer.fun.as_deref()),
             aux: printer
                 .materials
                 .as_ref()
@@ -93,8 +106,12 @@ impl From<&PrinterStatus> for StudioTelemetry {
                 .and_then(|materials| materials.stat.clone()),
             gcode_state: printer
                 .gcode_state
-                .clone()
-                .unwrap_or_else(|| "IDLE".to_owned()),
+                .as_deref()
+                .or(printer.state.as_deref())
+                .or(printer.task_status.as_deref())
+                .map(str::trim)
+                .filter(|state| !state.is_empty())
+                .map(str::to_owned),
             mc_percent: printer.mc_percent.unwrap_or_default(),
             mc_remaining_time: printer.mc_remaining_time.unwrap_or_default(),
             layer_num: printer.layer_num.unwrap_or_default(),
@@ -108,10 +125,15 @@ impl From<&PrinterStatus> for StudioTelemetry {
             gcode_file: printer.gcode_file.clone().unwrap_or_default(),
             subtask_name: printer.subtask_name.clone().unwrap_or_default(),
             hms: printer.hms.clone(),
-            printer_type: text_if_present(&printer.dev_model_name)
-                .unwrap_or_else(|| "C11".to_string()),
-            support_chamber: true,
-            support_chamber_temp_display: true,
+            printer_type: text_if_present(&printer.dev_model_name),
+            support_chamber: supports_chamber,
+            support_chamber_temp_display: supports_chamber,
+            sdcard: sdcard_available(
+                printer
+                    .materials
+                    .as_ref()
+                    .and_then(|materials| materials.aux.as_deref()),
+            ),
             bed_temper: JsonNumber::new(&bed_current),
             bed_target_temper: JsonNumber::new(&bed_target),
             nozzle_type: studio_nozzle_type(main_nozzle),
@@ -123,11 +145,15 @@ impl From<&PrinterStatus> for StudioTelemetry {
             nozzle_temper2: JsonNumber::new(&auxiliary_nozzle_current),
             nozzle_target_temper2: JsonNumber::new(&auxiliary_nozzle_target),
             chamber_temper: JsonNumber::new(&chamber_current),
-            lights_report: vec![LightReport {
-                node: "chamber_light",
-                mode: light_mode.to_string(),
-            }],
-            device: DeviceBlock::new(printer, &bed_current, &bed_target, &chamber_current),
+            ctt: JsonNumber::new(&chamber_target),
+            lights_report,
+            device: DeviceBlock::new(
+                printer,
+                &bed_current,
+                &bed_target,
+                &chamber_current,
+                &chamber_target,
+            ),
             ams: AmsPayload::new(printer.materials.as_ref()),
             vir_slot: virtual_slots(printer.materials.as_ref()),
         }
@@ -144,6 +170,7 @@ struct LightReport {
 struct DeviceBlock {
     #[serde(rename = "type")]
     kind: u8,
+    connection_type: &'static str,
     bed_temp: u32,
     ctc: ChamberBlock,
     nozzle: NozzleDevice,
@@ -156,14 +183,16 @@ impl DeviceBlock {
         bed_current: &str,
         bed_target: &str,
         chamber_current: &str,
+        chamber_target: &str,
     ) -> Self {
         Self {
             kind: 1,
+            connection_type: "cloud",
             bed_temp: packed_temperature(bed_current, bed_target),
             ctc: ChamberBlock {
                 state: 1,
                 info: ChamberInfo {
-                    temp: packed_temperature(chamber_current, ""),
+                    temp: packed_temperature(chamber_current, chamber_target),
                 },
             },
             nozzle: NozzleDevice::new(&printer.nozzle_temperatures),

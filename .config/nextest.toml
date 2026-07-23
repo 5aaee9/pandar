@@ -7,8 +7,36 @@ filter = "package(pandar-network-plugin) & binary(studio_abi_probe)"
 test-group = "studio-abi-probe"
 threads-required = "num-test-threads"
 
+[[profile.default.overrides]]
+filter = "package(pandar-network-plugin) & binary(task_token_refresh)"
+test-group = "studio-abi-probe"
+threads-required = "num-test-threads"
+
+[[profile.default.overrides]]
+filter = "package(pandar-network-plugin) & binary(logout_revoke)"
+test-group = "studio-abi-probe"
+threads-required = "num-test-threads"
+
+[[profile.default.overrides]]
+filter = "package(pandar-network-plugin) & binary(logout_revoke_upgrade)"
+test-group = "studio-abi-probe"
+threads-required = "num-test-threads"
+
+[[profile.default.overrides]]
+filter = "package(pandar-network-plugin) & binary(no_auth_credential_hygiene)"
+test-group = "studio-abi-probe"
+threads-required = "num-test-threads"
+
+[[profile.default.overrides]]
+filter = "package(pandar-network-plugin) & binary(studio_print_contract_red)"
+test-group = "studio-print-contract"
+threads-required = "num-test-threads"
+
 [test-groups.postgres-print-error]
 max-threads = 1
 
 [test-groups.studio-abi-probe]
+max-threads = 1
+
+[test-groups.studio-print-contract]
 max-threads = 1

@@ -32,8 +32,22 @@ use crate::machine::mqtt::{
 };
 const PRINTER_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 
-fn snapshot_has_temperature_telemetry(snapshot: &MachineSnapshot) -> bool {
-    !snapshot.nozzle_temperatures.is_empty()
+#[derive(Debug, Default)]
+pub(crate) struct MqttPresenceState {
+    offline: bool,
+}
+
+pub(crate) struct MqttForwardingContext<'a> {
+    pub(crate) device_features: &'a DeviceFeatureCache,
+    pub(crate) firmware: Option<FirmwareReportContext>,
+    pub(crate) presence: &'a mut MqttPresenceState,
+}
+
+fn snapshot_has_telemetry(snapshot: &MachineSnapshot) -> bool {
+    snapshot.telemetry_authoritative
+        || snapshot.state.is_some()
+        || !snapshot.nozzle_temperatures.is_empty()
+        || snapshot.active_nozzle.is_some()
         || snapshot.bed_temperature_celsius.is_some()
         || snapshot.bed_target_temperature_celsius.is_some()
         || snapshot.chamber_temperature_celsius.is_some()
@@ -52,14 +66,18 @@ pub async fn forward_print_reports<T>(
 where
     T: BambuMqttTransport + ?Sized,
 {
-    forward_print_reports_inner(
+    let mut presence = MqttPresenceState::default();
+    forward_print_reports_with_context(
         config,
         transport,
         endpoint,
         report_timeout,
         sender,
-        cache,
-        None,
+        MqttForwardingContext {
+            device_features: cache,
+            firmware: None,
+            presence: &mut presence,
+        },
     )
     .await
 }
@@ -76,16 +94,46 @@ pub async fn forward_print_reports_with_firmware<T>(
 where
     T: BambuMqttTransport + ?Sized,
 {
-    forward_print_reports_inner(
+    let mut presence = MqttPresenceState::default();
+    forward_print_reports_with_context(
         config,
         transport,
         endpoint,
         report_timeout,
         sender,
-        cache,
-        Some(firmware),
+        MqttForwardingContext {
+            device_features: cache,
+            firmware: Some(firmware),
+            presence: &mut presence,
+        },
     )
     .await
+}
+
+pub(crate) async fn forward_print_reports_with_context<T>(
+    config: &AgentConfig,
+    transport: &T,
+    endpoint: &BambuPrinterEndpoint,
+    report_timeout: Duration,
+    sender: &mpsc::Sender<AgentEvent>,
+    mut context: MqttForwardingContext<'_>,
+) -> anyhow::Result<()>
+where
+    T: BambuMqttTransport + ?Sized,
+{
+    let result = forward_print_reports_inner(
+        config,
+        transport,
+        endpoint,
+        report_timeout,
+        sender,
+        &mut context,
+    )
+    .await;
+    if result.is_err() {
+        mark_mqtt_offline(config, endpoint, sender, context.presence).await;
+    }
+    result
 }
 
 async fn forward_print_reports_inner<T>(
@@ -94,8 +142,7 @@ async fn forward_print_reports_inner<T>(
     endpoint: &BambuPrinterEndpoint,
     report_timeout: Duration,
     sender: &mpsc::Sender<AgentEvent>,
-    cache: &DeviceFeatureCache,
-    firmware_context: Option<FirmwareReportContext>,
+    context: &mut MqttForwardingContext<'_>,
 ) -> anyhow::Result<()>
 where
     T: BambuMqttTransport + ?Sized,
@@ -105,11 +152,11 @@ where
         .subscribe(&topics.report)
         .await
         .with_context(|| format!("subscribe to report topic {}", topics.report))?;
-    let mut firmware_processor = if let Some(context) = firmware_context {
+    let mut firmware_processor = if let Some(firmware) = context.firmware.take() {
         Some(
             super::firmware::FirmwareReportProcessor::start(
                 endpoint,
-                context,
+                firmware,
                 report_timeout,
                 transport,
                 &topics,
@@ -119,14 +166,12 @@ where
     } else {
         None
     };
+    let (pushall, sequence_id) = pushall_command(&topics.request);
     transport
-        .publish(PublishedMqttCommand {
-            topic: topics.request.clone(),
-            payload: BambuMqttCommand::RequestPushAll.payload(),
-            qos: BAMBU_MQTT_QOS,
-        })
+        .publish(pushall)
         .await
         .with_context(|| format!("publish pushall to request topic {}", topics.request))?;
+    let mut outstanding_pushall = Some(sequence_id);
 
     let mut refresh_interval = interval_at(
         Instant::now() + PRINTER_REFRESH_INTERVAL,
@@ -139,12 +184,9 @@ where
             biased;
             _ = sender.closed() => break,
             _ = refresh_interval.tick() => {
+                let (pushall, sequence_id) = pushall_command(&topics.request);
                 transport
-                    .publish(PublishedMqttCommand {
-                        topic: topics.request.clone(),
-                        payload: BambuMqttCommand::RequestPushAll.payload(),
-                        qos: BAMBU_MQTT_QOS,
-                    })
+                    .publish(pushall)
                     .await
                     .with_context(|| {
                         format!(
@@ -152,6 +194,7 @@ where
                             topics.request
                         )
                     })?;
+                outstanding_pushall = Some(sequence_id);
             },
             report = transport.next_report(report_timeout) => {
                 match report {
@@ -191,11 +234,26 @@ where
                     }
                 };
                 if let Some(value) = device_features {
-                    cache.update(&endpoint.serial, value).await;
+                    context.device_features.update(&endpoint.serial, value).await;
                 }
                 let mut snapshot = snapshot_from_parsed_report(endpoint, snapshot_report.as_ref());
+                snapshot.telemetry_authoritative = outstanding_pushall.as_deref().is_some_and(
+                    |sequence_id| {
+                        snapshot_report
+                            .as_ref()
+                            .is_some_and(|report| report.is_full_push_status(sequence_id))
+                    },
+                );
+                if snapshot.telemetry_authoritative {
+                    outstanding_pushall = None;
+                }
+                snapshot.model = None;
                 snapshot.device_features = device_features;
-                let snapshot_event = snapshot_has_temperature_telemetry(&snapshot)
+                if context.presence.offline && !snapshot.telemetry_authoritative {
+                    snapshot.state = None;
+                }
+                let restores_presence = snapshot.telemetry_authoritative;
+                let snapshot_event = snapshot_has_telemetry(&snapshot)
                     .then(|| printer_snapshot_event(config, snapshot));
                 let feature_event = (snapshot_event.is_none() && device_features.is_some())
                     .then(|| feature_event(config, endpoint.serial.clone(), device_features));
@@ -215,9 +273,13 @@ where
                     break;
                 }
                 if let Some(snapshot_event) = snapshot_event
-                    && sender.send(snapshot_event).await.is_err()
                 {
-                    break;
+                    if sender.send(snapshot_event).await.is_err() {
+                        break;
+                    }
+                    if restores_presence {
+                        context.presence.offline = false;
+                    }
                 }
                 if let Some(feature_event) = feature_event
                     && sender.send(feature_event).await.is_err()
@@ -242,6 +304,9 @@ where
                     error = %format!("{err:#}"),
                     "printer report receive failed"
                 );
+                if !mark_mqtt_offline(config, endpoint, sender, context.presence).await {
+                    break;
+                }
             }
             Err(err) => {
                 return Err(err).with_context(|| {
@@ -257,4 +322,59 @@ where
     }
 
     Ok(())
+}
+
+fn pushall_command(topic: &str) -> (PublishedMqttCommand, String) {
+    let command = BambuMqttCommand::RequestPushAll.command_payload();
+    let sequence_id = command
+        .sequence_id
+        .expect("pushall commands always carry a sequence id");
+    (
+        PublishedMqttCommand {
+            topic: topic.to_owned(),
+            payload: command.payload,
+            qos: BAMBU_MQTT_QOS,
+        },
+        sequence_id,
+    )
+}
+
+async fn mark_mqtt_offline(
+    config: &AgentConfig,
+    endpoint: &BambuPrinterEndpoint,
+    sender: &mpsc::Sender<AgentEvent>,
+    presence: &mut MqttPresenceState,
+) -> bool {
+    if presence.offline {
+        return true;
+    }
+    let snapshot = MachineSnapshot {
+        serial: endpoint.serial.clone(),
+        host: None,
+        access_code: None,
+        name: endpoint
+            .name
+            .clone()
+            .unwrap_or_else(|| endpoint.serial.clone()),
+        model: None,
+        state: Some("offline".to_owned()),
+        nozzle_temperatures: Vec::new(),
+        active_nozzle: None,
+        bed_temperature_celsius: None,
+        bed_target_temperature_celsius: None,
+        chamber_temperature_celsius: None,
+        chamber_target_temperature_celsius: None,
+        chamber_light_on: None,
+        device_features: None,
+        telemetry_authoritative: false,
+    };
+    if sender
+        .send(printer_snapshot_event(config, snapshot))
+        .await
+        .is_err()
+    {
+        return false;
+    }
+    presence.offline = true;
+    true
 }

@@ -1,11 +1,15 @@
-use serde::Deserialize;
-use serde_json::{Number, Value};
+mod schema;
+
+use serde_json::Value;
 
 use crate::machine::{
     BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot, types::decode_json_payload,
 };
 
-use super::device_features::{FunField, deserialize_fun_field, device_feature_observation};
+use self::schema::{NozzleInfo, ScalarValue, SnapshotPrint, TemperatureValue};
+use super::device_features::device_feature_observation;
+
+pub(crate) use self::schema::SnapshotReport;
 
 pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> MachineSnapshot {
     let report = parse_snapshot_report(report);
@@ -26,8 +30,7 @@ pub(crate) fn snapshot_from_parsed_report(
             trimmed_string(print.gcode_state.as_ref())
                 .or_else(|| trimmed_string(print.state.as_ref()))
         })
-        .or_else(|| report.and_then(|report| trimmed_string(report.state.as_ref())))
-        .unwrap_or_else(|| "unknown".to_owned());
+        .or_else(|| report.and_then(|report| trimmed_string(report.state.as_ref())));
     let (packed_bed_temperature, packed_bed_target_temperature) =
         packed_temperature_pair(print.and_then(|print| print.device.bed_temp.as_ref()));
     let (packed_chamber_temperature, packed_chamber_target_temperature) =
@@ -64,133 +67,8 @@ pub(crate) fn snapshot_from_parsed_report(
         device_features: report
             .and_then(|report| device_feature_observation(&endpoint.serial, report).ok())
             .flatten(),
+        telemetry_authoritative: false,
     }
-}
-
-#[derive(Debug, Default, Deserialize)]
-pub(crate) struct SnapshotReport {
-    #[serde(default)]
-    state: Option<ScalarValue>,
-    #[serde(default)]
-    pub(super) print: Option<SnapshotPrint>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-pub(super) struct SnapshotPrint {
-    #[serde(default, deserialize_with = "deserialize_fun_field")]
-    pub(super) fun: FunField,
-    #[serde(default)]
-    gcode_state: Option<ScalarValue>,
-    #[serde(default)]
-    state: Option<ScalarValue>,
-    #[serde(default, alias = "bed_temp", alias = "bed_temperature")]
-    bed_temper: Option<TemperatureValue>,
-    #[serde(default, alias = "target_bed_temper", alias = "bed_target_temperature")]
-    bed_target_temper: Option<TemperatureValue>,
-    #[serde(default, alias = "chamber_temp", alias = "chamber_temperature")]
-    chamber_temper: Option<TemperatureValue>,
-    #[serde(default, rename = "ctt")]
-    chamber_target_temper: Option<TemperatureValue>,
-    #[serde(default, alias = "nozzle_temp", alias = "nozzle_temperature")]
-    nozzle_temper: Option<TemperatureValue>,
-    #[serde(
-        default,
-        alias = "target_nozzle_temper",
-        alias = "nozzle_target_temperature"
-    )]
-    nozzle_target_temper: Option<TemperatureValue>,
-    #[serde(default, alias = "right_nozzle_temper", alias = "nozzle_temp2")]
-    nozzle_temper2: Option<TemperatureValue>,
-    #[serde(
-        default,
-        alias = "right_nozzle_target_temper",
-        alias = "target_nozzle_temper2"
-    )]
-    nozzle_target_temper2: Option<TemperatureValue>,
-    #[serde(default)]
-    lights_report: Vec<LightReport>,
-    #[serde(default)]
-    device: SnapshotDevice,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct SnapshotDevice {
-    #[serde(default)]
-    bed_temp: Option<TemperatureValue>,
-    #[serde(default)]
-    ctc: CtcDevice,
-    #[serde(default)]
-    extruder: ExtruderDevice,
-    #[serde(default)]
-    nozzle: NozzleDevice,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct CtcDevice {
-    #[serde(default)]
-    info: CtcInfo,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct CtcInfo {
-    #[serde(default)]
-    temp: Option<TemperatureValue>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct ExtruderDevice {
-    #[serde(default)]
-    state: Option<u64>,
-    #[serde(default)]
-    info: Vec<ExtruderInfo>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ExtruderInfo {
-    #[serde(default)]
-    id: Option<u64>,
-    #[serde(default)]
-    temp: Option<TemperatureValue>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct NozzleDevice {
-    #[serde(default)]
-    info: Vec<NozzleInfo>,
-}
-
-#[derive(Debug, Deserialize)]
-struct NozzleInfo {
-    #[serde(default)]
-    id: Option<u64>,
-    #[serde(default)]
-    diameter: Option<ScalarValue>,
-    #[serde(default)]
-    nozzle_type: Option<String>,
-    #[serde(default, rename = "type")]
-    kind: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct LightReport {
-    #[serde(default)]
-    node: Option<String>,
-    #[serde(default)]
-    mode: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum TemperatureValue {
-    Number(Number),
-    String(String),
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-enum ScalarValue {
-    Number(Number),
-    String(String),
 }
 
 fn chamber_light_on_from_report(print: Option<&SnapshotPrint>) -> Option<bool> {
@@ -199,7 +77,11 @@ fn chamber_light_on_from_report(print: Option<&SnapshotPrint>) -> Option<bool> {
         .iter()
         .find(|light| light.node.as_deref() == Some("chamber_light"))
         .and_then(|light| light.mode.as_deref())
-        .map(|mode| mode == "on")
+        .and_then(|mode| match mode {
+            "on" | "flashing" => Some(true),
+            "off" => Some(false),
+            _ => None,
+        })
 }
 
 fn active_nozzle_from_report(print: Option<&SnapshotPrint>) -> Option<String> {

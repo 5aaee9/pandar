@@ -5,6 +5,10 @@ import { apiHeaders, authSource } from "../api-auth";
 import { authProviderConfig } from "../auth-provider";
 import type { Tenant, TenantList } from "../dashboard-types";
 import { LanguageSwitcher } from "../../components/language-switcher";
+import {
+  pluginAuthSignInUrl,
+  pluginSignInReturnTarget,
+} from "./auth-return";
 import { PluginTicketForm } from "./plugin-ticket-form";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
@@ -100,6 +104,11 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
   const redirectUrl = Array.isArray(params?.redirect_url)
     ? params.redirect_url[0]
     : params?.redirect_url;
+  const callbackUrl = redirectUrl ?? defaultRedirectUrl;
+  const authSignInUrl = pluginAuthSignInUrl(
+    provider,
+    pluginSignInReturnTarget(requestedTenant, callbackUrl),
+  );
   const selectedTenant =
     tenants.find((tenant) => tenant.id === requestedTenant) ??
     (!requestedTenant && tenants.length === 1 ? tenants[0] : null);
@@ -151,8 +160,8 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
             message={t("authMessage")}
             statusLabel={t("actionRequired")}
             actions={[
-              ...(provider.signInUrl
-                ? [{ href: provider.signInUrl, label: t("signIn") }]
+              ...(authSignInUrl
+                ? [{ href: authSignInUrl, label: t("signIn") }]
                 : []),
               { href: "/", label: t("returnDashboard") },
             ]}
@@ -188,7 +197,7 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
               <input
                 name="redirect_url"
                 type="hidden"
-                value={redirectUrl ?? defaultRedirectUrl}
+                value={callbackUrl}
               />
               <label className="grid gap-1 text-sm">
                 <span className="text-xs font-medium text-slate-500">
@@ -217,7 +226,7 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
           <PluginTicketForm
             action={createPluginTicket}
             autoSelectedTenant={!requestedTenant && tenants.length === 1}
-            redirectUrl={redirectUrl ?? defaultRedirectUrl}
+            redirectUrl={callbackUrl}
             selectedTenant={selectedTenant}
           />
         )}

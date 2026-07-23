@@ -1,8 +1,40 @@
 #pragma once
 
-#include "shim_types.hpp"
+#include "shim_connection.hpp"
+#include "shim_account_ffi.hpp"
+#include "shim_account_callbacks.hpp"
 
 namespace pandar::network_plugin {
+
+using PluginPrinterRefreshTransaction = std::int32_t (*)(void*);
+using PluginPrinterRefreshWithLock = std::int32_t (*)(
+    void*, void*, PluginPrinterRefreshTransaction
+);
+using PluginPrinterRefreshFirmwareObserver = void (*)(
+    void*, const std::uint8_t*, std::size_t
+);
+
+struct PluginPrinterRefreshAdapter {
+    void* context;
+    PluginPrinterRefreshWithLock with_refresh_lock;
+    void (*reserve_observation)(void*);
+    PluginPrinterRefreshFirmwareObserver observe_printers;
+    PluginConnectionDeviceVisitor collect_offline;
+};
+
+struct PluginPrinterRefreshLifecycleResult {
+    PluginHttpResult http;
+    PluginConnectionResult connection;
+    std::int32_t cache_committed;
+    std::int32_t snapshot_current;
+};
+
+constexpr std::int32_t kPrinterRefreshStudioPrintInfo = 1;
+constexpr std::int32_t kPrinterRefreshBackground = 2;
+
+extern "C" PluginPrinterRefreshLifecycleResult pandar_plugin_printer_refresh_with_session(
+    void*, std::int32_t, void*, PluginWithCurrentAccount, PluginPrinterRefreshAdapter
+);
 
 Agent* as_agent(void* raw) {
     return reinterpret_cast<Agent*>(raw);
@@ -10,12 +42,10 @@ Agent* as_agent(void* raw) {
 
 void trace_plugin_event(const Agent* agent, const std::string& message) {
     if (!agent) return;
+    std::lock_guard<std::mutex> lock(agent->trace_mutex);
     std::filesystem::path base;
-    {
-        std::lock_guard<std::mutex> lock(agent->trace_mutex);
-        base = !agent->config_dir.empty() ? std::filesystem::path(agent->config_dir)
-                                          : std::filesystem::path(agent->log_dir);
-    }
+    base = !agent->config_dir.empty() ? std::filesystem::path(agent->config_dir)
+                                      : std::filesystem::path(agent->log_dir);
     if (base.empty()) return;
     std::error_code ec;
     std::filesystem::create_directories(base, ec);
@@ -29,126 +59,150 @@ void trace_plugin_event(const Agent* agent, const std::string& event, const std:
 
 std::string body_from_result(PluginHttpResult result);
 void refresh_local_webserver_config(Agent* agent);
-PluginHttpResult rust_get_printers(const Agent* agent);
-PluginHttpResult get_printers_with_token_refresh(
-    Agent*, std::uint64_t& request_epoch, FirmwareObservationTicket& observation
-);
 void sync_printer_refresh_session(Agent* agent);
+void invalidate_firmware_account_session(Agent* agent);
+bool try_no_auth_session(Agent* agent, bool initial_attempt);
 FirmwareObservationTicket begin_firmware_observation(Agent* agent);
-bool observe_firmware_printers(
-    Agent*, const std::string& body, const FirmwareObservationTicket& observation
-);
-BBL::OnMessageFn message_callback_for(Agent* agent, MessageTunnel tunnel);
-void invoke_message_callback(
-    Agent*, const BBL::OnMessageFn&, const std::string&, const std::string&
-);
-
-struct FirmwareObservationReservation {
+struct PrinterRefreshAdapterState {
     Agent* agent;
-    FirmwareObservationTicket* observation;
+    FirmwareObservationTicket observation;
+    std::vector<IssuedOfflineDelivery> offline;
 };
 
-extern "C" void reserve_firmware_observation(void* context) noexcept {
-    auto* reservation = static_cast<FirmwareObservationReservation*>(context);
-    *reservation->observation = begin_firmware_observation(reservation->agent);
+extern "C" std::int32_t with_printer_refresh_lock(
+    void* context,
+    void* transaction_context,
+    PluginPrinterRefreshTransaction transaction
+) noexcept {
+    auto* adapter = static_cast<PrinterRefreshAdapterState*>(context);
+    if (!adapter || !adapter->agent || !transaction) return 1;
+    std::lock_guard<std::recursive_mutex> refresh(adapter->agent->printer_refresh_mutex);
+    return transaction(transaction_context);
 }
 
-bool has_hub(const Agent* agent) {
-    return agent && !agent->hub_url.empty();
+extern "C" void reserve_printer_refresh_observation(void* context) noexcept {
+    auto* adapter = static_cast<PrinterRefreshAdapterState*>(context);
+    adapter->observation = begin_firmware_observation(adapter->agent);
 }
 
-void clear_login_state(Agent* agent, bool sync_sessions = true) {
-    agent->printer_status_epoch.fetch_add(1);
+extern "C" void observe_printer_refresh_firmware(
+    void* context,
+    const std::uint8_t* body,
+    std::size_t body_len
+) noexcept {
+    auto* adapter = static_cast<PrinterRefreshAdapterState*>(context);
+    if (!adapter->agent->firmware_session) return;
+    std::lock_guard<std::recursive_mutex> transition(
+        adapter->agent->firmware_transition_mutex
+    );
+    pandar_plugin_firmware_observe_printers(
+        adapter->agent->firmware_session,
+        body,
+        body_len,
+        adapter->observation.generation,
+        adapter->observation.sequence
+    );
+}
+
+extern "C" void collect_printer_refresh_offline(
+    void* context,
+    const std::uint8_t* dev_id,
+    std::size_t dev_id_len,
+    std::uint64_t ticket
+) noexcept {
+    auto* adapter = static_cast<PrinterRefreshAdapterState*>(context);
+    adapter->offline.push_back({
+        std::string(reinterpret_cast<const char*>(dev_id), dev_id_len),
+        ticket,
+    });
+}
+
+PluginPrinterRefreshAdapter printer_refresh_adapter(PrinterRefreshAdapterState* state) {
+    return {
+        state,
+        with_printer_refresh_lock,
+        reserve_printer_refresh_observation,
+        observe_printer_refresh_firmware,
+        collect_printer_refresh_offline,
+    };
+}
+
+struct LocalLostDelivery {
+    std::uint64_t account_epoch = 0;
+};
+
+LocalLostDelivery reset_account_printer_state(Agent* agent) {
+    std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
+    pandar_plugin_studio_begin_account_transition(agent->printer_refresh_session);
+    invalidate_firmware_account_session(agent);
+    return {studio_session_state(agent).account_epoch};
+}
+
+std::function<void()> finish_account_printer_transition(
+    Agent* agent,
+    const LocalLostDelivery& transition
+) {
+    std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
+    auto offline = take_printer_offline_transitions(agent);
+    auto studio = take_studio_offline_transitions(agent);
+    return [agent, account_epoch = transition.account_epoch,
+            offline = std::move(offline), studio = std::move(studio)]() mutable {
+        dispatch_issued_printer_offline_transitions(
+            agent, std::move(offline), std::move(studio)
+        );
+        std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
+        pandar_plugin_studio_finish_account_transition(
+            agent->printer_refresh_session, account_epoch
+        );
+    };
+}
+
+std::string account_token_snapshot(const Agent* agent) {
+    std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
+    return agent->token;
+}
+
+bool account_session_current(
+    const Agent* agent,
+    std::uint64_t expected_epoch,
+    const std::string& expected_token,
+    bool require_logged_out
+) {
+    std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
+    const auto state = studio_session_state(agent);
+    return static_cast<AccountPolicyAction>(pandar_plugin_account_commit_action(
+        expected_epoch,
+        state.account_epoch,
+        reinterpret_cast<const uint8_t*>(expected_token.data()), expected_token.size(),
+        reinterpret_cast<const uint8_t*>(agent->token.data()), agent->token.size(),
+        require_logged_out
+    )) == AccountPolicyAction::Apply;
+}
+
+bool account_transition_current(
+    const Agent* agent,
+    const LocalLostDelivery& transition,
+    const std::string& expected_token,
+    bool require_logged_out
+) {
+    return account_session_current(
+        agent, transition.account_epoch, expected_token, require_logged_out
+    );
+}
+
+LocalLostDelivery clear_login_state(Agent* agent, bool sync_sessions = true) {
+    auto lost = reset_account_printer_state(agent);
+    std::unique_lock<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
     agent->token.clear();
     agent->user_id.clear();
     agent->user_name.clear();
     agent->avatar.clear();
     agent->profile_json.clear();
-    {
-        std::lock_guard<std::mutex> lock(agent->status_mutex);
-        agent->selected_machine.clear();
-        agent->printer_connections.clear();
-        agent->pandar_printer_ids.clear();
-        agent->printer_models.clear();
-        agent->printer_telemetry.clear();
-        agent->cloud_subscribed_devices.clear();
-        agent->cloud_initialized_devices.clear();
-        agent->cloud_connection_notifications.clear();
+    agent->account_session_kind = 0;
+    if (sync_sessions) {
+        sync_printer_refresh_session(agent);
     }
-    agent->connected = false;
-    if (sync_sessions) sync_printer_refresh_session(agent);
-}
-
-std::filesystem::path persisted_login_path(const Agent* agent) {
-    if (!agent || agent->config_dir.empty()) return {};
-    return std::filesystem::path(agent->config_dir) / "pandar-plugin-login.json";
-}
-
-void clear_persisted_login(Agent* agent) {
-    const auto path = persisted_login_path(agent);
-    if (path.empty()) return;
-    std::error_code ignored;
-    std::filesystem::remove(path, ignored);
-}
-
-std::pair<std::string, bool> env_or_default(const char* primary, const char* secondary, std::string fallback) {
-    if (const char* value = std::getenv(primary); value && value[0] != '\0') {
-        return {value, true};
-    }
-    if (const char* value = std::getenv(secondary); value && value[0] != '\0') {
-        return {value, true};
-    }
-    return {std::move(fallback), false};
-}
-
-std::string escape_json(const std::string& value) {
-    std::string out;
-    out.reserve(value.size() + 2);
-    out.push_back('"');
-    for (char c : value) {
-        switch (c) {
-            case '\\': out += "\\\\"; break;
-            case '"': out += "\\\""; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            case '\t': out += "\\t"; break;
-            default: out.push_back(c); break;
-        }
-    }
-    out.push_back('"');
-    return out;
-}
-
-std::string field_from_json(const std::string& json, const char* key) {
-    const std::string needle = std::string("\"") + key + "\"";
-    const auto key_pos = json.find(needle);
-    if (key_pos == std::string::npos) return {};
-    const auto colon = json.find(':', key_pos + needle.size());
-    if (colon == std::string::npos) return {};
-    const auto quote = json.find_first_not_of(" \t\r\n", colon + 1);
-    if (quote == std::string::npos || json[quote] != '"') return {};
-    std::string out;
-    for (std::size_t i = quote + 1; i < json.size(); ++i) {
-        const char c = json[i];
-        if (c == '\\' && i + 1 < json.size()) {
-            out.push_back(json[++i]);
-            continue;
-        }
-        if (c == '"') break;
-        out.push_back(c);
-    }
-    return out;
-}
-
-std::vector<std::string> objects_from_array(const std::string& json, const char* key);
-std::string object_from_json(const std::string& json, const char* key);
-
-std::string printer_telemetry_from_json(const std::string& printer) {
-    auto result = pandar_plugin_printer_telemetry_json(
-        reinterpret_cast<const uint8_t*>(printer.data()),
-        printer.size()
-    );
-    return body_from_result(result);
+    return lost;
 }
 
 std::string studio_dev_id(std::string dev_id) {
@@ -158,189 +212,39 @@ std::string studio_dev_id(std::string dev_id) {
     return dev_id;
 }
 
-std::vector<std::string> objects_from_array(const std::string& json, const char* key) {
-    const std::string needle = std::string("\"") + key + "\"";
-    const auto key_pos = json.find(needle);
-    if (key_pos == std::string::npos) return {};
-    const auto colon = json.find(':', key_pos + needle.size());
-    if (colon == std::string::npos) return {};
-    const auto start = json.find('[', colon + 1);
-    if (start == std::string::npos) return {};
-    int array_depth = 0;
-    int object_depth = 0;
-    bool in_string = false;
-    bool escaped = false;
-    std::size_t object_start = std::string::npos;
-    std::vector<std::string> objects;
-    for (std::size_t i = start; i < json.size(); ++i) {
-        const char c = json[i];
-        if (escaped) {
-            escaped = false;
-            continue;
-        }
-        if (c == '\\' && in_string) {
-            escaped = true;
-            continue;
-        }
-        if (c == '"') {
-            in_string = !in_string;
-            continue;
-        }
-        if (in_string) continue;
-        if (c == '[') {
-            ++array_depth;
-            continue;
-        }
-        if (c == ']') {
-            --array_depth;
-            if (array_depth == 0) break;
-            continue;
-        }
-        if (array_depth != 1) continue;
-        if (c == '{') {
-            if (object_depth == 0) object_start = i;
-            ++object_depth;
-            continue;
-        }
-        if (c == '}') {
-            --object_depth;
-            if (object_depth == 0 && object_start != std::string::npos) {
-                objects.push_back(json.substr(object_start, i - object_start + 1));
-                object_start = std::string::npos;
-            }
-        }
-    }
-    return objects;
-}
-
-bool remember_printer_connections(
-    Agent* agent,
-    const std::string& body,
-    std::uint64_t expected_epoch
-) {
-    if (!agent) return false;
-    std::map<std::string, std::pair<std::string, std::string>> printer_connections;
-    std::map<std::string, std::string> pandar_printer_ids;
-    std::map<std::string, std::string> printer_models;
-    std::map<std::string, std::string> printer_telemetry;
-    for (const auto& printer : objects_from_array(body, "devices")) {
-        const auto dev_id = field_from_json(printer, "dev_id");
-        if (dev_id.empty()) continue;
-        printer_connections[dev_id] = {
-            field_from_json(printer, "dev_ip"),
-            field_from_json(printer, "dev_access_code"),
-        };
-        if (const auto pandar_id = field_from_json(printer, "pandar_printer_id"); !pandar_id.empty()) {
-            pandar_printer_ids[dev_id] = pandar_id;
-        }
-        if (const auto model = field_from_json(printer, "dev_model_name"); !model.empty()) {
-            printer_models[dev_id] = model;
-        }
-        printer_telemetry[dev_id] = printer_telemetry_from_json(printer);
-    }
-    {
-        std::lock_guard<std::mutex> lock(agent->status_mutex);
-        if (agent->printer_status_epoch.load() != expected_epoch) {
-            return false;
-        }
-        agent->printer_connections.swap(printer_connections);
-        agent->pandar_printer_ids.swap(pandar_printer_ids);
-        agent->printer_models.swap(printer_models);
-        agent->printer_telemetry.swap(printer_telemetry);
-    }
-    return true;
+std::string borrowed_string(const uint8_t* ptr, std::size_t len) {
+    return std::string(reinterpret_cast<const char*>(ptr), len);
 }
 
 bool refresh_printer_status_cache(Agent* agent) {
     if (!agent || !agent->printer_refresh_session) return false;
-    const auto epoch = agent->printer_status_epoch.load();
-    FirmwareObservationTicket observation;
-    FirmwareObservationReservation reservation{agent, &observation};
-    auto result = pandar_plugin_printer_refresh(
+    refresh_local_webserver_config(agent);
+    std::unique_lock<std::mutex> request(agent->printer_refresh_request_mutex);
+    PrinterRefreshAdapterState adapter_state{agent};
+    auto lifecycle = pandar_plugin_printer_refresh_with_session(
         agent->printer_refresh_session,
-        &reservation,
-        reserve_firmware_observation
+        kPrinterRefreshBackground,
+        agent,
+        with_current_account,
+        printer_refresh_adapter(&adapter_state)
     );
-    const auto status = result.status;
-    const auto http_code = result.http_code;
-    auto body = body_from_result(result);
-    if (status != 0) {
+    const auto status = lifecycle.http.status;
+    const auto http_code = lifecycle.http.http_code;
+    auto body = body_from_result(lifecycle.http);
+    const auto cache_committed = lifecycle.cache_committed != 0;
+    request.unlock();
+    dispatch_connection_transition(agent, lifecycle.connection);
+    dispatch_printer_offline_transitions(agent, std::move(adapter_state.offline));
+    if (!cache_committed) {
         trace_plugin_event(
             agent,
             "printer status refresh failed status=" + std::to_string(status) +
                 " http_code=" + std::to_string(http_code) + " body=" + body
         );
-        return false;
     }
-    const auto remembered = remember_printer_connections(agent, body, epoch);
-    if (remembered) observe_firmware_printers(agent, body, observation);
-    return remembered;
+    return cache_committed;
 }
-
-std::pair<std::string, std::string> printer_connection_for(const Agent* agent, const std::string& dev_id) {
-    if (!agent) return {};
-    std::lock_guard<std::mutex> lock(agent->status_mutex);
-    if (const auto it = agent->printer_connections.find(studio_dev_id(dev_id)); it != agent->printer_connections.end()) {
-        return it->second;
-    }
-    return {};
-}
-
-std::string pandar_printer_id_for(const Agent* agent, const std::string& dev_id) {
-    if (!agent) return studio_dev_id(dev_id);
-    std::lock_guard<std::mutex> lock(agent->status_mutex);
-    const auto normalized = studio_dev_id(dev_id);
-    if (const auto it = agent->pandar_printer_ids.find(normalized); it != agent->pandar_printer_ids.end()) {
-        return it->second;
-    }
-    return normalized;
-}
-
-std::string printer_model_for(const Agent* agent, const std::string& dev_id) {
-    if (!agent) return "C11";
-    std::lock_guard<std::mutex> lock(agent->status_mutex);
-    if (const auto it = agent->printer_models.find(studio_dev_id(dev_id)); it != agent->printer_models.end()) {
-        return it->second;
-    }
-    return "C11";
-}
-
-std::string first_known_printer_id(Agent* agent) {
-    if (!agent) return {};
-    std::lock_guard<std::mutex> lock(agent->status_mutex);
-    if (!agent->printer_connections.empty()) return agent->printer_connections.begin()->first;
-    if (!agent->cloud_subscribed_devices.empty()) return *agent->cloud_subscribed_devices.begin();
-    return {};
-}
-
-std::string ensure_selected_machine(Agent* agent) {
-    if (!agent) return {};
-    {
-        std::lock_guard<std::mutex> lock(agent->status_mutex);
-        if (!agent->selected_machine.empty()) return agent->selected_machine;
-    }
-
-    auto selected = first_known_printer_id(agent);
-    if (selected.empty() && !agent->token.empty()) {
-        refresh_local_webserver_config(agent);
-        std::uint64_t request_epoch = 0;
-        FirmwareObservationTicket observation;
-        auto result = get_printers_with_token_refresh(agent, request_epoch, observation);
-        auto body = body_from_result(result);
-        if (result.status == 0 && remember_printer_connections(agent, body, request_epoch)) {
-            observe_firmware_printers(agent, body, observation);
-            selected = first_known_printer_id(agent);
-        }
-    }
-
-    if (!selected.empty()) {
-        std::lock_guard<std::mutex> lock(agent->status_mutex);
-        if (agent->selected_machine.empty()) agent->selected_machine = selected;
-        agent->cloud_subscribed_devices.insert(selected);
-        return agent->selected_machine;
-    }
-    return {};
-}
-
 
 } // namespace pandar::network_plugin
+
+#include "shim_printer_cache.hpp"

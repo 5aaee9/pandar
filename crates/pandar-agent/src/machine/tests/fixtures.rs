@@ -51,7 +51,7 @@ struct ProjectFile<'a> {
     sequence_id: &'a str,
     param: &'static str,
     project_id: &'a str,
-    profile_id: &'static str,
+    profile_id: &'a str,
     task_id: &'a str,
     subtask_id: &'a str,
     subtask_name: &'static str,
@@ -71,6 +71,7 @@ struct ProjectFile<'a> {
     nozzle_offset_cali: u8,
     cfg: &'static str,
     extrude_cali_flag: u8,
+    extrude_cali_manual_mode: i32,
 }
 
 #[derive(Serialize)]
@@ -202,14 +203,14 @@ pub(super) fn expected_project_file_payload(sequence_id: &str, submission_id: &s
             sequence_id,
             param: "Metadata/plate_1.gcode",
             project_id: submission_id,
-            profile_id: "0",
+            profile_id: submission_id,
             task_id: submission_id,
             subtask_id: submission_id,
             subtask_name: "plate",
             url: "ftp://plate.gcode.3mf",
             file: "plate.gcode.3mf",
             md5: "900150983CD24FB0D6963F7D28E17F72",
-            bed_type: "auto",
+            bed_type: "textured_plate",
             bed_leveling: false,
             flow_cali: false,
             vibration_cali: false,
@@ -222,6 +223,7 @@ pub(super) fn expected_project_file_payload(sequence_id: &str, submission_id: &s
             nozzle_offset_cali: 0,
             cfg: "0",
             extrude_cali_flag: 0,
+            extrude_cali_manual_mode: -1,
         },
     })
 }

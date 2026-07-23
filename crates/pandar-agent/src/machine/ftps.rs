@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use anyhow::{Context, anyhow};
+use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
 use rustls::{ClientConfig, version};
 use suppaftp::{
@@ -18,7 +18,7 @@ use crate::machine::{
     compatibility::ftps_tls_1_2_cap,
     file_transfer::{
         BAMBU_FILE_TRANSFER_CHUNK_SIZE, BAMBU_FILE_TRANSFER_PORT, BAMBU_FILE_TRANSFER_USERNAME,
-        FileUploadResult, MachineFileTransfer, TransferProtectionMode,
+        FileUploadResult, MachineFileTransfer, PrintUploadPolicy, TransferProtectionMode,
     },
     mqtt::BambuLanCertificateVerifier,
 };
@@ -292,6 +292,19 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
         .await
     }
 
+    async fn upload_print(
+        &self,
+        path: &str,
+        bytes: &[u8],
+        mode: TransferProtectionMode,
+        policy: PrintUploadPolicy,
+    ) -> anyhow::Result<FileUploadResult> {
+        if policy.try_emmc_print {
+            bail!("FTPS-only transfer cannot honor try_emmc_print");
+        }
+        self.upload(path, bytes, mode).await
+    }
+
     async fn delete(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<()> {
         let path = path.to_string();
         self.with_session(mode, |mut stream| async move {
@@ -305,57 +318,4 @@ impl MachineFileTransfer for FtpsMachineFileTransfer {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn profile_caps_tls_for_known_aliases_only() {
-        assert!(!FtpsProfile::for_model(None).cap_tls_1_2);
-        assert!(!FtpsProfile::for_model(Some("P1S")).cap_tls_1_2);
-        assert!(FtpsProfile::for_model(Some("P2S")).cap_tls_1_2);
-        assert!(FtpsProfile::for_model(Some("N7")).cap_tls_1_2);
-        assert!(FtpsProfile::for_model(Some("X2D")).cap_tls_1_2);
-        assert!(FtpsProfile::for_model(Some("N6")).cap_tls_1_2);
-    }
-
-    #[test]
-    fn default_profile_builds_tls_config() {
-        let config = bambu_lan_ftps_tls_config_for_default_profile();
-
-        assert!(config.alpn_protocols.is_empty());
-    }
-
-    #[test]
-    fn p2s_profile_builds_tls_config() {
-        let config = bambu_lan_ftps_tls_config(FtpsProfile::for_model(Some("P2S")));
-
-        assert!(config.alpn_protocols.is_empty());
-    }
-
-    #[test]
-    fn upload_size_verification_accepts_exact_match() {
-        assert!(matches!(
-            verify_uploaded_size(42, Some(42), "Metadata/job.3mf").unwrap(),
-            UploadVerification::Verified
-        ));
-    }
-
-    #[test]
-    fn upload_size_verification_rejects_mismatch() {
-        let err = verify_uploaded_size(42, Some(41), "Metadata/job.3mf").unwrap_err();
-        let message = err.to_string();
-
-        assert!(message.contains("Metadata/job.3mf"));
-        assert!(message.contains("expected 42 bytes"));
-        assert!(message.contains("server reported 41 bytes"));
-    }
-
-    #[test]
-    fn upload_size_verification_rejects_missing_size() {
-        let err = verify_uploaded_size(42, None, "Metadata/job.3mf").unwrap_err();
-        let message = err.to_string();
-
-        assert!(message.contains("Metadata/job.3mf"));
-        assert!(message.contains("server did not return SIZE"));
-    }
-}
+mod tests;

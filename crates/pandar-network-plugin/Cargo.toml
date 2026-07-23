@@ -17,13 +17,16 @@ futures-util.workspace = true
 http-body.workspace = true
 http-body-util.workspace = true
 pandar-core.workspace = true
+quick-xml.workspace = true
 reqwest.workspace = true
 rust-embed.workspace = true
 uuid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+zip.workspace = true
 
 [dev-dependencies]
 cc = "1.2.47"

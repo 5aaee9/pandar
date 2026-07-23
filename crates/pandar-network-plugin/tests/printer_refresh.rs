@@ -12,12 +12,20 @@ use std::{
 };
 
 use pandar_network_plugin::{
-    PluginHttpResult, pandar_plugin_free_with_capacity, pandar_plugin_printer_refresh,
-    pandar_plugin_printer_refresh_session_create, pandar_plugin_printer_refresh_session_destroy,
-    pandar_plugin_printer_refresh_session_update,
+    PluginHttpResult, pandar_plugin_connection_set_account_epoch,
+    pandar_plugin_connection_visit_printers, pandar_plugin_free_with_capacity,
+    pandar_plugin_printer_refresh, pandar_plugin_printer_refresh_session_create,
+    pandar_plugin_printer_refresh_session_destroy, pandar_plugin_printer_refresh_session_update,
 };
 
-const INITIAL_PRINTERS_RESPONSE: &str = r#"{"message":"success","devices":[{"dev_id":"serial-1","dev_name":"Printer","name":"Printer","dev_ip":null,"dev_access_code":null,"dev_model_name":null,"model":null,"dev_online":false,"online":false,"task_status":"unknown","state":"unknown","gcode_state":null,"mc_percent":null,"mc_remaining_time":null,"layer_num":null,"total_layer_num":null,"task_id":null,"subtask_id":null,"gcode_file":null,"subtask_name":null,"hms":[],"pandar_printer_id":"printer-1","nozzle_temperatures":[],"active_nozzle":null,"bed_temperature_celsius":null,"bed_target_temperature_celsius":null,"chamber_temperature_celsius":null,"chamber_light_on":null,"materials":null}]}"#;
+#[path = "printer_refresh/connection_delivery.rs"]
+mod connection_delivery;
+#[path = "printer_refresh/offline_delivery.rs"]
+mod offline_delivery;
+#[path = "printer_refresh/studio_session.rs"]
+mod studio_session;
+
+const INITIAL_PRINTERS_RESPONSE: &str = r#"{"message":"success","devices":[{"dev_id":"serial-1","dev_name":"Printer","name":"Printer","dev_model_name":null,"model":null,"dev_online":false,"online":false,"task_status":"unknown","state":"unknown","gcode_state":null,"mc_percent":null,"mc_remaining_time":null,"layer_num":null,"total_layer_num":null,"task_id":null,"subtask_id":null,"gcode_file":null,"subtask_name":null,"hms":[],"pandar_printer_id":"printer-1","nozzle_temperatures":[],"active_nozzle":null,"bed_temperature_celsius":null,"bed_target_temperature_celsius":null,"chamber_temperature_celsius":null,"chamber_light_on":null,"materials":null}]}"#;
 
 #[derive(Debug, PartialEq, Eq)]
 enum RefreshEvent {
@@ -271,6 +279,49 @@ fn status_refresh_discards_response_after_credentials_change() {
     assert_ne!(status, 0);
     assert_eq!(http_code, 0);
     assert_eq!(response_body, r#"{"error":"hub_unavailable"}"#);
+    pandar_plugin_printer_refresh_session_destroy(session);
+    server.join().unwrap();
+}
+
+#[test]
+fn status_refresh_discards_response_after_same_token_account_change() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let hub_url = format!("http://{}", listener.local_addr().unwrap());
+    let (request_started_tx, request_started_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let request = read_http_request(&mut stream);
+        assert!(request.starts_with("GET /api/v1/plugin/printers HTTP/1.1\r\n"));
+        request_started_tx.send(()).unwrap();
+        release_rx.recv().unwrap();
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{INITIAL_PRINTERS_RESPONSE}",
+            INITIAL_PRINTERS_RESPONSE.len()
+        )
+        .unwrap();
+    });
+    let session = create_session(&hub_url, "same-token");
+    let session_address = session as usize;
+    let refresh = thread::spawn(move || {
+        let result = refresh_without_observation(session_address as *mut c_void);
+        (result.status, result.http_code, body(result))
+    });
+    request_started_rx.recv().unwrap();
+
+    assert_eq!(pandar_plugin_connection_set_account_epoch(session, 1), 0);
+    release_tx.send(()).unwrap();
+    let (status, http_code, response_body) = refresh.join().unwrap();
+
+    assert_ne!(status, 0);
+    assert_eq!(http_code, 0);
+    assert_eq!(response_body, r#"{"error":"hub_unavailable"}"#);
+    assert_ne!(
+        pandar_plugin_connection_visit_printers(session, std::ptr::null_mut(), None),
+        0,
+        "old account response became a fresh printer snapshot"
+    );
     pandar_plugin_printer_refresh_session_destroy(session);
     server.join().unwrap();
 }

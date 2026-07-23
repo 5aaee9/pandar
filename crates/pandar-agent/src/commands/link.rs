@@ -62,7 +62,7 @@ where
                 host: &endpoint.host,
                 name: &snapshot.name,
                 model: snapshot.model.as_deref(),
-                status: &snapshot.state,
+                status: snapshot.state.as_deref(),
             })
             .expect("printer link result is serializable");
             sender
@@ -96,7 +96,8 @@ struct PrinterLinkResult<'a> {
     name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     model: Option<&'a str>,
-    status: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status: Option<&'a str>,
 }
 
 async fn discover_link_printer_endpoint<G>(

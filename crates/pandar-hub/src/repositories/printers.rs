@@ -47,7 +47,7 @@ pub struct PrinterSnapshotUpsert {
     pub access_code: Option<String>,
     pub name: String,
     pub model: Option<String>,
-    pub status: String,
+    pub status: Option<String>,
     pub observed_at: String,
     pub nozzle_temperatures: Vec<PrinterNozzleTemperature>,
     pub active_nozzle: Option<String>,
@@ -57,7 +57,21 @@ pub struct PrinterSnapshotUpsert {
     pub chamber_target_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
     pub connection_authoritative: bool,
+    pub telemetry_authoritative: bool,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SnapshotSessionState<'a> {
+    pub(crate) device_features: Option<BambuDeviceFeatures>,
+    pub(crate) device_features_session_id: Option<&'a str>,
+    pub(crate) mqtt_presence_session_id: Option<&'a str>,
+}
+
+const EMPTY_SNAPSHOT_SESSION_STATE: SnapshotSessionState<'static> = SnapshotSessionState {
+    device_features: None,
+    device_features_session_id: None,
+    mqtt_presence_session_id: None,
+};
 
 #[derive(Debug, Clone)]
 pub struct PrinterRepository {
@@ -285,8 +299,7 @@ impl PrinterRepository {
             tenant_id,
             agent_id,
             snapshot,
-            None,
-            None,
+            EMPTY_SNAPSHOT_SESSION_STATE,
             &self.access_code_cipher,
         )
         .await?;
@@ -310,8 +323,7 @@ impl PrinterRepository {
             tenant_id,
             agent_id,
             snapshot,
-            None,
-            None,
+            EMPTY_SNAPSHOT_SESSION_STATE,
             &self.access_code_cipher,
         )
         .await?;
@@ -327,8 +339,7 @@ async fn upsert_snapshot_in_transaction(
     tenant_id: TenantId,
     agent_id: AgentId,
     snapshot: PrinterSnapshotUpsert,
-    device_features: Option<BambuDeviceFeatures>,
-    device_features_session_id: Option<&str>,
+    session_state: SnapshotSessionState<'_>,
     access_code_cipher: &PrinterAccessCodeCipher,
 ) -> RepositoryResult<Printer> {
     let access_code_encrypted = snapshot
@@ -344,8 +355,7 @@ async fn upsert_snapshot_in_transaction(
         agent_id,
         &snapshot,
         access_code_encrypted.as_deref(),
-        device_features,
-        device_features_session_id,
+        session_state,
     )
     .await?;
     printers::Entity::find()

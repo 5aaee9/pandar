@@ -148,7 +148,10 @@ async fn job_repository_reprint_and_duplicate_reuse_artifact_metadata() {
     input.artifact_metadata_json = Some(artifact_metadata_json("Reusable", 2));
     input.ams_mapping_json = Some("[0]".to_owned());
     input.ams_mapping2_json = Some(r#"[{"ams_id":0,"slot_id":0}]"#.to_owned());
-    input.ams_mapping_info_json = Some(r#"[{"nozzleId":0}]"#.to_owned());
+    input.ams_mapping_info_json = Some(
+        r#"[{"ams":0,"targetColor":"11223344","filamentId":"GFA00","filamentType":"PLA","nozzleId":0}]"#
+            .to_owned(),
+    );
     let source = jobs.create_print_job(input).await.unwrap();
     commands
         .mark_sent(source.job.command_id, tenant.id, agent.id)

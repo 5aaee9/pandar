@@ -1,15 +1,12 @@
 use anyhow::Context;
-use sea_orm::{
-    DatabaseConnection, DatabaseTransaction, SqliteTransactionMode, TransactionOptions,
-    TransactionTrait,
-};
+use pandar_core::StudioPrintMetadata;
 
 use crate::{
     db::Database,
     repositories::{
         AuditActor, CreatePrintJob, JobWithArtifact, RepositoryResult,
         audit::{EmptyAuditMetadata, audit_metadata, insert_audit_event_tx, record_audit_event},
-        jobs::create,
+        jobs::{create, write_transaction},
     },
 };
 
@@ -18,11 +15,28 @@ pub async fn create_print_job_with_audit(
     input: CreatePrintJob,
     actor: AuditActor,
 ) -> RepositoryResult<JobWithArtifact> {
-    let connection = database.sea_orm_connection();
-    let tx = begin_print_job_write_transaction(&connection)
+    create_print_job_with_optional_metadata(database, input, None, actor).await
+}
+
+pub async fn create_studio_print_job_with_audit(
+    database: &Database,
+    input: CreatePrintJob,
+    metadata: StudioPrintMetadata,
+    actor: AuditActor,
+) -> RepositoryResult<JobWithArtifact> {
+    create_print_job_with_optional_metadata(database, input, Some(metadata), actor).await
+}
+
+async fn create_print_job_with_optional_metadata(
+    database: &Database,
+    input: CreatePrintJob,
+    metadata: Option<StudioPrintMetadata>,
+    actor: AuditActor,
+) -> RepositoryResult<JobWithArtifact> {
+    let tx = write_transaction::begin(database)
         .await
         .context("failed to begin print job audit transaction")?;
-    let created = create::create_print_job(&tx, input).await?;
+    let created = create::create_print_job(&tx, input, metadata).await?;
     let event = record_audit_event(
         created.job.tenant_id,
         actor,
@@ -36,20 +50,4 @@ pub async fn create_print_job_with_audit(
         .await
         .context("failed to commit print job audit transaction")?;
     Ok(created)
-}
-
-async fn begin_print_job_write_transaction(
-    connection: &DatabaseConnection,
-) -> Result<DatabaseTransaction, sea_orm::DbErr> {
-    match connection.get_database_backend() {
-        sea_orm::DatabaseBackend::Sqlite => {
-            connection
-                .begin_with_options(TransactionOptions {
-                    sqlite_transaction_mode: Some(SqliteTransactionMode::Immediate),
-                    ..Default::default()
-                })
-                .await
-        }
-        _ => connection.begin().await,
-    }
 }

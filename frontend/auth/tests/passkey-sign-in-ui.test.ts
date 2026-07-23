@@ -41,9 +41,13 @@ describe("passkey sign-in UI", () => {
     expect(loginForm).toMatch(
       /redirectWithAuthToken\(dashboardCallbackUrl, messages\)/,
     );
+    expect(signInPage).toMatch(/normalizePluginReturnTo/);
     expect(signInPage).toMatch(
-      /dashboardCallbackUrl=\{env\.dashboardCallbackUrl\}/,
+      /dashboardCallbackUrl=\{withPluginReturnTo\([\s\S]*env\.dashboardCallbackUrl,[\s\S]*returnTo/,
     );
+    expect(loginForm).toMatch(/callbackURL: completionUrl/);
+    expect(loginForm).toMatch(/newUserCallbackURL: completionUrl/);
+    expect(loginForm).toMatch(/errorCallbackURL: errorUrl/);
 
     for (const key of [
       "or",
@@ -71,7 +75,7 @@ describe("passkey sign-in UI", () => {
   });
 
   it("preserves useful feedback while removing reduced motion", async () => {
-    const css = await readSource("app/globals.css");
+    const css = (await readSource("app/globals.css")).replace(/\r\n/g, "\n");
     const reducedMotion = css.slice(
       css.indexOf("@media (prefers-reduced-motion: reduce)"),
     );

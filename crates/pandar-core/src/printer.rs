@@ -26,6 +26,8 @@ pub struct Printer {
     pub bambu_device_features: Option<BambuDeviceFeatures>,
     #[serde(skip_serializing, skip_deserializing)]
     pub bambu_device_features_session_id: Option<String>,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub mqtt_presence_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,6 +52,7 @@ pub struct PrinterParts {
     pub chamber_light_on: Option<bool>,
     pub bambu_device_features: Option<BambuDeviceFeatures>,
     pub bambu_device_features_session_id: Option<String>,
+    pub mqtt_presence_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,6 +92,7 @@ impl Printer {
             chamber_light_on: parts.chamber_light_on,
             bambu_device_features: parts.bambu_device_features,
             bambu_device_features_session_id: parts.bambu_device_features_session_id,
+            mqtt_presence_session_id: parts.mqtt_presence_session_id,
         })
     }
 }

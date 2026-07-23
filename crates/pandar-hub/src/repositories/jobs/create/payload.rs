@@ -1,4 +1,4 @@
-use pandar_core::JobId;
+use pandar_core::{JobId, StudioPrintMetadata, StudioSubmissionId};
 
 use crate::repositories::{CreatePrintJob, PrintProjectFilePayload};
 
@@ -8,6 +8,8 @@ pub(super) fn payload(
     input: &CreatePrintJob,
     job_id: JobId,
     serial_number: &str,
+    studio_submission_id: StudioSubmissionId,
+    studio_metadata: Option<StudioPrintMetadata>,
 ) -> PrintProjectFilePayload {
     PrintProjectFilePayload {
         job_id: job_id.to_string(),
@@ -29,6 +31,8 @@ pub(super) fn payload(
         ams_mapping_json: input.ams_mapping_json.clone(),
         ams_mapping2_json: input.ams_mapping2_json.clone(),
         ams_mapping_info_json: input.ams_mapping_info_json.clone(),
+        studio_submission_id,
+        studio_metadata,
     }
 }
 
@@ -36,6 +40,8 @@ pub(super) fn payload_from_existing_artifact(
     input: &NewPrintJobFromArtifact,
     job_id: JobId,
     serial_number: &str,
+    studio_submission_id: StudioSubmissionId,
+    studio_metadata: Option<StudioPrintMetadata>,
 ) -> PrintProjectFilePayload {
     PrintProjectFilePayload {
         job_id: job_id.to_string(),
@@ -57,6 +63,8 @@ pub(super) fn payload_from_existing_artifact(
         ams_mapping_json: input.ams_mapping_json.clone(),
         ams_mapping2_json: input.ams_mapping2_json.clone(),
         ams_mapping_info_json: input.ams_mapping_info_json.clone(),
+        studio_submission_id,
+        studio_metadata,
     }
 }
 

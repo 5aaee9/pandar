@@ -15,12 +15,14 @@ pub use agents::{AGENT_CREDENTIAL_PREFIX, AgentRepository, begin_current_agent_t
 pub use audit::{
     AuditActor, AuditEvent, AuditEventListQuery, AuditEventRepository, RecordAuditEvent,
 };
+#[cfg(test)]
+pub(crate) use auth::no_auth_session_test_pause;
 pub use auth::{
     AcceptedJoinLink, ApiToken, AuthRepository, AuthenticatedPrincipal, AuthenticatedTenantToken,
     AuthenticatedUser, ExternalIdentityProfile, ExternalMembership, JoinLink,
-    JoinLinkWithPlaintext, PluginLoginTicket, PluginLoginTicketExchange,
-    PluginLoginTicketWithPlaintext, TenantToken, TenantTokenScope, TenantTokenWithPlaintext, User,
-    UserIdentity, UserRole,
+    JoinLinkWithPlaintext, NoAuthPluginSession, NoAuthPluginSessionOutcome, PluginLoginTicket,
+    PluginLoginTicketExchange, PluginLoginTicketWithPlaintext, TenantToken, TenantTokenScope,
+    TenantTokenWithPlaintext, User, UserIdentity, UserRole,
 };
 #[cfg(test)]
 pub(crate) use commands::printer_operation_ownership_pause;
@@ -32,9 +34,12 @@ pub use commands::{
     PrinterOperationPayload, RefreshPrinterMaterialsPayload, ReloadPrinterConnectionPayload,
     WebPrintErrorRecovery,
 };
+#[cfg(test)]
+pub(crate) use jobs::studio_task_test_pause;
 pub use jobs::{
     AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, ClearJobsOutcome, CreatePrintJob,
-    DuplicatePrintJob, JobRepository, JobWithArtifact, PrintReportDiagnostic,
+    DuplicatePrintJob, JobRepository, JobWithArtifact, PrintReportDiagnostic, StudioTaskPage,
+    StudioTaskQuery, StudioTaskStatus,
 };
 pub(crate) use materials::CurrentMaterialPatchOutcome;
 pub use materials::{
@@ -114,6 +119,10 @@ pub enum RepositoryError {
     InvalidPersistedJobStatus(String),
     #[error("invalid persisted print status: {0}")]
     InvalidPersistedPrintStatus(String),
+    #[error("invalid persisted artifact metadata: {0:#}")]
+    InvalidPersistedArtifactMetadata(anyhow::Error),
+    #[error("invalid persisted Studio metadata: {0:#}")]
+    InvalidPersistedStudioMetadata(anyhow::Error),
     #[error("invalid persisted user role: {0}")]
     InvalidPersistedUserRole(String),
     #[error("invalid tenant token scope: {0}")]
@@ -124,6 +133,10 @@ pub enum RepositoryError {
     RetryNotSafe,
     #[error("print job cannot be reprinted")]
     ReprintNotAllowed,
+    #[error("Studio submission id range is exhausted for tenant")]
+    StudioSubmissionIdExhausted,
+    #[error("Studio print cancellation is too late because dispatch already started")]
+    StudioCancellationTooLate,
     #[error("printer control is unavailable for this printer")]
     PrinterControlUnavailable,
     #[error("invalid printer control")]

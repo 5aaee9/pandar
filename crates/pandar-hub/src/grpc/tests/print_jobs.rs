@@ -12,6 +12,9 @@ use crate::{
     },
 };
 
+mod support;
+use support::*;
+
 #[tokio::test]
 async fn grpc_dispatch_print_project_file_sends_payload_and_marks_job_sent() {
     let state = fixture_state().await;
@@ -41,11 +44,23 @@ async fn grpc_dispatch_print_project_file_sends_payload_and_marks_job_sent() {
     );
     assert_eq!(print.size_bytes, 42);
     assert!(print.serial_number.starts_with("serial-"));
-    assert!(print.bed_leveling);
-    assert!(!print.flow_cali);
-    assert_eq!(print.auto_bed_leveling, Some(2));
-    assert_eq!(print.auto_flow_cali, Some(1));
-    assert_eq!(print.auto_offset_cali, Some(0));
+    assert_eq!(
+        print.studio_submission_id,
+        created.job.studio_submission_id.get() as u32
+    );
+    let options = print.options.expect("typed Studio print options");
+    assert!(options.bed_leveling);
+    assert!(!options.flow_cali);
+    assert_eq!(options.auto_bed_leveling, Some(2));
+    assert_eq!(options.auto_flow_cali, Some(1));
+    assert_eq!(options.auto_offset_cali, Some(0));
+    assert_eq!(options.extruder_cali_manual_mode, None);
+    assert!(options.try_emmc_print);
+    assert_eq!(
+        print.submission_source,
+        crate::protocol::agent::v1::PrintSubmissionSource::Web as i32
+    );
+    assert!(print.task_metadata.is_none());
     assert_eq!(
         state
             .jobs()
@@ -57,6 +72,59 @@ async fn grpc_dispatch_print_project_file_sends_payload_and_marks_job_sent() {
             .status,
         JobStatus::Sent
     );
+}
+
+#[tokio::test]
+async fn grpc_dispatch_studio_print_projects_exact_metadata_and_source() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
+        .await
+        .unwrap();
+    let mut metadata = crate::test_support::studio_metadata_for_tests();
+    let pandar_core::StudioPrintMetadata::V1(studio) = &mut metadata;
+    studio.task_name = "Studio exact task".to_owned();
+    studio.task_bed_type = "pei".to_owned();
+    studio.extruder_cali_manual_mode = -1;
+    studio.try_emmc_print = false;
+    studio.task_bed_leveling = false;
+    studio.auto_bed_leveling = pandar_core::PrintCalibrationMode::Off;
+    let created = state
+        .jobs()
+        .create_studio_print_job_with_audit(
+            print_input(tenant_id, agent_id, &printer_id, "studio-exact", None, None),
+            metadata,
+            crate::repositories::AuditActor {
+                actor_type: "system".to_owned(),
+                user_id: None,
+                metadata: None,
+            },
+        )
+        .await
+        .unwrap();
+    let (mut stream, _sender) = connect_live(&state, vec![hello_event(tenant_id, agent_id)])
+        .await
+        .unwrap();
+
+    let hub_command = stream.next().await.unwrap().unwrap();
+    let Some(hub_command::Command::PrintProjectFile(print)) = hub_command.command else {
+        panic!("expected print project file command");
+    };
+    assert_eq!(
+        print.submission_source,
+        crate::protocol::agent::v1::PrintSubmissionSource::Studio as i32
+    );
+    assert_eq!(
+        print.studio_submission_id,
+        created.job.studio_submission_id.get() as u32
+    );
+    let options = print.options.unwrap();
+    assert!(!options.bed_leveling);
+    assert_eq!(options.auto_bed_leveling, Some(0));
+    assert_eq!(options.bed_type, "pei");
+    assert_eq!(options.extruder_cali_manual_mode, Some(-1));
+    assert!(!options.try_emmc_print);
+    assert_eq!(print.task_metadata.unwrap().task_name, "Studio exact task");
 }
 
 #[tokio::test]
@@ -82,8 +150,11 @@ async fn grpc_dispatch_print_project_file_sends_mapping_strings() {
     let Some(hub_command::Command::PrintProjectFile(print)) = hub_command.command else {
         panic!("expected print project file command");
     };
-    assert_eq!(print.ams_mapping_json, "[0,254]");
-    assert_eq!(print.ams_mapping2_json, r#"[{"ams_id":254,"slot_id":1}]"#);
+    let options = print.options.expect("typed Studio print options");
+    assert_eq!(options.ams_mapping, vec![0, 254]);
+    assert_eq!(options.ams_mapping2.len(), 1);
+    assert_eq!(options.ams_mapping2[0].ams_id, 254);
+    assert_eq!(options.ams_mapping2[0].slot_id, 1);
 }
 
 #[tokio::test]
@@ -107,7 +178,7 @@ async fn grpc_corrupt_persisted_mapping_streams_internal_error() {
     let err = stream.next().await.unwrap().unwrap_err();
 
     assert_eq!(err.code(), Code::Internal);
-    assert_eq!(err.message(), "invalid print command mapping payload");
+    assert_eq!(err.message(), "invalid print command payload");
     assert_eq!(
         state
             .jobs()
@@ -312,96 +383,4 @@ async fn printer_operation_success_does_not_mutate_physical_print_status() {
         .unwrap()
         .unwrap();
     assert_eq!(reloaded.job.print.status, PrintStatus::Pending);
-}
-
-async fn create_print_job(
-    state: &AppState,
-    tenant_id: TenantId,
-    agent_id: AgentId,
-    artifact_id: &str,
-) -> crate::repositories::JobWithArtifact {
-    create_print_job_with_mappings(state, tenant_id, agent_id, artifact_id, None, None).await
-}
-
-async fn create_print_job_with_mappings(
-    state: &AppState,
-    tenant_id: TenantId,
-    agent_id: AgentId,
-    artifact_id: &str,
-    ams_mapping_json: Option<String>,
-    ams_mapping2_json: Option<String>,
-) -> crate::repositories::JobWithArtifact {
-    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
-        .await
-        .unwrap();
-
-    state
-        .jobs()
-        .create_print_job(CreatePrintJob {
-            tenant_id,
-            printer_id: printer_id.clone(),
-            agent_id,
-            artifact_id: artifact_id.to_string(),
-            artifact_filename: "plate.3mf".to_string(),
-            artifact_content_type: "model/3mf".to_string(),
-            artifact_size_bytes: 42,
-            artifact_storage_path: format!("{tenant_id}/{artifact_id}/plate.3mf"),
-            artifact_metadata_json: None,
-            plate_id: 1,
-            use_ams: true,
-            bed_leveling: true,
-            auto_bed_leveling: pandar_core::PrintCalibrationMode::Auto,
-            flow_cali: false,
-            auto_flow_cali: pandar_core::PrintCalibrationMode::On,
-            auto_offset_cali: pandar_core::PrintCalibrationMode::Off,
-            timelapse: true,
-            ams_mapping_json,
-            ams_mapping2_json,
-            ams_mapping_info_json: None,
-        })
-        .await
-        .unwrap()
-}
-
-async fn corrupt_command_payload(state: &AppState, command_id: pandar_core::CommandId) {
-    match state.database() {
-        Database::Sqlite(pool) => {
-            sqlx::query("UPDATE commands SET payload_json = ?2 WHERE id = ?1")
-                .bind(command_id.to_string())
-                .bind("{")
-                .execute(pool)
-                .await
-                .unwrap();
-        }
-        Database::Postgres(pool) => {
-            sqlx::query("UPDATE commands SET payload_json = $2 WHERE id = $1")
-                .bind(command_id.to_string())
-                .bind("{")
-                .execute(pool)
-                .await
-                .unwrap();
-        }
-    }
-}
-
-async fn corrupt_command_mapping(state: &AppState, command_id: pandar_core::CommandId) {
-    let payload = r#"{"job_id":"job","artifact_id":"artifact","printer_id":"printer","serial_number":"serial","filename":"plate.3mf","storage_path":"tenant/artifact/plate.3mf","artifact_download_path":"/api/v1/agents/agent/artifacts/artifact","size_bytes":42,"plate_id":1,"use_ams":true,"bed_leveling":true,"auto_bed_leveling":2,"flow_cali":false,"auto_flow_cali":1,"auto_offset_cali":0,"timelapse":true,"ams_mapping_json":"[{}]","ams_mapping2_json":null}"#;
-    match state.database() {
-        Database::Sqlite(pool) => {
-            sqlx::query("UPDATE commands SET payload_json = ?2 WHERE id = ?1")
-                .bind(command_id.to_string())
-                .bind(payload)
-                .execute(pool)
-                .await
-                .unwrap();
-        }
-        Database::Postgres(pool) => {
-            sqlx::query("UPDATE commands SET payload_json = $2 WHERE id = $1")
-                .bind(command_id.to_string())
-                .bind(payload)
-                .execute(pool)
-                .await
-                .unwrap();
-        }
-    }
 }

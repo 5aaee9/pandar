@@ -19,7 +19,7 @@ use tokio::{
     time::advance,
 };
 
-use crate::machine::mqtt::{BambuMqttTransport, PublishedMqttCommand};
+use crate::machine::mqtt::{BambuMqttTransport, PublishedMqttCommand, mqtt_report_idle_timeout};
 use crate::{
     AgentConfig,
     machine::{
@@ -29,7 +29,10 @@ use crate::{
     protocol::agent::v1::{AgentEvent, agent_event},
 };
 
-use super::forward_print_reports;
+use super::{
+    MqttForwardingContext, MqttPresenceState, forward_print_reports,
+    forward_print_reports_with_context,
+};
 
 const EXPECTED_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 const SETTLE_ATTEMPTS: usize = 512;
@@ -46,9 +49,16 @@ enum ControlledOperation {
 }
 
 #[derive(Debug)]
+enum ControlledReport {
+    Value(Value),
+    IdleTimeout,
+    TransportFailure,
+}
+
+#[derive(Debug)]
 struct ControlledState {
     operations: StdMutex<Vec<ControlledOperation>>,
-    report_receiver: Mutex<mpsc::UnboundedReceiver<Value>>,
+    report_receiver: Mutex<mpsc::UnboundedReceiver<ControlledReport>>,
     publish_attempts: AtomicUsize,
     report_waits_armed: AtomicUsize,
     reports_delivered: AtomicUsize,
@@ -60,7 +70,7 @@ struct ControlledState {
 #[derive(Debug, Clone)]
 struct ControlledTransport {
     state: Arc<ControlledState>,
-    report_sender: mpsc::UnboundedSender<Value>,
+    report_sender: mpsc::UnboundedSender<ControlledReport>,
 }
 
 impl ControlledTransport {
@@ -83,7 +93,19 @@ impl ControlledTransport {
 
     fn push_report(&self, report: Value) {
         self.report_sender
-            .send(report)
+            .send(ControlledReport::Value(report))
+            .expect("controlled report receiver remains open");
+    }
+
+    fn push_idle_timeout(&self) {
+        self.report_sender
+            .send(ControlledReport::IdleTimeout)
+            .expect("controlled report receiver remains open");
+    }
+
+    fn push_transport_failure(&self) {
+        self.report_sender
+            .send(ControlledReport::TransportFailure)
             .expect("controlled report receiver remains open");
     }
     fn make_reports_ready_without_waking(&self, count: usize) {
@@ -194,7 +216,7 @@ impl BambuMqttTransport for ControlledTransport {
         Ok(())
     }
 
-    async fn next_report(&self, _timeout: Duration) -> anyhow::Result<Value> {
+    async fn next_report(&self, timeout: Duration) -> anyhow::Result<Value> {
         let mut receiver = self.state.report_receiver.lock().await;
         let armed = self.state.report_waits_armed.fetch_add(1, Ordering::SeqCst) + 1;
         self.state
@@ -212,7 +234,9 @@ impl BambuMqttTransport for ControlledTransport {
                 })
                 .is_ok()
             {
-                Poll::Ready(Some(json!({ "unrelated": { "value": 1 } })))
+                Poll::Ready(Some(ControlledReport::Value(json!({
+                    "unrelated": { "value": 1 }
+                }))))
             } else {
                 receiver.poll_recv(context)
             }
@@ -225,7 +249,11 @@ impl BambuMqttTransport for ControlledTransport {
             .lock()
             .unwrap()
             .push(ControlledOperation::ReportDelivered(delivered));
-        Ok(report)
+        match report {
+            ControlledReport::Value(report) => Ok(report),
+            ControlledReport::IdleTimeout => Err(mqtt_report_idle_timeout(timeout)),
+            ControlledReport::TransportFailure => bail!("controlled MQTT transport failure"),
+        }
     }
 }
 
@@ -310,354 +338,23 @@ async fn next_event(receiver: &mut mpsc::Receiver<AgentEvent>) -> AgentEvent {
         .expect("expected Agent event was not observed")
 }
 
+async fn next_snapshot(
+    receiver: &mut mpsc::Receiver<AgentEvent>,
+) -> crate::protocol::agent::v1::PrinterSnapshot {
+    loop {
+        let event = next_event(receiver).await;
+        if let Some(agent_event::Event::PrinterSnapshot(snapshot)) = event.event {
+            return snapshot;
+        }
+    }
+}
+
 fn pushall_sequence_id(command: &PublishedMqttCommand) -> &str {
     command.payload["pushing"]["sequence_id"]
         .as_str()
         .expect("pushall sequence_id is a string")
 }
 
-#[test]
-fn periodic_printer_refresh_uses_exact_sixty_second_constant() {
-    assert_eq!(super::PRINTER_REFRESH_INTERVAL, Duration::from_secs(60));
-}
-#[tokio::test(start_paused = true)]
-async fn periodic_printer_refresh_startup_uses_existing_pushall_contract() {
-    let transport = ControlledTransport::new(None);
-    let (task, _receiver) = spawn_forwarder(transport.clone());
-    transport.wait_for_publish_attempts(1).await;
-    transport.wait_for_report_waits(1).await;
-
-    let published = transport.published_commands();
-    assert_eq!(published.len(), 1);
-    let (ordinal, command) = &published[0];
-    assert_eq!(*ordinal, 1);
-    assert_eq!(command.topic, "device/01S00EXAMPLE/request");
-    assert_eq!(command.qos, 1);
-    let sequence_id = pushall_sequence_id(command);
-    assert_eq!(
-        command.payload,
-        json!({
-            "pushing": {
-                "command": "pushall",
-                "sequence_id": sequence_id,
-                "version": 1,
-                "push_target": 1
-            }
-        })
-    );
-    let operations = transport.operations();
-    assert!(matches!(
-        &operations[0],
-        ControlledOperation::Subscribe(topic) if topic == "device/01S00EXAMPLE/report"
-    ));
-    assert!(matches!(
-        &operations[1],
-        ControlledOperation::Publish { ordinal: 1, .. }
-    ));
-    assert!(matches!(
-        &operations[2],
-        ControlledOperation::ReportWaitArmed(1)
-    ));
-
-    abort_and_join(task).await;
-}
-
-#[tokio::test(start_paused = true)]
-async fn periodic_printer_refresh_publishes_at_exact_sixty_second_deadline() {
-    let transport = ControlledTransport::new(None);
-    let (task, _receiver) = spawn_forwarder(transport.clone());
-    transport.wait_for_publish_attempts(1).await;
-    transport.wait_for_report_waits(1).await;
-
-    advance(EXPECTED_REFRESH_INTERVAL - Duration::from_nanos(1)).await;
-    yield_now().await;
-    assert_eq!(transport.publish_attempts(), 1);
-    advance(Duration::from_nanos(1)).await;
-    transport.wait_for_publish_attempts(2).await;
-    assert_eq!(transport.publish_attempts(), 2);
-
-    abort_and_join(task).await;
-}
-
-#[tokio::test(start_paused = true)]
-async fn periodic_printer_refresh_unsolicited_report_does_not_move_deadline() {
-    let transport = ControlledTransport::new(None);
-    let (task, mut receiver) = spawn_forwarder(transport.clone());
-    transport.wait_for_publish_attempts(1).await;
-    transport.wait_for_report_waits(1).await;
-
-    advance(Duration::from_secs(30)).await;
-    transport.push_report(json!({ "print": { "bed_temper": 42.0 } }));
-    transport.wait_for_report_waits(2).await;
-    let mut saw_snapshot = false;
-    while let Ok(event) = receiver.try_recv() {
-        saw_snapshot |= matches!(event.event, Some(agent_event::Event::PrinterSnapshot(_)));
-    }
-    assert!(
-        saw_snapshot,
-        "qualifying report must be forwarded immediately"
-    );
-
-    advance(Duration::from_secs(30) - Duration::from_nanos(1)).await;
-    yield_now().await;
-    assert_eq!(transport.publish_attempts(), 1);
-    advance(Duration::from_nanos(1)).await;
-    transport.wait_for_publish_attempts(2).await;
-
-    abort_and_join(task).await;
-}
-
-#[tokio::test(start_paused = true)]
-async fn periodic_printer_refresh_missed_ticks_delay_without_burst() {
-    let transport = ControlledTransport::new(None);
-    let (task, _receiver) = spawn_forwarder(transport.clone());
-    transport.wait_for_publish_attempts(1).await;
-    transport.wait_for_report_waits(1).await;
-
-    advance(Duration::from_secs(180)).await;
-    transport.wait_for_publish_attempts(2).await;
-    transport.wait_for_report_waits(2).await;
-    assert_eq!(transport.publish_attempts(), 2);
-    advance(EXPECTED_REFRESH_INTERVAL - Duration::from_nanos(1)).await;
-    yield_now().await;
-    assert_eq!(transport.publish_attempts(), 2);
-    advance(Duration::from_nanos(1)).await;
-    transport.wait_for_publish_attempts(3).await;
-    assert_eq!(transport.publish_attempts(), 3);
-
-    abort_and_join(task).await;
-}
-
-#[tokio::test(start_paused = true)]
-async fn periodic_printer_refresh_sender_closure_wins_when_deadline_is_due() {
-    let transport = ControlledTransport::new(None);
-    let (task, receiver) = spawn_forwarder(transport.clone());
-    transport.wait_for_publish_attempts(1).await;
-    transport.wait_for_report_waits(1).await;
-
-    drop(receiver);
-    advance(EXPECTED_REFRESH_INTERVAL).await;
-    wait_for_task_finish(&task).await;
-    task.await.unwrap().unwrap();
-    assert_eq!(transport.publish_attempts(), 1);
-}
-
-#[tokio::test(start_paused = true)]
-async fn periodic_printer_refresh_due_tick_wins_over_ready_reports() {
-    let transport = ControlledTransport::new(None);
-    let (task, _receiver) = spawn_forwarder(transport.clone());
-    transport.wait_for_publish_attempts(1).await;
-    transport.wait_for_report_waits(1).await;
-
-    transport.make_reports_ready_without_waking(32);
-    advance(EXPECTED_REFRESH_INTERVAL).await;
-    transport.wait_for_publish_attempts(2).await;
-    transport.wait_for_deliveries(1).await;
-
-    let operations = transport.operations();
-    let publish_index = operations
-        .iter()
-        .position(|operation| matches!(operation, ControlledOperation::Publish { ordinal: 2, .. }))
-        .expect("periodic publish is recorded");
-    let delivery_index = operations
-        .iter()
-        .position(|operation| matches!(operation, ControlledOperation::ReportDelivered(1)))
-        .expect("ready report delivery is recorded");
-    assert!(publish_index < delivery_index);
-
-    abort_and_join(task).await;
-}
-
-#[tokio::test(start_paused = true)]
-async fn periodic_printer_refresh_without_response_emits_no_presence_event() {
-    let transport = ControlledTransport::new(None);
-    let (task, mut receiver) = spawn_forwarder(transport.clone());
-    transport.wait_for_publish_attempts(1).await;
-    transport.wait_for_report_waits(1).await;
-
-    advance(EXPECTED_REFRESH_INTERVAL).await;
-    transport.wait_for_publish_attempts(2).await;
-    assert!(receiver.try_recv().is_err());
-
-    abort_and_join(task).await;
-}
-
-#[tokio::test(start_paused = true)]
-async fn periodic_printer_refresh_receiver_close_stops_future_requests() {
-    let transport = ControlledTransport::new(None);
-    let (task, receiver) = spawn_forwarder(transport.clone());
-    transport.wait_for_publish_attempts(1).await;
-    transport.wait_for_report_waits(1).await;
-
-    advance(Duration::from_secs(30)).await;
-    drop(receiver);
-    wait_for_task_finish(&task).await;
-    task.await.unwrap().unwrap();
-    advance(Duration::from_secs(120)).await;
-    yield_now().await;
-    assert_eq!(transport.publish_attempts(), 1);
-}
-
-#[tokio::test(start_paused = true)]
-async fn periodic_printer_refresh_publish_failure_preserves_context_chain() {
-    let transport = ControlledTransport::new(Some(2));
-    let (task, _receiver) = spawn_forwarder(transport.clone());
-    transport.wait_for_publish_attempts(1).await;
-    transport.wait_for_report_waits(1).await;
-
-    advance(EXPECTED_REFRESH_INTERVAL).await;
-    wait_for_task_finish(&task).await;
-    let error = task.await.unwrap().unwrap_err();
-    let chain = format!("{error:#}");
-    assert!(
-        chain.contains("publish periodic pushall to request topic device/01S00EXAMPLE/request"),
-        "missing periodic topic context: {chain}"
-    );
-    assert!(
-        chain.contains("controlled MQTT publish failure at attempt 2"),
-        "missing lower transport cause: {chain}"
-    );
-}
-
-#[tokio::test(start_paused = true)]
-async fn periodic_printer_refresh_runtime_failure_retries_with_fresh_timer() {
-    let config = test_config();
-    let endpoint = endpoint();
-    let firmware_cache = FirmwareObservationCache::default();
-    let device_features = DeviceFeatureCache::default();
-    device_features
-        .update(&endpoint.serial, BambuDeviceFeatures::from_bits(0x40))
-        .await;
-    let (sender, mut receiver) = mpsc::channel(128);
-    let transition = firmware_cache
-        .begin_generation(&config, endpoint.clone(), &sender, None)
-        .await
-        .unwrap()
-        .unwrap();
-    let generation_one = transition.generation();
-    drop(transition);
-    let initial_event = next_event(&mut receiver).await;
-    let Some(agent_event::Event::PrinterFirmwareInvalidated(initial)) = initial_event.event else {
-        panic!("initial generation must emit firmware invalidation");
-    };
-    assert_eq!(initial.serial, endpoint.serial);
-    assert_eq!(initial.generation, generation_one);
-
-    let transport = ControlledTransport::new(Some(3));
-    let task_transport = transport.clone();
-    let task_config = config.clone();
-    let task_endpoint = endpoint.clone();
-    let task_firmware_cache = firmware_cache.clone();
-    let task_device_features = device_features.clone();
-    let task = tokio::spawn(async move {
-        crate::machine::runtime::forward_print_reports_with_firmware_retry(
-            task_config,
-            task_transport,
-            task_endpoint,
-            Duration::from_secs(10),
-            sender,
-            Duration::from_secs(5),
-            RuntimeReportContext {
-                device_features: task_device_features,
-                firmware: FirmwareReportContext {
-                    cache: task_firmware_cache,
-                    generation: generation_one,
-                },
-            },
-        )
-        .await;
-    });
-
-    transport.wait_for_subscriptions(1).await;
-    transport.wait_for_publish_attempts(2).await;
-    transport.wait_for_report_waits(1).await;
-    let initial_publishes = transport.published_commands();
-    assert_eq!(initial_publishes[0].0, 1);
-    assert_eq!(
-        initial_publishes[0].1.payload["info"]["command"],
-        "get_version"
-    );
-    assert_eq!(initial_publishes[1].0, 2);
-    assert_eq!(
-        initial_publishes[1].1.payload["pushing"]["command"],
-        "pushall"
-    );
-
-    advance(Duration::from_secs(60)).await;
-    transport.wait_for_publish_attempts(3).await;
-    let failed_publish = &transport.published_commands()[2];
-    assert_eq!(failed_publish.0, 3);
-    assert_eq!(failed_publish.1.payload["pushing"]["command"], "pushall");
-    let invalidation_event = next_event(&mut receiver).await;
-    let Some(agent_event::Event::PrinterFirmwareInvalidated(invalidation)) =
-        invalidation_event.event
-    else {
-        panic!("periodic failure must invalidate the firmware generation");
-    };
-    assert_eq!(invalidation.serial, endpoint.serial);
-    assert_eq!(invalidation.generation, generation_one + 1);
-    let generation_two = invalidation.generation;
-
-    let feature_event = next_event(&mut receiver).await;
-    let Some(agent_event::Event::PrinterDeviceFeaturesSnapshot(features)) = feature_event.event
-    else {
-        panic!("periodic failure must invalidate cached device features");
-    };
-    assert_eq!(features.serial, endpoint.serial);
-    assert!(features.device_features.is_none());
-    assert!(device_features.get(&endpoint.serial).await.is_none());
-    assert_eq!(
-        firmware_cache
-            .snapshot(&endpoint.serial)
-            .await
-            .expect("new firmware generation remains active")
-            .generation,
-        generation_two
-    );
-
-    advance(Duration::from_secs(5) - Duration::from_nanos(1)).await;
-    yield_now().await;
-    assert_eq!(transport.subscription_count(), 1);
-    assert_eq!(transport.publish_attempts(), 3);
-    advance(Duration::from_nanos(1)).await;
-    transport.wait_for_subscriptions(2).await;
-    transport.wait_for_publish_attempts(5).await;
-    transport.wait_for_report_waits(2).await;
-
-    let retry_publishes = transport.published_commands();
-    assert_eq!(retry_publishes[3].0, 4);
-    assert_eq!(
-        retry_publishes[3].1.payload["info"]["command"],
-        "get_version"
-    );
-    assert_eq!(retry_publishes[4].0, 5);
-    assert_eq!(
-        retry_publishes[4].1.payload["pushing"]["command"],
-        "pushall"
-    );
-
-    advance(Duration::from_secs(55)).await;
-    yield_now().await;
-    assert_eq!(transport.publish_attempts(), 5);
-    advance(Duration::from_secs(5) - Duration::from_nanos(1)).await;
-    yield_now().await;
-    assert_eq!(transport.publish_attempts(), 5);
-    advance(Duration::from_nanos(1)).await;
-    transport.wait_for_publish_attempts(6).await;
-    transport.wait_for_report_waits(3).await;
-    let final_publishes = transport.published_commands();
-    assert_eq!(final_publishes[5].0, 6);
-    assert_eq!(
-        final_publishes[5].1.payload["pushing"]["command"],
-        "pushall"
-    );
-    assert_eq!(transport.subscription_count(), 2);
-
-    drop(receiver);
-    settle_until(
-        || task.is_finished(),
-        "retry wrapper must stop when the Agent event receiver closes",
-    )
-    .await;
-    task.await.unwrap();
-}
+mod authority;
+mod refresh;
+mod runtime_retry;

@@ -1,15 +1,17 @@
 use anyhow::Context;
 use futures_util::TryStreamExt;
-use pandar_core::PrintCalibrationMode;
+use pandar_core::{PrintCalibrationMode, StudioAmsMappingEntry, StudioAmsMappingInfo};
 use serde::{Deserialize, Serialize};
-use serde_json::Number;
-use std::{collections::BTreeMap, io::Write, path::PathBuf};
+use std::{io::Write, path::PathBuf, time::Duration};
 
 use super::{
     PluginHttpResult, RequestKind, invalid_input, network_error, normalize_hub_url, read_utf8,
     result, runtime, stable_error_body,
 };
+use crate::cancellation::RequestCancellation;
 
+pub(super) mod cancellable;
+mod diagnostics;
 #[cfg(test)]
 mod tests;
 
@@ -20,6 +22,9 @@ pub(super) struct TicketExchangeRequest<'a> {
 
 #[derive(Serialize)]
 pub(super) struct EmptyRequest {}
+
+const PLUGIN_SESSION_DELETE_TIMEOUT: Duration = Duration::from_secs(2);
+const NO_AUTH_SESSION_POST_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(super) fn calibration_mode(value: i32) -> Option<PrintCalibrationMode> {
     let value = u8::try_from(value).ok()?;
@@ -41,16 +46,24 @@ pub(super) fn get_json(
     else {
         return invalid_input("invalid_auth_token");
     };
-    match runtime().block_on(async {
-        reqwest::Client::new()
-            .get(format!("{hub_url}{path}"))
-            .bearer_auth(token)
-            .send()
+    diagnostics::buffered(|writer| {
+        match runtime().block_on(async {
+            execute_request(
+                reqwest::Client::new()
+                    .get(format!("{hub_url}{path}"))
+                    .bearer_auth(token),
+                None,
+            )
             .await
-    }) {
-        Ok(response) => response_result(response, kind),
-        Err(_) => network_error(),
-    }
+            .context("GET plugin request")
+        }) {
+            Ok(response) => response_result_with_writer(response, kind, writer),
+            Err(error) => {
+                write_network_error(writer, &error);
+                network_error()
+            }
+        }
+    })
 }
 
 pub(super) fn post_json(
@@ -59,9 +72,7 @@ pub(super) fn post_json(
     body: impl Serialize,
     kind: RequestKind,
 ) -> PluginHttpResult {
-    let stderr = std::io::stderr();
-    let mut writer = stderr.lock();
-    post_json_with_writer(url, token, body, kind, &mut writer)
+    diagnostics::buffered(|writer| post_json_with_writer(url, token, body, kind, writer))
 }
 
 pub(super) fn post_json_with_writer<W: Write>(
@@ -71,32 +82,84 @@ pub(super) fn post_json_with_writer<W: Write>(
     kind: RequestKind,
     writer: &mut W,
 ) -> PluginHttpResult {
-    match runtime().block_on(async {
+    match send_json(url, token, &body, kind, None) {
+        Ok(response) => response_result_with_writer(response, kind, writer),
+        Err(error) => {
+            write_network_error(writer, &error);
+            network_error()
+        }
+    }
+}
+
+#[cfg(test)]
+fn post_json_with_connect_failure_with_writer(
+    url: &str,
+    body: impl Serialize,
+    kind: RequestKind,
+    writer: &mut impl Write,
+) -> PluginHttpResult {
+    cancellable::post_json_with_connect_failure_with_writer(
+        url,
+        body,
+        kind,
+        RequestCancellation::disabled(),
+        writer,
+    )
+}
+
+pub(super) fn delete_session(url: &str, token: &str, kind: RequestKind) -> PluginHttpResult {
+    cancellable::delete_session(url, token, kind, RequestCancellation::disabled())
+}
+
+fn send_json(
+    url: &str,
+    token: Option<&str>,
+    body: &impl Serialize,
+    kind: RequestKind,
+    timeout: Option<Duration>,
+) -> anyhow::Result<HttpResponse> {
+    runtime().block_on(async {
         let request = reqwest::Client::new().post(url).json(&body);
         let request = if let Some(token) = token {
             request.bearer_auth(token)
         } else {
             request
         };
-        match kind {
-            RequestKind::PrinterOperation => request
-                .send()
+        execute_request(request, timeout)
+            .await
+            .context(post_request_context(kind))
+    })
+}
+
+struct HttpResponse {
+    http_code: u32,
+    body: anyhow::Result<String>,
+}
+
+async fn execute_request(
+    request: reqwest::RequestBuilder,
+    timeout: Option<Duration>,
+) -> anyhow::Result<HttpResponse> {
+    let response = match timeout {
+        Some(timeout) => tokio::time::timeout(timeout, request.send())
+            .await
+            .context("plugin HTTP request timed out")?,
+        None => request.send().await,
+    };
+    let response = response.map_err(reqwest::Error::without_url)?;
+    let http_code = response.status().as_u16().into();
+    let body = async {
+        let body = match timeout {
+            Some(timeout) => tokio::time::timeout(timeout, response.text())
                 .await
-                .map_err(reqwest::Error::without_url)
-                .context("POST plugin printer operation request"),
-            _ => request
-                .send()
-                .await
-                .map_err(reqwest::Error::without_url)
-                .context(post_request_context(kind)),
-        }
-    }) {
-        Ok(response) => response_result(response, kind),
-        Err(error) => {
-            write_network_error(writer, &error);
-            network_error()
-        }
+                .context("plugin HTTP response body timed out")?,
+            None => response.text().await,
+        };
+        Ok::<_, anyhow::Error>(body.map_err(reqwest::Error::without_url)?)
     }
+    .await
+    .context("read plugin HTTP response body");
+    Ok(HttpResponse { http_code, body })
 }
 
 fn post_request_context(kind: RequestKind) -> &'static str {
@@ -106,6 +169,7 @@ fn post_request_context(kind: RequestKind) -> &'static str {
         RequestKind::JobLookup => "POST plugin job lookup request",
         RequestKind::PrintSubmission => "POST plugin print submission request",
         RequestKind::PrinterOperation => "POST plugin printer operation request",
+        RequestKind::PluginSession => "DELETE plugin session request",
     }
 }
 
@@ -147,41 +211,13 @@ pub(super) struct PrintSubmissionBody {
     pub(super) ams_mapping_info: Option<AmsMappingInfo>,
 }
 
-pub(super) type AmsMapping = Vec<i64>;
-pub(super) type AmsMapping2 = Vec<AmsMapping2Entry>;
-pub(super) type AmsMappingInfo = Vec<AmsMappingInfoEntry>;
-
-#[derive(Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(super) struct AmsMapping2Entry {
-    ams_id: i64,
-    slot_id: i64,
-}
-
-#[derive(Deserialize, Serialize)]
-pub(super) struct AmsMappingInfoEntry {
-    #[serde(rename = "nozzleId")]
-    nozzle_id: i64,
-    #[serde(flatten)]
-    extra: BTreeMap<String, AmsMappingInfoValue>,
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(untagged)]
-enum AmsMappingInfoValue {
-    Object(BTreeMap<String, AmsMappingInfoValue>),
-    Array(Vec<AmsMappingInfoValue>),
-    String(String),
-    Number(Number),
-    Bool(bool),
-    Null,
-}
-
+pub(super) type AmsMapping = Vec<i32>;
+pub(super) type AmsMapping2 = Vec<StudioAmsMappingEntry>;
+pub(super) type AmsMappingInfo = Vec<StudioAmsMappingInfo>;
 enum PrintSubmissionError {
     LocalArtifact,
-    Request,
+    Request(anyhow::Error),
 }
-
 #[derive(Deserialize)]
 struct HubErrorBody {
     error: Option<String>,
@@ -191,6 +227,15 @@ pub(super) fn post_multipart_print(
     url: &str,
     token: &str,
     body: PrintSubmissionBody,
+) -> PluginHttpResult {
+    diagnostics::buffered(|writer| post_multipart_print_with_writer(url, token, body, writer))
+}
+
+fn post_multipart_print_with_writer(
+    url: &str,
+    token: &str,
+    body: PrintSubmissionBody,
+    writer: &mut impl Write,
 ) -> PluginHttpResult {
     match runtime().block_on(async {
         let artifact = tokio::fs::File::open(&body.artifact_path)
@@ -204,7 +249,8 @@ pub(super) fn post_multipart_print(
         )
         .file_name(body.filename.clone())
         .mime_str("model/3mf")
-        .map_err(|_| PrintSubmissionError::Request)?;
+        .map_err(anyhow::Error::from)
+        .map_err(PrintSubmissionError::Request)?;
         let mut form = reqwest::multipart::Form::new()
             .text("printer_id", body.printer_id)
             .text("filename", body.filename)
@@ -236,14 +282,17 @@ pub(super) fn post_multipart_print(
             .post(url)
             .bearer_auth(token)
             .multipart(form.part("file", file));
-        request
-            .send()
+        execute_request(request, None)
             .await
-            .map_err(|_| PrintSubmissionError::Request)
+            .context("POST plugin multipart print submission request")
+            .map_err(PrintSubmissionError::Request)
     }) {
-        Ok(response) => response_result(response, RequestKind::PrintSubmission),
+        Ok(response) => response_result_with_writer(response, RequestKind::PrintSubmission, writer),
         Err(PrintSubmissionError::LocalArtifact) => invalid_input("artifact_missing"),
-        Err(PrintSubmissionError::Request) => network_error(),
+        Err(PrintSubmissionError::Request(error)) => {
+            write_network_error(writer, &error);
+            network_error()
+        }
     }
 }
 
@@ -251,9 +300,13 @@ fn multipart_json_text(value: &impl Serialize) -> String {
     serde_json::to_string(value).expect("multipart mapping payload is serializable")
 }
 
-fn response_result(response: reqwest::Response, kind: RequestKind) -> PluginHttpResult {
-    let http_code = response.status().as_u16().into();
-    match runtime().block_on(response.text()) {
+fn response_result_with_writer(
+    response: HttpResponse,
+    kind: RequestKind,
+    writer: &mut impl Write,
+) -> PluginHttpResult {
+    let HttpResponse { http_code, body } = response;
+    match body {
         Ok(body) => {
             if (200..300).contains(&http_code) {
                 result(0, http_code, body)
@@ -261,7 +314,10 @@ fn response_result(response: reqwest::Response, kind: RequestKind) -> PluginHttp
                 result(1, http_code, redact_hub_error(kind, http_code, &body))
             }
         }
-        Err(_) => result(1, http_code, stable_error_body("invalid_response")),
+        Err(error) => {
+            write_network_error(writer, &error);
+            result(1, http_code, stable_error_body("invalid_response"))
+        }
     }
 }
 
@@ -304,5 +360,7 @@ fn is_stable_hub_error(error: &str) -> bool {
             | "invalid_auth_token"
             | "invalid_printer_id"
             | "plugin_forbidden"
+            | "ambiguous_no_auth_tenant"
+            | "tenant_not_found"
     )
 }

@@ -20,7 +20,7 @@ fn report_maps_to_snapshot_uses_configured_model() {
             access_code: Some("12345678".to_string()),
             name: "garage-a1".to_string(),
             model: Some("A1 Mini".to_string()),
-            state: "RUNNING".to_string(),
+            state: Some("RUNNING".to_string()),
             nozzle_temperatures: Vec::new(),
             active_nozzle: None,
             bed_temperature_celsius: None,
@@ -29,6 +29,7 @@ fn report_maps_to_snapshot_uses_configured_model() {
             chamber_target_temperature_celsius: None,
             chamber_light_on: None,
             device_features: None,
+            telemetry_authoritative: false,
         }
     );
 }
@@ -50,19 +51,27 @@ fn report_maps_device_features_to_full_snapshot() {
 }
 
 #[test]
-fn report_maps_chamber_light_state_to_snapshot() {
-    let report = report_with_print(SnapshotPrintFixture {
-        lights_report: vec![LightReportFixture {
-            node: "chamber_light",
-            mode: "on",
-        }],
-        ..Default::default()
-    });
+fn report_maps_only_known_chamber_light_modes_to_snapshot() {
+    for (mode, expected) in [
+        ("on", Some(true)),
+        ("flashing", Some(true)),
+        ("off", Some(false)),
+        ("future-mode", None),
+    ] {
+        let report = report_with_print(SnapshotPrintFixture {
+            lights_report: vec![LightReportFixture {
+                node: "chamber_light",
+                mode,
+            }],
+            ..Default::default()
+        });
 
-    assert_eq!(
-        snapshot_from_report(&endpoint(), &report).chamber_light_on,
-        Some(true)
-    );
+        assert_eq!(
+            snapshot_from_report(&endpoint(), &report).chamber_light_on,
+            expected,
+            "mode {mode}"
+        );
+    }
 }
 
 #[test]
@@ -260,7 +269,10 @@ fn report_state_falls_back_to_print_state() {
         ..Default::default()
     });
 
-    assert_eq!(snapshot_from_report(&endpoint(), &report).state, "READY");
+    assert_eq!(
+        snapshot_from_report(&endpoint(), &report).state.as_deref(),
+        Some("READY")
+    );
 }
 
 #[test]
@@ -270,7 +282,10 @@ fn report_state_falls_back_to_root_state() {
         ..Default::default()
     });
 
-    assert_eq!(snapshot_from_report(&endpoint(), &report).state, "IDLE");
+    assert_eq!(
+        snapshot_from_report(&endpoint(), &report).state.as_deref(),
+        Some("IDLE")
+    );
 }
 
 #[test]
@@ -281,17 +296,20 @@ fn report_state_skips_non_string_candidates() {
         ..Default::default()
     });
 
-    assert_eq!(snapshot_from_report(&endpoint(), &report).state, "READY");
+    assert_eq!(
+        snapshot_from_report(&endpoint(), &report).state.as_deref(),
+        Some("READY")
+    );
 }
 
 #[test]
-fn report_state_defaults_to_unknown() {
+fn report_with_unusable_state_keeps_state_absent() {
     let report = report_with_print(SnapshotPrintFixture {
         gcode_state: Some(ScalarFixture::Number(123)),
         ..Default::default()
     });
 
-    assert_eq!(snapshot_from_report(&endpoint(), &report).state, "unknown");
+    assert_eq!(snapshot_from_report(&endpoint(), &report).state, None);
 }
 
 #[test]

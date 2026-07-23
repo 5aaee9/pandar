@@ -119,6 +119,7 @@ impl ArtifactReader for HubArtifactReader {
             .bearer_auth(&self.agent_credential)
             .send()
             .await
+            .map_err(reqwest::Error::without_url)
             .context("request print artifact from hub")?;
         let status = response.status();
         if !status.is_success() {
@@ -128,6 +129,7 @@ impl ArtifactReader for HubArtifactReader {
         Ok(response
             .bytes()
             .await
+            .map_err(reqwest::Error::without_url)
             .context("read print artifact response from hub")?
             .to_vec())
     }

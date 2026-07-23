@@ -19,6 +19,7 @@ use crate::{
     machine::{
         BambuMachineGateway, BambuPrinterEndpoint, ConfiguredBambuMachineGateway,
         DeviceFeatureCache, FirmwareObservationCache, FirmwareReportContext,
+        diagnostics::PrinterEndpointSecrets,
         mqtt::{FirmwareMqttTaskSet, RumqttcBambuMqttTransport, feature_event},
     },
     protocol::agent::v1::AgentEvent,
@@ -55,7 +56,7 @@ pub struct RuntimeBambuMachineGateway {
     firmware: FirmwareObservationCache,
     firmware_mqtt_tasks: FirmwareMqttTaskSet,
     current_sender: tokio::sync::Mutex<Option<mpsc::Sender<AgentEvent>>>,
-    redaction_access_codes: StdMutex<Vec<String>>,
+    redaction_values: StdMutex<PrinterEndpointSecrets>,
     config: AgentConfig,
     report_timeout: Duration,
     #[cfg(test)]
@@ -80,10 +81,7 @@ impl RuntimeBambuMachineGateway {
         printers: Vec<BambuPrinterEndpoint>,
         report_timeout: Duration,
     ) -> Self {
-        let redaction_access_codes = printers
-            .iter()
-            .map(|endpoint| endpoint.access_code.clone())
-            .collect();
+        let redaction_values = PrinterEndpointSecrets::from_endpoints(&printers);
         let inner = ConfiguredBambuMachineGateway::new(
             printers
                 .into_iter()
@@ -102,7 +100,7 @@ impl RuntimeBambuMachineGateway {
             firmware: FirmwareObservationCache::default(),
             firmware_mqtt_tasks: FirmwareMqttTaskSet::default(),
             current_sender: tokio::sync::Mutex::new(None),
-            redaction_access_codes: StdMutex::new(redaction_access_codes),
+            redaction_values: StdMutex::new(redaction_values),
             config,
             report_timeout,
             #[cfg(test)]
@@ -293,10 +291,8 @@ impl RuntimeBambuMachineGateway {
         ))
     }
 
-    fn record_access_code(&self, endpoint: &BambuPrinterEndpoint) {
-        let mut access_codes = self.redaction_access_codes.lock().unwrap();
-        access_codes.retain(|access_code| access_code != &endpoint.access_code);
-        access_codes.push(endpoint.access_code.clone());
+    fn record_endpoint_secrets(&self, endpoint: &BambuPrinterEndpoint) {
+        self.redaction_values.lock().unwrap().record(endpoint);
     }
 }
 

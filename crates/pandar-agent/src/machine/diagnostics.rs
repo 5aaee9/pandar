@@ -16,6 +16,9 @@ use crate::machine::{
     },
 };
 
+mod redaction;
+pub use redaction::{PrinterEndpointSecrets, redact_access_code, redact_known_access_codes};
+
 pub(super) const DIAGNOSTIC_PROBE_PATH: &str = "Metadata/pandar-diagnostic.tmp";
 const PORT_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -172,24 +175,6 @@ where
         checks,
         Some(compatibility),
     )
-}
-
-pub fn redact_access_code(message: &str, access_code: &str) -> String {
-    if access_code.is_empty() {
-        return message.to_owned();
-    }
-    message.replace(access_code, "[REDACTED_ACCESS_CODE]")
-}
-
-pub fn redact_known_access_codes(
-    message: &str,
-    access_codes: impl IntoIterator<Item = String>,
-) -> String {
-    access_codes
-        .into_iter()
-        .fold(message.to_owned(), |redacted, access_code| {
-            redact_access_code(&redacted, &access_code)
-        })
 }
 
 pub(super) fn aggregate_status(checks: &[DiagnosticCheck]) -> DiagnosticStatus {

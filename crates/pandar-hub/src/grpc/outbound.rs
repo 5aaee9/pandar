@@ -282,6 +282,8 @@ mod tests {
             ams_mapping_json: None,
             ams_mapping2_json: None,
             ams_mapping_info_json: None,
+            studio_submission_id: crate::test_support::studio_submission_id_for_tests(),
+            studio_metadata: Some(crate::test_support::studio_metadata_for_tests()),
         };
         let payload_json = serde_json::to_string(&payload).unwrap();
         let crate::db::Database::Sqlite(pool) = state.database() else {

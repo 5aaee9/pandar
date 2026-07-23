@@ -11,6 +11,7 @@ pub enum CommandStatus {
     Acknowledged,
     Succeeded,
     Failed,
+    Cancelled,
 }
 
 impl CommandStatus {
@@ -21,6 +22,7 @@ impl CommandStatus {
             Self::Acknowledged => "acknowledged",
             Self::Succeeded => "succeeded",
             Self::Failed => "failed",
+            Self::Cancelled => "cancelled",
         }
     }
 }
@@ -41,6 +43,7 @@ impl FromStr for CommandStatus {
             "acknowledged" => Ok(Self::Acknowledged),
             "succeeded" => Ok(Self::Succeeded),
             "failed" => Ok(Self::Failed),
+            "cancelled" => Ok(Self::Cancelled),
             value => Err(CoreError::InvalidCommandStatus(value.to_string())),
         }
     }

@@ -9,33 +9,28 @@ PANDAR_ABI int bambu_network_get_user_print_info(void* agent, unsigned int* http
     auto* a = as_agent(agent);
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     refresh_local_webserver_config(a);
-    if (a->token.empty()) {
-        if (http_code) *http_code = 401;
-        if (http_body) *http_body = R"({"error":"invalid_auth_token"})";
-        return BBL::BAMBU_NETWORK_ERR_GET_USER_PRINTINFO_FAILED;
-    }
-    std::uint64_t request_epoch = 0;
-    FirmwareObservationTicket observation;
-    auto result = get_printers_with_token_refresh(a, request_epoch, observation);
-    if (http_code) *http_code = result.http_code;
-    auto body = body_from_result(result);
-    if (result.status == 0 && !remember_printer_connections(a, body, request_epoch)) {
+    std::unique_lock<std::mutex> request(a->printer_refresh_request_mutex);
+    PrinterRefreshAdapterState adapter_state{a};
+    auto lifecycle = pandar_plugin_printer_refresh_with_session(
+        a->printer_refresh_session,
+        kPrinterRefreshStudioPrintInfo,
+        a,
+        with_current_account,
+        printer_refresh_adapter(&adapter_state)
+    );
+    const auto status = lifecycle.http.status;
+    const auto result_http_code = lifecycle.http.http_code;
+    auto body = body_from_result(lifecycle.http);
+    request.unlock();
+    dispatch_connection_transition(a, lifecycle.connection);
+    dispatch_printer_offline_transitions(a, std::move(adapter_state.offline));
+    if (lifecycle.snapshot_current == 0 && status == 0) {
         trace_plugin_event(a, "get_user_print_info discarded after login change");
-        if (http_code) *http_code = 401;
-        if (http_body) *http_body = R"({"error":"invalid_auth_token"})";
-        return BBL::BAMBU_NETWORK_ERR_GET_USER_PRINTINFO_FAILED;
     }
-    if (result.status == 0) observe_firmware_printers(a, body, observation);
-    trace_plugin_event(a, std::string("get_user_print_info status=") + std::to_string(result.status));
-    if (http_body) *http_body = body;
-    if (result.status != 0) return BBL::BAMBU_NETWORK_ERR_GET_USER_PRINTINFO_FAILED;
-    return BBL::BAMBU_NETWORK_SUCCESS;
-}
-
-PANDAR_ABI int bambu_network_get_user_tasks(void* agent, BBL::TaskQueryParams, std::string* http_body) {
-    if (!as_agent(agent)) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
-    if (http_body) *http_body = R"({"total":0,"hits":[]})";
-    return BBL::BAMBU_NETWORK_SUCCESS;
+    trace_plugin_event(a, std::string("get_user_print_info status=") + std::to_string(status));
+    if (http_code) *http_code = result_http_code;
+    if (http_body) *http_body = std::move(body);
+    return status;
 }
 
 PANDAR_ABI int bambu_network_get_printer_firmware(void* agent, std::string dev_id, unsigned* http_code, std::string* http_body) {
@@ -43,157 +38,181 @@ PANDAR_ABI int bambu_network_get_printer_firmware(void* agent, std::string dev_i
     if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
     refresh_local_webserver_config(a);
     const auto normalized_dev_id = studio_dev_id(dev_id);
-    const auto printer_id = pandar_printer_id_for(a, normalized_dev_id);
-    auto result = pandar_plugin_firmware_catalog(
-        a->firmware_session,
-        reinterpret_cast<const uint8_t*>(normalized_dev_id.data()),
-        normalized_dev_id.size(),
-        reinterpret_cast<const uint8_t*>(printer_id.data()),
-        printer_id.size()
+    const auto snapshot = printer_request_snapshot(a, normalized_dev_id);
+    auto admission = pandar_plugin_studio_request_admitted(
+        snapshot.printer_authorized, snapshot.account_transition_pending
     );
-    if (http_code) *http_code = result.http_code;
-    auto body = body_from_result(result);
-    if (http_body) *http_body = body;
-    if (result.status != 0) {
-        a->last_error = std::move(body);
-        return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
+    if (admission.status != 0) {
+        const auto status = admission.status;
+        if (http_code) *http_code = admission.http_code;
+        auto body = body_from_result(admission);
+        if (http_body) *http_body = std::move(body);
+        return status;
     }
-    a->last_error.clear();
-    return BBL::BAMBU_NETWORK_SUCCESS;
-}
-
-PANDAR_ABI int bambu_network_get_task_plate_index(void*, std::string, int* plate_index) {
-    if (plate_index) *plate_index = -1;
-    return BBL::BAMBU_NETWORK_SUCCESS;
-}
-
-PANDAR_ABI int bambu_network_get_subtask_info(void*, std::string, std::string* task_json, unsigned int* http_code, std::string* http_body) {
-    if (task_json) task_json->clear();
-    success_body(http_code, http_body, "{}");
-    return BBL::BAMBU_NETWORK_SUCCESS;
-}
-
-PANDAR_ABI int bambu_network_get_slice_info(void*, std::string, std::string, int, std::string* slice_json) {
-    if (slice_json) slice_json->clear();
-    return BBL::BAMBU_NETWORK_SUCCESS;
+    body_from_result(admission);
+    auto upstream = firmware_catalog_from_snapshot(
+        pandar_plugin_firmware_catalog,
+        a->firmware_session,
+        normalized_dev_id,
+        snapshot
+    );
+    const auto upstream_status = upstream.status;
+    const auto upstream_http_code = upstream.http_code;
+    auto body = body_from_result(upstream);
+    auto result = pandar_plugin_studio_firmware_catalog_result(
+        upstream_status,
+        upstream_http_code,
+        reinterpret_cast<const uint8_t*>(body.data()), body.size(),
+        printer_request_snapshot_current(a, snapshot)
+    );
+    body = body_from_result(result);
+    if (http_code) *http_code = result.http_code;
+    if (http_body) *http_body = body;
+    return result.status;
 }
 
 PANDAR_ABI int bambu_network_get_camera_url(void* agent, std::string dev_id, std::function<void(std::string)> callback) {
     auto* a = as_agent(agent);
-    if (callback) callback(camera_url_for(a, dev_id));
-    return BBL::BAMBU_NETWORK_SUCCESS;
+    auto result = pandar_plugin_camera_access_result(a != nullptr);
+    body_from_result(result);
+    if (callback) callback({});
+    return result.status;
 }
 
 PANDAR_ABI int bambu_network_get_camera_url_for_golive(void* agent, std::string dev_id, std::string, std::function<void(std::string)> callback) {
     auto* a = as_agent(agent);
-    if (callback) callback(camera_url_for(a, dev_id));
-    return BBL::BAMBU_NETWORK_SUCCESS;
+    auto result = pandar_plugin_camera_access_result(a != nullptr);
+    body_from_result(result);
+    if (callback) callback({});
+    return result.status;
 }
 
-PANDAR_ABI int bambu_network_get_hms_snapshot(void*, std::string&, std::string&, std::function<void(std::string, int)> callback) {
-    if (callback) callback({}, -1);
-    return BBL::BAMBU_NETWORK_SUCCESS;
+PANDAR_ABI int bambu_network_get_hms_snapshot(void* agent, std::string& current, std::string& history, std::function<void(std::string, int)>) {
+    current.clear();
+    history.clear();
+    return studio_disposition(as_agent(agent), StudioDisposition::HmsSnapshot);
 }
 
-PANDAR_ABI int bambu_network_get_design_staffpick(void*, int, int, std::function<void(std::string)> cb) {
-    if (cb) cb(R"({"list":[],"total":0})");
-    return BBL::BAMBU_NETWORK_SUCCESS;
+PANDAR_ABI int bambu_network_get_design_staffpick(void* agent, int, int, std::function<void(std::string)>) {
+    return studio_disposition(as_agent(agent), StudioDisposition::DesignStaffPick);
 }
 
-PANDAR_ABI int bambu_network_start_publish(void*, BBL::PublishParams, BBL::OnUpdateStatusFn, BBL::WasCancelledFn, std::string* out) {
+PANDAR_ABI int bambu_network_start_publish(void* agent, BBL::PublishParams, BBL::OnUpdateStatusFn, BBL::WasCancelledFn, std::string* out) {
     if (out) out->clear();
-    return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
+    return studio_disposition(as_agent(agent), StudioDisposition::StartPublish);
 }
 
-PANDAR_ABI int bambu_network_get_model_publish_url(void*, std::string* url) {
-    if (url) *url = "https://makerworld.com/";
-    return BBL::BAMBU_NETWORK_SUCCESS;
+PANDAR_ABI int bambu_network_get_model_publish_url(void* agent, std::string* url) {
+    if (url) url->clear();
+    return studio_disposition(as_agent(agent), StudioDisposition::ModelPublishUrl);
 }
 
-class BBLModelTask;
-
-PANDAR_ABI int bambu_network_get_subtask(void*, BBLModelTask*, std::function<void(BBLModelTask*)>) {
-    return BBL::BAMBU_NETWORK_SUCCESS;
+PANDAR_ABI int bambu_network_get_subtask(
+    void* agent,
+    Slic3r::BBLModelTask* task,
+    std::function<void(Slic3r::BBLModelTask*)> callback
+) {
+    auto* current = as_agent(agent);
+    if (!current) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    return enqueue_model_task(current, task, std::move(callback))
+        ? BBL::BAMBU_NETWORK_SUCCESS
+        : BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
 }
 
-PANDAR_ABI int bambu_network_get_model_mall_home_url(void*, std::string* url) {
-    if (url) *url = "https://makerworld.com/";
-    return BBL::BAMBU_NETWORK_SUCCESS;
+PANDAR_ABI int bambu_network_get_model_mall_home_url(void* agent, std::string* url) {
+    if (url) url->clear();
+    return studio_disposition(as_agent(agent), StudioDisposition::ModelMallHome);
 }
 
-PANDAR_ABI int bambu_network_get_model_mall_detail_url(void*, std::string* url, std::string id) {
-    if (url) *url = std::string("https://makerworld.com/models/") + id;
-    return BBL::BAMBU_NETWORK_SUCCESS;
+PANDAR_ABI int bambu_network_get_model_mall_detail_url(void* agent, std::string* url, std::string) {
+    if (url) url->clear();
+    return studio_disposition(as_agent(agent), StudioDisposition::ModelMallDetail);
 }
 
-PANDAR_ABI int bambu_network_put_model_mall_rating(void*, int, int, std::string, std::vector<std::string>, unsigned int& http_code, std::string& http_error) {
-    http_code = 0;
-    http_error.clear();
-    return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
+PANDAR_ABI int bambu_network_put_model_mall_rating(void* agent, int, int, std::string, std::vector<std::string>, unsigned int& http_code, std::string& http_error) {
+    return studio_disposition(
+        as_agent(agent), StudioDisposition::PutModelRating, &http_error, &http_code
+    );
 }
 
-PANDAR_ABI int bambu_network_get_oss_config(void*, std::string& config, std::string, unsigned int& http_code, std::string& http_error) {
+PANDAR_ABI int bambu_network_get_oss_config(void* agent, std::string& config, std::string, unsigned int& http_code, std::string& http_error) {
     config.clear();
-    http_code = 0;
-    http_error.clear();
-    return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
+    return studio_disposition(
+        as_agent(agent), StudioDisposition::OssConfig, &http_error, &http_code
+    );
 }
 
-PANDAR_ABI int bambu_network_put_rating_picture_oss(void*, std::string&, std::string& pic_oss_path, std::string, int, unsigned int& http_code, std::string& http_error) {
+PANDAR_ABI int bambu_network_put_rating_picture_oss(void* agent, std::string&, std::string& pic_oss_path, std::string, int, unsigned int& http_code, std::string& http_error) {
     pic_oss_path.clear();
-    http_code = 0;
-    http_error.clear();
-    return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
+    return studio_disposition(
+        as_agent(agent), StudioDisposition::PutRatingPicture, &http_error, &http_code
+    );
 }
 
-PANDAR_ABI int bambu_network_get_model_mall_rating(void*, int, std::string& rating_result, unsigned int& http_code, std::string& http_error) {
+PANDAR_ABI int bambu_network_get_model_mall_rating(void* agent, int, std::string& rating_result, unsigned int& http_code, std::string& http_error) {
     rating_result.clear();
-    http_code = 0;
-    http_error.clear();
-    return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
+    return studio_disposition(
+        as_agent(agent), StudioDisposition::GetModelRating, &http_error, &http_code
+    );
 }
 
-PANDAR_ABI int bambu_network_get_mw_user_preference(void*, std::function<void(std::string)> cb) {
-    if (cb) cb(R"({"recommendStatus":0})");
-    return BBL::BAMBU_NETWORK_SUCCESS;
+PANDAR_ABI int bambu_network_get_mw_user_preference(void* agent, std::function<void(std::string)>) {
+    return studio_disposition(as_agent(agent), StudioDisposition::MakerWorldPreference);
 }
 
-PANDAR_ABI int bambu_network_get_mw_user_4ulist(void*, int, int, std::function<void(std::string)> cb) {
-    if (cb) cb(R"({"list":[],"total":0})");
-    return BBL::BAMBU_NETWORK_SUCCESS;
+PANDAR_ABI int bambu_network_get_mw_user_4ulist(void* agent, int, int, std::function<void(std::string)>) {
+    return studio_disposition(as_agent(agent), StudioDisposition::MakerWorldForYou);
 }
 
-PANDAR_ABI int bambu_network_get_filament_spools(void*, BBL::FilamentQueryParams, std::string* http_body) {
-    if (http_body) *http_body = "{}";
-    return BBL::BAMBU_NETWORK_ERR_GET_FILAMENTS_FAILED;
+PANDAR_ABI int bambu_network_get_filament_spools(void* agent, BBL::FilamentQueryParams, std::string* http_body) {
+    std::string body;
+    const auto status = studio_disposition(as_agent(agent), StudioDisposition::GetFilaments, &body);
+    if (http_body) *http_body = std::move(body);
+    return status;
 }
 
-PANDAR_ABI int bambu_network_create_filament_spool(void*, std::string, std::string* http_body) {
-    if (http_body) *http_body = "{}";
-    return BBL::BAMBU_NETWORK_ERR_CREATE_FILAMENT_FAILED;
+PANDAR_ABI int bambu_network_create_filament_spool(void* agent, std::string, std::string* http_body) {
+    std::string body;
+    const auto status = studio_disposition(as_agent(agent), StudioDisposition::CreateFilament, &body);
+    if (http_body) *http_body = std::move(body);
+    return status;
 }
 
-PANDAR_ABI int bambu_network_update_filament_spool(void*, std::string, std::string, std::string* http_body) {
-    if (http_body) *http_body = "{}";
-    return BBL::BAMBU_NETWORK_ERR_UPDATE_FILAMENT_FAILED;
+PANDAR_ABI int bambu_network_update_filament_spool(void* agent, std::string, std::string, std::string* http_body) {
+    std::string body;
+    const auto status = studio_disposition(as_agent(agent), StudioDisposition::UpdateFilament, &body);
+    if (http_body) *http_body = std::move(body);
+    return status;
 }
 
-PANDAR_ABI int bambu_network_delete_filament_spools(void*, BBL::FilamentDeleteParams, std::string* http_body) {
-    if (http_body) *http_body = "{}";
-    return BBL::BAMBU_NETWORK_ERR_DELETE_FILAMENT_FAILED;
+PANDAR_ABI int bambu_network_delete_filament_spools(void* agent, BBL::FilamentDeleteParams, std::string* http_body) {
+    std::string body;
+    const auto status = studio_disposition(as_agent(agent), StudioDisposition::DeleteFilament, &body);
+    if (http_body) *http_body = std::move(body);
+    return status;
 }
 
-PANDAR_ABI int bambu_network_get_filament_config(void*, std::string* http_body) {
-    if (http_body) *http_body = "{}";
-    return BBL::BAMBU_NETWORK_ERR_GET_FILAMENT_CONFIG_FAILED;
+PANDAR_ABI int bambu_network_get_filament_config(void* agent, std::string* http_body) {
+    std::string body;
+    const auto status = studio_disposition(as_agent(agent), StudioDisposition::GetFilamentConfig, &body);
+    if (http_body) *http_body = std::move(body);
+    return status;
 }
 
-PANDAR_ABI int bambu_network_track_enable(void*, bool) { return BBL::BAMBU_NETWORK_SUCCESS; }
-PANDAR_ABI int bambu_network_track_remove_files(void*) { return BBL::BAMBU_NETWORK_SUCCESS; }
-PANDAR_ABI int bambu_network_track_event(void*, std::string, std::string) { return BBL::BAMBU_NETWORK_SUCCESS; }
-PANDAR_ABI int bambu_network_track_header(void*, std::string) { return BBL::BAMBU_NETWORK_SUCCESS; }
-PANDAR_ABI int bambu_network_track_update_property(void*, std::string, std::string, std::string) { return BBL::BAMBU_NETWORK_SUCCESS; }
-PANDAR_ABI int bambu_network_track_get_property(void*, std::string, std::string& value, std::string) {
+PANDAR_ABI int bambu_network_sync_ams_filaments(void* agent, BBL::AmsSyncParams, std::string* http_body) {
+    auto result = pandar_plugin_sync_ams_filaments(agent != nullptr);
+    const int status = result.status;
+    auto body = body_from_result(result);
+    if (http_body) *http_body = std::move(body);
+    return status;
+}
+
+PANDAR_ABI int bambu_network_track_enable(void* agent, bool) { return studio_disposition(as_agent(agent), StudioDisposition::TrackEnable); }
+PANDAR_ABI int bambu_network_track_remove_files(void* agent) { return studio_disposition(as_agent(agent), StudioDisposition::TrackRemoveFiles); }
+PANDAR_ABI int bambu_network_track_event(void* agent, std::string, std::string) { return studio_disposition(as_agent(agent), StudioDisposition::TrackEvent); }
+PANDAR_ABI int bambu_network_track_header(void* agent, std::string) { return studio_disposition(as_agent(agent), StudioDisposition::TrackHeader); }
+PANDAR_ABI int bambu_network_track_update_property(void* agent, std::string, std::string, std::string) { return studio_disposition(as_agent(agent), StudioDisposition::TrackUpdateProperty); }
+PANDAR_ABI int bambu_network_track_get_property(void* agent, std::string, std::string& value, std::string) {
     value.clear();
-    return BBL::BAMBU_NETWORK_SUCCESS;
+    return studio_disposition(as_agent(agent), StudioDisposition::TrackGetProperty);
 }

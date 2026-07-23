@@ -68,19 +68,25 @@ impl JobRepository {
         actor: AuditActor,
     ) -> RepositoryResult<ClearJobsOutcome> {
         let tx = begin_clear_transaction(&self.database).await?;
-        let tenant_jobs = locked_tenant_jobs(&tx, tenant_id).await?;
         let target_id = match &scope {
             ClearScope::Tenant => None,
             ClearScope::Job(job_id) => Some(job_id),
         };
+        let command_ids = jobs::Entity::find()
+            .select_only()
+            .column(jobs::Column::CommandId)
+            .filter(jobs::Column::TenantId.eq(tenant_id.to_string()))
+            .into_tuple::<String>()
+            .all(&tx)
+            .await
+            .context("failed to select print commands for clearing")?
+            .into_iter()
+            .collect::<HashSet<_>>();
+        let commands = locked_commands(&tx, command_ids).await?;
+        let tenant_jobs = locked_tenant_jobs(&tx, tenant_id).await?;
         if target_id.is_some_and(|job_id| !tenant_jobs.iter().any(|job| &job.id == job_id)) {
             return Err(crate::repositories::RepositoryError::MissingJob);
         }
-        let command_ids = tenant_jobs
-            .iter()
-            .map(|job| job.command_id.clone())
-            .collect::<HashSet<_>>();
-        let commands = locked_commands(&tx, command_ids).await?;
         let command_by_id = commands
             .iter()
             .map(|command| (command.id.as_str(), command))
@@ -258,8 +264,11 @@ fn clearable_job(
     command: &commands::Model,
     now: OffsetDateTime,
 ) -> RepositoryResult<bool> {
-    if !matches!(job.status.as_str(), "succeeded" | "failed")
-        || !matches!(command.status.as_str(), "succeeded" | "failed")
+    if !matches!(job.status.as_str(), "succeeded" | "failed" | "cancelled")
+        || !matches!(
+            command.status.as_str(),
+            "succeeded" | "failed" | "cancelled"
+        )
         || command.kind != "print_project_file"
     {
         return Ok(false);
@@ -308,7 +317,10 @@ async fn delete_unreferenced_commands(
         .into_iter()
         .filter(|command| {
             command.kind == "print_project_file"
-                && matches!(command.status.as_str(), "succeeded" | "failed")
+                && matches!(
+                    command.status.as_str(),
+                    "succeeded" | "failed" | "cancelled"
+                )
         })
         .map(|command| command.id)
         .collect::<HashSet<_>>();

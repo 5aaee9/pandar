@@ -17,6 +17,7 @@ fn firmware_ffi_send_classifies_non_firmware_and_invalid_without_hub_contact() {
         r#"{"print":{"command":"push_status"}}"#,
         0,
         Some(&mut token),
+        1,
     );
     assert_eq!((not_firmware.status, not_firmware.http_code), (2, 200));
     assert!(not_firmware.body.is_empty());
@@ -29,9 +30,29 @@ fn firmware_ffi_send_classifies_non_firmware_and_invalid_without_hub_contact() {
         r#"{"upgrade":null}"#,
         0,
         Some(&mut token),
+        1,
     );
     assert_eq!((invalid.status, invalid.http_code), (1, 400));
     assert_eq!(invalid.body, r#"{"error":"unsupported_printer_operation"}"#);
+    assert_eq!(token, 0);
+
+    token = 99;
+    let invalid_identity = session.send(
+        " ",
+        "printer-1",
+        &command("missing"),
+        0,
+        Some(&mut token),
+        1,
+    );
+    assert_eq!(
+        (invalid_identity.status, invalid_identity.http_code),
+        (1, 400)
+    );
+    assert_eq!(
+        invalid_identity.body,
+        r#"{"error":"invalid_firmware_request"}"#
+    );
     assert_eq!(token, 0);
 
     session.destroy();
@@ -46,7 +67,7 @@ fn firmware_ffi_send_classifies_valid_oversized_non_firmware_without_hub_contact
     assert!(message.len() > PLUGIN_JSON_BODY_LIMIT);
     let mut token = 99;
 
-    let result = session.send("SERIAL", "printer-1", &message, 0, Some(&mut token));
+    let result = session.send("SERIAL", "printer-1", &message, 0, Some(&mut token), 1);
 
     assert_eq!((result.status, result.http_code), (2, 200));
     assert!(result.body.is_empty());
@@ -57,7 +78,14 @@ fn firmware_ffi_send_classifies_valid_oversized_non_firmware_without_hub_contact
         "x".repeat(PLUGIN_JSON_BODY_LIMIT)
     );
     token = 99;
-    let invalid = session.send("SERIAL", "printer-1", &present_upgrade, 0, Some(&mut token));
+    let invalid = session.send(
+        "SERIAL",
+        "printer-1",
+        &present_upgrade,
+        0,
+        Some(&mut token),
+        1,
+    );
     assert_eq!((invalid.status, invalid.http_code), (1, 400));
     assert_eq!(invalid.body, r#"{"error":"unsupported_printer_operation"}"#);
     assert_eq!(token, 0);
@@ -78,7 +106,7 @@ fn firmware_ffi_send_requires_non_null_token_out_before_hub_contact() {
     ]);
     let session = Session::create(&hub, "token", 1);
 
-    let result = session.send("SERIAL", "printer-1", &command("7"), 0, None);
+    let result = session.send("SERIAL", "printer-1", &command("7"), 0, None, 1);
 
     session.destroy();
     let requests = server.join().unwrap();
@@ -104,14 +132,16 @@ fn firmware_ffi_acknowledged_send_handoff_returns_and_frees_callback_triples() {
     let session = Session::create(&hub, "token", 3);
     let mut token = 0;
 
-    let result = session.send("SERIAL", "printer-1", &command("8"), 1, Some(&mut token));
+    let result = session.send("SERIAL", "printer-1", &command("8"), 1, Some(&mut token), 3);
     assert_eq!((result.status, result.http_code), (0, 200));
     assert_eq!(result.body, r#"{"outcome":"acknowledged"}"#);
     assert_ne!(token, 0);
-    assert_eq!(session.handoff(token, 44), 0);
+    assert_eq!(session.handoff(token, 44, 91, 101), 0);
 
     let callback = session.next_callback(1_800);
     assert_eq!(callback.status, 0);
+    assert_eq!(callback.local_generation, 91);
+    assert_eq!(callback.cache_generation, 101);
     assert_eq!(callback.dev_id, "SERIAL");
     assert_eq!(callback.tunnel, 1);
     let body: serde_json::Value = serde_json::from_str(&callback.message).unwrap();
@@ -130,12 +160,12 @@ fn firmware_ffi_generation_cancel_removes_pending_callback() {
     ]);
     let session = Session::create(&hub, "token", 5);
     let mut token = 0;
-    let result = session.send("SERIAL", "printer-1", &command("9"), 0, Some(&mut token));
+    let result = session.send("SERIAL", "printer-1", &command("9"), 0, Some(&mut token), 5);
     assert_eq!(result.status, 0);
     assert_ne!(token, 0);
 
     session.cancel_generation(5);
-    assert_eq!(session.handoff(token, 45), 1);
+    assert_eq!(session.handoff(token, 45, 0, 0), 1);
     let callback = session.next_callback(0);
     assert_eq!(callback.status, 1);
     assert!(callback.dev_id.is_empty());
@@ -152,7 +182,14 @@ fn firmware_ffi_generation_cancel_blocks_future_same_generation_send() {
     session.cancel_generation(5);
     let mut token = 99;
 
-    let result = session.send("SERIAL", "printer-1", &command("10"), 0, Some(&mut token));
+    let result = session.send(
+        "SERIAL",
+        "printer-1",
+        &command("10"),
+        0,
+        Some(&mut token),
+        5,
+    );
 
     assert_eq!((result.status, result.http_code), (1, 400));
     assert_eq!(result.body, r#"{"outcome":"pre_publish_failure"}"#);

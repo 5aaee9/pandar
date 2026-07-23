@@ -10,11 +10,165 @@ use crate::{
             auto_bed_leveling_supported, auto_flow_calibration_supported,
             flow_calibration_supported, nozzle_offset_calibration_supported,
         },
-        file_transfer::run_with_transfer_mode,
-        mqtt::{BambuMqttCommand, BambuMqttTopics, ProjectFileCommand, PublishedMqttCommand},
+        file_transfer::{PrintUploadPolicy, run_with_transfer_mode},
+        mqtt::{
+            BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, ProjectFileAmsMapping2,
+            ProjectFileAmsMappingInfo, ProjectFileCommand, PublishedMqttCommand,
+        },
     },
-    protocol::agent::v1::PrintProjectFile,
+    protocol::agent::v1::{
+        PrintProjectFile, PrintProjectFileOptions, PrintSubmissionSource, StudioTaskMetadata,
+    },
 };
+
+const MAX_STUDIO_MAPPING_ENTRIES: usize = 32;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum StudioBedType {
+    SuperTack,
+    Cool,
+    Engineering,
+    SmoothPei,
+    TexturedPei,
+}
+
+impl StudioBedType {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::SuperTack => "supertack_plate",
+            Self::Cool => "cool_plate",
+            Self::Engineering => "eng_plate",
+            Self::SmoothPei => "hot_plate",
+            Self::TexturedPei => "textured_plate",
+        }
+    }
+}
+
+impl TryFrom<&str> for StudioBedType {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "supertack_plate" => Ok(Self::SuperTack),
+            "cool_plate" => Ok(Self::Cool),
+            "eng_plate" => Ok(Self::Engineering),
+            "hot_plate" => Ok(Self::SmoothPei),
+            "textured_plate" => Ok(Self::TexturedPei),
+            _ => bail!("invalid Studio bed_type {value:?}"),
+        }
+    }
+}
+
+pub(crate) struct ValidatedPrintProjectFile<'a> {
+    options: &'a PrintProjectFileOptions,
+    submission_source: PrintSubmissionSource,
+    task_metadata: Option<&'a StudioTaskMetadata>,
+    bed_type: String,
+    auto_bed_leveling: PrintCalibrationMode,
+    auto_flow_cali: PrintCalibrationMode,
+    auto_offset_cali: PrintCalibrationMode,
+    extruder_cali_manual_mode: Option<i32>,
+}
+
+pub(crate) fn validate_print_project_file_command(
+    command: &PrintProjectFile,
+) -> anyhow::Result<ValidatedPrintProjectFile<'_>> {
+    if command.plate_id == 0 || command.plate_id > i32::MAX as u32 {
+        bail!("invalid plate_id; expected 1..={}", i32::MAX);
+    }
+    if command.studio_submission_id == 0 || command.studio_submission_id > i32::MAX as u32 {
+        bail!("invalid studio_submission_id; expected 1..={}", i32::MAX);
+    }
+    let submission_source = PrintSubmissionSource::try_from(command.submission_source)
+        .context("invalid print submission source")?;
+    if submission_source == PrintSubmissionSource::Unspecified {
+        bail!("missing print submission source");
+    }
+    let options = command
+        .options
+        .as_ref()
+        .context("missing print project file options")?;
+    let (
+        task_metadata,
+        bed_type,
+        auto_bed_leveling,
+        auto_flow_cali,
+        auto_offset_cali,
+        extruder_cali_manual_mode,
+    ) = match submission_source {
+        PrintSubmissionSource::Studio => {
+            let task_metadata = command
+                .task_metadata
+                .as_ref()
+                .context("missing Studio task metadata")?;
+            let bed_type = StudioBedType::try_from(options.bed_type.as_str())?;
+            let extruder_cali_manual_mode = options
+                .extruder_cali_manual_mode
+                .context("missing extruder_cali_manual_mode")?;
+            if !(-1..=1).contains(&extruder_cali_manual_mode) {
+                bail!("invalid extruder_cali_manual_mode; expected -1, 0, or 1");
+            }
+            (
+                Some(task_metadata),
+                bed_type.as_str().to_owned(),
+                required_calibration_mode(options.auto_bed_leveling, "auto_bed_leveling")?,
+                required_calibration_mode(options.auto_flow_cali, "auto_flow_cali")?,
+                required_calibration_mode(options.auto_offset_cali, "auto_offset_cali")?,
+                Some(extruder_cali_manual_mode),
+            )
+        }
+        PrintSubmissionSource::Web => {
+            if command.task_metadata.is_some() {
+                bail!("Web print command must not contain Studio task metadata");
+            }
+            if options.extruder_cali_manual_mode.is_some() {
+                bail!("Web print command must not contain extruder_cali_manual_mode");
+            }
+            (
+                None,
+                if options.bed_type.trim().is_empty() {
+                    "auto".to_owned()
+                } else {
+                    options.bed_type.clone()
+                },
+                required_calibration_mode(options.auto_bed_leveling, "auto_bed_leveling")?,
+                required_calibration_mode(options.auto_flow_cali, "auto_flow_cali")?,
+                required_calibration_mode(options.auto_offset_cali, "auto_offset_cali")?,
+                None,
+            )
+        }
+        PrintSubmissionSource::Unspecified => unreachable!(),
+    };
+    for (field, len) in [
+        ("nozzle_mapping", options.nozzle_mapping.len()),
+        ("ams_mapping", options.ams_mapping.len()),
+        ("ams_mapping2", options.ams_mapping2.len()),
+        ("ams_mapping_info", options.ams_mapping_info.len()),
+    ] {
+        if len > MAX_STUDIO_MAPPING_ENTRIES {
+            bail!("invalid {field}; expected at most {MAX_STUDIO_MAPPING_ENTRIES} entries");
+        }
+    }
+    if options
+        .nozzles_info
+        .iter()
+        .filter_map(|nozzle| nozzle.diameter)
+        .any(|diameter| !diameter.is_finite())
+    {
+        bail!("invalid nozzles_info diameter; expected a finite number");
+    }
+
+    Ok(ValidatedPrintProjectFile {
+        options,
+        submission_source,
+        task_metadata,
+        bed_type,
+        auto_bed_leveling,
+        auto_flow_cali,
+        auto_offset_cali,
+        extruder_cali_manual_mode,
+    })
+}
 
 pub async fn dispatch_print_project_file<F, T>(
     endpoint: &BambuPrinterEndpoint,
@@ -28,12 +182,11 @@ where
     F: MachineFileTransfer + Send + Sync,
     T: BambuMqttTransport + Send + Sync,
 {
-    let auto_bed_leveling =
-        required_calibration_mode(command.auto_bed_leveling, "auto_bed_leveling")?;
-    let auto_flow_cali = required_calibration_mode(command.auto_flow_cali, "auto_flow_cali")?;
-    let auto_offset_cali = required_calibration_mode(command.auto_offset_cali, "auto_offset_cali")?;
+    let validated = validate_print_project_file_command(command)
+        .context("validate print project file command")?;
+    let options = validated.options;
 
-    if (command.flow_cali || auto_flow_cali == PrintCalibrationMode::On)
+    if (options.flow_cali || validated.auto_flow_cali == PrintCalibrationMode::On)
         && !flow_calibration_supported(endpoint.model.as_deref())
     {
         bail!(
@@ -41,7 +194,7 @@ where
             endpoint.model.as_deref().unwrap_or("unknown")
         );
     }
-    if auto_flow_cali == PrintCalibrationMode::Auto
+    if validated.auto_flow_cali == PrintCalibrationMode::Auto
         && !auto_flow_calibration_supported(endpoint.model.as_deref())
     {
         bail!(
@@ -49,7 +202,7 @@ where
             endpoint.model.as_deref().unwrap_or("unknown")
         );
     }
-    if auto_bed_leveling == PrintCalibrationMode::Auto
+    if validated.auto_bed_leveling == PrintCalibrationMode::Auto
         && !auto_bed_leveling_supported(endpoint.model.as_deref())
     {
         bail!(
@@ -57,7 +210,7 @@ where
             endpoint.model.as_deref().unwrap_or("unknown")
         );
     }
-    if auto_offset_cali != PrintCalibrationMode::Off
+    if validated.auto_offset_cali != PrintCalibrationMode::Off
         && !nozzle_offset_calibration_supported(endpoint.model.as_deref())
     {
         bail!(
@@ -67,39 +220,76 @@ where
     }
 
     let remote_path = pick_remote_name(&command.filename);
+    let print_upload_policy = PrintUploadPolicy {
+        try_emmc_print: options.try_emmc_print,
+    };
     let uploaded = run_with_transfer_mode(endpoint, cache, false, |mode| {
         let remote_path = remote_path.clone();
-        async move { transfer.upload(&remote_path, artifact, mode).await }
+        async move {
+            transfer
+                .upload_print(&remote_path, artifact, mode, print_upload_policy)
+                .await
+        }
     })
     .await
     .with_context(|| format!("upload print artifact to {}", endpoint.serial))?;
 
     let topics = BambuMqttTopics::for_serial(&endpoint.serial);
     let md5 = md5_upper(artifact);
-    let payload = BambuMqttCommand::ProjectFile(ProjectFileCommand {
+    let payload = BambuMqttCommand::project_file(ProjectFileCommand {
         printer_model: endpoint.model.clone(),
         filename: uploaded.path.clone(),
         url: Some(uploaded.url.clone()),
         md5: Some(md5.clone()),
         plate_id: command.plate_id,
-        task_id: command.job_id.clone(),
-        subtask_id: command.artifact_id.clone(),
-        use_ams: command.use_ams,
-        bed_leveling: command.bed_leveling,
-        auto_bed_leveling,
-        flow_cali: command.flow_cali,
-        auto_flow_cali,
-        auto_offset_cali,
-        timelapse: command.timelapse,
-        ams_mapping_json: non_empty_string(&command.ams_mapping_json),
-        ams_mapping2_json: non_empty_string(&command.ams_mapping2_json),
-        ams_mapping_info_json: non_empty_string(&command.ams_mapping_info_json),
+        studio_submission_id: command.studio_submission_id,
+        submission_source: validated.submission_source,
+        task_name: validated
+            .task_metadata
+            .map(|metadata| metadata.task_name.clone()),
+        origin_profile_id: validated
+            .task_metadata
+            .map_or(0, |metadata| metadata.origin_profile_id),
+        use_ams: options.use_ams,
+        bed_leveling: options.bed_leveling,
+        auto_bed_leveling: validated.auto_bed_leveling,
+        flow_cali: options.flow_cali,
+        vibration_cali: options.vibration_cali,
+        layer_inspect: options.layer_inspect,
+        auto_flow_cali: validated.auto_flow_cali,
+        auto_offset_cali: validated.auto_offset_cali,
+        timelapse: options.record_timelapse,
+        timelapse_use_internal: options.timelapse_use_internal,
+        bed_type: validated.bed_type,
+        extruder_cali_manual_mode: validated.extruder_cali_manual_mode,
+        nozzle_mapping: options.nozzle_mapping.clone(),
+        ams_mapping: options.ams_mapping.clone(),
+        ams_mapping2: options
+            .ams_mapping2
+            .iter()
+            .map(|entry| ProjectFileAmsMapping2 {
+                ams_id: entry.ams_id,
+                slot_id: entry.slot_id,
+            })
+            .collect(),
+        ams_mapping_info: options
+            .ams_mapping_info
+            .iter()
+            .map(|entry| ProjectFileAmsMappingInfo {
+                ams: entry.ams,
+                target_color: entry.target_color.clone(),
+                filament_id: entry.filament_id.clone(),
+                filament_type: entry.filament_type.clone(),
+                nozzle_id: entry.nozzle_id,
+                source_color: entry.source_color.clone(),
+            })
+            .collect(),
     })
     .payload();
     mqtt.publish(PublishedMqttCommand {
         topic: topics.request.clone(),
         payload: payload.clone(),
-        qos: 0,
+        qos: BAMBU_MQTT_QOS,
     })
     .await
     .with_context(|| format!("publish project_file to {}", endpoint.serial))?;
@@ -107,7 +297,7 @@ where
     Ok(PrintProjectDispatchResult {
         topic: topics.request,
         payload: MachineJsonPayload::from(payload),
-        qos: 0,
+        qos: BAMBU_MQTT_QOS,
         uploaded_path: uploaded.path,
         uploaded_url: uploaded.url,
         md5,
@@ -117,7 +307,7 @@ fn required_calibration_mode(
     value: Option<i32>,
     field: &str,
 ) -> anyhow::Result<PrintCalibrationMode> {
-    let value = value.ok_or_else(|| anyhow::anyhow!("missing {field}"))?;
+    let value = value.with_context(|| format!("missing {field} calibration mode"))?;
     let value = u8::try_from(value).with_context(|| format!("invalid {field} calibration mode"))?;
     PrintCalibrationMode::try_from(value)
         .with_context(|| format!("invalid {field} calibration mode"))
@@ -158,8 +348,4 @@ fn strip_3mf_extension(mut name: String) -> String {
         name.truncate(name.len() - ".3mf".len());
     }
     name
-}
-
-fn non_empty_string(value: &str) -> Option<String> {
-    (!value.is_empty()).then(|| value.to_owned())
 }

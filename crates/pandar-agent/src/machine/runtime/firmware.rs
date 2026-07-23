@@ -20,8 +20,8 @@ use crate::{
         FirmwareObservationCache, FirmwareReportContext, PrinterRefreshResult,
         diagnostics::redact_access_code,
         mqtt::{
-            BambuMqttTransport, feature_event, forward_print_reports_with_firmware,
-            refresh_printer_with_firmware,
+            BambuMqttTransport, MqttForwardingContext, MqttPresenceState, feature_event,
+            forward_print_reports_with_context, refresh_printer_with_firmware,
         },
     },
     protocol::agent::v1::AgentEvent,
@@ -207,15 +207,19 @@ pub(crate) async fn forward_print_reports_with_firmware_retry<T>(
 ) where
     T: BambuMqttTransport + Send + Sync,
 {
+    let mut presence = MqttPresenceState::default();
     loop {
-        match forward_print_reports_with_firmware(
+        match forward_print_reports_with_context(
             &config,
             &transport,
             &endpoint,
             report_timeout,
             &sender,
-            &context.device_features,
-            context.firmware.clone(),
+            MqttForwardingContext {
+                device_features: &context.device_features,
+                firmware: Some(context.firmware.clone()),
+                presence: &mut presence,
+            },
         )
         .await
         {

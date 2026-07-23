@@ -27,6 +27,8 @@ pub struct FirmwareCallback {
 pub struct ReadyFirmwareCallback {
     pub token: u64,
     pub origin_tick: u64,
+    pub local_generation: u64,
+    pub cache_generation: u64,
     pub dev_id: String,
     pub tunnel: FirmwareTunnel,
     pub message: String,
@@ -52,6 +54,8 @@ struct PendingFirmwareCallback {
 
 struct CallbackHandoff {
     origin_tick: u64,
+    local_generation: u64,
+    cache_generation: u64,
     not_before: Instant,
     deadline: Instant,
 }
@@ -86,7 +90,14 @@ impl FirmwareCallbackQueue {
         Some(token)
     }
 
-    pub fn return_handoff_at(&self, token: u64, origin_tick: u64, handoff: Instant) -> bool {
+    pub fn return_handoff_at(
+        &self,
+        token: u64,
+        origin_tick: u64,
+        local_generation: u64,
+        cache_generation: u64,
+        handoff: Instant,
+    ) -> bool {
         let mut state = self.state.lock().expect("firmware callback queue poisoned");
         if state.stopped {
             return false;
@@ -100,6 +111,8 @@ impl FirmwareCallbackQueue {
         };
         pending.handoff = Some(CallbackHandoff {
             origin_tick,
+            local_generation,
+            cache_generation,
             not_before: handoff + CALLBACK_NOT_BEFORE,
             deadline: handoff + CALLBACK_DEADLINE,
         });
@@ -194,6 +207,8 @@ fn take_ready(state: &mut QueueState, now: Instant) -> Option<ReadyFirmwareCallb
     Some(ReadyFirmwareCallback {
         token: pending.token,
         origin_tick: handoff.origin_tick,
+        local_generation: handoff.local_generation,
+        cache_generation: handoff.cache_generation,
         dev_id: pending.callback.dev_id,
         tunnel: pending.callback.tunnel,
         message: pending.callback.message,

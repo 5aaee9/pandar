@@ -85,7 +85,7 @@ where
             ..Default::default()
         })
         .filter(jobs::Column::CommandId.eq(transition.command_id.to_string()))
-        .filter(jobs::Column::Status.is_not_in(["succeeded", "failed"]))
+        .filter(jobs::Column::Status.is_not_in(["succeeded", "failed", "cancelled"]))
         .exec(connection)
         .await
         .context("failed to update print job for command")?;
@@ -93,7 +93,7 @@ where
     if result.rows_affected == 0
         && !matches!(
             transition.job_status,
-            JobStatus::Succeeded | JobStatus::Failed
+            JobStatus::Succeeded | JobStatus::Failed | JobStatus::Cancelled
         )
     {
         return Err(RepositoryError::MissingJob);

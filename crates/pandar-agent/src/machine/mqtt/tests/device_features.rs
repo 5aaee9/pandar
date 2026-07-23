@@ -42,7 +42,7 @@ fn device_features_parser_preserves_presence_and_sibling_telemetry() {
         .expect("print.fun is present");
     assert_eq!(observed.bits(), HIGH_BITS);
     let snapshot = snapshot_from_parsed_report(&endpoint(), Some(&valid));
-    assert_eq!(snapshot.state, "RUNNING");
+    assert_eq!(snapshot.state.as_deref(), Some("RUNNING"));
     assert_eq!(snapshot.bed_temperature_celsius.as_deref(), Some("60"));
 
     for payload in [
@@ -52,7 +52,7 @@ fn device_features_parser_preserves_presence_and_sibling_telemetry() {
     ] {
         let report = report_from_mqtt_bytes(payload);
         let snapshot = snapshot_from_parsed_report(&endpoint(), Some(&report));
-        assert_eq!(snapshot.state, "RUNNING");
+        assert_eq!(snapshot.state.as_deref(), Some("RUNNING"));
         assert_eq!(snapshot.bed_temperature_celsius.as_deref(), Some("60"));
 
         let error = device_feature_observation("SERIAL-1", &report).unwrap_err();
@@ -108,7 +108,7 @@ fn device_features_refresh_logs_invalid_fun_and_preserves_sibling_telemetry() {
             })
     });
 
-    assert_eq!(snapshot.state, "RUNNING");
+    assert_eq!(snapshot.state.as_deref(), Some("RUNNING"));
     assert_eq!(snapshot.bed_temperature_celsius.as_deref(), Some("60"));
     assert_eq!(snapshot.device_features, None);
     let logs = logs.contents();
@@ -263,15 +263,16 @@ async fn device_features_fun_only_report_emits_only_feature_snapshot() {
     assert_eq!(snapshot.device_features.unwrap().bambu_fun_bits, HIGH_BITS);
     assert_eq!(cache.get("01S00EXAMPLE").await.unwrap().bits(), HIGH_BITS);
 
-    match timeout(Duration::from_millis(10), receiver.recv()).await {
-        Err(_) | Ok(None) => {}
-        Ok(Some(event)) => panic!("unexpected duplicate event: {event:?}"),
-    }
+    let offline = timeout(Duration::from_millis(50), receiver.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_offline_snapshot(offline);
     task.abort();
 }
 
 #[tokio::test]
-async fn device_features_temperature_report_uses_one_full_snapshot_without_duplicate() {
+async fn device_features_temperature_report_precedes_separate_offline_transition() {
     let report = decode_mqtt_report_payload(
         br#"{"print":{"fun":"8000004100000020","gcode_state":"RUNNING","bed_temper":60}}"#,
     )
@@ -294,24 +295,37 @@ async fn device_features_temperature_report_uses_one_full_snapshot_without_dupli
         }
     });
 
-    let mut snapshots = Vec::new();
-    while let Ok(Some(event)) = timeout(Duration::from_millis(10), receiver.recv()).await {
+    let snapshot = loop {
+        let event = receiver.recv().await.unwrap();
         match event.event {
-            Some(agent_event::Event::PrinterSnapshot(snapshot)) => snapshots.push(snapshot),
+            Some(agent_event::Event::PrinterSnapshot(snapshot)) => break snapshot,
             Some(agent_event::Event::PrinterDeviceFeaturesSnapshot(snapshot)) => {
                 panic!("unexpected duplicate feature-only snapshot: {snapshot:?}")
             }
             _ => {}
         }
-    }
-
-    assert_eq!(snapshots.len(), 1);
-    let features = snapshots[0]
+    };
+    let features = snapshot
         .device_features
         .as_ref()
         .expect("full snapshot carries observed features");
     assert_eq!(features.bambu_fun_bits, HIGH_BITS);
-    assert_eq!(snapshots[0].state, "RUNNING");
-    assert_eq!(snapshots[0].bed_temperature_celsius, "60");
+    assert_eq!(snapshot.state, "RUNNING");
+    assert_eq!(snapshot.bed_temperature_celsius, "60");
+
+    let offline = timeout(Duration::from_millis(50), receiver.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_offline_snapshot(offline);
     task.abort();
+}
+
+fn assert_offline_snapshot(event: crate::protocol::agent::v1::AgentEvent) {
+    let Some(agent_event::Event::PrinterSnapshot(snapshot)) = event.event else {
+        panic!("expected offline printer snapshot, got {event:?}");
+    };
+    assert_eq!(snapshot.state, "offline");
+    assert!(!snapshot.telemetry_authoritative);
+    assert!(snapshot.device_features.is_none());
 }

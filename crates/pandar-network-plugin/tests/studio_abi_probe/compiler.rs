@@ -135,6 +135,17 @@ pub(super) fn compile_firmware_probe() -> CompiledProbe {
     compile_fixture("firmware", "firmware_abi_probe.cpp")
 }
 
+pub(super) fn compile_firmware_snapshot_claim_probe() -> CompiledProbe {
+    compile_fixture(
+        "firmware-snapshot-claim",
+        "firmware_snapshot_claim_probe.cpp",
+    )
+}
+
+pub(super) fn compile_disposition_probe() -> CompiledProbe {
+    compile_fixture("dispositions", "studio_disposition_probe.cpp")
+}
+
 pub(super) fn build_plugin() -> PathBuf {
     let output = Command::new("cargo")
         .args(["build", "-p", "pandar-network-plugin"])

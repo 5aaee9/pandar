@@ -138,6 +138,7 @@ async fn firmware_stream_cancellation_aborts_queued_publish_before_generation_re
     .await
     .unwrap();
     let abort_requested = session.pump_abort_requested_flag_for_test();
+    let pump_reaped = session.pump_reaped_flag_for_test();
     let abort_before_transition_release = Arc::new(AtomicBool::new(false));
     let execute = gateway
         .install_firmware_publish_session_for_execute(
@@ -233,8 +234,8 @@ async fn firmware_stream_cancellation_aborts_queued_publish_before_generation_re
         "generation replacement must remain blocked until the pump future actually drops"
     );
     assert!(
-        !stream.is_finished(),
-        "command teardown must retain the registered pump join"
+        !pump_reaped.load(Ordering::SeqCst),
+        "the registered pump must remain owned until its paused future drops"
     );
     pump_drop_pause_handle.release();
     let outcome = timeout(Duration::from_secs(5), stream)
@@ -263,6 +264,10 @@ async fn firmware_stream_cancellation_aborts_queued_publish_before_generation_re
     FirmwareMachineGateway::cancel_firmware_session(gateway.as_ref(), 92)
         .await
         .unwrap();
+    assert!(
+        pump_reaped.load(Ordering::SeqCst),
+        "firmware session teardown must reap the registered pump"
+    );
 }
 
 async fn connect_session(

@@ -7,6 +7,19 @@ use std::process::Command;
 use std::process::Output;
 
 fn target_dir() -> PathBuf {
+    if let Some(configured) = std::env::var_os("CARGO_TARGET_DIR")
+        && !configured.is_empty()
+    {
+        let configured = PathBuf::from(configured);
+        return if configured.is_absolute() {
+            configured
+        } else {
+            std::env::current_dir()
+                .expect("resolve current directory for CARGO_TARGET_DIR")
+                .join(configured)
+        };
+    }
+
     let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     dir.pop();
     dir.pop();
@@ -25,7 +38,7 @@ fn dynamic_library_path() -> PathBuf {
     target_dir().join(profile).join(filename)
 }
 
-fn expected_symbols() -> BTreeSet<String> {
+fn historical_floor_symbols() -> BTreeSet<String> {
     let symbols = include_str!(
         "../../../docs/superpowers/specs/2026-06-23-phase-21-network-plugin-abi-symbols.txt"
     );
@@ -35,6 +48,42 @@ fn expected_symbols() -> BTreeSet<String> {
         .filter(|line| line.starts_with("bambu_network_") || line.starts_with("ft_"))
         .map(ToOwned::to_owned)
         .collect()
+}
+
+fn target_studio_symbols() -> BTreeSet<String> {
+    let symbols = include_str!("../src/shim_exports.hpp")
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("PANDAR_STUDIO_EXPORT("))
+        .map(|record| {
+            record
+                .split_once(',')
+                .map(|(symbol, _)| symbol.trim())
+                .filter(|symbol| symbol.starts_with("bambu_network_") || symbol.starts_with("ft_"))
+                .unwrap_or_else(|| panic!("invalid target Studio export record: {record}"))
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    let expected = symbols.iter().cloned().collect::<BTreeSet<_>>();
+    assert_eq!(
+        expected.len(),
+        symbols.len(),
+        "duplicate target Studio export"
+    );
+    assert_eq!(
+        symbols
+            .iter()
+            .filter(|symbol| symbol.starts_with("bambu_network_"))
+            .count(),
+        109
+    );
+    assert_eq!(
+        symbols
+            .iter()
+            .filter(|symbol| symbol.starts_with("ft_"))
+            .count(),
+        21
+    );
+    expected
 }
 
 #[cfg(target_os = "windows")]
@@ -168,19 +217,31 @@ fn exported_symbols(path: &Path) -> BTreeSet<String> {
 
     #[cfg(not(target_os = "windows"))]
     {
-        let output = Command::new("nm")
-            .arg("-g")
+        let mut command = Command::new("nm");
+        if cfg!(target_os = "macos") {
+            command.arg("-gU");
+        } else {
+            command.args(["-gD", "--defined-only"]);
+        }
+        let output = command
             .arg(path)
             .output()
-            .expect("nm -g is required to inspect plugin exports");
+            .expect("native nm is required to inspect defined plugin exports");
         assert!(
             output.status.success(),
-            "nm -g failed: {}",
+            "native nm defined-export inspection failed: {}",
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8_lossy(&output.stdout)
             .lines()
             .filter_map(|line| line.split_whitespace().last())
+            .map(|symbol| {
+                if cfg!(target_os = "macos") {
+                    symbol.strip_prefix('_').unwrap_or(symbol)
+                } else {
+                    symbol
+                }
+            })
             .filter(|symbol| symbol.starts_with("bambu_network_") || symbol.starts_with("ft_"))
             .map(ToOwned::to_owned)
             .collect()
@@ -188,7 +249,7 @@ fn exported_symbols(path: &Path) -> BTreeSet<String> {
 }
 
 #[test]
-fn exports_phase_21_abi_symbols() {
+fn exports_historical_phase_21_abi_floor() {
     let library = dynamic_library_path();
     let status = Command::new("cargo")
         .args(["build", "-p", "pandar-network-plugin"])
@@ -204,9 +265,29 @@ fn exports_phase_21_abi_symbols() {
         library.display()
     );
 
-    let expected = expected_symbols();
+    let expected = historical_floor_symbols();
     let exported = exported_symbols(&library);
     let missing = expected.difference(&exported).cloned().collect::<Vec<_>>();
 
     assert!(missing.is_empty(), "missing plugin exports: {missing:?}");
+}
+
+#[test]
+fn exports_exact_target_studio_abi() {
+    let library = dynamic_library_path();
+    let status = Command::new("cargo")
+        .args(["build", "-p", "pandar-network-plugin"])
+        .status()
+        .expect("cargo build -p pandar-network-plugin is required before export inspection");
+    assert!(
+        status.success(),
+        "cargo build -p pandar-network-plugin failed"
+    );
+    assert!(
+        library.exists(),
+        "dynamic library does not exist at {}",
+        library.display()
+    );
+
+    assert_eq!(exported_symbols(&library), target_studio_symbols());
 }

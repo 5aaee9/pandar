@@ -50,7 +50,7 @@ async fn plugin_print_error_rejects_same_serial_reassignment_between_owner_read_
                 access_code: None,
                 name: "Reassigned Printer".to_owned(),
                 model: Some("A1".to_owned()),
-                status: "IDLE".to_owned(),
+                status: Some("IDLE".to_owned()),
                 observed_at: "2026-07-10T00:00:00Z".to_owned(),
                 nozzle_temperatures: Vec::new(),
                 active_nozzle: None,
@@ -60,6 +60,7 @@ async fn plugin_print_error_rejects_same_serial_reassignment_between_owner_read_
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
                 connection_authoritative: false,
+                telemetry_authoritative: true,
             },
         )
         .await

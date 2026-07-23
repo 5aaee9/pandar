@@ -1,4 +1,4 @@
-use pandar_core::PrintCalibrationMode;
+use pandar_core::{PrintCalibrationMode, StudioPrintMetadata, StudioSubmissionId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,6 +23,8 @@ pub struct PrintProjectFilePayload {
     pub ams_mapping_json: Option<String>,
     pub ams_mapping2_json: Option<String>,
     pub ams_mapping_info_json: Option<String>,
+    pub studio_submission_id: StudioSubmissionId,
+    pub studio_metadata: Option<StudioPrintMetadata>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -331,7 +331,7 @@ fn rich_snapshot(serial_number: &str, status: &str) -> PrinterSnapshotUpsert {
         access_code: Some("feature-access".to_owned()),
         name: "Feature Printer".to_owned(),
         model: Some("X2D".to_owned()),
-        status: status.to_owned(),
+        status: Some(status.to_owned()),
         observed_at: "2026-07-11T00:01:00Z".to_owned(),
         nozzle_temperatures: vec![PrinterNozzleTemperature {
             label: Some("L".to_owned()),
@@ -347,6 +347,7 @@ fn rich_snapshot(serial_number: &str, status: &str) -> PrinterSnapshotUpsert {
         chamber_target_temperature_celsius: None,
         chamber_light_on: Some(true),
         connection_authoritative: false,
+        telemetry_authoritative: true,
     }
 }
 

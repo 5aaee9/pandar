@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
 use anyhow::bail;
-use pandar_core::PrintCalibrationMode;
 use serde::Serialize;
 use serde_json::{Number, Value};
 
@@ -15,6 +14,7 @@ pub use axis::GcodeLineCommand;
 use payload::*;
 pub use print_error::{HandlePrintErrorCommand, PrintErrorAction};
 use project_file::project_file_payload;
+pub use project_file::{ProjectFileAmsMapping2, ProjectFileAmsMappingInfo, ProjectFileCommand};
 use sequence::next_studio_sequence_id;
 #[cfg(test)]
 pub(crate) use sequence::next_studio_sequence_id_from;
@@ -49,27 +49,6 @@ impl PrintSpeed {
     pub fn as_u8(self) -> u8 {
         self.0
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProjectFileCommand {
-    pub printer_model: Option<String>,
-    pub filename: String,
-    pub url: Option<String>,
-    pub md5: Option<String>,
-    pub plate_id: u32,
-    pub task_id: String,
-    pub subtask_id: String,
-    pub use_ams: bool,
-    pub bed_leveling: bool,
-    pub auto_bed_leveling: PrintCalibrationMode,
-    pub flow_cali: bool,
-    pub auto_flow_cali: PrintCalibrationMode,
-    pub auto_offset_cali: PrintCalibrationMode,
-    pub timelapse: bool,
-    pub ams_mapping_json: Option<String>,
-    pub ams_mapping2_json: Option<String>,
-    pub ams_mapping_info_json: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,10 +148,14 @@ pub enum BambuMqttCommand {
     AmsUnloadFilament(AmsFilamentCommand),
     HandlePrintError(HandlePrintErrorCommand),
     RawJson(Value),
-    ProjectFile(ProjectFileCommand),
+    ProjectFile(Box<ProjectFileCommand>),
 }
 
 impl BambuMqttCommand {
+    pub fn project_file(command: ProjectFileCommand) -> Self {
+        Self::ProjectFile(Box::new(command))
+    }
+
     pub fn payload(&self) -> Value {
         self.command_payload().payload
     }

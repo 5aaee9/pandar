@@ -20,7 +20,7 @@ pub struct MachineSnapshot {
     pub access_code: Option<String>,
     pub name: String,
     pub model: Option<String>,
-    pub state: String,
+    pub state: Option<String>,
     pub nozzle_temperatures: Vec<MachineNozzleTemperature>,
     pub active_nozzle: Option<String>,
     pub bed_temperature_celsius: Option<String>,
@@ -29,6 +29,7 @@ pub struct MachineSnapshot {
     pub chamber_target_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
     pub device_features: Option<BambuDeviceFeatures>,
+    pub telemetry_authoritative: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

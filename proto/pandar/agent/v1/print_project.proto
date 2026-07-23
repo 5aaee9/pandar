@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package pandar.agent.v1;
+
+enum PrintCalibrationMode {
+  PRINT_CALIBRATION_MODE_OFF = 0;
+  PRINT_CALIBRATION_MODE_ON = 1;
+  PRINT_CALIBRATION_MODE_AUTO = 2;
+}
+
+enum PrintSubmissionSource {
+  PRINT_SUBMISSION_SOURCE_UNSPECIFIED = 0;
+  PRINT_SUBMISSION_SOURCE_WEB = 1;
+  PRINT_SUBMISSION_SOURCE_STUDIO = 2;
+}
+
+message StudioAmsMappingEntry {
+  sint32 ams_id = 1;
+  sint32 slot_id = 2;
+}
+
+message StudioAmsMappingInfo {
+  sint32 ams = 1;
+  string target_color = 2;
+  string filament_id = 3;
+  string filament_type = 4;
+  optional sint32 nozzle_id = 5;
+  optional string source_color = 6;
+}
+
+message StudioNozzleInfo {
+  sint32 id = 1;
+  optional string nozzle_type = 2;
+  optional string flow_size = 3;
+  optional double diameter = 4;
+}
+
+message PrintProjectFileOptions {
+  bool use_ams = 1;
+  bool bed_leveling = 2;
+  bool flow_cali = 3;
+  bool vibration_cali = 4;
+  bool layer_inspect = 5;
+  bool record_timelapse = 6;
+  bool timelapse_use_internal = 7;
+  string bed_type = 8;
+  optional PrintCalibrationMode auto_bed_leveling = 9;
+  optional PrintCalibrationMode auto_flow_cali = 10;
+  optional PrintCalibrationMode auto_offset_cali = 11;
+  optional sint32 extruder_cali_manual_mode = 12;
+  bool try_emmc_print = 13;
+  repeated sint32 nozzle_mapping = 14;
+  repeated sint32 ams_mapping = 15;
+  repeated StudioAmsMappingEntry ams_mapping2 = 16;
+  repeated StudioAmsMappingInfo ams_mapping_info = 17;
+  repeated StudioNozzleInfo nozzles_info = 18;
+}
+
+message StudioTaskMetadata {
+  string task_name = 1;
+  string project_name = 2;
+  string preset_name = 3;
+  string connection_type = 4;
+  string comments = 5;
+  sint64 origin_profile_id = 6;
+  sint64 stl_design_id = 7;
+  string origin_model_id = 8;
+  string print_type = 9;
+  string submitted_device_name = 10;
+  string svc_context = 11;
+  string slicer_uid = 12;
+}
+
+message PrintProjectFile {
+  string job_id = 1;
+  string artifact_id = 2;
+  string printer_id = 3;
+  string serial_number = 4;
+  string filename = 5;
+  string storage_path = 6;
+  uint64 size_bytes = 7;
+  uint32 plate_id = 8;
+  string artifact_download_path = 14;
+  reserved 9 to 13, 15 to 19;
+  reserved "use_ams", "flow_cali", "timelapse", "ams_mapping_json", "ams_mapping2_json";
+  reserved "ams_mapping_info_json", "auto_bed_leveling", "auto_flow_cali";
+  reserved "auto_offset_cali", "bed_leveling";
+  uint32 studio_submission_id = 20;
+  PrintProjectFileOptions options = 21;
+  StudioTaskMetadata task_metadata = 22;
+  PrintSubmissionSource submission_source = 23;
+}

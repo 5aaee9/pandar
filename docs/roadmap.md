@@ -844,8 +844,14 @@ Exit criteria:
 
 Goal: turn the Phase 21 network-plugin scaffold into a verified Bambu Studio integration on real desktop installs.
 
-- Run real Bambu Studio load/login/print-flow smoke tests on Linux, Windows, and macOS using the generated release artifacts.
-- Capture the exact Studio caller behavior for plugin initialization, sign-in, token/profile retrieval, printer listing, job listing, print submission, logout, and offline transitions.
+- Final13 and final14 remain historical regression evidence. Final15/run6 is also non-promotable
+  history: Studio selected the single synthetic printer but did not explicitly subscribe it, exposing
+  the selected-target ownership gap before any model-task request. Final16 contains that correction
+  and is the current completed Linux evidence chain for exact Studio `02.08.01.55`. Real Windows
+  Studio and macOS remain untested until separate native evidence exists.
+- Capture Studio initialization, both library loads, sign-in, token/profile retrieval, printer listing,
+  Hub-backed job listing, Hub outage/recovery, logout, and explicit no-hardware unsupported behavior.
+  Keep automated print/cancel/command contracts and optional hardware evidence separate.
 - Harden `pandar-network-plugin` HTTP behavior beyond symbol exports:
   - preserve useful hub/network error details without exposing bearer tokens, plugin tickets, artifact paths, or local filesystem paths;
   - map Pandar hub responses into stable Bambu-shaped response bodies where Studio expects them;
@@ -857,12 +863,231 @@ Goal: turn the Phase 21 network-plugin scaffold into a verified Bambu Studio int
 - Refreshed local probe evidence on 2026-06-24: `cargo test -p pandar-network-plugin` passed 20 tests against the current code.
 - Added a Phase 23 Studio preflight helper that validates local Studio/plugin prerequisite metadata and prints a redacted manifest row template before manual real-Studio testing; it does not claim compatibility without a real Studio run.
 - Checked real Studio test prerequisites on 2026-06-24: no local Bambu Studio command and no Windows/macOS host were available, so Phase 23 real Studio rows are blocked until matching Studio installations exist. Matching plugin artifact availability is tracked separately in the Phase 24 release evidence manifest.
-- Real Studio compatibility remains unverified until `docs/compatibility/bambu-studio-plugin.md` records real Studio runs for each platform.
+- Earlier Task 1 evidence audited the plugin and release path against official Bambu Studio `02.08.01.55`, froze the exact 109-network-plus-21-FT upstream contract, and repaired the target version, bind timezone signature, trailing `PrintParams::slicer_uid`, AMS sync ABI, and complete 130-export surface. That focused run passed all `version,bind,print,ams,ft` modes on native Windows and Linux x64; Linux checker coverage was 16/16, plugin Nextest was 155/155, and the 21-entrypoint FT ownership scope passed 256 cycles under ASan/LSan with `libasan.so.8`. An independent ABI audit returned `VERDICT: APPROVE`. Final12, final11, and final13 are now historical; final13's Windows/PostgreSQL gates had passed before final14 replaced it. Direct LAN and direct `ft_*` machine transfer remain explicitly unsupported.
+- Earlier Task 3 evidence completed the truthful Hub-connectivity and printer-presence slice for the pinned Studio contract. Rust owns bounded readiness, authenticated rejection, typed online observations, refresh/cache admission, and generation-scoped delivery tickets. Connection/status/firmware deliveries use the recursive callback gate plus final claims; account events are immutable commit-order records drained FIFO outside business locks, and epoch-owned transition finish keeps reentrant Lost callbacks fenced without requiring the old account to remain visible. Offline/recovery, token/account rotation, local Lost, firmware acknowledgement, and callback reentrancy probes pass through the compiled ABI. That focused Windows run passed 57/57 and full plugin 180/180; an isolated NixOS SSH runner passed strict Clippy, firmware stress 5/5, and full plugin 180/180 with Rust 1.95/GCC 15.2/glibc 2.42 plus target-scoped `lld`, without GitHub Actions. The Linux-only mock-Hub lifetime failure found during verification was fixed in the test fixture rather than by weakening production timeouts, and independent concurrency review returned `VERDICT: APPROVE`.
+- Final12 post-freeze Linux pressure exposed a narrower race not covered above. The C++ firmware fixture
+  succeeded, but the wrapper failed on `pandar printer status refresh discarded: credentials changed
+  during request`; a background heartbeat was temporarily clearing `printers_fresh` and could suppress
+  a firmware callback. Final13 preserves the last confirmed cache only while a background refresh is in
+  flight, while foreground Studio print-info still invalidates immediately and fails closed. Directed
+  tests cover both paths. The firmware fixture now uses a callback sentinel handshake and rejects every
+  stderr line except the exact stale-generation diagnostic.
+- Preserved the full Windows stress diagnosis. Final12's first full run failed with `firmware version
+  refresh failed` before its exact and full reruns passed. After the callback-sentinel change, stress
+  iteration 2 failed with `firmware callback missed handoff deadline`, driving the product repair. Six
+  repaired iterations passed; iteration 7 then exceeded the old three-second compound logout watchdog.
+  An independent wait-for graph found no ABBA cycle because the dispatcher releases the firmware-
+  transition lock before waiting on the callback mutex and callback dispatch does not hold the account-
+  queue lock. The test now separates start/logout errors, uses an eight-second internal watchdog, and a
+  45-second child bound; this is test-timing correction, not a production lock-order change.
+- Aligned the remaining Studio session boundary: Rust now owns selection, subscriptions, initialization, heartbeat planning, virtual-local generations, listener eligibility, request snapshots, and two-phase callback tickets. The selected getter is side-effect-free, status succeeds only after an eligible callback delivery, firmware/status/operation classification is total, trailing-slash Hub identities retain persisted login, and both Studio tunnels expose a Hub-backed virtual printer with `print.device.connection_type:"cloud"`; no direct printer socket or credential path was added.
+- Implemented the pinned print/task contract in the working tree: all 45 `PrintParams` fields have typed
+  dispositions, delivery stages no longer claim physical start, cancellation/stable ids are explicit,
+  and `get_user_tasks` now queries authorized Hub jobs with filters and pagination instead of returning
+  synthetic empty success.
+- Implemented Task 11's pinned caller-owned model-task contract in the later working tree. The exact
+  `StatusPanel.cpp:4145-4162` consumer and eight-field `BBLModelTask` layout are frozen; ordinary
+  submissions resolve by tenant plus stable Studio id, return real project/preset names with explicit
+  no-rating sentinels, and never invent MakerWorld metadata. One persistent worker performs the Hub
+  read asynchronously, writes the same caller pointer and calls back once only on success, fences
+  account/configuration races, and interrupts pending GET/POST/DELETE and follower waits during
+  destroy. Successful no-auth recovery drains persistence and revocation bookkeeping; server delivery
+  before its response remains an unknowable HTTP-create outcome, and cross-process persistence has no
+  hard real-time bound. Local workspace run `d8622da6-4458-407d-8ae6-48ee8d0ac27b` passed
+  1,800/1,800 with one skip. Linux workspace `67858341-820f-42d7-9a8d-a408b03e6d3d` passed
+  1,801/1,801 with one skip, PostgreSQL 16 `f3fef6c4-dcb9-46f1-9812-43040510eca4` passed 7/7,
+  and GCC compiled tasks `6fe5e158-4b98-425f-b6ef-578624937801` passed 17/17. Independent review
+  returned `VERDICT: APPROVE`. At that point final14 predated this slice, so a new frozen candidate
+  and bounded real-Studio evidence were still required; final16 below later satisfied that successor
+  callback-evidence gate.
+- Completed Task 9 development-session hardening. Rust now owns the bounded serialized no-auth retry,
+  retries only proven pre-delivery connection failures, and fences every attempt by Hub generation,
+  account epoch, configuration, token, logout, and destroy state. Hub issues a no-auth Studio token
+  only inside an exactly-one-tenant SQLite/PostgreSQL transaction; missing or ambiguous tenant states
+  create no credential or audit. Printer list and task list/plate/subtask `401`/`410` recovery share
+  one no-auth rotation and retry once, while authenticated credentials never fall back to no-auth.
+- Serialized every persisted Studio account mutation across processes with
+  `.pandar-plugin-account.lock`. Only `MutationDurability::Confirmed` may activate a login candidate
+  or count pending/direct revocation intent as staged. `ChangedUnconfirmed` means a namespace change
+  was published without confirmed directory durability and fails closed; an ordinary error describes
+  the canonical namespace visible at return rather than promising crash durability during an extreme
+  rollback failure.
+- Hardened requested/passive logout. Requested logout first stages a pending tenant-scoped self-
+  revocation and otherwise requires a confirmed direct intent before DELETE. Passive loss does not
+  revoke, and a requested race upgrades passive finalization without duplicate callbacks. A retained
+  login can be fully restored only before DELETE. Successful or idempotent `401`/`410` revocation
+  records a `{hub_url, token_sha256}` completed tombstone before cleanup, blocking stale login loads
+  and writes. Duplicate pending cleanup after direct success is best effort. The completed ledger is
+  unbounded and may be cleared only after all Studio processes using the directory are stopped and all
+  older Hub plugin sessions are invalid or expired.
+- Aligned two additional Studio-facing boundaries found after final13. The status projection now clears
+  pinned Studio `fun` bit 48 so the external change-assist checkbox is hidden while
+  `task_ext_change_assist=true` remains explicitly unsupported. Better Auth carries the exact
+  `/plugin-sign-in` tenant and localhost callback through magic-link and passkey completion as a
+  bounded canonical base64url value; both issuer and dashboard decoders fail closed, and the JWT is
+  not copied into the return target. Real Better Auth 1.6.23 handler coverage freezes the extra-decode
+  boundary.
+- Historical: froze final14 at source `HEAD 2ba0d1f2755501ea9e7d4babcf176db40638f643`.
+  Source archive `pandar-bambu-final14-019f7b10.tar.gz` is 2,782,539 bytes with 1,548 regular members
+  and SHA-256 `c422d80d89052732db6b8ae87b68fd1e4145c64f588d8382deafef3345d86681`; canonical-tree,
+  member-list, and freeze-evidence SHA-256 values are
+  `43a4a577fb90327dad9e59bcb89dc1e91352bad83f27786a32cae34cb62136e5`,
+  `5b32472c9372a992c23315d9b33691a0f269248b65db312590ed00556e21aac0`, and
+  `70d545770086c6acde271d3181508adf4f0d91fc8213771363ec78b2792f5ec3`. Determinism and all
+  unsafe/duplicate/case/reparse/content-diff checks passed.
+- Passed the final14 pre-freeze frontend gates: Web 38 files/327 tests and standalone auth 3 files/9
+  tests, both typechecks, zero-warning Web lint, both production builds, and the Better Auth callback
+  smoke. The immutable final14 source then passed Ubuntu-native fmt, strict workspace Clippy,
+  module-size 2/2, release-smoke 21/21, and workspace Nextest run
+  `d2231751-1284-46b0-aee6-2e041ca1a203` at 1,781/1,781 with one separately reported skip in 812.413
+  seconds. Rust `-D warnings` passed; the retained log still records C++ missing-field-initializer and
+  dependency future-incompatibility warnings. All five ABI modes passed the exact
+  109-network-plus-21-FT contract, and all 21 File
+  Transfer entrypoints passed 256 ASan/LSan cycles without sanitizer errors.
+- Produced the final14 three-file Linux package at 24,854,111 bytes with SHA-256
+  `4e91f2457197532102544b02d4edac5354dc2982ec55fa707a057cbcba518b68`; its 202,300-byte Linux
+  evidence bundle has SHA-256 `db6a464ce6b9b4b5e4689e1f0f21962dd097349056e78beb57a8779e1352cb02`.
+  Official-AppImage attempt 1 passed with fixed Bambu Studio AppImage SHA-256
+  `e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`: Studio retained one PID
+  and start-ticks identity, both libraries mapped 4/4, loader/certificate error counts were zero, and
+  exactly one development no-auth session was observed. The 10,603-byte, 23-member redacted evidence
+  bundle has SHA-256 `7eac6abbc7364928147d60dd1c583d084c02debf1552734bc82a4dec59c941be` and records
+  `authenticated_session_claim=false`.
+- Final14's evidence-document review returned `APPROVE` with no Blocking, Important, or Minor finding,
+  but the archive predates the model-task implementation and is now historical.
+- Corrected Studio target ownership: a device remains an effective cloud target while selected or
+  explicitly subscribed, and heartbeat planning uses that deduplicated union. Removing one ownership
+  source retains the target while the other remains; only removing both retires cloud state and Cloud
+  tickets, without cancelling or advancing any Local generation or Local ticket.
+- Froze final16 for exact Bambu Studio commit
+  `ba049f6a2e08c3b6033660bb84da80c08722974b`, version `02.08.01.55`. Its source archive SHA-256
+  is `24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039`.
+- Passed the complete immutable final16 Linux gate: workspace Nextest 1,808/1,808 with one configured
+  skip, fmt, strict workspace Clippy, module-size, ABI tools 22/22, release-smoke tools 25/25,
+  packaged tasks 18/18, exactly 109 network plus 21 File Transfer exports, all 21 File Transfer
+  entrypoints x 256 ASan/LSan cycles, and PostgreSQL 16.14 at 7/7 with zero runtime skips. The
+  three-file release archive SHA-256 is
+  `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3`; the Linux evidence
+  archive SHA-256 is `fe35290675aac4e6ce323a8ebc75bde1c34d373b1df7506f7f8a65b69ffea950`.
+- Passed the bounded final16 official-AppImage proof with AppImage SHA-256
+  `e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995` and packaged plugin
+  SHA-256 `3bcce9085205d6af67dc9671cf58cd6f9fb694d5a587b43d160dc8b6a9b0712f`. The fail-closed
+  loopback mock observed exactly one model-task HTTP 200 and four lifecycle events exactly once and
+  in order: request started, response accepted, callback started, callback returned. The redacted
+  evidence manifest SHA-256 is
+  `c6ba9b6282581119d3baec720e26990ad63efc20eb394b0c71dced89081d5fd9`. The deterministic
+  245,225-byte redacted official-AppImage evidence archive has SHA-256
+  `f07c369ad9e0354ef40142294d9385e9c454fd534a04badce4be000f49c06eca`; an independent second
+  generation matched byte-for-byte.
+- Final16 is current and its bounded Linux evidence chain is complete. The AppImage proof used a
+  synthetic persisted authenticated-shaped session and a fail-closed loopback mock; it makes no
+  downstream encrypted-log claim and does not claim real authentication, Hub, Agent, database,
+  hardware, print, control, cancel, or firmware behavior. GitHub Actions and Windows Studio were not
+  used. Independent final evidence-document and code/evidence reviews found no remaining issue and
+  returned `APPROVE`; the code/evidence reviewer independently reran all four selected-target
+  regressions successfully. Codex Goal `019f7b10-9262-74e1-aa9c-ba18a29beb2a` is complete.
+- Historical: froze final12 at source HEAD `2ba0d1f2755501ea9e7d4babcf176db40638f643`: source archive
+  `pandar-bambu-final12-019f7b10.tar.gz` contains 1,543 regular files, is 2,740,698 bytes, and has
+  SHA-256 `17371828ef7a26cace73cfbed321d094bf38323670e8fa6ccf69d6cbfd4b7eee`, source-tree SHA-256
+  `5aa0038dbc3f0962cc172646876263b0db04e1e6df5fbe571553af1967f242a6`, and member-list SHA-256
+  `87a6ad1dfaa404731ed30d7e265303cca64fc4278a478f9c12192c09373eb880`. The ordinal selector includes
+  cached and untracked non-ignored existing leaves, excludes `reference/*`, generated plugin
+  `probe-*`, and `.superpowers/sdd/progress.md`, and rejects unsafe paths, duplicates, case collisions,
+  and reparse points. A second archive matched byte-for-byte.
+- Historical: passed the complete final12 Windows clean gate: fmt, strict workspace Clippy, module-size 2/2,
+  ABI-tool 21/21, release-smoke-tool 21/21, frontend 37 files/324 tests plus typecheck/lint/build, and
+  workspace Nextest final run `5e6f3720-4c1b-4a55-ac34-2250c0cefba7` at 1,776/1,776. The first
+  complete attempt's one firmware-probe failure passed in isolation and then in the required complete
+  rerun. Clean evidence SHA-256 is
+  `a6fc922b5069c78dcbe077f6c4238794777f6b17b62574ee75638c46256fb342`.
+- Historical: passed real PostgreSQL 16.14 verification from the same frozen source: evidence run
+  `3e00d36c-7fb9-47d3-b71b-d9735ebe0eae` and Nextest run
+  `0b708279-6183-4477-9f78-31add8d7f423` completed 55/55 with zero runtime skip markers; evidence
+  SHA-256 is `d7f002f5be8708844cce406895503ef7056b634bf04aad068722eb25ef15247e`.
+- Added the sentinel-only non-media `pandar-bambu-source` startup companion and three-file release-
+  smoke policy. The historical final12 Windows amd64 archive is 21,285,799 bytes with SHA-256
+  `b4f6913eef7c1d09da9377fbce36b0ab759add25caac2baa0604c07a595440cb`; its CLI, plugin, and
+  companion SHA-256 values are respectively
+  `1e57a7cfc2b46717129e7ced227b358eedbaaa74064f2ae2ac5cd44eac576b32`,
+  `43be9e73350cacb66ee2dfa991f1a7291175c4d18db2ec917a10a1489f9244d9`, and
+  `20805176609ebe891ed45bc7171a34ad0d741351b5dbe8c3c4d9f9b4a5a2a49a`. Native build run
+  `4fa89d78-503f-4c51-a4e3-fc788a4f7f03`, ABI run
+  `6b71c048-8377-4a61-a750-20c5531df864`, and release-smoke run
+  `d808cce0-6e5f-45e7-b4aa-f7b39642d67a` passed; evidence SHA-256 is
+  `11c38eb3c198cd07b2f96abbfbf70792b078170389e8869b230badbb98a404d2`. No real Windows Studio
+  process was launched.
+- Historical: froze final13 at source `HEAD 2ba0d1f2755501ea9e7d4babcf176db40638f643`. Source archive
+  `pandar-bambu-final13-019f7b10.tar.gz` is 2,751,227 bytes with 1,543 regular members and SHA-256
+  `71080abb1e7392b0440a179b5bca9fd80638de74a614105b8dc11a0f70959c34`; canonical-tree,
+  member-list, and freeze-evidence SHA-256 values are
+  `db0b7c3385c29ff0cdee1930a66f554a6845b58907373ef543563b829c245761`,
+  `87a6ad1dfaa404731ed30d7e265303cca64fc4278a478f9c12192c09373eb880`, and
+  `4d132e16f91365795f54c97f608483c34b55726c5f614f5bb8ffaac2ede1fb7f`. Determinism passed and
+  all unsafe/duplicate/case/reparse/diff counts were zero. Pre-freeze plugin run
+  `da32fbc4-f37e-4198-af5e-c35f73512dcb` passed 368/368 with one separately reported skip.
+- Historical: completed the final13 Windows clean gate in first full run
+  `90cb6a69-08a5-4421-a661-58e696c374a3`: workspace Nextest 1,778/1,778 with one separately
+  reported skip in 1,050.084 seconds, firmware probe 28.858 seconds, fmt, zero-warning strict Clippy,
+  module-size 2/2, ABI/release tools 21/21, and frontend 37 files/324 tests plus typecheck, zero-warning
+  lint, and production build. `npm ci` recorded six audit vulnerabilities (three moderate, three high),
+  preserved as dependency-audit evidence rather than a Studio-parity failure. Clean evidence SHA-256
+  is `c1ac8807a427ae4b7003681e9ad343d668dab1d6aa7c143d14bc699fe58b7b89`.
+- Historical: completed two final13 PostgreSQL 16.14 runs under harness
+  `0c292295-f9ab-459b-89c2-ea74f2c9ff56`: runs `24b49c19-cd07-42b5-a5a3-6d220345bd7e` and
+  `1f4b8458-6397-4c0b-8ab3-23d37779c68a` each passed 55/55 with 831 filtered and zero runtime skips.
+  Normalized evidence SHA-256 is
+  `7e04ae355f7bca3fb409bbc700b5c8f160194c0d2f9ec82df823c859566a2db7`; source read-only and
+  cleanup checks passed.
+- Historical: completed final13 Windows native package/ABI/release-smoke. Archive
+  `pandar-final13-windows-amd64-019f7b10.tar.gz` is 21,285,752 bytes with SHA-256
+  `6c50e77a0b4008ce46d86de51411117061c5118e18849ca1fb94f4a3f319db64`; ABI and smoke each passed
+  21/21, all five modes passed, `dumpbin` reported 271 total plugin exports, and the companion had one
+  Pandar sentinel and zero `Bambu_*` exports. Native evidence SHA-256 is
+  `3dab4bffa359e4c46eec77cbfb278ce3a1497f806a1d80343a1735b5a68f025b`; build, ABI, and smoke runs
+  were `0430ad0e-7f96-41c5-b9aa-1c6fd690fd16`, `2f27f859-b795-4420-b04a-30410ae7bcbc`, and
+  `65ffc0b0-e17e-45da-bd3a-3375f5d88de1`. Six earlier pre-product
+  manifest-harness calibrations are infrastructure-only history. No Studio/auth/hardware/Action was
+  used.
+- Historical: completed final13 Linux native/ASan attempt 2. Nextest run
+  `6ec3a215-9430-4ad2-adc7-f692ca156333` passed 1,779/1,779 with one separately reported skip in
+  792.687 seconds; firmware passed in 27.315 seconds. Fmt, strict Clippy, module-size 2/2, ABI-tool
+  22/22, release-smoke-tool 21/21, all five ABI modes, and 21 File Transfer entrypoints x 256 ASan/LSan
+  cycles passed. Archive `pandar-final13-linux-amd64-019f7b10.tar.gz` has SHA-256
+  `4166e6012e6c1bf7cdf056ba3bfb28f0fbc9d216c31e5ed2e8620adb8b5fcccc`; evidence-bundle SHA-256 is
+  `aa7478fe0f74debcc5f3d1f5ec53a2222d726beafe5224935aa3382c24f6097a`. Attempt 1 run
+  `c8a134c4-e775-4f37-b6ed-74ccb1b79123` remains non-promotable harness history. The final evidence-
+  document review completed after correcting its sole Minor terminology finding. A pre-final Linux
+  tree with manifest SHA-256
+  `668f541a8e535018495d8a8969fa6a6d5b70daef49ed848c4c03ab19c40e4f9a` and source-archive SHA-256
+  `e8c4d17505e9102b7f9fa3fbce8e653dddc7277b33f02671f603818fc1580b3b` passed the exact firmware
+  probe 21/21, but this is non-promotable behavioral stress evidence. Final11/final12 and frozen final5
+  results are historical; no GitHub Action, live printer action, or live firmware update was used.
+- Historical: completed final13 exact-AppImage attempt 8 with the passed Linux package and official Ubuntu 22.04
+  Bambu Studio `02.08.01.55` AppImage SHA-256
+  `e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`. Studio PID `137`/start
+  ticks `192688662` remained unchanged across two offline failures and one success/commit after Hub
+  became ready. Both libraries mapped 4/4; active/total token count was `1/1`; create/revoke/discard
+  counts were `1/0/0`; and loader/certificate error counts were zero. The 7,211-byte, 23-member
+  redacted evidence bundle has SHA-256
+  `a4453c8dce3829cc1a84a372a772b516812fe1564b310e61db9e9009a11cf9d2`. Attempts 1-7 are retained
+  as locale/data-directory/first-run harness calibration history. This passes only exact module load
+  and same-process development no-auth recovery; authenticated UI/session, printers/jobs/print/logout,
+  unsupported UI, hardware, and live firmware remain untested.
+- Historical final13 implementation review returned `APPROVE` with no Blocking, Important, or Minor finding. The
+  product diff from final12 changed only four Rust connection files, made no C++ ABI change, and kept
+  `connection.rs` at 388 lines. The final evidence-document review is complete.
+- Full Studio compatibility remains unverified until every claimed platform has the exact session
+  evidence required by `docs/compatibility/bambu-studio-plugin.md`. Authenticated Linux session rows,
+  real Windows Studio, macOS, and hardware actions remain untested as recorded in the compatibility
+  manifests.
 
 Exit criteria:
 
-- Bambu Studio can load the Pandar plugin without missing symbols on every supported desktop platform.
-- A user can sign in through Studio, receive a tenant-scoped plugin credential, list Pandar printers/jobs, and submit a print through the hub-backed plugin route.
+- Every platform explicitly claimed for the pinned build has real Studio load/session evidence for the
+  packaged network plugin plus sentinel-only BambuSource companion; unclaimed platforms stay untested.
+- A user can sign in through Studio, receive a tenant-scoped plugin credential, and list Pandar
+  printers/Hub-backed jobs. Print submission, cancellation, and command semantics have separate
+  automated contract evidence; a no-print desktop smoke does not claim hardware execution.
 - Plugin failure modes are visible enough to diagnose invalid hub URL, expired ticket, revoked plugin token, offline hub, bad artifact, and unauthorized printer/job access.
 - The compatibility evidence is documented from real Studio runs, not only unit tests or export inspection.
 
@@ -871,17 +1096,36 @@ Exit criteria:
 Goal: make release artifacts predictable enough for operators to install without building from source.
 
 - Validate tag-driven GitHub Release artifacts on real Linux, Windows, and macOS hosts, including CLI startup, dynamic-library loadability, checksums, and archive layout.
-- Completed local Phase 24 release-smoke scaffolding: a standalone helper crate that validates release archive checksums and top-level CLI/plugin layout without joining the main Cargo workspace.
-- Completed packaged-artifact release-smoke checks for CLI startup on native runners and plugin ABI export inspection from the unpacked release plugin library.
+- Completed the local native release-smoke implementation for exact three-file CLI/network-plugin/
+  BambuSource layout, exact 109-network-plus-21-FT target-prefix exports, and companion sentinel/no-
+  `Bambu_*` inspection. Historical final13 Windows amd64 passed native MSVC build, all five pinned ABI modes,
+  packaged CLI, exact layout/contract exports, and companion inspection with archive SHA-256
+  `6c50e77a0b4008ce46d86de51411117061c5118e18849ca1fb94f4a3f319db64`. Current final16 Linux
+  native/runtime/sanitizer gates passed with archive SHA-256
+  `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3`; its official
+  exact-AppImage model-task evidence manifest has SHA-256
+  `c6ba9b6282581119d3baec720e26990ad63efc20eb394b0c71dced89081d5fd9`. Final15/run6,
+  final14, final13 Linux, and final11/final12/final5 results are historical regression evidence only;
+  real authenticated Studio sessions remain a separate unclaimed boundary.
 - Refreshed local release-smoke unit evidence on 2026-06-24: `cargo test --manifest-path tools/release-smoke/Cargo.toml` passed 17 tests.
-- Added local linux-amd64 artifact evidence on 2026-06-24: a `pandar-release-local-a79bcae-linux-amd64.tar.gz` archive built from release binaries passed checksum/layout, `pandar --help`, and 129 packaged plugin ABI export checks through `tools/release-smoke`.
-- Wired the tag-driven GitHub Release workflow to run checksum verification and release-smoke before uploading release artifacts.
+- Historical evidence only: the 2026-06-24 `local-a79bcae` Linux archive used the old two-file layout
+  and 129-export check. It remains in the manifest but is not a current Studio candidate.
+- Historical Phase 24 work wired the tag-driven workflow to the old release smoke. That workflow still
+  emits a GNU Windows/two-file package and is not compatible with or part of the current native
+  `02.08.01.55` three-file delivery path; it was not modified or run for this Goal.
 - Added operator release installation docs, a release artifact evidence manifest, and the explicit Phase 24 signing decision: `unsigned-accepted`.
+- The workflow-run bullets below are historical two-file/129-export Phase 24 evidence. They are not
+  current `02.08.01.55` candidates and are not instructions to use GitHub Actions for this alignment.
 - Initial pre-workflow release artifact availability check on 2026-06-24 found no GitHub Releases, no `release.yml` workflow runs, and no tags. Later workflow_dispatch runs uploaded artifacts for five target families (see run evidence below), but no tagged GitHub Release archive exists yet. The generated local linux-amd64 archive proves local artifact smoke only; workflow run `28102001464` now has local Linux x86_64 host install evidence, while tagged-release install validation and the other target families remain blocked.
-- Triggered `release.yml` workflow_dispatch run `28098334876` on 2026-06-24: linux-amd64 and linux-arm64 artifacts uploaded, but the full matrix failed because macOS CLI builds linked through cargo-zigbuild on native macOS runners and Windows plugin builds did not find the `cc` shim object. The release workflow now uses native `cargo build` for non-zig macOS targets and accepts both `.o` and `.obj` shim objects before the next workflow evidence run.
-- Triggered `release.yml` workflow_dispatch run `28099917011` on 2026-06-24: linux-amd64 and linux-arm64 artifact jobs passed in CI and local downloaded artifact smoke; macOS CLI/package smoke reached the plugin export check but failed because the Mach-O export table omitted required ABI symbols; Windows plugin builds now find the shim object but fail to link C++ runtime symbols. The plugin build script now prepares a macOS exported-symbol list from the canonical ABI file and links Windows shim builds against libc++/libc++abi before the next workflow evidence run.
-- Triggered `release.yml` workflow_dispatch run `28102001464` on 2026-06-24: linux-amd64, linux-arm64, macos-amd64, macos-arm64, and windows-amd64 artifact jobs passed packaged release-smoke and uploaded artifacts. Windows arm64 built and packaged but failed plugin export inspection because Ubuntu's default `objdump` did not recognize ARM64 PE and no LLVM PE inspector was present. The release workflow now installs LLVM tools before Windows PE export inspection.
-- Triggered `release.yml` workflow_dispatch run `28103772270` on 2026-06-24 after the LLVM inspector fix, but GitHub Actions did not start any build steps because account payments failed or the spending limit needs to be increased. Re-run the workflow after billing is restored before treating Windows arm64 release evidence as updated.
+- Historical run `28098334876` (2026-06-24): old Linux two-file artifacts uploaded; Windows plugin
+  packaging and macOS CLI linking failed.
+- Historical run `28099917011` (2026-06-24): old Linux two-file/129 checks passed; Windows C++
+  runtime linking and macOS export inspection failed.
+- Historical run `28102001464` (2026-06-24): old two-file checks passed for Linux amd64/arm64,
+  Windows amd64, and macOS amd64/arm64; Windows arm64 export inspection failed. None of those artifacts
+  included the current BambuSource companion.
+- Historical run `28103772270` (2026-06-24) did not start build steps and produced no artifact
+  evidence. It is not part of the current no-Actions alignment path.
 - Rechecked release availability on 2026-06-25: no GitHub Releases or remote git tags exist, and run `28102001464` artifacts remain unexpired for linux-amd64, linux-arm64, windows-amd64, macos-amd64, and macos-arm64. Local static follow-up checks passed release-smoke for linux-arm64 and windows-amd64 and checksum/layout/file-type inspection for both macOS artifacts; these do not replace target-host install evidence.
 - Real host installation evidence now covers only the `linux-amd64` workflow artifact from run `28102001464`; tagged GitHub Release installs and the other target families remain unverified until `docs/compatibility/release-artifacts.md` records target-family rows from actual release artifact installs.
 - Rework the Linux `pandar-network-plugin` export strategy if arm64 plugin releases remain a target, because the current GNU export-map path is known to be fragile around Rust `cdylib` plus C++ shim exports.
@@ -1037,7 +1281,10 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Replaced Hub plugin multipart print-created response assertions with typed serde structs instead of direct `Value` field indexing.
 - Replaced Bambu Studio network-plugin installer config patching with typed serde config structs while preserving unknown config fields through flatten maps.
 - Fixed the Bambu Studio network-plugin installer to accept Studio's mixed string/boolean plugin flags and write boolean flags back in Studio's native JSON form.
-- Prevented Bambu Studio UI hangs by returning an immediate Studio-shaped empty task page from its synchronous `get_user_tasks` ABI instead of performing Hub HTTP on the UI thread, and stopped duplicating each Hub status through both cloud and local callbacks.
+- Historical baseline: an earlier UI-hang workaround returned an immediate synthetic empty
+  `get_user_tasks` page. The `02.08.01.55` alignment supersedes that behavior with the authorized
+  Hub-backed jobs route, bounded request behavior, filters/pagination, stable ids, and explicit errors;
+  it also keeps Cloud and virtual-local callback delivery generation-scoped without duplicate status.
 - Preserved Studio HMS and print progress when optional Hub telemetry such as `chamber_light_on` is JSON `null`, defaulting only that missing light state instead of rejecting the entire printer status.
 - Prevented Bambu Studio 2.7.1.62 from crashing while parsing Pandar extruder status by always emitting `filam_bak`, and stopped unchanged connection refreshes and selected-machine updates from replaying the server/printer/status callback loop.
 - Restored Bambu Studio's single-machine cloud initialization by emitting `tunnel/<device>` before cloud status, retrying at heartbeat cadence until Studio requests `get_version`, and then suppressing later notifications while keeping focus subscriptions side-effect-free.
@@ -1081,6 +1328,11 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
 - Matched Bambu Studio print dispatch options by model, carrying Timelapse plus paired Auto/On/Off bed-leveling, flow-dynamics, and nozzle-offset values through Web, Hub, gRPC, Agent, MQTT, and the Studio plugin ABI; migrated existing queued commands and corrected N6/X2D capability handling.
 - Restored Next 16 frontend linting with ESLint, extended the 400-line production-module guard to C/C++ and TypeScript/TSX, split the oversized Studio shim and dashboard/action modules, loaded dashboard resources by view with batched user identities, and hardened Docker/Helm defaults for non-root read-only workloads without ServiceAccount tokens.
 - Added current and active-target readouts to the nozzle, bed, and chamber temperature dropdowns; chamber targets now flow from Bambu Studio's legacy `ctt` and V2 packed MQTT reports through gRPC, SQLite/PostgreSQL persistence, and dashboard events, while zero targets remain represented as off.
+- Moved Bambu Studio account/profile/token JSON, cross-process-locked atomic persisted-login I/O,
+  directory-durability decisions, pending/direct/completed revocation state, runtime URL policy,
+  `401`/`410` session decisions, and versioned unsupported ABI dispositions into Rust. The thin C++
+  shim now retains all eight callback registrations, rejects Debug Studio STL mode, and reports local-
+  print-with-record and other unimplemented cloud surfaces explicitly instead of silently succeeding.
 
 Exit criteria:
 
@@ -1096,17 +1348,21 @@ Exit criteria:
 
 ## Immediate Next
 
-- Merge the reviewed release-preparation commit to `main`, confirm its GitHub `Checks` workflow passes, then create and push the annotated `v0.1.0` tag by following `docs/releasing.md`; do not treat the release as complete until all six archive jobs, both container images, the Helm chart, and post-publication checks pass.
-- Run fresh native firmware-update workspace delivery verification, create the single approved implementation commit, push `main`, and confirm remote readback without running a live firmware command.
-- Validate the chamber target readout against a real printer while chamber heating is safely active.
-- Replace process-local native-recovery ownership with a durable or broker-mediated cross-Hub owner/lease and cleanup protocol, then validate multi-Hub Web recovery before lifting the single-active-Hub restriction.
-- Continue splitting oversized dedicated Rust test suites into smaller topic files while preserving shared fixtures and helpers.
-- Provide Bambu Studio installations and matching plugin artifacts, then run Phase 23 real compatibility testing on Linux, Windows, and macOS.
-- Validate the `v0.1.0` tagged artifact while running Phase 23 so Phase 24 can use the same platform evidence.
-- Record real Bambu Studio plugin compatibility evidence for Phase 23.
-- Select a published `v0.1.0` GitHub Release archive, then record live release artifact install evidence for Phase 24 target families that are still unverified.
-- Run Phase 27 pause/resume/stop/print-speed and Phase 29 home/move/hotend hardware probes only after a safe printer state and agent-local LAN credentials are available.
-- Keep virtual-printer/proxy behavior deferred until plugin compatibility, scaled artifact storage, and operator recovery workflows are stable.
+- Treat real Better Auth WebView/ticket/session, real Hub/Agent/database integration, and all hardware,
+  print, control, cancel, and firmware behavior as separate unclaimed follow-up evidence. Final16's
+  fail-closed loopback proof is not a substitute for those rows.
+- Run the same authenticated checklist with a newly frozen native archive in real Windows Bambu
+  Studio. Historical native MSVC, PE, ABI, and release-smoke evidence does not itself prove Studio
+  behavior; no Windows Studio process was launched for final16.
+- Produce same-target three-file macOS amd64/arm64 candidates, pass native ABI/release-smoke on each
+  host, and record real Studio load plus authenticated-session evidence. macOS remains untested.
+- Run live-printer validation only with an explicitly safe printer state and agent-local credentials:
+  chamber target readout, pause/resume/stop/print-speed, home/move/hotend, print/cancel, and other
+  hardware-dependent behavior remain unclaimed. Any live firmware-update validation remains a
+  separately authorized hardware gate; none was run for final16.
+- After a current three-file `v0.1.0` archive is published, record target-host checksum, install, CLI,
+  library-load, and real Studio evidence without treating historical two-file workflow artifacts as
+  current candidates.
 
 ## Completed: Android App
 

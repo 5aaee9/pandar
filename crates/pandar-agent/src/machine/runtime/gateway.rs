@@ -8,9 +8,7 @@ use crate::{
     machine::{
         BambuMachineGateway, BambuPrinterEndpoint, FirmwareReportContext, MachineSnapshot,
         MaterialRefreshResult, PrintProjectDispatchResult, PrinterOperation,
-        PrinterOperationDispatchResult, PrinterRefreshResult,
-        diagnostics::redact_known_access_codes,
-        firmware_modules_event,
+        PrinterOperationDispatchResult, PrinterRefreshResult, firmware_modules_event,
         mqtt::{
             RumqttcBambuMqttTransport, dispatch_sequence_zero_recovery, feature_event,
             refresh_printer_with_firmware, resolve_bambu_mqtt_serial,
@@ -28,7 +26,7 @@ use super::{
 #[async_trait]
 impl BambuMachineGateway for RuntimeBambuMachineGateway {
     fn redact_error(&self, message: &str) -> String {
-        redact_known_access_codes(message, self.redaction_access_codes.lock().unwrap().clone())
+        self.redaction_values.lock().unwrap().redact(message)
     }
 
     async fn discover_printers(
@@ -226,7 +224,7 @@ impl BambuMachineGateway for RuntimeBambuMachineGateway {
             self.device_features.update(&endpoint.serial, value).await;
         }
         inner.replace_printer(endpoint.clone(), command_transport, transfer);
-        self.record_access_code(&endpoint);
+        self.record_endpoint_secrets(&endpoint);
         let firmware = FirmwareReportContext {
             cache: self.firmware.clone(),
             generation: transition.generation(),

@@ -36,6 +36,7 @@ fn firmware_callback_generation_update_cannot_race_between_validation_and_enqueu
             "printer-1",
             r#"{"upgrade":{"command":"upgrade_confirm","sequence_id":"7","src_id":1}}"#,
             FirmwareTunnel::Cloud,
+            1,
         )
     });
     test_hook::wait_until_reached();
@@ -57,7 +58,7 @@ fn firmware_callback_generation_update_cannot_race_between_validation_and_enqueu
 
     let token = response.callback_token.expect("acknowledgement token");
     assert!(
-        !session.return_handoff_at(token, 1, std::time::Instant::now()),
+        !session.return_handoff_at(token, 1, 0, 0, std::time::Instant::now()),
         "stale callback escaped generation cancellation"
     );
 }
@@ -88,6 +89,7 @@ fn firmware_callback_generation_cancel_cannot_race_with_in_flight_enqueue() {
             "printer-1",
             r#"{"upgrade":{"command":"upgrade_confirm","sequence_id":"8","src_id":1}}"#,
             FirmwareTunnel::Cloud,
+            1,
         )
     });
     test_hook::wait_until_reached();
@@ -109,7 +111,7 @@ fn firmware_callback_generation_cancel_cannot_race_with_in_flight_enqueue() {
 
     let token = response.callback_token.expect("acknowledgement token");
     assert!(
-        !session.return_handoff_at(token, 1, std::time::Instant::now()),
+        !session.return_handoff_at(token, 1, 0, 0, std::time::Instant::now()),
         "stale callback escaped explicit generation cancellation"
     );
 }

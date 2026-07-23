@@ -2,12 +2,39 @@ use anyhow::{Context, bail};
 use pandar_core::PrinterFirmwareState;
 use serde::Deserialize;
 
-use super::input::{ActiveTray, AmsUnit, MaterialTray, PrinterHms};
+use super::{
+    input::{ActiveTray, AmsUnit, MaterialTray, PrinterHms, PrinterStatus},
+    payload::push_status_json,
+};
 
 #[derive(Deserialize)]
 struct PrinterList {
     message: String,
     devices: Vec<Printer>,
+}
+
+#[derive(Deserialize)]
+struct ObservationList {
+    devices: Vec<ObservationPrinter>,
+}
+
+#[derive(Deserialize)]
+struct ObservationPrinter {
+    dev_id: String,
+    pandar_printer_id: String,
+    dev_online: bool,
+    online: bool,
+    #[serde(flatten)]
+    status: PrinterStatus,
+}
+
+#[derive(Clone)]
+pub(crate) struct PrinterObservation {
+    pub(crate) dev_id: String,
+    pub(crate) pandar_printer_id: String,
+    pub(crate) model: Option<String>,
+    pub(crate) status_report: String,
+    pub(crate) online: bool,
 }
 
 #[derive(Deserialize)]
@@ -17,10 +44,6 @@ struct Printer {
     _dev_name: String,
     #[serde(rename = "name")]
     _name: String,
-    #[serde(rename = "dev_ip")]
-    _dev_ip: Option<String>,
-    #[serde(rename = "dev_access_code")]
-    _dev_access_code: Option<String>,
     #[serde(rename = "dev_model_name")]
     _dev_model_name: Option<String>,
     #[serde(rename = "model")]
@@ -68,6 +91,8 @@ struct Printer {
     _bed_target_temperature_celsius: Option<String>,
     #[serde(rename = "chamber_temperature_celsius")]
     _chamber_temperature_celsius: Option<String>,
+    #[serde(rename = "chamber_target_temperature_celsius")]
+    _chamber_target_temperature_celsius: Option<String>,
     #[serde(rename = "chamber_light_on")]
     _chamber_light_on: Option<bool>,
     #[serde(rename = "materials")]
@@ -120,6 +145,30 @@ pub(crate) fn validate_printer_list(body: &str) -> anyhow::Result<()> {
     validate_response(&response)
 }
 
+pub(crate) fn printer_observations(body: &str) -> anyhow::Result<Vec<PrinterObservation>> {
+    validate_printer_list(body)?;
+    let response = serde_json::from_str::<ObservationList>(body)
+        .context("deserialize Hub plugin printer observations")?;
+    Ok(response
+        .devices
+        .into_iter()
+        .map(|printer| {
+            let online = printer.dev_online && printer.online;
+            PrinterObservation {
+                dev_id: printer.dev_id,
+                pandar_printer_id: printer.pandar_printer_id,
+                model: printer
+                    .status
+                    .dev_model_name
+                    .as_ref()
+                    .map(|model| model.text()),
+                status_report: push_status_json(&printer.status, online),
+                online,
+            }
+        })
+        .collect())
+}
+
 pub(crate) fn firmware_observations(body: &str) -> anyhow::Result<Vec<FirmwareObservation>> {
     let response = parse_printer_list(body)?;
     validate_response(&response)?;
@@ -155,15 +204,13 @@ fn validate_response(response: &PrinterList) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_printer_list;
+    use super::{printer_observations, validate_printer_list};
 
     fn printer_list_with_fields(fields: serde_json::Value) -> String {
         let mut printer = serde_json::json!({
             "dev_id": "studio-serial-1",
             "dev_name": "Probe Printer",
             "name": "Probe Printer",
-            "dev_ip": "192.0.2.10",
-            "dev_access_code": "12345678",
             "dev_model_name": "N6",
             "model": "N6",
             "dev_online": true,
@@ -213,5 +260,27 @@ mod tests {
         let body = printer_list_with_fields(serde_json::json!({"job_id": 42}));
 
         assert!(validate_printer_list(&body).is_err());
+    }
+
+    #[test]
+    fn printer_observation_requires_both_online_signals() {
+        for fields in [
+            serde_json::json!({"dev_online": false, "online": true}),
+            serde_json::json!({"dev_online": true, "online": false}),
+        ] {
+            let observations = printer_observations(&printer_list_with_fields(fields)).unwrap();
+            assert!(!observations[0].online);
+        }
+    }
+
+    #[test]
+    fn printer_observation_keeps_missing_model_unknown() {
+        let observations = printer_observations(&printer_list_with_fields(serde_json::json!({
+            "dev_model_name": null,
+            "model": null
+        })))
+        .unwrap();
+
+        assert!(observations[0].model.is_none());
     }
 }

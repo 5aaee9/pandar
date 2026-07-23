@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import {
   betterAuthCallbackRedirect,
   dashboardCallbackRedirectUrl,
+  encodePluginSignInReturnTarget,
 } from "../../../app/auth/betterauth/callback-redirect.ts";
 
 const validToken = "header.payload.signature";
@@ -11,10 +12,16 @@ const acceptsOnlyValidToken = (token) => token === validToken;
 
 assert.deepEqual(
   betterAuthCallbackRedirect(
-    `https://pandar.example/auth/betterauth/callback?token=${validToken}`,
+    `https://pandar.example/auth/betterauth/callback?token=${validToken}&return_to=${encodePluginSignInReturnTarget("/plugin-sign-in?redirect_url=http://localhost:13618/callback")}`,
     acceptsOnlyValidToken,
   ),
-  { ok: true, token: validToken, target: "/", status: 303 },
+  {
+    ok: true,
+    token: validToken,
+    target:
+      "/plugin-sign-in?redirect_url=http://localhost:13618/callback",
+    status: 303,
+  },
 );
 
 assert.equal(
@@ -42,6 +49,22 @@ assert.deepEqual(
   ),
   { ok: true, token: validToken, target: "/", status: 303 },
 );
+
+for (const returnTo of [
+  "https://evil.example/plugin-sign-in",
+  "//evil.example/plugin-sign-in",
+  "/other",
+  "/plugin-sign-in#fragment",
+  "/\\evil.example/plugin-sign-in",
+]) {
+  assert.deepEqual(
+    betterAuthCallbackRedirect(
+      `https://pandar.example/auth/betterauth/callback?token=${validToken}&return_to=${encodePluginSignInReturnTarget(returnTo)}`,
+      acceptsOnlyValidToken,
+    ),
+    { ok: true, token: validToken, target: "/", status: 303 },
+  );
+}
 
 assert.deepEqual(
   betterAuthCallbackRedirect(

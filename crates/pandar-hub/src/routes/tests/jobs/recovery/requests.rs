@@ -1,11 +1,8 @@
-use std::collections::BTreeMap;
-
 use crate::material_mapping::{
     AmsMapping, AmsMapping2, AmsMapping2Entry, AmsMappingInfo, AmsMappingInfoEntry,
-    AmsMappingInfoExtra,
 };
 use serde::Serialize;
-use serde_json::{Number, Value};
+use serde_json::Value;
 
 #[derive(Serialize)]
 struct RecoveryReasonRequest<'a> {
@@ -97,17 +94,12 @@ pub(super) fn reprint_job_body(printer_id: &str, plate_id: i32) -> Option<Value>
                     },
                 ]),
                 ams_mapping_info: Some(vec![AmsMappingInfoEntry {
-                    nozzle_id: 1,
-                    extra: BTreeMap::from([
-                        (
-                            "ams".to_owned(),
-                            AmsMappingInfoExtra::Number(Number::from(4)),
-                        ),
-                        (
-                            "filamentType".to_owned(),
-                            AmsMappingInfoExtra::String("PLA".to_owned()),
-                        ),
-                    ]),
+                    ams: 4,
+                    target_color: "11223344".to_owned(),
+                    filament_id: "GFA00".to_owned(),
+                    filament_type: "PLA".to_owned(),
+                    nozzle_id: Some(1),
+                    source_color: None,
                 }]),
             },
         })

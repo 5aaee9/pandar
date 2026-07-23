@@ -58,6 +58,7 @@ pub(super) fn printer_from_model(
                 .transpose()
                 .context("failed to rehydrate printer Bambu device features")?,
             bambu_device_features_session_id: model.bambu_fun_session_id,
+            mqtt_presence_session_id: model.mqtt_presence_session_id,
         })
         .map_err(anyhow::Error::from)
     })()

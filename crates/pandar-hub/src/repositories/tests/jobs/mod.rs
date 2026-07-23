@@ -14,6 +14,8 @@ mod mapping;
 mod recovery;
 mod repository;
 pub(super) mod stalled;
+mod studio_contract;
+mod studio_tasks;
 pub(super) mod submission_correlation;
 mod transitions;
 

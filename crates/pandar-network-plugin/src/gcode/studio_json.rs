@@ -7,6 +7,7 @@ use super::{
 };
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct StudioMessage {
     system: Option<StudioSystem>,
     print: Option<StudioPrint>,
@@ -83,14 +84,14 @@ pub(super) fn parse_studio_json_operation(message: &str) -> StudioOperationParse
 
 impl StudioMessage {
     fn operation(self) -> StudioOperationParse {
-        if let Some(system) = self.system {
-            return system.operation().map_or(
+        match (self.system, self.print) {
+            (Some(system), None) => system.operation().map_or(
                 StudioOperationParse::Unsupported,
                 StudioOperationParse::Operation,
-            );
+            ),
+            (None, Some(print)) => print.operation(),
+            _ => StudioOperationParse::Unsupported,
         }
-        self.print
-            .map_or(StudioOperationParse::Unsupported, StudioPrint::operation)
     }
 }
 

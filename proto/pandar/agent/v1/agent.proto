@@ -2,6 +2,9 @@ syntax = "proto3";
 
 package pandar.agent.v1;
 
+import "pandar/agent/v1/firmware.proto";
+import "pandar/agent/v1/print_project.proto";
+
 service AgentControl {
   rpc ReverseConnect(stream AgentEvent) returns (stream HubCommand);
   rpc ReverseCamera(stream AgentCameraEvent) returns (stream HubCameraCommand);
@@ -64,6 +67,7 @@ message PrinterSnapshot {
   PrinterDeviceFeatures device_features = 13;
   bool connection_authoritative = 14;
   string chamber_target_temperature_celsius = 15;
+  bool telemetry_authoritative = 16;
 }
 
 message PrinterDeviceFeatures {
@@ -107,152 +111,6 @@ message CommandResult {
   string error = 3;
   string result_json = 4;
   optional FirmwareCommandResult firmware_result = 5;
-}
-
-message PrinterFirmwareModule {
-  string name = 1;
-  optional string software_version = 2;
-  optional string software_new_version = 3;
-  optional string new_version = 4;
-  optional bool visible = 5;
-  optional string product_name = 6;
-  optional string serial_number = 7;
-  optional string hardware_version = 8;
-  optional int32 firmware_flag = 9;
-}
-
-message PrinterFirmwareModulesSnapshot {
-  string serial = 1;
-  uint64 generation = 2;
-  uint64 module_revision = 3;
-  repeated PrinterFirmwareModule modules = 4;
-}
-
-message PrinterFirmwareVersion {
-  string name = 1;
-  optional string current_version = 2;
-  optional string new_version = 3;
-}
-
-message PrinterFirmwareVersionList {
-  repeated PrinterFirmwareVersion versions = 1;
-}
-
-message AmsFirmwareDescriptor {
-  int32 id = 1;
-  string name = 2;
-  string version = 3;
-}
-
-message AmsFirmwareDescriptorList {
-  repeated AmsFirmwareDescriptor firmware = 1;
-}
-
-message AmsFirmwareSwitchState {
-  AmsFirmwareDescriptorList firmware = 1;
-  optional int32 current_firmware_id = 2;
-  optional int32 current_run_firmware_id = 3;
-  optional string status = 4;
-}
-
-message PrinterUpgradeState {
-  optional string status = 1;
-  optional string progress = 2;
-  optional string message = 3;
-  optional string module = 4;
-  optional int64 error_code = 5;
-  optional int32 new_version_state = 6;
-  optional bool consistency_request = 7;
-  optional bool force_upgrade = 8;
-  optional int32 display_state = 9;
-  optional string ota_new_version_number = 10;
-  optional string ams_new_version_number = 11;
-  optional string ahb_new_version_number = 12;
-  PrinterFirmwareVersionList new_versions = 13;
-  AmsFirmwareSwitchState ams_firmware = 14;
-}
-
-message PrinterFirmwareStatus {
-  PrinterUpgradeState upgrade_state = 1;
-  optional string cfg = 2;
-}
-
-message PrinterFirmwareStatusSnapshot {
-  string serial = 1;
-  uint64 generation = 2;
-  uint64 status_revision = 3;
-  PrinterUpgradeState upgrade_state = 4;
-  optional string cfg = 5;
-}
-
-message PrinterFirmwareInvalidated {
-  string serial = 1;
-  uint64 generation = 2;
-}
-
-message FirmwarePrepared {
-  string command_id = 1;
-  string serial = 2;
-  uint64 generation = 3;
-}
-
-message FirmwarePublished {
-  string command_id = 1;
-  string serial = 2;
-  uint64 generation = 3;
-}
-
-message FirmwareCommand {
-  string sequence_id = 1;
-  int64 src_id = 2;
-  oneof command {
-    FirmwareUpgradeConfirm upgrade_confirm = 10;
-    FirmwareConsistencyConfirm consistency_confirm = 11;
-    FirmwareStart start = 12;
-    FirmwareSwitchAmsFirmware switch_ams_firmware = 13;
-  }
-}
-
-message FirmwareUpgradeConfirm {}
-
-message FirmwareConsistencyConfirm {}
-
-message FirmwareStart {
-  string url = 1;
-  string module = 2;
-  string version = 3;
-}
-
-message FirmwareSwitchAmsFirmware {
-  int32 id = 1;
-}
-
-message FirmwareAcknowledgement {
-  string command = 1;
-  string sequence_id = 2;
-  optional string result = 3;
-  optional int64 error_code = 4;
-  optional string reason = 5;
-  optional string message = 6;
-}
-
-message FirmwareRefreshedModules {
-  repeated PrinterFirmwareModule modules = 1;
-  uint64 module_revision = 2;
-}
-
-message PublishedWithoutAcknowledgement {}
-
-message FirmwareCommandResult {
-  string command_id = 1;
-  string serial = 2;
-  uint64 generation = 3;
-  PrinterFirmwareStatus transient_status = 4;
-  oneof outcome {
-    FirmwareRefreshedModules refreshed_modules = 10;
-    FirmwareAcknowledgement acknowledgement = 11;
-    PublishedWithoutAcknowledgement published_without_acknowledgement = 12;
-  }
 }
 
 message PrintJobReport {
@@ -313,25 +171,6 @@ message HubCommand {
     ExecuteFirmwareControl execute_firmware_control = 20;
     ReloadPrinterConnection reload_printer_connection = 21;
   }
-}
-
-message RefreshFirmwareVersion {
-  string serial = 1;
-  string sequence_id = 2;
-  uint64 expected_generation = 3;
-}
-
-message PrepareFirmwareControl {
-  string command_id = 1;
-  string serial = 2;
-  uint64 expected_generation = 3;
-}
-
-message ExecuteFirmwareControl {
-  string command_id = 1;
-  string serial = 2;
-  uint64 expected_generation = 3;
-  FirmwareCommand command = 4;
 }
 
 message RefreshPrinters {}
@@ -530,32 +369,4 @@ message AmsUnloadFilamentOperation {
   uint32 global_tray_id = 3;
   string external_id = 4;
   optional uint32 extruder_id = 5;
-}
-
-enum PrintCalibrationMode {
-  PRINT_CALIBRATION_MODE_OFF = 0;
-  PRINT_CALIBRATION_MODE_ON = 1;
-  PRINT_CALIBRATION_MODE_AUTO = 2;
-}
-
-message PrintProjectFile {
-  string job_id = 1;
-  string artifact_id = 2;
-  string printer_id = 3;
-  string serial_number = 4;
-  string filename = 5;
-  string storage_path = 6;
-  uint64 size_bytes = 7;
-  uint32 plate_id = 8;
-  bool use_ams = 9;
-  bool flow_cali = 10;
-  bool timelapse = 11;
-  string ams_mapping_json = 12;
-  string ams_mapping2_json = 13;
-  string artifact_download_path = 14;
-  string ams_mapping_info_json = 15;
-  optional PrintCalibrationMode auto_bed_leveling = 16;
-  optional PrintCalibrationMode auto_flow_cali = 17;
-  optional PrintCalibrationMode auto_offset_cali = 18;
-  bool bed_leveling = 19;
 }

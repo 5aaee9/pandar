@@ -1,7 +1,7 @@
-use std::collections::BTreeMap;
+use serde::Serialize;
+use serde_json::Value;
 
-use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
+use super::{ProjectFileAmsMapping2, ProjectFileAmsMappingInfo};
 
 pub(in crate::machine::mqtt) fn json_payload<T: Serialize>(payload: T) -> Value {
     serde_json::to_value(payload).expect("MQTT payload is serializable")
@@ -123,14 +123,14 @@ pub(in crate::machine::mqtt) struct ProjectFilePayloadPrint {
     pub(in crate::machine::mqtt) sequence_id: String,
     pub(in crate::machine::mqtt) param: String,
     pub(in crate::machine::mqtt) project_id: String,
-    pub(in crate::machine::mqtt) profile_id: &'static str,
+    pub(in crate::machine::mqtt) profile_id: String,
     pub(in crate::machine::mqtt) task_id: String,
     pub(in crate::machine::mqtt) subtask_id: String,
     pub(in crate::machine::mqtt) subtask_name: String,
     pub(in crate::machine::mqtt) url: String,
     pub(in crate::machine::mqtt) file: String,
     pub(in crate::machine::mqtt) md5: String,
-    pub(in crate::machine::mqtt) bed_type: &'static str,
+    pub(in crate::machine::mqtt) bed_type: String,
     pub(in crate::machine::mqtt) bed_leveling: bool,
     pub(in crate::machine::mqtt) flow_cali: bool,
     pub(in crate::machine::mqtt) vibration_cali: bool,
@@ -140,34 +140,13 @@ pub(in crate::machine::mqtt) struct ProjectFilePayloadPrint {
     pub(in crate::machine::mqtt) ams_mapping: Vec<i64>,
     pub(in crate::machine::mqtt) ams_mapping2: Vec<ProjectFileAmsMapping2>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(in crate::machine::mqtt) nozzle_mapping: Option<Vec<i32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(in crate::machine::mqtt) ams_mapping_info: Option<Vec<ProjectFileAmsMappingInfo>>,
     pub(in crate::machine::mqtt) auto_bed_leveling: u8,
     pub(in crate::machine::mqtt) nozzle_offset_cali: u8,
-    pub(in crate::machine::mqtt) cfg: &'static str,
+    pub(in crate::machine::mqtt) cfg: String,
     pub(in crate::machine::mqtt) extrude_cali_flag: u8,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub(in crate::machine::mqtt) struct ProjectFileAmsMapping2 {
-    pub(in crate::machine::mqtt) ams_id: i64,
-    pub(in crate::machine::mqtt) slot_id: i64,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub(in crate::machine::mqtt) struct ProjectFileAmsMappingInfo {
-    #[serde(rename = "nozzleId")]
-    pub(in crate::machine::mqtt) nozzle_id: i64,
-    #[serde(flatten)]
-    pub(in crate::machine::mqtt) extra: BTreeMap<String, ProjectFileAmsMappingInfoExtra>,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub(in crate::machine::mqtt) enum ProjectFileAmsMappingInfoExtra {
-    Object(BTreeMap<String, ProjectFileAmsMappingInfoExtra>),
-    Array(Vec<ProjectFileAmsMappingInfoExtra>),
-    String(String),
-    Number(Number),
-    Bool(bool),
-    Null,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(in crate::machine::mqtt) extrude_cali_manual_mode: Option<i32>,
 }

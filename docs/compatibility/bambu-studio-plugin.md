@@ -2,6 +2,140 @@
 
 Phase 23 tracks Pandar's Bambu Studio network plugin compatibility evidence. A platform is compatible only after a real Bambu Studio run is recorded here.
 
+## Active `02.08.01.x` Alignment
+
+The current compatibility target is official Bambu Studio commit
+`ba049f6a2e08c3b6033660bb84da80c08722974b` (`02.08.01.55`, network agent `02.08.01.52`) with
+upstream Boost `1.84.0`. Before the active remediation Pandar advertised `02.07.01.00`; that and the
+other gap bullets in the alignment design are historical baseline facts. The working tree now models
+the pinned 109 network plus 21 File Transfer declarations (130 unique exports).
+
+Final12 is retained as historical evidence, not as the current candidate. Its immutable input passed
+the complete Windows clean, PostgreSQL 16.14, and Windows native three-file package/ABI/release-smoke
+gates, but the subsequent Linux full run exposed a status/firmware race: the compiled C++ fixture
+completed successfully while the Rust wrapper rejected the run after the exact diagnostic
+`pandar printer status refresh discarded: credentials changed during request`. Stress investigation
+then proved that a background heartbeat could temporarily clear `printers_fresh` while its refresh was
+in flight and randomly suppress a firmware callback.
+
+The historical final13 frozen candidate repairs that boundary with background-only stale-while-revalidate: a periodic
+heartbeat preserves the last confirmed cache only while its replacement request is in flight, whereas
+foreground Studio print-info still invalidates immediately and fails closed. Two directed Rust tests
+freeze those separate policies. The compiled firmware fixture now uses a callback sentinel handshake,
+and its wrapper permits only the exact stale-generation diagnostic above. The immutable final13 input
+has passed the complete Windows clean gate, two real PostgreSQL 16.14 runs, and the Windows MSVC
+three-file package/ABI/release-smoke gates. Ubuntu-native/ASan attempt 2 then passed as a whole; attempt
+1 remains non-promotable harness history because its outer wrapper incorrectly expected 21 exports from
+an FT-only invocation even though the checker correctly reported all 130 library contract exports.
+Final13 exact-AppImage attempt 8 then passed the official Ubuntu 22.04 `02.08.01.55` module-load and
+same-process development no-auth recovery gate. Authenticated Linux WebView/ticket/session and UI
+rows, real Windows Studio, macOS, hardware actions, and live firmware remain untested.
+
+Final16 is the current verified Linux compatibility baseline. It includes the pinned Studio `fun` bit
+48 mask, Better Auth plugin return-intent repair, caller-owned model-task overload, and selected-target
+Cloud ownership correction. Its immutable source archive has SHA-256
+`24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039`; the final16 Linux release
+archive has SHA-256 `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3`.
+The complete Linux matrix and controlled official-AppImage model-task boundary passed as recorded
+below. Final14 is retained as historical module-load/development-no-auth evidence. Final15 is retained
+as non-promotable pre-correction evidence and is not a current candidate.
+
+Authenticated Better Auth sign-in/ticket exchange, real Hub/Agent/database integration through
+Studio, real Windows Studio, macOS, hardware actions, print/control/cancel, and live firmware remain
+untested. The final16 AppImage evidence uses a synthetic persisted authenticated-shaped session and a
+loopback fail-closed mock; it proves the named selected-only model-task request/callback boundary, not
+those excluded surfaces or downstream behavior hidden in Studio's encrypted logs.
+
+`02.08.01.x` is only the version-handshake family. Compatibility is recorded per exact Studio build,
+OS, architecture, and native C++ ABI; evidence for `02.08.01.55` does not automatically cover a later
+patch build with the same prefix.
+
+The active remediation contract and execution order are:
+
+- [Bambu Studio 02.08.01 alignment design](../superpowers/specs/2026-07-19-bambu-studio-02-08-01-alignment-design.md)
+- [Bambu Studio 02.08.01 implementation plan](../superpowers/plans/2026-07-19-bambu-studio-02-08-01-alignment.md)
+
+Do not add a `passed` target-version row until the versioned ABI contract and real-host evidence gates
+in those documents are complete.
+
+### Target Native ABI Matrix
+
+This matrix records the compiler/runtime family required by the pinned source and the native runner
+that must execute the contract. It is contract metadata, not real Studio evidence.
+
+| Target | Pinned Studio build contract | Pandar plugin contract | Native contract runner | Current state |
+| ------ | ---------------------------- | ---------------------- | ---------------------- | ------------- |
+| Windows x64 | Upstream Windows x64, C++17, Release `/MD`, MSVC STL/UCRT | `x86_64-pc-windows-msvc`, MSVC C++17, `/MD`, `_ITERATOR_DEBUG_LEVEL=0` | Local Windows x64 native runner required | final16 has no native Windows package or real Windows Studio evidence; `untested` |
+| Linux x86_64 | Official Ubuntu 22.04 `02.08.01.55` AppImage, native C++17, libstdc++/glibc | `x86_64-unknown-linux-gnu`, native C++17 and an AppImage-compatible libstdc++/glibc baseline | Disposable Ubuntu 22.04.5 container on the user-authorized SSH host | current final16 native matrix and controlled official-AppImage selected-only model-task boundary passed; authenticated end-to-end Studio behavior remains `untested` |
+| macOS x86_64/arm64 | Upstream macOS 15 Intel and macOS 15/26 universal workflows, C++17, AppleClang/libc++, deployment target 10.15 | Native `x86_64-apple-darwin` or `aarch64-apple-darwin`, AppleClang/libc++ | Matching native macOS runner required | `untested`: native artifact contract is a Task 8 delivery gate |
+| Historical Windows cross-build path | No compatible Studio host contract: Ubuntu/Zig emits GNU Windows C++ ABI | `x86_64-pc-windows-gnu` or `aarch64-pc-windows-gnullvm`, GNU STL/runtime | Linux cross-build only | `failed` historical evidence: it must not be used as MSVC Studio plugin evidence or shipped as the target plugin |
+
+The Windows compatibility claim is Release-only. The plugin is built with
+`_ITERATOR_DEBUG_LEVEL=0`; its Rust-owned consistency policy accepts a Release Studio host and
+rejects a Debug Studio host before C++ STL values cross the ABI. A Debug Studio build is not a
+supported host contract for this artifact.
+
+The upstream source does not by itself prove a packaged Linux runtime baseline, so the Linux row must
+record the exact compiler, libstdc++, glibc symbol ceiling, and artifact hashes from the final native
+run. A compiler log or contract caller remains local automation; only a real Studio run can add a
+`passed` row below.
+
+Final16 freezes source archive SHA-256
+`24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039` and release archive SHA-256
+`023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3`. The release plugin and
+BambuSource companion have SHA-256 values
+`3bcce9085205d6af67dc9671cf58cd6f9fb694d5a587b43d160dc8b6a9b0712f` and
+`88d34358be39ed3d239aeb317df8f34a92d4652877e86a9849c66e32347c1df2`. From that exact input,
+workspace Nextest passed 1,808/1,808 with one configured skip; fmt, strict Clippy, and module-size
+gates passed; the 22 ABI tools, 25 packaged release-smoke tools, and 18 packaged tasks passed; all 130
+exports were present; all 21 File Transfer entrypoints completed 256 ASan cycles; and PostgreSQL
+passed 7/7 with zero skipped.
+
+The historical final12 native-caller evidence uses upstream's Boost `1.84.0` archive with SHA-256
+`4d27e9efed0f6f152dc28db6430b9d3dfb40c0345da7342eaa5a987dde57bd95`, stages its real header tree,
+and verifies `BOOST_VERSION == 108400`. The final12 Windows build, full ABI, and packaged
+release-smoke runs are `4fa89d78-503f-4c51-a4e3-fc788a4f7f03`,
+`6b71c048-8377-4a61-a750-20c5531df864`, and `d808cce0-6e5f-45e7-b4aa-f7b39642d67a`.
+The 21,285,799-byte archive has SHA-256
+`b4f6913eef7c1d09da9377fbce36b0ab759add25caac2baa0604c07a595440cb`; its CLI, network plugin,
+and BambuSource companion have SHA-256 values
+`1e57a7cfc2b46717129e7ced227b358eedbaaa74064f2ae2ac5cd44eac576b32`,
+`43be9e73350cacb66ee2dfa991f1a7291175c4d18db2ec917a10a1489f9244d9`, and
+`20805176609ebe891ed45bc7171a34ad0d741351b5dbe8c3c4d9f9b4a5a2a49a`. Consolidated Windows-native
+evidence SHA-256 is `11c38eb3c198cd07b2f96abbfbf70792b078170389e8869b230badbb98a404d2`.
+Those values do not promote final13. The historical final13 Windows archive
+`pandar-final13-windows-amd64-019f7b10.tar.gz` is 21,285,752 bytes with SHA-256
+`6c50e77a0b4008ce46d86de51411117061c5118e18849ca1fb94f4a3f319db64`; its consolidated native
+evidence SHA-256 is `3dab4bffa359e4c46eec77cbfb278ce3a1497f806a1d80343a1735b5a68f025b`.
+The packaged plugin passed 21/21 ABI cases, all `version,bind,print,ams,ft` modes, the 109-network plus
+21-File-Transfer contract, and companion inspection; `dumpbin` reported 271 total plugin exports. The
+build, ABI, and packaged-smoke runs were `0430ad0e-7f96-41c5-b9aa-1c6fd690fd16`,
+`2f27f859-b795-4420-b04a-30410ae7bcbc`, and `65ffc0b0-e17e-45da-bd3a-3375f5d88de1`. The
+final13 Linux archive `pandar-final13-linux-amd64-019f7b10.tar.gz` is 24,854,768 bytes with SHA-256
+`4166e6012e6c1bf7cdf056ba3bfb28f0fbc9d216c31e5ed2e8620adb8b5fcccc`. Native Nextest run
+`6ec3a215-9430-4ad2-adc7-f692ca156333` passed 1,779/1,779 with one separately reported skip; all five
+ABI modes, packaged smoke, runtime audit, and 21 File Transfer entrypoints x 256 ASan/LSan cycles
+passed. The Linux evidence bundle SHA-256 is
+`aa7478fe0f74debcc5f3d1f5ec53a2222d726beafe5224935aa3382c24f6097a`.
+
+Final13 exact-AppImage attempt 8 used the official Ubuntu 22.04 `02.08.01.55` AppImage with SHA-256
+`e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`, official seed database SHA-256
+`72b7d020ef537c7bd510910086d9dcafd3ad0e38e24614216630e27767a46be0`, fresh `AppRun` SHA-256
+`eaf5a1c6ff4f0d49d6e0c0bacf106309daa2c822ca1ebe8739067699e6cdaef4`, and the passed final13
+Linux package above. Studio PID `137` with start ticks `192688662` did not change while two proven
+pre-delivery connection failures occurred before Hub PID `674`/start ticks `192689166` became ready;
+one later request succeeded and committed. The final counts were one active token out of one total,
+one create audit, zero revoke audits, and zero discarded credentials. The mode-`0600`, 343-byte login
+file had SHA-256 `c67cbb2470085de83fb5f0cd79119c3cf70d97f56d424b657da1a00943b47e99`; its content was not
+captured. Each library had four process-map lines, while `ldd`, undefined-symbol, `dlopen`, and
+certificate-error counts were all zero. This is exact real-Studio module-load and development no-auth
+recovery evidence, not authenticated Studio, UI, printer, print, hardware, or firmware evidence.
+
+The historical Task 3 Linux behavior rerun used the user-authorized NixOS host and a separate isolated
+source tree. Its `nix develop` toolchain needed newer Nixpkgs Rust plus target-scoped `lld`, so it was
+behavior evidence rather than a release baseline. Final11 later produced historical native Ubuntu,
+sanitizer, and official-AppImage results, but those results do not promote a final13 package.
+
 ## Status Values
 
 | Status        | Meaning                                                                       |
@@ -11,25 +145,93 @@ Phase 23 tracks Pandar's Bambu Studio network plugin compatibility evidence. A p
 | `blocked`     | Could not complete because of a documented environment or dependency blocker. |
 | `unsupported` | Intentionally unsupported by Pandar.                                          |
 | `untested`    | No evidence has been recorded.                                                |
+| `in_progress` | Implementation exists, but one or more named final gates are still pending.    |
 
 ## Real Studio Evidence
 
-| Studio Version | OS      | Arch         | Plugin Artifact                  | Pandar Commit | Test Date  | Load      | Sign-In Page | Localhost Ticket | Token Exchange | Profile    | Printers   | Jobs       | Print Submission | Logout     | Unsupported ABI | Evidence                                                                                                                                                                                                                                      |
+| Studio Version | OS      | Arch         | Plugin Artifact                  | Pandar Snapshot | Test Date  | Load      | Sign-In Page | Localhost Ticket | Token Exchange | Profile    | Printers   | Jobs       | Print Submission | Logout     | Unsupported ABI | Evidence                                                                                                                                                                                                                                      |
 | -------------- | ------- | ------------ | -------------------------------- | ------------- | ---------- | --------- | ------------ | ---------------- | -------------- | ---------- | ---------- | ---------- | ---------------- | ---------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | blocked        | Linux   | x86_64       | `libpandar_network_plugin.so`    | none          | 2026-06-24 | `blocked` | `blocked`    | `blocked`        | `blocked`      | `blocked`  | `blocked`  | `blocked`  | `blocked`        | `blocked`  | `blocked`       | No Bambu Studio command is available in this workspace. Real Studio validation cannot run until a Studio installation is available; matching plugin artifact evidence is tracked separately in `docs/compatibility/release-artifacts.md`.     |
 | blocked        | Windows | x86_64       | `pandar_network_plugin.dll`      | none          | 2026-06-24 | `blocked` | `blocked`    | `blocked`        | `blocked`      | `blocked`  | `blocked`  | `blocked`  | `blocked`        | `blocked`  | `blocked`       | No Windows Bambu Studio host is available in this workspace. Real Studio validation cannot run until a same-platform host is available; matching plugin artifact evidence is tracked separately in `docs/compatibility/release-artifacts.md`. |
 | 02.07.01.62    | Windows | x86_64       | `pandar_network_plugin.dll`      | `00380cf`     | 2026-06-25 | `passed`  | `untested`   | `untested`       | `untested`     | `untested` | `untested` | `untested` | `untested`       | `untested` | `untested`      | Local Windows DLL smoke loaded the Pandar DLL through `%APPDATA%\BambuStudio\plugins\bambu_networking.dll`; Bambu Studio reached the main UI and did not replace the DLL. See `docs/compatibility/windows-dll-smoke-2026-06-25.md`.           |
 | blocked        | macOS   | arm64/x86_64 | `libpandar_network_plugin.dylib` | none          | 2026-06-24 | `blocked` | `blocked`    | `blocked`        | `blocked`      | `blocked`  | `blocked`  | `blocked`  | `blocked`        | `blocked`  | `blocked`       | No macOS Bambu Studio host is available in this workspace. Real Studio validation cannot run until a same-platform host is available; matching plugin artifact evidence is tracked separately in `docs/compatibility/release-artifacts.md`.   |
+| 02.08.01.55    | Linux   | x86_64       | `libpandar_network_plugin.so` + `libpandar_bambu_source.so` | final16 frozen input `24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039` | 2026-07-23 | `passed` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | The official AppImage automatically selected the only fixture printer without an explicit subscription and produced exactly one model-task GET/200 plus the four ordered request-started, response-accepted, callback-started, and callback-returned lifecycle events. Unexpected, legacy, and unsafe mutating request counts were zero. This uses a synthetic persisted authenticated-shaped session and loopback fail-closed mock; it does not claim real authentication, Hub/Agent/database integration, hardware, print/control/cancel, firmware, or downstream behavior in encrypted Studio logs. Evidence manifest SHA-256: `c6ba9b6282581119d3baec720e26990ad63efc20eb394b0c71dced89081d5fd9`; result summary SHA-256: `771d0a657e235eff40dffd1637175a4991bbbac7672b231133a20fddc11e3220`. |
+| 02.08.01.55    | Linux   | x86_64       | `libpandar_network_plugin.so` + `libpandar_bambu_source.so` | historical final14 frozen input `c422d80d89052732db6b8ae87b68fd1e4145c64f588d8382deafef3345d86681` | 2026-07-22 | `passed` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | Historical final14 attempt 1 loaded both passed Linux-package libraries 4/4 into the same official AppImage process with zero loader/certificate errors and one development no-auth session. This does not exercise authenticated Better Auth sign-in/ticket/token/profile, printer/task/print/logout UI, unsupported-path UI, hardware, live firmware, or the model-task overload. Redacted evidence SHA-256: `7eac6abbc7364928147d60dd1c583d084c02debf1552734bc82a4dec59c941be`. |
+| 02.08.01.55    | Linux   | x86_64       | `libpandar_network_plugin.so` + `libpandar_bambu_source.so` | historical final13 frozen input `71080abb1e7392b0440a179b5bca9fd80638de74a614105b8dc11a0f70959c34` | 2026-07-22 | `passed` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | Historical final13 attempt 8 loaded both passed Linux-package libraries into the unchanged official AppImage process and recovered development no-auth after two offline failures with exactly one success/commit and one credential. This does not exercise authenticated sign-in/ticket/token/profile, printer/task/print/logout UI, unsupported-path UI, hardware, or live firmware. |
+| 02.08.01.55    | Windows | x86_64       | `pandar_network_plugin.dll` + `pandar_bambu_source.dll` | historical final13 frozen input `71080abb1e7392b0440a179b5bca9fd80638de74a614105b8dc11a0f70959c34` | 2026-07-22 | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | Historical final13 native MSVC package/ABI/release-smoke passed from the frozen input, but no real Windows Studio process, authentication, or hardware was used; this row therefore remains `untested` for Studio load/session behavior. |
+| 02.08.01.55    | macOS   | arm64/x86_64 | `libpandar_network_plugin.dylib` + `libpandar_bambu_source.dylib` | `none` | pending | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | No current native release-smoke candidate or real Studio evidence exists for macOS. |
 
 ## Studio Environment Check
 
 | Date       | Scope                                      | Command                                                                                                                 | Result   | Evidence                                                                                                                                                                                                                                 |
-| ---------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | --------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-06-24 | Local workspace Studio host search         | `command -v bambu-studio                                                                                                |          | command -v BambuStudio                                                                                                                                                                                                                   |     | command -v bambu-studio.AppImage` | `blocked` | No local Bambu Studio command was found. Phase 23 real Studio rows remain unproven until a real Studio installation is available; release artifact availability is tracked separately in `docs/compatibility/release-artifacts.md`. |
+| ---------- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-06-24 | Local workspace Studio host search         | `command -v bambu-studio; command -v BambuStudio; command -v bambu-studio.AppImage`                                    | `blocked` | No local Bambu Studio command was found. This is historical environment evidence, not the current authorized SSH/AppImage setup.                                                                                                     |
 | 2026-06-25 | Local Windows Bambu Studio load smoke      | `cargo run --manifest-path tools/studio-plugin-smoke/Cargo.toml -- --preflight ...` plus manual-installation load check | `passed` | Bambu Studio `02.07.01.62` was available on Windows x86_64. Preflight, export inspection, direct `LoadLibrary`/`ft_abi_version`, and Studio process-module load checks passed. See `docs/compatibility/windows-dll-smoke-2026-06-25.md`. |
-| 2026-06-25 | Current Linux workspace Studio host search | `command -v bambu-studio                                                                                                |          | command -v BambuStudio                                                                                                                                                                                                                   |     | command -v bambu-studio.AppImage` | `blocked` | Fresh check found no local Bambu Studio command in this workspace. Linux/macOS real Studio validation and Windows sign-in/print-flow validation remain unproven until matching Studio hosts are available.                          |
+| 2026-06-25 | Linux workspace Studio host search         | `command -v bambu-studio; command -v BambuStudio; command -v bambu-studio.AppImage`                                    | `blocked` | Historical local-workspace result, superseded by the isolated-host attempt below.                                                                                                    |
+| 2026-07-23 | Final16 Linux official `02.08.01.55` AppImage selected-only model-task boundary | Start the exact official AppImage in a read-only, network-isolated harness with the passed final16 package, a synthetic persisted authenticated-shaped session, and a loopback fail-closed mock | `passed` | AppImage SHA-256 `e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`; runner SHA-256 `7ab2c4cb8816ae4488e40fce71ec69684997739567d3a76f17d2c9e2a324873f`. The automatic selected-only fixture caused exactly one model-task request/200 and four ordered lifecycle events; unexpected, legacy, and unsafe mutating requests were zero. Downstream encrypted-log behavior is not claimed. |
+| 2026-07-22 | Historical final14 Linux official `02.08.01.55` AppImage load | Start the exact official AppImage with the passed final14 Linux package; verify module maps, unchanged process identity, zero loader errors, and one redacted development no-auth session | `passed` | Attempt 1 kept the same Studio PID/start ticks, mapped both libraries 4/4, recorded zero loader/certificate errors, and observed one development no-auth session. Redacted evidence bundle SHA-256 is `7eac6abbc7364928147d60dd1c583d084c02debf1552734bc82a4dec59c941be`. No authenticated Better Auth, printer/task UI, hardware, firmware, or model-task path was exercised. |
+| 2026-07-22 | Historical final13 Linux official `02.08.01.55` AppImage recovery | Start the exact official AppImage before Hub with the passed final13 Linux package; make one-tenant development Hub ready without restarting Studio; verify module maps, same process, and redacted singular credential state | `passed` | Attempt 8 kept Studio PID `137`/ticks `192688662`, mapped both libraries 4/4, recorded two offline failures then one success/commit, and ended with active/total token `1/1` and create/revoke/discard counts `1/0/0`. Loader/certificate counts were zero. Redacted evidence bundle SHA-256 is `a4453c8dce3829cc1a84a372a772b516812fe1564b310e61db9e9009a11cf9d2`. No authenticated UI or hardware path was exercised. |
+| 2026-07-22 | Historical final11 Linux official `02.08.01.55` AppImage recovery | Start the isolated Ubuntu 22.04 AppImage before Hub; make an exactly-one-tenant Hub ready without restarting Studio; verify the same process and redacted credential counts | `passed` | Historical regression evidence only: PID `2176` with start ticks `190073915` remained unchanged. Two pre-delivery connection failures were followed by one HTTP 200 commit; evidence recorded `retry_attempts=2`, `commits=1`, `discarded=0`, one active session, one create audit, zero revoke audits, and one mode-`0600` 343-byte login file. Each library had four mapped lines, the post-agent getter appeared three times, and undefined-symbol, `dlopen`, and certificate error counts were zero. It does not promote final14. |
+| 2026-07-21 | Historical final5 startup-recovery regression | Start before Hub, recover Hub in the same Studio process, then restart Studio | `failed` | The same process did not bootstrap within 30 seconds; restarting Studio against the ready Hub created one session. This historical regression drove the final11 repair and is not current-candidate evidence. Redacted evidence SHA-256: `7f103873d222b8b51e1209c4836f2acc2579515cff9729dd89c4271032e801b0`. |
+
+## No-Auth Development Boundary
+
+No-auth remains a development-only profile and is intentionally not promoted into the authenticated
+columns above. Its current contract is:
+
+- Hub issues a no-auth Studio credential only when exactly one tenant exists. Zero tenants return not
+  found; multiple tenants return stable `ambiguous_no_auth_tenant` conflict without creating a token
+  or audit.
+- Startup retries only a connection failure proven to occur before request delivery. The bounded
+  sequence permits at most five attempts including the initial attempt, starts with a two-second
+  delay, doubles to a 30-second cap, and is fenced by logout/destroy plus Hub-configuration, token,
+  account, and generation changes. HTTP responses, ambiguous timeouts, and response loss are never
+  retried automatically.
+- Every persisted account mutation is serialized across processes by
+  `.pandar-plugin-account.lock`. Login, pending-revocation, and direct-intent state may become active
+  only after `MutationDurability::Confirmed`. `ChangedUnconfirmed` means the namespace change was
+  published without confirmed directory durability and therefore fails closed; an ordinary error
+  describes the canonical namespace visible at return rather than promising crash durability during
+  an extreme rollback failure.
+- Requested logout first stages a confirmed pending self-revocation. If that cannot be confirmed, it
+  must confirm a direct-revocation intent before DELETE. Passive account loss never revokes, and a
+  requested transition may upgrade passive finalization without duplicate callbacks. A retained login
+  may be restored only before DELETE; it is never restored after DELETE is attempted.
+- Successful DELETE and idempotent `401`/`410` first record a completed tombstone containing the
+  canonical Hub URL and token SHA-256. That tombstone blocks stale login loads and writes before
+  direct/pending cleanup. Duplicate pending cleanup after direct success is best effort. The completed
+  ledger is currently unbounded and may be cleared only after every Studio process using the directory
+  is stopped and all older Hub plugin sessions are invalid or expired.
+- Printer and task list/detail/plate/subtask/model-task reads share the same no-auth `401`/`410`
+  rotation. Concurrent callers share one rotation, each logical request retries at most once, and an
+  authenticated session never falls back to no-auth.
+
+Final13 deterministic Windows and SQLite/PostgreSQL probes cover the pre-model-task development
+contract. Final13 exact-AppImage attempt 8 also passed same-process development no-auth recovery. The
+later Task 11 working tree covers model-task recovery deterministically. Neither result proves the
+authenticated WebView/ticket flow or Studio UI behavior.
 
 ## Local Automated Probe Coverage
+
+The dated rows below are focused-slice evidence. They remain useful regressions but do not substitute
+for real Studio session evidence. The final13 implementation review returned `APPROVE` with no
+Blocking, Important, or Minor finding. The historical persistence review returned `VERDICT: APPROVE`
+with two Minor limitations: the completed-revocation ledger is unbounded, and an ordinary rollback
+error describes the current namespace rather than guaranteeing crash durability. The final evidence-
+document review completed after correcting its sole Minor terminology finding.
+
+The final12/final13 firmware stress sequence is intentionally recorded as separate observations.
+Final12 Windows full first failed with `firmware version refresh failed`, then its exact probe and
+required full rerun passed. Final12 Linux later completed the C++ fixture but failed the wrapper on the
+exact stale-generation diagnostic. After the callback-sentinel fixture change, Windows stress
+iteration 2 failed with `firmware callback missed handoff deadline`, which led to the background stale-
+while-revalidate product fix. After that fix, six iterations passed and iteration 7 reported
+`status callback logout deadlocked against firmware dispatcher` under the old three-second compound
+watchdog. Independent lock-graph review found no ABBA cycle: the firmware
+transition lock is released before waiting for the callback mutex, and callback dispatch does not hold
+the account-queue lock. The fixture now separates request-start and logout failures, uses an eight-
+second internal watchdog, and a 45-second child-process deadline. None of these pre-freeze observations
+completes a final13 gate.
 
 | Probe                                                                                                        | Coverage                                                                                                                                                            | Status   | Evidence                                                                                                                                                                                                                                                       |
 | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -38,12 +240,154 @@ Phase 23 tracks Pandar's Bambu Studio network plugin compatibility evidence. A p
 | `cargo test --manifest-path tools/studio-plugin-smoke/Cargo.toml` plus a valid temporary-file CLI invocation | Validates Phase 23 operator prerequisite shape, plugin filename/OS matching, URL redaction rules, and evidence row formatting before a manual Studio run.           | `passed` | 2026-06-24: local helper coverage only; real Studio rows remain blocked until actual Bambu Studio hosts are available.                                                                                                                                         |
 | Feature-aware axis-control workspace, package, and compiled ABI probes                                       | Preserves the full `8000004100000020` bitmap (bit 63, bits 38/32, and an unnamed bit), checks modern required-feature semantics and exact legacy wrappers, and exercises both exported ABI entrypoints against a deterministic loopback Hub. | `passed` | 2026-07-11: workspace 1,063/1,063; Agent 288; Hub 656; network plugin 84; compiled Studio ABI filter 2/2 using the MSVC fixture. `PANDAR_TEST_POSTGRES_URL` was not configured, so the real PostgreSQL device-feature test was explicitly skipped. This is local automated evidence, not real Studio or printer evidence. |
 | Native firmware protocol, lifecycle, and compiled ABI probes                                                 | Covers printer-main and printer-reported AMS-family modules, live refresh/status, all four native commands, Cloud and LAN ABI entrypoints, two-phase delivery, invalidation/reset, redaction, and no-replay behavior with deterministic fakes and loopback peers. | `passed` | 2026-07-13: prior local implementation evidence before the final documentation delivery gate. `PANDAR_TEST_POSTGRES_URL` was unset, so real PostgreSQL firmware tests were explicitly skipped; SQLite behavior and SQLite/PostgreSQL migration parity were covered. No external package was downloaded, no live printer firmware command was sent, and this is not new real Studio evidence. |
+| Pinned Bambu Studio `02.08.01.55` native ABI contract                                                        | Compiles the exact upstream declarations and Print/AMS/FT layouts against Boost 1.84.0, inspects the built export set, and invokes version, bind, print, AMS, and all FT entrypoints through upstream function-pointer types. | `passed` | 2026-07-20 Windows x64: 109 network declarations, 21 FT declarations, exactly 130 unique exports, all five native modes passed; focused ABI 12/12, checker 15/15, plugin 155/155, module-size 2/2, fmt, strict Clippy, and independent `VERDICT: APPROVE`. Native Linux SSH readback independently passed checker 16/16, the same five modes and 130 exports, plugin 155/155, concrete ASan imports/`libasan.so.8`, and 21-entrypoint × 256-cycle ASan/LSan FT execution with exit 0. This is automated native-caller evidence, not a real Studio run. |
+| Truthful Hub connectivity and printer-presence probes                                                       | Exercises bounded `/readyz`, authenticated rejection, typed `dev_online`, timeout/failure suppression, account/token/cache generations, Cloud/LAN offline and recovery ordering, reentrant listener replacement, and firmware callback final-claim serialization through the compiled Studio ABI. | `passed` | 2026-07-20 Windows x64: focused 57/57, full plugin 180/180, post-Clippy regression 20/20, fmt, strict Clippy, and independent `VERDICT: APPROVE`. Isolated NixOS SSH: strict Clippy, firmware final-claim stress 5/5, and full plugin 180/180 with Rust 1.95.0, GCC 15.2.0, glibc 2.42, and target-scoped `lld`; no GitHub Actions. This is deterministic fake/loopback evidence, not a real Studio or printer run. |
+| Truthful status, camera, and telemetry-presence probes                                                      | Exercises Rust-owned status projection, `fun`/`cfg` masks, authoritative SD/chamber gates, explicit camera unavailability, no-cache/offline behavior, sequence-authoritative full refreshes, current-session liveness, model-presence preservation, and partial versus full Agent/Hub telemetry updates through the compiled ABI and both database adapters. | `passed` | 2026-07-21 Windows x64 final evidence: Agent authority/liveness 5/5, Hub route/presence/partial merge 5/5, plugin status plus pinned compiled Studio consumer 23/23, and final `on`/`flashing`/`off`/unknown lamp regression 1/1; fmt and strict plugin/Agent/Hub Clippy passed. Isolated Linux SSH previously ran the shared repository test against a real disposable PostgreSQL 16 container, Run ID `b48cf2e9-ffc5-4f86-b1e6-69d4c550b670`, then removed the container and `/tmp` source copy. Independent review returned `VERDICT: APPROVE`. No GitHub Actions or live printer action was used. |
+| Typed account, durable revocation, and explicit ABI-disposition probes                                     | Exercises typed account/profile/token JSON, cross-process-serialized persisted-login replacement, confirmed directory durability, pending/direct/completed revocation, Release/Debug ABI consistency, all eight callback registrations and teardown, local-print-with-record failure, and versioned unsupported/no-track outcomes through dynamically loaded compiled C++ callers. | `passed` | The historical final12 Windows clean gate contains the account, logout, callback, and ABI regressions. Logout/ABI review found no issue; persistence review approved with the two Minor limitations recorded above. This is local compiled-probe evidence, not a final13 gate or real Studio run. |
+| Rust-owned Studio session and virtual-local tunnel probes                                                  | Exercises explicit selection/subscriptions, heartbeat initialization, Cloud/local eligibility, account/cache generations, two-phase callback claims, total message classification, canonical Hub identity, and the Hub-backed virtual-local boundary. | `passed` | 2026-07-21 Windows x64: Rust session/classifier 23/23 (`c5614541-3e79-4f87-8ee6-1a2ee222b7ef`), callback/account races 2/2 (`ae5b39fd-05f2-42ed-96e9-d06ab6a9b02f`), final compiled connection/status slice 5/5 (`a26750c1-56cb-49e7-a340-7c7f33cfed84`), and static ABI plus success-path gate 10/10 (`dbf6aa5c-772e-4a97-b653-02c08b7aaf6d`). This is deterministic local evidence, not a real Studio or printer run. |
+| Pinned caller-owned model-task probes | Compiles the exact `StatusPanel.cpp` consumer boundary and `BBLModelTask` layout, exercises ordinary-task projection, tenant/current-session authorization, SQLite/PostgreSQL parity, stable errors, stale-account fencing, callback/account racing, and half-open-request destroy cancellation. | `passed` | 2026-07-22 working tree: RED `56f7e205-52a9-4878-abda-d3902d4f294d` exposed a 3,006 ms half-open no-auth-response destroy; GREEN `aa6f7193-e699-45b8-9c92-8574fcf11d37` passed 1/1, destroy regression `ec498a26-c83a-4156-8319-f4b0f0f1851d` passed 2/2, and compiled model-task `9f40d58b-416f-4c0d-b1ba-0fdb5b0d549a` passed 4/4. Local workspace `d8622da6-4458-407d-8ae6-48ee8d0ac27b` passed 1,800/1,800 with one skip; local PostgreSQL was explicitly skipped because `PANDAR_TEST_POSTGRES_URL` was unset. Authorized Linux SSH workspace `67858341-820f-42d7-9a8d-a408b03e6d3d` passed 1,801/1,801 with one skip, PostgreSQL 16 `f3fef6c4-dcb9-46f1-9812-43040510eca4` passed 7/7, and GCC compiled tasks `6fe5e158-4b98-425f-b6ef-578624937801` passed 17/17. Fmt and strict workspace Clippy passed locally and on Linux; independent review returned `VERDICT: APPROVE`. No Action, real Studio, authentication, printer, or firmware action was used. |
+| Final16 frozen Linux full matrix | Rechecks the complete workspace, native ABI/release package, exact export contract, sanitizer ownership, and SQLite/PostgreSQL behavior from one immutable source input. | `passed` | Source archive SHA-256 `24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039`; release archive SHA-256 `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3`. Nextest passed 1,808/1,808 with one configured skip; fmt, strict Clippy, and module-size passed; ABI tools 22/22, release-smoke tools 25/25, packaged tasks 18/18, 130 exports, ASan 21 entrypoints x 256 cycles, and PostgreSQL 7/7 with zero skipped all passed. |
+| Final16 official-AppImage selected-only model-task gate | Exercises the official AppImage's automatic one-printer selection against the packaged plugin and a fail-closed loopback model-task fixture. | `passed` | AppImage SHA-256 `e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`; plugin SHA-256 `3bcce9085205d6af67dc9671cf58cd6f9fb694d5a587b43d160dc8b6a9b0712f`; companion SHA-256 `88d34358be39ed3d239aeb317df8f34a92d4652877e86a9849c66e32347c1df2`. Exactly one model-task request returned 200 and the four request/response/callback lifecycle events occurred once in order; unexpected, legacy, and unsafe mutating request counts were zero. Manifest, result-summary, and runner SHA-256 values are `c6ba9b6282581119d3baec720e26990ad63efc20eb394b0c71dced89081d5fd9`, `771d0a657e235eff40dffd1637175a4991bbbac7672b231133a20fddc11e3220`, and `7ab2c4cb8816ae4488e40fce71ec69684997739567d3a76f17d2c9e2a324873f`. The synthetic persisted authenticated-shaped session and loopback mock do not prove real authentication, Hub/Agent/database integration, hardware, mutations, or downstream encrypted-log behavior. |
+| Historical frozen final12 clean workspace and database gates | Rechecked the complete workspace, standalone ABI/release tools, frontend, and database behavior from one immutable source input. | `passed` | Source archive SHA-256 `17371828ef7a26cace73cfbed321d094bf38323670e8fa6ccf69d6cbfd4b7eee`; final Windows Nextest run `5e6f3720-4c1b-4a55-ac34-2250c0cefba7` passed 1,776/1,776 after the first complete attempt's `firmware version refresh failed` passed in isolation and again in the required full rerun. PostgreSQL 16.14 passed 55/55 selected cases. These are historical final12 results and do not promote final13. |
+| Historical frozen final12 Windows native package and ABI gates | Rechecked the final12 Windows three-file artifact, exact pinned ABI, and packaged release-smoke. | `passed` | Build, ABI, and release-smoke runs `4fa89d78-503f-4c51-a4e3-fc788a4f7f03`, `6b71c048-8377-4a61-a750-20c5531df864`, and `d808cce0-6e5f-45e7-b4aa-f7b39642d67a` passed. Archive SHA-256 is `b4f6913eef7c1d09da9377fbce36b0ab759add25caac2baa0604c07a595440cb`. This artifact is non-promotable and no real Windows Studio process was launched. |
+| Historical Final13 background-refresh and firmware-fixture regression probes | Separates background stale-while-revalidate from foreground fail-closed print-info; synchronizes the firmware callback before command assertions; stress-checks the compiled firmware ABI. | `passed` | Directed tests `background_refresh_preserves_last_confirmed_cache_while_in_flight` and `foreground_refresh_invalidates_cache_while_in_flight` passed in the final13 Windows and Linux full gates. Linux run `6ec3a215-9430-4ad2-adc7-f692ca156333` passed the exact firmware fixture in 27.315 seconds. The pre-final Linux 21/21 probe remains stress provenance, not the basis of this frozen-candidate result. |
+| Historical Final13 immutable source and pre-freeze plugin gate | Freezes one deterministic source input after focused plugin verification and rejects unsafe paths, duplicates, case collisions, reparse points, and source drift. | `passed` | Pre-freeze plugin run `da32fbc4-f37e-4198-af5e-c35f73512dcb` passed 368/368 with one separately reported skip. `pandar-bambu-final13-019f7b10.tar.gz` is 2,751,227 bytes, contains 1,543 regular files, and has SHA-256 `71080abb1e7392b0440a179b5bca9fd80638de74a614105b8dc11a0f70959c34`; canonical tree, member-list, and freeze-evidence SHA-256 values are `db0b7c3385c29ff0cdee1930a66f554a6845b58907373ef543563b829c245761`, `87a6ad1dfaa404731ed30d7e265303cca64fc4278a478f9c12192c09373eb880`, and `4d132e16f91365795f54c97f608483c34b55726c5f614f5bb8ffaac2ede1fb7f`. Determinism passed and every rejection/diff count was zero. |
+| Historical Final13 frozen Windows clean and PostgreSQL gates | Rechecks the complete workspace, standalone ABI/release tools, frontend, SQLite, and real PostgreSQL behavior from the immutable input. | `passed` | Windows run `90cb6a69-08a5-4421-a661-58e696c374a3` passed 1,778/1,778 in 1,050.084 seconds with one separately reported skip; the firmware probe passed in 28.858 seconds. Fmt, zero-warning strict Clippy, module-size 2/2, both tools 21/21, and frontend 37 files/324 tests plus typecheck/lint/build passed. `npm ci` reported six audit vulnerabilities (three moderate, three high), retained as dependency-audit evidence rather than recategorized as a parity failure. Clean evidence SHA-256 is `c1ac8807a427ae4b7003681e9ad343d668dab1d6aa7c143d14bc699fe58b7b89`. PostgreSQL harness `0c292295-f9ab-459b-89c2-ea74f2c9ff56` ran `24b49c19-cd07-42b5-a5a3-6d220345bd7e` and `1f4b8458-6397-4c0b-8ab3-23d37779c68a`; each passed 55/55 with 831 filtered and zero runtime skip, and normalized evidence SHA-256 is `7e04ae355f7bca3fb409bbc700b5c8f160194c0d2f9ec82df823c859566a2db7`. |
+| Historical Final13 Windows native package and ABI gates | Rechecks the exact three-file MSVC package, pinned ABI, and packaged release-smoke. | `passed` | `pandar-final13-windows-amd64-019f7b10.tar.gz` is 21,285,752 bytes with SHA-256 `6c50e77a0b4008ce46d86de51411117061c5118e18849ca1fb94f4a3f319db64`; evidence SHA-256 is `3dab4bffa359e4c46eec77cbfb278ce3a1497f806a1d80343a1735b5a68f025b`. ABI and smoke each passed 21/21, all five modes passed, the contract is 109+21, `dumpbin` reported 271 total exports, and companion inspection found one Pandar sentinel and zero `Bambu_*` exports. Six earlier manifest-harness calibration attempts are retained as infrastructure-only history and made no product claim. No Studio, authentication, hardware, or Action was used. |
+| Historical Final13 Ubuntu-native and sanitizer gates | Rechecks the full workspace, exact native package/ABI/release-smoke, runtime baseline, and FT ownership under ASan/LSan. | `passed` | Attempt 2 run `6ec3a215-9430-4ad2-adc7-f692ca156333` passed 1,779/1,779 with one skip. Package SHA-256 is `4166e6012e6c1bf7cdf056ba3bfb28f0fbc9d216c31e5ed2e8620adb8b5fcccc`; evidence-bundle SHA-256 is `aa7478fe0f74debcc5f3d1f5ec53a2222d726beafe5224935aa3382c24f6097a`. All five ABI modes and 21 FT entrypoints x 256 ASan/LSan cycles passed. Attempt 1 run `c8a134c4-e775-4f37-b6ed-74ccb1b79123` is preserved as non-promotable harness history. |
+| Historical Final13 exact-AppImage gate | Exercises the exact official AppImage with the passed Linux package and proves same-process development no-auth recovery before promoting load behavior. | `passed` | Attempt 8 used official AppImage SHA-256 `e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`. Both libraries mapped 4/4 in unchanged Studio PID `137`; two offline failures were followed by one success/commit and singular credential state. Redacted 23-member evidence SHA-256 is `a4453c8dce3829cc1a84a372a772b516812fe1564b310e61db9e9009a11cf9d2`. Authenticated Studio, hardware, and live-firmware rows remain `untested`. |
+
+The deterministic redacted final16 AppImage bundle
+`pandar-final16-real-studio-evidence-019f7b10.tar.gz` is 245,225 bytes with 26 tar entries (23 files
+and three directories) and SHA-256
+`f07c369ad9e0354ef40142294d9385e9c454fd534a04badce4be000f49c06eca`. A second independent
+generation produced the same hash. Its sidecar has SHA-256
+`30c6e5d43b74f9770d19638b86cefddd96d4d861c16155c74d30b488adf7f1b6`. The bundle contains only
+manifest-covered safe evidence plus outer success/provenance; it excludes the runner and mock
+implementation plus synthetic token contents.
+
+## Connection And Printer Presence Evidence Boundary
+
+A configured Hub URL now means only that a connection can be attempted. Server-connected state
+requires a fresh bounded readiness observation; an authenticated plugin-route `401` or `403` proves
+transport reachability but produces Studio authentication-rejected status instead of pretending that
+the session is healthy. The no-auth startup profile has the narrowly bounded pre-delivery retry above;
+other failures do not become recoverable merely because the configured URL is unchanged.
+
+Printer-connected and `push_status` delivery require a fresh typed printer observation with both
+online signals true. A periodic background refresh uses stale-while-revalidate only while its request
+is in flight, so it does not temporarily erase the last confirmed cache and suppress an unrelated
+firmware callback. A failed background refresh still invalidates freshness. Foreground Studio
+print-info invalidates immediately and remains fail closed. A timeout, malformed response, or server
+error may retain diagnostic cache data, but it cannot replay that cache as current state. Connection,
+printer, local-tunnel, status, and
+firmware deliveries recheck their Rust-owned generations at final claim. Account login/logout and
+HTTP-error callbacks instead carry immutable transition outcomes queued in commit order and drained
+FIFO after account/refresh/queue locks are released; callback code may observe a later complete
+account, but never a partial one. Lost delivery remains request-fenced until it completes, and a stale
+account epoch cannot finish a newer transition. External callbacks share the recursive callback gate,
+including reentrant listener replacement and teardown.
+
+The probes use deterministic loopback Hubs and compiled native callers. They do not prove a real
+Bambu Studio UI transition, a live printer disconnect/reconnect, or compatibility with any Studio
+patch other than the pinned source contract. Those remain real-host Task 8 evidence gates.
+
+### Rust-owned Studio session and virtual local tunnel
+
+Cloud mode and Studio's LAN-shaped mode are two ABI tunnels to the same Hub-backed virtual printer.
+`connect_printer` does not open a printer socket and does not use its host, username, password, or TLS
+arguments; those values are ignored and scrubbed. The caller-supplied `dev_id` is the only target
+authority and must resolve to a freshly eligible authorized Hub printer. The plugin then records a
+generation-scoped local target,
+and emits Studio's local-connect callback. Later local messages still go through the Hub; MQTT, FTPS,
+and machine credentials remain exclusively in `pandar-agent`. Status therefore reports
+`print.device.connection_type` as `"cloud"` on both Studio tunnels.
+
+Rust `ConnectionSession` owns the selected printer, explicit Cloud subscriptions and initialization,
+heartbeat plan, virtual-local generation, listeners, account/cache epochs, and delivery tickets. A
+printer is a Cloud target when it is selected or explicitly subscribed. Heartbeat operates on the
+deduplicated union of those two ownership sources, so Studio's automatic single-printer selection is
+eligible even when Studio never calls the explicit add-subscription ABI.
+
+Changing selection or deleting a subscription removes only that ownership source. The target remains
+eligible while the other source still owns it. Only when both selection and explicit subscription are
+absent may the session retire that target's Cloud initialization, Cloud notifications, and Cloud
+delivery tickets. Cloud retirement must not advance the virtual-local generation, clear a local
+target, or complete/cancel any Local delivery ticket. Explicit set/add/delete calls remain local
+atomic operations, including during an account transition.
+
+Heartbeat and status callbacks use a two-phase claim around the callback, so success is returned only
+when the current listener actually accepted an eligible delivery. Missing listeners, missing Cloud-
+target ownership, stale refreshes, account/cache changes during callback reentry, and superseded final
+claims return `BAMBU_NETWORK_ERR_CONNECT_FAILED` (`-2`) instead of reporting false success.
+
+Hub URLs use one trailing-slash-insensitive identity. Persisted login and runtime configuration are
+stored and compared in canonical form, so changing `http://hub/` to `http://hub` retains the matching
+token and does not manufacture an account transition.
+
+Rust classifies each generic Studio message exactly once with precedence firmware -> status ->
+semantic operation -> unsupported. A firmware-shaped envelope is never reinterpreted as status or an
+operation after a firmware parse error. Status returns success only when the current eligible callback
+actually receives the payload; missing callbacks, targets that are neither selected nor explicitly
+subscribed, failed refresh, or a superseded delivery claim return
+`BAMBU_NETWORK_ERR_CONNECT_FAILED` (`-2`).
+
+## Status, Camera, And Telemetry Presence Boundary
+
+Rust typed serde code owns the complete `push_status` envelope and local-connect payload. It masks
+only Studio operations the Pandar bridge cannot execute, preserving handled axis bits 32/38 and
+unrelated future `fun` bits. It clears unsupported `cfg` camera bits, omits synthetic Wi-Fi strength,
+does not advertise `fun2` or `device.airduct`, and derives `sdcard` only from authoritative `aux`
+state 1. Chamber controls are advertised only when both current and target temperatures are present;
+the target is emitted in both legacy `ctt` and packed V2 `device.ctc.info.temp` form. A fresh online
+full status alone emits `support_mqtt_alive:true`.
+
+The Studio camera path is intentionally unavailable. Status reports no local or remote live-view
+protocol and an empty URL; both camera ABI functions return `BAMBU_NETWORK_ERR_INVALID_RESULT`
+(`-19`) and invoke a supplied callback exactly once with an empty string. Printer host and access-code
+credentials remain Agent-local and are never converted into a direct `bambu:///rtsps` URL. The Pandar
+Web monitor remains a separate Hub-mediated product path.
+
+Agent snapshots carry `telemetry_authoritative` independently from connection authority. Unsolicited
+MQTT deltas update only fields explicitly present, including each temperature and nonempty nozzle
+list. Only a synchronous requested full refresh may clear a missing stale field. SQLite and
+PostgreSQL use the same write mask; the real PostgreSQL verification ran in a loopback-only disposable
+container on the user-authorized SSH host. These automated probes do not establish a real Studio UI
+or live-printer compatibility claim.
+
+Studio task history is no longer an immediate synthetic empty page. `get_user_tasks` calls the
+tenant-authorized Hub plugin jobs route with device/status filters, offset/limit pagination, stable
+Studio submission ids, and deterministic status mapping. Plate and subtask lookup return stored typed
+metadata; unknown or unavailable detail is an explicit non-success, and `get_slice_info` remains
+explicitly unavailable until a pinned consumer and real source exist. Final13 PostgreSQL 16.14
+verification passed all 55 selected PostgreSQL cases twice from the same frozen source.
+
+The distinct `bambu_network_get_subtask(BBLModelTask*, callback)` overload is supported in final16
+for ordinary Pandar submissions. Its model-task read path is Studio -> plugin -> Hub and does not
+contact Agent or printer. The valid ABI return `0` means asynchronous admission. On success,
+the persistent worker writes the same caller-owned pointer's eight fields and invokes the callback
+once; Hub 409/404, malformed 2xx, and stale account/configuration leave the object untouched and
+invoke no callback. Cancellation or destroy observed before the response/callback gate has the same
+outcome. Destroy waits for a callback that already won the gate and guarantees no callback after
+destroy returns. Cancellation interrupts pending initial/retry GET, no-auth POST through its response
+body, pending/direct revocation DELETE, and same-key follower waits. A successful no-auth response
+makes persistence and rotation/revocation bookkeeping drain to consistency. Server delivery before
+that response is unknowable; the same in-process create is not automatically retried, and cross-process
+locking/fsync has no hard real-time bound. MakerWorld markers require rating/model metadata Pandar
+does not own and return `409 studio_model_task_metadata_unavailable`; `instance_id=0` is the
+no-rating sentinel, not a synthetic submission id. The final16 official-AppImage harness observed one
+request/200 and the four ordered request/response/callback lifecycle events for an automatically
+selected-only fixture. Because Studio's own logs are encrypted, no downstream post-callback Studio
+state is claimed.
 
 ## Feature-Aware Axis-Control Evidence Boundary
 
 The local probes cover typed `BambuDeviceFeatures`, complete unsigned `print.fun` passthrough including zero and unknown bits, exact-session capability-3 advertisement, fail-closed required-feature dispatch, bit-32 `back_to_center`, strict bit-38 `xyz_ctrl`, and legacy `G28`/ordered-axis/seven-line parsing. They use deterministic fake or loopback transports plus a compiled MSVC ABI fixture.
 
-No real printer received a Home or XYZ movement command during this verification, and no new Bambu Studio host run was performed. The Real Studio Evidence table above is therefore intentionally unchanged; hardware and real-Studio compatibility remain unverified until separately authorized and recorded with the required environment evidence.
+No real printer received a Home or XYZ movement command during this verification, and the final13
+exact-AppImage run did not invoke axis-control UI. The Real Studio Evidence table therefore promotes
+only Linux module load; axis-control UI and hardware behavior remain untested until separately
+authorized and recorded with the required environment evidence.
 
 ## Typed `gcode_line` Passthrough Evidence Boundary
 
@@ -53,7 +397,7 @@ Only the authenticated Studio plugin route can submit this operation; the normal
 
 Hub marks a queued command `sent` before writing it to the gRPC channel. A still-queued command may be handled by a capable replacement session, but Hub never automatically requeues or replays a `sent` command. Roll out in the order Hub → Agent → network plugin. To roll back, first stop the plugin from creating new typed G-code operations, then drain or explicitly fail all queued and sent `GcodeLine` commands to terminal states before rolling back Agent or Hub. No database migration is involved.
 
-Evidence is limited to deterministic local parser and HTTP tests, compiled Cloud and LAN ABI calls against a loopback Hub, and deterministic Hub/Agent conversion and command-lifecycle tests. `PANDAR_TEST_POSTGRES_URL` was unset, so the real PostgreSQL round trip was explicitly skipped. No new real Studio run occurred, and no live printer received movement, Homing, or passthrough G-code during this verification.
+Evidence is limited to deterministic local parser and HTTP tests, compiled Cloud and LAN ABI calls against a loopback Hub, and deterministic Hub/Agent conversion and command-lifecycle tests. Final13 PostgreSQL 16.14 passed the 55-case filter twice with zero runtime skip markers. No live printer received movement, Homing, or passthrough G-code during this verification.
 
 ## Native Firmware Update Evidence Boundary
 
@@ -65,20 +409,75 @@ Firmware state is authoritative only for the exact current Agent session, report
 
 Mutations use prepare then execute at both the plugin-to-Hub and Hub-to-Agent boundaries. Prepared tokens and Agent reservations are bounded, one-use, and consumed at most once; an execute with an ambiguous publish/delivery result is never automatically retried or replayed. Signed start URLs exist only on the transient execute path and are redacted from durable command data, audit data, errors, and loggable results. Live Agent sessions, prepared URLs, and result waiters are process-local, so this firmware path requires one active Hub process; a non-owning Hub cannot forward or reconstruct the work.
 
-Verification used deterministic local parsers, repositories, fake MQTT/HTTP peers, lifecycle tests, and compiled Cloud/LAN ABI fixtures. `PANDAR_TEST_POSTGRES_URL` was unset, so real PostgreSQL firmware tests were skipped while SQLite behavior and equivalent SQLite/PostgreSQL migrations were covered. No external firmware package was downloaded, no live printer firmware command was issued, and no new real Bambu Studio compatibility claim is added to the table above.
+Verification used deterministic local parsers, repositories, fake MQTT/HTTP peers, lifecycle tests,
+compiled Cloud/LAN ABI fixtures, two final13 PostgreSQL 16.14 55/55 runs, the passed final13 Linux
+native/ASan gate, and exact-AppImage module load. The AppImage run did not invoke firmware UI or a
+firmware ABI operation. No external firmware package was downloaded, no live printer firmware command
+was issued, and no real Studio firmware or hardware compatibility claim is added above.
 
 Roll out Agent first, then Hub schema/protobuf/plugin endpoints with both SQLite and PostgreSQL migrations, then the network plugin. Keep plugin firmware controls hidden until the exact current Agent session advertises firmware capability. For rollback, first stop and roll back the network plugin so it cannot start new firmware mutations. Before rolling back Hub or Agent, let the owning Hub's process-local URL/result waiters reach a terminal acknowledgement or explicitly fail them, allow outstanding reservations to expire, and never transfer or replay the work; then roll back Hub and finally Agent, leaving the additive nullable columns in place. Web/Android remote OTA and firmware package staging or hosting remain a future C scope and are not implemented.
 
+## BambuSource And Current Package Boundary
+
+Pinned Studio creates its network agent only after loading the platform BambuSource library. Pandar's
+`pandar-bambu-source` companion is therefore a sentinel-only, non-media load-gate artifact: it exports
+`pandar_bambu_source_sentinel`, exports no `Bambu_*` entrypoint, and leaves Studio's
+`Fake_Bambu_Create` fallback in control. It is not camera, media, discovery, or printer transport
+support.
+
+The current final16 Linux candidate archive has exactly three top-level files: the Pandar CLI, the
+network plugin, and the companion. The network plugin exposes the pinned 109 network plus 21 File
+Transfer symbols (130 unique exports); the companion passed separate sentinel and absence-of-
+`Bambu_*` inspection. Final16 native release-smoke, sanitizer, database, and controlled official-
+AppImage selected-only model-task gates passed on `linux-amd64`. No final16 Windows or macOS package
+has been validated. Final14 and earlier candidates are historical evidence; final15 is explicitly
+non-promotable pre-correction evidence. Historical two-file/129-export artifacts are preserved in
+`release-artifacts.md` only as historical evidence and are not target candidates.
+
 ## Unsupported ABI Surfaces
 
-| Surface                                     | Status        | Reason                                                                                                           |
-| ------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Direct LAN printer connect/message APIs     | `unsupported` | Pandar keeps printer sockets in `pandar-agent`; the plugin talks only to `pandar-hub`.                           |
+Rust typed serde code owns login, profile, token, runtime URL, and persisted-login messages. Every
+persisted account mutation uses atomic replacement under `.pandar-plugin-account.lock`; only
+`MutationDurability::Confirmed` may activate login or stage pending/direct revocation intent.
+`ChangedUnconfirmed` fails closed after a published but not directory-durability-proven namespace
+change. Failures retain their full cause chain in diagnostic logs while returning only a stable
+redacted FFI error.
+
+Requested logout confirms pending revocation first or a direct intent before DELETE. Passive loss
+does not revoke, a requested race may upgrade passive finalization, and retained login is restored only
+before DELETE. Success and idempotent `401`/`410` record a completed `{hub_url, token_sha256}`
+tombstone before cleanup, blocking stale loads and writes. Direct-success pending cleanup is best
+effort; the unbounded completed ledger may be cleared only after all Studio processes using the data
+directory stop and all older Hub plugin sessions expire or are invalidated. Rust also owns the
+`401`/`410` refresh-or-retry decision. The C++ shim only moves borrowed result bytes into Studio-owned
+STL values and invokes copied callbacks after releasing business locks.
+
+All eight formerly discarded callback setters retain their callback until replacement or agent destruction.
+Supported login/logout and HTTP-error outcomes invoke their corresponding callbacks; registered-only SSDP,
+country, subscribe-failure, user-message, main-queue, and server-error callbacks are not invoked without a real
+owned event.
+
+Unsupported responses below use disposition schema version 1 and return `-19` instead of reporting success.
+Tracking is the sole benign success: it implements an explicit never-track policy and neither sends nor persists
+an event. Consent reporting is unsupported and does not claim persistence.
+
+| Surface | Status | Reason |
+| ------- | ------ | ------ |
+| Hub-backed virtual/local connect and message ABI | `supported with constraints` | `dev_id` is the only authority. IP/host, username, password, and SSL inputs are ignored and scrubbed; status and messages use Hub/Agent, and the plugin opens no printer socket. |
+| Direct LAN discovery, bind/unbind, certificate handling, or printer sockets | `unsupported` | LAN ownership remains in `pandar-agent`; ABI entrypoints remain safe but do not claim the direct behavior. |
+| `start_local_print_with_record` | `unsupported` | It is distinct from Hub-backed print submission, returns `-19`, and emits one `PrintingStageERROR/-19` callback; it never aliases `start_print`. |
+| `bambu_network_get_subtask(BBLModelTask*, callback)` for ordinary Pandar submissions | `supported with constraints` | Final16 asynchronously reads tenant-authorized Hub metadata, fills the same caller-owned eight-field object, and calls back once on success. The official AppImage reached request, response, callback entry, and callback return once in order for the automatic selected-only fixture; real authentication/backend integration and downstream encrypted-log behavior remain untested. |
+| MakerWorld model-task enrichment and rating instance | `unsupported` | Pandar has no real MakerWorld rating/model instance. Any MakerWorld marker returns Hub 409 and no callback; `instance_id=0` is the explicit no-rating sentinel. |
+| Cloud settings/presets, MakerWorld/HMS, user messages/task reports, extra headers, certificate and init-log APIs | `unsupported` | Pandar has no owned implementation for these Studio cloud surfaces, so each returns its versioned disposition. |
+| `start_subscribe` / `stop_subscribe` | `unsupported` | These lifecycle calls return `-19` and do not mutate subscription state; the separately implemented add/delete subscription APIs remain distinct. |
+| Consent reporting | `unsupported` | No consent state is stored or reported. |
+| Tracking events | `benign no-op` | The explicit version-1 `never_track` policy returns success without network or persistence side effects. |
 | `ft_*` direct file-transfer tunnel/job APIs | `unsupported` | Pandar uploads through hub-backed print submission and does not open direct file-transfer sockets in the plugin. |
 
 ## Evidence Requirements
 
-- Record the exact Studio version, OS, architecture, plugin artifact name, Pandar commit, and test date.
+- Record the exact Studio version, OS, architecture, all artifact names/hashes, current `HEAD`, exact
+  dirty source snapshot SHA-256, and test date. Name a Pandar commit only after it exists.
 - Redact bearer tokens, plugin tickets, Bambu access codes, local artifact paths, and filesystem paths.
 - Attach or summarize logs/screenshots only after redaction.
 - Keep failed and blocked rows; they are compatibility evidence.

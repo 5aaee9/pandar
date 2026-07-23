@@ -118,8 +118,8 @@ impl ProjectFilePayload {
         };
         for entry in entries {
             match entry.nozzle_id {
-                0 => entry.nozzle_id = 1,
-                1 => entry.nozzle_id = 0,
+                Some(0) => entry.nozzle_id = Some(1),
+                Some(1) => entry.nozzle_id = Some(0),
                 _ => {}
             }
         }
@@ -130,27 +130,27 @@ impl ProjectFilePayload {
 mod tests {
     use serde_json::Value;
 
-    use crate::machine::mqtt::commands::payload::{
-        ProjectFileAmsMappingInfo, ProjectFilePayloadPrint,
+    use crate::machine::mqtt::commands::{
+        ProjectFileAmsMappingInfo, payload::ProjectFilePayloadPrint,
     };
 
     use super::{ProjectFilePayload, h2d_family, json_payload};
 
-    fn test_payload(nozzle_ids: impl IntoIterator<Item = i64>) -> ProjectFilePayload {
+    fn test_payload(nozzle_ids: impl IntoIterator<Item = i32>) -> ProjectFilePayload {
         ProjectFilePayload {
             print: ProjectFilePayloadPrint {
                 command: "project_file",
                 sequence_id: "20000".to_owned(),
                 param: "Metadata/plate_1.gcode".to_owned(),
                 project_id: "0".to_owned(),
-                profile_id: "0",
+                profile_id: "0".to_owned(),
                 task_id: "0".to_owned(),
                 subtask_id: "0".to_owned(),
                 subtask_name: "job".to_owned(),
                 url: "ftp://job.3mf".to_owned(),
                 file: "job.3mf".to_owned(),
                 md5: String::new(),
-                bed_type: "auto",
+                bed_type: "auto".to_owned(),
                 bed_leveling: false,
                 flow_cali: false,
                 vibration_cali: false,
@@ -159,19 +159,25 @@ mod tests {
                 use_ams: true,
                 ams_mapping: Vec::new(),
                 ams_mapping2: Vec::new(),
+                nozzle_mapping: None,
                 ams_mapping_info: Some(
                     nozzle_ids
                         .into_iter()
                         .map(|nozzle_id| ProjectFileAmsMappingInfo {
-                            nozzle_id,
-                            extra: Default::default(),
+                            ams: 0,
+                            target_color: String::new(),
+                            filament_id: String::new(),
+                            filament_type: String::new(),
+                            nozzle_id: Some(nozzle_id),
+                            source_color: None,
                         })
                         .collect(),
                 ),
                 auto_bed_leveling: 0,
                 nozzle_offset_cali: 0,
-                cfg: "0",
+                cfg: "0".to_owned(),
                 extrude_cali_flag: 0,
+                extrude_cali_manual_mode: Some(-1),
             },
         }
     }

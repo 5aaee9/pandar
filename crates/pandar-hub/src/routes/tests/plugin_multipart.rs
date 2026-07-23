@@ -168,11 +168,13 @@ async fn plugin_print_uses_stable_artifact_validation_errors() {
         &token,
     )
     .await;
-    assert_eq!(status, StatusCode::CREATED);
-    let response = decode::<PluginPrintCreatedResponse>(response);
-    assert!(!response.task_id.is_empty());
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        decode::<ErrorResponse>(response).error,
+        "invalid_studio_print_metadata"
+    );
 
-    for plate_id in [0, -1, 4294967296_i64] {
+    for plate_id in [0, -1, 2147483648_i64, 4294967296_i64] {
         let (status, response) = multipart_request_as(
             app.clone(),
             Method::POST,
@@ -196,11 +198,6 @@ async fn plugin_print_uses_stable_artifact_validation_errors() {
 #[derive(Debug, serde::Deserialize)]
 struct ErrorResponse {
     error: String,
-}
-
-#[derive(Debug, serde::Deserialize)]
-struct PluginPrintCreatedResponse {
-    task_id: String,
 }
 
 fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {

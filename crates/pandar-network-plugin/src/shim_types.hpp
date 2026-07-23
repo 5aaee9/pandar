@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -18,6 +19,8 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+#include "shim_model_task_types.hpp"
 
 #if defined(_WIN32)
 #define PANDAR_ABI extern "C" __declspec(dllexport)
@@ -47,6 +50,7 @@ constexpr int BAMBU_NETWORK_ERR_CREATE_FILAMENT_FAILED = -28;
 constexpr int BAMBU_NETWORK_ERR_UPDATE_FILAMENT_FAILED = -29;
 constexpr int BAMBU_NETWORK_ERR_DELETE_FILAMENT_FAILED = -30;
 constexpr int BAMBU_NETWORK_ERR_GET_FILAMENT_CONFIG_FAILED = -31;
+constexpr int BAMBU_NETWORK_ERR_AMS_SYNC_FAILED = -32;
 constexpr int BAMBU_NETWORK_ERR_BIND_FAILED = -5;
 constexpr int BAMBU_NETWORK_ERR_UNBIND_FAILED = -6;
 constexpr int BAMBU_NETWORK_ERR_PUT_SETTING_FAILED = -8;
@@ -129,6 +133,7 @@ struct PrintParams {
     bool task_ext_change_assist = false;
     bool try_emmc_print = false;
     std::string svc_context;
+    std::string slicer_uid;
 };
 
 struct TaskQueryParams {
@@ -150,6 +155,32 @@ struct FilamentQueryParams {
 struct FilamentDeleteParams {
     std::vector<std::string> ids;
     std::vector<std::string> rfids;
+};
+
+struct AmsSyncItem {
+    std::string RFID;
+    std::string filamentVendor;
+    std::string filamentType;
+    std::string filamentName;
+    std::string filamentId;
+    bool isSupport = false;
+    std::string color;
+    int colorType = 0;
+    std::vector<std::string> colors;
+    int netWeight = 0;
+    int totalNetWeight = 0;
+    std::string trayIdName;
+    std::string note;
+    std::string amsSn;
+    std::string slotId;
+    int amsId = 0;
+    int amsType = 0;
+    bool createNew = false;
+};
+
+struct AmsSyncParams {
+    std::string devId;
+    std::vector<AmsSyncItem> items;
 };
 
 struct PublishParams {
@@ -177,6 +208,8 @@ struct PluginHttpResult {
 struct PluginFirmwareCallbackResult {
     int32_t status;
     uint64_t origin_tick;
+    uint64_t local_generation;
+    uint64_t cache_generation;
     uint8_t* dev_id_ptr;
     std::size_t dev_id_len;
     std::size_t dev_id_cap;
@@ -186,20 +219,16 @@ struct PluginFirmwareCallbackResult {
     int32_t tunnel;
 };
 
+const char* pandar_plugin_network_agent_version();
+PluginHttpResult pandar_plugin_sync_ams_filaments(bool);
+PluginHttpResult pandar_plugin_camera_access_result(bool);
+PluginHttpResult pandar_plugin_local_connect_json(
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t
+);
+
 PluginHttpResult pandar_plugin_exchange_ticket(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
-PluginHttpResult pandar_plugin_create_no_auth_session(const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_get_printers(const uint8_t*, std::size_t, const uint8_t*, std::size_t);
-void* pandar_plugin_printer_refresh_session_create(
-    const uint8_t*, std::size_t,
-    const uint8_t*, std::size_t
-);
-int32_t pandar_plugin_printer_refresh_session_update(
-    void*,
-    const uint8_t*, std::size_t,
-    const uint8_t*, std::size_t
-);
-PluginHttpResult pandar_plugin_printer_refresh(void*, void*, void (*)(void*));
-void pandar_plugin_printer_refresh_session_destroy(void*);
 void* pandar_plugin_firmware_session_create(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t,
@@ -217,13 +246,15 @@ int32_t pandar_plugin_firmware_observe_printers(
 PluginHttpResult pandar_plugin_firmware_catalog(
     void*,
     const uint8_t*, std::size_t,
-    const uint8_t*, std::size_t
+    const uint8_t*, std::size_t,
+    uint64_t
 );
 PluginHttpResult pandar_plugin_firmware_refresh_version(
     void*,
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t,
-    const uint8_t*, std::size_t
+    const uint8_t*, std::size_t,
+    uint64_t
 );
 PluginHttpResult pandar_plugin_firmware_send(
     void*,
@@ -231,9 +262,12 @@ PluginHttpResult pandar_plugin_firmware_send(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t,
     int32_t,
-    uint64_t*
+    uint64_t*,
+    uint64_t
 );
-int32_t pandar_plugin_firmware_return_handoff(void*, uint64_t, uint64_t);
+int32_t pandar_plugin_firmware_return_handoff(
+    void*, uint64_t, uint64_t, uint64_t, uint64_t
+);
 PluginHttpResult pandar_plugin_firmware_next_status_override(
     void*, const uint8_t*, std::size_t
 );
@@ -291,19 +325,16 @@ struct Agent {
 
     std::string log_dir;
     std::string config_dir;
-    std::string cert_folder;
-    std::string cert_filename;
     std::string country_code;
-    std::string selected_machine;
-    std::string active_local_device;
     std::string token;
     std::string user_id;
     std::string user_name;
     std::string avatar;
     std::string profile_json;
+    std::int32_t account_session_kind = 0;
     std::string hub_url = "http://127.0.0.1:8080";
     std::string frontend_url = "http://localhost:3000";
-    std::string last_error;
+    std::uint64_t account_identity = 0;
     void* printer_refresh_session = nullptr;
     void* firmware_session = nullptr;
     std::string firmware_hub_url;
@@ -312,20 +343,29 @@ struct Agent {
     std::uint64_t firmware_observation_sequence = 0;
     mutable std::mutex trace_mutex;
     mutable std::mutex status_mutex;
-    mutable std::timed_mutex callback_mutex;
+    mutable std::mutex printer_refresh_request_mutex;
+    mutable std::recursive_mutex printer_refresh_mutex;
+    mutable std::recursive_mutex account_mutex;
+    mutable std::mutex no_auth_refresh_mutex;
+    std::atomic<std::uint64_t> account_config_epoch = 0;
+    mutable std::mutex account_callback_queue_mutex;
+    std::deque<std::function<void()>> account_callback_queue;
+    bool account_callback_draining = false;
+    mutable std::recursive_timed_mutex callback_mutex;
     mutable std::recursive_mutex firmware_transition_mutex;
-    std::map<std::string, std::pair<std::string, std::string>> printer_connections;
-    std::map<std::string, std::string> pandar_printer_ids;
-    std::map<std::string, std::string> printer_models;
-    std::map<std::string, std::string> printer_telemetry;
-    std::set<std::string> cloud_subscribed_devices;
-    std::set<std::string> cloud_initialized_devices;
-    std::map<std::string, std::chrono::steady_clock::time_point> cloud_connection_notifications;
     BBL::OnPrinterConnectedFn on_printer_connected;
     BBL::OnServerConnectedFn on_server_connected;
     BBL::OnLocalConnectedFn on_local_connect;
     BBL::OnMessageFn on_message;
     BBL::OnMessageFn on_local_message;
+    BBL::OnMsgArrivedFn on_ssdp_message;
+    BBL::OnUserLoginFn on_user_login;
+    BBL::OnHttpErrorFn on_http_error;
+    BBL::GetCountryCodeFn get_country_code;
+    BBL::GetSubscribeFailureFn on_subscribe_failure;
+    BBL::OnMessageFn on_user_message;
+    BBL::QueueOnMainFn queue_on_main;
+    BBL::OnServerErrFn on_server_error;
     std::thread status_thread;
     std::atomic<bool> status_thread_stop = false;
     std::mutex status_thread_mutex;
@@ -333,11 +373,18 @@ struct Agent {
     std::thread firmware_thread;
     std::atomic<bool> firmware_thread_stop = false;
     std::atomic<bool> firmware_transition_pending = false;
-    std::atomic<std::uint64_t> printer_status_epoch = 0;
-    bool connected = false;
+    std::thread model_task_thread;
+    std::mutex model_task_mutex;
+    std::condition_variable model_task_wake;
+    bool model_task_stop = false;
+    bool model_task_busy = false;
+    std::function<void()> model_task_job;
     bool hub_configured = false;
     bool frontend_configured = false;
 };
+
+void start_model_task_worker(Agent*);
+void stop_model_task_worker(Agent*);
 
 struct FirmwareObservationTicket {
     std::uint64_t generation = 0;

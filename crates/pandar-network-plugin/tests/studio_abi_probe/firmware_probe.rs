@@ -10,7 +10,7 @@ use super::{
     firmware_mock::spawn_firmware_mock_hub,
 };
 
-const TIMEOUT: Duration = Duration::from_secs(35);
+const TIMEOUT: Duration = Duration::from_secs(45);
 
 pub(super) struct FirmwareProbeOutput {
     pub(super) stdout: String,
@@ -34,6 +34,7 @@ pub(super) fn run_firmware_probe() -> FirmwareProbeOutput {
     let mut child = Command::new(&compiled.executable)
         .arg(library)
         .arg(config_directory)
+        .current_dir(run_directory.path())
         .env("PANDAR_PLUGIN_HUB_URL", &hub.url)
         .env("PANDAR_PLUGIN_FRONTEND_URL", "http://127.0.0.1:3000/pandar")
         .stdout(Stdio::piped())

@@ -13,6 +13,7 @@ use crate::{
 };
 
 mod support;
+mod validation;
 
 use support::*;
 
@@ -278,16 +279,42 @@ fn print_command(command_id: String, serial_number: &str, storage_path: &str) ->
             artifact_download_path: "/api/v1/agents/agent-1/artifacts/artifact-1".to_string(),
             size_bytes: 3,
             plate_id: 1,
-            use_ams: true,
-            bed_leveling: false,
-            flow_cali: false,
-            auto_bed_leveling: Some(0),
-            auto_flow_cali: Some(0),
-            auto_offset_cali: Some(0),
-            timelapse: true,
-            ams_mapping_json: String::new(),
-            ams_mapping2_json: String::new(),
-            ams_mapping_info_json: String::new(),
+            studio_submission_id: 38_191,
+            options: Some(crate::protocol::agent::v1::PrintProjectFileOptions {
+                use_ams: true,
+                bed_leveling: false,
+                flow_cali: false,
+                vibration_cali: false,
+                layer_inspect: false,
+                record_timelapse: true,
+                timelapse_use_internal: false,
+                bed_type: "textured_plate".to_owned(),
+                auto_bed_leveling: Some(0),
+                auto_flow_cali: Some(0),
+                auto_offset_cali: Some(0),
+                extruder_cali_manual_mode: Some(-1),
+                try_emmc_print: false,
+                nozzle_mapping: Vec::new(),
+                ams_mapping: Vec::new(),
+                ams_mapping2: Vec::new(),
+                ams_mapping_info: Vec::new(),
+                nozzles_info: Vec::new(),
+            }),
+            task_metadata: Some(crate::protocol::agent::v1::StudioTaskMetadata {
+                task_name: "plate".to_owned(),
+                project_name: String::new(),
+                preset_name: String::new(),
+                connection_type: "cloud".to_owned(),
+                comments: String::new(),
+                origin_profile_id: 0,
+                stl_design_id: 0,
+                origin_model_id: String::new(),
+                print_type: "from_normal".to_owned(),
+                submitted_device_name: String::new(),
+                svc_context: String::new(),
+                slicer_uid: String::new(),
+            }),
+            submission_source: crate::protocol::agent::v1::PrintSubmissionSource::Studio as i32,
         })),
     }
 }
@@ -321,7 +348,7 @@ fn assert_print_success(event: AgentEvent, command_id: &str) {
                     md5: "900150983CD24FB0D6963F7D28E17F72".to_owned(),
                     mqtt: TestPrintProjectMqttResult {
                         topic: "device/SERIAL1/request".to_owned(),
-                        qos: 0,
+                        qos: 1,
                         payload: TestPrintProjectMqttPayload {
                             print: TestPrintProjectPrintPayload {
                                 command: "project_file".to_owned(),

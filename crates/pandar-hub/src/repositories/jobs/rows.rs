@@ -60,6 +60,9 @@ pub fn job_from_model_with_usage(
         agent_id: AgentId::parse(&model.agent_id).map_err(anyhow::Error::from)?,
         artifact_id: model.artifact_id,
         command_id: CommandId::parse(&model.command_id).map_err(anyhow::Error::from)?,
+        studio_submission_id: i64::from(model.studio_submission_id),
+        plate_index: i32_to_u32(model.plate_index)?,
+        studio_metadata_json: model.studio_metadata_json,
         status: model.status,
         error: model.error,
         print_status: model.print_status,
@@ -88,6 +91,11 @@ pub fn job_from_model_with_usage(
         }
         pandar_core::CoreError::InvalidPrintStatus(_) => {
             RepositoryError::InvalidPersistedPrintStatus(print_status_for_error)
+        }
+        err @ pandar_core::CoreError::InvalidStudioPrintMetadata(_) => {
+            RepositoryError::InvalidPersistedStudioMetadata(
+                anyhow::Error::from(err).context("failed to rehydrate Studio task metadata"),
+            )
         }
         err => {
             RepositoryError::Database(anyhow::Error::from(err).context("failed to rehydrate job"))
@@ -122,7 +130,8 @@ pub(crate) fn usage_from_model(
 pub(crate) fn artifact_from_model(model: job_artifacts::Model) -> RepositoryResult<JobArtifact> {
     if let Some(metadata_json) = &model.metadata_json {
         serde_json::from_str::<ArtifactMetadata>(metadata_json)
-            .with_context(|| format!("invalid persisted artifact metadata for {}", model.id))?;
+            .with_context(|| format!("invalid persisted artifact metadata for {}", model.id))
+            .map_err(RepositoryError::InvalidPersistedArtifactMetadata)?;
     }
     JobArtifact::from_parts(JobArtifactParts {
         id: model.id,

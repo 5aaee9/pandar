@@ -18,7 +18,9 @@ import {
 import { Input } from "@/components/ui/input";
 
 type LoginFormProps = React.ComponentProps<"div"> & {
+  completionUrl: string;
   dashboardCallbackUrl: string;
+  errorUrl: string;
   messages: SignInMessages;
 };
 
@@ -71,7 +73,9 @@ function formatCooldown(template: string, seconds: number): string {
 
 export function LoginForm({
   className,
+  completionUrl,
   dashboardCallbackUrl,
+  errorUrl,
   messages,
   ...props
 }: LoginFormProps) {
@@ -159,9 +163,9 @@ export function LoginForm({
       const result = await authClient.signIn.magicLink({
         email: normalizedEmail,
         name,
-        callbackURL: "/auth/complete",
-        newUserCallbackURL: "/auth/complete",
-        errorCallbackURL: "/sign-in",
+        callbackURL: completionUrl,
+        newUserCallbackURL: completionUrl,
+        errorCallbackURL: errorUrl,
       });
       if (result.error) {
         throw new Error(result.error.message || messages.magicLinkSendFailed);

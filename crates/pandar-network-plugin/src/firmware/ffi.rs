@@ -2,8 +2,10 @@ use std::{ffi::c_void, time::Duration};
 
 use serde::Serialize;
 
+mod callback_result;
+
 use super::{
-    callbacks::{FirmwareTunnel, ReadyFirmwareCallback},
+    callbacks::FirmwareTunnel,
     model::{FirmwareSendOutcome, StudioFirmwareParse},
     parser::parse_studio_firmware,
     session::FirmwarePluginSession,
@@ -11,6 +13,7 @@ use super::{
 use crate::{
     PluginHttpResult, invalid_input, normalize_hub_url, read_utf8, result, stable_error_body,
 };
+use callback_result::{callback_result, empty_callback};
 
 const CALLBACK_NONE: i32 = 1;
 
@@ -18,6 +21,8 @@ const CALLBACK_NONE: i32 = 1;
 pub struct PluginFirmwareCallbackResult {
     pub status: i32,
     pub origin_tick: u64,
+    pub local_generation: u64,
+    pub cache_generation: u64,
     pub dev_id_ptr: *mut u8,
     pub dev_id_len: usize,
     pub dev_id_cap: usize,
@@ -112,6 +117,7 @@ pub unsafe extern "C" fn pandar_plugin_firmware_catalog(
     studio_dev_id_len: usize,
     printer_id_ptr: *const u8,
     printer_id_len: usize,
+    expected_generation: u64,
 ) -> PluginHttpResult {
     let Some((session, studio_dev_id, printer_id)) = (unsafe {
         request_parts(
@@ -124,7 +130,7 @@ pub unsafe extern "C" fn pandar_plugin_firmware_catalog(
     }) else {
         return invalid_input("invalid_firmware_request");
     };
-    match session.catalog_json(&studio_dev_id, &printer_id) {
+    match session.catalog_json(&studio_dev_id, &printer_id, expected_generation) {
         Ok(body) => result(0, 200, body),
         Err(error) => {
             eprintln!("pandar firmware catalog request failed: {error:#}");
@@ -144,6 +150,7 @@ pub unsafe extern "C" fn pandar_plugin_firmware_refresh_version(
     printer_id_len: usize,
     sequence_id_ptr: *const u8,
     sequence_id_len: usize,
+    expected_generation: u64,
 ) -> PluginHttpResult {
     let Some((session, _studio_dev_id, printer_id)) = (unsafe {
         request_parts(
@@ -162,7 +169,7 @@ pub unsafe extern "C" fn pandar_plugin_firmware_refresh_version(
     result(
         0,
         200,
-        session.refresh_version_json(&printer_id, &sequence_id),
+        session.refresh_version_json(&printer_id, &sequence_id, expected_generation),
     )
 }
 
@@ -179,6 +186,7 @@ pub unsafe extern "C" fn pandar_plugin_firmware_send(
     message_len: usize,
     tunnel: i32,
     token_out: *mut u64,
+    expected_generation: u64,
 ) -> PluginHttpResult {
     if token_out.is_null() {
         return invalid_input("invalid_firmware_request");
@@ -205,7 +213,13 @@ pub unsafe extern "C" fn pandar_plugin_firmware_send(
         StudioFirmwareParse::NotFirmware => result(2, 200, String::new()),
         StudioFirmwareParse::InvalidFirmware => invalid_input("unsupported_printer_operation"),
         StudioFirmwareParse::Firmware(_) => {
-            let response = session.send(&studio_dev_id, &printer_id, &message, tunnel);
+            let response = session.send(
+                &studio_dev_id,
+                &printer_id,
+                &message,
+                tunnel,
+                expected_generation,
+            );
             if let Some(token) = response.callback_token {
                 unsafe { *token_out = token };
             }
@@ -221,11 +235,19 @@ pub unsafe extern "C" fn pandar_plugin_firmware_return_handoff(
     session: *mut c_void,
     token: u64,
     origin_tick: u64,
+    local_generation: u64,
+    cache_generation: u64,
 ) -> i32 {
     let Some(session) = (unsafe { session_ref(session) }) else {
         return 1;
     };
-    i32::from(!session.return_handoff_at(token, origin_tick, std::time::Instant::now()))
+    i32::from(!session.return_handoff_at(
+        token,
+        origin_tick,
+        local_generation,
+        cache_generation,
+        std::time::Instant::now(),
+    ))
 }
 
 #[unsafe(no_mangle)]
@@ -342,45 +364,4 @@ fn send_result(outcome: FirmwareSendOutcome) -> PluginHttpResult {
         serde_json::to_string(&SendOutcomeBody { outcome: body })
             .expect("firmware send outcome is serializable"),
     )
-}
-
-fn callback_result(callback: ReadyFirmwareCallback) -> PluginFirmwareCallbackResult {
-    let origin_tick = callback.origin_tick;
-    let (dev_id_ptr, dev_id_len, dev_id_cap) = allocation(callback.dev_id);
-    let (message_ptr, message_len, message_cap) = allocation(callback.message);
-    PluginFirmwareCallbackResult {
-        status: 0,
-        origin_tick,
-        dev_id_ptr,
-        dev_id_len,
-        dev_id_cap,
-        message_ptr,
-        message_len,
-        message_cap,
-        tunnel: match callback.tunnel {
-            FirmwareTunnel::Cloud => 0,
-            FirmwareTunnel::Local => 1,
-        },
-    }
-}
-
-fn empty_callback() -> PluginFirmwareCallbackResult {
-    PluginFirmwareCallbackResult {
-        status: CALLBACK_NONE,
-        origin_tick: 0,
-        dev_id_ptr: std::ptr::null_mut(),
-        dev_id_len: 0,
-        dev_id_cap: 0,
-        message_ptr: std::ptr::null_mut(),
-        message_len: 0,
-        message_cap: 0,
-        tunnel: 0,
-    }
-}
-
-fn allocation(value: String) -> (*mut u8, usize, usize) {
-    let mut bytes = value.into_bytes();
-    let parts = (bytes.as_mut_ptr(), bytes.len(), bytes.capacity());
-    std::mem::forget(bytes);
-    parts
 }

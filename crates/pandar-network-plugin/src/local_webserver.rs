@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::{PluginHttpResult, result, stable_error_body};
 
 mod callback;
+pub mod ffi;
 mod response;
 mod routes;
 

@@ -292,6 +292,7 @@ fn snapshot_event(
             chamber_light_on: None,
             device_features: None,
             connection_authoritative: false,
+            telemetry_authoritative: false,
         }),
     )
 }

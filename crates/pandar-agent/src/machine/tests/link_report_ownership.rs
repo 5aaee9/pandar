@@ -33,8 +33,9 @@ async fn firmware_runtime_configured_startup_snapshot_precedes_first_generation(
     };
     assert_eq!(snapshot.serial, "SERIAL1");
     assert_eq!(snapshot.name, "configured office");
-    assert_eq!(snapshot.state, "unknown");
+    assert!(snapshot.state.is_empty());
     assert!(snapshot.connection_authoritative);
+    assert!(!snapshot.telemetry_authoritative);
 
     let second = loop {
         if let event @ agent_event::Event::PrinterFirmwareInvalidated(_) =
@@ -156,7 +157,7 @@ async fn firmware_runtime_link_joins_old_report_before_emitting_or_mutating() {
                     access_code: Some(new_endpoint.access_code.clone()),
                     name: new_endpoint.name.clone().unwrap(),
                     model: Some("P2S".into()),
-                    state: "READY".into(),
+                    state: Some("READY".into()),
                     nozzle_temperatures: Vec::new(),
                     active_nozzle: None,
                     bed_temperature_celsius: None,
@@ -165,6 +166,7 @@ async fn firmware_runtime_link_joins_old_report_before_emitting_or_mutating() {
                     chamber_target_temperature_celsius: None,
                     chamber_light_on: None,
                     device_features: None,
+                    telemetry_authoritative: true,
                 },
                 materials: None,
             },
@@ -249,7 +251,7 @@ async fn firmware_runtime_link_waits_for_old_publish_transition_before_snapshot(
                     access_code: Some(new_endpoint.access_code.clone()),
                     name: new_endpoint.name.clone().unwrap(),
                     model: Some("P2S".into()),
-                    state: "READY".into(),
+                    state: Some("READY".into()),
                     nozzle_temperatures: Vec::new(),
                     active_nozzle: None,
                     bed_temperature_celsius: None,
@@ -258,6 +260,7 @@ async fn firmware_runtime_link_waits_for_old_publish_transition_before_snapshot(
                     chamber_target_temperature_celsius: None,
                     chamber_light_on: None,
                     device_features: None,
+                    telemetry_authoritative: true,
                 },
                 materials: None,
             },
@@ -308,7 +311,7 @@ async fn firmware_runtime_first_link_queues_snapshot_before_generation() {
                     access_code: Some(endpoint.access_code.clone()),
                     name: endpoint.name.clone().unwrap(),
                     model: Some("P2S".into()),
-                    state: "READY".into(),
+                    state: Some("READY".into()),
                     nozzle_temperatures: Vec::new(),
                     active_nozzle: None,
                     bed_temperature_celsius: None,
@@ -317,6 +320,7 @@ async fn firmware_runtime_first_link_queues_snapshot_before_generation() {
                     chamber_target_temperature_celsius: None,
                     chamber_light_on: None,
                     device_features: None,
+                    telemetry_authoritative: true,
                 },
                 materials: None,
             },

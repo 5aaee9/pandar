@@ -19,6 +19,7 @@ fn command_status_round_trips_persisted_strings() {
         (CommandStatus::Acknowledged, "acknowledged"),
         (CommandStatus::Succeeded, "succeeded"),
         (CommandStatus::Failed, "failed"),
+        (CommandStatus::Cancelled, "cancelled"),
     ] {
         assert_eq!(status.as_str(), value);
         assert_eq!(value.parse::<CommandStatus>(), Ok(status));
@@ -71,6 +72,7 @@ fn job_status_round_trips_persisted_strings() {
         (JobStatus::Acknowledged, "acknowledged"),
         (JobStatus::Succeeded, "succeeded"),
         (JobStatus::Failed, "failed"),
+        (JobStatus::Cancelled, "cancelled"),
     ] {
         assert_eq!(status.as_str(), value);
         assert_eq!(value.parse::<JobStatus>(), Ok(status));
@@ -201,6 +203,9 @@ fn job_from_parts_validates_required_fields_and_status() {
             agent_id,
             artifact_id: artifact_id.to_string(),
             command_id,
+            studio_submission_id: 1,
+            plate_index: 1,
+            studio_metadata_json: None,
             status: status.to_string(),
             error: None,
             print_status: "pending".to_string(),
@@ -252,6 +257,9 @@ fn job_from_parts_rehydrates_print_state() {
         agent_id: AgentId::new(),
         artifact_id: "artifact-1".to_string(),
         command_id: CommandId::new(),
+        studio_submission_id: 1,
+        plate_index: 1,
+        studio_metadata_json: None,
         status: "succeeded".to_string(),
         error: None,
         print_status: "running".to_string(),
@@ -298,6 +306,9 @@ fn job_from_parts_rejects_invalid_print_status() {
             agent_id: AgentId::new(),
             artifact_id: "artifact-1".to_string(),
             command_id: CommandId::new(),
+            studio_submission_id: 1,
+            plate_index: 1,
+            studio_metadata_json: None,
             status: "queued".to_string(),
             error: None,
             print_status: "paused".to_string(),

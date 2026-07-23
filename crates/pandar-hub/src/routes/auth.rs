@@ -124,6 +124,19 @@ pub(super) async fn authorize_plugin_studio(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<crate::repositories::AuthenticatedTenantToken, ApiError> {
+    let token = bearer_token(headers)?;
+    let authenticated = state
+        .auth()
+        .authenticate_tenant_token(token)
+        .await?
+        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "invalid_auth_token"))?;
+    if authenticated.token.scopes != [TenantTokenScope::PluginStudio] {
+        return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
+    }
+    Ok(authenticated)
+}
+
+pub(super) fn bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
     let Some(header) = headers.get(AUTHORIZATION) else {
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
@@ -139,15 +152,7 @@ pub(super) async fn authorize_plugin_studio(
             "invalid_auth_token",
         ));
     };
-    let authenticated = state
-        .auth()
-        .authenticate_tenant_token(token)
-        .await?
-        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "invalid_auth_token"))?;
-    if authenticated.token.scopes != [TenantTokenScope::PluginStudio] {
-        return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
-    }
-    Ok(authenticated)
+    Ok(token)
 }
 
 pub(super) async fn verify_external_identity(

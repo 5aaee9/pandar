@@ -1,29 +1,82 @@
 use std::{ffi::c_void, path::PathBuf, slice};
 
+mod account;
+mod cancellation;
+mod connection;
 pub mod firmware;
 mod gcode;
 mod http;
 pub mod installer;
 mod local_webserver;
-mod printer_refresh;
+mod plugin_session;
+mod studio_abi;
+mod studio_disposition;
+mod studio_message;
+mod studio_policy;
+mod studio_print;
 mod studio_status;
 
-pub use printer_refresh::{
-    PrinterRefreshObservationReservation, pandar_plugin_printer_refresh,
+pub use connection::{
+    ConnectionDeviceVisitor, ConnectionPrinterVisitor, PluginConnectionResult,
+    PluginPrinterRefreshLifecycleResult, PluginStudioDeliveryResult, PluginStudioHeartbeatPlan,
+    PluginStudioRequestState, PrinterRefreshObservationReservation, StudioHeartbeatVisitor,
+    StudioPayloadVisitor, StudioRequestVisitor, StudioWorkVisitor,
+    pandar_plugin_connection_claim_delivery, pandar_plugin_connection_is_connected,
+    pandar_plugin_connection_printer_eligible, pandar_plugin_connection_refresh,
+    pandar_plugin_connection_set_account_epoch, pandar_plugin_connection_studio_snapshot_current,
+    pandar_plugin_connection_take_offline, pandar_plugin_connection_take_transition,
+    pandar_plugin_connection_visit_printers, pandar_plugin_printer_refresh,
     pandar_plugin_printer_refresh_session_create, pandar_plugin_printer_refresh_session_destroy,
-    pandar_plugin_printer_refresh_session_update,
+    pandar_plugin_printer_refresh_session_update, pandar_plugin_printer_refresh_with_session,
+    pandar_plugin_studio_account_request_admitted, pandar_plugin_studio_account_request_current,
+    pandar_plugin_studio_add_subscription, pandar_plugin_studio_begin_account_transition,
+    pandar_plugin_studio_claim_delivery, pandar_plugin_studio_complete_delivery,
+    pandar_plugin_studio_connect_local, pandar_plugin_studio_del_subscription,
+    pandar_plugin_studio_disconnect_local, pandar_plugin_studio_finish_account_transition,
+    pandar_plugin_studio_heartbeat_plan, pandar_plugin_studio_local_generation,
+    pandar_plugin_studio_prepare_connected, pandar_plugin_studio_prepare_message,
+    pandar_plugin_studio_request_snapshot, pandar_plugin_studio_selected,
+    pandar_plugin_studio_set_listener, pandar_plugin_studio_set_selected,
+    pandar_plugin_studio_status_target_available, pandar_plugin_studio_take_work,
+};
+pub use local_webserver::ffi::{
+    pandar_plugin_local_webserver_base_url, pandar_plugin_local_webserver_config,
+    pandar_plugin_start_local_webserver,
+};
+pub use plugin_session::{
+    pandar_plugin_create_no_auth_session, pandar_plugin_delete_session,
+    pandar_plugin_exchange_ticket, pandar_plugin_no_auth_retryable_connect_failure,
+};
+pub use studio_abi::{
+    NETWORK_AGENT_VERSION, pandar_plugin_camera_access_result, pandar_plugin_local_connect_json,
+    pandar_plugin_network_agent_version, pandar_plugin_sync_ams_filaments,
+};
+pub use studio_message::{
+    PluginStudioMessageResult, pandar_plugin_classify_status_request,
+    pandar_plugin_dispatch_studio_message, pandar_plugin_operation_json_from_gcode,
+};
+pub use studio_print::{
+    PluginBytes, PluginStudioAccount, PluginStudioCallbacks, PluginStudioModelTask,
+    PluginStudioPlateResult, PluginStudioPrintParams, PluginStudioSnapshot, PluginStudioTaskQuery,
+    StudioModelTaskVisitor, pandar_plugin_studio_get_model_task,
+    pandar_plugin_studio_get_model_task_with_session, pandar_plugin_studio_get_plate,
+    pandar_plugin_studio_get_plate_with_session, pandar_plugin_studio_get_subtask,
+    pandar_plugin_studio_get_subtask_with_session, pandar_plugin_studio_get_tasks,
+    pandar_plugin_studio_get_tasks_with_session, pandar_plugin_studio_slice_unavailable,
+    pandar_plugin_studio_start_print,
 };
 
-use serde::de::DeserializeOwned;
+use serde::{Serialize, de::DeserializeOwned};
 
-use gcode::{PrinterOperation, StudioOperationParse, operation_json_from_gcode};
+use gcode::PrinterOperation;
 use http::{
-    AmsMapping, AmsMapping2, AmsMappingInfo, EmptyRequest, PrintSubmissionBody,
-    TicketExchangeRequest, calibration_mode, get_json, plugin_printer_operation_url, post_json,
-    post_multipart_print,
+    AmsMapping, AmsMapping2, AmsMappingInfo, PrintSubmissionBody, calibration_mode, get_json,
+    plugin_printer_operation_url, post_json, post_multipart_print,
 };
 
 pub const PLUGIN_NAME: &str = "pandar-network-plugin";
+
+const NO_AUTH_CONNECT_FAILURE_STATUS: i32 = 2;
 
 #[derive(Clone, Copy)]
 enum RequestKind {
@@ -32,6 +85,7 @@ enum RequestKind {
     JobLookup,
     PrintSubmission,
     PrinterOperation,
+    PluginSession,
 }
 
 #[repr(C)]
@@ -41,72 +95,6 @@ pub struct PluginHttpResult {
     pub body_ptr: *mut u8,
     pub body_len: usize,
     pub body_cap: usize,
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_start_local_webserver(
-    web_url_ptr: *const u8,
-    web_url_len: usize,
-    hub_url_ptr: *const u8,
-    hub_url_len: usize,
-    web_configured: bool,
-    hub_configured: bool,
-) -> PluginHttpResult {
-    let Some(web_url) = read_utf8(web_url_ptr, web_url_len) else {
-        return invalid_input("invalid_target_server");
-    };
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len) else {
-        return invalid_input("invalid_target_server");
-    };
-    local_webserver::start(web_url, hub_url, web_configured, hub_configured)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_local_webserver_base_url() -> PluginHttpResult {
-    local_webserver::base_url()
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_local_webserver_config() -> PluginHttpResult {
-    local_webserver::config()
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_exchange_ticket(
-    hub_url_ptr: *const u8,
-    hub_url_len: usize,
-    ticket_ptr: *const u8,
-    ticket_len: usize,
-) -> PluginHttpResult {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
-        return invalid_input("invalid_hub_url");
-    };
-    let Some(ticket) = read_utf8(ticket_ptr, ticket_len).filter(|ticket| !ticket.trim().is_empty())
-    else {
-        return invalid_input("invalid_plugin_ticket");
-    };
-    post_json(
-        &format!("{hub_url}/api/v1/plugin/login-tickets/exchange"),
-        None,
-        TicketExchangeRequest { ticket: &ticket },
-        RequestKind::TicketExchange,
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_create_no_auth_session(
-    hub_url_ptr: *const u8,
-    hub_url_len: usize,
-) -> PluginHttpResult {
-    let Some(hub_url) = read_utf8(hub_url_ptr, hub_url_len).and_then(normalize_hub_url) else {
-        return invalid_input("invalid_hub_url");
-    };
-    post_json(
-        &format!("{hub_url}/api/v1/plugin/no-auth-session"),
-        None,
-        EmptyRequest {},
-        RequestKind::TicketExchange,
-    )
 }
 
 #[unsafe(no_mangle)]
@@ -195,6 +183,19 @@ pub extern "C" fn pandar_plugin_submit_print(
     let Some(auto_offset_cali) = calibration_mode(auto_offset_cali) else {
         return invalid_input("bad_request");
     };
+    let Ok(ams_mapping) = parse_optional_json::<AmsMapping>(ams_mapping_ptr, ams_mapping_len)
+    else {
+        return invalid_input("bad_request");
+    };
+    let Ok(ams_mapping2) = parse_optional_json::<AmsMapping2>(ams_mapping2_ptr, ams_mapping2_len)
+    else {
+        return invalid_input("bad_request");
+    };
+    let Ok(ams_mapping_info) =
+        parse_optional_json::<AmsMappingInfo>(ams_mapping_info_ptr, ams_mapping_info_len)
+    else {
+        return invalid_input("bad_request");
+    };
     let artifact_path = PathBuf::from(artifact_path);
     let artifact_len = match std::fs::metadata(&artifact_path) {
         Ok(metadata) if metadata.is_file() => metadata.len(),
@@ -204,11 +205,6 @@ pub extern "C" fn pandar_plugin_submit_print(
     if artifact_len == 0 {
         return invalid_input("artifact_empty");
     }
-    let ams_mapping = parse_optional_json::<AmsMapping>(ams_mapping_ptr, ams_mapping_len);
-    let ams_mapping2 = parse_optional_json::<AmsMapping2>(ams_mapping2_ptr, ams_mapping2_len);
-    let ams_mapping_info =
-        parse_optional_json::<AmsMappingInfo>(ams_mapping_info_ptr, ams_mapping_info_len);
-
     post_multipart_print(
         &format!("{hub_url}/api/v1/plugin/prints"),
         &token,
@@ -272,34 +268,6 @@ pub extern "C" fn pandar_plugin_submit_printer_operation(
     )
 }
 
-/// Stable parser statuses: 0 is an operation with HTTP 200; 1 is unsupported with HTTP 400;
-/// 2 is an invalid native candidate with HTTP 400. Both error statuses use the same body.
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_operation_json_from_gcode(
-    message_ptr: *const u8,
-    message_len: usize,
-) -> PluginHttpResult {
-    read_utf8(message_ptr, message_len)
-        .map_or(StudioOperationParse::Unsupported, |message| {
-            operation_json_from_gcode(&message)
-        })
-        .into_http_result()
-}
-
-/// Stable status-request kinds: 0 is not a status request, 1 is `info.get_version`,
-/// and 2 is `pushing.pushall`. The body is the typed request sequence string.
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_classify_status_request(
-    message_ptr: *const u8,
-    message_len: usize,
-) -> PluginHttpResult {
-    let (kind, sequence_id) = read_utf8(message_ptr, message_len)
-        .map_or((0, String::new()), |message| {
-            studio_status::classify_status_request(&message)
-        });
-    result(kind, 200, sequence_id)
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_printer_telemetry_json(
     printer_ptr: *const u8,
@@ -332,10 +300,15 @@ pub extern "C" fn pandar_plugin_free_with_capacity(ptr: *mut c_void, len: usize,
 }
 
 fn stable_error_body(error: &str) -> String {
-    format!(r#"{{"error":"{error}"}}"#)
+    #[derive(Serialize)]
+    struct StableError<'a> {
+        error: &'a str,
+    }
+
+    serde_json::to_string(&StableError { error }).expect("stable error body is serializable")
 }
 
-fn normalize_hub_url(value: String) -> Option<String> {
+pub(crate) fn normalize_hub_url(value: String) -> Option<String> {
     let value = value.trim().trim_end_matches('/').to_string();
     if value.is_empty() {
         return None;
@@ -387,10 +360,10 @@ fn read_utf8(ptr: *const u8, len: usize) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn parse_optional_json<T: DeserializeOwned>(ptr: *const u8, len: usize) -> Option<T> {
-    let value = read_utf8(ptr, len)?;
+fn parse_optional_json<T: DeserializeOwned>(ptr: *const u8, len: usize) -> Result<Option<T>, ()> {
+    let value = read_utf8(ptr, len).ok_or(())?;
     if value.trim().is_empty() {
-        return None;
+        return Ok(None);
     }
-    serde_json::from_str(&value).ok()
+    serde_json::from_str(&value).map(Some).map_err(|_| ())
 }

@@ -7,7 +7,7 @@ use serde::Serialize;
 fn firmware_parser_accepts_all_commands_and_preserves_exact_fields() {
     let cases = [
         (
-            r#"{"upgrade":{"command":"upgrade_confirm","sequence_id":"0009","src_id":-7},"future":true}"#,
+            r#"{"upgrade":{"command":"upgrade_confirm","sequence_id":"0009","src_id":-7,"future":true}}"#,
             StudioFirmwareCommand::UpgradeConfirm {
                 sequence_id: "0009".into(),
                 src_id: -7,
@@ -92,6 +92,18 @@ fn firmware_parser_rejects_present_invalid_upgrade_shapes() {
 }
 
 #[test]
+fn firmware_parser_stably_rejects_the_finite_unsupported_upgrade_pair() {
+    let message =
+        r#"{"upgrade":{"command":"wtm_upgrade","module":"wtm/16","src_id":1,"sequence_id":"123"}}"#;
+
+    assert_eq!(
+        parse_studio_firmware(message),
+        StudioFirmwareParse::InvalidFirmware,
+        "upgrade.wtm_upgrade must remain the 45th explicitly unsupported finite pair"
+    );
+}
+
+#[test]
 fn firmware_parser_rejects_duplicate_top_level_upgrade_keys() {
     for message in [
         r#"{"upgrade":{"command":"upgrade_confirm","sequence_id":"first","src_id":1},"upgrade":{"command":"consistency_confirm","sequence_id":"second","src_id":2}}"#,
@@ -101,6 +113,21 @@ fn firmware_parser_rejects_duplicate_top_level_upgrade_keys() {
             parse_studio_firmware(message),
             StudioFirmwareParse::InvalidFirmware,
             "duplicate upgrade key was not classified as invalid: {message}"
+        );
+    }
+}
+
+#[test]
+fn firmware_parser_rejects_upgrade_mixed_with_another_top_level_envelope() {
+    for message in [
+        r#"{"upgrade":{"command":"upgrade_confirm","sequence_id":"mixed-print","src_id":1},"print":{"command":"pause","sequence_id":"123"}}"#,
+        r#"{"upgrade":{"command":"consistency_confirm","sequence_id":"mixed-info","src_id":2},"info":{"command":"get_version","sequence_id":"124"}}"#,
+        r#"{"upgrade":{"command":"upgrade_confirm","sequence_id":"extra-future","src_id":1},"future":{"command":"future_control"}}"#,
+    ] {
+        assert_eq!(
+            parse_studio_firmware(message),
+            StudioFirmwareParse::InvalidFirmware,
+            "mixed top-level upgrade was accepted as firmware: {message}"
         );
     }
 }

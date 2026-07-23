@@ -1,11 +1,20 @@
 import { env } from "../../../lib/env";
 import { getAuthLocale, getAuthMessages } from "../../../lib/i18n";
+import {
+  normalizePluginReturnTo,
+  withPluginReturnTo,
+} from "../../../lib/plugin-return";
 import { CompleteAuth } from "./complete-auth";
 
 export const dynamic = "force-dynamic";
 
-export default async function CompleteAuthPage() {
+type PageProps = {
+  searchParams?: Promise<{ return_to?: string | string[] }>;
+};
+
+export default async function CompleteAuthPage({ searchParams }: PageProps) {
   const messages = getAuthMessages(await getAuthLocale());
+  const returnTo = normalizePluginReturnTo((await searchParams)?.return_to);
 
   return (
     <main className="auth-page">
@@ -13,7 +22,10 @@ export default async function CompleteAuthPage() {
         <h1 id="complete-auth-title">{messages.addPasskey}</h1>
         <p>{messages.passkeyOptionalIntro}</p>
         <CompleteAuth
-          dashboardCallbackUrl={env.dashboardCallbackUrl}
+          dashboardCallbackUrl={withPluginReturnTo(
+            env.dashboardCallbackUrl,
+            returnTo,
+          )}
           messages={{
             addPasskey: messages.addPasskey,
             addingPasskey: messages.addingPasskey,

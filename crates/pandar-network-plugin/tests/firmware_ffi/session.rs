@@ -2,8 +2,37 @@ use serde_json::json;
 
 use super::{
     abi::Session,
-    support::{Response, mock_hub, printer_batch},
+    support::{Response, command, mock_hub, printer_batch, probe_hub},
 };
+
+#[test]
+fn firmware_ffi_expected_generation_mismatch_performs_zero_hub_io() {
+    let (hub_a, server_a) = probe_hub(Vec::new());
+    let (hub_b, server_b) = probe_hub(Vec::new());
+    let session = Session::create(&hub_a, "token-a", 1);
+    assert_eq!(session.update(&hub_b, "token-b", 2), 0);
+
+    let _catalog = session.catalog("SERIAL-A", "printer-a", 1);
+    let _refresh = session.refresh("SERIAL-A", "printer-a", "stale-refresh", 1);
+    let mut callback_token = 99;
+    let _send = session.send(
+        "SERIAL-A",
+        "printer-a",
+        &command("stale-send"),
+        0,
+        Some(&mut callback_token),
+        1,
+    );
+
+    assert_eq!(callback_token, 0);
+    session.destroy();
+    let requests_a = server_a.join().unwrap();
+    let requests_b = server_b.join().unwrap();
+    assert!(
+        requests_a.is_empty() && requests_b.is_empty(),
+        "stale generation paired printer A with a Hub credential: A={requests_a:?} B={requests_b:?}"
+    );
+}
 
 #[test]
 fn firmware_ffi_session_read_surfaces_free_every_http_allocation() {
@@ -35,7 +64,7 @@ fn firmware_ffi_session_read_surfaces_free_every_http_allocation() {
         "ota"
     );
 
-    let catalog = session.catalog("SERIAL", "printer-1");
+    let catalog = session.catalog("SERIAL", "printer-1", 2);
     assert_eq!((catalog.status, catalog.http_code), (0, 200));
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&catalog.body).unwrap()["devices"][0]["firmware"]
@@ -43,7 +72,7 @@ fn firmware_ffi_session_read_surfaces_free_every_http_allocation() {
         "printer.bin"
     );
 
-    let refresh = session.refresh("SERIAL", "printer-1", "0009");
+    let refresh = session.refresh("SERIAL", "printer-1", "0009", 2);
     assert_eq!((refresh.status, refresh.http_code), (0, 200));
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&refresh.body).unwrap()["info"]["sequence_id"],

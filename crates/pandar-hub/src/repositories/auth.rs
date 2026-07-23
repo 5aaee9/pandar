@@ -31,8 +31,11 @@ pub use onboarding::{
 pub use plugin_tickets::{
     PluginLoginTicket, PluginLoginTicketExchange, PluginLoginTicketWithPlaintext,
 };
+#[cfg(test)]
+pub(crate) use tenant_tokens::no_auth_session_test_pause;
 pub use tenant_tokens::{
-    AuthenticatedTenantToken, TenantToken, TenantTokenScope, TenantTokenWithPlaintext,
+    AuthenticatedTenantToken, NoAuthPluginSession, NoAuthPluginSessionOutcome, TenantToken,
+    TenantTokenScope, TenantTokenWithPlaintext,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

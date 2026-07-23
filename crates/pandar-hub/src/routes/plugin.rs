@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::rejection::JsonRejection,
-    extract::{Multipart, Path, State},
+    extract::{Path, State},
     http::{HeaderMap, StatusCode},
 };
 use serde::{Deserialize, Serialize};
@@ -9,8 +9,7 @@ use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     AppState,
-    artifacts::metadata::ArtifactMetadata,
-    repositories::{AuditActor, AuthenticatedPrincipal, RepositoryError, TenantTokenScope},
+    repositories::{AuthenticatedPrincipal, NoAuthPluginSessionOutcome, RepositoryError},
     routes::{
         ApiError, auth,
         printer_operations::{PrinterOperationRequest, dispatch_plugin_printer_operation},
@@ -20,8 +19,12 @@ use crate::{
 pub(super) mod firmware;
 mod responses;
 mod studio_devices;
+mod studio_jobs;
 pub(crate) use responses::redact_artifact_error;
 use studio_devices::{PluginPrinterListResponse, plugin_printer_devices};
+pub(super) use studio_jobs::{
+    cancel_job, create_print, get_job, get_model_task, get_plate, get_subtask, list_jobs,
+};
 
 #[derive(Debug, Deserialize)]
 pub(super) struct CreateLoginTicketRequest {
@@ -53,34 +56,6 @@ pub(super) struct PluginProfileResponse {
     user_name: String,
     tenant_id: String,
     tenant_name: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct PluginJobListResponse {
-    jobs: Vec<PluginJobResponse>,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct PluginJobResponse {
-    task_id: String,
-    dev_id: String,
-    name: String,
-    status: String,
-    progress_percent: Option<u8>,
-    artifact_metadata: Option<ArtifactMetadata>,
-    created_at: String,
-    updated_at: String,
-    pandar_job_id: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(super) struct PluginPrintResponse {
-    task_id: String,
-    command_id: String,
-    status: String,
-    message: Option<String>,
-    artifact_metadata: Option<ArtifactMetadata>,
-    pandar_job_id: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -225,28 +200,33 @@ pub(super) async fn create_no_auth_session(
     if !state.no_auth_enabled() {
         return Err(ApiError::new(StatusCode::FORBIDDEN, "no_auth_required"));
     }
-    let tenant = state
-        .tenants()
-        .list()
-        .await?
-        .into_iter()
-        .next()
-        .ok_or_else(|| ApiError::not_found("tenant_not_found"))?;
-    let token = state
+    let outcome = state
         .auth()
-        .create_tenant_token_with_audit(
-            tenant.id,
+        .create_no_auth_plugin_session_with_audit(
             "Local Bambu Studio Plugin",
-            vec![TenantTokenScope::PluginStudio],
-            Some(plugin_session_expires_at()?),
-            AuditActor::no_auth(),
+            plugin_session_expires_at()?,
         )
         .await?;
+    let (tenant, token) = match outcome {
+        NoAuthPluginSessionOutcome::Created(session) => {
+            let session = *session;
+            (session.tenant, session.tenant_token)
+        }
+        NoAuthPluginSessionOutcome::MissingTenant => {
+            return Err(ApiError::not_found("tenant_not_found"));
+        }
+        NoAuthPluginSessionOutcome::AmbiguousTenant => {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "ambiguous_no_auth_tenant",
+            ));
+        }
+    };
     let profile = PluginProfileResponse {
         user_id: token.token.id.clone(),
         user_name: token.token.name.clone(),
         tenant_id: token.token.tenant_id.to_string(),
-        tenant_name: tenant.display_name,
+        tenant_name: tenant.display_name.clone(),
     };
 
     Ok(Json(ExchangeLoginTicketResponse {
@@ -257,6 +237,19 @@ pub(super) async fn create_no_auth_session(
             .expect("plugin token must have expiry"),
         profile,
     }))
+}
+
+pub(super) async fn revoke_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let token = auth::bearer_token(&headers)?;
+    state
+        .auth()
+        .revoke_plugin_studio_token_with_audit(token)
+        .await?
+        .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "invalid_auth_token"))?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 fn plugin_session_expires_at() -> Result<String, ApiError> {
@@ -277,45 +270,6 @@ pub(super) async fn list_printers(
         message: "success",
         devices: plugin_printer_devices(&state, authenticated.token.tenant_id).await?,
     }))
-}
-
-pub(super) async fn list_jobs(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<PluginJobListResponse>, ApiError> {
-    let authenticated = auth::authorize_plugin_studio(&state, &headers).await?;
-    let jobs = state
-        .jobs()
-        .list_for_tenant(authenticated.token.tenant_id)
-        .await?
-        .into_iter()
-        .map(PluginJobResponse::try_from)
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok(Json(PluginJobListResponse { jobs }))
-}
-
-pub(super) async fn create_print(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    multipart: Multipart,
-) -> Result<(StatusCode, Json<PluginPrintResponse>), ApiError> {
-    let authenticated = auth::authorize_plugin_studio(&state, &headers).await?;
-    let tenant_id = authenticated.token.tenant_id;
-    let created = super::jobs::multipart::create_print_job_from_multipart(
-        &state,
-        tenant_id,
-        None,
-        multipart,
-        auth::plugin_audit_actor(&authenticated),
-        "plugin",
-    )
-    .await?;
-    let wake_tenant_id = created.job.tenant_id;
-    let wake_agent_id = created.job.agent_id;
-    let response = PluginPrintResponse::try_from(created)?;
-    state.wake_agent(wake_tenant_id, wake_agent_id).await;
-    Ok((StatusCode::CREATED, Json(response)))
 }
 
 pub(super) async fn create_printer_operation(

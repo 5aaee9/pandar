@@ -7,7 +7,9 @@ use anyhow::anyhow;
 
 use super::*;
 use crate::machine::{
-    file_transfer::{FileTransferRequest, FileUploadResult, TransferProtectionMode},
+    file_transfer::{
+        FileTransferRequest, FileUploadResult, PrintUploadPolicy, TransferProtectionMode,
+    },
     mqtt::FakeMqttTransport,
 };
 
@@ -198,6 +200,21 @@ fn redacts_distinctive_access_code_from_error_chain() {
     );
 }
 
+#[test]
+fn endpoint_redaction_hides_host_when_access_code_is_its_substring() {
+    let endpoint = BambuPrinterEndpoint {
+        host: "printer-1234.local".to_owned(),
+        access_code: "1234".to_owned(),
+        ..endpoint(None)
+    };
+    let secrets = PrinterEndpointSecrets::from_endpoints([&endpoint]);
+
+    assert_eq!(
+        secrets.redact("connect printer-1234.local with 1234"),
+        "connect [REDACTED_PRINTER_HOST] with [REDACTED_ACCESS_CODE]"
+    );
+}
+
 fn endpoint(model: Option<&str>) -> BambuPrinterEndpoint {
     BambuPrinterEndpoint {
         host: "127.0.0.1".to_owned(),
@@ -272,6 +289,25 @@ impl MachineFileTransfer for DiagnosticFakeTransfer {
         state
             .recorded
             .push((mode, FileTransferRequest::upload(path, bytes.len() as u64)));
+        if let Some(err) = state.upload_error.take() {
+            Err(err)
+        } else {
+            Ok(FileUploadResult::ftp(path))
+        }
+    }
+
+    async fn upload_print(
+        &self,
+        path: &str,
+        bytes: &[u8],
+        mode: TransferProtectionMode,
+        policy: PrintUploadPolicy,
+    ) -> anyhow::Result<FileUploadResult> {
+        let mut state = self.state.lock().unwrap();
+        state.recorded.push((
+            mode,
+            FileTransferRequest::print_upload(path, bytes.len() as u64, policy),
+        ));
         if let Some(err) = state.upload_error.take() {
             Err(err)
         } else {

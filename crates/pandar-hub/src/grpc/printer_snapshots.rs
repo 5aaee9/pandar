@@ -19,7 +19,7 @@ pub async fn handle_snapshot(
     let connection_authoritative = snapshot.connection_authoritative;
     let serial_number = required(&snapshot.serial, "serial must not be blank")?;
     let name = required(&snapshot.name, "name must not be blank")?;
-    let status = required(&snapshot.state, "state must not be blank")?;
+    let status = trim_optional(snapshot.state);
     let model = trim_optional(snapshot.model);
     let device_features = snapshot
         .device_features
@@ -54,6 +54,7 @@ pub async fn handle_snapshot(
         ),
         chamber_light_on: snapshot.chamber_light_on,
         connection_authoritative: snapshot.connection_authoritative,
+        telemetry_authoritative: snapshot.telemetry_authoritative,
     };
     let _lease = state
         .sessions()

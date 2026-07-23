@@ -25,6 +25,7 @@ pub struct Model {
     pub chamber_light_on: Option<bool>,
     pub bambu_fun_bits: Option<String>,
     pub bambu_fun_session_id: Option<String>,
+    pub mqtt_presence_session_id: Option<String>,
     pub state_revision: i64,
     pub print_task_generation: i64,
     pub print_error_generation: i64,

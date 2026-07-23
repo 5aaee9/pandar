@@ -1,6 +1,6 @@
 use axum::{extract::Multipart, http::StatusCode};
 use pandar_core::TenantId;
-use tokio::{fs, io::AsyncWriteExt};
+use tokio::fs;
 
 use crate::{
     AppState,
@@ -10,14 +10,21 @@ use crate::{
 
 use super::metadata_preview::{artifact_metadata_json, parsed_artifact_metadata};
 use parsing::{parse_bool, parse_calibration_mode, parse_i64, parse_optional_json_field, required};
+use staging::{cleanup_staged_upload, read_text_field, stage_file_field};
 use types::PreparedPrintJob;
 
 mod parsing;
+mod staging;
+mod studio;
 mod types;
 
 pub(in crate::routes::jobs) use types::{MultipartPrintFields, StagedUpload};
 
-const MAX_MULTIPART_TEXT_FIELD_BYTES: usize = 16 * 1024;
+#[derive(Clone, Copy)]
+pub(in crate::routes) enum MultipartPrintKind {
+    Web,
+    Studio,
+}
 
 pub(in crate::routes) async fn create_print_job_from_multipart(
     state: &AppState,
@@ -26,8 +33,19 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
     multipart: Multipart,
     audit_actor: AuditActor,
     log_context: &'static str,
+    kind: MultipartPrintKind,
 ) -> Result<JobWithArtifact, ApiError> {
     let parsed = parse_multipart_print_fields(state, multipart).await?;
+    let studio_metadata = match kind {
+        MultipartPrintKind::Web => None,
+        MultipartPrintKind::Studio => match studio::metadata(&parsed) {
+            Ok(metadata) => Some(metadata),
+            Err(err) => {
+                parsed.cleanup_staged_uploads().await;
+                return Err(err);
+            }
+        },
+    };
     let prepared = prepare_print_job(state, tenant_id, path_printer_id, &parsed).await;
     let PreparedPrintJob {
         printer,
@@ -78,34 +96,42 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
     cleanup_staged_upload(file).await;
     let stored = stored?;
 
-    let created = state
-        .jobs()
-        .create_print_job_with_audit(
-            CreatePrintJob {
-                tenant_id,
-                printer_id: printer.id,
-                agent_id: printer.agent_id,
-                artifact_id,
-                artifact_filename: stored.filename,
-                artifact_content_type: content_type,
-                artifact_size_bytes: stored.size_bytes,
-                artifact_storage_path: stored.storage_path.clone(),
-                artifact_metadata_json: artifact_metadata_json(artifact_metadata.as_ref())?,
-                plate_id,
-                use_ams,
-                bed_leveling,
-                auto_bed_leveling,
-                flow_cali,
-                auto_flow_cali,
-                auto_offset_cali,
-                timelapse,
-                ams_mapping_json,
-                ams_mapping2_json,
-                ams_mapping_info_json,
-            },
-            audit_actor,
-        )
-        .await;
+    let input = CreatePrintJob {
+        tenant_id,
+        printer_id: printer.id,
+        agent_id: printer.agent_id,
+        artifact_id,
+        artifact_filename: stored.filename,
+        artifact_content_type: content_type,
+        artifact_size_bytes: stored.size_bytes,
+        artifact_storage_path: stored.storage_path.clone(),
+        artifact_metadata_json: artifact_metadata_json(artifact_metadata.as_ref())?,
+        plate_id,
+        use_ams,
+        bed_leveling,
+        auto_bed_leveling,
+        flow_cali,
+        auto_flow_cali,
+        auto_offset_cali,
+        timelapse,
+        ams_mapping_json,
+        ams_mapping2_json,
+        ams_mapping_info_json,
+    };
+    let created = match studio_metadata {
+        Some(metadata) => {
+            state
+                .jobs()
+                .create_studio_print_job_with_audit(input, metadata, audit_actor)
+                .await
+        }
+        None => {
+            state
+                .jobs()
+                .create_print_job_with_audit(input, audit_actor)
+                .await
+        }
+    };
 
     match created {
         Ok(created) => Ok(created),
@@ -134,7 +160,11 @@ pub(super) async fn parse_multipart_print_fields(
     loop {
         let Some(field) = (match multipart.next_field().await {
             Ok(field) => field,
-            Err(_) => {
+            Err(err) => {
+                tracing::warn!(
+                    error = %super::redact_artifact_error(&format!("{err:#}")),
+                    "failed to read next multipart print field"
+                );
                 fields.cleanup_staged_uploads().await;
                 return Err(ApiError::bad_request("artifact_invalid_upload"));
             }
@@ -175,9 +205,9 @@ pub(super) async fn parse_multipart_print_fields(
 
         let text = match read_text_field(field).await {
             Ok(text) => text,
-            Err(_) => {
+            Err(err) => {
                 fields.cleanup_staged_uploads().await;
-                return Err(ApiError::bad_request("artifact_invalid_upload"));
+                return Err(err);
             }
         };
         let parsed = match name.as_str() {
@@ -216,7 +246,7 @@ pub(super) async fn parse_multipart_print_fields(
             "ams_mapping_info" => {
                 parse_optional_json_field(&text).map(|value| fields.ams_mapping_info = value)
             }
-            _ => Ok(()),
+            _ => studio::parse_field(&mut fields, &name, &text),
         };
         if let Err(err) = parsed {
             fields.cleanup_staged_uploads().await;
@@ -225,23 +255,6 @@ pub(super) async fn parse_multipart_print_fields(
     }
 
     Ok(fields)
-}
-
-async fn read_text_field(
-    mut field: axum::extract::multipart::Field<'_>,
-) -> Result<String, ApiError> {
-    let mut bytes = Vec::new();
-    while let Some(chunk) = field
-        .chunk()
-        .await
-        .map_err(|_| ApiError::bad_request("artifact_invalid_upload"))?
-    {
-        if bytes.len().saturating_add(chunk.len()) > MAX_MULTIPART_TEXT_FIELD_BYTES {
-            return Err(ApiError::bad_request("artifact_invalid_upload"));
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    String::from_utf8(bytes).map_err(|_| ApiError::bad_request("artifact_invalid_upload"))
 }
 
 async fn prepare_print_job(
@@ -315,77 +328,4 @@ async fn prepare_print_job(
         artifact_metadata,
         upload_file,
     })
-}
-
-async fn stage_file_field(
-    max_artifact_bytes: usize,
-    mut field: axum::extract::multipart::Field<'_>,
-    filename: Option<String>,
-    content_type: Option<String>,
-) -> Result<StagedUpload, ApiError> {
-    let path = std::env::temp_dir().join(format!("pandar-upload-{}", uuid::Uuid::new_v4()));
-    let mut file = fs::File::create(&path).await.map_err(|err| {
-        tracing::error!(
-            error = %super::redact_artifact_error(&format!("{err:#}")),
-            "failed to create staged print artifact"
-        );
-        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
-    })?;
-    let mut size_bytes = 0usize;
-    while let Some(chunk) = match field.chunk().await {
-        Ok(chunk) => chunk,
-        Err(_) => {
-            drop(file);
-            let _ = fs::remove_file(&path).await;
-            return Err(ApiError::bad_request("artifact_invalid_upload"));
-        }
-    } {
-        size_bytes = size_bytes.saturating_add(chunk.len());
-        if size_bytes > max_artifact_bytes {
-            drop(file);
-            let _ = fs::remove_file(&path).await;
-            return Err(ApiError::new(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "artifact_too_large",
-            ));
-        }
-        if let Err(err) = file.write_all(&chunk).await {
-            tracing::error!(
-                error = %super::redact_artifact_error(&format!("{err:#}")),
-                "failed to write staged print artifact"
-            );
-            drop(file);
-            let _ = fs::remove_file(&path).await;
-            return Err(ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "internal_server_error",
-            ));
-        }
-    }
-    if size_bytes == 0 {
-        drop(file);
-        let _ = fs::remove_file(&path).await;
-        return Err(ApiError::bad_request("artifact_empty"));
-    }
-    if let Err(err) = file.flush().await {
-        tracing::error!(
-            error = %super::redact_artifact_error(&format!("{err:#}")),
-            "failed to flush staged print artifact"
-        );
-        drop(file);
-        let _ = fs::remove_file(&path).await;
-        return Err(ApiError::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_server_error",
-        ));
-    }
-    Ok(StagedUpload {
-        path,
-        filename,
-        content_type,
-    })
-}
-
-async fn cleanup_staged_upload(file: &StagedUpload) {
-    let _ = fs::remove_file(&file.path).await;
 }

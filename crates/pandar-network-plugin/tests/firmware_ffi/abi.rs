@@ -31,6 +31,7 @@ unsafe extern "C" {
         dev_id_len: usize,
         printer_id_ptr: *const u8,
         printer_id_len: usize,
+        expected_generation: u64,
     ) -> PluginHttpResult;
     fn pandar_plugin_firmware_refresh_version(
         session: *mut c_void,
@@ -40,6 +41,7 @@ unsafe extern "C" {
         printer_id_len: usize,
         sequence_id_ptr: *const u8,
         sequence_id_len: usize,
+        expected_generation: u64,
     ) -> PluginHttpResult;
     fn pandar_plugin_firmware_send(
         session: *mut c_void,
@@ -51,11 +53,14 @@ unsafe extern "C" {
         message_len: usize,
         tunnel: i32,
         token_out: *mut u64,
+        expected_generation: u64,
     ) -> PluginHttpResult;
     fn pandar_plugin_firmware_return_handoff(
         session: *mut c_void,
         token: u64,
         origin_tick: u64,
+        local_generation: u64,
+        cache_generation: u64,
     ) -> i32;
     fn pandar_plugin_firmware_next_status_override(
         session: *mut c_void,
@@ -84,6 +89,8 @@ pub(super) struct HttpOutput {
 
 pub(super) struct CallbackOutput {
     pub(super) status: i32,
+    pub(super) local_generation: u64,
+    pub(super) cache_generation: u64,
     pub(super) dev_id: String,
     pub(super) message: String,
     pub(super) tunnel: i32,
@@ -129,7 +136,12 @@ impl Session {
         }
     }
 
-    pub(super) fn catalog(&self, dev_id: &str, printer_id: &str) -> HttpOutput {
+    pub(super) fn catalog(
+        &self,
+        dev_id: &str,
+        printer_id: &str,
+        expected_generation: u64,
+    ) -> HttpOutput {
         let result = unsafe {
             pandar_plugin_firmware_catalog(
                 self.raw,
@@ -137,12 +149,19 @@ impl Session {
                 dev_id.len(),
                 printer_id.as_ptr(),
                 printer_id.len(),
+                expected_generation,
             )
         };
         take_http(result)
     }
 
-    pub(super) fn refresh(&self, dev_id: &str, printer_id: &str, sequence_id: &str) -> HttpOutput {
+    pub(super) fn refresh(
+        &self,
+        dev_id: &str,
+        printer_id: &str,
+        sequence_id: &str,
+        expected_generation: u64,
+    ) -> HttpOutput {
         let result = unsafe {
             pandar_plugin_firmware_refresh_version(
                 self.raw,
@@ -152,6 +171,7 @@ impl Session {
                 printer_id.len(),
                 sequence_id.as_ptr(),
                 sequence_id.len(),
+                expected_generation,
             )
         };
         take_http(result)
@@ -164,6 +184,7 @@ impl Session {
         message: &str,
         tunnel: i32,
         token_out: Option<&mut u64>,
+        expected_generation: u64,
     ) -> HttpOutput {
         let token_out = token_out.map_or(std::ptr::null_mut(), |token| token as *mut u64);
         let result = unsafe {
@@ -177,13 +198,28 @@ impl Session {
                 message.len(),
                 tunnel,
                 token_out,
+                expected_generation,
             )
         };
         take_http(result)
     }
 
-    pub(super) fn handoff(&self, token: u64, origin_tick: u64) -> i32 {
-        unsafe { pandar_plugin_firmware_return_handoff(self.raw, token, origin_tick) }
+    pub(super) fn handoff(
+        &self,
+        token: u64,
+        origin_tick: u64,
+        local_generation: u64,
+        cache_generation: u64,
+    ) -> i32 {
+        unsafe {
+            pandar_plugin_firmware_return_handoff(
+                self.raw,
+                token,
+                origin_tick,
+                local_generation,
+                cache_generation,
+            )
+        }
     }
 
     pub(super) fn next_status(&self, dev_id: &str) -> HttpOutput {
@@ -234,6 +270,8 @@ fn take_callback(result: PluginFirmwareCallbackResult) -> CallbackOutput {
     let message = copy_allocation(result.message_ptr, result.message_len, result.message_cap);
     CallbackOutput {
         status: result.status,
+        local_generation: result.local_generation,
+        cache_generation: result.cache_generation,
         dev_id,
         message,
         tunnel: result.tunnel,

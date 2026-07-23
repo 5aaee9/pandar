@@ -9,6 +9,7 @@ pub mod firmware;
 pub mod ids;
 pub mod job;
 pub mod printer;
+pub mod studio_print;
 pub mod tenant;
 
 pub use agent::{Agent, AgentStatus};
@@ -26,6 +27,10 @@ pub use job::{
     PrintCalibrationMode, PrintStatus,
 };
 pub use printer::{Printer, PrinterNozzleTemperature, PrinterParts};
+pub use studio_print::{
+    StudioAmsMappingEntry, StudioAmsMappingInfo, StudioFiniteF64, StudioNozzleInfo,
+    StudioPrintMetadata, StudioPrintMetadataV1, StudioSubmissionId,
+};
 pub use tenant::Tenant;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -78,6 +83,12 @@ pub enum CoreError {
     InvalidPrintStatus(String),
     #[error("invalid print calibration mode: {0}")]
     InvalidPrintCalibrationMode(u8),
+    #[error("studio submission id must be a positive int32: {0}")]
+    InvalidStudioSubmissionId(i64),
+    #[error("Studio print numeric metadata must be finite")]
+    NonFiniteStudioNumber,
+    #[error("invalid Studio print metadata: {0}")]
+    InvalidStudioPrintMetadata(String),
 }
 
 pub fn created_at_now() -> String {

@@ -140,7 +140,10 @@ Deploy in this exact order: database migration, dual-capability Agents, all Hubs
 
 ## Bambu Studio Network Plugin
 
-`crates/pandar-network-plugin` builds as a dynamic-library replacement scaffold for Bambu Studio's network plugin ABI. It uses `reference/open-bamboo-networking` for ABI coverage and `reference/BambuStudio` for caller behavior.
+`crates/pandar-network-plugin` builds the Hub-backed adapter for exact Bambu Studio commit
+`ba049f6a2e08c3b6033660bb84da80c08722974b` (`02.08.01.55`, network agent
+`02.08.01.52`). The target-header caller uses upstream Boost `1.84.0` and freezes 109 network plus 21
+File Transfer declarations (130 unique exports).
 
 Important boundaries:
 
@@ -148,6 +151,23 @@ Important boundaries:
 - The plugin does not connect directly to `pandar-agent` or Bambu machines.
 - The plugin does not store Bambu printer access codes.
 - Bambu LAN MQTT and machine file transfer remain agent-local.
+- Studio's LAN-shaped connect/message ABI is a Hub-backed virtual/local proxy, not Direct LAN. Only an
+  authorized `dev_id` selects a target; host/IP, username, password, and SSL inputs are ignored and
+  scrubbed, and the plugin opens no direct printer socket.
+- Direct discovery, bind/unbind, certificate ownership, printer sockets, and `ft_*` operations remain
+  explicit unsupported results.
+- Rust owns typed account/persisted-login policy, session selection, subscriptions, virtual-local
+  generations, heartbeat delivery, status construction, and message classification. C++ owns only
+  ABI/STL adaptation, callback invocation, and required synchronization.
+- A Studio cloud target is eligible when it is selected or explicitly subscribed. Heartbeat delivery
+  uses the deduplicated union of both ownership sources. Removing one source retains the target while
+  the other remains; only removal of both retires cloud initialization, cloud notifications, and cloud
+  tickets. Cloud retirement never retires a Local generation or Local ticket.
+- Generic message precedence is firmware -> status -> semantic operation -> unsupported. Status is
+  successful only after an eligible current callback delivery; ineligible/subscription/refresh/listener
+  failures return `-2`.
+- `get_user_tasks` is Hub-backed with authorized filters, pagination, stable ids, and typed metadata;
+  it does not return an unconditional empty page.
 
 ### Native Bambu Studio firmware updates
 
@@ -170,7 +190,7 @@ Firmware session ownership, prepared secrets, and result waiters are process-loc
 
 Roll out in the order Agent, Hub schema/protobuf/plugin endpoints with both SQLite and PostgreSQL migrations, then network plugin. The plugin exposes controls only after the exact current Agent session advertises firmware capability. For rollback, first stop and roll back the network plugin so it cannot start new firmware mutations. Before rolling back Hub or Agent, let the owning Hub's process-local URL/result waiters reach a terminal acknowledgement or explicitly fail them, allow outstanding reservations to expire, and never transfer or replay the work. Then roll back Hub and finally Agent, leaving the additive nullable firmware columns in place. A printer already flashing remains under printer control; rollback neither cancels it nor asserts an outcome.
 
-Local verification is deterministic: typed parser and repository tests, fake MQTT/HTTP peers, lifecycle/race tests, and compiled Cloud/LAN ABI fixtures. `PANDAR_TEST_POSTGRES_URL` was unset, so real PostgreSQL firmware tests were explicitly skipped; SQLite behavior and SQLite/PostgreSQL migration parity were covered. Verification downloaded no external firmware package, sent no live printer firmware command, and adds no new real Bambu Studio compatibility evidence. Web/Android remote OTA plus firmware package staging or hosting remain future C work, not implemented behavior.
+Local verification is deterministic: typed parser and repository tests, fake MQTT/HTTP peers, lifecycle/race tests, and compiled Cloud/LAN ABI fixtures. The phase-local run historically recorded `PANDAR_TEST_POSTGRES_URL` as unset and skipped real PostgreSQL firmware tests. Final13 disposable PostgreSQL 16.14 validation later passed the 55-case filter twice with zero runtime skip markers. Verification downloaded no external firmware package, sent no live printer firmware command, and adds no new real Bambu Studio compatibility evidence. Web/Android remote OTA plus firmware package staging or hosting remain future C work, not implemented behavior.
 
 ### Feature-aware Home and XYZ controls
 
@@ -182,7 +202,7 @@ With bit 32, an eligible full Home uses `back_to_center`. With bit 38, an eligib
 
 Roll out this protocol in the order Hub (including both database migrations and session gates) -> Agent -> network plugin. During rollback, first stop the plugin from creating new required-feature operations and drain or fail every queued or sent operation whose `required_device_features` list is non-empty. Only then roll back Agent and Hub; leave the additive nullable columns in place. Required operations tied to a replaced or mismatched session fail and are not sent to an older Agent.
 
-Local operator verification for this implementation recorded 1,063/1,063 workspace tests, 288 Agent tests, 656 Hub tests, 84 network-plugin tests, and two compiled Studio ABI probe tests. The protocol tests use deterministic fakes/loopback peers, and the compiled Windows ABI fixture uses MSVC. `PANDAR_TEST_POSTGRES_URL` was not configured, so the real PostgreSQL device-feature test was explicitly skipped; migration parity and SQLite behavior were still covered locally. No Home or XYZ movement was executed against a real printer, and this evidence must not be recorded as real Studio or hardware validation.
+Local operator verification for this implementation recorded 1,063/1,063 workspace tests, 288 Agent tests, 656 Hub tests, 84 network-plugin tests, and two compiled Studio ABI probe tests. The protocol tests use deterministic fakes/loopback peers, and the compiled Windows ABI fixture uses MSVC. Its missing `PANDAR_TEST_POSTGRES_URL` was a historical phase-local skip; final13 backend-parity validation supersedes it with two PostgreSQL 55/55 runs and zero runtime skip markers. No Home or XYZ movement was executed against a real printer, and this evidence must not be recorded as real Studio or hardware validation.
 
 ### Typed Studio `gcode_line` passthrough
 
@@ -194,7 +214,7 @@ The command uses the existing first-dispatch lifecycle: Hub changes `queued` to 
 
 Roll out in the order Hub → Agent → network plugin. For rollback, first stop the plugin from creating new typed G-code operations, then drain or explicitly fail every queued and sent `GcodeLine` command to a terminal state before rolling back Agent or Hub. The feature has no database migration.
 
-Verification is local and deterministic: parser and plugin HTTP tests, compiled Cloud and LAN ABI calls against a loopback Hub, and Hub/Agent conversion and lifecycle tests. `PANDAR_TEST_POSTGRES_URL` was unset, so the real PostgreSQL round trip was skipped. No live Studio validation or live-printer movement, Homing, or passthrough G-code execution is claimed.
+Verification is local and deterministic: parser and plugin HTTP tests, compiled Cloud and LAN ABI calls against a loopback Hub, and Hub/Agent conversion and lifecycle tests. The omitted `PANDAR_TEST_POSTGRES_URL` round trip belongs to that historical phase-local run; final13 PostgreSQL 16.14 passed the 55-case filter twice with zero runtime skip markers. No live Studio validation or live-printer movement, Homing, or passthrough G-code execution is claimed.
 
 ### Native print-error live operations
 
@@ -208,7 +228,7 @@ Implemented login flow:
 2. The plugin starts a loopback HTTP server on `127.0.0.1:0`; that server is the host returned by `bambu_network_get_bambulab_host`.
 3. The local server serves `frontend/plugin-local/dist` with `rust-embed`. The page shows default web/hub URLs when no configuration is present and lets the user switch the target server before sign-in.
 4. The local page links to the configured Pandar frontend `/plugin-sign-in` route with the local callback URL.
-5. The frontend relies on the configured Pandar auth token/cookie bridge and tenant selection through Pandar-managed membership.
+5. The frontend relies on the configured Pandar auth token/cookie bridge and tenant selection through Pandar-managed membership. With Better Auth, `/plugin-sign-in` adds a versioned base64url return intent to the issuer URL; magic-link and passkey completion carry that opaque value back through the dashboard callback, which accepts only `/plugin-sign-in` and never copies the JWT into the return target.
 6. The hub issues a short-lived one-use plugin login ticket.
 7. The page uses Studio's `get_localhost_url` message and redirects to Studio's local HTTP server with `ticket` and `redirect_url`.
 8. Studio calls the plugin's `get_my_token(ticket)` and `get_my_profile(token)` ABI methods.
@@ -222,7 +242,172 @@ Plugin URL configuration uses this precedence:
 
 The local `/config` endpoint stores an in-process target-server override. Later hub-facing ABI calls refresh only the hub URL from that local config; the existing Next.js `/plugin-sign-in` flow remains responsible for authentication and ticket creation.
 
-Plugin credentials are revocable tenant-owned credentials. They do not carry `agent:register`. Phase 23 adds a compatibility manifest, manual smoke runbook, stable plugin error mapping, and a local ABI probe. Real Bambu Studio compatibility remains unverified until `docs/compatibility/bambu-studio-plugin.md` contains a real Studio evidence row.
+Plugin credentials are revocable tenant-owned credentials. They do not carry `agent:register`. Phase
+23 has automated ABI/status/command/print-task probes and a manual smoke runbook, but real exact-Studio
+compatibility claims follow the per-platform evidence in `docs/compatibility/bambu-studio-plugin.md`.
+
+The current final16 Linux candidate freezes source `HEAD`
+`2ba0d1f2755501ea9e7d4babcf176db40638f643` as `pandar-bambu-final16-019f7b10.tar.gz`: 2,793,904
+bytes, archive SHA-256 `24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039`,
+and canonical source-tree SHA-256
+`c62c92167f466a915400953ec2d0e126bc34b3c6509a747ddee17dce8d52bf30`. The preceding pre-fix
+freeze whose SHA-256 begins `6318d190` and ends `ab473` was rejected by P1 review and is not a
+candidate.
+
+Final16 Ubuntu 22.04 Nextest run `c9c96abe-5b80-4478-be33-9ceffef62a53` passed 1,808/1,808
+executed tests with one configured skip. Fmt, strict workspace Clippy, module-size checks, ABI tool
+22/22, release-smoke 25/25, packaged tasks 18/18, the 109-network plus 21-File-Transfer export
+contract, and 21 File Transfer entrypoints x 256 ASan/LSan cycles passed. Disposable PostgreSQL
+16.14 run `b73d7ce9-d3ab-424b-8d65-b4736e59f24b` passed 7/7 with zero skips; its dedicated
+container, network, and volume were removed and their absence was verified.
+
+The exact final16 Linux archive `pandar-final16-linux-amd64-019f7b10.tar.gz` is 24,891,706 bytes
+with SHA-256 `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3` and sidecar
+SHA-256 `bde03e9633839432063d93768e10b0caf845755d216a653e20fa11d1461296f8`. Its only members
+are `pandar`, `libpandar_network_plugin.so`, and `libpandar_bambu_source.so`, with respective
+SHA-256 values `b1762bfccdfc1f658147b19b23d7016707b5414d14f74be518e0b5663ddb1b22`,
+`3bcce9085205d6af67dc9671cf58cd6f9fb694d5a587b43d160dc8b6a9b0712f`, and
+`88d34358be39ed3d239aeb317df8f34a92d4652877e86a9849c66e32347c1df2`. The native evidence
+archive and sidecar SHA-256 values are
+`fe35290675aac4e6ce323a8ebc75bde1c34d373b1df7506f7f8a65b69ffea950` and
+`00a560832428e045affad08617646f7e3d322e07c4849d20e5912be6d545595b`.
+
+The final16 official Bambu Studio `02.08.01.55` AppImage, SHA-256
+`e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`, made exactly one
+model-task request, received one HTTP 200 response, and produced the ordered lifecycle `request
+started` -> `response accepted` -> `callback started` -> `callback returned` exactly once. Its
+evidence-manifest SHA-256 is
+`c6ba9b6282581119d3baec720e26990ad63efc20eb394b0c71dced89081d5fd9`. This controlled gate
+uses a synthetic persisted session and loopback mock; it is not real authentication, Hub, Agent,
+database, printer, hardware, print, or firmware evidence. No GitHub Action or Windows Studio process
+was used.
+
+Historical final14 Linux evidence freezes source `HEAD`
+`2ba0d1f2755501ea9e7d4babcf176db40638f643` as `pandar-bambu-final14-019f7b10.tar.gz`: 2,782,539
+bytes and 1,548 regular members, archive SHA-256
+`c422d80d89052732db6b8ae87b68fd1e4145c64f588d8382deafef3345d86681`, member-list SHA-256
+`5b32472c9372a992c23315d9b33691a0f269248b65db312590ed00556e21aac0`, canonical tree SHA-256
+`43a4a577fb90327dad9e59bcb89dc1e91352bad83f27786a32cae34cb62136e5`, and freeze-evidence
+SHA-256 `70d545770086c6acde271d3181508adf4f0d91fc8213771363ec78b2792f5ec3`. Determinism passed;
+unsafe-member, duplicate, case-collision, reparse-point, membership-diff, and content-diff counts were
+zero. Pre-freeze Web 38 files/327 tests, Auth 3 files/9 tests, both typechecks and production builds,
+zero-warning Web lint, and the Better Auth callback smoke passed.
+
+Historical final14 Ubuntu 22.04 Nextest run `d2231751-1284-46b0-aee6-2e041ca1a203` passed
+1,781/1,781 with one separately reported skip in 812.413 seconds. Fmt, strict Clippy, module-size 2/2,
+release-smoke-tool 21/21, the 109-network plus 21-File-Transfer contract in all five native modes,
+and 21 File Transfer entrypoints x 256 ASan/LSan cycles passed. Its Linux archive
+`pandar-final14-linux-amd64-019f7b10.tar.gz` is 24,854,111 bytes with SHA-256
+`4e91f2457197532102544b02d4edac5354dc2982ec55fa707a057cbcba518b68`; its evidence bundle
+SHA-256 is `db6a464ce6b9b4b5e4689e1f0f21962dd097349056e78beb57a8779e1352cb02`.
+The strict Clippy command exited successfully with Rust `-D warnings`; its captured build log still
+contains C++ missing-field-initializer diagnostics and a dependency future-incompatibility warning, so
+that final14 gate is not described as warning-free.
+
+Historical final14 official-AppImage attempt 1 loaded both candidate libraries 4/4 and retained
+Studio PID `137`/start ticks `193373032` across two offline failures and one successful development
+no-auth commit. Undefined-symbol, `dlopen`, certificate, and missing-library counts were zero. Redacted
+evidence `pandar-final14-appimage-redacted-evidence-019f7b10.tar.gz` is 10,603 bytes with 23 members
+and SHA-256 `7eac6abbc7364928147d60dd1c583d084c02debf1552734bc82a4dec59c941be`.
+It explicitly records `authenticated_session_claim=false`; authenticated Studio, real Windows Studio,
+macOS, model-task `get_subtask`, hardware actions, and live firmware were not covered by final14.
+
+The historical final13 immutable input is `pandar-bambu-final13-019f7b10.tar.gz` at source `HEAD`
+`2ba0d1f2755501ea9e7d4babcf176db40638f643`: 2,751,227 bytes and 1,543 regular members, archive
+SHA-256 `71080abb1e7392b0440a179b5bca9fd80638de74a614105b8dc11a0f70959c34`, member-list SHA-256
+`87a6ad1dfaa404731ed30d7e265303cca64fc4278a478f9c12192c09373eb880`, source-tree SHA-256
+`db0b7c3385c29ff0cdee1930a66f554a6845b58907373ef543563b829c245761`, and freeze-evidence
+SHA-256 `4d132e16f91365795f54c97f608483c34b55726c5f614f5bb8ffaac2ede1fb7f`. Determinism passed and
+all unsafe/duplicate/case/reparse/diff counts were zero. Pre-freeze plugin run
+`da32fbc4-f37e-4198-af5e-c35f73512dcb` passed 368/368 with one separately reported skip.
+
+Final13 Windows clean run `90cb6a69-08a5-4421-a661-58e696c374a3` passed 1,778/1,778 with one
+separately reported skip in 1,050.084 seconds; the firmware probe passed in 28.858 seconds. Fmt,
+zero-warning strict Clippy, module-size 2/2, both standalone tools 21/21, and frontend 37 files/324
+tests plus typecheck, zero-warning lint, and production build passed. `npm ci` recorded six audit
+vulnerabilities (three moderate and three high); retain that as dependency-audit evidence rather than
+relabeling it a Studio-parity failure. Clean evidence SHA-256 is
+`c1ac8807a427ae4b7003681e9ad343d668dab1d6aa7c143d14bc699fe58b7b89`.
+
+Historical final13 PostgreSQL 16.14 harness `0c292295-f9ab-459b-89c2-ea74f2c9ff56` ran
+`24b49c19-cd07-42b5-a5a3-6d220345bd7e` and `1f4b8458-6397-4c0b-8ab3-23d37779c68a`; each passed
+55/55 with 831 filtered and zero runtime skip markers. Per-run log SHA-256 values are
+`b123f495e09de3c57c2c175000a37cc1fa7395dd0a9c52f1c2f72426c2f4dc08` and
+`b3e233f50fe1be9df43867e34307fd6193f09a2dc00940318bdfb8827f0a8d54`; normalized evidence SHA-256 is
+`7e04ae355f7bca3fb409bbc700b5c8f160194c0d2f9ec82df823c859566a2db7`; source read-only and
+cleanup checks passed.
+
+The final13 Windows archive `pandar-final13-windows-amd64-019f7b10.tar.gz` is 21,285,752 bytes with
+SHA-256 `6c50e77a0b4008ce46d86de51411117061c5118e18849ca1fb94f4a3f319db64`; native evidence
+SHA-256 is `3dab4bffa359e4c46eec77cbfb278ce3a1497f806a1d80343a1735b5a68f025b`. The MSVC candidate
+passed exact three-file layout, packaged CLI execution, all five ABI modes, the 109-network plus
+21-File-Transfer contract, 21/21 ABI and packaged-smoke checks, and companion sentinel/no-`Bambu_*`
+inspection. `dumpbin` reported 271 total plugin exports. Six pre-product manifest-harness calibration
+attempts are retained as infrastructure-only history. Build, ABI, and smoke runs were
+`0430ad0e-7f96-41c5-b9aa-1c6fd690fd16`, `2f27f859-b795-4420-b04a-30410ae7bcbc`, and
+`65ffc0b0-e17e-45da-bd3a-3375f5d88de1`. Real Windows Studio remains untested.
+
+Final13 Linux attempt 2 passed the full native/ASan gate. Nextest run
+`6ec3a215-9430-4ad2-adc7-f692ca156333` passed 1,779/1,779 with one separately reported skip; all five
+ABI modes, the exact three-file package, runtime audit, and 21 File Transfer entrypoints x 256
+ASan/LSan cycles passed. Archive and evidence-bundle SHA-256 values are
+`4166e6012e6c1bf7cdf056ba3bfb28f0fbc9d216c31e5ed2e8620adb8b5fcccc` and
+`aa7478fe0f74debcc5f3d1f5ec53a2222d726beafe5224935aa3382c24f6097a`. Attempt 1 run
+`c8a134c4-e775-4f37-b6ed-74ccb1b79123` remains non-promotable outer-harness history. Final13
+exact-AppImage attempt 8 passed the official Ubuntu 22.04 `02.08.01.55` module-load and same-process
+development no-auth recovery gate. The AppImage and redacted evidence SHA-256 values are
+`e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995` and
+`a4453c8dce3829cc1a84a372a772b516812fe1564b310e61db9e9009a11cf9d2`. Studio PID `137`/ticks
+`192688662` remained unchanged across two offline failures and one success/commit; both libraries
+mapped 4/4, active/total token count was `1/1`, create/revoke/discard counts were `1/0/0`, and loader/
+certificate error counts were zero. The final implementation review returned `APPROVE` with no
+Blocking, Important, or Minor finding; the final evidence-document review completed after correcting
+its sole Minor terminology finding.
+
+The historical final12 build input is `pandar-bambu-final12-019f7b10.tar.gz` at source HEAD
+`2ba0d1f2755501ea9e7d4babcf176db40638f643`: 2,740,698 bytes and 1,543 regular members, archive
+SHA-256 `17371828ef7a26cace73cfbed321d094bf38323670e8fa6ccf69d6cbfd4b7eee`, canonical member-list
+SHA-256 `87a6ad1dfaa404731ed30d7e265303cca64fc4278a478f9c12192c09373eb880`, and source-tree/manifest
+SHA-256 `5aa0038dbc3f0962cc172646876263b0db04e1e6df5fbe571553af1967f242a6`.
+
+The frozen final12 disposable PostgreSQL 16.14 validation used harness run
+`3e00d36c-7fb9-47d3-b71b-d9735ebe0eae` and Nextest run
+`0b708279-6183-4477-9f78-31add8d7f423`; 55/55 focused cases passed, 831 tests were filtered out,
+and the evidence contained zero skip markers. Its evidence SHA-256 is
+`d7f002f5be8708844cce406895503ef7056b634bf04aad068722eb25ef15247e`. The final12 Windows
+amd64 archive `pandar-final12-windows-amd64-019f7b10.tar.gz` has SHA-256
+`b4f6913eef7c1d09da9377fbce36b0ab759add25caac2baa0604c07a595440cb`; its native evidence
+SHA-256 is `11c38eb3c198cd07b2f96abbfbf70792b078170389e8869b230badbb98a404d2`. The native MSVC
+candidate passed exact three-file layout, packaged CLI execution, 109 network plus 21 File Transfer
+exports, all five ABI modes, companion PE/sentinel checks, and the 21-case packaged release smoke.
+Real Windows Studio remains untested.
+
+The final12 Windows clean gate passed, but subsequent Linux validation exposed the background-
+refresh/firmware-callback race, so all final12 results are retained only as historical regression
+evidence. The prior final11 clean run `c6a28ae0-1489-4b08-afda-7497be5668cf` (workspace Nextest
+1,749/1,749 plus frontend 37 files/324 tests, typecheck, lint, and production build) is historical too.
+The historical final11 Ubuntu 22.04 archive SHA-256 is
+`7b7ac417e1c781fbb682552676822457cac6f57a1eb1dd288f2d851f1181a0c6`; it passed workspace
+Nextest 1,750/1,750, the full ABI/release-smoke path, and 21 File Transfer entrypoints x 256
+ASan/LSan ownership cycles. All three historical Linux files require at most `GLIBC_2.34`; none is the
+current candidate. Final16 is the current verified Linux native/ASan candidate and has the narrow
+exact-AppImage model-task request/response/callback evidence described above. Real authenticated
+Linux Studio through Hub and Agent, real Windows Studio, macOS, printer hardware, print actions, and
+live firmware remain untested.
+
+Studio's `dev_id` is resolved to an authorized Hub printer, but only the Hub printer id crosses the
+HTTP boundary. Hub owns stable Studio submission/task ids, durable job/command state, plate and
+subtask metadata, authorization, and cancellation races. The plugin reports only milestones actually
+observed at that boundary; Agent owns artifact transfer and the final Bambu MQTT `project_file`
+translation. Roll out equivalent SQLite/PostgreSQL migrations first, then Agent, Hub, and finally the
+network plugin plus BambuSource. Roll back by stopping the plugin producer, draining or explicitly
+failing nonterminal Studio jobs/commands, then rolling back Hub and Agent while leaving additive
+columns in place. Studio must be stopped before replacing or restoring both plugin libraries.
+
+Pinned Studio also requires a platform BambuSource library before it creates the network agent.
+`crates/pandar-bambu-source` supplies only the `pandar_bambu_source_sentinel` load gate and exports no
+`Bambu_*` camera/media entrypoint, leaving Studio's fake-source fallback in control. It is not media,
+camera, discovery, or machine-transport support.
 
 Compatibility references:
 
@@ -233,18 +418,67 @@ Build and inspect the plugin:
 
 ```bash
 cargo test -p pandar-network-plugin
-cargo build -p pandar-network-plugin
+cargo build -p pandar-network-plugin -p pandar-bambu-source
 ```
 
-The output library is under `target/{debug,release}` as `libpandar_network_plugin.so`, `libpandar_network_plugin.dylib`, or `pandar_network_plugin.dll`.
+The output libraries are under `target/{debug,release}`. A current release candidate contains exactly
+the CLI, network plugin, and BambuSource companion at top level. Native release-smoke is currently
+scoped to `linux-amd64` and `windows-amd64`; it verifies 130 network-plugin exports plus the companion
+sentinel/no-`Bambu_*` rule. Historical two-file/129-export packages are not current candidates.
 
-Typical replacement paths:
+Install both libraries with the CLI so the companion receives Studio's exact platform name:
 
-- Linux AppImage or extracted builds: replace the bundled Bambu network plugin library next to the extracted Studio libraries, then start Studio from that extracted tree.
-- Windows: replace the Bambu Studio network plugin DLL in the Studio installation's plugin/library directory and keep the original DLL for rollback.
-- macOS: replace the network plugin dylib inside the Bambu Studio `.app` bundle's Frameworks/plugin library area. Gatekeeper signing/notarization for redistributed bundles is not completed by this package.
+```text
+pandar install-network-plugin --plugin-file <network-library> --source-file <source-library> --data-dir <BambuStudio-data-dir>
+```
 
-Packaging and signing are optional and not completed here.
+Typical Studio data/plugin locations:
+
+- Linux AppImage or extracted builds: use the installer to place both exact library names in Studio's
+  data-directory `plugins` folder, then start the same extracted Studio tree.
+- Windows: use the installer to place both exact DLL names in Studio's data-directory `plugins` folder
+  and keep both originals for rollback.
+- macOS: future evidence must install both exact dylib names with a native candidate. Gatekeeper
+  signing/notarization and current real Studio evidence are not available.
+
+The current final16 official-AppImage gate used AppImage SHA-256
+`e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`, made exactly one
+model-task request, received exactly one HTTP 200, and completed one ordered four-event lifecycle
+through callback return. Its evidence-manifest SHA-256 is
+`c6ba9b6282581119d3baec720e26990ad63efc20eb394b0c71dced89081d5fd9`. It used a synthetic
+persisted session and loopback mock, not real authentication, Hub, Agent, database, printer, hardware,
+print, or firmware. No GitHub Action or Windows Studio process was used.
+The redacted bundle `pandar-final16-real-studio-evidence-019f7b10.tar.gz` is 245,225 bytes with
+SHA-256 `f07c369ad9e0354ef40142294d9385e9c454fd534a04badce4be000f49c06eca`; a second
+independent generation matched byte-for-byte. It contains only safe `evidence/` and `outer/`
+artifacts, with no runner or mock implementation and no synthetic token contents.
+Its `.sha256` sidecar has SHA-256
+`30c6e5d43b74f9770d19638b86cefddd96d4d861c16155c74d30b488adf7f1b6`, and
+`sha256sum --check` passed.
+
+Historical final14 official-AppImage attempt 1 mapped both passed-package libraries 4/4 and retained
+Studio PID `137`/start ticks `193373032` while two proven pre-delivery failures were followed by one
+successful development no-auth commit. Redacted evidence SHA-256 is
+`7eac6abbc7364928147d60dd1c583d084c02debf1552734bc82a4dec59c941be`; its 23 members contain
+only hashes and redacted summaries. The run captured no login content, raw database, or key and used no
+Setup Wizard interaction, UI injection, authenticated account, Agent, printer, hardware, or firmware.
+
+The historical final13 official AppImage attempt 8 mapped both passed-package libraries 4/4 and retained
+Studio PID `137`/start ticks `192688662` while two proven pre-delivery failures were followed by one
+successful development no-auth commit. Redacted evidence SHA-256 is
+`a4453c8dce3829cc1a84a372a772b516812fe1564b310e61db9e9009a11cf9d2`; the login content, raw
+runner state, and database files were not retrieved. No Setup Wizard interaction, UI injection,
+authenticated account, Agent, printer, hardware action, or firmware action occurred.
+
+An earlier exact Linux packaged-library load passed but was superseded. The historical final11 official AppImage
+run mapped both Ubuntu 22.04 libraries and kept the same Studio process alive across two proven
+pre-delivery connection failures; after Hub became ready, retry produced one successful no-auth
+response, one committed active plugin session, and one create audit with no duplicate or discarded
+credential. The evidence file SHA-256 is
+`cc8a0ef1f16bfc3a109345f9ada4e15096ca5fcf6f6b50c82387cce53aee55dd`. Its authenticated
+desktop-session checklist, Windows real Studio, macOS, and live printer actions remain separate
+evidence gates. A development no-auth or no-print Studio result must not be presented as external
+sign-in, print, cancel, command, or hardware validation.
 
 ## Authentication And Provisioning
 
@@ -283,6 +517,56 @@ If `PANDAR_EXTERNAL_AUTH_PROVIDER` is unset, external identity auth is disabled.
 
 For no-auth local development, set `PANDAR_HUB_NO_AUTH=true` on `pandar-hub` and leave `APP_AUTH_PROVIDER`, `APP_API_TOKEN`, and `APP_AUTH_BEARER_TOKEN` unset on `pandar-web`. This exposes all hub HTTP/WebSocket tenant and bootstrap APIs without a bearer token, so do not use it on an untrusted network.
 
+Studio auto-bootstrap remains a development-only convenience. `POST /api/v1/plugin/no-auth-session`
+issues a `plugin:studio` credential only when the database contains exactly one tenant. Missing and
+ambiguous tenant states fail closed; the ambiguous case returns a stable conflict and commits neither
+a token nor a create audit. SQLite reserves the write transaction before the tenant count and
+PostgreSQL uses its equivalent locked transaction boundary, so tenant insertion cannot race issuance.
+
+The plugin serializes no-auth bootstrap and retries only a proven connection failure before HTTP
+delivery. A retry key binds the Hub generation and account epoch, uses a bounded five-attempt backoff
+starting at two seconds and capped at thirty seconds, and admits only one attempt at a time. Hub,
+token, account, configuration, logout, or destroy changes fence the captured request. A successful but
+stale candidate is not installed and is submitted for revocation instead.
+
+All Studio account files in one config directory are protected by the in-process locks and the
+cross-process `.pandar-plugin-account.lock`. Login, pending queue, direct intent, and completion-ledger
+updates use atomic namespace replacement/removal plus parent-directory confirmation. A persistence
+mutation has three distinct outcomes:
+
+- `Confirmed`: the namespace mutation was published and directory durability was confirmed. Only this
+  outcome can install a login candidate or authorize a revocation DELETE.
+- `ChangedUnconfirmed`: the namespace change was published, but directory durability could not be
+  confirmed. The operation fails closed; login candidates are not admitted and an unconfirmed
+  pending/direct intent cannot authorize DELETE.
+- Ordinary error: the current canonical namespace is unchanged. This does not claim that a rollback
+  has been made crash-durable before its directory metadata reaches stable storage.
+
+Requested logout and passive account loss share one ordered account-transition coordinator but have
+different token disposition. Passive loss clears local state without revoking the Hub token; a
+concurrent requested logout upgrades that same transition before finalization. Requested logout first
+seeks a `Confirmed` entry in `pandar-plugin-pending-revocations.json`. If pending staging cannot be
+confirmed, it must persist a `Confirmed` `pandar-plugin-direct-revocation.json` intent before calling
+`DELETE /api/v1/plugin/session`. A passive transition that is upgraded after clearing runtime state
+retains the complete account snapshot and restores it after an ordinary pre-DELETE preparation
+failure. A changed-unconfirmed intent fails without DELETE. Staged/direct remote failure remains
+replayable, while `401`/`410` is idempotent success.
+
+Successful revocation records only Hub URL plus token SHA-256 in
+`pandar-plugin-completed-revocations.json` before clearing recovery state. Login load/store consults
+this ledger plus pending/direct state, blocking a stale process from rewriting a revoked token.
+Successful direct completion removes a duplicate pending entry best-effort and idempotently; failure
+of that duplicate cleanup does not reverse the completed DELETE. The completed ledger is intentionally
+unbounded and has no automatic compaction. Clear it manually only after every Studio process using the
+config directory is stopped and every corresponding Hub plugin session is revoked, invalid, or
+expired. Hub revocation is tenant-scoped, redacted, and creates at most one revoke audit.
+
+Printer-list and task list/plate/subtask calls use the same no-auth recovery contract. A no-auth
+`401`/`410` enters the shared rotation coordinator, refreshes the credential once, and replays the
+request once. A second authorization failure is returned without recursion, stale account/configuration
+responses are rejected, and an authenticated Studio credential never falls back to no-auth issuance.
+These behaviors do not change the external-auth sign-in contract.
+
 Better Auth is supported through the same external JWT/JWKS contract. Configure Better Auth 1.6.23's JWT plugin with `keyPairConfig.alg = "RS256"` and configure Pandar verification with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. Better Auth delegates key generation to `jose`, where the RSA signing algorithm value is `RS256`; Pandar's smoke check signs a token and confirms the JWT header is `alg: "RS256"` and the JWKS key is `kty: "RSA"`. Pandar expects a stable `sub` plus verified email claims before creating tenant-local user projections.
 
 Self-hosted Better Auth issuer development lives under `frontend/auth/`:
@@ -304,7 +588,7 @@ node --experimental-strip-types frontend/auth/scripts/smoke-jwt-and-registration
 npm run build:auth
 ```
 
-The self-hosted issuer signs users in with email magic links by default and auto-creates first-time Better Auth users from verified email links. `PANDAR_AUTH_EMAIL_PROVIDER` must be `resend` or `smtp` at runtime. Resend uses `RESEND_API_KEY` plus `PANDAR_AUTH_EMAIL_FROM`; SMTP uses `PANDAR_AUTH_SMTP_HOST`, `PANDAR_AUTH_SMTP_PORT`, `PANDAR_AUTH_SMTP_USERNAME`, `PANDAR_AUTH_SMTP_PASSWORD`, and optional `PANDAR_AUTH_SMTP_TLS=starttls|tls|none`. Magic links expire after 30 minutes by default. After a magic-link login, `/auth/complete` offers optional passkey binding with a visible Skip action.
+The self-hosted issuer signs users in with email magic links by default and auto-creates first-time Better Auth users from verified email links. `PANDAR_AUTH_EMAIL_PROVIDER` must be `resend` or `smtp` at runtime. Resend uses `RESEND_API_KEY` plus `PANDAR_AUTH_EMAIL_FROM`; SMTP uses `PANDAR_AUTH_SMTP_HOST`, `PANDAR_AUTH_SMTP_PORT`, `PANDAR_AUTH_SMTP_USERNAME`, `PANDAR_AUTH_SMTP_PASSWORD`, and optional `PANDAR_AUTH_SMTP_TLS=starttls|tls|none`. Magic links expire after 30 minutes by default. After a magic-link login, `/auth/complete` offers optional passkey binding with a visible Skip action. Plugin return intents are opaque because Better Auth 1.6.23 decodes its magic-link callback value during verification; placing a nested query there directly would lose later `&`-delimited fields such as the Studio callback.
 
 For local end-to-end testing, run `pandar-auth` on port 3001, `pandar-web` on port 3000 with `APP_AUTH_PROVIDER=betterauth`, `APP_AUTH_BETTER_AUTH_BASE_URL=http://127.0.0.1:3001`, and `APP_AUTH_COOKIE_MAX_AGE_SECONDS=43200`, then configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth`, `PANDAR_EXTERNAL_AUTH_ISSUER=http://127.0.0.1:3001`, `PANDAR_EXTERNAL_AUTH_JWKS_URL=http://127.0.0.1:3001/api/auth/jwks`, `PANDAR_EXTERNAL_AUTH_AUDIENCE=http://127.0.0.1:3001`, and `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`.
 

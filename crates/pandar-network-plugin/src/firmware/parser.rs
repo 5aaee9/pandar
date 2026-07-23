@@ -7,6 +7,7 @@ use super::model::{StudioFirmwareCommand, StudioFirmwareParse};
 pub const PLUGIN_JSON_BODY_LIMIT: usize = 64 * 1024;
 
 #[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct StudioEnvelope {
     #[serde(default, deserialize_with = "present_upgrade")]
     upgrade: UpgradePresence,

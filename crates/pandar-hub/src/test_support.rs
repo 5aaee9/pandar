@@ -2,6 +2,46 @@ use anyhow::Context;
 
 use crate::{AppState, artifacts, cluster, db, identity::JwtVerifier};
 
+pub(crate) fn studio_metadata_for_tests() -> pandar_core::StudioPrintMetadata {
+    pandar_core::StudioPrintMetadata::V1(pandar_core::StudioPrintMetadataV1 {
+        task_name: "plate.3mf".to_owned(),
+        project_name: "Test project".to_owned(),
+        preset_name: "0.20mm Standard".to_owned(),
+        config_plate_index: Some(1),
+        nozzle_mapping: Vec::new(),
+        ams_mapping: Vec::new(),
+        ams_mapping2: Vec::new(),
+        ams_mapping_info: Vec::new(),
+        nozzles_info: Vec::new(),
+        connection_type: "hub".to_owned(),
+        comments: String::new(),
+        origin_profile_id: 0,
+        stl_design_id: 0,
+        origin_model_id: String::new(),
+        print_type: "from_normal".to_owned(),
+        submitted_device_name: "Test printer".to_owned(),
+        task_bed_leveling: false,
+        task_flow_cali: false,
+        task_vibration_cali: false,
+        task_layer_inspect: false,
+        task_record_timelapse: true,
+        task_timelapse_use_internal: false,
+        task_use_ams: true,
+        task_bed_type: "auto".to_owned(),
+        auto_bed_leveling: pandar_core::PrintCalibrationMode::Off,
+        auto_flow_cali: pandar_core::PrintCalibrationMode::Off,
+        auto_offset_cali: pandar_core::PrintCalibrationMode::Off,
+        extruder_cali_manual_mode: -1,
+        try_emmc_print: false,
+        svc_context: String::new(),
+        slicer_uid: String::new(),
+    })
+}
+
+pub(crate) fn studio_submission_id_for_tests() -> pandar_core::StudioSubmissionId {
+    pandar_core::StudioSubmissionId::try_from(1_i64).expect("positive Studio submission ID")
+}
+
 impl AppState {
     pub fn with_external_auth(self, verifier: JwtVerifier) -> Self {
         self.with_external_auth_option(Some(verifier))

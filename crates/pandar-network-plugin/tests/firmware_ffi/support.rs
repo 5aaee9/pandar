@@ -120,8 +120,8 @@ pub(super) fn command(sequence_id: &str) -> String {
 
 pub(super) fn printer_batch() -> &'static str {
     r#"{"message":"success","devices":[{
-        "dev_id":"SERIAL","dev_name":"Printer","name":"Printer","dev_ip":null,
-        "dev_access_code":null,"dev_model_name":"N6","model":"N6","dev_online":true,
+        "dev_id":"SERIAL","dev_name":"Printer","name":"Printer",
+        "dev_model_name":"N6","model":"N6","dev_online":true,
         "online":true,"task_status":"IDLE","state":"IDLE","gcode_state":"IDLE",
         "mc_percent":0,"mc_remaining_time":0,"layer_num":0,"total_layer_num":0,
         "task_id":null,"print_error":null,"job_id":null,"subtask_id":null,

@@ -244,7 +244,7 @@ fn every_partial_ignore_shape_is_an_invalid_native_candidate() {
 fn invalid_native_candidates_never_reach_ordinary_or_raw_gcode_fallback() {
     let mut value = native_candidate("resume");
     value["print"]["err"] = json!("not-decimal");
-    value["gcode"] = json!("G28 X");
+    value["print"]["gcode"] = json!("G28 X");
 
     assert_status(&value, STATUS_INVALID_NATIVE);
 }

@@ -8,8 +8,9 @@ use std::{
 };
 
 use super::{
-    PRINTERS_RESPONSE, firmware_compat,
+    firmware_compat,
     operations::{TestOperation, TestPrintErrorAction, assert_operation_body_eq},
+    responses::PRINTERS_RESPONSE,
     transport::{read_request_until, write_response},
 };
 
@@ -27,7 +28,6 @@ fn printers_response() -> String {
     local_clear["pandar_printer_id"] = serde_json::json!("printer-2");
     local_clear["dev_name"] = serde_json::json!("Probe Local Printer");
     local_clear["name"] = serde_json::json!("Probe Local Printer");
-    local_clear["dev_ip"] = serde_json::json!("192.0.2.11");
     local_clear["print_error"] = serde_json::json!(0);
     local_clear["job_id"] = serde_json::json!("");
 
@@ -36,7 +36,6 @@ fn printers_response() -> String {
     local_replacement["pandar_printer_id"] = serde_json::json!("printer-3");
     local_replacement["dev_name"] = serde_json::json!("Probe Replacement Printer");
     local_replacement["name"] = serde_json::json!("Probe Replacement Printer");
-    local_replacement["dev_ip"] = serde_json::json!("192.0.2.12");
 
     *devices = vec![cloud, local_clear, local_replacement];
     response.to_string()
@@ -49,6 +48,7 @@ fn request_line(request: &str) -> &str {
 pub(super) fn serve(listener: &TcpListener, stop: &Arc<AtomicBool>, deadline: Instant) {
     let printers = printers_response();
     let mut operation_posts = 0_u32;
+    let mut printer_refreshes = 0_u32;
 
     while !stop.load(Ordering::Acquire) {
         let Some((mut stream, request)) =
@@ -62,7 +62,13 @@ pub(super) fn serve(listener: &TcpListener, stop: &Arc<AtomicBool>, deadline: In
             continue;
         }
 
-        if line == "POST /api/v1/plugin/no-auth-session HTTP/1.1" {
+        if line == "GET /readyz HTTP/1.1" {
+            write_response(
+                &mut stream,
+                "HTTP/1.1 200 OK",
+                r#"{"status":"ready","checks":{}}"#,
+            );
+        } else if line == "POST /api/v1/plugin/no-auth-session HTTP/1.1" {
             write_response(
                 &mut stream,
                 "HTTP/1.1 403 Forbidden",
@@ -79,6 +85,7 @@ pub(super) fn serve(listener: &TcpListener, stop: &Arc<AtomicBool>, deadline: In
                 request.contains("authorization: Bearer probe-token"),
                 "native probe printer refresh omitted bearer token: {request}"
             );
+            printer_refreshes += 1;
             write_response(&mut stream, "HTTP/1.1 200 OK", &printers);
         } else if line == "GET /probe-operation-count HTTP/1.1" {
             write_response(
@@ -86,9 +93,24 @@ pub(super) fn serve(listener: &TcpListener, stop: &Arc<AtomicBool>, deadline: In
                 "HTTP/1.1 200 OK",
                 &serde_json::json!({"count": operation_posts}).to_string(),
             );
+        } else if line == "GET /probe-printer-refresh-count HTTP/1.1" {
+            write_response(
+                &mut stream,
+                "HTTP/1.1 200 OK",
+                &serde_json::json!({"count": printer_refreshes}).to_string(),
+            );
         } else if line.starts_with("POST /api/v1/plugin/printers/")
             && line.contains("/operations HTTP/1.1")
         {
+            if operation_posts >= 6 {
+                operation_posts += 1;
+                write_response(
+                    &mut stream,
+                    "HTTP/1.1 202 Accepted",
+                    r#"{"command_id":"unexpected-command","status":"sent"}"#,
+                );
+                continue;
+            }
             let (printer_id, error_action, printer_job_id, sequence_id) = match operation_posts {
                 0 => (
                     "printer-1",
@@ -126,7 +148,7 @@ pub(super) fn serve(listener: &TcpListener, stop: &Arc<AtomicBool>, deadline: In
                     "local-stop-get_version-pushall",
                     20_047,
                 ),
-                _ => panic!("unexpected extra native operation: {request}"),
+                _ => unreachable!(),
             };
             assert_eq!(
                 line,

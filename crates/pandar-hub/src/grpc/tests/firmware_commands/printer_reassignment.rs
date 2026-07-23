@@ -304,7 +304,7 @@ fn reassignment_snapshot(fixture: &FirmwareFixture) -> PrinterSnapshotUpsert {
         access_code: None,
         name: "reassigned printer".to_owned(),
         model: None,
-        status: "idle".to_owned(),
+        status: Some("idle".to_owned()),
         observed_at: "2026-07-13T00:00:00Z".to_owned(),
         nozzle_temperatures: Vec::new(),
         active_nozzle: None,
@@ -314,6 +314,7 @@ fn reassignment_snapshot(fixture: &FirmwareFixture) -> PrinterSnapshotUpsert {
         chamber_target_temperature_celsius: None,
         chamber_light_on: None,
         connection_authoritative: false,
+        telemetry_authoritative: true,
     }
 }
 

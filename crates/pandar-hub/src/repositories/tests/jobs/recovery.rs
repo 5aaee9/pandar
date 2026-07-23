@@ -3,6 +3,9 @@ use pandar_core::PrintCalibrationMode;
 
 use crate::repositories::DuplicatePrintJob;
 
+mod support;
+use support::*;
+
 #[tokio::test]
 async fn job_repository_retry_dispatch_requires_safe_pre_physical_failure() {
     let (database, tenants, agents, _, commands, jobs) = repositories().await;
@@ -49,6 +52,10 @@ async fn job_repository_retry_dispatch_requires_safe_pre_physical_failure() {
 
     assert_eq!(retried.job.id, safe.job.id);
     assert_ne!(retried.job.command_id, safe.job.command_id);
+    assert_eq!(
+        retried.job.studio_submission_id,
+        safe.job.studio_submission_id
+    );
     assert_eq!(retried.job.status, JobStatus::Queued);
     assert_eq!(retried.job.print.status, PrintStatus::Pending);
     assert_eq!(commands.count().await.unwrap(), 2);
@@ -236,7 +243,7 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
                     r#"[{"ams_id":1,"slot_id":0},{"ams_id":0,"slot_id":0}]"#.to_owned(),
                 ),
                 ams_mapping_info_json: Some(
-                    r#"[{"ams":4,"filamentType":"PLA","nozzleId":1}]"#.to_owned(),
+                    r#"[{"ams":4,"targetColor":"11223344","filamentId":"GFA00","filamentType":"PLA","nozzleId":1}]"#.to_owned(),
                 ),
             },
             Some("again".to_string()),
@@ -250,6 +257,10 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
         .unwrap();
 
     assert_ne!(reprint.job.id, source.job.id);
+    assert_ne!(
+        reprint.job.studio_submission_id,
+        source.job.studio_submission_id
+    );
     assert_eq!(reprint.job.status, JobStatus::Queued);
     assert_eq!(reprint.job.printer_id, target_printer_id);
     assert_eq!(reprint.job.agent_id, target_agent.id);
@@ -348,6 +359,10 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
         .unwrap();
 
     assert_ne!(duplicate.job.id, running.job.id);
+    assert_ne!(
+        duplicate.job.studio_submission_id,
+        running.job.studio_submission_id
+    );
     assert_eq!(duplicate.artifact.id, running.artifact.id);
     assert_eq!(duplicate.job.print.status, PrintStatus::Pending);
     assert_eq!(duplicate.job.status, JobStatus::Queued);
@@ -378,23 +393,4 @@ async fn job_repository_reprint_and_duplicate_create_independent_queued_jobs() {
         )
     );
     assert_studio_auto_calibration(&duplicate_payload);
-}
-
-fn with_studio_auto_calibration(mut input: CreatePrintJob) -> CreatePrintJob {
-    input.bed_leveling = true;
-    input.auto_bed_leveling = PrintCalibrationMode::Auto;
-    input.flow_cali = false;
-    input.auto_flow_cali = PrintCalibrationMode::Auto;
-    input.auto_offset_cali = PrintCalibrationMode::On;
-    input.timelapse = true;
-    input
-}
-
-fn assert_studio_auto_calibration(payload: &PrintProjectFilePayload) {
-    assert!(payload.bed_leveling);
-    assert_eq!(payload.auto_bed_leveling, PrintCalibrationMode::Auto);
-    assert!(!payload.flow_cali);
-    assert_eq!(payload.auto_flow_cali, PrintCalibrationMode::Auto);
-    assert_eq!(payload.auto_offset_cali, PrintCalibrationMode::On);
-    assert!(payload.timelapse);
 }

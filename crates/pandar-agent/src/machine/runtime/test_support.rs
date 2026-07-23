@@ -8,7 +8,7 @@ use crate::commands::authoritative_printer_snapshot_event as snapshot_event;
 use crate::machine::{
     MachineSnapshot, MaterialRefreshResult, PrintProjectDispatchResult, PrinterOperation,
     PrinterOperationDispatchResult, PrinterRefreshResult,
-    diagnostics::{PrinterDiagnosticResult, redact_known_access_codes},
+    diagnostics::{PrinterDiagnosticResult, PrinterEndpointSecrets},
     discovery::{DiscoveredPrinter, PrinterDiscoveryResult},
     file_transfer::{MachineFileTransfer, TransferModeCache},
     mqtt::{BambuMqttTransport, refresh_printer},
@@ -34,7 +34,7 @@ pub(crate) struct TestRuntimeBambuMachineGateway<T, F> {
     firmware: FirmwareObservationCache,
     firmware_execute_pause: tokio::sync::Mutex<Option<Arc<FirmwareExecutePauseState>>>,
     firmware_publish_count: std::sync::atomic::AtomicUsize,
-    redaction_access_codes: StdMutex<Vec<String>>,
+    redaction_values: StdMutex<PrinterEndpointSecrets>,
     transfer: F,
     report_timeout: Duration,
 }
@@ -49,10 +49,9 @@ where
         transfer: F,
         report_timeout: Duration,
     ) -> Self {
-        let redaction_access_codes = printers
-            .iter()
-            .map(|(endpoint, _, _)| endpoint.access_code.clone())
-            .collect();
+        let redaction_values = PrinterEndpointSecrets::from_endpoints(
+            printers.iter().map(|(endpoint, _, _)| endpoint),
+        );
         let discovered_printers = printers
             .iter()
             .map(|(endpoint, _, _)| DiscoveredPrinter {
@@ -81,7 +80,7 @@ where
             firmware: FirmwareObservationCache::default(),
             firmware_execute_pause: tokio::sync::Mutex::new(None),
             firmware_publish_count: std::sync::atomic::AtomicUsize::new(0),
-            redaction_access_codes: StdMutex::new(redaction_access_codes),
+            redaction_values: StdMutex::new(redaction_values),
             transfer,
             report_timeout,
         }
@@ -217,10 +216,8 @@ where
         }
     }
 
-    fn record_access_code(&self, endpoint: &BambuPrinterEndpoint) {
-        let mut access_codes = self.redaction_access_codes.lock().unwrap();
-        access_codes.retain(|access_code| access_code != &endpoint.access_code);
-        access_codes.push(endpoint.access_code.clone());
+    fn record_endpoint_secrets(&self, endpoint: &BambuPrinterEndpoint) {
+        self.redaction_values.lock().unwrap().record(endpoint);
     }
 }
 
@@ -231,7 +228,7 @@ where
     F: MachineFileTransfer + Clone + Send + Sync + 'static,
 {
     fn redact_error(&self, message: &str) -> String {
-        redact_known_access_codes(message, self.redaction_access_codes.lock().unwrap().clone())
+        self.redaction_values.lock().unwrap().redact(message)
     }
 
     async fn discover_printers(
@@ -359,7 +356,7 @@ where
             endpoint.serial.clone(),
             tokio::spawn(async { std::future::pending::<()>().await }),
         );
-        self.record_access_code(&endpoint);
+        self.record_endpoint_secrets(&endpoint);
         drop(version_lease);
         Ok(snapshot)
     }

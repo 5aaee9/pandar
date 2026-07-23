@@ -80,6 +80,40 @@ async fn fake_records_trait_boundary_operations_and_modes() {
     );
 }
 
+#[tokio::test]
+async fn generic_and_print_uploads_keep_distinct_emmc_policy() {
+    let fake = FakeMachineFileTransfer::default();
+    let disabled = PrintUploadPolicy {
+        try_emmc_print: false,
+    };
+    let enabled = PrintUploadPolicy {
+        try_emmc_print: true,
+    };
+
+    fake.upload("job.gcode.3mf", b"abc", P).await.unwrap();
+    fake.upload_print("job.gcode.3mf", b"abc", P, disabled)
+        .await
+        .unwrap();
+    fake.upload_print("job.gcode.3mf", b"abc", P, enabled)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        fake.recorded_requests(),
+        vec![
+            (P, FileTransferRequest::upload("job.gcode.3mf", 3)),
+            (
+                P,
+                FileTransferRequest::print_upload("job.gcode.3mf", 3, disabled)
+            ),
+            (
+                P,
+                FileTransferRequest::print_upload("job.gcode.3mf", 3, enabled)
+            ),
+        ]
+    );
+}
+
 #[test]
 fn attempt_order_uses_cache_force_clear_and_model_policy() {
     let cache = TransferModeCache::default();

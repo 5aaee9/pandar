@@ -1,6 +1,133 @@
 use super::*;
 
 #[tokio::test]
+async fn plugin_printer_online_requires_full_mqtt_presence_from_the_current_session() {
+    let state = state().await;
+    let tenant = state
+        .tenants()
+        .create("plugin-mqtt-presence", "Plugin MQTT Presence")
+        .await
+        .unwrap();
+    let auth = plugin_studio_tenant_token(&state, &tenant.id.to_string(), "mqtt-presence").await;
+    let serial = "presence-serial";
+    let agent_id = feature_advertisement_printer(&state, tenant.id, "presence-agent", serial).await;
+    let session_one = register_feature_session(&state, tenant.id, agent_id, false).await;
+
+    let (_, body) = request_as(
+        router(state.clone()),
+        Method::GET,
+        "/api/v1/plugin/printers",
+        None,
+        &auth,
+    )
+    .await;
+    let body = decode::<PluginPrinterListResponse>(body);
+    assert!(!body.devices[0].online);
+
+    let mut full = crate::repositories::PrinterSnapshotUpsert {
+        serial_number: serial.to_owned(),
+        host: None,
+        access_code: None,
+        name: serial.to_owned(),
+        model: None,
+        status: Some("idle".to_owned()),
+        observed_at: "2026-07-20T00:00:00Z".to_owned(),
+        nozzle_temperatures: Vec::new(),
+        active_nozzle: None,
+        bed_temperature_celsius: None,
+        bed_target_temperature_celsius: None,
+        chamber_temperature_celsius: None,
+        chamber_target_temperature_celsius: None,
+        chamber_light_on: None,
+        connection_authoritative: false,
+        telemetry_authoritative: true,
+    };
+    state
+        .printers()
+        .upsert_snapshot_with_device_features_if_current(
+            tenant.id,
+            agent_id,
+            &session_one.persisted_id(),
+            full.clone(),
+            None,
+        )
+        .await
+        .unwrap();
+    let (_, body) = request_as(
+        router(state.clone()),
+        Method::GET,
+        "/api/v1/plugin/printers",
+        None,
+        &auth,
+    )
+    .await;
+    let body = decode::<PluginPrinterListResponse>(body);
+    assert!(body.devices[0].online);
+    assert_eq!(body.devices[0].fun, "0");
+
+    state
+        .agents()
+        .mark_offline_if_current(
+            tenant.id,
+            agent_id,
+            &session_one.persisted_id(),
+            "2026-07-20T00:00:30Z",
+        )
+        .await
+        .unwrap();
+    state
+        .sessions()
+        .remove_if_current(agent_id, session_one)
+        .await;
+    let (_, body) = request_as(
+        router(state.clone()),
+        Method::GET,
+        "/api/v1/plugin/printers",
+        None,
+        &auth,
+    )
+    .await;
+    let body = decode::<PluginPrinterListResponse>(body);
+    assert!(!body.devices[0].online);
+
+    let session_two = register_feature_session(&state, tenant.id, agent_id, false).await;
+    full.observed_at = "2026-07-20T00:01:00Z".to_owned();
+    let (_, body) = request_as(
+        router(state.clone()),
+        Method::GET,
+        "/api/v1/plugin/printers",
+        None,
+        &auth,
+    )
+    .await;
+    let body = decode::<PluginPrinterListResponse>(body);
+    assert!(!body.devices[0].online);
+
+    state
+        .printers()
+        .upsert_snapshot_with_device_features_if_current(
+            tenant.id,
+            agent_id,
+            &session_two.persisted_id(),
+            full,
+            None,
+        )
+        .await
+        .unwrap();
+    let (_, body) = request_as(
+        router(state.clone()),
+        Method::GET,
+        "/api/v1/plugin/printers",
+        None,
+        &auth,
+    )
+    .await;
+    let body = decode::<PluginPrinterListResponse>(body);
+    assert!(body.devices[0].online);
+    assert_eq!(body.devices[0].fun, "0");
+}
+
+#[tokio::test]
 async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
     let state = state().await;
     let app = router(state.clone());
@@ -22,7 +149,7 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
                 access_code: None,
                 name: "Live Printer".to_string(),
                 model: Some("A1".to_string()),
-                status: "IDLE".to_string(),
+                status: Some("IDLE".to_string()),
                 observed_at: "2026-07-09T09:59:00Z".to_string(),
                 nozzle_temperatures: Vec::new(),
                 active_nozzle: None,
@@ -32,6 +159,7 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
                 connection_authoritative: false,
+                telemetry_authoritative: true,
             },
         )
         .await

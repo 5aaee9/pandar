@@ -108,6 +108,7 @@ pub async fn create_job(
         multipart,
         auth::audit_actor(&auth),
         "print",
+        multipart::MultipartPrintKind::Web,
     )
     .await?;
     let wake_tenant_id = created.job.tenant_id;
@@ -220,10 +221,10 @@ pub(super) fn parse_printer_id(value: &str) -> Result<(), ApiError> {
 }
 
 pub(super) fn validated_plate_id(value: i64) -> Result<u32, ApiError> {
-    if value <= 0 {
+    if !(1..=i64::from(i32::MAX)).contains(&value) {
         return Err(ApiError::bad_request("artifact_invalid_plate"));
     }
-    u32::try_from(value).map_err(|_| ApiError::bad_request("artifact_invalid_plate"))
+    Ok(value as u32)
 }
 
 pub async fn list_jobs(

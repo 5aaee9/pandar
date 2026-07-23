@@ -2,6 +2,7 @@ use super::*;
 
 mod command_job;
 mod firmware;
+mod studio_print;
 
 #[test]
 fn id_parse_rejects_invalid_uuid() {
@@ -94,6 +95,7 @@ fn printer_from_parts_builds_valid_record() {
         chamber_light_on: None,
         bambu_device_features: Some(BambuDeviceFeatures::from_bits(0x8000_0041_0000_0020)),
         bambu_device_features_session_id: Some("feature-session".to_owned()),
+        mqtt_presence_session_id: Some("presence-session".to_owned()),
     })
     .unwrap();
 
@@ -115,6 +117,7 @@ fn printer_from_parts_builds_valid_record() {
     let serialized = serde_json::to_value(&printer).unwrap();
     assert!(serialized.get("bambu_device_features").is_none());
     assert!(serialized.get("bambu_device_features_session_id").is_none());
+    assert!(serialized.get("mqtt_presence_session_id").is_none());
 }
 
 #[test]
@@ -141,6 +144,7 @@ fn printer_from_parts_validates_required_fields() {
             chamber_light_on: None,
             bambu_device_features: None,
             bambu_device_features_session_id: None,
+            mqtt_presence_session_id: None,
         })
     };
 
@@ -185,6 +189,7 @@ fn printer_from_parts_normalizes_blank_model() {
         chamber_light_on: None,
         bambu_device_features: None,
         bambu_device_features_session_id: None,
+        mqtt_presence_session_id: None,
     })
     .unwrap();
 

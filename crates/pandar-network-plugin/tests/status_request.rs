@@ -87,3 +87,41 @@ fn lookalikes_and_native_job_id_collisions_are_not_status_requests() {
         );
     }
 }
+
+#[test]
+fn mixed_or_extra_top_level_envelopes_are_not_status_requests() {
+    for value in [
+        json!({
+            "info": {"command": "get_version", "sequence_id": "31001"},
+            "pushing": {
+                "command": "pushall",
+                "sequence_id": "31002",
+                "version": 1,
+                "push_target": 1
+            }
+        }),
+        json!({
+            "info": {"command": "get_version", "sequence_id": "31003"},
+            "print": {"command": "pause", "sequence_id": "31004"}
+        }),
+        json!({
+            "pushing": {
+                "command": "pushall",
+                "sequence_id": "31005",
+                "version": 1,
+                "push_target": 1
+            },
+            "print": {"command": "pause", "sequence_id": "31006"}
+        }),
+        json!({
+            "info": {"command": "get_version", "sequence_id": "31007"},
+            "future": {"command": "future_control"}
+        }),
+    ] {
+        assert_eq!(
+            classify_json(value.clone()),
+            (STATUS_NOT_REQUEST, 200, String::new()),
+            "mixed or extra envelope was classified as status: {value}"
+        );
+    }
+}

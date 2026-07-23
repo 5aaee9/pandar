@@ -22,7 +22,11 @@ Bambu Studio -(network plugin ABI)-> pandar-network-plugin -(HTTP / WebSocket)->
 
 `pandar-auth` is the optional self-hosted Better Auth issuer app. It owns email magic-link sign-in, optional post-login passkey binding, its own SQLite database, and JWT/JWKS issuance. The hub does not read Better Auth tables; it only verifies emitted JWTs through the existing external-auth contract.
 
-`pandar-network-plugin` is a Bambu Studio dynamic-library plugin replacement scaffold. It exposes the required network plugin ABI symbols while connecting only to `pandar-hub`. It must not connect directly to `pandar-agent` or Bambu machines; local machine access remains the agent's responsibility.
+`pandar-network-plugin` is a Hub-backed Bambu Studio dynamic-library adapter. The active exact contract
+is Studio commit `ba049f6a2e08c3b6033660bb84da80c08722974b` (`02.08.01.55`) with Boost
+`1.84.0` and 109 network plus 21 File Transfer declarations. It connects only to `pandar-hub`; it must
+not connect directly to `pandar-agent` or Bambu machines, and local machine access remains the agent's
+responsibility.
 
 End-user authentication can be delegated to Clerk, Logto, or Better Auth, but tenant authorization remains inside Pandar. The hub verifies identity-provider JWTs, maps provider subjects to local tenant users, and checks Rust-managed user-to-tenant membership plus tenant roles for every tenant-scoped operation. Pandar user rows are tenant-local projections of external accounts; the primary product path does not make Pandar an account manager.
 
@@ -129,7 +133,7 @@ Pandar's contract:
 
 Phase 10 implements this contract in `pandar-hub` with one configured external identity profile per hub process. The hub parses `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, optional audience, RS-family algorithm allow-list, optional Clerk-style authorized parties, optional Logto-style required scopes, and clock leeway at startup. Partial external-auth configuration is a startup error.
 
-The self-hosted Better Auth issuer is packaged as a sibling Next.js app named `pandar-auth`. It configures Better Auth's magic-link, passkey, and JWT plugins, exposes JWKS at `/api/auth/jwks`, exposes session JWT retrieval at `/api/auth/token`, and redirects successful sign-ins back to `pandar-web`'s callback with a `token` query parameter. The dashboard callback validates the Better Auth issuer/audience shape, sets the HTTP-only bearer cookie, and immediately redirects to `/` with `cache-control: no-store` and `referrer-policy: no-referrer`. Callback request logs and browser history can contain a bearer JWT and should be treated as sensitive. Email delivery is selected at deployment time through Resend or SMTP. `BETTER_AUTH_SECRET` signs Better Auth sessions and, by default, encrypts the persisted JWKS private key in the issuer database; rotating it without re-encrypting or clearing JWKS rows breaks issuer signing until the key material is repaired.
+The self-hosted Better Auth issuer is packaged as a sibling Next.js app named `pandar-auth`. It configures Better Auth's magic-link, passkey, and JWT plugins, exposes JWKS at `/api/auth/jwks`, exposes session JWT retrieval at `/api/auth/token`, and redirects successful sign-ins back to `pandar-web`'s callback with a `token` query parameter. The dashboard callback validates the Better Auth issuer/audience shape, sets the HTTP-only bearer cookie, and redirects to `/` by default. A Studio login may instead carry a versioned base64url `return_to`; both apps decode it fail-closed and accept only the same-origin `/plugin-sign-in` path and query before the dashboard callback redirects there. The return intent never contains the JWT. Every callback response uses `cache-control: no-store` and `referrer-policy: no-referrer`. Callback request logs and browser history can contain a bearer JWT and should be treated as sensitive. Email delivery is selected at deployment time through Resend or SMTP. `BETTER_AUTH_SECRET` signs Better Auth sessions and, by default, encrypts the persisted JWKS private key in the issuer database; rotating it without re-encrypting or clearing JWKS rows breaks issuer signing until the key material is repaired.
 
 Tenant route authentication checks bearer credentials in this order:
 
@@ -161,10 +165,38 @@ Pandar's plugin design:
 1. `pandar-network-plugin` starts a process-local loopback HTTP server and returns that server as the plugin host/sign-in URL.
 2. The loopback server serves an embedded minimal sign-in/configuration page from `frontend/plugin-local/dist` through `rust-embed`.
 3. The local page displays default Pandar web and hub URLs when no configuration is present, lets the user switch the target server, and links to the configured Pandar frontend `/plugin-sign-in` page.
-4. The Pandar frontend completes Clerk or Logto authentication and asks the hub to create a short-lived, one-use plugin login ticket for a selected tenant.
+4. The Pandar frontend completes Clerk, Logto, or Better Auth authentication and asks the hub to create a short-lived, one-use plugin login ticket for a selected tenant. Better Auth preserves the selected tenant and Studio localhost callback through its magic-link, optional passkey, and dashboard callback hops with the validated opaque return intent described above.
 5. The page uses Studio's `get_localhost_url` flow and redirects the browser to Studio's local callback with `ticket` and `redirect_url`.
 6. Studio calls the plugin's token/profile ABI. The plugin exchanges the ticket with `pandar-hub` for a tenant-owned plugin credential and returns Bambu-shaped token/profile JSON to Studio.
 7. `change_user` stores enough session state for Studio login UI and future hub API calls.
+
+Rust owns typed account/persisted-login policy, session selection, Cloud subscriptions, virtual-local
+generations, heartbeat scheduling and delivery eligibility, status projection, and the one-pass
+firmware -> status -> semantic-operation -> unsupported message classifier. C++ is limited to ABI/STL
+adaptation, callback invocation, and the synchronization those callbacks require. A status call
+returns success only after an eligible current callback delivery; an ineligible or missing listener
+returns `-2`.
+
+Studio's LAN-shaped connect/message entrypoints form a Hub-backed virtual/local ABI proxy. The
+authorized `dev_id` is the only target authority. Passed host/IP, username, password, and SSL values
+are ignored and scrubbed, no direct printer socket is opened, and status/messages still flow through
+Hub and Agent. Direct discovery, bind/unbind, certificate handling, MQTT, FTPS, and `ft_*` remain
+unsupported in the plugin.
+
+Studio identity and print ownership stay separated across boundaries. The plugin resolves Studio's
+`dev_id` only to an authorized Hub printer and sends the Hub printer id internally; it never treats a
+Studio device id, host, or credential as direct machine authority. Hub assigns and persists the
+stable Studio submission/task ids, job/command state, plate index, and available subtask/slice
+metadata in one backend-neutral transaction. Plugin callbacks describe admission, upload, durable
+creation, dispatch, and the observed terminal Hub job only; HTTP acceptance is never physical print
+start. Agent alone owns artifact transfer, Bambu MQTT command translation, and printer observations.
+
+Deploy this alignment in the order equivalent SQLite/PostgreSQL migrations, Agent, Hub, then the
+network plugin and same-target BambuSource companion. Before binary rollback, stop the plugin from
+creating new Studio jobs or operations and drain or explicitly fail nonterminal Studio-owned commands
+and jobs. Roll Hub back only after that ownership is terminal, then roll Agent back; leave additive
+database columns in place. Replacing or rolling back the Studio files requires Studio to be stopped
+and both original libraries to be restored together.
 
 The plugin credential is tenant-owned and revocable. It is not a user-owned API token and does not receive `agent:register`.
 
@@ -421,14 +453,63 @@ Agent phase status after Phase 15:
 
 ### pandar-network-plugin
 
-- Dynamic-library crate intended to replace Bambu Studio's network plugin ABI.
-- Exports the required `bambu_network_*` and minimal `ft_*` compatibility symbols.
+- Dynamic-library crate implementing the pinned Studio `02.08.01.55` network-plugin ABI: 109 network
+  plus 21 File Transfer declarations, 130 unique exports.
+- File Transfer, direct discovery/bind/certificate handling, and direct printer sockets keep their
+  exact ABI shape but remain explicit non-success paths.
 - Connects only to `pandar-hub` through HTTP/WebSocket APIs.
 - Uses Bambu Studio's existing login WebView, local callback, token/profile ABI, and `change_user` flow. The plugin host is a minimal loopback webserver that serves the embedded local sign-in/config page and keeps the hub URL selectable before token exchange.
-- Presents hub-backed printer/job state to Bambu Studio from cached hub responses where ABI calls are synchronous.
+- Presents Hub-backed printer state and Hub-backed authorized/paginated task history to Bambu Studio;
+  `get_user_tasks` no longer returns a synthetic empty success.
 - Submits print actions to the hub; the hub dispatches through authenticated agents.
 - Does not store Bambu access codes, open printer MQTT/FTPS/SFTP sockets, or call agents directly.
-- Phase 23 local probe/docs coverage exercises the exported C++ ABI against a mock hub and documents the real Studio smoke process; real platform compatibility is still gated by manifest evidence.
+- Rust owns account, session/selection/subscription, heartbeat, status, and message-classification
+  policy. The C++ shim owns only ABI/STL adaptation, callback invocation, and required synchronization.
+- Development no-auth issuance is an exactly-one-tenant transaction. SQLite uses an immediate write
+  transaction and PostgreSQL takes the corresponding tenant-table lock before counting at most two
+  ordered tenants. Zero or multiple tenants return stable non-credential outcomes; only one tenant can
+  atomically create the scoped `plugin:studio` token and its redacted create audit.
+- Startup no-auth recovery is a serialized Rust state machine, not C++ heartbeat policy. It retries
+  only a connection failure proven to occur before HTTP delivery, with a bounded generation/account-
+  epoch key and one in-flight attempt. Hub/account/configuration/token changes, logout, and destroy
+  fence captured work; post-response admission prevents a stale credential from becoming current.
+- Login, pending-revocation, direct-revocation, and completed-revocation mutations are serialized both
+  in-process and across Studio processes by the config-directory
+  `.pandar-plugin-account.lock`. Atomic replacement/removal is followed by parent-directory
+  confirmation. `Confirmed` is the only outcome that may admit a login candidate or authorize a
+  pending/direct `DELETE`; `ChangedUnconfirmed` means the namespace change was published but its
+  directory durability could not be confirmed and therefore fails closed. An ordinary persistence
+  error leaves the current canonical namespace unchanged, but is not a claim that a rollback would
+  survive a crash before its directory metadata reaches stable storage.
+- Requested logout and passive account loss share a linearizable transition coordinator. Passive loss
+  clears local state without revoking the Hub token, but a concurrent requested logout upgrades the
+  same transition before finalization. Requested logout first seeks a `Confirmed` entry in
+  `pandar-plugin-pending-revocations.json`; if that cannot be established, it must establish a
+  `Confirmed` `pandar-plugin-direct-revocation.json` intent before calling the tenant-scoped
+  `DELETE /api/v1/plugin/session`. A passive transition upgraded after clearing runtime state retains
+  the complete account snapshot and restores it on an ordinary pre-DELETE preparation failure;
+  changed-unconfirmed intent fails closed without issuing DELETE. Staged or direct remote failure
+  remains replayable, `401`/`410` is idempotent success, callbacks run outside account locks, and one
+  Hub token can produce at most one redacted revoke audit on either SQLite or PostgreSQL.
+- Successful revocation first records `{hub_url, token_sha256}` in the unbounded
+  `pandar-plugin-completed-revocations.json` ledger. Loading or storing a matching login consults that
+  ledger, pending state, and direct intent so a stale Studio process cannot resurrect a revoked token.
+  Direct completion removes any duplicate pending entry on a best-effort, idempotent basis; a cleanup
+  failure cannot turn an already successful Hub DELETE into a failed revocation. The completed ledger
+  has no automatic compaction because its entries are stale-write tombstones; operators may clear it
+  only after all Studio processes using the directory are stopped and every corresponding Hub plugin
+  session is revoked, invalid, or expired.
+- Printer-list and task list/plate/subtask authorization recovery share the current account snapshot.
+  A no-auth `401`/`410` joins one credential rotation and retries the original request exactly once;
+  stale account/configuration responses fail closed, while authenticated credentials never fall back
+  to development no-auth. Firmware catalog/version/send requests likewise carry one frozen request
+  snapshot and claimed firmware generation through admission, HTTP, post-check, and callback delivery;
+  the C++ shim never rereads live generation or owns a `last_error` side channel.
+- `pandar-bambu-source` is a separate sentinel-only non-media companion required by the pinned Studio
+  startup gate. A current candidate archive has exactly CLI + network plugin + companion; the
+  companion exports no `Bambu_*` media API.
+- Phase 23 automated probes and native release-smoke remain separate from real Studio evidence. Exact
+  Studio and hardware claims are gated by the compatibility manifest.
 
 ### pandar-core
 

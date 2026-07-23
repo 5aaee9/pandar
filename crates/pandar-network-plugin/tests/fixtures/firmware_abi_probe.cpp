@@ -1,229 +1,4 @@
-#include <atomic>
-#include <chrono>
-#include <condition_variable>
-#include <cstdint>
-#include <cstdlib>
-#include <filesystem>
-#include <functional>
-#include <iostream>
-#include <mutex>
-#include <string>
-#include <thread>
-#include <vector>
-
-#if defined(_WIN32)
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
-namespace BBL {
-using OnMessageFn = std::function<void(std::string, std::string)>;
-}
-
-namespace {
-
-constexpr int kSuccess = 0;
-
-bool contains(const std::string& body, const std::string& value) {
-    return body.find(value) != std::string::npos;
-}
-
-struct Library {
-#if defined(_WIN32)
-    HMODULE handle;
-#else
-    void* handle;
-#endif
-    explicit Library(const char* path)
-#if defined(_WIN32)
-        : handle(LoadLibraryA(path)) {}
-#else
-        : handle(dlopen(path, RTLD_NOW | RTLD_LOCAL)) {}
-#endif
-    ~Library() {
-#if defined(_WIN32)
-        if (handle) FreeLibrary(handle);
-#else
-        if (handle) dlclose(handle);
-#endif
-    }
-    template <class T> T sym(const char* name) const {
-#if defined(_WIN32)
-        auto* raw = handle ? reinterpret_cast<void*>(GetProcAddress(handle, name)) : nullptr;
-#else
-        auto* raw = handle ? dlsym(handle, name) : nullptr;
-#endif
-        if (!raw) {
-            std::cerr << "missing symbol: " << name << "\n";
-            std::exit(3);
-        }
-        return reinterpret_cast<T>(raw);
-    }
-};
-
-using Clock = std::chrono::steady_clock;
-
-struct Capture {
-    std::atomic<int> active{0};
-    std::atomic<bool> concurrent{false};
-    std::atomic<int> delayed_callbacks{0};
-    std::atomic<int> overlap_callbacks{0};
-    std::atomic<int> deadline_callbacks{0};
-    std::atomic<int> forbidden_callbacks{0};
-    std::atomic<int> firmware_status_callbacks{0};
-    std::atomic<int> firmware_status_callbacks_after_logout{0};
-    std::atomic<bool> auxiliary_fence_new{false};
-    std::atomic<bool> auxiliary_fence_old{false};
-    std::atomic<bool> reentrant_done{false};
-    std::atomic<bool> synchronous_reentrant_done{false};
-    std::atomic<bool> status_logout_armed{false};
-    std::atomic<bool> status_logout_entered{false};
-    std::atomic<bool> status_logout_completed{false};
-    std::atomic<bool> status_deadline_armed{false};
-    std::atomic<bool> status_deadline_entered{false};
-    std::mutex mutex;
-    std::condition_variable ready;
-    bool delayed_entered = false;
-    bool cloud_version = false;
-    bool local_version = false;
-    bool overlap_version = false;
-    bool overlap_exact = false;
-    bool rejection_exact = false;
-    Clock::time_point delayed_at{};
-    Clock::time_point overlap_at{};
-    std::function<void()> reentrant_logout;
-    std::function<void()> synchronous_reentrant_logout;
-    std::function<void()> status_logout;
-
-    void on_message(bool cloud, const std::string& dev_id, const std::string& body) {
-        if (active.fetch_add(1) != 0) concurrent = true;
-        if (dev_id != "studio-serial-1") concurrent = true;
-        if (contains(body, R"("command":"push_status")") && status_logout_armed.exchange(false)) {
-            status_logout_entered = true;
-            ready.notify_all();
-            std::this_thread::sleep_for(std::chrono::milliseconds(1'400));
-            if (status_logout) status_logout();
-            status_logout_completed = true;
-            ready.notify_all();
-        }
-        if (contains(body, R"("command":"push_status")") && status_deadline_armed.exchange(false)) {
-            status_deadline_entered = true;
-            ready.notify_all();
-            std::this_thread::sleep_for(std::chrono::milliseconds(2'200));
-        }
-        if (contains(body, R"("sequence_id":"c-version")")) {
-            std::lock_guard<std::mutex> lock(mutex);
-            cloud_version = cloud && version_exact(body, "c-version");
-        } else if (contains(body, R"("sequence_id":"l-version")")) {
-            std::lock_guard<std::mutex> lock(mutex);
-            local_version = !cloud && version_exact(body, "l-version");
-        } else if (contains(body, R"("sequence_id":"c-lock-overlap-version")")) {
-            std::lock_guard<std::mutex> lock(mutex);
-            overlap_version = cloud && version_exact(body, "c-lock-overlap-version");
-        } else if (contains(body, R"("sequence_id":"c-delay-reject")")) {
-            {
-                std::lock_guard<std::mutex> lock(mutex);
-                rejection_exact = cloud &&
-                    contains(body, R"("command":"mc_for_ams_firmware_upgrade")") &&
-                    contains(body, R"("result":"fail")") &&
-                    contains(body, R"("err_code":765)") &&
-                    contains(body, R"("reason":"printer_busy")") &&
-                    contains(body, R"("message":"selector rejected")") &&
-                    contains(body, R"("status":"FAIL")") &&
-                    contains(body, R"("progress":"42")") &&
-                    contains(body, R"("cfg":"101")");
-                delayed_at = Clock::now();
-                delayed_entered = true;
-            }
-            ++delayed_callbacks;
-            ready.notify_all();
-            std::this_thread::sleep_for(std::chrono::milliseconds(300));
-        } else if (contains(body, R"("sequence_id":"c-lock-overlap-ack")")) {
-            {
-                std::lock_guard<std::mutex> lock(mutex);
-                overlap_at = Clock::now();
-                overlap_exact = cloud &&
-                    contains(body, R"("command":"upgrade_confirm")") &&
-                    contains(body, R"("result":"fail")") &&
-                    contains(body, R"("err_code":765)") &&
-                    contains(body, R"("reason":"printer_busy")");
-            }
-            ++overlap_callbacks;
-            ready.notify_all();
-        } else if (contains(body, R"("sequence_id":"c-deadline")")) {
-            ++deadline_callbacks;
-        } else if (contains(body, R"("sequence_id":"c-reentrant")")) {
-            if (reentrant_logout) reentrant_logout();
-        } else if (contains(body, R"("sequence_id":"c-synchronous-reentrant")")) {
-            if (synchronous_reentrant_logout) synchronous_reentrant_logout();
-        } else if (contains(body, R"("sequence_id":"c-generation-fence")")) {
-            ++forbidden_callbacks;
-        } else if (contains(body, R"("sequence_id":"c-logout")") ||
-                   contains(body, R"("sequence_id":"c-lock-order")") ||
-                   contains(body, R"("sequence_id":"c-destroy")")) {
-            ++forbidden_callbacks;
-        }
-        if (contains(body, R"("upgrade_state":{"status":"UPGRADING","progress":"37"})") &&
-            contains(body, R"("cfg":"101")")) {
-            ++firmware_status_callbacks;
-        }
-        if (contains(body, R"("command":"push_status")") && contains(body, "08.08.08.08")) {
-            auxiliary_fence_new = true;
-        }
-        if (contains(body, R"("command":"push_status")") && contains(body, "06.06.06.06")) {
-            auxiliary_fence_old = true;
-        }
-        if (status_logout_completed.load() &&
-            contains(body, R"("sequence_id":"0")") &&
-            contains(body, R"("result":"fail")")) {
-            ++firmware_status_callbacks_after_logout;
-        }
-        active.fetch_sub(1);
-    }
-
-    static bool version_exact(const std::string& body, const std::string& sequence) {
-        if (!contains(body, R"("sequence_id":")" + sequence + R"(")") ||
-            contains(body, "01.07.00.00") || contains(body, "01.07.22.25")) return false;
-        const std::vector<std::string> fields = {
-            R"("name":"ota")", R"("sw_ver":"01.02.03.04")", R"("sw_new_ver":"01.02.04.00")",
-            R"("new_ver":"01.02.05.00")", R"("visible":true)", R"("product_name":"Main")",
-            R"("sn":"SERIAL")", R"("hw_ver":"AP05")", R"("flag":5)",
-            R"("name":"ams/0")", R"("sw_ver":"02.00.00.00")", R"("sw_new_ver":"02.00.01.00")", R"("new_ver":"02.00.02.00")", R"("visible":false)", R"("product_name":"AMS")", R"("sn":"AMS0")", R"("hw_ver":"AMS01")", R"("flag":1)",
-            R"("name":"n3f/0")", R"("sw_ver":"02.01.00.00")", R"("sw_new_ver":"02.01.01.00")", R"("new_ver":"02.01.02.00")", R"("product_name":"AMS 2 Pro")", R"("sn":"N3F0")", R"("hw_ver":"N3F01")", R"("flag":2)",
-            R"("name":"n3s/0")", R"("sw_ver":"03.00.00.00")", R"("sw_new_ver":"03.00.01.00")", R"("new_ver":"03.00.02.00")", R"("product_name":"AMS-HT")", R"("sn":"N3S0")", R"("hw_ver":"N3S01")", R"("flag":3)",
-            R"("name":"future/9")", R"("sw_ver":"09.09.09.09")", R"("sw_new_ver":"09.09.10.00")", R"("new_ver":"09.09.11.00")", R"("product_name":"Future")", R"("sn":"F9")", R"("hw_ver":"F09")", R"("flag":9)"
-        };
-        for (const auto& field : fields) if (!contains(body, field)) return false;
-        return true;
-    }
-};
-
-[[noreturn]] void fail(void* agent, int (*destroy)(void*), const std::string& message) {
-    if (agent) destroy(agent);
-    std::cerr << message << "\n";
-    std::exit(2);
-}
-
-bool wait_until(const std::function<bool()>& predicate, Clock::time_point deadline) {
-    while (!predicate() && Clock::now() < deadline) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    }
-    return predicate();
-}
-
-std::string command(const std::string& name, const std::string& sequence) {
-    if (name == "upgrade_confirm")
-        return R"({"upgrade":{"command":"upgrade_confirm","sequence_id":")" + sequence + R"(","src_id":1}})";
-    if (name == "consistency_confirm")
-        return R"({"upgrade":{"command":"consistency_confirm","sequence_id":")" + sequence + R"(","src_id":2}})";
-    if (name == "start")
-        return R"({"upgrade":{"command":"start","sequence_id":")" + sequence +
-            R"(","src_id":3,"url":"https://user:secret@example.invalid/fw.bin?sig=ABI_SENTINEL","module":"n3s/0","version":"03.04.05.06"}})";
-    return R"({"upgrade":{"command":"mc_for_ams_firmware_upgrade","sequence_id":")" + sequence + R"(","src_id":4,"id":-7}})";
-}
-
-} // namespace
+#include "firmware_abi_probe_support.hpp"
 
 int main(int argc, char** argv) {
     if (argc != 3) return 2;
@@ -233,6 +8,9 @@ int main(int argc, char** argv) {
     using string_fn = int (*)(void*, std::string);
     using send_fn = int (*)(void*, std::string, std::string, int, int);
     using callback_fn = int (*)(void*, BBL::OnMessageFn);
+    using subscription_fn = int (*)(void*, std::vector<std::string>);
+    using local_connect_callback_fn = int (*)(void*, BBL::OnLocalConnectedFn);
+    using connect_printer_fn = int (*)(void*, std::string, std::string, std::string, std::string, bool);
     using print_info_fn = int (*)(void*, unsigned int*, std::string*);
     using get_string_fn = std::string (*)(void*);
     using catalog_fn = int (*)(void*, std::string, unsigned int*, std::string*);
@@ -244,35 +22,41 @@ int main(int argc, char** argv) {
     auto change_user = lib.sym<string_fn>("bambu_network_change_user");
     auto get_print_info = lib.sym<print_info_fn>("bambu_network_get_user_print_info");
     auto get_selected_machine = lib.sym<get_string_fn>("bambu_network_get_user_selected_machine");
+    auto set_selected_machine = lib.sym<string_fn>("bambu_network_set_user_selected_machine");
+    auto add_subscribe = lib.sym<subscription_fn>("bambu_network_add_subscribe");
     auto get_catalog = lib.sym<catalog_fn>("bambu_network_get_printer_firmware");
     auto send_cloud = lib.sym<send_fn>("bambu_network_send_message");
     auto send_local = lib.sym<send_fn>("bambu_network_send_message_to_printer");
     auto set_cloud = lib.sym<callback_fn>("bambu_network_set_on_message_fn");
     auto set_local = lib.sym<callback_fn>("bambu_network_set_on_local_message_fn");
+    auto set_local_connect = lib.sym<local_connect_callback_fn>("bambu_network_set_on_local_connect_fn");
+    auto connect_printer = lib.sym<connect_printer_fn>("bambu_network_connect_printer");
+    auto disconnect_printer = lib.sym<agent_fn>("bambu_network_disconnect_printer");
     auto logout = lib.sym<logout_fn>("bambu_network_user_logout");
 
     void* agent = create("firmware-probe");
     Capture capture;
+    const auto select_and_subscribe = [&] {
+        return set_selected_machine(agent, "studio-serial-1") == kSuccess &&
+            add_subscribe(agent, {"studio-serial-1"}) == kSuccess;
+    };
     if (!agent || set_config(agent, argv[2]) != kSuccess || start(agent) != kSuccess) {
         fail(agent, destroy, "firmware probe setup failed");
     }
     unsigned code = 0;
     std::string body;
-    unsigned delayed_code = 0;
-    std::string delayed_body;
-    int delayed_seed_rc = -1;
-    std::thread delayed_seed([&] {
-        delayed_seed_rc = get_print_info(agent, &delayed_code, &delayed_body);
-    });
-    const auto race_ready = std::filesystem::path(argv[2]) / "auxiliary-printer-ready";
-    if (!wait_until([&] { return std::filesystem::exists(race_ready); }, Clock::now() + std::chrono::seconds(5))) {
-        fail(agent, destroy, "delayed printer response did not enter mock Hub");
+    if (get_print_info(agent, &code, &body) != kSuccess) {
+        fail(agent, destroy, "auxiliary printer seed failed");
+    }
+    const auto selected_before = get_selected_machine(agent);
+    if (!selected_before.empty() ||
+        !select_and_subscribe()) {
+        fail(agent, destroy, "selected machine getter performed implicit session work");
     }
     const auto selected = get_selected_machine(agent);
-    std::filesystem::create_directory(std::filesystem::path(argv[2]) / "auxiliary-printer-applied");
-    delayed_seed.join();
     if (set_cloud(agent, [&capture](std::string id, std::string body) { capture.on_message(true, id, body); }) != kSuccess ||
-        set_local(agent, [&capture](std::string id, std::string body) { capture.on_message(false, id, body); }) != kSuccess) {
+        set_local(agent, [&capture](std::string id, std::string body) { capture.on_message(false, id, body); }) != kSuccess ||
+        set_local_connect(agent, [](int, std::string, std::string) {}) != kSuccess) {
         fail(agent, destroy, "firmware callback setup failed");
     }
     const auto background_failure =
@@ -283,10 +67,13 @@ int main(int argc, char** argv) {
         )) {
         fail(agent, destroy, "background printer failure was not served");
     }
-    if (selected != "studio-serial-1" || delayed_seed_rc != kSuccess ||
+    if (selected != "studio-serial-1" ||
         send_cloud(agent, "studio-serial-1", R"({"pushing":{"command":"pushall","sequence_id":"auxiliary-fence"}})", 0, 0) != kSuccess ||
         !capture.auxiliary_fence_new || capture.auxiliary_fence_old) {
-        fail(agent, destroy, "newer auxiliary printer response did not fence delayed response");
+        fail(agent, destroy, "printer recovery did not preserve the fresh auxiliary response");
+    }
+    if (connect_printer(agent, "studio-serial-1", "127.0.0.1", "user", "pass", false) != kSuccess) {
+        fail(agent, destroy, "firmware local connection failed after printer recovery");
     }
     if (get_print_info(agent, &code, &body) != kSuccess) fail(agent, destroy, "printer seed failed");
 
@@ -299,6 +86,15 @@ int main(int argc, char** argv) {
         fail(agent, destroy, "populated firmware catalog was not exact: " + body);
     }
 
+    const auto heartbeat_arm =
+        std::filesystem::path(argv[2]) / "version-heartbeat-arm";
+    std::filesystem::create_directory(heartbeat_arm);
+    if (!wait_until(
+            [&] { return capture.version_heartbeat_committed.load(); },
+            Clock::now() + std::chrono::seconds(3)
+        )) {
+        fail(agent, destroy, "firmware version heartbeat synchronization failed");
+    }
     if (send_cloud(agent, "studio-serial-1", R"({"info":{"command":"get_version","sequence_id":"c-version"}})", 0, 0) != kSuccess ||
         send_local(agent, "studio-serial-1", R"({"info":{"command":"get_version","sequence_id":"l-version"}})", 0, 0) != kSuccess) {
         fail(agent, destroy, "firmware version refresh failed");
@@ -380,6 +176,29 @@ int main(int argc, char** argv) {
         if (send_local(agent, "studio-serial-1", command(item.first, item.second), 0, 0) != kSuccess)
             fail(agent, destroy, "local firmware command failed");
 
+    if (send_local(
+            agent,
+            "studio-serial-1",
+            command("upgrade_confirm", "l-generation-fence"),
+            0,
+            0
+        ) != kSuccess ||
+        disconnect_printer(agent) != kSuccess ||
+        connect_printer(
+            agent,
+            "studio-serial-1",
+            "127.0.0.1",
+            "user",
+            "pass",
+            false
+        ) != kSuccess) {
+        fail(agent, destroy, "local firmware generation fence setup failed");
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(2'100));
+    if (capture.stale_local_generation_callbacks != 0) {
+        fail(agent, destroy, "stale local firmware acknowledgement reached the new connection");
+    }
+
     Clock::time_point returned_at;
     std::atomic<bool> send_returned{false};
     int delayed_rc = -1;
@@ -389,8 +208,12 @@ int main(int argc, char** argv) {
         send_returned = true;
     });
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    if (send_returned || capture.delayed_callbacks != 0 ||
-        send_cloud(agent, "studio-serial-1", R"({"system":{"command":"unrelated"}})", 0, 0) != kSuccess) {
+    const auto unrelated_rc =
+        send_cloud(agent, "studio-serial-1", R"({"system":{"command":"unrelated"}})", 0, 0);
+    if (send_returned || capture.delayed_callbacks != 0 || unrelated_rc != kInvalidResult) {
+        std::cerr << "originating_send_returned=" << send_returned.load()
+                  << " delayed_callbacks=" << capture.delayed_callbacks.load()
+                  << " unrelated_rc=" << unrelated_rc << '\n';
         fail(agent, destroy, "originating call was not delayed across unrelated send");
     }
     delayed.join();
@@ -427,7 +250,7 @@ int main(int argc, char** argv) {
 
     const std::string profile = R"({"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"})";
     capture.synchronous_reentrant_logout = [&] {
-        if (logout(agent, true) == kSuccess) capture.synchronous_reentrant_done = true;
+        if (logout(agent, false) == kSuccess) capture.synchronous_reentrant_done = true;
     };
     if (send_cloud(
             agent,
@@ -435,13 +258,15 @@ int main(int argc, char** argv) {
             R"({"info":{"command":"get_version","sequence_id":"c-synchronous-reentrant"}})",
             0,
             0
-        ) != kSuccess ||
+        ) != kConnectFailed ||
         !capture.synchronous_reentrant_done.load() ||
         change_user(agent, profile) != kSuccess ||
-        get_print_info(agent, &code, &body) != kSuccess) {
+        get_print_info(agent, &code, &body) != kSuccess ||
+        !select_and_subscribe() ||
+        get_selected_machine(agent) != "studio-serial-1") {
         fail(agent, destroy, "synchronous firmware callback reentrant logout deadlocked");
     }
-    capture.status_logout = [&] { logout(agent, true); };
+    capture.status_logout = [&] { logout(agent, false); };
     if (send_cloud(agent, "studio-serial-1", command("upgrade_confirm", "c-lock-order"), 0, 0) != kSuccess) {
         fail(agent, destroy, "lock-order regression setup failed");
     }
@@ -453,6 +278,7 @@ int main(int argc, char** argv) {
         std::cerr << "status callback did not enter for generation fence\n";
         std::_Exit(2);
     }
+    const auto status_logout_entered_at = Clock::now();
     std::atomic<bool> version_fence_started{false};
     int version_fence_rc = -1;
     std::thread version_fence([&] {
@@ -465,33 +291,53 @@ int main(int argc, char** argv) {
             0
         );
     });
-    if (!wait_until([&] { return version_fence_started.load(); }, Clock::now() + std::chrono::seconds(1)) ||
-        !wait_until([&] { return capture.status_logout_completed.load(); }, Clock::now() + std::chrono::seconds(3))) {
-        std::cerr << "status callback logout deadlocked against firmware dispatcher\n";
+    if (!wait_until(
+            [&] { return version_fence_started.load(); },
+            Clock::now() + std::chrono::seconds(1)
+        )) {
+        std::cerr << "firmware generation fence request did not start\n";
+        std::_Exit(2);
+    }
+    if (!wait_until(
+            [&] { return capture.status_logout_completed.load(); },
+            Clock::now() + std::chrono::seconds(8)
+        )) {
+        const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            Clock::now() - status_logout_entered_at
+        ).count();
+        std::cerr << "status callback logout exceeded watchdog elapsed_ms="
+                  << elapsed_ms << '\n';
         std::_Exit(2);
     }
     status_logout.join();
     version_fence.join();
-    if (version_fence_rc != kSuccess || capture.forbidden_callbacks != 0 ||
+    if (version_fence_rc != kConnectFailed || capture.forbidden_callbacks != 0 ||
         capture.firmware_status_callbacks_after_logout != 0 ||
         change_user(agent, profile) != kSuccess ||
-        get_print_info(agent, &code, &body) != kSuccess) {
+        get_print_info(agent, &code, &body) != kSuccess ||
+        !select_and_subscribe() ||
+        get_selected_machine(agent) != "studio-serial-1") {
         fail(agent, destroy, "generation fence did not cancel synchronous firmware callback");
     }
 
     if (send_cloud(agent, "studio-serial-1", command("upgrade_confirm", "c-logout"), 0, 0) != kSuccess ||
-        logout(agent, true) != kSuccess) fail(agent, destroy, "logout cancellation setup failed");
+        logout(agent, false) != kSuccess) fail(agent, destroy, "logout cancellation setup failed");
     std::this_thread::sleep_for(std::chrono::milliseconds(2'100));
     const bool logout_cancelled = capture.forbidden_callbacks == 0;
-    if (!logout_cancelled || change_user(agent, profile) != kSuccess || get_print_info(agent, &code, &body) != kSuccess) {
+    if (!logout_cancelled || change_user(agent, profile) != kSuccess ||
+        get_print_info(agent, &code, &body) != kSuccess ||
+        !select_and_subscribe() ||
+        get_selected_machine(agent) != "studio-serial-1") {
         fail(agent, destroy, "reentrant logout setup failed");
     }
     capture.reentrant_logout = [&] {
-        if (logout(agent, true) == kSuccess) capture.reentrant_done = true;
+        if (logout(agent, false) == kSuccess) capture.reentrant_done = true;
     };
     if (send_cloud(agent, "studio-serial-1", command("upgrade_confirm", "c-reentrant"), 0, 0) != kSuccess ||
         !wait_until([&] { return capture.reentrant_done.load(); }, Clock::now() + std::chrono::milliseconds(2'100)) ||
         change_user(agent, profile) != kSuccess || get_print_info(agent, &code, &body) != kSuccess ||
+        !select_and_subscribe() ||
+        get_selected_machine(agent) != "studio-serial-1" ||
         send_cloud(agent, "studio-serial-1", command("upgrade_confirm", "c-destroy"), 0, 0) != kSuccess) {
         fail(agent, destroy, "destroy cancellation setup failed");
     }

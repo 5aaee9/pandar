@@ -126,6 +126,7 @@ pub fn router(state: AppState) -> Router {
             "/api/v1/plugin/no-auth-session",
             post(plugin::create_no_auth_session),
         )
+        .route("/api/v1/plugin/session", delete(plugin::revoke_session))
         .route("/api/v1/plugin/printers", get(plugin::list_printers))
         .route(
             "/api/v1/plugin/printers/{printer_id}/firmware",
@@ -146,6 +147,14 @@ pub fn router(state: AppState) -> Router {
             )),
         )
         .route("/api/v1/plugin/jobs", get(plugin::list_jobs))
+        .route("/api/v1/plugin/jobs/{id}", get(plugin::get_job))
+        .route("/api/v1/plugin/jobs/{id}/plate", get(plugin::get_plate))
+        .route(
+            "/api/v1/plugin/jobs/{id}/model-task",
+            get(plugin::get_model_task),
+        )
+        .route("/api/v1/plugin/jobs/{id}/subtask", get(plugin::get_subtask))
+        .route("/api/v1/plugin/jobs/{id}/cancel", post(plugin::cancel_job))
         .route(
             "/api/v1/plugin/prints",
             post(plugin::create_print).layer(DefaultBodyLimit::disable()),

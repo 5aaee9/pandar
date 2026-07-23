@@ -82,3 +82,36 @@ async fn hub_artifact_reader_fetches_with_bearer_agent_credential() {
     );
     server.abort();
 }
+
+#[tokio::test]
+async fn hub_artifact_network_failure_omits_url_ip_credential_and_path() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    drop(listener);
+    let credential = "artifact-credential-sentinel";
+    let config = crate::AgentConfig {
+        hub_api_url: Some(format!("http://{address}/hub-private-base")),
+        agent_credential: credential.to_owned(),
+        ..test_config()
+    };
+    let reader = HubArtifactReader::new(&config);
+
+    let error = reader
+        .read_artifact("/api/v1/agents/private-agent/artifacts/private-artifact")
+        .await
+        .unwrap_err();
+    let message = format!("{error:#}");
+    let address_text = address.to_string();
+
+    assert!(message.contains("request print artifact from hub"));
+    for secret in [
+        address_text.as_str(),
+        "127.0.0.1",
+        "hub-private-base",
+        "private-agent",
+        "private-artifact",
+        credential,
+    ] {
+        assert!(!message.contains(secret), "leaked {secret}: {message}");
+    }
+}

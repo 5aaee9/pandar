@@ -57,6 +57,7 @@ fn firmware_http_execute_redirect_is_not_followed_or_replayed() {
         "printer-1",
         &start_message(),
         FirmwareTunnel::Cloud,
+        1,
         &mut diagnostics,
     );
     let requests = server.join().unwrap();
@@ -124,6 +125,7 @@ fn firmware_http_execute_5xx_pre_publish_phase_is_safe_failure() {
         "printer-1",
         &start_message(),
         FirmwareTunnel::Cloud,
+        1,
         &mut diagnostics,
     );
     let requests = server.join().unwrap();
@@ -176,6 +178,7 @@ fn firmware_http_execute_2xx_pre_publish_phase_is_safe_failure() {
             "printer-1",
             &start_message(),
             FirmwareTunnel::Cloud,
+            1,
             &mut diagnostics,
         );
         let requests = server.join().unwrap();
@@ -215,6 +218,7 @@ fn firmware_http_malformed_4xx_preserves_status_and_decode_diagnostics() {
         "printer-1",
         &start_message(),
         FirmwareTunnel::Cloud,
+        1,
         &mut diagnostics,
     );
     let request = server.join().unwrap();

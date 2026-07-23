@@ -1,5 +1,4 @@
-const ABI_SYMBOLS_PATH: &str =
-    "../../docs/superpowers/specs/2026-06-23-phase-21-network-plugin-abi-symbols.txt";
+const STUDIO_EXPORTS_PATH: &str = "src/shim_exports.hpp";
 
 fn main() {
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR is set by Cargo");
@@ -7,6 +6,7 @@ fn main() {
         std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is set by Cargo");
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").expect("target OS is set by Cargo");
     let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
+    let studio_symbols = expected_abi_symbols(&manifest_dir);
 
     let mut shim_build = cc::Build::new();
     shim_build.cpp(true).cargo_metadata(false);
@@ -55,9 +55,8 @@ fn main() {
         println!("cargo:rustc-link-arg-cdylib=-lstdc++");
     }
     if target_os == "macos" {
-        let symbols = expected_abi_symbols(&manifest_dir);
         let export_map = format!("{out_dir}/pandar-network-plugin-macos.exports");
-        let export_list = symbols
+        let export_list = studio_symbols
             .iter()
             .map(|symbol| format!("_{symbol}\n"))
             .collect::<String>();
@@ -71,10 +70,28 @@ fn main() {
         "shim_abi_content.hpp",
         "shim_abi_operations.hpp",
         "shim_abi_user.hpp",
+        "shim_account_ffi.hpp",
+        "shim_connection.hpp",
+        "shim_exports.hpp",
         "shim_file_transfer.hpp",
+        "shim_file_transfer_types.hpp",
         "shim_firmware.hpp",
+        "shim_model_task.hpp",
+        "shim_model_task_types.hpp",
+        "shim_no_auth.hpp",
         "shim_state.hpp",
         "shim_status.hpp",
+        "shim_status_delivery.hpp",
+        "shim_status_heartbeat.hpp",
+        "shim_status_payload.hpp",
+        "shim_profile.hpp",
+        "shim_print.hpp",
+        "shim_print_types.hpp",
+        "shim_printer_cache.hpp",
+        "shim_request_snapshot.hpp",
+        "shim_session_sync.hpp",
+        "shim_studio_session.hpp",
+        "shim_tasks.hpp",
         "shim_types.hpp",
         "studio_materials.hpp",
     ] {
@@ -83,19 +100,38 @@ fn main() {
 }
 
 fn expected_abi_symbols(manifest_dir: &str) -> Vec<String> {
-    let path = std::path::Path::new(manifest_dir).join(ABI_SYMBOLS_PATH);
+    let path = std::path::Path::new(manifest_dir).join(STUDIO_EXPORTS_PATH);
     println!("cargo:rerun-if-changed={}", path.display());
-    let content = std::fs::read_to_string(&path).expect("read network plugin ABI symbols");
+    let content = std::fs::read_to_string(&path).expect("read reviewed Studio export map");
     let symbols = content
         .lines()
-        .map(str::trim)
-        .filter(|line| line.starts_with("bambu_network_") || line.starts_with("ft_"))
-        .map(str::to_owned)
+        .filter_map(|line| line.trim().strip_prefix("PANDAR_STUDIO_EXPORT("))
+        .map(|record| {
+            record
+                .split_once(',')
+                .map(|(symbol, _)| symbol.trim())
+                .filter(|symbol| symbol.starts_with("bambu_network_") || symbol.starts_with("ft_"))
+                .unwrap_or_else(|| panic!("invalid Studio export record: {record}"))
+                .to_owned()
+        })
         .collect::<Vec<_>>();
 
-    assert!(
-        !symbols.is_empty(),
-        "network plugin ABI symbols are not empty"
+    let unique = symbols.iter().collect::<std::collections::BTreeSet<_>>();
+    let network_count = symbols
+        .iter()
+        .filter(|symbol| symbol.starts_with("bambu_network_"))
+        .count();
+    let file_transfer_count = symbols
+        .iter()
+        .filter(|symbol| symbol.starts_with("ft_"))
+        .count();
+    assert_eq!(
+        unique.len(),
+        symbols.len(),
+        "duplicate Studio export symbol"
     );
+    assert_eq!(network_count, 109, "Studio network export count drifted");
+    assert_eq!(file_transfer_count, 21, "Studio FT export count drifted");
+    assert_eq!(symbols.len(), 130, "Studio export map total drifted");
     symbols
 }

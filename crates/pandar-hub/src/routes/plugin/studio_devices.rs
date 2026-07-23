@@ -21,8 +21,6 @@ pub(super) struct PluginPrinterResponse {
     fun: String,
     dev_name: String,
     name: String,
-    dev_ip: Option<String>,
-    dev_access_code: Option<String>,
     dev_model_name: Option<String>,
     model: Option<String>,
     dev_online: bool,
@@ -82,7 +80,13 @@ pub(super) async fn plugin_printer_devices(
         let firmware = printer_with_live_status.firmware;
         let printer = printer_with_live_status.printer;
         let live_status = printer_with_live_status.live_status;
-        let online = studio_online_from_status(&printer.status);
+        let current_session_id = state
+            .sessions()
+            .current_token(tenant_id, printer.agent_id)
+            .await
+            .map(|token| token.persisted_id());
+        let online = current_session_id.as_deref() == printer.mqtt_presence_session_id.as_deref()
+            && studio_online_from_status(&printer.status);
         let studio_model_name = printer.model.as_deref().map(studio_model_id);
         let fun = match state
             .sessions()
@@ -113,8 +117,6 @@ pub(super) async fn plugin_printer_devices(
             fun,
             dev_name: printer.name.clone(),
             name: printer.name,
-            dev_ip: printer.host,
-            dev_access_code: printer.access_code,
             dev_model_name: studio_model_name,
             model: printer.model,
             dev_online: online,

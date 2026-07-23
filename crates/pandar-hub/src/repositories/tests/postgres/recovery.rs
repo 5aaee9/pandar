@@ -93,7 +93,10 @@ async fn postgres_job_recovery_when_configured() {
             timelapse: false,
             ams_mapping_json: Some("[0]".to_owned()),
             ams_mapping2_json: Some(r#"[{"ams_id":0,"slot_id":0}]"#.to_owned()),
-            ams_mapping_info_json: Some(r#"[{"nozzleId":0}]"#.to_owned()),
+            ams_mapping_info_json: Some(
+                r#"[{"ams":0,"targetColor":"11223344","filamentId":"GFA00","filamentType":"PLA","nozzleId":0}]"#
+                    .to_owned(),
+            ),
         })
         .await
         .unwrap();

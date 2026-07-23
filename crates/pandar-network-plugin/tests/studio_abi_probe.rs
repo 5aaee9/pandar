@@ -3,6 +3,8 @@
 
 #[path = "studio_abi_probe/compiler.rs"]
 mod compiler;
+#[path = "studio_abi_probe/disposition_probe.rs"]
+mod disposition_probe;
 #[path = "studio_abi_probe/firmware_mock.rs"]
 mod firmware_mock;
 #[path = "studio_abi_probe/firmware_probe.rs"]
@@ -11,12 +13,17 @@ mod firmware_probe;
 mod mock_hub;
 #[path = "studio_abi_probe/native_print_error.rs"]
 mod native_print_error;
+#[path = "studio_abi_probe/request_claims.rs"]
+mod request_claims;
 #[path = "studio_abi_probe/run.rs"]
 mod run;
 mod support;
 
 use mock_hub::MockMode;
 use run::{ProbeOutput, run_probe};
+
+const EXPECTED_STALE_REFRESH_DIAGNOSTIC: &str =
+    "pandar printer status refresh discarded: credentials changed during request";
 
 fn assert_json_field(output: &str, field: &str, value: &str) {
     assert!(
@@ -29,6 +36,16 @@ fn compiler_identity_is_allowed_for_target(compiler: &str, target_requires_msvc:
     !target_requires_msvc || compiler.to_ascii_lowercase().contains("cl.exe")
 }
 
+fn assert_only_expected_stale_refresh_diagnostics(stderr: &str) {
+    assert!(
+        stderr.is_empty()
+            || stderr
+                .lines()
+                .all(|line| line == EXPECTED_STALE_REFRESH_DIAGNOSTIC),
+        "firmware ABI probe wrote unexpected stderr: {stderr}"
+    );
+}
+
 #[test]
 fn firmware_probe_wires_native_cloud_and_lan_behavior() {
     let output = firmware_probe::run_firmware_probe();
@@ -39,11 +56,7 @@ fn firmware_probe_wires_native_cloud_and_lan_behavior() {
         "firmware ABI probe must compile with MSVC cl.exe, got {}",
         output.compiler
     );
-    assert!(
-        output.stderr.is_empty(),
-        "firmware ABI probe stderr was not empty: {}",
-        output.stderr
-    );
+    assert_only_expected_stale_refresh_diagnostics(&output.stderr);
     let result: serde_json::Value = serde_json::from_str(output.stdout.trim()).unwrap();
     assert_eq!(result["ok"], serde_json::json!(true));
     assert_eq!(result["catalog_exact"], serde_json::json!(true));
@@ -93,6 +106,183 @@ fn probe_exercises_studio_abi_success_path() {
     assert_json_field(&stdout, "ft_start_job_rc", "0");
     assert_json_field(&stdout, "ft_job_result_ec", "-3");
     assert_json_field(&stdout, "ft_cancel_rc", "0");
+    assert_json_field(&stdout, "camera_unavailable_exact", "true");
+    assert_json_field(&stdout, "local_connect_transport_redacted", "true");
+}
+
+#[test]
+fn compiled_probe_enforces_account_callbacks_and_explicit_abi_dispositions() {
+    let output = disposition_probe::run_disposition_probe();
+    println!("Studio disposition ABI probe compiler: {}", output.compiler);
+    #[cfg(all(windows, target_env = "msvc"))]
+    assert!(
+        compiler_identity_is_allowed_for_target(&output.compiler, true),
+        "disposition ABI probe must compile with MSVC cl.exe, got {}",
+        output.compiler
+    );
+    assert!(
+        output.stderr.is_empty(),
+        "disposition ABI probe stderr was not empty: {}",
+        output.stderr
+    );
+    assert_eq!(output.stdout.trim(), r#"{"ok":true,"version":1}"#);
+}
+
+#[test]
+fn probe_camera_abis_fail_closed_even_when_agent_has_printer_credentials() {
+    let ProbeOutput { stdout, stderr, .. } =
+        run_probe(MockMode::CameraUnavailable, "camera-unavailable");
+
+    assert!(
+        stderr.is_empty(),
+        "camera unavailable probe stderr was not empty: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+    assert_json_field(&stdout, "camera_unavailable_exact", "true");
+}
+
+#[test]
+fn probe_server_connectivity_follows_readyz_transitions() {
+    let ProbeOutput { stdout, stderr, .. } =
+        run_probe(MockMode::ConnectionReadiness, "connection-readiness");
+
+    assert!(
+        stderr.contains("validate Hub readiness response"),
+        "connection readiness probe missed invalid JSON cause: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+}
+
+#[test]
+fn probe_background_printer_timeout_invalidates_connectivity_without_stale_status() {
+    let ProbeOutput { stdout, stderr, .. } =
+        run_probe(MockMode::BackgroundTimeout, "background-timeout");
+
+    assert!(
+        stderr.contains("timed out"),
+        "background timeout probe missed the lower-level cause: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+}
+
+#[test]
+fn probe_authenticated_rejection_preserves_reachability_and_reports_code_five_once() {
+    let ProbeOutput { stdout, stderr, .. } = run_probe(MockMode::AuthRejected, "auth-rejected");
+
+    assert!(
+        stderr.is_empty(),
+        "auth rejection probe stderr was not empty: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+}
+
+#[test]
+fn probe_printer_presence_requires_fresh_typed_online_observations() {
+    let ProbeOutput { stdout, stderr, .. } =
+        run_probe(MockMode::PrinterPresence, "printer-presence");
+
+    assert!(
+        stderr.contains("timed out"),
+        "printer presence probe missed timeout cause: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+}
+
+#[test]
+fn probe_same_token_account_transition_fences_reentrant_printer_state() {
+    let ProbeOutput { stdout, stderr, .. } =
+        run_probe(MockMode::AccountTransition, "account-transition");
+
+    assert!(
+        stderr.is_empty(),
+        "account transition probe stderr was not empty: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+}
+
+#[test]
+fn probe_no_auth_startup_recovers_once_after_hub_becomes_available() {
+    let ProbeOutput { stdout, stderr, .. } =
+        run_probe(MockMode::NoAuthRecovery, "no-auth-recovery");
+    let stderr_lower = stderr.to_ascii_lowercase();
+
+    assert!(
+        stderr_lower.contains("connection refused")
+            || stderr_lower.contains("actively refused")
+            || stderr_lower.contains("os error 10061"),
+        "no-auth recovery probe missed the initial connect failure: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+}
+
+#[test]
+fn probe_official_studio_lifecycle_recovers_without_foreground_abi_polling() {
+    let ProbeOutput { stdout, stderr, .. } = run_probe(
+        MockMode::OfficialNoAuthRecovery,
+        "official-no-auth-recovery",
+    );
+    let stderr_lower = stderr.to_ascii_lowercase();
+
+    assert!(
+        stderr_lower.contains("connection refused")
+            || stderr_lower.contains("actively refused")
+            || stderr_lower.contains("os error 10061"),
+        "official lifecycle probe missed the initial connect failure: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+}
+
+#[test]
+fn probe_logged_out_notification_preserves_official_no_auth_recovery() {
+    let ProbeOutput { stdout, stderr, .. } = run_probe(
+        MockMode::OfficialNoAuthLogoutRecovery,
+        "official-no-auth-logout-recovery",
+    );
+    let stderr_lower = stderr.to_ascii_lowercase();
+
+    assert!(
+        stderr_lower.contains("connection refused")
+            || stderr_lower.contains("actively refused")
+            || stderr_lower.contains("os error 10061"),
+        "logout recovery probe missed the initial connect failure: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+}
+
+#[test]
+fn probe_serializes_ticket_exchange_with_later_account_mutation() {
+    let ProbeOutput { stdout, stderr, .. } =
+        run_probe(MockMode::AccountExchangeRace, "account-exchange-race");
+
+    assert!(
+        stderr.contains(
+            "pandar ticket candidate revoke failed: status=1 http_code=503 body={\"error\":\"invalid_response\"}"
+        ) && !stderr.contains("fifo-login-token"),
+        "account exchange race missed the redacted candidate revoke failure: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+}
+
+#[test]
+fn probe_online_callbacks_recheck_freshness_at_final_claim() {
+    let ProbeOutput { stdout, stderr, .. } = run_probe(MockMode::FreshnessClaim, "freshness-claim");
+
+    assert!(
+        stderr.is_empty(),
+        "freshness claim probe stderr was not empty: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+}
+
+#[test]
+fn probe_callback_gate_orders_offline_and_recovery_at_final_claim() {
+    let ProbeOutput { stdout, stderr, .. } = run_probe(MockMode::CallbackOrder, "callback-order");
+
+    assert!(
+        stderr.is_empty(),
+        "callback order probe stderr was not empty: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
 }
 
 #[test]
@@ -145,6 +335,21 @@ fn studio_abi_probe_preserves_full_axis_feature_bitmap_and_submits_semantics_thr
     );
     assert_eq!(status["print"]["aux"], serde_json::json!("A4003001"));
     assert_eq!(status["print"]["stat"], serde_json::json!("1000000001"));
+    assert_ne!(status["print"]["wifi_signal"], serde_json::json!("100%"));
+    assert_eq!(status["print"]["sdcard"], serde_json::json!(false));
+    assert_eq!(status["print"]["ipcam"]["ipcam_dev"], "0");
+    assert_eq!(status["print"]["ipcam"]["liveview"]["local"], "none");
+    assert_eq!(status["print"]["ipcam"]["liveview"]["remote"], "none");
+    assert_eq!(status["print"]["ipcam"]["rtsp_url"], "");
+    assert_eq!(
+        status["print"]["support_mqtt_alive"],
+        serde_json::json!(true)
+    );
+    assert_eq!(status["print"]["support_chamber"], serde_json::json!(false));
+    assert_eq!(
+        status["print"]["support_chamber_temp_display"],
+        serde_json::json!(false)
+    );
     assert_eq!(
         status["print"]["ams"]["ams"][0]["info"],
         serde_json::json!("00000E00")
@@ -156,9 +361,8 @@ fn studio_abi_probe_preserves_full_axis_feature_bitmap_and_submits_semantics_thr
 }
 
 #[test]
-fn probe_refreshes_stale_session_and_preserves_cache_on_invalid_status_refresh() {
-    let ProbeOutput { stdout, stderr, .. } =
-        run_probe(MockMode::StaleTokenRefresh, "stale-token-refresh");
+fn probe_successful_token_rotation_preserves_state_and_invalid_status_suppresses_stale_output() {
+    let ProbeOutput { stdout, stderr, .. } = run_probe(MockMode::TokenRotation, "token-rotation");
 
     assert!(
         stderr.contains("validate Hub printer status refresh response"),
@@ -170,7 +374,19 @@ fn probe_refreshes_stale_session_and_preserves_cache_on_invalid_status_refresh()
     );
     assert_json_field(&stdout, "ok", "true");
     assert_json_field(&stdout, "printer_rc", "0");
-    assert_json_field(&stdout, "restored_login", "true");
+}
+
+#[test]
+fn probe_token_rotation_retry_offline_disconnects_cloud_and_local_once() {
+    let ProbeOutput { stdout, stderr, .. } =
+        run_probe(MockMode::TokenRotationOffline, "token-rotation-offline");
+
+    assert!(
+        stderr.is_empty(),
+        "offline token rotation probe wrote stderr: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+    assert_json_field(&stdout, "printer_rc", "0");
 }
 
 #[test]

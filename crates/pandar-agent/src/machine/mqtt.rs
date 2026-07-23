@@ -25,8 +25,8 @@ pub(crate) use commands::next_studio_sequence_id_from;
 pub use commands::{
     AmsFilamentCommand, AmsSlotCommand, BambuMqttCommand, BambuMqttTopics, GcodeLineCommand,
     HandlePrintErrorCommand, MachineReportDiagnostic, MachineReportDiagnosticPayload,
-    PrintErrorAction, PrintReportProgress, PrintSpeed, ProjectFileCommand,
-    SetNozzleTemperatureCommand,
+    PrintErrorAction, PrintReportProgress, PrintSpeed, ProjectFileAmsMapping2,
+    ProjectFileAmsMappingInfo, ProjectFileCommand, SetNozzleTemperatureCommand,
 };
 pub(crate) use device_features::{
     device_feature_observation, feature_event, probe_device_features,
@@ -47,6 +47,9 @@ pub(crate) use firmware::{
 pub use hms::MachineHmsItem;
 pub(super) use recovery::dispatch_sequence_zero_recovery;
 pub(crate) use report_payload::decode_mqtt_report_payload;
+pub(crate) use reports::{
+    MqttForwardingContext, MqttPresenceState, forward_print_reports_with_context,
+};
 pub use reports::{
     forward_print_reports, forward_print_reports_with_firmware, print_job_report_event,
     print_report_from_report, printer_materials_snapshot_event,
@@ -149,6 +152,7 @@ where
         }
         let mut snapshot = snapshot_from_parsed_report(endpoint, snapshot_report.as_ref());
         snapshot.model = Some(firmware.model.clone());
+        snapshot.telemetry_authoritative = true;
         let observed_at = created_at_now();
         let materials_report = parse_materials_report(&report);
         let materials = match materials_report

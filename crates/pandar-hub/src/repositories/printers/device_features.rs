@@ -5,7 +5,9 @@ use sea_orm::{
     QueryFilter, QuerySelect,
 };
 
-use super::{PrinterRepository, PrinterSnapshotUpsert, upsert_snapshot_in_transaction};
+use super::{
+    PrinterRepository, PrinterSnapshotUpsert, SnapshotSessionState, upsert_snapshot_in_transaction,
+};
 use crate::{
     entities::printers,
     repositories::{RepositoryError, RepositoryResult, begin_current_agent_transaction},
@@ -30,13 +32,17 @@ impl PrinterRepository {
             begin_current_agent_transaction(&self.database, tenant_id, agent_id, session_id)
                 .await?;
         let feature_session_id = features.map(|_| session_id);
+        let presence_session_id = snapshot.telemetry_authoritative.then_some(session_id);
         let printer = upsert_snapshot_in_transaction(
             &transaction,
             tenant_id,
             agent_id,
             snapshot,
-            features,
-            feature_session_id,
+            SnapshotSessionState {
+                device_features: features,
+                device_features_session_id: feature_session_id,
+                mqtt_presence_session_id: presence_session_id,
+            },
             &self.access_code_cipher,
         )
         .await?;

@@ -139,7 +139,7 @@ async fn reassign_to_new_agent(
                 access_code: None,
                 name: "firmware redaction reassigned printer".to_owned(),
                 model: None,
-                status: "idle".to_owned(),
+                status: Some("idle".to_owned()),
                 observed_at: "2026-07-13T00:00:00Z".to_owned(),
                 nozzle_temperatures: Vec::new(),
                 active_nozzle: None,
@@ -149,6 +149,7 @@ async fn reassign_to_new_agent(
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
                 connection_authoritative: false,
+                telemetry_authoritative: true,
             },
         )
         .await

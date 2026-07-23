@@ -10,7 +10,12 @@ use crate::repositories::{
 };
 
 mod jobs;
+mod onboarding;
+mod printers;
 mod recovery;
+mod studio_contract;
+mod studio_locking;
+mod studio_queries;
 
 pub(super) async fn postgres_database() -> Option<Database> {
     let url = match std::env::var("PANDAR_TEST_POSTGRES_URL") {
@@ -29,7 +34,7 @@ pub(super) async fn clear_postgres(database: &Database) {
         panic!("expected PostgreSQL database");
     };
     sqlx::query(
-        "TRUNCATE printer_event_tickets, audit_events, api_tokens, user_identities, join_links, tenant_tokens, plugin_login_tickets, job_filament_usages, printer_material_snapshots, machine_events, jobs, job_artifacts, commands, printers, agents, users, tenants",
+        "TRUNCATE printer_event_tickets, audit_events, api_tokens, user_identities, join_links, tenant_tokens, plugin_login_tickets, job_filament_usages, printer_material_snapshots, machine_events, studio_submission_sequences, jobs, job_artifacts, commands, printers, agents, users, tenants",
     )
         .execute(pool)
         .await
@@ -229,159 +234,6 @@ async fn postgres_core_repository_behavior_when_configured() {
 }
 
 #[tokio::test]
-async fn postgres_external_onboarding_behavior_when_configured() {
-    let Some(database) = postgres_database().await else {
-        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
-        return;
-    };
-
-    let auth = AuthRepository::new(database.clone());
-    let audit = AuditEventRepository::new(database);
-    let admin = auth
-        .self_create_tenant_for_external_identity(
-            "pg-onboarding",
-            "Postgres Onboarding",
-            ExternalIdentityProfile {
-                provider: "betterauth".to_owned(),
-                subject: "admin-subject".to_owned(),
-                email: "admin@example.test".to_owned(),
-                display_name: "Admin".to_owned(),
-            },
-        )
-        .await
-        .unwrap();
-    assert_eq!(admin.user.role, UserRole::TenantAdmin);
-
-    let memberships = auth
-        .list_external_memberships("betterauth", "admin-subject")
-        .await
-        .unwrap();
-    assert_eq!(memberships.len(), 1);
-    assert_eq!(memberships[0].tenant.id, admin.tenant.id);
-
-    let link = auth
-        .create_join_link_with_audit(
-            admin.tenant.id,
-            UserRole::Operator,
-            Some("operator@example.test".to_owned()),
-            60,
-            1,
-            AuditActor::user(admin.user.id.clone()),
-        )
-        .await
-        .unwrap();
-    let accepted = auth
-        .accept_join_link(
-            &link.plaintext_token,
-            ExternalIdentityProfile {
-                provider: "betterauth".to_owned(),
-                subject: "operator-subject".to_owned(),
-                email: "operator@example.test".to_owned(),
-                display_name: "Operator".to_owned(),
-            },
-        )
-        .await
-        .unwrap();
-    assert!(accepted.created);
-    assert_eq!(accepted.user.role, UserRole::Operator);
-
-    let existing_link = auth
-        .create_join_link_with_audit(
-            admin.tenant.id,
-            UserRole::Viewer,
-            Some("changed@example.test".to_owned()),
-            60,
-            1,
-            AuditActor::user(admin.user.id.clone()),
-        )
-        .await
-        .unwrap();
-    let existing = auth
-        .accept_join_link(
-            &existing_link.plaintext_token,
-            ExternalIdentityProfile {
-                provider: "betterauth".to_owned(),
-                subject: "operator-subject".to_owned(),
-                email: "changed@example.test".to_owned(),
-                display_name: "Operator Changed".to_owned(),
-            },
-        )
-        .await
-        .unwrap();
-    assert!(!existing.created);
-    assert_eq!(existing.user.id, accepted.user.id);
-    assert_eq!(existing.user.role, UserRole::Operator);
-
-    let listed = auth
-        .list_join_links_for_tenant(admin.tenant.id)
-        .await
-        .unwrap();
-    assert!(
-        listed
-            .iter()
-            .any(|join_link| join_link.id == link.join_link.id && join_link.used_count == 1)
-    );
-    assert!(
-        listed.iter().any(
-            |join_link| join_link.id == existing_link.join_link.id && join_link.used_count == 0
-        )
-    );
-    let revoked = auth
-        .create_join_link_with_audit(
-            admin.tenant.id,
-            UserRole::Viewer,
-            None,
-            60,
-            1,
-            AuditActor::user(admin.user.id.clone()),
-        )
-        .await
-        .unwrap();
-    let revoked = auth
-        .revoke_join_link_with_audit(
-            admin.tenant.id,
-            &revoked.join_link.id,
-            AuditActor::user(admin.user.id.clone()),
-        )
-        .await
-        .unwrap();
-    assert!(revoked.revoked_at.is_some());
-
-    let concurrent = auth
-        .create_join_link_with_audit(
-            admin.tenant.id,
-            UserRole::Viewer,
-            None,
-            60,
-            1,
-            AuditActor::user(admin.user.id.clone()),
-        )
-        .await
-        .unwrap();
-    super::auth::assert_single_concurrent_accept(
-        auth.clone(),
-        admin.tenant.id,
-        concurrent.join_link.id,
-        concurrent.plaintext_token,
-    )
-    .await;
-
-    let events = audit.list_for_tenant(admin.tenant.id).await.unwrap();
-    assert!(
-        events
-            .iter()
-            .any(|event| event.action == "join_link.accept")
-    );
-    let audit_json = events
-        .iter()
-        .map(|event| event.metadata_json.as_str())
-        .collect::<String>();
-    assert!(!audit_json.contains("admin-subject"));
-    assert!(!audit_json.contains("operator-subject"));
-    assert!(!audit_json.contains(&link.plaintext_token));
-}
-
-#[tokio::test]
 async fn postgres_cleanup_when_configured() {
     let Some(database) = postgres_database().await else {
         eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
@@ -399,134 +251,24 @@ async fn postgres_cleanup_when_configured() {
 }
 
 #[tokio::test]
-async fn postgres_printer_repository_upsert_list_when_configured() {
+async fn postgres_partial_snapshot_preserves_absent_telemetry_fields_when_configured() {
     let Some(database) = postgres_database().await else {
         eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
         return;
     };
 
-    let tenants = TenantRepository::new(database.clone());
-    let agents = AgentRepository::new(database.clone());
-    let printers = PrinterRepository::new(database.clone());
-    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
-    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    super::printer_snapshot_presence::exercise_partial_snapshot_presence(database).await;
+}
 
-    let created = printers
-        .upsert_snapshot(
-            tenant.id,
-            agent.id,
-            PrinterSnapshotUpsert {
-                serial_number: "SN-001".to_string(),
-                host: Some("192.0.2.10".to_string()),
-                access_code: Some("12345678".to_string()),
-                name: "Garage A1".to_string(),
-                model: Some("A1 Mini".to_string()),
-                status: "idle".to_string(),
-                observed_at: "2026-06-21T00:00:00Z".to_string(),
-                nozzle_temperatures: Vec::new(),
-                active_nozzle: None,
-                bed_temperature_celsius: None,
-                bed_target_temperature_celsius: None,
-                chamber_temperature_celsius: None,
-                chamber_target_temperature_celsius: None,
-                chamber_light_on: None,
-                connection_authoritative: false,
-            },
-        )
-        .await
-        .unwrap();
-    printers
-        .update_details_with_audit(
-            tenant.id,
-            &created.id,
-            "Garage A1".to_owned(),
-            "192.0.2.11".to_owned(),
-            "edited-access-code".to_owned(),
-            AuditActor::no_auth(),
-        )
-        .await
-        .unwrap();
-    let updated = printers
-        .upsert_snapshot(
-            tenant.id,
-            agent.id,
-            PrinterSnapshotUpsert {
-                serial_number: "SN-001".to_string(),
-                host: Some("192.0.2.10".to_owned()),
-                access_code: Some("12345678".to_owned()),
-                name: "Ignored Snapshot Name".to_string(),
-                model: Some("A1 Mini".to_string()),
-                status: "printing".to_string(),
-                observed_at: "2026-06-21T00:05:00Z".to_string(),
-                nozzle_temperatures: Vec::new(),
-                active_nozzle: None,
-                bed_temperature_celsius: None,
-                bed_target_temperature_celsius: None,
-                chamber_temperature_celsius: None,
-                chamber_target_temperature_celsius: None,
-                chamber_light_on: None,
-                connection_authoritative: false,
-            },
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(updated.id, created.id);
-    assert_eq!(updated.created_at, created.created_at);
-    assert_eq!(updated.name, "Garage A1");
-    assert_eq!(updated.host.as_deref(), Some("192.0.2.11"));
-    assert_eq!(updated.access_code.as_deref(), Some("edited-access-code"));
-    assert_eq!(updated.status, "printing");
-    assert_eq!(updated.last_seen_at, "2026-06-21T00:05:00Z");
-    let Database::Postgres(pool) = &database else {
-        panic!("expected PostgreSQL database");
+#[tokio::test]
+async fn postgres_mqtt_presence_requires_an_authoritative_current_session_snapshot_when_configured()
+{
+    let Some(database) = postgres_database().await else {
+        eprintln!("skipping PostgreSQL test; PANDAR_TEST_POSTGRES_URL is not set");
+        return;
     };
-    let (plaintext, encrypted): (Option<String>, Option<String>) =
-        sqlx::query_as("SELECT access_code, access_code_encrypted FROM printers WHERE id = $1")
-            .bind(&created.id)
-            .fetch_one(pool)
-            .await
-            .unwrap();
-    assert_eq!(plaintext, None);
-    assert!(
-        encrypted
-            .as_deref()
-            .is_some_and(|value| value.starts_with("v1:"))
-    );
 
-    let authoritative = printers
-        .upsert_snapshot(
-            tenant.id,
-            agent.id,
-            PrinterSnapshotUpsert {
-                serial_number: "SN-001".to_string(),
-                host: Some("192.0.2.12".to_owned()),
-                access_code: Some("reloaded-access-code".to_owned()),
-                name: "Ignored Snapshot Name".to_string(),
-                model: Some("A1 Mini".to_string()),
-                status: "idle".to_string(),
-                observed_at: "2026-06-21T00:10:00Z".to_string(),
-                nozzle_temperatures: Vec::new(),
-                active_nozzle: None,
-                bed_temperature_celsius: None,
-                bed_target_temperature_celsius: None,
-                chamber_temperature_celsius: None,
-                chamber_target_temperature_celsius: None,
-                chamber_light_on: None,
-                connection_authoritative: true,
-            },
-        )
-        .await
-        .unwrap();
-    assert_eq!(authoritative.host.as_deref(), Some("192.0.2.12"));
-    assert_eq!(
-        authoritative.access_code.as_deref(),
-        Some("reloaded-access-code")
-    );
-    assert_eq!(
-        printers.list_for_tenant(tenant.id).await.unwrap(),
-        vec![authoritative]
-    );
+    super::printer_snapshot_presence::exercise_mqtt_presence_session(database).await;
 }
 
 #[tokio::test]

@@ -53,10 +53,80 @@ fn studio_status_omits_unknown_native_error_fields() {
 }
 
 #[test]
-fn studio_status_preserves_fun_bitmap_exactly() {
-    let telemetry = telemetry_json(r#"{"fun":"8000004100000020"}"#);
+fn studio_status_masks_unsupported_fun_bits_and_preserves_supported_and_unknown_bits() {
+    let telemetry = telemetry_json(r#"{"fun":"D0027D41100037C0"}"#);
 
-    assert_eq!(telemetry["fun"], serde_json::json!("8000004100000020"));
+    assert_eq!(telemetry["fun"], serde_json::json!("8000004100000000"));
+}
+
+#[test]
+fn studio_status_hides_external_change_assist_while_print_field_is_unsupported() {
+    let telemetry = telemetry_json(r#"{"fun":"1000000000000"}"#);
+
+    assert_eq!(telemetry["fun"], serde_json::json!("0"));
+}
+
+#[test]
+fn studio_status_masks_unsupported_cfg_bits_without_rewriting_observed_storage() {
+    let telemetry = telemetry_json(r#"{"materials":{"cfg":"800000C000000001","ams_units":[]}}"#);
+
+    assert_eq!(telemetry["cfg"], serde_json::json!("8000000000000001"));
+}
+
+#[test]
+fn studio_status_hides_camera_capabilities_while_camera_abi_is_unavailable() {
+    let telemetry =
+        telemetry_json(r#"{"fun":"4100000002","materials":{"cfg":"4C000000001","ams_units":[]}}"#);
+
+    assert_eq!(telemetry["fun"], serde_json::json!("4100000000"));
+    assert_eq!(telemetry["cfg"], serde_json::json!("1"));
+}
+
+#[test]
+fn studio_status_reports_sdcard_only_for_aux_normal_state() {
+    for (printer, expected) in [
+        (r#"{"materials":{"aux":"00001000"}}"#, true),
+        (r#"{"materials":{"aux":"00000000"}}"#, false),
+        (r#"{"materials":{"aux":"00002000"}}"#, false),
+        (r#"{"materials":{"aux":"00003000"}}"#, false),
+        (r#"{"materials":{"aux":"not-hex"}}"#, false),
+        (r#"{"materials":{}}"#, false),
+        (r#"{}"#, false),
+    ] {
+        let telemetry = telemetry_json(printer);
+
+        assert_eq!(telemetry["sdcard"], serde_json::json!(expected));
+    }
+}
+
+#[test]
+fn studio_status_preserves_chamber_current_and_target_in_v1_and_v2_shapes() {
+    for (printer, current, target, packed, support) in [
+        (r#"{}"#, 0, 0, 0, false),
+        (
+            r#"{"chamber_target_temperature_celsius":"45"}"#,
+            0,
+            45,
+            2_949_120,
+            false,
+        ),
+        (r#"{"chamber_temperature_celsius":"32"}"#, 32, 0, 32, false),
+        (
+            r#"{"chamber_temperature_celsius":"32","chamber_target_temperature_celsius":"45"}"#,
+            32,
+            45,
+            2_949_152,
+            true,
+        ),
+    ] {
+        let telemetry = telemetry_json(printer);
+
+        assert_eq!(telemetry["chamber_temper"], serde_json::json!(current));
+        assert_eq!(telemetry["ctt"], serde_json::json!(target));
+        assert_eq!(telemetry["device"]["ctc"]["info"]["temp"], packed);
+        assert_eq!(telemetry["support_chamber"], support);
+        assert_eq!(telemetry["support_chamber_temp_display"], support);
+    }
 }
 
 #[test]
@@ -80,11 +150,11 @@ fn studio_status_defaults_missing_or_null_fun_without_discarding_telemetry() {
 }
 
 #[test]
-fn printer_telemetry_defaults_to_studio_safe_idle_shape() {
+fn printer_telemetry_omits_unknown_model_and_state() {
     let body = telemetry("{}");
     let json: serde_json::Value = serde_json::from_str(&format!("{{{body}}}")).unwrap();
 
-    assert!(body.contains(r#""gcode_state":"IDLE""#));
+    assert!(json.get("gcode_state").is_none());
     assert!(body.contains(r#""mc_percent":0"#));
     assert!(body.contains(r#""mc_remaining_time":0"#));
     assert!(body.contains(r#""layer_num":0"#));
@@ -93,7 +163,9 @@ fn printer_telemetry_defaults_to_studio_safe_idle_shape() {
     assert!(body.contains(r#""profile_id":"0""#));
     assert!(body.contains(r#""subtask_id":"0""#));
     assert!(body.contains(r#""hms":[]"#));
-    assert!(body.contains(r#""printer_type":"C11""#));
+    assert!(json.get("printer_type").is_none());
+    assert!(body.contains(r#""support_chamber":false"#));
+    assert!(body.contains(r#""support_chamber_temp_display":false"#));
     assert!(json.get("cfg").is_none());
     assert!(json.get("aux").is_none());
     assert!(json.get("stat").is_none());
@@ -249,5 +321,19 @@ fn nullable_chamber_light_does_not_discard_live_print_status() {
     assert!(body.contains(r#""gcode_state":"RUNNING""#));
     assert!(body.contains(r#""mc_percent":37"#));
     assert!(body.contains(r#""hms":[{"attr":134152704,"code":32785}]"#));
+    assert!(body.contains(r#""lights_report":[]"#));
+}
+
+#[test]
+fn printer_telemetry_uses_present_state_without_inventing_idle() {
+    let telemetry = telemetry_json(r#"{"state":"PAUSE"}"#);
+
+    assert_eq!(telemetry["gcode_state"], serde_json::json!("PAUSE"));
+}
+
+#[test]
+fn explicit_chamber_light_off_is_reported_as_off() {
+    let body = telemetry(r#"{"chamber_light_on":false}"#);
+
     assert!(body.contains(r#""lights_report":[{"node":"chamber_light","mode":"off"}]"#));
 }

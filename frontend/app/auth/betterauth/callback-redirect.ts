@@ -2,16 +2,82 @@ export type BetterAuthCallbackRedirect =
   | { ok: true; token: string; target: string; status: 303 }
   | { ok: false; body: string; status: 400 };
 
+const returnTokenPrefix = "v1.";
+const maxReturnTokenLength = 4096;
+
+export function encodePluginSignInReturnTarget(target: string): string {
+  return `${returnTokenPrefix}${Buffer.from(target, "utf8").toString("base64url")}`;
+}
+
+export function decodePluginSignInReturnTarget(
+  value: string | null | undefined,
+): string | null {
+  const token = value?.trim();
+  if (
+    !token?.startsWith(returnTokenPrefix) ||
+    token.length > maxReturnTokenLength
+  ) {
+    return null;
+  }
+
+  const encoded = token.slice(returnTokenPrefix.length);
+  if (!encoded || !/^[A-Za-z0-9_-]+$/.test(encoded)) {
+    return null;
+  }
+
+  const bytes = Buffer.from(encoded, "base64url");
+  if (bytes.toString("base64url") !== encoded) {
+    return null;
+  }
+  const target = bytes.toString("utf8");
+  if (!Buffer.from(target, "utf8").equals(bytes)) {
+    return null;
+  }
+  if (
+    !target.startsWith("/") ||
+    target.startsWith("//") ||
+    target.includes("\\")
+  ) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(target, "http://pandar.invalid");
+    if (
+      parsed.origin !== "http://pandar.invalid" ||
+      parsed.pathname !== "/plugin-sign-in" ||
+      parsed.hash
+    ) {
+      return null;
+    }
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return null;
+  }
+}
+
 export function betterAuthCallbackRedirect(
   requestUrl: string,
   isAllowedToken: (token: string) => boolean,
 ): BetterAuthCallbackRedirect {
-  const token = new URL(requestUrl).searchParams.get("token")?.trim() ?? "";
+  const request = new URL(requestUrl);
+  const token = request.searchParams.get("token")?.trim() ?? "";
   if (!token || !isAllowedToken(token)) {
     return { ok: false, body: "malformed token", status: 400 };
   }
 
-  return { ok: true, token, target: "/", status: 303 };
+  return {
+    ok: true,
+    token,
+    target: safePluginReturnTarget(request),
+    status: 303,
+  };
+}
+
+function safePluginReturnTarget(request: URL): string {
+  return (
+    decodePluginSignInReturnTarget(request.searchParams.get("return_to")) ?? "/"
+  );
 }
 
 export function dashboardCallbackRedirectUrl(

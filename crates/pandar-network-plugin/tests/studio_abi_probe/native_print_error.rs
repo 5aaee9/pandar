@@ -20,6 +20,11 @@ struct NativeProbeResult {
     native_actions_exact: bool,
     cloud_unsupported_exact: bool,
     local_unsupported_exact: bool,
+    empty_cloud_target_rejected_without_refresh_post_or_callbacks: bool,
+    unsupported_commands_rejected_without_post_or_callbacks: bool,
+    unsupported_parser_error_stable: bool,
+    mixed_status_envelopes_rejected_without_callbacks: bool,
+    command_disposition_failure: String,
     cloud_invalid_native_exact: bool,
     local_invalid_native_exact: bool,
     cloud_requests_exact: bool,
@@ -69,12 +74,32 @@ fn studio_abi_probe_routes_native_status_through_explicit_tunnels() {
     assert!(result.local_status_messages > 0);
     assert!(result.printer_connected_callbacks > 0);
     assert_eq!(result.local_connect_callbacks, 2);
-    assert_eq!(result.operation_posts, 6);
     assert!(result.status_requests_zero_posts);
-    assert!(result.status_request_lookalikes_exact);
     assert!(result.native_actions_exact);
+    assert!(
+        result.empty_cloud_target_rejected_without_refresh_post_or_callbacks,
+        "empty cloud target disposition failed: {}",
+        result.command_disposition_failure
+    );
+    assert!(
+        result.unsupported_commands_rejected_without_post_or_callbacks,
+        "unsupported command disposition failed: {}",
+        result.command_disposition_failure
+    );
+    assert!(
+        result.unsupported_parser_error_stable,
+        "unsupported parser error was not stable: {}",
+        result.command_disposition_failure
+    );
+    assert!(
+        result.mixed_status_envelopes_rejected_without_callbacks,
+        "mixed status envelope disposition failed: {}",
+        result.command_disposition_failure
+    );
     assert!(result.cloud_unsupported_exact);
     assert!(result.local_unsupported_exact);
+    assert!(result.status_request_lookalikes_exact);
+    assert_eq!(result.operation_posts, 6);
     assert!(result.cloud_invalid_native_exact);
     assert!(result.local_invalid_native_exact);
 

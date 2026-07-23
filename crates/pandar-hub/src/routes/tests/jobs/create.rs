@@ -43,8 +43,8 @@ async fn job_create_writes_artifact_queues_command_and_returns_created_job() {
     assert_eq!(body.command.status, "queued");
     assert_eq!(body.artifact.filename, "plate_file.3mf");
     assert_eq!(body.artifact.size_bytes, 3);
-    assert_eq!(body.material.ams_mapping, None);
-    assert_eq!(body.material.ams_mapping2, None);
+    assert_eq!(body.material.ams_mapping, Some(vec![]));
+    assert_eq!(body.material.ams_mapping2, Some(vec![]));
     assert!(body.material.filament_usage.is_empty());
     assert_eq!(state.commands().count().await.unwrap(), 1);
     let events = state
@@ -227,7 +227,21 @@ async fn job_create_accepts_optional_material_mappings_and_responses_preserve_nu
         app.clone(),
         Method::POST,
         &uri,
-        multipart_print_body(None, Some(("plate.3mf", "model/3mf", b"abc")), 1),
+        multipart_print_body_with_fields(
+            Some(("plate.3mf", "model/3mf", b"abc")),
+            &[
+                ("filename", "plate file.3mf"),
+                ("content_type", "model/3mf"),
+                ("plate_id", "1"),
+                ("use_ams", "true"),
+                ("bed_leveling", "false"),
+                ("auto_bed_leveling", "0"),
+                ("flow_cali", "false"),
+                ("auto_flow_cali", "0"),
+                ("auto_offset_cali", "0"),
+                ("timelapse", "true"),
+            ],
+        ),
         &token,
     )
     .await;

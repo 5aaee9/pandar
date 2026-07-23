@@ -2,6 +2,7 @@
 members = [
     "crates/pandar-agent",
     "crates/pandar-app",
+    "crates/pandar-bambu-source",
     "crates/pandar-core",
     "crates/pandar-hub",
     "crates/pandar-network-plugin",

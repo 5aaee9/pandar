@@ -9,6 +9,7 @@ use sea_orm::{ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, Transacti
 
 mod artifacts;
 mod audit;
+mod cancel;
 mod clear;
 mod create;
 pub(crate) mod hydration;
@@ -16,7 +17,10 @@ mod print_reports;
 mod recovery;
 pub mod rows;
 mod stalled;
+mod studio_ids;
+mod studio_tasks;
 mod transitions;
+mod write_transaction;
 
 use crate::{
     db::Database,
@@ -29,6 +33,9 @@ pub use artifacts::AgentArtifactAccess;
 pub use clear::ClearJobsOutcome;
 pub use print_reports::{AppliedPrintReport, ApplyPrintReport, PrintReportDiagnostic};
 use rows::job_from_model_loading_usage;
+#[cfg(test)]
+pub(crate) use studio_tasks::test_pause as studio_task_test_pause;
+pub use studio_tasks::{StudioTaskPage, StudioTaskQuery, StudioTaskStatus};
 
 #[derive(Debug, Clone)]
 pub struct JobRepository {
@@ -107,16 +114,23 @@ impl JobRepository {
         &self,
         input: CreatePrintJob,
     ) -> RepositoryResult<JobWithArtifact> {
-        let connection = self.database.sea_orm_connection();
-        let tx = connection
-            .begin()
+        let tx = write_transaction::begin(&self.database)
             .await
             .context("failed to begin print job transaction")?;
-        let created = create::create_print_job(&tx, input).await?;
+        let created = create::create_print_job(&tx, input, None).await?;
         tx.commit()
             .await
             .context("failed to commit print job transaction")?;
         Ok(created)
+    }
+
+    pub async fn create_studio_print_job_with_audit(
+        &self,
+        input: CreatePrintJob,
+        metadata: pandar_core::StudioPrintMetadata,
+        actor: AuditActor,
+    ) -> RepositoryResult<JobWithArtifact> {
+        audit::create_studio_print_job_with_audit(&self.database, input, metadata, actor).await
     }
 
     pub async fn create_print_job_with_audit(
@@ -125,6 +139,21 @@ impl JobRepository {
         actor: AuditActor,
     ) -> RepositoryResult<JobWithArtifact> {
         audit::create_print_job_with_audit(&self.database, input, actor).await
+    }
+
+    pub async fn cancel_studio_print_with_audit(
+        &self,
+        tenant_id: TenantId,
+        studio_submission_id: pandar_core::StudioSubmissionId,
+        actor: AuditActor,
+    ) -> RepositoryResult<JobWithArtifact> {
+        cancel::cancel_studio_print_with_audit(
+            &self.database,
+            tenant_id,
+            studio_submission_id,
+            actor,
+        )
+        .await
     }
 
     pub async fn retry_dispatch_with_audit(
@@ -173,7 +202,7 @@ impl JobRepository {
                 ..Default::default()
             })
             .filter(jobs::Column::CommandId.eq(command_id.to_string()))
-            .filter(jobs::Column::Status.is_not_in(["succeeded", "failed"]))
+            .filter(jobs::Column::Status.is_not_in(["succeeded", "failed", "cancelled"]))
             .exec(&self.database.sea_orm_connection())
             .await
             .context("failed to update job for command")?

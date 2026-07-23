@@ -142,7 +142,7 @@ impl BambuMachineGateway for FakePrintGateway {
             })
             .unwrap()
             .into(),
-            qos: 0,
+            qos: crate::machine::mqtt::BAMBU_MQTT_QOS,
             uploaded_path: "plate.gcode.3mf".to_string(),
             uploaded_url: "ftp://plate.gcode.3mf".to_string(),
             md5: "900150983CD24FB0D6963F7D28E17F72".to_string(),

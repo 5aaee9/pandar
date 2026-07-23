@@ -108,7 +108,7 @@ pub(super) async fn exercise_printer_live_status(database: Database) {
                 access_code: None,
                 name: "Fixture Printer".to_string(),
                 model: None,
-                status: "unknown".to_string(),
+                status: Some("unknown".to_string()),
                 observed_at: "2026-07-09T10:00:30Z".to_string(),
                 nozzle_temperatures: Vec::new(),
                 active_nozzle: None,
@@ -118,6 +118,7 @@ pub(super) async fn exercise_printer_live_status(database: Database) {
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
                 connection_authoritative: false,
+                telemetry_authoritative: true,
             },
         )
         .await

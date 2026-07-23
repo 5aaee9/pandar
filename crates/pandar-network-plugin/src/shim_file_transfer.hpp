@@ -1,42 +1,9 @@
 #pragma once
 
-#include "shim_types.hpp"
+#include "shim_file_transfer_types.hpp"
+#include "shim_account_ffi.hpp"
 
-extern "C" {
-
-struct ft_job_result {
-    int ec;
-    int resp_ec;
-    const char* json;
-    const void* bin;
-    uint32_t bin_size;
-};
-
-struct ft_job_msg {
-    int kind;
-    const char* json;
-};
-
-typedef enum {
-    FT_OK = 0,
-    FT_EINVAL = -1,
-    FT_ESTATE = -2,
-    FT_EIO = -3,
-    FT_ETIMEOUT = -4,
-    FT_ECANCELLED = -5,
-    FT_EXCEPTION = -6,
-    FT_EUNKNOWN = -128
-} ft_err;
-
-using ft_tunnel_connect_cb = void (*)(void* user, int ok, int err, const char* msg);
-using ft_tunnel_status_cb = void (*)(void* user, int old_status, int new_status, int err, const char* msg);
-using ft_job_result_cb = void (*)(void* user, ft_job_result result);
-using ft_job_msg_cb = void (*)(void* user, ft_job_msg msg);
-
-struct FT_TunnelHandle;
-struct FT_JobHandle;
-
-}
+using namespace Slic3r;
 
 namespace {
 
@@ -95,8 +62,18 @@ PANDAR_ABI void ft_tunnel_release(FT_TunnelHandle* h) { release(reinterpret_cast
 PANDAR_ABI ft_err ft_tunnel_start_connect(FT_TunnelHandle* h, ft_tunnel_connect_cb cb, void* user) {
     auto* tunnel = reinterpret_cast<Tunnel*>(h);
     if (!tunnel) return FT_EINVAL;
-    if (cb) cb(user, 1, FT_EIO, R"({"error":"unsupported_file_transfer"})");
-    if (tunnel->status_cb) tunnel->status_cb(tunnel->status_user, 0, -1, FT_EIO, R"({"error":"unsupported_file_transfer"})");
+    auto result = pandar::network_plugin::pandar_plugin_studio_file_transfer_unavailable();
+    std::string message;
+    if (result.body_ptr && result.body_len > 0) {
+        message.assign(reinterpret_cast<char*>(result.body_ptr), result.body_len);
+    }
+    pandar::network_plugin::pandar_plugin_free_with_capacity(
+        result.body_ptr, result.body_len, result.body_cap
+    );
+    if (cb) cb(user, 1, FT_EIO, message.c_str());
+    if (tunnel->status_cb) {
+        tunnel->status_cb(tunnel->status_user, 0, -1, FT_EIO, message.c_str());
+    }
     return FT_OK;
 }
 

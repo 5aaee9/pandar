@@ -1,8 +1,10 @@
+#[path = "firmware_mock/responses.rs"]
+mod responses;
+
 use std::{
     collections::{BTreeSet, HashMap},
     fs,
-    io::Write,
-    net::{Shutdown, TcpListener, TcpStream},
+    net::{TcpListener, TcpStream},
     path::Path,
     sync::{
         Arc,
@@ -14,7 +16,12 @@ use std::{
 
 use serde_json::{Value, json};
 
-use crate::support::{read_http_request_with_timeout, request_body};
+use crate::support::read_http_request_with_timeout;
+
+use self::responses::{
+    catalog_response, is_delayed_refresh, json_body, login_response, printer_list,
+    printer_list_with_version, refresh_response, respond, string_field,
+};
 
 const START_URL: &str = "https://user:secret@example.invalid/fw.bin?sig=ABI_SENTINEL";
 
@@ -28,7 +35,6 @@ pub(super) struct FirmwareMockHub {
 struct State {
     catalog_reads: usize,
     printer_reads: usize,
-    delayed_printer_stream: Option<TcpStream>,
     delayed_refresh_stream: Option<(TcpStream, Instant)>,
     refresh_sequences: BTreeSet<String>,
     prepared: HashMap<String, Value>,
@@ -130,43 +136,35 @@ impl State {
             "firmware request lacked plugin auth: {request}"
         );
         self.printer_reads += 1;
-        match self.printer_reads {
-            1 => {
-                fs::create_dir(race_directory.join("auxiliary-printer-ready")).unwrap();
-                self.delayed_printer_stream = Some(stream);
-            }
-            2 => {
-                respond(
+        let heartbeat_arm = race_directory.join("version-heartbeat-arm");
+        let version_heartbeat_armed = heartbeat_arm.exists();
+        if version_heartbeat_armed {
+            respond(
+                &mut stream,
+                "HTTP/1.1 200 OK",
+                printer_list_with_version("version-heartbeat", "09.87.65.43"),
+            );
+        } else {
+            match self.printer_reads {
+                1 | 3 => respond(
                     &mut stream,
                     "HTTP/1.1 200 OK",
                     printer_list_with_version("session-auxiliary", "08.08.08.08"),
-                );
-                stream.shutdown(Shutdown::Both).unwrap();
-                let applied = race_directory.join("auxiliary-printer-applied");
-                let deadline = std::time::Instant::now() + Duration::from_secs(5);
-                while !applied.exists() && std::time::Instant::now() < deadline {
-                    thread::sleep(Duration::from_millis(5));
+                ),
+                2 => {
+                    fs::create_dir(race_directory.join("background-printer-failure-served"))
+                        .unwrap();
+                    respond(
+                        &mut stream,
+                        "HTTP/1.1 503 Service Unavailable",
+                        r#"{"error":"observe cached firmware"}"#.to_owned(),
+                    );
                 }
-                assert!(
-                    applied.exists(),
-                    "auxiliary printer response was not applied"
-                );
-                respond(
-                    self.delayed_printer_stream.as_mut().unwrap(),
-                    "HTTP/1.1 200 OK",
-                    printer_list_with_version("session-delayed", "06.06.06.06"),
-                );
-                self.delayed_printer_stream = None;
+                _ => respond(&mut stream, "HTTP/1.1 200 OK", printer_list()),
             }
-            3 => {
-                fs::create_dir(race_directory.join("background-printer-failure-served")).unwrap();
-                respond(
-                    &mut stream,
-                    "HTTP/1.1 503 Service Unavailable",
-                    r#"{"error":"observe cached firmware"}"#.to_owned(),
-                );
-            }
-            _ => respond(&mut stream, "HTTP/1.1 200 OK", printer_list()),
+        }
+        if version_heartbeat_armed {
+            fs::remove_dir(heartbeat_arm).unwrap();
         }
     }
 
@@ -251,6 +249,7 @@ impl State {
                 | "c-lock-overlap-ack"
                 | "c-logout"
                 | "c-destroy"
+                | "l-generation-fence"
         ) {
             json!({
                 "command_id":"00000000-0000-0000-0000-000000000011",
@@ -274,9 +273,8 @@ impl State {
     fn assert_complete(&self) {
         assert!(
             self.printer_reads >= 4,
-            "printer race and recovery were not exercised"
+            "printer failure and recovery were not exercised"
         );
-        assert!(self.delayed_printer_stream.is_none());
         assert_eq!(
             self.catalog_reads, 2,
             "catalog was not read empty then populated"
@@ -339,93 +337,9 @@ fn expected_commands() -> BTreeSet<(String, String)> {
         ("upgrade_confirm", "c-lock-overlap-ack"),
         ("upgrade_confirm", "c-logout"),
         ("upgrade_confirm", "c-destroy"),
+        ("upgrade_confirm", "l-generation-fence"),
     ]
     .into_iter()
     .map(|(command, sequence)| (command.into(), sequence.into()))
     .collect()
-}
-
-fn login_response() -> String {
-    json!({"token":"probe-token","profile":{
-        "token":"probe-token","user_id":"probe-user","user_name":"Probe User",
-        "tenant_id":"tenant-1","tenant_name":"Tenant"
-    }})
-    .to_string()
-}
-
-fn printer_list() -> String {
-    printer_list_with_version("session-1", "01.02.03.04")
-}
-
-fn printer_list_with_version(session_id: &str, printer_version: &str) -> String {
-    json!({"message":"success","devices":[{
-        "dev_id":"studio-serial-1","dev_name":"Probe Printer","name":"Probe Printer",
-        "dev_ip":"192.0.2.10","dev_access_code":"12345678","dev_model_name":"N6","model":"N6",
-        "dev_online":true,"online":true,"task_status":"IDLE","state":"IDLE","gcode_state":"IDLE",
-        "mc_percent":0,"mc_remaining_time":0,"layer_num":0,"total_layer_num":0,"task_id":null,
-        "print_error":null,"job_id":null,"subtask_id":null,"gcode_file":null,"subtask_name":null,
-        "hms":[],"pandar_printer_id":"printer-1","nozzle_temperatures":[],"active_nozzle":null,
-        "bed_temperature_celsius":null,"bed_target_temperature_celsius":null,
-        "chamber_temperature_celsius":null,"chamber_light_on":null,"materials":null,
-        "firmware":{"session_id":session_id,"generation":5,"module_revision":8,"status_revision":9,
-            "modules":modules_with_printer_version(printer_version),"upgrade_state":{"status":"UPGRADING","progress":"37"},"cfg":"101"}
-    }]})
-    .to_string()
-}
-
-fn modules() -> Value {
-    modules_with_printer_version("01.02.03.04")
-}
-
-fn refresh_response() -> String {
-    json!({
-        "command_id":"00000000-0000-0000-0000-000000000010",
-        "modules":modules(),
-        "module_revision":10
-    })
-    .to_string()
-}
-
-fn modules_with_printer_version(printer_version: &str) -> Value {
-    json!([
-        {"name":"ota","sw_ver":printer_version,"sw_new_ver":"01.02.04.00","new_ver":"01.02.05.00","visible":true,"product_name":"Main","sn":"SERIAL","hw_ver":"AP05","flag":5},
-        {"name":"ams/0","sw_ver":"02.00.00.00","sw_new_ver":"02.00.01.00","new_ver":"02.00.02.00","visible":false,"product_name":"AMS","sn":"AMS0","hw_ver":"AMS01","flag":1},
-        {"name":"n3f/0","sw_ver":"02.01.00.00","sw_new_ver":"02.01.01.00","new_ver":"02.01.02.00","visible":true,"product_name":"AMS 2 Pro","sn":"N3F0","hw_ver":"N3F01","flag":2},
-        {"name":"n3s/0","sw_ver":"03.00.00.00","sw_new_ver":"03.00.01.00","new_ver":"03.00.02.00","visible":false,"product_name":"AMS-HT","sn":"N3S0","hw_ver":"N3S01","flag":3},
-        {"name":"future/9","sw_ver":"09.09.09.09","sw_new_ver":"09.09.10.00","new_ver":"09.09.11.00","visible":true,"product_name":"Future","sn":"F9","hw_ver":"F09","flag":9}
-    ])
-}
-
-fn catalog_response(populated: bool) -> String {
-    let catalog = if populated {
-        json!([
-            {"target":"printer","version":"01.02.04.00","url":"main.bin","description":"Main release"},
-            {"target":"ams","version":"03.01.00.00","url":"ams.bin","description":"AMS release"}
-        ])
-    } else {
-        json!([])
-    };
-    json!({"firmware":{"module_revision":8,"status_revision":9},"catalog":catalog}).to_string()
-}
-
-fn json_body(request: &str) -> Value {
-    serde_json::from_str(request_body(request)).expect("typed firmware request JSON")
-}
-
-fn string_field(value: &Value, field: &str) -> String {
-    value[field].as_str().expect("string field").to_owned()
-}
-
-fn is_delayed_refresh(request: &str) -> bool {
-    request.lines().next().unwrap_or_default()
-        == "POST /api/v1/plugin/printers/printer-1/firmware/refresh HTTP/1.1"
-        && request.contains(r#""sequence_id":"c-lock-overlap-version""#)
-}
-
-fn respond(stream: &mut TcpStream, status: &str, body: String) {
-    let response = format!(
-        "{status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    );
-    stream.write_all(response.as_bytes()).unwrap();
 }

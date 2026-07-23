@@ -54,8 +54,19 @@ impl TransferModeCache {
 pub enum FileTransferOperation {
     List,
     Download,
-    Upload { size_bytes: u64 },
+    Upload {
+        size_bytes: u64,
+    },
+    PrintUpload {
+        size_bytes: u64,
+        try_emmc_print: bool,
+    },
     Delete,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PrintUploadPolicy {
+    pub try_emmc_print: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,6 +93,20 @@ impl FileTransferRequest {
 
     pub fn upload(path: impl Into<String>, size_bytes: u64) -> Self {
         Self::new(FileTransferOperation::Upload { size_bytes }, path)
+    }
+
+    pub fn print_upload(
+        path: impl Into<String>,
+        size_bytes: u64,
+        policy: PrintUploadPolicy,
+    ) -> Self {
+        Self::new(
+            FileTransferOperation::PrintUpload {
+                size_bytes,
+                try_emmc_print: policy.try_emmc_print,
+            },
+            path,
+        )
     }
 
     pub fn delete(path: impl Into<String>) -> Self {
@@ -122,6 +147,13 @@ pub trait MachineFileTransfer: Send + Sync {
         path: &str,
         bytes: &[u8],
         mode: TransferProtectionMode,
+    ) -> anyhow::Result<FileUploadResult>;
+    async fn upload_print(
+        &self,
+        path: &str,
+        bytes: &[u8],
+        mode: TransferProtectionMode,
+        policy: PrintUploadPolicy,
     ) -> anyhow::Result<FileUploadResult>;
     async fn delete(&self, path: &str, mode: TransferProtectionMode) -> anyhow::Result<()>;
 }
@@ -263,6 +295,20 @@ impl MachineFileTransfer for FakeMachineFileTransfer {
         mode: TransferProtectionMode,
     ) -> anyhow::Result<FileUploadResult> {
         self.record(mode, FileTransferRequest::upload(path, bytes.len() as u64))?;
+        Ok(FileUploadResult::ftp(path))
+    }
+
+    async fn upload_print(
+        &self,
+        path: &str,
+        bytes: &[u8],
+        mode: TransferProtectionMode,
+        policy: PrintUploadPolicy,
+    ) -> anyhow::Result<FileUploadResult> {
+        self.record(
+            mode,
+            FileTransferRequest::print_upload(path, bytes.len() as u64, policy),
+        )?;
         Ok(FileUploadResult::ftp(path))
     }
 

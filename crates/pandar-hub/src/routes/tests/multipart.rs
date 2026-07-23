@@ -81,12 +81,40 @@ pub(super) fn multipart_print_body_with_mappings(
     push_text("auto_flow_cali", "0");
     push_text("auto_offset_cali", "0");
     push_text("timelapse", "true");
-    if let Some(ams_mapping) = ams_mapping {
-        push_text("ams_mapping", &ams_mapping.to_string());
-    }
-    if let Some(ams_mapping2) = ams_mapping2 {
-        push_text("ams_mapping2", &ams_mapping2.to_string());
-    }
+    push_text("task_name", "plate file.3mf");
+    push_text("project_name", "Fixture project");
+    push_text("preset_name", "Fixture preset");
+    push_text("config_plate_index", "1");
+    push_text("nozzle_mapping", "[]");
+    push_text(
+        "ams_mapping",
+        &ams_mapping
+            .unwrap_or_else(|| serde_json::json!([]))
+            .to_string(),
+    );
+    push_text(
+        "ams_mapping2",
+        &ams_mapping2
+            .unwrap_or_else(|| serde_json::json!([]))
+            .to_string(),
+    );
+    push_text("ams_mapping_info", "[]");
+    push_text("nozzles_info", "[]");
+    push_text("connection_type", "cloud");
+    push_text("comments", "");
+    push_text("origin_profile_id", "0");
+    push_text("stl_design_id", "0");
+    push_text("origin_model_id", "");
+    push_text("print_type", "from_normal");
+    push_text("dev_name", "Fixture Printer");
+    push_text("vibration_cali", "false");
+    push_text("layer_inspect", "false");
+    push_text("timelapse_use_internal", "false");
+    push_text("bed_type", "auto");
+    push_text("extruder_cali_manual_mode", "-1");
+    push_text("try_emmc_print", "false");
+    push_text("svc_context", "");
+    push_text("slicer_uid", "");
     if let Some((filename, content_type, bytes)) = file {
         body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
         body.extend_from_slice(

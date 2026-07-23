@@ -35,10 +35,12 @@ enum Command {
         #[arg(long)]
         execute: bool,
     },
-    #[command(about = "Install a specified file as the Bambu Studio network plugin")]
+    #[command(about = "Install the Pandar network plugin and BambuSource companion")]
     InstallNetworkPlugin {
         #[arg(long)]
         plugin_file: PathBuf,
+        #[arg(long)]
+        source_file: PathBuf,
         #[arg(long)]
         data_dir: Option<PathBuf>,
     },
@@ -101,16 +103,19 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::InstallNetworkPlugin {
             plugin_file,
+            source_file,
             data_dir,
         } => {
             let summary = install_network_plugin(InstallNetworkPluginOptions {
                 plugin_file,
+                source_file,
                 data_dir,
             })?;
             println!(
                 "{}",
                 serde_json::to_string(&NetworkPluginJson {
                     plugin_path: summary.plugin_path,
+                    source_path: summary.source_path,
                     config_path: summary.config_path,
                 })?
             );
@@ -150,6 +155,7 @@ async fn main() -> anyhow::Result<()> {
 #[derive(Serialize)]
 struct NetworkPluginJson {
     plugin_path: PathBuf,
+    source_path: PathBuf,
     config_path: PathBuf,
 }
 
@@ -257,12 +263,15 @@ mod tests {
             "install-network-plugin",
             "--plugin-file",
             "target/release/pandar_network_plugin.dll",
+            "--source-file",
+            "target/release/pandar_bambu_source.dll",
             "--data-dir",
             "C:/Users/test/AppData/Roaming/BambuStudio",
         ]);
 
         let Command::InstallNetworkPlugin {
             plugin_file,
+            source_file,
             data_dir,
         } = cli.command
         else {
@@ -271,6 +280,10 @@ mod tests {
         assert_eq!(
             plugin_file,
             PathBuf::from("target/release/pandar_network_plugin.dll")
+        );
+        assert_eq!(
+            source_file,
+            PathBuf::from("target/release/pandar_bambu_source.dll")
         );
         assert_eq!(
             data_dir,

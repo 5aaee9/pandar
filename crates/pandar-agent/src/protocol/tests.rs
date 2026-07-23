@@ -14,6 +14,8 @@ use super::agent::v1::{
     firmware_command_result, hub_command,
 };
 
+mod studio_print;
+
 fn assert_round_trip<T>(value: T)
 where
     T: Message + Default + PartialEq + Debug,

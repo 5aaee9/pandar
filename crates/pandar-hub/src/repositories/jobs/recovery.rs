@@ -2,7 +2,7 @@ use anyhow::Context;
 use pandar_core::{CommandId, CommandStatus, JobId, JobStatus, PrintStatus, TenantId};
 use sea_orm::{
     ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, DatabaseTransaction, EntityTrait,
-    QueryFilter, TransactionTrait,
+    QueryFilter,
 };
 use serde::Serialize;
 
@@ -17,6 +17,7 @@ use crate::{
             create::{self, NewPrintJobFromArtifact},
             hydration::job_with_artifact_by_id,
             rows::{job_from_model_with_usage, job_with_artifact_from_models, usage_from_model},
+            write_transaction,
         },
     },
 };
@@ -28,9 +29,7 @@ pub async fn retry_dispatch_with_audit(
     reason: Option<String>,
     actor: AuditActor,
 ) -> RepositoryResult<JobWithArtifact> {
-    let connection = database.sea_orm_connection();
-    let tx = connection
-        .begin()
+    let tx = write_transaction::begin(database)
         .await
         .context("failed to begin retry dispatch transaction")?;
     let source = load_job_for_update(&tx, tenant_id, job_id).await?;
@@ -205,9 +204,7 @@ async fn create_copy_with_audit(
     database: &Database,
     input: CopyJobWithAudit,
 ) -> RepositoryResult<JobWithArtifact> {
-    let connection = database.sea_orm_connection();
-    let tx = connection
-        .begin()
+    let tx = write_transaction::begin(database)
         .await
         .context("failed to begin print recovery transaction")?;
     let source_job_id = input.source.job.id;

@@ -15,6 +15,7 @@ mod print;
 pub mod runtime;
 mod transfer;
 mod types;
+mod unavailable_transfer;
 
 use std::time::Duration;
 
@@ -48,6 +49,7 @@ pub use noop::NoopMachineGateway;
 use operations::dispatch_printer_operation;
 pub use operations::{PrinterAxis, PrinterOperation};
 use print::dispatch_print_project_file;
+pub(crate) use print::validate_print_project_file_command;
 #[cfg(test)]
 pub(crate) use runtime::RuntimeReportContext;
 use transfer::BambuMachineFileTransfer;
@@ -56,6 +58,7 @@ pub use types::{
     MaterialRefreshResult, PrintProjectDispatchResult, PrinterOperationDispatchResult,
     PrinterOperationMqttSummary, PrinterRefreshResult,
 };
+pub use unavailable_transfer::UnavailableMachineFileTransfer;
 
 #[async_trait]
 pub trait BambuMachineGateway: Send + Sync {
@@ -148,12 +151,10 @@ where
     F: MachineFileTransfer + Send + Sync,
 {
     fn redact_error(&self, message: &str) -> String {
-        diagnostics::redact_known_access_codes(
-            message,
-            self.printers
-                .iter()
-                .map(|(endpoint, _, _)| endpoint.access_code.clone()),
+        diagnostics::PrinterEndpointSecrets::from_endpoints(
+            self.printers.iter().map(|(endpoint, _, _)| endpoint),
         )
+        .redact(message)
     }
 
     async fn discover_printers(
@@ -348,45 +349,6 @@ impl<T, F> ConfiguredBambuMachineGateway<T, F> {
             report_timeout,
             transfer_cache,
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-pub struct UnavailableMachineFileTransfer;
-
-#[async_trait]
-impl MachineFileTransfer for UnavailableMachineFileTransfer {
-    async fn list(
-        &self,
-        _path: &str,
-        _mode: file_transfer::TransferProtectionMode,
-    ) -> anyhow::Result<Vec<String>> {
-        bail!("Bambu FTPS runtime is not implemented in this phase")
-    }
-
-    async fn download(
-        &self,
-        _path: &str,
-        _mode: file_transfer::TransferProtectionMode,
-    ) -> anyhow::Result<Vec<u8>> {
-        bail!("Bambu FTPS runtime is not implemented in this phase")
-    }
-
-    async fn upload(
-        &self,
-        _path: &str,
-        _bytes: &[u8],
-        _mode: file_transfer::TransferProtectionMode,
-    ) -> anyhow::Result<file_transfer::FileUploadResult> {
-        bail!("Bambu FTPS runtime is not implemented in this phase")
-    }
-
-    async fn delete(
-        &self,
-        _path: &str,
-        _mode: file_transfer::TransferProtectionMode,
-    ) -> anyhow::Result<()> {
-        bail!("Bambu FTPS runtime is not implemented in this phase")
     }
 }
 

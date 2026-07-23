@@ -6,6 +6,12 @@ use sea_orm::{
 };
 mod helpers;
 mod mobile;
+mod no_auth_session;
+mod revocation;
+
+#[cfg(test)]
+pub(crate) use no_auth_session::test_pause as no_auth_session_test_pause;
+pub use no_auth_session::{NoAuthPluginSession, NoAuthPluginSessionOutcome};
 
 use helpers::{is_expired, tenant_token_audit_event, tenant_token_model};
 use serde::Serialize;

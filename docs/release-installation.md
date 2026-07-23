@@ -19,7 +19,15 @@ Select the archive that matches the operator host OS and CPU architecture:
 | macOS Intel           | `macos-amd64`   | `pandar-release-<tag-or-sanitized-ref>-macos-amd64.tar.gz`   |
 | macOS Apple Silicon   | `macos-arm64`   | `pandar-release-<tag-or-sanitized-ref>-macos-arm64.tar.gz`   |
 
-Each archive contains the `pandar` CLI binary, or `pandar.exe` on Windows, and the matching `pandar-network-plugin` dynamic library for the target platform.
+The six labels above describe the broader release naming scheme. For the current exact Bambu Studio
+`02.08.01.55` alignment, final16 is verified only for `linux-amd64`; the most recent Windows artifact is
+historical final13 and predates the post-final13 fixes. Every candidate archive must contain exactly
+three top-level files: the `pandar` CLI (or `pandar.exe`), the matching network plugin, and the matching
+sentinel-only BambuSource companion.
+Historical two-file/129-export archives are not current Studio candidates.
+The existing tag workflow still emits the historical GNU Windows/two-file shape; do not use it for
+this target. Build and verify the current candidates with the same-OS native procedure recorded in
+`docs/compatibility/release-artifacts.md`.
 
 ## Checksum Verification
 
@@ -103,6 +111,11 @@ For SMTP delivery, set `PANDAR_AUTH_EMAIL_PROVIDER=smtp` instead of `resend` and
 
 Keep `PANDAR_AUTH_JWT_MAX_AGE_SECONDS` and `APP_AUTH_COOKIE_MAX_AGE_SECONDS` aligned. If the dashboard cookie outlives the JWT, authenticated dashboard requests will fail until the user signs in again; if the cookie is shorter, users reauthenticate earlier than the issuer token requires.
 
+When Better Auth is used from Bambu Studio, keep `PANDAR_AUTH_DASHBOARD_CALLBACK_URL` pointed at the
+dashboard `/auth/betterauth/callback` route. Pandar carries the selected tenant and Studio localhost
+callback through magic-link/passkey completion as a versioned base64url `return_to`; the dashboard
+accepts only the same-origin `/plugin-sign-in` target and never places the bearer JWT in that target.
+
 For agent artifact downloads, set `PANDAR_HUB_API_URL` when `PANDAR_HUB_GRPC_URL` is not an HTTP(S) URL. Agents authenticate artifact downloads with `PANDAR_AGENT_CREDENTIAL`; do not distribute object-store credentials to agents or browsers.
 
 ## Docker Compose Shapes
@@ -143,38 +156,212 @@ NixOS deployments use the flake module exposed as `nixosModules.default` and `ni
 
 Use root-owned runtime `EnvironmentFile` paths outside `/nix/store` for every NixOS secret. `services.pandar.hub.environmentFile` must contain `PANDAR_DATABASE_URL` and `PANDAR_PRINTER_ACCESS_CODE_KEY`; `services.pandar.agent.environmentFile` must contain `PANDAR_AGENT_CREDENTIAL` and may contain secret-bearing `PANDAR_PRINTERS`; `services.pandar-auth.environmentFile` carries `BETTER_AUTH_SECRET` and the selected email-provider secret; and `services.pandar.web.environmentFile` carries a static single-user token when that mode is used. The module rejects these variables in `extraEnvironment`, and the former plain `hub.databaseUrl`, `agent.credential`, and `agent.printers` options no longer exist. Generated option documentation is in `docs/deployment/nixos/options.md`.
 
-## Bambu Studio Plugin Replacement
+## Bambu Studio Plugin And BambuSource Replacement
 
-Replace the Bambu Studio network plugin library with the archive's platform plugin file:
+Pinned Studio commit `ba049f6a2e08c3b6033660bb84da80c08722974b` (`02.08.01.55`) requires
+both libraries before agent creation. Use the archive's platform files:
 
-| OS      | Plugin file                      |
-| ------- | -------------------------------- |
-| Linux   | `libpandar_network_plugin.so`    |
-| Windows | `pandar_network_plugin.dll`      |
-| macOS   | `libpandar_network_plugin.dylib` |
+| OS      | Network plugin                 | BambuSource companion          | Current native candidate |
+| ------- | ------------------------------ | ------------------------------ | ------------------------ |
+| Linux   | `libpandar_network_plugin.so`  | `libpandar_bambu_source.so`    | `pandar-final16-linux-amd64-019f7b10.tar.gz` |
+| Windows | `pandar_network_plugin.dll`    | `pandar_bambu_source.dll`      | none; successor unbuilt  |
+| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | none; untested          |
 
-Keep the original Studio plugin file for rollback. Typical locations vary by Studio installation:
+Install both with the CLI:
 
-- Linux AppImage or extracted builds: replace the bundled network plugin library next to the extracted Studio libraries.
-- Windows: replace the Bambu Studio network plugin DLL in the Studio installation's plugin or library directory.
-- macOS: replace the network plugin dylib inside the Bambu Studio `.app` bundle's Frameworks or plugin library area.
+```text
+pandar install-network-plugin --plugin-file <network-library> --source-file <source-library> --data-dir <BambuStudio-data-dir>
+```
 
-Record real Studio load and sign-in evidence with `docs/compatibility/bambu-studio-plugin-smoke.md`. Do not treat release-smoke export checks as real Bambu Studio compatibility evidence.
+The installer writes Studio's exact names, including `libbambu_networking.so` and
+`libBambuSource.so` on Linux and `bambu_networking.dll` plus `BambuSource.dll` on Windows. The
+companion exports only `pandar_bambu_source_sentinel`, exports no
+`Bambu_*` media/camera API, and leaves Studio's fake-source fallback in control.
+
+Keep both original Studio library files for rollback. Typical locations vary by Studio installation:
+
+- Linux AppImage or extracted builds: install both exact library names in Studio's data-directory
+  `plugins` folder.
+- Windows: install both exact DLL names in Studio's data-directory `plugins` folder.
+- macOS: a future native candidate must install both exact dylib names in Studio's data-directory
+  `plugins` folder; no current macOS evidence exists.
+
+### Plugin account-state recovery
+
+The selected Studio config directory contains account state that must move as one serialized
+namespace:
+
+| File | Purpose | Cleanup rule |
+| --- | --- | --- |
+| `.pandar-plugin-account.lock` | Cross-process account mutation lock. | Leave it in place. Never remove it while any Studio process using this directory is running. |
+| `pandar-plugin-login.json` | Current persisted Studio login, including its bearer credential. | Do not copy, restore, or delete it independently while Studio is running. |
+| `pandar-plugin-pending-revocations.json` | Durable pending-first revocation queue. | Do not delete it merely to suppress a retry; it may be the only recovery path for a still-valid Hub session. |
+| `pandar-plugin-direct-revocation.json` | Fallback intent that must be confirmed before an unstaged DELETE. | Keep it until replay completes or the corresponding Hub session is independently invalidated. |
+| `pandar-plugin-completed-revocations.json` | Hub URL plus token-hash tombstones that block stale login rewrites. | It is unbounded and has no automatic compaction; apply the full manual-reset prerequisites below before clearing it. |
+
+For a manual account-state reset, first stop every Bambu Studio process that uses this config
+directory. Then revoke, invalidate, or allow expiry of every corresponding Hub plugin session,
+including tokens represented by login, pending, direct, or completed state. Only after both conditions
+hold may an operator back up and remove the four JSON state files as one reset; the lock file can
+remain. Do not restore an old login file afterward. A successful direct DELETE may leave a duplicate
+pending entry only when best-effort cleanup failed; replay is idempotent, so retain the files and let
+normal recovery reconcile them rather than deleting either file by hand.
+
+Record real Studio load and sign-in evidence with `docs/compatibility/bambu-studio-plugin-smoke.md`.
+Do not treat release-smoke export checks as real Bambu Studio compatibility evidence. The current
+desktop checklist is a no-print smoke; automated print/cancel/command evidence and live hardware
+evidence remain separate.
 
 ## Unsupported Or Untested Targets
 
-Target status is tracked in `docs/compatibility/release-artifacts.md`. For checksum, layout, CLI startup, plugin exports, and real host install columns, treat any target with `failed`, `blocked`, `unsupported`, or `untested` evidence as not proven for operator installation.
+Target status is tracked in `docs/compatibility/release-artifacts.md`. For checksum, layout, CLI
+startup, plugin exports, and real host install columns, treat `in_progress`, `failed`, `blocked`,
+`unsupported`, or `untested` as not proven for operator installation.
 
-CI release-smoke evidence and real host installation evidence are separate. A target can pass archive layout, checksum, CLI startup, and packaged plugin export checks in CI while still having `untested` real host installation status.
+Native release-smoke and real Studio evidence are separate. The old workflow-run rows are preserved
+only in `docs/compatibility/release-artifacts.md` as historical two-file/129-export evidence; they are
+not current candidates and are not instructions to run an Action.
 
-| Target label    | Current operator status | Reason                                                                                                                                                                                                                                                                                                              | Next action                                                                                                                                                                                                                                                                                      |
-| --------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `linux-amd64`   | `blocked`               | Workflow-run artifact evidence and local Linux x86_64 host install evidence exist from run `28102001464`, but no tagged GitHub Release exists yet and real Bambu Studio plugin replacement is tracked separately.                                                                                                   | Produce or select a tagged GitHub Release archive, repeat checksum and host install validation for that release artifact, then record the row in `docs/compatibility/release-artifacts.md`.                                                                                                      |
-| `linux-arm64`   | `blocked`               | Workflow-run artifact evidence and local static release-smoke evidence exist from run `28102001464`, but no tagged GitHub Release or real Linux arm64 host install evidence exists yet.                                                                                                                             | Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, install on Linux arm64 hardware, verify checksum, run `pandar --help`, inspect the plugin, and record host install evidence before treating it as usable.                                         |
-| `windows-amd64` | `blocked`               | Workflow-run artifact evidence and local static PE export evidence exist from run `28102001464`, but no tagged GitHub Release or real Windows x86_64 host install evidence exists yet; artifacts are unsigned and may trigger platform warnings.                                                                    | Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, install on Windows x86_64, verify checksum, run `pandar.exe --help`, replace the Studio plugin DLL for a controlled smoke, and record evidence.                                                   |
-| `windows-arm64` | `blocked`               | Built and packaged in run `28102001464`, but release-smoke failed before upload because the runner lacked an LLVM PE inspector for ARM64 PE; after the LLVM inspector fix, follow-up run `28103772270` was billing-blocked before any build step started. Artifacts are unsigned and may trigger platform warnings. | Produce a tagged GitHub Release archive or re-run `release.yml` after billing is restored to produce an uploaded Windows arm64 workflow artifact, install on Windows arm64, verify checksum, run `pandar.exe --help`, replace the Studio plugin DLL for a controlled smoke, and record evidence. |
-| `macos-amd64`   | `blocked`               | Workflow-run artifact evidence and local static Mach-O archive inspection exist from run `28102001464`, but no tagged GitHub Release or real Intel macOS host install evidence exists yet; artifacts are unsigned and may trigger Gatekeeper warnings.                                                              | Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, install on Intel macOS, verify checksum, run `pandar --help`, replace the Studio plugin dylib for a controlled smoke, and record evidence.                                                        |
-| `macos-arm64`   | `blocked`               | Workflow-run artifact evidence and local static Mach-O archive inspection exist from run `28102001464`, but no tagged GitHub Release or real Apple Silicon macOS host install evidence exists yet; artifacts are unsigned and may trigger Gatekeeper warnings.                                                      | Select a tagged GitHub Release archive or a suitable workflow artifact from run `28102001464`, install on Apple Silicon macOS, verify checksum, run `pandar --help`, replace the Studio plugin dylib for a controlled smoke, and record evidence.                                                |
+The current final16 immutable input `pandar-bambu-final16-019f7b10.tar.gz` is 2,793,904 bytes with
+SHA-256 `24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039`; its canonical
+source-tree SHA-256 is `c62c92167f466a915400953ec2d0e126bc34b3c6509a747ddee17dce8d52bf30`.
+The preceding pre-fix freeze whose SHA-256 begins `6318d190` and ends `ab473` was rejected by P1
+review and is not an install candidate.
+
+The current Linux archive `pandar-final16-linux-amd64-019f7b10.tar.gz` is 24,891,706 bytes with
+SHA-256 `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3` and sidecar SHA-256
+`bde03e9633839432063d93768e10b0caf845755d216a653e20fa11d1461296f8`. Its exact top-level
+members are `pandar`, `libpandar_network_plugin.so`, and `libpandar_bambu_source.so`; their SHA-256
+values are `b1762bfccdfc1f658147b19b23d7016707b5414d14f74be518e0b5663ddb1b22`,
+`3bcce9085205d6af67dc9671cf58cd6f9fb694d5a587b43d160dc8b6a9b0712f`, and
+`88d34358be39ed3d239aeb317df8f34a92d4652877e86a9849c66e32347c1df2`.
+Its native evidence archive and sidecar SHA-256 values are
+`fe35290675aac4e6ce323a8ebc75bde1c34d373b1df7506f7f8a65b69ffea950` and
+`00a560832428e045affad08617646f7e3d322e07c4849d20e5912be6d545595b`.
+
+Final16 Linux validation passed workspace Nextest 1,808/1,808 with one configured skip in run
+`c9c96abe-5b80-4478-be33-9ceffef62a53`, fmt, strict workspace Clippy, module-size checks, ABI tool
+22/22, release-smoke 25/25, packaged tasks 18/18, the 109-network plus 21-File-Transfer export
+contract, and 21 entrypoints x 256 ASan/LSan cycles. Disposable PostgreSQL 16.14 run
+`b73d7ce9-d3ab-424b-8d65-b4736e59f24b` passed 7/7 with zero skips; its dedicated container,
+network, and volume were removed and their absence was verified.
+
+The official Bambu Studio `02.08.01.55` AppImage with SHA-256
+`e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995` made exactly one
+model-task request, received one HTTP 200 response, and produced one ordered four-event lifecycle
+through callback return. Evidence-manifest SHA-256 is
+`c6ba9b6282581119d3baec720e26990ad63efc20eb394b0c71dced89081d5fd9`.
+The redacted bundle `pandar-final16-real-studio-evidence-019f7b10.tar.gz` is 245,225 bytes with
+SHA-256 `f07c369ad9e0354ef40142294d9385e9c454fd534a04badce4be000f49c06eca`; an independent
+second generation matched byte-for-byte. It contains only safe `evidence/` and `outer/` artifacts,
+with no runner or mock implementation and no synthetic token contents.
+Its `.sha256` sidecar has SHA-256
+`30c6e5d43b74f9770d19638b86cefddd96d4d861c16155c74d30b488adf7f1b6`, and
+`sha256sum --check` passed.
+This controlled result used a synthetic persisted session and loopback mock; it is not real
+authentication, Hub, Agent, database, printer, hardware, print, or firmware evidence. No GitHub
+Action or Windows Studio process was used.
+
+The historical final14 immutable input is `pandar-bambu-final14-019f7b10.tar.gz` at source `HEAD`
+`2ba0d1f2755501ea9e7d4babcf176db40638f643`, 2,782,539 bytes and 1,548 regular members. Archive,
+member-list, canonical-tree, and freeze-evidence SHA-256 values are
+`c422d80d89052732db6b8ae87b68fd1e4145c64f588d8382deafef3345d86681`,
+`5b32472c9372a992c23315d9b33691a0f269248b65db312590ed00556e21aac0`,
+`43a4a577fb90327dad9e59bcb89dc1e91352bad83f27786a32cae34cb62136e5`, and
+`70d545770086c6acde271d3181508adf4f0d91fc8213771363ec78b2792f5ec3`. Determinism passed and
+all unsafe, duplicate, case-collision, reparse-point, membership-diff, and content-diff counts were zero.
+
+The historical final14 Linux archive `pandar-final14-linux-amd64-019f7b10.tar.gz` is 24,854,111
+bytes with SHA-256 `4e91f2457197532102544b02d4edac5354dc2982ec55fa707a057cbcba518b68`
+and sidecar SHA-256 `c7e95f887fe415bcc592ab4475a4a6d5a070344d855c22e95ba7efe1323938a1`.
+Ubuntu 22.04 Nextest run `d2231751-1284-46b0-aee6-2e041ca1a203` passed 1,781/1,781 with one
+separately reported skip; fmt, strict Clippy, module-size 2/2, release-smoke-tool 21/21, all five ABI
+modes, 109 network plus 21 File Transfer exports, the companion sentinel/no-`Bambu_*` rule, and
+21 x 256 ASan/LSan cycles passed. The native evidence bundle is 202,300 bytes with SHA-256
+`db6a464ce6b9b4b5e4689e1f0f21962dd097349056e78beb57a8779e1352cb02`.
+
+Historical final14 official-AppImage attempt 1 used the fixed official Ubuntu 22.04 AppImage SHA-256
+`e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`. Studio PID
+`137`/start ticks `193373032` remained unchanged across two offline failures and one successful
+development no-auth commit; both libraries mapped 4/4, one plugin session was committed, and
+loader/certificate error counts were zero. Redacted evidence
+`pandar-final14-appimage-redacted-evidence-019f7b10.tar.gz` is 10,603 bytes with 23 members and
+SHA-256 `7eac6abbc7364928147d60dd1c583d084c02debf1552734bc82a4dec59c941be`.
+This is historical exact module-load and development no-auth recovery evidence, not authenticated
+Studio evidence or a current install candidate.
+
+The historical final13 build input is archive `pandar-bambu-final13-019f7b10.tar.gz`, source `HEAD`
+`2ba0d1f2755501ea9e7d4babcf176db40638f643`, 2,751,227 bytes and 1,543 regular members. Its
+archive SHA-256 is `71080abb1e7392b0440a179b5bca9fd80638de74a614105b8dc11a0f70959c34`, member-list SHA-256
+is `87a6ad1dfaa404731ed30d7e265303cca64fc4278a478f9c12192c09373eb880`, canonical tree SHA-256
+is `db0b7c3385c29ff0cdee1930a66f554a6845b58907373ef543563b829c245761`, and freeze-evidence
+SHA-256 is `4d132e16f91365795f54c97f608483c34b55726c5f614f5bb8ffaac2ede1fb7f`. Determinism passed;
+unsafe member, duplicate, case-collision, reparse-point, membership-diff, and content-diff counts were
+zero.
+
+The historical Windows native archive `pandar-final13-windows-amd64-019f7b10.tar.gz` is 21,285,752
+bytes with SHA-256 `6c50e77a0b4008ce46d86de51411117061c5118e18849ca1fb94f4a3f319db64`.
+It passed native CLI execution, exact three-file layout, all five ABI modes, the 109-network plus
+21-File-Transfer contract, 21/21 ABI and release-smoke checks, and companion inspection. Consolidated
+evidence SHA-256 is `3dab4bffa359e4c46eec77cbfb278ce3a1497f806a1d80343a1735b5a68f025b`.
+The basename-only sidecar has SHA-256
+`0d908e117a58bdd951f49b66ca40d84555f54b1d097dfdabbd3bac2acdf10922`. CLI, plugin, and companion
+SHA-256 values are `a73fbe47a56fd557f14912e0e774007e0a4774ce83f250ce2a9cc41e52da8d57`,
+`7861e454eb9dd6122eabc6252102de462228eec526f47149e00a037d3dc48eba`, and
+`eaf98016c7d38cb6121a525a0f7a5bb5f0c59df333722798c5f76cee279fdfe6`.
+This is a native artifact result, not a real Windows Studio session; authentication and hardware remain
+untested. Do not publish the cross-platform alignment as complete while authenticated Linux, real
+Windows Studio, macOS, hardware, and live-firmware evidence remain pending.
+
+The historical Linux native archive `pandar-final13-linux-amd64-019f7b10.tar.gz` is 24,854,768 bytes
+with SHA-256 `4166e6012e6c1bf7cdf056ba3bfb28f0fbc9d216c31e5ed2e8620adb8b5fcccc`.
+It passed native CLI execution, exact three-file layout, all five ABI modes, the 109-network plus
+21-File-Transfer contract, 22/22 ABI-tool tests, 21/21 release-smoke-tool tests, companion inspection,
+and 21 File Transfer entrypoints x 256 ASan/LSan ownership cycles. CLI, plugin, and companion SHA-256
+values are `7c44138d559ee62d02d4ac7fe0c23c7091e99a7782aac8a163a0c3565458d77f`,
+`f9baf8346901fdc2ba20aeee786029e47af495bad3ee2e754f440db89010be24`, and
+`88d34358be39ed3d239aeb317df8f34a92d4652877e86a9849c66e32347c1df2`. Evidence-bundle SHA-256
+is `aa7478fe0f74debcc5f3d1f5ec53a2222d726beafe5224935aa3382c24f6097a`.
+
+Final13 exact-AppImage attempt 8 then loaded this package in the official Ubuntu 22.04 Bambu Studio
+`02.08.01.55` AppImage with SHA-256
+`e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`. Studio PID `137`/start
+ticks `192688662` remained unchanged across two offline failures and one successful commit after Hub
+became ready; both libraries mapped 4/4, and loader/certificate error counts were zero. Final
+active/total token count was `1/1`, with create/revoke/discard counts `1/0/0`. Redacted evidence bundle
+`pandar-final13-appimage-redacted-evidence-019f7b10.tar.gz` is 7,211 bytes with SHA-256
+`a4453c8dce3829cc1a84a372a772b516812fe1564b310e61db9e9009a11cf9d2`. This proves exact module
+load and development no-auth same-process recovery only; it is not an authenticated Studio session.
+
+The historical final12 alignment input is archive `pandar-bambu-final12-019f7b10.tar.gz`, source HEAD
+`2ba0d1f2755501ea9e7d4babcf176db40638f643`, 2,740,698 bytes and 1,543 regular members. Its
+archive SHA-256 is `17371828ef7a26cace73cfbed321d094bf38323670e8fa6ccf69d6cbfd4b7eee`, canonical
+member-list SHA-256 is `87a6ad1dfaa404731ed30d7e265303cca64fc4278a478f9c12192c09373eb880`, and
+source-tree/manifest SHA-256 is
+`5aa0038dbc3f0962cc172646876263b0db04e1e6df5fbe571553af1967f242a6`. Later Linux validation
+exposed a background-refresh/firmware-callback race, so frozen final5, final11, and final12 results
+remain only where explicitly labeled historical. Do not install any of those archives as the current
+`02.08.01.55` candidate.
+
+Frozen final12 PostgreSQL 16.14 harness run `3e00d36c-7fb9-47d3-b71b-d9735ebe0eae` and Nextest
+run `0b708279-6183-4477-9f78-31add8d7f423` passed 55/55 focused cases with zero skip markers; 831
+tests were outside the filter. The PostgreSQL evidence SHA-256 is
+`d7f002f5be8708844cce406895503ef7056b634bf04aad068722eb25ef15247e`.
+
+Historical final13 PostgreSQL 16.14 harness `0c292295-f9ab-459b-89c2-ea74f2c9ff56` ran
+`24b49c19-cd07-42b5-a5a3-6d220345bd7e` and `1f4b8458-6397-4c0b-8ab3-23d37779c68a`; each passed
+55/55 focused cases with 831 filtered and zero runtime skip markers. Normalized evidence SHA-256 is
+`7e04ae355f7bca3fb409bbc700b5c8f160194c0d2f9ec82df823c859566a2db7`; source read-only and
+cleanup checks passed.
+
+| Target label | Current operator status | Reason | Next action |
+| --- | --- | --- | --- |
+| `linux-amd64` | `in_progress` | Current final16 passed native package/ABI/release-smoke/runtime, ASan/LSan, and the narrow exact-AppImage model-task callback gate. Real authentication and the live Hub/Agent/printer path remain pending. | Use only the checksum-verified final16 Linux archive for this slice. Do not claim full compatibility until real sign-in/ticket/token/profile/printer/job/outage/logout rows pass; hardware and live firmware require separate authorization. |
+| `windows-amd64` | `in_progress` | Historical final13 passed native MSVC layout, CLI, ABI, export, companion, and packaged-smoke gates, but predates the later fixes. No final16 Windows package or real Windows Studio evidence exists. | Build and validate a native MSVC final16 successor, then keep operator status `in_progress` until a real exact-version Windows Studio session is recorded. |
+| `linux-arm64` | `untested` | No current three-file native candidate exists. | Do not publish a Studio compatibility claim. |
+| `windows-arm64` | `untested` | No current three-file native candidate exists. | Do not publish a Studio compatibility claim. |
+| `macos-amd64` | `untested` | No current native candidate or real Studio evidence exists. | Do not publish a Studio compatibility claim. |
+| `macos-arm64` | `untested` | No current native candidate or real Studio evidence exists. | Do not publish a Studio compatibility claim. |
 
 ## Operations Runbook
 

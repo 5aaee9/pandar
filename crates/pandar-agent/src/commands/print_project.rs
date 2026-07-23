@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     AgentConfig,
-    machine::{BambuMachineGateway, MachineJsonPayload},
+    machine::{BambuMachineGateway, MachineJsonPayload, validate_print_project_file_command},
     protocol::agent::v1::{AgentEvent, PrintProjectFile},
 };
 
@@ -71,6 +71,17 @@ where
     G: BambuMachineGateway,
     R: PrintCommandArtifactReader,
 {
+    if let Err(err) =
+        validate_print_project_file_command(&command).context("validate print-project-file command")
+    {
+        let error = gateway.redact_error(&format!("{err:#}"));
+        sender
+            .send(rejected_ack_event(config, command_id, error))
+            .await
+            .context("queue invalid print-project-file rejected ack")?;
+        return Ok(());
+    }
+
     if let Err(err) = gateway.validate_printer(&command.serial_number).await {
         let error = gateway.redact_error(&format!("{err:#}"));
         sender

@@ -34,7 +34,6 @@ struct CredentialsSnapshot {
     hub_url: String,
     token: String,
     generation: u64,
-    cancelled: bool,
 }
 
 impl FirmwarePluginSession {
@@ -76,6 +75,7 @@ impl FirmwarePluginSession {
         printer_id: &str,
         message: &str,
         tunnel: FirmwareTunnel,
+        expected_generation: u64,
     ) -> FirmwareSendResult {
         let stderr = std::io::stderr();
         self.send_with_diagnostics(
@@ -83,6 +83,7 @@ impl FirmwarePluginSession {
             printer_id,
             message,
             tunnel,
+            expected_generation,
             &mut stderr.lock(),
         )
     }
@@ -93,6 +94,7 @@ impl FirmwarePluginSession {
         printer_id: &str,
         message: &str,
         tunnel: FirmwareTunnel,
+        expected_generation: u64,
         diagnostics: &mut impl Write,
     ) -> FirmwareSendResult {
         let StudioFirmwareParse::Firmware(command) = parse_studio_firmware(message) else {
@@ -101,13 +103,12 @@ impl FirmwarePluginSession {
                 callback_token: None,
             };
         };
-        let snapshot = self.snapshot();
-        if snapshot.cancelled {
+        let Some(snapshot) = self.claim(expected_generation) else {
             return FirmwareSendResult {
                 outcome: FirmwareSendOutcome::PrePublishFailure,
                 callback_token: None,
             };
-        }
+        };
         let response = FirmwareHttpClient::new(snapshot.hub_url, snapshot.token).send(
             studio_dev_id,
             printer_id,
@@ -119,7 +120,7 @@ impl FirmwarePluginSession {
             .credentials
             .lock()
             .expect("firmware credentials poisoned");
-        if credentials.generation != snapshot.generation || credentials.cancelled {
+        if credentials.generation != expected_generation || credentials.cancelled {
             return FirmwareSendResult {
                 outcome: match response.outcome {
                     FirmwareSendOutcome::PrePublishFailure => {
@@ -176,22 +177,36 @@ impl FirmwarePluginSession {
         self.next_status_override_at(dev_id, Instant::now())
     }
 
-    pub fn catalog_json(&self, studio_dev_id: &str, printer_id: &str) -> anyhow::Result<String> {
-        let snapshot = self.snapshot();
+    pub fn catalog_json(
+        &self,
+        studio_dev_id: &str,
+        printer_id: &str,
+        expected_generation: u64,
+    ) -> anyhow::Result<String> {
+        let snapshot = self
+            .claim(expected_generation)
+            .ok_or_else(|| anyhow::anyhow!("firmware session changed"))?;
         let entries =
             FirmwareHttpClient::new(snapshot.hub_url, snapshot.token).catalog(printer_id)?;
         anyhow::ensure!(
-            self.generation() == snapshot.generation,
+            self.is_current(expected_generation),
             "firmware session changed"
         );
         Ok(firmware_catalog_json(studio_dev_id, &entries))
     }
 
-    pub fn refresh_version_json(&self, printer_id: &str, sequence_id: &str) -> String {
-        let snapshot = self.snapshot();
+    pub fn refresh_version_json(
+        &self,
+        printer_id: &str,
+        sequence_id: &str,
+        expected_generation: u64,
+    ) -> String {
+        let Some(snapshot) = self.claim(expected_generation) else {
+            return firmware_refresh_failure_json(sequence_id);
+        };
         let response = FirmwareHttpClient::new(snapshot.hub_url, snapshot.token)
             .refresh(printer_id, sequence_id);
-        if self.generation() != snapshot.generation {
+        if !self.is_current(expected_generation) {
             return firmware_refresh_failure_json(sequence_id);
         }
         match response {
@@ -203,8 +218,21 @@ impl FirmwarePluginSession {
         }
     }
 
-    pub fn return_handoff_at(&self, token: u64, origin_tick: u64, now: Instant) -> bool {
-        self.callbacks.return_handoff_at(token, origin_tick, now)
+    pub fn return_handoff_at(
+        &self,
+        token: u64,
+        origin_tick: u64,
+        local_generation: u64,
+        cache_generation: u64,
+        now: Instant,
+    ) -> bool {
+        self.callbacks.return_handoff_at(
+            token,
+            origin_tick,
+            local_generation,
+            cache_generation,
+            now,
+        )
     }
 
     pub fn take_ready_callback_at(&self, now: Instant) -> Option<ReadyFirmwareCallback> {
@@ -230,24 +258,27 @@ impl FirmwarePluginSession {
         self.callbacks.stop();
     }
 
-    fn snapshot(&self) -> CredentialsSnapshot {
+    fn claim(&self, expected_generation: u64) -> Option<CredentialsSnapshot> {
         let credentials = self
             .credentials
             .lock()
             .expect("firmware credentials poisoned");
-        CredentialsSnapshot {
+        if credentials.generation != expected_generation || credentials.cancelled {
+            return None;
+        }
+        Some(CredentialsSnapshot {
             hub_url: credentials.hub_url.clone(),
             token: credentials.token.clone(),
             generation: credentials.generation,
-            cancelled: credentials.cancelled,
-        }
+        })
     }
 
-    fn generation(&self) -> u64 {
-        self.credentials
+    fn is_current(&self, expected_generation: u64) -> bool {
+        let credentials = self
+            .credentials
             .lock()
-            .expect("firmware credentials poisoned")
-            .generation
+            .expect("firmware credentials poisoned");
+        credentials.generation == expected_generation && !credentials.cancelled
     }
 }
 

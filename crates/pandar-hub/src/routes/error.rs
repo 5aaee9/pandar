@@ -149,6 +149,14 @@ impl From<RepositoryError> for ApiError {
                 tracing::error!(%status, "invalid persisted print status");
                 Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
             }
+            RepositoryError::InvalidPersistedArtifactMetadata(err) => {
+                tracing::error!(error = %format!("{err:#}"), "invalid persisted artifact metadata");
+                Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
+            }
+            RepositoryError::InvalidPersistedStudioMetadata(err) => {
+                tracing::error!(error = %format!("{err:#}"), "invalid persisted Studio metadata");
+                Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
+            }
             RepositoryError::InvalidPersistedUserRole(role) => {
                 tracing::error!(%role, "invalid persisted user role");
                 Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
@@ -163,6 +171,12 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::RetryNotSafe => Self::new(StatusCode::CONFLICT, "retry_not_safe"),
             RepositoryError::ReprintNotAllowed => {
                 Self::new(StatusCode::CONFLICT, "reprint_not_allowed")
+            }
+            RepositoryError::StudioSubmissionIdExhausted => {
+                Self::new(StatusCode::CONFLICT, "studio_submission_id_exhausted")
+            }
+            RepositoryError::StudioCancellationTooLate => {
+                Self::new(StatusCode::CONFLICT, "studio_cancellation_too_late")
             }
             RepositoryError::PrinterControlUnavailable => {
                 Self::new(StatusCode::BAD_REQUEST, "printer_control_unavailable")

@@ -1,5 +1,5 @@
 use anyhow::Context;
-use pandar_core::TenantId;
+use pandar_core::{Printer, TenantId};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 
 use crate::{
@@ -7,9 +7,24 @@ use crate::{
     repositories::{RepositoryError, RepositoryResult},
 };
 
-use super::{PrinterRepository, PrinterWithLiveStatus, live_status};
+use super::{PrinterRepository, PrinterWithLiveStatus, live_status, rows::printer_from_model};
 
 impl PrinterRepository {
+    pub async fn get_by_serial_for_tenant(
+        &self,
+        tenant_id: TenantId,
+        serial_number: &str,
+    ) -> RepositoryResult<Option<Printer>> {
+        printers::Entity::find()
+            .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
+            .filter(printers::Column::SerialNumber.eq(serial_number))
+            .one(&self.database.sea_orm_connection())
+            .await
+            .context("failed to get printer by serial")?
+            .map(|model| printer_from_model(model, &self.access_code_cipher))
+            .transpose()
+    }
+
     pub async fn list_with_live_status_for_tenant(
         &self,
         tenant_id: TenantId,

@@ -80,7 +80,7 @@ pub(super) fn run_probe(mode: MockMode, mode_arg: &str) -> ProbeOutput {
     let artifact = run_directory.path().join("probe.3mf");
     let artifact_bytes = b"probe artifact bytes".to_vec();
     fs::write(&artifact, &artifact_bytes).expect("write Studio ABI artifact");
-    let hub = spawn_mock_hub(mode, artifact_bytes);
+    let hub = spawn_mock_hub(mode, artifact_bytes, &config_directory);
 
     let mut command = Command::new(&compiled.executable);
     command
@@ -88,6 +88,7 @@ pub(super) fn run_probe(mode: MockMode, mode_arg: &str) -> ProbeOutput {
         .arg(&artifact)
         .arg(mode_arg)
         .arg(&config_directory)
+        .current_dir(run_directory.path())
         .env("PANDAR_PLUGIN_HUB_URL", &hub.url)
         .env("PANDAR_PLUGIN_FRONTEND_URL", "http://127.0.0.1:3000/pandar");
     let child = spawn_probe(command);

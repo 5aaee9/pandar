@@ -2995,6 +2995,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "pandar-bambu-source"
+version = "0.1.0"
+
+[[package]]
 name = "pandar-core"
 version = "0.1.0"
 dependencies = [
@@ -3059,14 +3063,17 @@ dependencies = [
  "http-body 1.0.1",
  "http-body-util",
  "pandar-core",
+ "quick-xml",
  "reqwest",
  "rust-embed",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "tokio",
  "tokio-util",
  "uuid",
+ "zip",
 ]
 
 [[package]]

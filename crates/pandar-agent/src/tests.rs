@@ -190,7 +190,7 @@ async fn ended_command_stream_preserves_runtime_linked_printer_for_reconnect() {
     let snapshots = gateway.refresh_printers().await.unwrap();
     assert_eq!(snapshots.len(), 1);
     assert_eq!(snapshots[0].snapshot.serial, "SERIAL123");
-    assert_eq!(snapshots[0].snapshot.state, "IDLE");
+    assert_eq!(snapshots[0].snapshot.state.as_deref(), Some("IDLE"));
 }
 
 #[tokio::test]

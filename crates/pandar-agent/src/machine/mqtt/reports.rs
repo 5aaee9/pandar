@@ -4,6 +4,9 @@ mod forwarding;
 mod protocol;
 mod schema;
 
+pub(crate) use forwarding::{
+    MqttForwardingContext, MqttPresenceState, forward_print_reports_with_context,
+};
 pub use forwarding::{forward_print_reports, forward_print_reports_with_firmware};
 use pandar_core::created_at_now;
 pub use protocol::print_job_report_event;
@@ -91,7 +94,8 @@ pub(crate) fn print_report_from_parsed_report(
         printer_job_id: print.job_id.clone(),
         artifact_id: subtask_id.clone(),
         subtask_id,
-        gcode_state: trimmed_string(print.gcode_state.as_deref()),
+        gcode_state: trimmed_string(print.gcode_state.as_deref())
+            .or_else(|| trimmed_string(print.state.as_deref())),
         percent: bounded_u32(print.mc_percent.as_ref(), 0, 100).map(|value| value as u8),
         remaining_time_minutes: bounded_u32(print.mc_remaining_time.as_ref(), 0, 4320),
         current_layer: bounded_u32(print.layer_num.as_ref(), 0, 100_000),
@@ -136,7 +140,7 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
             host: snapshot.host.unwrap_or_default(),
             access_code: snapshot.access_code.unwrap_or_default(),
             name: snapshot.name,
-            state: snapshot.state,
+            state: snapshot.state.unwrap_or_default(),
             model: snapshot.model.unwrap_or_default(),
             nozzle_temperatures: snapshot
                 .nozzle_temperatures
@@ -165,6 +169,7 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
                     bambu_fun_bits: features.bits(),
                 }),
             connection_authoritative: false,
+            telemetry_authoritative: snapshot.telemetry_authoritative,
         })),
     }
 }
