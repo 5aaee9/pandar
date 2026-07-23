@@ -127,7 +127,16 @@
           --prefix PATH : ${lib.makeBinPath [ pkgs.ffmpeg ]}
       '';
       pandar-cli = buildRustPackage "pandar-cli" "-p pandar-app --bin pandar";
-      pandar-network-plugin = buildRustPackage "pandar-network-plugin" "-p pandar-network-plugin";
+      pandar-network-plugin = craneLib.buildPackage (
+        commonArgs
+        // {
+          inherit cargoArtifacts;
+          pname = "pandar-network-plugin";
+          cargoExtraArgs = "-p pandar-network-plugin";
+          # External-checkout contract tests run outside the hermetic package build.
+          doCheck = false;
+        }
+      );
 
       pandarAuthLibraryPath = lib.makeLibraryPath [
         pkgs.sqlite
@@ -179,7 +188,7 @@
         src = frontendWorkspaceSource;
         npmWorkspace = "pandar-auth";
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-fdFMRiAY2RJ/4pM/ZOeIpdp2qRGtwT7ljEjbbrlnPBA=";
+        npmDepsHash = "sha256-3mKEkgEb/FBDCDZWlhwP8YeN7Hnua9uqtAV8uBDaTRc=";
 
         nativeBuildInputs = [
           pkgs.makeWrapper
@@ -264,7 +273,7 @@
         version = "0.1.0";
         src = frontendWorkspaceSource;
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-fdFMRiAY2RJ/4pM/ZOeIpdp2qRGtwT7ljEjbbrlnPBA=";
+        npmDepsHash = "sha256-3mKEkgEb/FBDCDZWlhwP8YeN7Hnua9uqtAV8uBDaTRc=";
         npmBuildScript = "build:web";
 
         nativeBuildInputs = [
@@ -708,7 +717,8 @@
           // {
             inherit cargoArtifacts;
             pname = "pandar-nextest";
-            cargoNextestExtraArgs = "--workspace";
+            # These contract gates require an external pinned BambuStudio Git checkout.
+            cargoNextestExtraArgs = "--workspace -E 'not (binary(studio_print_contract_red) | binary(studio_projection_contract))'";
           }
         );
 
