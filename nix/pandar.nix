@@ -69,7 +69,10 @@
           || rel == "frontend/plugin-local/dist"
           || lib.hasPrefix "frontend/plugin-local/dist/" rel
           || rel == "proto"
-          || lib.hasPrefix "proto/" rel;
+          || lib.hasPrefix "proto/" rel
+          || rel == "vendor"
+          || rel == "vendor/rumqttc"
+          || lib.hasPrefix "vendor/rumqttc/" rel;
       };
 
       nativeBuildInputs = [
