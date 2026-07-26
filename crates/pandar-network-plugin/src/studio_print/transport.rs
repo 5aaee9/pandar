@@ -17,6 +17,7 @@ use super::{
 };
 
 const UPLOAD_CHUNK_BYTES: usize = 64 * 1024;
+const HUB_RESPONSE_MAX_BYTES: usize = 1024 * 1024;
 
 pub(super) struct HttpReply {
     pub(super) status: u16,
@@ -31,7 +32,9 @@ struct HubError {
 
 pub(super) fn client() -> Result<Client, PrintFailure> {
     Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(5))
         .timeout(std::time::Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|error| diagnosed_failure(error.into(), "build Studio print HTTP client"))
 }
@@ -172,12 +175,31 @@ fn multipart_form(print: &AdmittedPrint) -> multipart::Form {
 
 async fn reply(response: reqwest::Response) -> Result<HttpReply, PrintFailure> {
     let status = response.status().as_u16();
-    let body = response.text().await.map_err(|error| {
-        let error =
-            anyhow::Error::new(error.without_url()).context("read Studio print Hub response");
-        eprintln!("pandar network plugin request failed: {error:#}");
-        PrintFailure::simple("invalid_response")
-    })?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > HUB_RESPONSE_MAX_BYTES as u64)
+    {
+        return Err(diagnosed_failure(
+            anyhow::anyhow!("Studio print Hub response exceeds {HUB_RESPONSE_MAX_BYTES} bytes"),
+            "read Studio print Hub response",
+        ));
+    }
+    let mut body = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|error| {
+            diagnosed_failure(error.without_url().into(), "read Studio print Hub response")
+        })?;
+        if body.len().saturating_add(chunk.len()) > HUB_RESPONSE_MAX_BYTES {
+            return Err(diagnosed_failure(
+                anyhow::anyhow!("Studio print Hub response exceeds {HUB_RESPONSE_MAX_BYTES} bytes"),
+                "read Studio print Hub response",
+            ));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    let body = String::from_utf8(body)
+        .map_err(|error| diagnosed_failure(error.into(), "decode Studio print Hub response"))?;
     Ok(HttpReply { status, body })
 }
 

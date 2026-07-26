@@ -25,7 +25,11 @@ export function pluginAuthSignInUrl(
     return provider.signInUrl;
   }
 
-  const signIn = new URL(provider.signInUrl);
-  signIn.searchParams.set("return_to", encodePluginSignInReturnTarget(returnTarget));
-  return signIn.toString();
+  const relative = provider.signInUrl.startsWith("/");
+  const signIn = new URL(provider.signInUrl, "http://pandar.invalid");
+  signIn.searchParams.set(
+    "return_to",
+    encodePluginSignInReturnTarget(returnTarget),
+  );
+  return relative ? `${signIn.pathname}${signIn.search}` : signIn.toString();
 }

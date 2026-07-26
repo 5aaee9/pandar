@@ -64,11 +64,11 @@ pub(super) fn next_request_allow_ready(
 ) -> (TcpStream, String) {
     loop {
         let (mut stream, request) = next_request(listener, stop, deadline, method, path);
-        if request.lines().next() == Some("GET /readyz HTTP/1.1") {
+        if request.lines().next() == Some("GET /healthz HTTP/1.1") {
             write_response(
                 &mut stream,
                 "HTTP/1.1 200 OK",
-                r#"{"status":"ready","checks":{}}"#,
+                r#"{"status":"ok","checks":{}}"#,
             );
             continue;
         }

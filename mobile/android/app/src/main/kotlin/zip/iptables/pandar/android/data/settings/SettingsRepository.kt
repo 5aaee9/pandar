@@ -41,10 +41,17 @@ class SettingsRepository(
                 tokenExpiresAt = prefs[expiresAtKey],
             )
             val updated = transform(current)
+            val hubChanged = updated.hubBaseUrl != current.hubBaseUrl
             prefs.putOrRemove(stringKeys.getValue(KEY_HUB_BASE_URL), updated.hubBaseUrl)
-            prefs.putOrRemove(stringKeys.getValue(KEY_TENANT_ID), updated.tenantId)
-            prefs.putOrRemove(stringKeys.getValue(KEY_ACCESS_TOKEN), updated.accessToken)
-            if (updated.tokenExpiresAtEpochMillis != null) {
+            prefs.putOrRemove(
+                stringKeys.getValue(KEY_TENANT_ID),
+                if (hubChanged) null else updated.tenantId,
+            )
+            prefs.putOrRemove(
+                stringKeys.getValue(KEY_ACCESS_TOKEN),
+                if (hubChanged) null else updated.accessToken,
+            )
+            if (!hubChanged && updated.tokenExpiresAtEpochMillis != null) {
                 prefs[expiresAtKey] = updated.tokenExpiresAtEpochMillis
             } else {
                 prefs.remove(expiresAtKey)

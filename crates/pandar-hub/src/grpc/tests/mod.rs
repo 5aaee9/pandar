@@ -440,7 +440,7 @@ pub(super) async fn persisted_agent(
 
 async fn connect(state: &AppState, events: Vec<AgentEvent>) -> Result<ResponseStream, Status> {
     AgentControlService::new(state.clone())
-        .connect_stream(iter(events.into_iter().map(Ok)))
+        .connect_stream(iter(events.into_iter().map(Ok)), None)
         .await
 }
 
@@ -453,7 +453,7 @@ pub(super) async fn connect_live(
         sender.send(Ok(event)).await.unwrap();
     }
     let stream = AgentControlService::new(state.clone())
-        .connect_stream(ReceiverStream::new(receiver))
+        .connect_stream(ReceiverStream::new(receiver), None)
         .await?;
     Ok((stream, sender))
 }

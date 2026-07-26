@@ -62,11 +62,11 @@ pub(super) fn serve(listener: &TcpListener, stop: &Arc<AtomicBool>, deadline: In
             continue;
         }
 
-        if line == "GET /readyz HTTP/1.1" {
+        if line == "GET /healthz HTTP/1.1" {
             write_response(
                 &mut stream,
                 "HTTP/1.1 200 OK",
-                r#"{"status":"ready","checks":{}}"#,
+                r#"{"status":"ok","checks":{}}"#,
             );
         } else if line == "POST /api/v1/plugin/no-auth-session HTTP/1.1" {
             write_response(

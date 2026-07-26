@@ -519,7 +519,7 @@ async fn update_printer_updates_details_without_agent_session() {
         app,
         Method::PATCH,
         &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}"),
-        update_printer_body("192.0.2.11", access_code, "Office A1 Updated"),
+        update_printer_body("192.168.2.11", access_code, "Office A1 Updated"),
         &token,
     )
     .await;
@@ -537,7 +537,7 @@ async fn update_printer_updates_details_without_agent_session() {
         .unwrap()
         .unwrap();
     assert_eq!(printer.name, "Office A1 Updated");
-    assert_eq!(printer.host.as_deref(), Some("192.0.2.11"));
+    assert_eq!(printer.host.as_deref(), Some("192.168.2.11"));
     assert_eq!(printer.access_code.as_deref(), Some(access_code));
 
     let command = state
@@ -568,7 +568,7 @@ async fn update_printer_keeps_existing_connection_when_fields_are_blank_without_
     seed_printer_connection(
         state.database(),
         &printer_id,
-        "192.0.2.10",
+        "192.168.2.10",
         "EXISTING-LINK-CODE",
     )
     .await;
@@ -594,7 +594,45 @@ async fn update_printer_keeps_existing_connection_when_fields_are_blank_without_
         .unwrap()
         .unwrap();
     assert_eq!(printer.name, "Office A1 Updated");
-    assert_eq!(printer.host.as_deref(), Some("192.0.2.10"));
+    assert_eq!(printer.host.as_deref(), Some("192.168.2.10"));
+    assert_eq!(printer.access_code.as_deref(), Some("EXISTING-LINK-CODE"));
+}
+
+#[tokio::test]
+async fn update_printer_rejects_host_change_without_access_code() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
+    let printer_id = insert_printer_fixture(state.database(), tenant_id, agent_id)
+        .await
+        .unwrap();
+    seed_printer_connection(
+        state.database(),
+        &printer_id,
+        "192.168.2.10",
+        "EXISTING-LINK-CODE",
+    )
+    .await;
+
+    let (status, _) = request_as(
+        app,
+        Method::PATCH,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}"),
+        update_printer_body("192.168.2.11", "", "Office A1 Updated"),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let printer = state
+        .printers()
+        .get_for_tenant(tenant_id, &printer_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(printer.host.as_deref(), Some("192.168.2.10"));
     assert_eq!(printer.access_code.as_deref(), Some("EXISTING-LINK-CODE"));
 }
 
@@ -1074,7 +1112,7 @@ async fn link_printer_direct_sends_secret_but_persists_only_redacted_payload() {
     match sent.command.unwrap() {
         hub_command::Command::LinkPrinter(command) => {
             assert_eq!(command.printer_type, "BambuLab");
-            assert_eq!(command.host, "192.0.2.10");
+            assert_eq!(command.host, "192.168.2.10");
             assert_eq!(command.access_code, access_code);
             assert_eq!(command.name, "Office X1C");
         }
@@ -1083,7 +1121,7 @@ async fn link_printer_direct_sends_secret_but_persists_only_redacted_payload() {
 
     let payload: LinkPrinterPayload = serde_json::from_str(&body.payload_json).unwrap();
     assert_eq!(payload.printer_type, "BambuLab");
-    assert_eq!(payload.host, "192.0.2.10");
+    assert_eq!(payload.host, "192.168.2.10");
     assert_eq!(payload.access_code, "[redacted]");
     assert_eq!(payload.name, "Office X1C");
     assert_eq!(payload.serial_number, None);
@@ -1101,8 +1139,8 @@ async fn link_printer_maps_absent_or_blank_optional_name_to_empty_proto_string()
     register_route_test_session(&state, tenant_id, agent_id, command_sender).await;
 
     for body in [
-        link_printer_value("BambuLab", "192.0.2.10", "SECRET-LINK-CODE", None),
-        link_printer_value("BambuLab", "192.0.2.11", "SECRET-LINK-CODE", Some("   ")),
+        link_printer_value("BambuLab", "192.168.2.10", "SECRET-LINK-CODE", None),
+        link_printer_value("BambuLab", "192.168.2.11", "SECRET-LINK-CODE", Some("   ")),
     ] {
         let (status, response) = request_as(
             app.clone(),
@@ -1195,7 +1233,7 @@ async fn link_printer_rejects_blank_required_fields() {
 
     for body in [
         link_printer_value("BambuLab", "", "SECRET-LINK-CODE", None),
-        link_printer_value("BambuLab", "192.0.2.10", "", None),
+        link_printer_value("BambuLab", "192.168.2.10", "", None),
     ] {
         let (status, body) = request_as(
             app.clone(),
@@ -1221,16 +1259,16 @@ async fn link_printer_rejects_invalid_type_host_and_legacy_metadata_fields() {
     let agent_id = decode::<AgentResponse>(agent).id;
 
     for request in [
-        link_printer_value("", "192.0.2.10", "SECRET-LINK-CODE", None),
-        link_printer_value("Other", "192.0.2.10", "SECRET-LINK-CODE", None),
+        link_printer_value("", "192.168.2.10", "SECRET-LINK-CODE", None),
+        link_printer_value("Other", "192.168.2.10", "SECRET-LINK-CODE", None),
         link_printer_value("BambuLab", "printer.local", "SECRET-LINK-CODE", None),
         link_printer_with_serial_number_value(
             "BambuLab",
-            "192.0.2.10",
+            "192.168.2.10",
             "SECRET-LINK-CODE",
             "SERIAL123",
         ),
-        link_printer_with_model_value("BambuLab", "192.0.2.10", "SECRET-LINK-CODE", "X1 Carbon"),
+        link_printer_with_model_value("BambuLab", "192.168.2.10", "SECRET-LINK-CODE", "X1 Carbon"),
     ] {
         let (status, body) = request_as(
             app.clone(),
@@ -1258,7 +1296,7 @@ async fn link_printer_rejects_unknown_fields() {
         app,
         Method::POST,
         &format!("/api/v1/tenants/{tenant_id}/agents/{agent_id}/link-printer"),
-        link_printer_with_unexpected_field_body("BambuLab", "192.0.2.10", "SECRET-LINK-CODE"),
+        link_printer_with_unexpected_field_body("BambuLab", "192.168.2.10", "SECRET-LINK-CODE"),
         &token,
     )
     .await;

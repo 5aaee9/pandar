@@ -115,21 +115,21 @@ async fn generic_and_print_uploads_keep_distinct_emmc_policy() {
 }
 
 #[test]
-fn attempt_order_uses_cache_force_clear_and_model_policy() {
+fn attempt_order_never_downgrades_to_clear_data() {
     let cache = TransferModeCache::default();
     cache.store_success("192.0.2.10", C);
 
     assert_eq!(
         transfer_attempt_order(&ep(Some("X1 Carbon")), &cache, false),
-        vec![C]
+        vec![P]
     );
     assert_eq!(
         transfer_attempt_order(&ep(Some("X1 Carbon")), &TransferModeCache::default(), true),
-        vec![C]
+        vec![P]
     );
     assert_eq!(
         transfer_attempt_order(&ep(Some("A1 Mini")), &TransferModeCache::default(), false),
-        vec![P, C]
+        vec![P]
     );
     assert_eq!(
         transfer_attempt_order(&ep(Some("X1")), &TransferModeCache::default(), false),
@@ -155,7 +155,7 @@ async fn protected_first_success_caches_protected_mode() {
 }
 
 #[tokio::test]
-async fn fallback_for_a1_forced_clear_and_cached_clear_use_clear_mode() {
+async fn failed_protected_transfer_does_not_fallback_to_clear_data() {
     let a1 = ep(Some("A1"));
     let fallback_cache = TransferModeCache::default();
     let fallback = FakeMachineFileTransfer::with_failures(true, false);
@@ -165,10 +165,10 @@ async fn fallback_for_a1_forced_clear_and_cached_clear_use_clear_mode() {
         async move { fallback.delete("/cache/job.3mf", mode).await }
     })
     .await
-    .unwrap();
+    .unwrap_err();
 
-    assert_eq!(fallback.recorded_modes(), vec![P, C]);
-    assert_eq!(fallback_cache.get("192.0.2.10"), Some(C));
+    assert_eq!(fallback.recorded_modes(), vec![P]);
+    assert_eq!(fallback_cache.get("192.0.2.10"), None);
 
     let endpoint = ep(Some("A1 Mini"));
     let fake = FakeMachineFileTransfer::with_failures(true, false);
@@ -179,24 +179,25 @@ async fn fallback_for_a1_forced_clear_and_cached_clear_use_clear_mode() {
         async move { fake.list("/cache", mode).await }
     })
     .await
-    .unwrap();
+    .unwrap_err();
 
-    assert_eq!(fake.recorded_modes(), vec![C]);
-    assert_eq!(cache.get("192.0.2.10"), Some(C));
+    assert_eq!(fake.recorded_modes(), vec![P]);
+    assert_eq!(cache.get("192.0.2.10"), None);
 
+    cache.store_success("192.0.2.10", C);
     let cached = FakeMachineFileTransfer::with_failures(true, false);
     run_with_transfer_mode(&endpoint, &cache, false, |mode| {
         let cached = cached.clone();
         async move { cached.download("/cache/job.3mf", mode).await }
     })
     .await
-    .unwrap();
+    .unwrap_err();
 
-    assert_eq!(cached.recorded_modes(), vec![C]);
+    assert_eq!(cached.recorded_modes(), vec![P]);
 }
 
 #[tokio::test]
-async fn failed_modes_are_not_cached_and_combined_error_has_both_contexts() {
+async fn failed_protected_mode_is_not_cached() {
     let endpoint = ep(Some("A1 Mini"));
     let cache = TransferModeCache::default();
     let fake = FakeMachineFileTransfer::with_failures(true, true);
@@ -210,6 +211,6 @@ async fn failed_modes_are_not_cached_and_combined_error_has_both_contexts() {
     let message = format!("{err:#}");
 
     assert!(message.contains("protected data transfer failed"));
-    assert!(message.contains("clear data transfer failed"));
+    assert!(!message.contains("clear data transfer failed"));
     assert_eq!(cache.get("192.0.2.10"), None);
 }

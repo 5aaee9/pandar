@@ -1,7 +1,3 @@
-export type BetterAuthCallbackRedirect =
-  | { ok: true; token: string; target: string; status: 303 }
-  | { ok: false; body: string; status: 400 };
-
 const returnTokenPrefix = "v1.";
 const maxReturnTokenLength = 4096;
 
@@ -56,22 +52,8 @@ export function decodePluginSignInReturnTarget(
   }
 }
 
-export function betterAuthCallbackRedirect(
-  requestUrl: string,
-  isAllowedToken: (token: string) => boolean,
-): BetterAuthCallbackRedirect {
-  const request = new URL(requestUrl);
-  const token = request.searchParams.get("token")?.trim() ?? "";
-  if (!token || !isAllowedToken(token)) {
-    return { ok: false, body: "malformed token", status: 400 };
-  }
-
-  return {
-    ok: true,
-    token,
-    target: safePluginReturnTarget(request),
-    status: 303,
-  };
+export function betterAuthCallbackTarget(requestUrl: string) {
+  return safePluginReturnTarget(new URL(requestUrl));
 }
 
 function safePluginReturnTarget(request: URL): string {

@@ -35,7 +35,9 @@ fn start_local(
         web_configured,
         hub_configured,
     );
-    assert_eq!(result.status, 0);
+    if result.status != 0 {
+        panic!("start local webserver failed: {}", body(result));
+    }
     assert_eq!(result.http_code, 200);
     serde_json::from_str(&body(result)).unwrap()
 }
@@ -196,6 +198,18 @@ fn local_webserver_serves_assets_rejects_bad_requests_and_switches_target_server
         response_body(&invalid_config),
         r#"{"error":"invalid_target_server"}"#
     );
+    let cleartext_remote_config = post_json(
+        base_url,
+        "/config",
+        &format!(
+            r#"{{"webUrl":"http://web.example.test","hubUrl":"https://hub.example.test","configNonce":"{config_nonce}"}}"#
+        ),
+    );
+    assert!(cleartext_remote_config.starts_with("HTTP/1.1 400 Bad Request"));
+    assert_eq!(
+        response_body(&cleartext_remote_config),
+        r#"{"error":"invalid_target_server"}"#
+    );
 
     let missing = get(base_url, "/assets/missing.js");
     assert!(missing.starts_with("HTTP/1.1 404 Not Found"));
@@ -261,8 +275,8 @@ fn local_webserver_serves_assets_rejects_bad_requests_and_switches_target_server
     assert!(!plugin_config.using_default_hub_server);
 
     let restarted = start_local(
-        "http://ignored-web.test",
-        "http://ignored-hub.test",
+        "https://ignored-web.test",
+        "https://ignored-hub.test",
         true,
         true,
     );

@@ -124,6 +124,9 @@ impl From<RepositoryError> for ApiError {
                 Self::new(StatusCode::NOT_FOUND, "printer_not_found")
             }
             RepositoryError::MissingJob => Self::new(StatusCode::NOT_FOUND, "job_not_found"),
+            RepositoryError::ArtifactQuotaExceeded => {
+                Self::new(StatusCode::PAYLOAD_TOO_LARGE, "artifact_quota_exceeded")
+            }
             RepositoryError::JobNotClearable => {
                 Self::new(StatusCode::CONFLICT, "job_not_clearable")
             }

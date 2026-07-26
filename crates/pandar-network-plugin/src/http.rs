@@ -2,7 +2,7 @@ use anyhow::Context;
 use futures_util::TryStreamExt;
 use pandar_core::{PrintCalibrationMode, StudioAmsMappingEntry, StudioAmsMappingInfo};
 use serde::{Deserialize, Serialize};
-use std::{io::Write, path::PathBuf, time::Duration};
+use std::{io::Write, path::PathBuf, sync::OnceLock, time::Duration};
 
 use super::{
     PluginHttpResult, RequestKind, invalid_input, network_error, normalize_hub_url, read_utf8,
@@ -10,8 +10,11 @@ use super::{
 };
 use crate::cancellation::RequestCancellation;
 
+pub(super) use response::read_bounded_response_body;
+
 pub(super) mod cancellable;
 mod diagnostics;
+mod response;
 #[cfg(test)]
 mod tests;
 
@@ -25,6 +28,21 @@ pub(super) struct EmptyRequest {}
 
 const PLUGIN_SESSION_DELETE_TIMEOUT: Duration = Duration::from_secs(2);
 const NO_AUTH_SESSION_POST_TIMEOUT: Duration = Duration::from_secs(5);
+const PLUGIN_HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const PLUGIN_HTTP_TIMEOUT: Duration = Duration::from_secs(15);
+const PLUGIN_HTTP_MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+
+fn client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .connect_timeout(PLUGIN_HTTP_CONNECT_TIMEOUT)
+            .timeout(PLUGIN_HTTP_TIMEOUT)
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .expect("plugin HTTP client configuration is valid")
+    })
+}
 
 pub(super) fn calibration_mode(value: i32) -> Option<PrintCalibrationMode> {
     let value = u8::try_from(value).ok()?;
@@ -49,9 +67,7 @@ pub(super) fn get_json(
     diagnostics::buffered(|writer| {
         match runtime().block_on(async {
             execute_request(
-                reqwest::Client::new()
-                    .get(format!("{hub_url}{path}"))
-                    .bearer_auth(token),
+                client().get(format!("{hub_url}{path}")).bearer_auth(token),
                 None,
             )
             .await
@@ -119,7 +135,7 @@ fn send_json(
     timeout: Option<Duration>,
 ) -> anyhow::Result<HttpResponse> {
     runtime().block_on(async {
-        let request = reqwest::Client::new().post(url).json(&body);
+        let request = client().post(url).json(&body);
         let request = if let Some(token) = token {
             request.bearer_auth(token)
         } else {
@@ -148,16 +164,14 @@ async fn execute_request(
     };
     let response = response.map_err(reqwest::Error::without_url)?;
     let http_code = response.status().as_u16().into();
-    let body = async {
-        let body = match timeout {
-            Some(timeout) => tokio::time::timeout(timeout, response.text())
-                .await
-                .context("plugin HTTP response body timed out")?,
-            None => response.text().await,
-        };
-        Ok::<_, anyhow::Error>(body.map_err(reqwest::Error::without_url)?)
+    let body = read_bounded_response_body(response);
+    let body = match timeout {
+        Some(timeout) => tokio::time::timeout(timeout, body)
+            .await
+            .context("plugin HTTP response body timed out")
+            .and_then(|body| body),
+        None => body.await,
     }
-    .await
     .context("read plugin HTTP response body");
     Ok(HttpResponse { http_code, body })
 }
@@ -278,7 +292,7 @@ fn post_multipart_print_with_writer(
         if let Some(ams_mapping_info) = body.ams_mapping_info {
             form = form.text("ams_mapping_info", multipart_json_text(&ams_mapping_info));
         }
-        let request = reqwest::Client::new()
+        let request = client()
             .post(url)
             .bearer_auth(token)
             .multipart(form.part("file", file));

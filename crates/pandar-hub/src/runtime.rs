@@ -117,6 +117,7 @@ async fn handle_control_message(state: &AppState, message: HubControlMessage) {
                 if source_instance_id == state.instance_id().to_string() {
                     return;
                 }
+                state.camera_sessions().close_agent(agent_id).await;
                 if let Some(session) = state
                     .sessions()
                     .close_local_agent(tenant_id, agent_id)

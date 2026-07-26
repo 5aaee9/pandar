@@ -180,7 +180,7 @@ async fn configured_print_project_file_does_not_publish_when_upload_fails() {
     assert!(message.contains("upload print artifact to SERIAL1"));
     assert!(message.contains("192.0.2.10"));
     assert!(message.contains("fake protected data failure"));
-    assert!(message.contains("fake clear data failure"));
+    assert!(!message.contains("fake clear data failure"));
     let redacted = gateway.redact_error(&message);
     assert!(!redacted.contains("192.0.2.10"));
     assert!(redacted.contains("[REDACTED_PRINTER_HOST]"));

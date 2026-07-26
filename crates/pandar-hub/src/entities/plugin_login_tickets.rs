@@ -9,6 +9,8 @@ pub struct Model {
     pub user_id: Option<String>,
     pub ticket_hash: String,
     pub redirect_url: String,
+    pub kind: String,
+    pub code_challenge: Option<String>,
     pub created_at: String,
     pub expires_at: String,
     pub used_at: Option<String>,

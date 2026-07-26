@@ -18,6 +18,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import zip.iptables.pandar.android.data.remote.secureHubHttpUrl
 import zip.iptables.pandar.android.core.util.Logger
 import zip.iptables.pandar.android.data.remote.appJson
 import zip.iptables.pandar.android.data.remote.dto.PrinterEventDto
@@ -148,11 +149,12 @@ class PrinterEventsRepository(
     }
 
     private fun buildWsUrl(): String? {
-        val base = hubBaseUrl()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val base = secureHubHttpUrl(hubBaseUrl()) ?: return null
         val tenant = tenantId()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        val wsBase = base
-            .replaceFirst("https://", "wss://")
-            .replaceFirst("http://", "ws://")
+        val wsBase = base.newBuilder()
+            .scheme(if (base.isHttps) "wss" else "ws")
+            .build()
+            .toString()
             .trimEnd('/')
         return "$wsBase/api/v1/tenants/$tenant/printer-events"
     }

@@ -7,8 +7,20 @@ struct PluginLoginTicketRequest<'a> {
 }
 
 #[derive(Serialize)]
+struct MobileLoginTicketRequest<'a> {
+    redirect_url: &'a str,
+    code_challenge: &'a str,
+}
+
+#[derive(Serialize)]
 struct PluginTicketExchangeRequest<'a> {
     ticket: &'a str,
+}
+
+#[derive(Serialize)]
+struct MobileTicketExchangeRequest<'a> {
+    ticket: &'a str,
+    code_verifier: &'a str,
 }
 
 #[derive(Serialize)]
@@ -49,6 +61,20 @@ pub(super) fn plugin_login_ticket_body(redirect_url: &str) -> Option<Value> {
 
 pub(super) fn plugin_ticket_exchange_body(ticket: &str) -> Option<Value> {
     Some(value(PluginTicketExchangeRequest { ticket }))
+}
+
+pub(super) fn mobile_login_ticket_body(redirect_url: &str) -> Option<Value> {
+    Some(value(MobileLoginTicketRequest {
+        redirect_url,
+        code_challenge: "ZtNPunH49FD35FWYhT5Tv8I7vRKQJ8uxMaL0_9eHjNA",
+    }))
+}
+
+pub(super) fn mobile_ticket_exchange_body(ticket: &str) -> Option<Value> {
+    Some(value(MobileTicketExchangeRequest {
+        ticket,
+        code_verifier: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    }))
 }
 
 pub(super) fn redacted_audit_metadata_fixture() -> Value {

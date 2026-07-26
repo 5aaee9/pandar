@@ -8,7 +8,7 @@ use std::{
 
 use axum::body::Bytes;
 use futures_util::Stream;
-use pandar_core::AgentId;
+use pandar_core::{AgentId, TenantId};
 use tokio::sync::{Mutex, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Status;
@@ -19,9 +19,14 @@ use crate::protocol::agent::v1::{
     hub_camera_command, hub_command,
 };
 
+mod capacity;
+
+use capacity::{CameraCapacity, CameraCapacityPermit};
+
 #[derive(Debug, Clone)]
 pub struct CameraSessionRegistry {
     streams: Arc<Mutex<HashMap<String, CameraStreamHandle>>>,
+    capacity: Arc<CameraCapacity>,
 }
 
 #[derive(Debug, Clone)]
@@ -37,27 +42,34 @@ pub enum CameraOpenError {
     AgentOffline,
     ChannelClosed,
     ChannelFull,
+    Capacity,
 }
 
 pub struct CameraHttpStream {
     stream_id: String,
     registry: CameraSessionRegistry,
     receiver: ReceiverStream<Result<Bytes, String>>,
+    _capacity_permit: CameraCapacityPermit,
 }
+
+pub(crate) const MAX_CAMERA_CHUNK_BYTES: usize = 64 * 1024;
 
 impl CameraSessionRegistry {
     pub fn new() -> Self {
         Self {
             streams: Arc::new(Mutex::new(HashMap::new())),
+            capacity: Arc::new(CameraCapacity::new()),
         }
     }
 
     pub async fn open_stream(
         &self,
+        tenant_id: TenantId,
         agent_id: AgentId,
         serial_number: String,
         command_sender: mpsc::Sender<Result<HubCommand, Status>>,
     ) -> Result<CameraHttpStream, CameraOpenError> {
+        let capacity_permit = self.capacity.acquire(tenant_id)?;
         let stream_id = Uuid::new_v4().to_string();
         let (sender, receiver) = mpsc::channel(16);
         let replaced_stream_ids = {
@@ -104,11 +116,13 @@ impl CameraSessionRegistry {
                 stream_id,
                 registry: self.clone(),
                 receiver: ReceiverStream::new(receiver),
+                _capacity_permit: capacity_permit,
             }),
             Err(mpsc::error::TrySendError::Closed(_)) => {
                 self.streams.lock().await.remove(&stream_id);
                 Err(CameraOpenError::ChannelClosed)
             }
+
             Err(mpsc::error::TrySendError::Full(_)) => {
                 self.streams.lock().await.remove(&stream_id);
                 Err(CameraOpenError::ChannelFull)
@@ -124,8 +138,16 @@ impl CameraSessionRegistry {
             .get(stream_id)
             .filter(|handle| handle.agent_id == agent_id)
             .map(|handle| handle.sender.clone());
-        if let Some(sender) = sender {
-            let _ = sender.send(Ok(data)).await;
+        if let Some(sender) = sender
+            && sender.try_send(Ok(data)).is_err()
+        {
+            let mut streams = self.streams.lock().await;
+            if streams
+                .get(stream_id)
+                .is_some_and(|handle| handle.agent_id == agent_id)
+            {
+                streams.remove(stream_id);
+            }
         }
     }
 
@@ -148,7 +170,33 @@ impl CameraSessionRegistry {
         if let Some(sender) = sender
             && !success
         {
-            let _ = sender.send(Err(error)).await;
+            let _ = sender.try_send(Err(error));
+        }
+    }
+
+    pub async fn close_agent(&self, agent_id: AgentId) {
+        let closed = {
+            let mut streams = self.streams.lock().await;
+            let stream_ids = streams
+                .iter()
+                .filter(|(_, handle)| handle.agent_id == agent_id)
+                .map(|(stream_id, _)| stream_id.clone())
+                .collect::<Vec<_>>();
+            stream_ids
+                .into_iter()
+                .filter_map(|stream_id| {
+                    streams
+                        .remove(&stream_id)
+                        .map(|handle| (stream_id, handle.command_sender, handle.sender))
+                })
+                .collect::<Vec<_>>()
+        };
+        for (stream_id, command_sender, sender) in closed {
+            let _ = sender.try_send(Err("agent_session_closed".to_owned()));
+            let _ = command_sender.try_send(Ok(camera_control_command(HubCameraCommand {
+                stream_id,
+                command: Some(hub_camera_command::Command::Close(CloseCameraStream {})),
+            })));
         }
     }
 
@@ -205,79 +253,4 @@ impl Default for CameraSessionRegistry {
 }
 
 #[cfg(test)]
-mod tests {
-    use futures_util::StreamExt;
-    use pandar_core::AgentId;
-
-    use super::*;
-
-    #[tokio::test]
-    async fn open_stream_sends_agent_command_and_forwards_chunks() {
-        let registry = CameraSessionRegistry::new();
-        let agent_id = AgentId::new();
-        let (command_sender, mut command_receiver) = mpsc::channel(1);
-
-        let mut stream = registry
-            .open_stream(agent_id, "SERIAL-1".to_owned(), command_sender)
-            .await
-            .unwrap();
-        let command = command_receiver.recv().await.unwrap().unwrap();
-        assert_eq!(command.command_id, stream.stream_id);
-        match command.command.unwrap() {
-            hub_command::Command::CameraStream(command) => match command.command.unwrap() {
-                hub_camera_command::Command::Open(open) => {
-                    assert_eq!(command.stream_id, stream.stream_id);
-                    assert_eq!(open.serial_number, "SERIAL-1");
-                    assert_eq!(open.mode, CameraStreamMode::FragmentedMp4 as i32);
-                }
-                other => panic!("expected open camera command, got {other:?}"),
-            },
-            other => panic!("expected camera stream command, got {other:?}"),
-        }
-
-        registry
-            .push_chunk(
-                agent_id,
-                &stream.stream_id.clone(),
-                Bytes::from_static(b"frame"),
-            )
-            .await;
-        let chunk = stream.next().await.unwrap().unwrap();
-        assert_eq!(chunk, Bytes::from_static(b"frame"));
-    }
-
-    #[tokio::test]
-    async fn open_stream_replaces_existing_stream_for_same_printer() {
-        let registry = CameraSessionRegistry::new();
-        let agent_id = AgentId::new();
-        let (command_sender, mut command_receiver) = mpsc::channel(4);
-
-        let mut first = registry
-            .open_stream(agent_id, "SERIAL-1".to_owned(), command_sender.clone())
-            .await
-            .unwrap();
-        let first_open = camera_command(command_receiver.recv().await.unwrap().unwrap());
-
-        let second = registry
-            .open_stream(agent_id, "SERIAL-1".to_owned(), command_sender)
-            .await
-            .unwrap();
-        let close = camera_command(command_receiver.recv().await.unwrap().unwrap());
-        let second_open = camera_command(command_receiver.recv().await.unwrap().unwrap());
-
-        assert_eq!(close.stream_id, first_open.stream_id);
-        assert!(matches!(
-            close.command,
-            Some(hub_camera_command::Command::Close(_))
-        ));
-        assert_eq!(second_open.stream_id, second.stream_id);
-        assert!(first.next().await.unwrap().is_err());
-    }
-
-    fn camera_command(command: HubCommand) -> HubCameraCommand {
-        match command.command.unwrap() {
-            hub_command::Command::CameraStream(command) => command,
-            other => panic!("expected camera stream command, got {other:?}"),
-        }
-    }
-}
+mod tests;

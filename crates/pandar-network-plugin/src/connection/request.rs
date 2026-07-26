@@ -47,7 +47,7 @@ impl ConnectionSession {
 }
 
 pub(super) fn fetch_readiness(snapshot: &RequestSnapshot) -> anyhow::Result<HubResponse> {
-    fetch(snapshot, "/readyz", None, || {}).context("refresh Hub readiness")
+    fetch(snapshot, "/healthz", None, || {}).context("refresh Hub readiness")
 }
 
 pub(super) fn fetch_printers(
@@ -72,7 +72,9 @@ fn fetch(
     runtime().block_on(async move {
         tokio::time::timeout(REQUEST_TIMEOUT, async move {
             let client = reqwest::Client::builder()
+                .connect_timeout(REQUEST_TIMEOUT)
                 .timeout(REQUEST_TIMEOUT)
+                .redirect(reqwest::redirect::Policy::none())
                 .build()
                 .context("build Hub connection client")?;
             let request = client.get(format!("{}{path}", snapshot.hub_url));
@@ -87,10 +89,8 @@ fn fetch(
                 .map_err(reqwest::Error::without_url)
                 .context("send Hub connection request")?;
             let http_code = response.status().as_u16().into();
-            let body = response
-                .text()
+            let body = crate::http::read_bounded_response_body(response)
                 .await
-                .map_err(reqwest::Error::without_url)
                 .context("read Hub connection response")?;
             Ok(HubResponse { http_code, body })
         })

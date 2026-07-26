@@ -253,6 +253,7 @@ pub(crate) async fn fail_pending_live_commands(
 
 impl AppState {
     pub async fn close_agent(&self, tenant_id: TenantId, agent_id: AgentId) {
+        self.camera_sessions().close_agent(agent_id).await;
         if let Some(session) = self.sessions().close_local_agent(tenant_id, agent_id).await {
             fail_pending_live_commands(
                 self,

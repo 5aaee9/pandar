@@ -63,13 +63,13 @@ in
 
         bind = lib.mkOption {
           type = lib.types.str;
-          default = "0.0.0.0:8080";
+          default = "127.0.0.1:8080";
           description = "HTTP bind address for pandar-hub.";
         };
 
         grpcBind = lib.mkOption {
           type = lib.types.str;
-          default = "0.0.0.0:50051";
+          default = "127.0.0.1:50051";
           description = "gRPC bind address for pandar-hub agent connections.";
         };
 

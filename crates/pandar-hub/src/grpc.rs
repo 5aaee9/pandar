@@ -1,14 +1,15 @@
-use std::{pin::Pin, sync::Arc};
+use std::{pin::Pin, sync::Arc, time::Duration};
 
 use pandar_core::{AgentId, TenantId};
 use tokio::sync::mpsc;
 use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
-use tonic::{Request, Response, Status};
+use tonic::Status;
 
 #[cfg(test)]
 use crate::grpc::print_reports::handle_print_report;
 #[cfg(test)]
 use crate::grpc::printer_snapshots::handle_snapshot;
+use camera_events::{handle_camera_event, parse_camera_hello};
 use inbound::spawn_inbound_handler;
 #[cfg(test)]
 use inbound::{disconnect_session, handle_ack, handle_event, handle_result};
@@ -19,9 +20,9 @@ use crate::{
     AppState,
     grpc::commands::repository_status,
     grpc::outbound::{OutboundSession, spawn_outbound_pump},
+    grpc_connection_limit::GrpcConnectInfo,
     protocol::agent::v1::{
-        AgentCameraEvent, AgentCameraHello, AgentCapability, AgentEvent, AgentHello,
-        HubCameraCommand, HubCommand, agent_camera_event, agent_control_server::AgentControl,
+        AgentCameraEvent, AgentCapability, AgentEvent, AgentHello, HubCameraCommand, HubCommand,
         agent_event,
     },
     repositories::hash_secret,
@@ -31,11 +32,13 @@ use crate::{
     },
 };
 
+mod camera_events;
 pub mod commands;
 mod inbound;
 mod outbound;
 pub mod print_reports;
 mod printer_firmware;
+mod service;
 #[cfg(test)]
 pub(crate) use printer_firmware::completion_pause as firmware_completion_pause;
 pub mod printer_materials;
@@ -53,13 +56,17 @@ impl AgentControlService {
         Self { state }
     }
 
-    async fn connect_stream<S>(&self, mut inbound: S) -> Result<ResponseStream, Status>
+    async fn connect_stream<S>(
+        &self,
+        mut inbound: S,
+        connect_info: Option<GrpcConnectInfo>,
+    ) -> Result<ResponseStream, Status>
     where
         S: Stream<Item = Result<AgentEvent, Status>> + Send + Unpin + 'static,
     {
-        let first = inbound
-            .next()
+        let first = tokio::time::timeout(Duration::from_secs(10), inbound.next())
             .await
+            .map_err(|_| Status::deadline_exceeded("agent hello timed out"))?
             .transpose()
             .map_err(|err| {
                 tracing::error!(error = ?err, "failed to read agent hello");
@@ -86,6 +93,14 @@ impl AgentControlService {
             || agent.credential_revoked_at.is_some()
         {
             return Err(Status::unauthenticated("invalid agent credential"));
+        }
+        if connect_info
+            .as_ref()
+            .is_some_and(|info| !info.mark_authenticated(tenant_id, agent_id))
+        {
+            return Err(Status::resource_exhausted(
+                "agent gRPC connection limit reached",
+            ));
         }
 
         let now = pandar_core::created_at_now();
@@ -172,13 +187,17 @@ impl AgentControlService {
         Ok(Box::pin(ReceiverStream::new(command_receiver)))
     }
 
-    async fn connect_camera_stream<S>(&self, mut inbound: S) -> Result<CameraResponseStream, Status>
+    async fn connect_camera_stream<S>(
+        &self,
+        mut inbound: S,
+        connect_info: Option<GrpcConnectInfo>,
+    ) -> Result<CameraResponseStream, Status>
     where
         S: Stream<Item = Result<AgentCameraEvent, Status>> + Send + Unpin + 'static,
     {
-        let first = inbound
-            .next()
+        let first = tokio::time::timeout(Duration::from_secs(10), inbound.next())
             .await
+            .map_err(|_| Status::deadline_exceeded("agent camera hello timed out"))?
             .transpose()
             .map_err(|err| {
                 tracing::error!(error = ?err, "failed to read agent camera hello");
@@ -206,14 +225,41 @@ impl AgentControlService {
         {
             return Err(Status::unauthenticated("invalid agent credential"));
         }
+        let session_token = self
+            .state
+            .sessions()
+            .current_token(tenant_id, agent_id)
+            .await
+            .ok_or_else(|| Status::failed_precondition("agent control session is not active"))?;
+        if connect_info
+            .as_ref()
+            .is_some_and(|info| !info.mark_authenticated(tenant_id, agent_id))
+        {
+            return Err(Status::resource_exhausted(
+                "agent gRPC connection limit reached",
+            ));
+        }
 
         let (keepalive_sender, command_receiver) = mpsc::channel(1);
         let state = self.state.clone();
         tokio::spawn(async move {
             let _keepalive_sender = keepalive_sender;
-            while let Some(event) = inbound.next().await {
+            loop {
+                if !state.sessions().is_current(agent_id, session_token).await {
+                    break;
+                }
+                let event = match tokio::time::timeout(Duration::from_secs(1), inbound.next()).await
+                {
+                    Ok(Some(event)) => event,
+                    Ok(None) => break,
+                    Err(_) => continue,
+                };
                 match event {
-                    Ok(event) => handle_camera_event(&state, agent_id, event).await,
+                    Ok(event) => {
+                        if !handle_camera_event(&state, agent_id, event).await {
+                            break;
+                        }
+                    }
                     Err(err) => {
                         tracing::warn!(error = ?err, "agent camera stream ended with error");
                         break;
@@ -237,32 +283,9 @@ pub(crate) async fn handle_event_for_tests(
     inbound::handle_event(state, tenant_id, agent_id, token, event).await
 }
 
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<HubCommand, Status>> + Send>>;
-type CameraResponseStream = Pin<Box<dyn Stream<Item = Result<HubCameraCommand, Status>> + Send>>;
-
-#[tonic::async_trait]
-impl AgentControl for AgentControlService {
-    type ReverseConnectStream = ResponseStream;
-    type ReverseCameraStream = CameraResponseStream;
-
-    async fn reverse_connect(
-        &self,
-        request: Request<tonic::Streaming<AgentEvent>>,
-    ) -> Result<Response<Self::ReverseConnectStream>, Status> {
-        self.connect_stream(request.into_inner())
-            .await
-            .map(Response::new)
-    }
-
-    async fn reverse_camera(
-        &self,
-        request: Request<tonic::Streaming<AgentCameraEvent>>,
-    ) -> Result<Response<Self::ReverseCameraStream>, Status> {
-        self.connect_camera_stream(request.into_inner())
-            .await
-            .map(Response::new)
-    }
-}
+pub(super) type ResponseStream = Pin<Box<dyn Stream<Item = Result<HubCommand, Status>> + Send>>;
+pub(super) type CameraResponseStream =
+    Pin<Box<dyn Stream<Item = Result<HubCameraCommand, Status>> + Send>>;
 
 fn parse_hello(event: AgentEvent) -> Result<(TenantId, AgentId, AgentHello), Status> {
     let tenant_id = TenantId::parse(&event.tenant_id)
@@ -276,44 +299,6 @@ fn parse_hello(event: AgentEvent) -> Result<(TenantId, AgentId, AgentHello), Sta
     };
 
     Ok((tenant_id, agent_id, hello))
-}
-
-fn parse_camera_hello(
-    event: AgentCameraEvent,
-) -> Result<(TenantId, AgentId, AgentCameraHello), Status> {
-    let tenant_id = TenantId::parse(&event.tenant_id)
-        .map_err(|_| Status::invalid_argument("tenant_id must be a UUID"))?;
-    let agent_id = AgentId::parse(&event.agent_id)
-        .map_err(|_| Status::invalid_argument("agent_id must be a UUID"))?;
-    let Some(agent_camera_event::Event::Hello(hello)) = event.event else {
-        return Err(Status::failed_precondition(
-            "first event must be AgentCameraHello",
-        ));
-    };
-
-    Ok((tenant_id, agent_id, hello))
-}
-
-async fn handle_camera_event(state: &AppState, agent_id: AgentId, event: AgentCameraEvent) {
-    match event.event {
-        Some(agent_camera_event::Event::Chunk(chunk)) => {
-            state
-                .camera_sessions()
-                .push_chunk(
-                    agent_id,
-                    &chunk.stream_id,
-                    axum::body::Bytes::from(chunk.data),
-                )
-                .await;
-        }
-        Some(agent_camera_event::Event::Closed(closed)) => {
-            state
-                .camera_sessions()
-                .close_stream(agent_id, &closed.stream_id, closed.success, closed.error)
-                .await;
-        }
-        Some(agent_camera_event::Event::Hello(_)) | None => {}
-    }
 }
 
 fn validate_rfc3339(value: &str) -> Result<(), Status> {

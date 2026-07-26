@@ -1,5 +1,19 @@
 use serde::Serialize;
 
+pub(super) fn content_type(path: &str) -> &'static str {
+    if path.ends_with(".html") {
+        "text/html; charset=utf-8"
+    } else if path.ends_with(".css") {
+        "text/css; charset=utf-8"
+    } else if path.ends_with(".js") {
+        "application/javascript; charset=utf-8"
+    } else if path.ends_with(".json") {
+        "application/json; charset=utf-8"
+    } else {
+        "application/octet-stream"
+    }
+}
+
 pub(super) fn json_string<T: Serialize>(value: &T) -> String {
     serde_json::to_string(value).expect("local webserver response is serializable")
 }

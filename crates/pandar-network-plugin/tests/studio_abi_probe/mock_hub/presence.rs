@@ -25,11 +25,11 @@ pub(super) fn serve_axis_features(listener: &TcpListener, stop: &AtomicBool, dea
         if firmware_compat::try_respond(&mut stream, &request) {
             continue;
         }
-        if line == "GET /readyz HTTP/1.1" {
+        if line == "GET /healthz HTTP/1.1" {
             write_response(
                 &mut stream,
                 "HTTP/1.1 200 OK",
-                r#"{"status":"ready","checks":{}}"#,
+                r#"{"status":"ok","checks":{}}"#,
             );
         } else if line == "POST /api/v1/plugin/no-auth-session HTTP/1.1" {
             write_response(
@@ -96,11 +96,11 @@ pub(super) fn serve_printer_presence(listener: &TcpListener, stop: &AtomicBool, 
             return;
         };
         let line = request.lines().next().unwrap_or_default();
-        if line == "GET /readyz HTTP/1.1" {
+        if line == "GET /healthz HTTP/1.1" {
             write_response(
                 &mut stream,
                 "HTTP/1.1 200 OK",
-                r#"{"status":"ready","checks":{}}"#,
+                r#"{"status":"ok","checks":{}}"#,
             );
         } else if line == "GET /probe-presence-step HTTP/1.1" {
             write_response(

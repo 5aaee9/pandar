@@ -9,6 +9,7 @@ pub struct Printer {
     pub agent_id: AgentId,
     pub serial_number: String,
     pub host: Option<String>,
+    #[serde(skip_serializing)]
     pub access_code: Option<String>,
     pub name: String,
     pub model: Option<String>,

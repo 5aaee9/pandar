@@ -61,7 +61,7 @@ where
 {
     tokio::pin!(cancellation);
     let camera_tasks = Arc::new(tokio::sync::Mutex::new(HashMap::new()));
-    let (normal_sender, mut normal_receiver) = mpsc::unbounded_channel::<HubCommand>();
+    let (normal_sender, mut normal_receiver) = mpsc::channel::<HubCommand>(32);
     let normal_config = config.clone();
     let normal_gateway = Arc::clone(&gateway);
     let normal_event_sender = sender.clone();
@@ -95,6 +95,15 @@ where
         tokio::select! {
             command = commands.next() => match command {
                 Some(Ok(command)) if is_firmware_command(&command) => {
+                    if firmware_tasks.len() >= 4 {
+                        let result = firmware_tasks
+                            .join_next()
+                            .await
+                            .expect("bounded firmware task set is non-empty");
+                        if let Err(error) = firmware_task_result(result) {
+                            break Err(error);
+                        }
+                    }
                     let Some(firmware_command) = command.command else {
                         unreachable!("firmware command classifier requires a command");
                     };
@@ -114,7 +123,7 @@ where
                     });
                 }
                 Some(Ok(command)) => {
-                    if normal_sender.send(command).is_err() {
+                    if normal_sender.send(command).await.is_err() {
                         break Err(anyhow!("normal Agent command worker ended"));
                     }
                 }

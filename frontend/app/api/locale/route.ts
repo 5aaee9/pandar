@@ -1,8 +1,11 @@
 import { cookies } from "next/headers";
 
 import { isLocale } from "../../../i18n/routing";
+import { rejectCrossOriginMutation } from "@/app/request-security";
 
 export async function POST(request: Request) {
+  const rejected = rejectCrossOriginMutation(request);
+  if (rejected) return rejected;
   const body = (await request.json()) as { locale?: unknown };
   const locale = body.locale;
   if (typeof locale !== "string" || !isLocale(locale)) {

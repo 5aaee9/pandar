@@ -90,7 +90,12 @@ impl ArtifactStorage for FilesystemArtifactStorage {
         }
 
         let mut reader = input.body.reader;
-        let mut file = fs::File::create(&path)
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+        let mut file = options
+            .open(&path)
             .await
             .with_context(|| format!("failed to create artifact file {}", path.display()))?;
         let mut size_bytes = 0usize;

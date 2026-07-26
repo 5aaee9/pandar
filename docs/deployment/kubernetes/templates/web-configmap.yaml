@@ -7,6 +7,7 @@ metadata:
     app.kubernetes.io/component: web
 data:
   APP_API_URL: {{ default (printf "http://%s-hub:%v" (include "pandar.fullname" .) .Values.hub.service.httpPort) .Values.web.appApiUrl | quote }}
+  APP_BASE_URL: {{ .Values.web.appBaseUrl | quote }}
   PORT: {{ .Values.web.service.port | quote }}
   {{- range $name, $value := .Values.web.env }}
   {{ $name }}: {{ $value | quote }}

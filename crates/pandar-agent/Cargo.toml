@@ -8,7 +8,9 @@ repository.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+aws-lc-rs.workspace = true
 base64.workspace = true
+cap-std.workspace = true
 clap.workspace = true
 futures-util.workspace = true
 md-5.workspace = true
@@ -16,7 +18,7 @@ pandar-core.workspace = true
 prost.workspace = true
 reqwest.workspace = true
 rumqttc.workspace = true
-rsa.workspace = true
+
 rustls.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
@@ -39,5 +41,6 @@ tonic-prost-build.workspace = true
 [dev-dependencies]
 clap.workspace = true
 rcgen.workspace = true
+tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 tracing-core.workspace = true

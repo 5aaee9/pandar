@@ -49,6 +49,9 @@ spec:
             - name: grpc
               containerPort: {{ .Values.hub.service.grpcPort }}
               protocol: TCP
+            - name: observability
+              containerPort: {{ .Values.hub.service.observabilityPort }}
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: {{ include "pandar.fullname" . }}-hub
@@ -75,7 +78,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /readyz
-              port: http
+              port: observability
             initialDelaySeconds: 5
             periodSeconds: 10
           {{- with .Values.hub.resources }}
@@ -85,6 +88,9 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            - name: grpc-tls
+              mountPath: /grpc-tls
+              readOnly: true
             {{- if .Values.hub.persistence.data.enabled }}
             - name: data
               mountPath: /data
@@ -96,6 +102,14 @@ spec:
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: grpc-tls
+          secret:
+            secretName: {{ required "hub.grpcTls.existingSecret is required" .Values.hub.grpcTls.existingSecret }}
+            items:
+              - key: {{ .Values.hub.grpcTls.certificateKey }}
+                path: tls.crt
+              - key: {{ .Values.hub.grpcTls.privateKeyKey }}
+                path: tls.key
         {{- if .Values.hub.persistence.data.enabled }}
         - name: data
           persistentVolumeClaim:

@@ -39,7 +39,12 @@ pub(crate) async fn printer_camera_stream(
     };
     let stream = state
         .camera_sessions()
-        .open_stream(printer.agent_id, printer.serial_number, command_sender)
+        .open_stream(
+            tenant_id,
+            printer.agent_id,
+            printer.serial_number,
+            command_sender,
+        )
         .await
         .map_err(camera_open_error)?;
 
@@ -59,5 +64,8 @@ fn camera_open_error(error: CameraOpenError) -> ApiError {
             StatusCode::SERVICE_UNAVAILABLE,
             "camera_channel_unavailable",
         ),
+        CameraOpenError::Capacity => {
+            ApiError::new(StatusCode::TOO_MANY_REQUESTS, "camera_capacity_exceeded")
+        }
     }
 }

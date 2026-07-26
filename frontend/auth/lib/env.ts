@@ -190,19 +190,35 @@ function readEmailConfig(): Env["email"] {
 const baseURL = trimTrailingSlash(
   readString("PANDAR_AUTH_BASE_URL", DEFAULT_BASE_URL),
 );
+const trustedOrigins = readTrustedOrigins(baseURL);
+const dashboardCallbackUrl = readString(
+  "PANDAR_AUTH_DASHBOARD_CALLBACK_URL",
+  `${DEFAULT_DASHBOARD_URL}/auth/betterauth/callback`,
+);
+const dashboardSignOutUrl = readString(
+  "PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL",
+  `${DEFAULT_DASHBOARD_URL}/auth/betterauth/session`,
+);
+
+if (process.env.NODE_ENV === "production" && !isBuild()) {
+  for (const [name, value] of [
+    ["PANDAR_AUTH_BASE_URL", baseURL],
+    ["PANDAR_AUTH_DASHBOARD_CALLBACK_URL", dashboardCallbackUrl],
+    ["PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL", dashboardSignOutUrl],
+    ...trustedOrigins.map((origin) => ["PANDAR_AUTH_TRUSTED_ORIGINS", origin]),
+  ]) {
+    if (new URL(value).protocol !== "https:") {
+      throw new Error(`${name} must use HTTPS in production`);
+    }
+  }
+}
 
 export const env: Env = {
   databaseFile: readString("PANDAR_AUTH_DATABASE_FILE", "./pandar-auth.db"),
   baseURL,
-  trustedOrigins: readTrustedOrigins(baseURL),
-  dashboardCallbackUrl: readString(
-    "PANDAR_AUTH_DASHBOARD_CALLBACK_URL",
-    `${DEFAULT_DASHBOARD_URL}/auth/betterauth/callback`,
-  ),
-  dashboardSignOutUrl: readString(
-    "PANDAR_AUTH_DASHBOARD_SIGN_OUT_URL",
-    `${DEFAULT_DASHBOARD_URL}/auth/betterauth/session`,
-  ),
+  trustedOrigins,
+  dashboardCallbackUrl,
+  dashboardSignOutUrl,
   jwtMaxAgeSeconds: readPositiveInteger(
     "PANDAR_AUTH_JWT_MAX_AGE_SECONDS",
     DEFAULT_JWT_MAX_AGE_SECONDS,

@@ -187,7 +187,7 @@ string
 _Default:_
 
 ```nix
-"0.0.0.0:8080"
+"127.0.0.1:8080"
 ```
 
 ## services\.pandar\.hub\.controlPlane
@@ -239,7 +239,7 @@ string
 _Default:_
 
 ```nix
-"0.0.0.0:50051"
+"127.0.0.1:50051"
 ```
 
 ## services\.pandar\.hub\.nats\.mode

@@ -4,9 +4,11 @@ use crate::{AppState, artifacts::metadata::ArtifactMetadata, routes::ApiError};
 
 pub(in crate::routes) async fn preview_artifact_metadata_from_multipart(
     state: &AppState,
+    tenant_id: pandar_core::TenantId,
     multipart: Multipart,
 ) -> Result<Option<ArtifactMetadata>, ApiError> {
-    let parsed = super::multipart::parse_multipart_print_fields(state, multipart).await?;
+    let parsed =
+        super::multipart::parse_multipart_print_fields(state, tenant_id, multipart).await?;
     let result = preview_artifact_metadata(&parsed).await;
     parsed.cleanup_staged_uploads().await;
     result

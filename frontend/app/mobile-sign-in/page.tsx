@@ -8,32 +8,20 @@ import { LanguageSwitcher } from "../../components/language-switcher";
 import { MobileTicketForm } from "./mobile-ticket-form";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
-const defaultRedirectUrl = "zip.iptables.pandar.android:/auth/callback";
+const defaultRedirectUrl = "zip.iptables.pandar.android://auth/callback";
 
 type PageProps = {
   searchParams?: Promise<{
     tenant?: string | string[];
     redirect_url?: string | string[];
+    code_challenge?: string | string[];
+    state?: string | string[];
   }>;
 };
 
 type TenantFetchResult = {
   tenants: Tenant[];
   error: string | null;
-};
-
-type ReadinessResult = {
-  externalAuthEnabled: boolean;
-  error: string | null;
-};
-
-type ReadinessResponse = {
-  checks?: {
-    external_auth?: {
-      ready?: boolean;
-      detail?: string;
-    };
-  };
 };
 
 async function fetchTenants(): Promise<TenantFetchResult> {
@@ -58,30 +46,6 @@ async function fetchTenants(): Promise<TenantFetchResult> {
   }
 }
 
-async function fetchExternalAuthStatus(): Promise<ReadinessResult> {
-  try {
-    const response = await fetch(`${apiUrl}/readyz`, { cache: "no-store" });
-    if (!response.ok) {
-      return {
-        externalAuthEnabled: false,
-        error: `Readiness check returned ${response.status}`,
-      };
-    }
-    const body = (await response.json()) as ReadinessResponse;
-    const externalAuth = body.checks?.external_auth;
-    return {
-      externalAuthEnabled:
-        externalAuth?.ready === true && externalAuth.detail !== "disabled",
-      error: null,
-    };
-  } catch (error) {
-    return {
-      externalAuthEnabled: false,
-      error: `Readiness check failed: ${error instanceof Error ? error.message : "unknown error"}`,
-    };
-  }
-}
-
 export default async function MobileSignInPage({ searchParams }: PageProps) {
   const [t, auth, params] = await Promise.all([
     getTranslations("signIn"),
@@ -89,10 +53,7 @@ export default async function MobileSignInPage({ searchParams }: PageProps) {
     searchParams,
   ]);
   const provider = authProviderConfig();
-  const [tenantResult, readiness] = await Promise.all([
-    fetchTenants(),
-    fetchExternalAuthStatus(),
-  ]);
+  const tenantResult = await fetchTenants();
   const tenants = tenantResult.tenants;
   const requestedTenant = Array.isArray(params?.tenant)
     ? params.tenant[0]
@@ -100,13 +61,16 @@ export default async function MobileSignInPage({ searchParams }: PageProps) {
   const redirectUrl = Array.isArray(params?.redirect_url)
     ? params.redirect_url[0]
     : params?.redirect_url;
+  const codeChallenge = Array.isArray(params?.code_challenge)
+    ? params.code_challenge[0]
+    : params?.code_challenge;
+  const state = Array.isArray(params?.state) ? params.state[0] : params?.state;
   const selectedTenant =
     tenants.find((tenant) => tenant.id === requestedTenant) ??
     (!requestedTenant && tenants.length === 1 ? tenants[0] : null);
   const localNoAuthMode =
     auth.source === "none" &&
     provider.provider === "none" &&
-    !readiness.externalAuthEnabled &&
     !tenantResult.error;
 
   return (
@@ -125,29 +89,7 @@ export default async function MobileSignInPage({ searchParams }: PageProps) {
           </div>
         </div>
 
-        {readiness.error ? (
-          <MobileEmptyState
-            title={t("externalUnavailableTitle")}
-            message={t("mobileReadinessCheckMessage")}
-            statusLabel={t("actionRequired")}
-            detail={readiness.error}
-            detailLabel={t("developerDetails")}
-            actions={[
-              { href: "/#diagnostics", label: t("openDiagnostics") },
-              { href: "/", label: t("returnDashboard") },
-            ]}
-          />
-        ) : !readiness.externalAuthEnabled && !localNoAuthMode ? (
-          <MobileEmptyState
-            title={t("externalUnavailableTitle")}
-            message={t("mobileExternalConfigMessage")}
-            statusLabel={t("actionRequired")}
-            actions={[
-              { href: "/#admin", label: t("openAdmin") },
-              { href: "/", label: t("returnDashboard") },
-            ]}
-          />
-        ) : auth.source === "none" && !localNoAuthMode ? (
+        {auth.source === "none" && !localNoAuthMode ? (
           <MobileEmptyState
             title={t("authUnavailableTitle")}
             message={t("mobileAuthMessage")}
@@ -192,6 +134,12 @@ export default async function MobileSignInPage({ searchParams }: PageProps) {
                 type="hidden"
                 value={redirectUrl ?? defaultRedirectUrl}
               />
+              <input
+                name="code_challenge"
+                type="hidden"
+                value={codeChallenge ?? ""}
+              />
+              <input name="state" type="hidden" value={state ?? ""} />
               <label className="grid gap-1 text-sm">
                 <span className="text-xs font-medium text-slate-500">
                   {t("tenant")}
@@ -219,8 +167,10 @@ export default async function MobileSignInPage({ searchParams }: PageProps) {
           <MobileTicketForm
             action={createMobileTicket}
             autoSelectedTenant={!requestedTenant && tenants.length === 1}
+            codeChallenge={codeChallenge ?? ""}
             redirectUrl={redirectUrl ?? defaultRedirectUrl}
             selectedTenant={selectedTenant}
+            state={state ?? ""}
           />
         )}
       </section>

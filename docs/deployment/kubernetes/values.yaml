@@ -23,10 +23,15 @@ hub:
   accessCodeEncryption:
     existingSecret: ""
     existingSecretKey: PANDAR_PRINTER_ACCESS_CODE_KEY
+  grpcTls:
+    existingSecret: ""
+    certificateKey: tls.crt
+    privateKeyKey: tls.key
   service:
     type: ClusterIP
     httpPort: 8080
     grpcPort: 50051
+    observabilityPort: 9090
   env:
     PANDAR_ARTIFACT_STORAGE: filesystem
     PANDAR_SPOOL_DIR: /spool
@@ -74,6 +79,7 @@ web:
     tag: ""
     pullPolicy: IfNotPresent
   appApiUrl: ""
+  appBaseUrl: http://pandar.local
   service:
     type: ClusterIP
     port: 3000

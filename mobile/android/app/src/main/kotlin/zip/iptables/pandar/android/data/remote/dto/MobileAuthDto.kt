@@ -6,6 +6,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class MobileTicketExchangeRequest(
     val ticket: String,
+    @SerialName("code_verifier") val codeVerifier: String,
 )
 
 @Serializable

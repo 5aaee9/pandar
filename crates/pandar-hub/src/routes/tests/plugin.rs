@@ -1,7 +1,7 @@
 use super::*;
 use requests::{
-    plugin_login_ticket_body, plugin_ticket_exchange_body, redacted_audit_metadata_fixture,
-    safe_audit_metadata_fixture,
+    mobile_login_ticket_body, mobile_ticket_exchange_body, plugin_login_ticket_body,
+    plugin_ticket_exchange_body, redacted_audit_metadata_fixture, safe_audit_metadata_fixture,
 };
 use serde::{Deserialize, Serialize, de::IgnoredAny};
 

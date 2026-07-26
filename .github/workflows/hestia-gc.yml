@@ -28,18 +28,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31.10.6
+        uses: cachix/install-nix-action@8aa03977d8d733052d78f4e008a241fd1dbf36b3 # v31.10.6
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
       - name: Install hestia
-        uses: Mic92/hestia@v2.0.0
+        uses: Mic92/hestia@fb239a2f72d4b6e26eec5425f289dea23b27a527 # v2.0.0
         with:
           version: v2.0.0
 

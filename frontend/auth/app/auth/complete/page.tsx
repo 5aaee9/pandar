@@ -1,6 +1,10 @@
 import { env } from "../../../lib/env";
 import { getAuthLocale, getAuthMessages } from "../../../lib/i18n";
 import {
+  normalizeDashboardState,
+  withDashboardState,
+} from "../../../lib/dashboard-state";
+import {
   normalizePluginReturnTo,
   withPluginReturnTo,
 } from "../../../lib/plugin-return";
@@ -9,12 +13,17 @@ import { CompleteAuth } from "./complete-auth";
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams?: Promise<{ return_to?: string | string[] }>;
+  searchParams?: Promise<{
+    return_to?: string | string[];
+    state?: string | string[];
+  }>;
 };
 
 export default async function CompleteAuthPage({ searchParams }: PageProps) {
   const messages = getAuthMessages(await getAuthLocale());
-  const returnTo = normalizePluginReturnTo((await searchParams)?.return_to);
+  const params = await searchParams;
+  const returnTo = normalizePluginReturnTo(params?.return_to);
+  const state = normalizeDashboardState(params?.state);
 
   return (
     <main className="auth-page">
@@ -22,9 +31,9 @@ export default async function CompleteAuthPage({ searchParams }: PageProps) {
         <h1 id="complete-auth-title">{messages.addPasskey}</h1>
         <p>{messages.passkeyOptionalIntro}</p>
         <CompleteAuth
-          dashboardCallbackUrl={withPluginReturnTo(
-            env.dashboardCallbackUrl,
-            returnTo,
+          dashboardCallbackUrl={withDashboardState(
+            withPluginReturnTo(env.dashboardCallbackUrl, returnTo),
+            state,
           )}
           messages={{
             addPasskey: messages.addPasskey,

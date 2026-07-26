@@ -1,20 +1,26 @@
 use anyhow::Context;
 use axum::http::Uri;
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use pandar_core::{TenantId, created_at_now};
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
     TransactionTrait,
 };
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 mod mobile;
+mod types;
+
+pub use types::{
+    LoginTicketKind, PluginLoginTicket, PluginLoginTicketExchange, PluginLoginTicketWithPlaintext,
+};
 
 use crate::{
     entities::plugin_login_tickets,
     repositories::{
         AuditActor, AuditEvent, AuthRepository, RepositoryError, RepositoryResult,
-        TenantTokenWithPlaintext,
         audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
         auth::{hash_token, secrets::generate_secret, user_exists},
         is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
@@ -22,44 +28,14 @@ use crate::{
 };
 
 const PLUGIN_LOGIN_TICKET_PREFIX: &str = "pandar_plugin_ticket_";
+const MOBILE_LOGIN_TICKET_PREFIX: &str = "pandar_mobile_ticket_";
 const PLUGIN_TOKEN_SCOPE: &str = "plugin:studio";
-const MOBILE_TOKEN_SCOPE: &str = "*";
+const MOBILE_TOKEN_SCOPE: &str = "mobile:session";
 const PLUGIN_TOKEN_TTL_DAYS: i64 = 30;
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct PluginLoginTicket {
-    pub id: String,
-    pub tenant_id: TenantId,
-    pub user_id: Option<String>,
-    pub redirect_url: String,
-    pub created_at: String,
-    pub expires_at: String,
-    pub used_at: Option<String>,
-    pub revoked_at: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PluginLoginTicketWithPlaintext {
-    pub ticket: PluginLoginTicket,
-    pub plaintext_ticket: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PluginLoginTicketExchange {
-    pub ticket: PluginLoginTicket,
-    pub redirect_url: String,
-    pub tenant_token: TenantTokenWithPlaintext,
-}
 
 #[derive(Serialize)]
 struct PluginLoginTicketAuditMetadata<'a> {
     issued_tenant_token_id: Option<&'a str>,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum LoginTicketTokenKind {
-    Plugin,
-    Mobile,
 }
 
 impl AuthRepository {
@@ -78,6 +54,8 @@ impl AuthRepository {
             tenant_id,
             user_id,
             redirect_url,
+            kind: LoginTicketKind::Plugin,
+            code_challenge: None,
             created_at: created_at_now(),
             expires_at,
             used_at: None,
@@ -110,22 +88,28 @@ impl AuthRepository {
         &self,
         plaintext_ticket: &str,
     ) -> RepositoryResult<Option<PluginLoginTicketExchange>> {
-        self.exchange_login_ticket(plaintext_ticket, LoginTicketTokenKind::Plugin)
+        self.exchange_login_ticket(plaintext_ticket, LoginTicketKind::Plugin, None)
             .await
     }
 
     pub async fn exchange_mobile_login_ticket(
         &self,
         plaintext_ticket: &str,
+        code_verifier: &str,
     ) -> RepositoryResult<Option<PluginLoginTicketExchange>> {
-        self.exchange_login_ticket(plaintext_ticket, LoginTicketTokenKind::Mobile)
-            .await
+        self.exchange_login_ticket(
+            plaintext_ticket,
+            LoginTicketKind::Mobile,
+            Some(code_verifier),
+        )
+        .await
     }
 
     async fn exchange_login_ticket(
         &self,
         plaintext_ticket: &str,
-        token_kind: LoginTicketTokenKind,
+        expected_kind: LoginTicketKind,
+        code_verifier: Option<&str>,
     ) -> RepositoryResult<Option<PluginLoginTicketExchange>> {
         let ticket_hash = hash_token(plaintext_ticket);
         let connection = self.database.sea_orm_connection();
@@ -136,6 +120,7 @@ impl AuthRepository {
 
         let Some(model) = plugin_login_tickets::Entity::find()
             .filter(plugin_login_tickets::Column::TicketHash.eq(ticket_hash))
+            .filter(plugin_login_tickets::Column::Kind.eq(expected_kind.as_str()))
             .filter(plugin_login_tickets::Column::UsedAt.is_null())
             .filter(plugin_login_tickets::Column::RevokedAt.is_null())
             .one(&tx)
@@ -146,6 +131,11 @@ impl AuthRepository {
         };
         let ticket = plugin_login_ticket_from_model(model)?;
         if plugin_login_ticket_expired(&ticket)? {
+            return Ok(None);
+        }
+        if expected_kind == LoginTicketKind::Mobile
+            && !mobile_pkce_matches(&ticket, code_verifier.unwrap_or_default())
+        {
             return Ok(None);
         }
 
@@ -170,8 +160,8 @@ impl AuthRepository {
         let token_expires_at = (OffsetDateTime::now_utc() + Duration::days(PLUGIN_TOKEN_TTL_DAYS))
             .format(&Rfc3339)
             .context("failed to format plugin tenant token expiry")?;
-        let tenant_token = match token_kind {
-            LoginTicketTokenKind::Plugin => {
+        let tenant_token = match expected_kind {
+            LoginTicketKind::Plugin => {
                 AuthRepository::create_plugin_token_from_ticket_tx(
                     &tx,
                     used_ticket.tenant_id,
@@ -181,7 +171,7 @@ impl AuthRepository {
                 )
                 .await?
             }
-            LoginTicketTokenKind::Mobile => {
+            LoginTicketKind::Mobile => {
                 AuthRepository::create_mobile_token_from_ticket_tx(
                     &tx,
                     used_ticket.tenant_id,
@@ -192,8 +182,8 @@ impl AuthRepository {
                 .await?
             }
         };
-        let (event_name, actor) = match token_kind {
-            LoginTicketTokenKind::Plugin => (
+        let (event_name, actor) = match expected_kind {
+            LoginTicketKind::Plugin => (
                 "plugin_login_ticket.exchange",
                 AuditActor::plugin_token(
                     used_ticket.user_id.clone(),
@@ -201,7 +191,7 @@ impl AuthRepository {
                     vec![PLUGIN_TOKEN_SCOPE],
                 ),
             ),
-            LoginTicketTokenKind::Mobile => (
+            LoginTicketKind::Mobile => (
                 "mobile_login_ticket.exchange",
                 AuditActor::tenant_token(
                     used_ticket.user_id.clone(),
@@ -313,6 +303,8 @@ fn plugin_login_ticket_from_model(
         tenant_id: TenantId::parse(&model.tenant_id).map_err(anyhow::Error::from)?,
         user_id: model.user_id,
         redirect_url: model.redirect_url,
+        kind: LoginTicketKind::parse(&model.kind)?,
+        code_challenge: model.code_challenge,
         created_at: model.created_at,
         expires_at: model.expires_at,
         used_at: model.used_at,
@@ -330,11 +322,25 @@ fn plugin_login_ticket_model(
         user_id: Set(ticket.user_id.clone()),
         ticket_hash: Set(ticket_hash.to_owned()),
         redirect_url: Set(ticket.redirect_url.clone()),
+        kind: Set(ticket.kind.as_str().to_owned()),
+        code_challenge: Set(ticket.code_challenge.clone()),
         created_at: Set(ticket.created_at.clone()),
         expires_at: Set(ticket.expires_at.clone()),
         used_at: Set(ticket.used_at.clone()),
         revoked_at: Set(ticket.revoked_at.clone()),
     }
+}
+
+fn mobile_pkce_matches(ticket: &PluginLoginTicket, code_verifier: &str) -> bool {
+    if !(43..=128).contains(&code_verifier.len())
+        || !code_verifier
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~'))
+    {
+        return false;
+    }
+    let actual = URL_SAFE_NO_PAD.encode(Sha256::digest(code_verifier.as_bytes()));
+    ticket.code_challenge.as_deref() == Some(actual.as_str())
 }
 
 fn plugin_login_ticket_expired(ticket: &PluginLoginTicket) -> RepositoryResult<bool> {

@@ -18,8 +18,11 @@ use crate::{
     },
 };
 
+mod close;
 #[cfg(test)]
 mod tests;
+
+use close::{report_reverse_camera_closed, spawn_reverse_camera_closed};
 
 #[cfg(test)]
 struct CameraJoinPause {
@@ -102,6 +105,17 @@ where
 {
     match command.command {
         Some(hub_camera_command::Command::Open(open)) => {
+            streams.retain(|_, task| !task.is_finished());
+            if !streams.contains_key(&command.stream_id) && streams.len() >= 4 {
+                report_reverse_camera_closed(
+                    config.clone(),
+                    command.stream_id,
+                    false,
+                    "camera stream concurrency limit reached".to_owned(),
+                )
+                .await;
+                return Ok(());
+            }
             stop_camera_task(streams, &command.stream_id).await?;
             let stream_id = command.stream_id.clone();
             let mode = CameraStreamMode::try_from(open.mode).unwrap_or(CameraStreamMode::Mjpeg);
@@ -230,47 +244,6 @@ where
             }
         }
     }
-}
-
-fn spawn_reverse_camera_closed(
-    config: AgentConfig,
-    stream_id: String,
-    success: bool,
-    error: String,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        if let Err(err) = reverse_camera_closed(config, stream_id, success, error).await {
-            tracing::warn!(error = %format!("{err:#}"), "on-demand camera close event failed");
-        }
-    })
-}
-
-async fn reverse_camera_closed(
-    config: AgentConfig,
-    stream_id: String,
-    success: bool,
-    error: String,
-) -> anyhow::Result<()> {
-    let mut client = AgentControlClient::connect(config.hub_grpc_url.clone())
-        .await
-        .with_context(|| {
-            format!(
-                "connect on-demand camera close event to hub gRPC at {}",
-                config.hub_grpc_url
-            )
-        })?;
-    let (sender, receiver) = mpsc::channel(2);
-    sender
-        .send(camera_hello_event(&config))
-        .await
-        .context("queue agent camera hello event")?;
-    send_camera_closed(&config, &sender, &stream_id, success, error).await;
-    drop(sender);
-    client
-        .reverse_camera(Request::new(ReceiverStream::new(receiver)))
-        .await
-        .context("open reverse agent camera stream for close event")?;
-    Ok(())
 }
 
 async fn forward_camera_frames<F>(

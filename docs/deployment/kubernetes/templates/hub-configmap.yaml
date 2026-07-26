@@ -8,6 +8,9 @@ metadata:
 data:
   PANDAR_HUB_BIND: {{ printf "0.0.0.0:%v" .Values.hub.service.httpPort | quote }}
   PANDAR_HUB_GRPC_BIND: {{ printf "0.0.0.0:%v" .Values.hub.service.grpcPort | quote }}
+  PANDAR_HUB_OBSERVABILITY_BIND: {{ printf "0.0.0.0:%v" .Values.hub.service.observabilityPort | quote }}
+  PANDAR_HUB_GRPC_TLS_CERT: /grpc-tls/tls.crt
+  PANDAR_HUB_GRPC_TLS_KEY: /grpc-tls/tls.key
   {{- range $name, $value := .Values.hub.env }}
   {{ $name }}: {{ $value | quote }}
   {{- end }}

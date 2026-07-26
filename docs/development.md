@@ -10,7 +10,7 @@ This document collects local setup, runtime configuration, authentication, and d
 sqlite://pandar.db
 ```
 
-`pandar-hub` listens for HTTP/WebSocket traffic on `PANDAR_HUB_BIND` and defaults to `0.0.0.0:8080`. The reverse agent gRPC listener uses `PANDAR_HUB_GRPC_BIND` and defaults to `0.0.0.0:50051`.
+`pandar-hub` listens for HTTP/WebSocket traffic on `PANDAR_HUB_BIND` and defaults to `127.0.0.1:8080`. The reverse agent gRPC listener uses `PANDAR_HUB_GRPC_BIND` and defaults to `127.0.0.1:50051`; non-loopback gRPC binds require `PANDAR_HUB_GRPC_TLS_CERT` and `PANDAR_HUB_GRPC_TLS_KEY`. Readiness and metrics use the separate `PANDAR_HUB_OBSERVABILITY_BIND`, which defaults to `127.0.0.1:9090`.
 
 `PANDAR_PRINTER_ACCESS_CODE_KEY` is required and must contain the unpadded base64url encoding of exactly 32 random bytes. Generate it with `openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`, inject the same value into every Hub replica through a secret manager, and back it up separately with the database. The Hub stores successful Bambu access codes only as versioned AES-256-GCM envelopes bound to the tenant and printer serial. Startup transactionally encrypts legacy plaintext rows and clears the plaintext column; an absent, changed, or invalid key prevents startup rather than silently dropping saved printer connections.
 
@@ -51,7 +51,7 @@ Reverse sessions require `PANDAR_AGENT_CREDENTIAL`. Tenant admins create or rota
 
 ## Machine Communication
 
-The agent-side MQTT boundary, `RefreshPrinters` gateway path, and machine file-transfer boundary are implemented from reference behavior. Bambu LAN MQTT, FTPS, and BRTC use printer-local TLS certificates, including X.509 v1 certificates, so the agent uses a Bambu-specific verifier instead of platform CA/hostname validation while still verifying handshake signatures against the certificate public key.
+The agent-side MQTT boundary, `RefreshPrinters` gateway path, and machine file-transfer boundary are implemented from reference behavior. Bambu LAN MQTT, FTPS, and BRTC require a certificate whose common name exactly matches the configured printer serial. The agent verifies the certificate chain against Studio's bundled Bambu printer CA set. For models such as P2S that send a leaf-only certificate from an issuer absent from that set, configure `PANDAR_BAMBU_CERTIFICATE_SHA256_PINS` as a JSON object mapping each serial to its independently verified leaf SHA-256 fingerprint (plain 64-digit hex or colon-separated hex). A configured pin must match exactly and certificate validity dates are still enforced; the agent never falls back to accepting an untrusted CN-only certificate.
 
 Runtime Bambu machine communication:
 
@@ -505,15 +505,16 @@ External identity configuration:
 PANDAR_EXTERNAL_AUTH_PROVIDER=clerk
 PANDAR_EXTERNAL_AUTH_ISSUER=https://example.clerk.accounts.dev
 PANDAR_EXTERNAL_AUTH_JWKS_URL=https://example.clerk.accounts.dev/.well-known/jwks.json
-PANDAR_EXTERNAL_AUTH_AUDIENCE=<optional audience>
+PANDAR_EXTERNAL_AUTH_AUDIENCE=<required audience>
 PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256
 PANDAR_EXTERNAL_AUTH_AUTHORIZED_PARTIES=<optional comma-separated origins>
 PANDAR_EXTERNAL_AUTH_REQUIRED_SCOPES=<optional comma-separated scopes>
 PANDAR_EXTERNAL_AUTH_LEEWAY_SECONDS=60
+PANDAR_EXTERNAL_AUTH_MAX_TOKEN_LIFETIME_SECONDS=86400
 PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE=true
 ```
 
-If `PANDAR_EXTERNAL_AUTH_PROVIDER` is unset, external identity auth is disabled. Partial external-auth configuration fails hub startup instead of silently falling back. `PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE` defaults to `true`; set it to `false` to require join links or bootstrap provisioning for first tenant membership.
+If `PANDAR_EXTERNAL_AUTH_PROVIDER` is unset, external identity auth is disabled. Partial external-auth configuration fails hub startup instead of silently falling back. External JWTs must include `iat`; Pandar rejects future issuance times and enforces the configured maximum across `exp - iat` rather than only checking remaining validity. `PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE` defaults to `true`; set it to `false` to require join links or bootstrap provisioning for first tenant membership.
 
 For no-auth local development, set `PANDAR_HUB_NO_AUTH=true` on `pandar-hub` and leave `APP_AUTH_PROVIDER`, `APP_API_TOKEN`, and `APP_AUTH_BEARER_TOKEN` unset on `pandar-web`. This exposes all hub HTTP/WebSocket tenant and bootstrap APIs without a bearer token, so do not use it on an untrusted network.
 
@@ -567,7 +568,7 @@ request once. A second authorization failure is returned without recursion, stal
 responses are rejected, and an authenticated Studio credential never falls back to no-auth issuance.
 These behaviors do not change the external-auth sign-in contract.
 
-Better Auth is supported through the same external JWT/JWKS contract. Configure Better Auth 1.6.23's JWT plugin with `keyPairConfig.alg = "RS256"` and configure Pandar verification with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. Better Auth delegates key generation to `jose`, where the RSA signing algorithm value is `RS256`; Pandar's smoke check signs a token and confirms the JWT header is `alg: "RS256"` and the JWKS key is `kty: "RSA"`. Pandar expects a stable `sub` plus verified email claims before creating tenant-local user projections.
+Better Auth is supported through the same external JWT/JWKS contract. Configure Better Auth 1.6.25's JWT plugin with `keyPairConfig.alg = "RS256"` and configure Pandar verification with `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`. Better Auth delegates key generation to `jose`, where the RSA signing algorithm value is `RS256`; Pandar's smoke check signs a token and confirms the JWT header is `alg: "RS256"` and the JWKS key is `kty: "RSA"`. Pandar expects a stable `sub` plus verified email claims before creating tenant-local user projections.
 
 Self-hosted Better Auth issuer development lives under `frontend/auth/`:
 
@@ -588,7 +589,7 @@ node --experimental-strip-types frontend/auth/scripts/smoke-jwt-and-registration
 npm run build:auth
 ```
 
-The self-hosted issuer signs users in with email magic links by default and auto-creates first-time Better Auth users from verified email links. `PANDAR_AUTH_EMAIL_PROVIDER` must be `resend` or `smtp` at runtime. Resend uses `RESEND_API_KEY` plus `PANDAR_AUTH_EMAIL_FROM`; SMTP uses `PANDAR_AUTH_SMTP_HOST`, `PANDAR_AUTH_SMTP_PORT`, `PANDAR_AUTH_SMTP_USERNAME`, `PANDAR_AUTH_SMTP_PASSWORD`, and optional `PANDAR_AUTH_SMTP_TLS=starttls|tls|none`. Magic links expire after 30 minutes by default. After a magic-link login, `/auth/complete` offers optional passkey binding with a visible Skip action. Plugin return intents are opaque because Better Auth 1.6.23 decodes its magic-link callback value during verification; placing a nested query there directly would lose later `&`-delimited fields such as the Studio callback.
+The self-hosted issuer signs users in with email magic links by default and auto-creates first-time Better Auth users from verified email links. `PANDAR_AUTH_EMAIL_PROVIDER` must be `resend` or `smtp` at runtime. Resend uses `RESEND_API_KEY` plus `PANDAR_AUTH_EMAIL_FROM`; SMTP uses `PANDAR_AUTH_SMTP_HOST`, `PANDAR_AUTH_SMTP_PORT`, `PANDAR_AUTH_SMTP_USERNAME`, `PANDAR_AUTH_SMTP_PASSWORD`, and optional `PANDAR_AUTH_SMTP_TLS=starttls|tls|none`. Magic links expire after 30 minutes by default. After a magic-link login, `/auth/complete` offers optional passkey binding with a visible Skip action. Plugin return intents are opaque because Better Auth 1.6.25 decodes its magic-link callback value during verification; placing a nested query there directly would lose later `&`-delimited fields such as the Studio callback.
 
 For local end-to-end testing, run `pandar-auth` on port 3001, `pandar-web` on port 3000 with `APP_AUTH_PROVIDER=betterauth`, `APP_AUTH_BETTER_AUTH_BASE_URL=http://127.0.0.1:3001`, and `APP_AUTH_COOKIE_MAX_AGE_SECONDS=43200`, then configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth`, `PANDAR_EXTERNAL_AUTH_ISSUER=http://127.0.0.1:3001`, `PANDAR_EXTERNAL_AUTH_JWKS_URL=http://127.0.0.1:3001/api/auth/jwks`, `PANDAR_EXTERNAL_AUTH_AUDIENCE=http://127.0.0.1:3001`, and `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256`.
 
@@ -692,8 +693,9 @@ Hub audit records are stored in `audit_events` for successful user-triggered mut
 
 Readiness and metrics:
 
-- `GET /readyz` checks database access, artifact storage access, scaled storage topology, gRPC bind configuration, and external-auth JWKS readiness when configured. Public details are sanitized.
-- `GET /metrics` exposes Prometheus text metrics for agent sessions, command/job/report counters, WebSocket tickets/subscriptions, control-plane publish/receive counters, and readiness gauges. Tenant labels are hashed before export.
+- `GET /readyz` on `PANDAR_HUB_OBSERVABILITY_BIND` checks database access, artifact storage access, scaled storage topology, gRPC bind configuration, and external-auth JWKS readiness when configured. Public details are sanitized.
+- `GET /metrics` on `PANDAR_HUB_OBSERVABILITY_BIND` exposes Prometheus text metrics for agent sessions, command/job/report counters, WebSocket tickets/subscriptions, control-plane publish/receive counters, and readiness gauges. Tenant labels are hashed before export.
+- Artifact uploads reserve tenant/global capacity in the database before writing filesystem/S3 data and hold that reservation through the artifact-row commit. They default to 1 GiB/10,000 objects per tenant and 10 GiB/100,000 objects globally. Override with `PANDAR_TENANT_ARTIFACT_QUOTA_BYTES`, `PANDAR_TENANT_ARTIFACT_QUOTA_COUNT`, `PANDAR_GLOBAL_ARTIFACT_QUOTA_BYTES`, and `PANDAR_GLOBAL_ARTIFACT_QUOTA_COUNT`. Multipart staging is separately capped at 16 concurrent uploads globally and 2 per tenant, with a 120-second total parse deadline; cancellation removes both partial and completed staging files.
 
 Cleanup CLI:
 

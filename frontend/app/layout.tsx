@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { headers } from 'next/headers'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages, getTranslations } from 'next-intl/server'
 import type { ReactNode } from 'react'
@@ -19,15 +20,16 @@ export default async function RootLayout({
 }: Readonly<{
   children: ReactNode
 }>) {
-  const [locale, messages, t] = await Promise.all([
+  const [locale, messages, t, requestHeaders] = await Promise.all([
     getLocale(),
     getMessages(),
     getTranslations('common'),
+    headers(),
   ])
   return (
     <html lang={locale} className="font-sans" suppressHydrationWarning>
       <head>
-        <ThemeScript />
+        <ThemeScript nonce={requestHeaders.get('x-nonce') ?? undefined} />
       </head>
       <body>
         <NextIntlClientProvider locale={locale} messages={messages}>

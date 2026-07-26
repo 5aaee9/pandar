@@ -14,6 +14,7 @@ mod clear;
 mod create;
 pub(crate) mod hydration;
 mod print_reports;
+mod quota;
 mod recovery;
 pub mod rows;
 mod stalled;
@@ -32,6 +33,7 @@ use crate::{
 pub use artifacts::AgentArtifactAccess;
 pub use clear::ClearJobsOutcome;
 pub use print_reports::{AppliedPrintReport, ApplyPrintReport, PrintReportDiagnostic};
+pub use quota::ArtifactQuotaLimits;
 use rows::job_from_model_loading_usage;
 #[cfg(test)]
 pub(crate) use studio_tasks::test_pause as studio_task_test_pause;
@@ -41,6 +43,10 @@ pub use studio_tasks::{StudioTaskPage, StudioTaskQuery, StudioTaskStatus};
 pub struct JobRepository {
     database: Database,
     access_code_cipher: PrinterAccessCodeCipher,
+}
+
+pub(crate) struct ArtifactQuotaReservation {
+    tx: sea_orm::DatabaseTransaction,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

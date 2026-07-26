@@ -97,7 +97,7 @@ describe("createMobileTicket", () => {
           new Response(
             JSON.stringify({
               ticket: "pandar_plugin_ticket_abc",
-              redirect_url: "zip.iptables.pandar.android:/auth/callback",
+              redirect_url: "zip.iptables.pandar.android://auth/callback",
             }),
             {
               status: 201,
@@ -111,10 +111,12 @@ describe("createMobileTicket", () => {
   it("creates a mobile login ticket and redirects back to Android", async () => {
     const formData = new FormData();
     formData.set("tenant_id", "tenant-1");
-    formData.set("redirect_url", "zip.iptables.pandar.android:/auth/callback");
+    formData.set("redirect_url", "zip.iptables.pandar.android://auth/callback");
+    formData.set("code_challenge", "challenge");
+    formData.set("state", "state");
 
     await expect(createMobileTicket(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:zip.iptables.pandar.android:/auth/callback?ticket=pandar_plugin_ticket_abc&redirect_url=zip.iptables.pandar.android%3A%2Fauth%2Fcallback",
+      "NEXT_REDIRECT:zip.iptables.pandar.android://auth/callback?ticket=pandar_plugin_ticket_abc&redirect_url=zip.iptables.pandar.android%3A%2F%2Fauth%2Fcallback&state=state",
     );
 
     expect(fetch).toHaveBeenCalledWith(
@@ -122,7 +124,8 @@ describe("createMobileTicket", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          redirect_url: "zip.iptables.pandar.android:/auth/callback",
+          redirect_url: "zip.iptables.pandar.android://auth/callback",
+          code_challenge: "challenge",
         }),
       }),
     );

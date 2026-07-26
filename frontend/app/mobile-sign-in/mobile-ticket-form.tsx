@@ -5,15 +5,19 @@ import type { Tenant } from "../dashboard-types";
 type MobileTicketFormProps = {
   action: (formData: FormData) => Promise<void>;
   autoSelectedTenant: boolean;
+  codeChallenge: string;
   redirectUrl: string;
   selectedTenant: Tenant;
+  state: string;
 };
 
 export async function MobileTicketForm({
   action,
   autoSelectedTenant,
+  codeChallenge,
   redirectUrl,
   selectedTenant,
+  state,
 }: MobileTicketFormProps) {
   const t = await getTranslations("signIn");
 
@@ -21,6 +25,8 @@ export async function MobileTicketForm({
     <form action={action} className="grid gap-4 px-4 py-4">
       <input name="tenant_id" type="hidden" value={selectedTenant.id} />
       <input name="redirect_url" type="hidden" value={redirectUrl} />
+      <input name="code_challenge" type="hidden" value={codeChallenge} />
+      <input name="state" type="hidden" value={state} />
       <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
         {autoSelectedTenant ? (
           <div className="rounded-md bg-white px-2 py-1.5 text-xs leading-5 text-slate-700">

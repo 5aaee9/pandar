@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Keep network-plugin callback validation loopback-only.
-- Android callback URL is exactly `zip.iptables.pandar.android:/auth/callback`.
+- Android callback URL is exactly `zip.iptables.pandar.android://auth/callback`.
 - Android settings UI must not expose OIDC discovery/client/scopes/redirect fields.
 - Persistent Hub data access must remain backend-neutral and covered by existing SQLite/PostgreSQL test paths when database behavior changes.
 - Update `docs/roadmap.md` after code changes.
@@ -57,7 +57,7 @@
 - Produces: `POST /api/v1/mobile/login-tickets/exchange`
 - Produces: exchange response `{ token, expires_at, profile: { user_id, user_name, tenant_id, tenant_name } }`
 
-- [ ] Add failing repository tests for `validate_mobile_redirect_url("zip.iptables.pandar.android:/auth/callback")` success and non-matching callback rejection.
+- [ ] Add failing repository tests for `validate_mobile_redirect_url("zip.iptables.pandar.android://auth/callback")` success and non-matching callback rejection.
 - [ ] Add failing route test that creates a mobile ticket with the Android callback, exchanges it once, receives a token, and sees second exchange rejected.
 - [ ] Implement mobile callback validation without changing `validate_plugin_redirect_url`.
 - [ ] Add a mobile token creation path that creates a normal tenant token usable by tenant APIs.
@@ -76,7 +76,7 @@
 **Interfaces:**
 
 - Consumes: `POST /api/v1/tenants/{tenant_id}/mobile/login-tickets`
-- Produces: browser redirect to `zip.iptables.pandar.android:/auth/callback?ticket=<ticket>&redirect_url=<callback>`
+- Produces: browser redirect to `zip.iptables.pandar.android://auth/callback?ticket=<ticket>&redirect_url=<callback>`
 
 - [ ] Add a failing action test for `createMobileTicket` redirecting to the callback with `ticket` and `redirect_url`.
 - [ ] Implement `createMobileTicket` next to `createPluginTicket`.
@@ -102,12 +102,12 @@
 **Interfaces:**
 
 - Consumes: `/api/v1/mobile/login-tickets/exchange`
-- Produces: Android callback handling for `zip.iptables.pandar.android:/auth/callback`
+- Produces: Android callback handling for `zip.iptables.pandar.android://auth/callback`
 
 - [ ] Add failing Android unit tests for settings readiness with Hub URL only.
 - [ ] Add Retrofit DTOs and API method for mobile ticket exchange.
 - [ ] Register the custom scheme callback intent filter on `MainActivity`.
-- [ ] Replace AppAuth sign-in with `Intent.ACTION_VIEW` to `{hub}/mobile-sign-in?redirect_url=zip.iptables.pandar.android:/auth/callback`.
+- [ ] Replace AppAuth sign-in with `Intent.ACTION_VIEW` to `{hub}/mobile-sign-in?redirect_url=zip.iptables.pandar.android://auth/callback`.
 - [ ] Parse callback `ticket`, exchange it, and store token, expiry, and tenant id.
 - [ ] Remove OIDC fields from the settings UI and messages.
 - [ ] Run `.\gradlew.bat :app:testDebugUnitTest` and `.\gradlew.bat :app:assembleDebug` from `mobile/android`.

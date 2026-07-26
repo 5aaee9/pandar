@@ -5,10 +5,7 @@ import { apiHeaders, authSource } from "../api-auth";
 import { authProviderConfig } from "../auth-provider";
 import type { Tenant, TenantList } from "../dashboard-types";
 import { LanguageSwitcher } from "../../components/language-switcher";
-import {
-  pluginAuthSignInUrl,
-  pluginSignInReturnTarget,
-} from "./auth-return";
+import { pluginAuthSignInUrl, pluginSignInReturnTarget } from "./auth-return";
 import { PluginTicketForm } from "./plugin-ticket-form";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
@@ -64,7 +61,7 @@ async function fetchTenants(): Promise<TenantFetchResult> {
 
 async function fetchExternalAuthStatus(): Promise<ReadinessResult> {
   try {
-    const response = await fetch(`${apiUrl}/readyz`, { cache: "no-store" });
+    const response = await fetch(`${apiUrl}/healthz`, { cache: "no-store" });
     if (!response.ok) {
       return {
         externalAuthEnabled: false,
@@ -194,11 +191,7 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
               {t("selectTenant")}
             </div>
             <form className="grid gap-3" action="/plugin-sign-in">
-              <input
-                name="redirect_url"
-                type="hidden"
-                value={callbackUrl}
-              />
+              <input name="redirect_url" type="hidden" value={callbackUrl} />
               <label className="grid gap-1 text-sm">
                 <span className="text-xs font-medium text-slate-500">
                   {t("tenant")}

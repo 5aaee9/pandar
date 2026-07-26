@@ -12,3 +12,12 @@ frontend/auth/out
 frontend/auth/tsconfig.tsbuildinfo
 frontend/plugin-local/node_modules
 frontend/plugin-local/tsconfig.tsbuildinfo
+.env
+**/.env*
+!**/.env.example
+**/*.pem
+!crates/pandar-agent/src/machine/bambu-printer-ca.pem
+**/*.key
+**/.aws
+**/.config/gcloud
+**/credentials*

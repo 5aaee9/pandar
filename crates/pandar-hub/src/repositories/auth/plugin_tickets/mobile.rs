@@ -3,7 +3,7 @@ use pandar_core::{TenantId, created_at_now};
 use sea_orm::TransactionTrait;
 
 use super::{
-    PLUGIN_LOGIN_TICKET_PREFIX, PluginLoginTicket, PluginLoginTicketWithPlaintext,
+    LoginTicketKind, MOBILE_LOGIN_TICKET_PREFIX, PluginLoginTicket, PluginLoginTicketWithPlaintext,
     insert_plugin_login_ticket, plugin_login_ticket_audit_event,
 };
 use crate::repositories::{
@@ -18,16 +18,19 @@ impl AuthRepository {
         tenant_id: TenantId,
         user_id: Option<String>,
         redirect_url: impl AsRef<str>,
+        code_challenge: String,
         expires_at: String,
         actor: AuditActor,
     ) -> RepositoryResult<PluginLoginTicketWithPlaintext> {
         let redirect_url = self.validate_mobile_redirect_url(redirect_url.as_ref())?;
-        let plaintext_ticket = generate_secret(PLUGIN_LOGIN_TICKET_PREFIX);
+        let plaintext_ticket = generate_secret(MOBILE_LOGIN_TICKET_PREFIX);
         let ticket = PluginLoginTicket {
             id: uuid::Uuid::new_v4().to_string(),
             tenant_id,
             user_id,
             redirect_url,
+            kind: LoginTicketKind::Mobile,
+            code_challenge: Some(code_challenge),
             created_at: created_at_now(),
             expires_at,
             used_at: None,
@@ -64,8 +67,8 @@ impl AuthRepository {
         let uri = reqwest::Url::parse(redirect_url)
             .map_err(|_| RepositoryError::InvalidPluginRedirectUrl)?;
         if uri.scheme() != "zip.iptables.pandar.android"
-            || uri.host_str().is_some()
-            || uri.path() != "/auth/callback"
+            || uri.host_str() != Some("auth")
+            || uri.path() != "/callback"
             || uri.query().is_some()
             || redirect_url.contains('#')
         {

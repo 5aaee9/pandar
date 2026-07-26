@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { apiHeaders } from "../../../../../api-auth";
 import { apiIdSegment, invalidApiIdResponse, isApiId } from "@/app/api-path";
+import { rejectCrossOriginMutation } from "@/app/request-security";
 import type { PrinterEventTicket } from "../../../../../dashboard-types";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
@@ -14,7 +15,9 @@ type RouteContext = {
   }>;
 };
 
-export async function POST(_request: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
+  const rejected = rejectCrossOriginMutation(request);
+  if (rejected) return rejected;
   const { tenantId } = await context.params;
   if (!isApiId(tenantId)) {
     return invalidApiIdResponse();

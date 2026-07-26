@@ -1,9 +1,15 @@
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
+};
+
+use async_trait::async_trait;
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode, jwk::JwkSet};
 use serde::{Deserialize, Serialize};
 
 use super::{
     config::tests_support::{AUDIENCE_VAR, REQUIRED_SCOPES_VAR, config_from_vars},
-    verifier::{AudienceClaim, JwtVerifier},
+    verifier::{AudienceClaim, JwksSource, JwtVerifier, JwtVerifyError},
 };
 
 const TEST_PRIVATE_KEY: &str = r#"-----BEGIN RSA PRIVATE KEY-----
@@ -65,6 +71,7 @@ async fn required_scopes_can_be_satisfied_by_scope_string_and_scp_array() {
     let token = token(TestClaims {
         iss: "https://issuer.example.test",
         sub: "user_123",
+        iat: jsonwebtoken::get_current_timestamp(),
         exp: jsonwebtoken::get_current_timestamp() + 300,
         aud: Some(AudienceClaimForTest::One("api://pandar".to_owned())),
         scope: Some("print:read print:write"),
@@ -91,6 +98,7 @@ async fn profile_claims_are_extracted_from_valid_jwt() {
     let token = token(TestClaims {
         iss: "https://issuer.example.test",
         sub: "user_profile",
+        iat: jsonwebtoken::get_current_timestamp(),
         exp: jsonwebtoken::get_current_timestamp() + 300,
         aud: Some(AudienceClaimForTest::One("api://pandar".to_owned())),
         scope: None,
@@ -120,6 +128,7 @@ async fn display_name_falls_back_to_username_then_verified_email() {
     let username_token = token(TestClaims {
         iss: "https://issuer.example.test",
         sub: "user_username",
+        iat: jsonwebtoken::get_current_timestamp(),
         exp: jsonwebtoken::get_current_timestamp() + 300,
         aud: Some(AudienceClaimForTest::One("api://pandar".to_owned())),
         scope: None,
@@ -132,6 +141,7 @@ async fn display_name_falls_back_to_username_then_verified_email() {
     let email_token = token(TestClaims {
         iss: "https://issuer.example.test",
         sub: "user_email",
+        iat: jsonwebtoken::get_current_timestamp(),
         exp: jsonwebtoken::get_current_timestamp() + 300,
         aud: Some(AudienceClaimForTest::One("api://pandar".to_owned())),
         scope: None,
@@ -156,9 +166,149 @@ async fn display_name_falls_back_to_username_then_verified_email() {
     );
 }
 
+#[tokio::test]
+async fn verification_rejects_missing_audience_and_excessive_lifetime() {
+    let verifier =
+        JwtVerifier::static_jwks(config_from_vars([(AUDIENCE_VAR, "api://pandar")]), jwks());
+    let claims = |aud, iat, exp| TestClaims {
+        iss: "https://issuer.example.test",
+        sub: "security-claims-user",
+        iat,
+        exp,
+        aud,
+        scope: None,
+        scp: Vec::new(),
+        email: None,
+        email_verified: None,
+        name: None,
+        preferred_username: None,
+    };
+
+    assert!(matches!(
+        verifier
+            .verify(&token(claims(
+                None,
+                jsonwebtoken::get_current_timestamp(),
+                jsonwebtoken::get_current_timestamp() + 300,
+            )))
+            .await,
+        Err(JwtVerifyError::InvalidClaims(_))
+    ));
+    let error = verifier
+        .verify(&token(claims(
+            Some(AudienceClaimForTest::One("api://pandar".to_owned())),
+            jsonwebtoken::get_current_timestamp(),
+            jsonwebtoken::get_current_timestamp() + 172_800,
+        )))
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(error, JwtVerifyError::TokenLifetimeExceeded),
+        "unexpected verification error: {error:?}"
+    );
+
+    let future_iat = jsonwebtoken::get_current_timestamp() + 300;
+    assert!(matches!(
+        verifier
+            .verify(&token(claims(
+                Some(AudienceClaimForTest::One("api://pandar".to_owned())),
+                future_iat,
+                future_iat + 300,
+            )))
+            .await,
+        Err(JwtVerifyError::InvalidTokenLifetime)
+    ));
+}
+
+#[tokio::test]
+async fn expired_jwks_cache_rejects_a_removed_key() {
+    let source = Arc::new(MutableJwksSource {
+        keys: Mutex::new(jwks()),
+        loads: AtomicUsize::new(0),
+    });
+    let verifier = JwtVerifier::new(
+        config_from_vars([(AUDIENCE_VAR, "api://pandar")]),
+        source.clone(),
+    );
+    let token = token(TestClaims {
+        iss: "https://issuer.example.test",
+        sub: "removed-key-user",
+        iat: jsonwebtoken::get_current_timestamp(),
+        exp: jsonwebtoken::get_current_timestamp() + 300,
+        aud: Some(AudienceClaimForTest::One("api://pandar".to_owned())),
+        scope: None,
+        scp: Vec::new(),
+        email: None,
+        email_verified: None,
+        name: None,
+        preferred_username: None,
+    });
+
+    verifier.verify(&token).await.unwrap();
+    *source.keys.lock().unwrap() = JwkSet { keys: Vec::new() };
+    verifier.expire_cache_for_test().await;
+
+    assert!(matches!(
+        verifier.verify(&token).await,
+        Err(JwtVerifyError::UnknownKeyId)
+    ));
+    assert_eq!(source.loads.load(Ordering::Relaxed), 2);
+}
+
+#[tokio::test]
+async fn unknown_key_ids_do_not_force_repeated_jwks_fetches() {
+    let source = Arc::new(MutableJwksSource {
+        keys: Mutex::new(jwks()),
+        loads: AtomicUsize::new(0),
+    });
+    let verifier = JwtVerifier::new(
+        config_from_vars([(AUDIENCE_VAR, "api://pandar")]),
+        source.clone(),
+    );
+    let claims = TestClaims {
+        iss: "https://issuer.example.test",
+        sub: "unknown-key-user",
+        iat: jsonwebtoken::get_current_timestamp(),
+        exp: jsonwebtoken::get_current_timestamp() + 300,
+        aud: Some(AudienceClaimForTest::One("api://pandar".to_owned())),
+        scope: None,
+        scp: Vec::new(),
+        email: None,
+        email_verified: None,
+        name: None,
+        preferred_username: None,
+    };
+    let token = token_with_kid(claims, "attacker-random-kid");
+
+    for _ in 0..2 {
+        assert!(matches!(
+            verifier.verify(&token).await,
+            Err(JwtVerifyError::UnknownKeyId)
+        ));
+    }
+    assert_eq!(source.loads.load(Ordering::Relaxed), 1);
+}
+
+struct MutableJwksSource {
+    keys: Mutex<JwkSet>,
+    loads: AtomicUsize,
+}
+
+#[async_trait]
+impl JwksSource for MutableJwksSource {
+    async fn load_jwks(&self) -> anyhow::Result<JwkSet> {
+        self.loads.fetch_add(1, Ordering::Relaxed);
+        Ok(self.keys.lock().unwrap().clone())
+    }
+}
+
 fn token(claims: TestClaims) -> String {
+    token_with_kid(claims, "test-key")
+}
+
+fn token_with_kid(claims: TestClaims, kid: &str) -> String {
     let mut header = Header::new(Algorithm::RS256);
-    header.kid = Some("test-key".to_owned());
+    header.kid = Some(kid.to_owned());
     encode(
         &header,
         &claims,
@@ -210,6 +360,7 @@ struct TestJwk {
 struct TestClaims {
     iss: &'static str,
     sub: &'static str,
+    iat: u64,
     exp: u64,
     aud: Option<AudienceClaimForTest>,
     scope: Option<&'static str>,

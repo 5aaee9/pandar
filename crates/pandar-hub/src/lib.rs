@@ -8,6 +8,7 @@ pub mod db;
 pub mod entities;
 pub mod firmware_control;
 pub mod grpc;
+mod grpc_connection_limit;
 pub mod identity;
 pub mod jobs;
 pub(crate) mod material_mapping;

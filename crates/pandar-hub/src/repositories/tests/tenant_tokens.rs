@@ -49,6 +49,8 @@ async fn sqlite_phase_16_entities_match_migration_shape() {
         user_id: Set(None),
         ticket_hash: Set("plugin-ticket-hash-1".to_owned()),
         redirect_url: Set("https://example.test/callback".to_owned()),
+        kind: Set("plugin".to_owned()),
+        code_challenge: Set(None),
         created_at: Set("2026-06-23T02:00:00Z".to_owned()),
         expires_at: Set("2026-06-23T02:05:00Z".to_owned()),
         used_at: Set(None),
@@ -347,7 +349,8 @@ async fn mobile_login_ticket_exchange_is_one_use_and_creates_tenant_token() {
         .create_mobile_login_ticket_with_audit(
             tenant.id,
             Some(admin.id.clone()),
-            "zip.iptables.pandar.android:/auth/callback",
+            "zip.iptables.pandar.android://auth/callback",
+            "ZtNPunH49FD35FWYhT5Tv8I7vRKQJ8uxMaL0_9eHjNA".to_owned(),
             future_rfc3339(),
             crate::repositories::AuditActor::user(admin.id.clone()),
         )
@@ -356,11 +359,14 @@ async fn mobile_login_ticket_exchange_is_one_use_and_creates_tenant_token() {
 
     assert_eq!(
         ticket.ticket.redirect_url,
-        "zip.iptables.pandar.android:/auth/callback"
+        "zip.iptables.pandar.android://auth/callback"
     );
 
     let exchanged = auth
-        .exchange_mobile_login_ticket(&ticket.plaintext_ticket)
+        .exchange_mobile_login_ticket(
+            &ticket.plaintext_ticket,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        )
         .await
         .unwrap()
         .unwrap();
@@ -378,14 +384,17 @@ async fn mobile_login_ticket_exchange_is_one_use_and_creates_tenant_token() {
     );
     assert_eq!(
         exchanged.tenant_token.token.scopes,
-        vec![crate::repositories::TenantTokenScope::All]
+        vec![crate::repositories::TenantTokenScope::MobileSession]
     );
 
     assert!(
-        auth.exchange_mobile_login_ticket(&ticket.plaintext_ticket)
-            .await
-            .unwrap()
-            .is_none()
+        auth.exchange_mobile_login_ticket(
+            &ticket.plaintext_ticket,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        )
+        .await
+        .unwrap()
+        .is_none()
     );
 }
 
@@ -439,20 +448,23 @@ async fn plugin_login_ticket_exchange_rejects_expired_tickets() {
 async fn mobile_redirect_validation_allows_only_android_callback() {
     let auth = AuthRepository::new(sqlite_database().await);
     assert_eq!(
-        auth.validate_mobile_redirect_url("zip.iptables.pandar.android:/auth/callback")
+        auth.validate_mobile_redirect_url("zip.iptables.pandar.android://auth/callback")
             .unwrap(),
-        "zip.iptables.pandar.android:/auth/callback"
+        "zip.iptables.pandar.android://auth/callback"
     );
 
     for invalid in [
         "zip.iptables.pandar.android:/oauth2redirect",
-        "zip.iptables.pandar.android://auth/callback",
-        "zip.iptables.pandar.android:/auth/callback?state=1",
-        "zip.iptables.pandar.android:/auth/callback#fragment",
+        "zip.iptables.pandar.android:/auth/callback",
+        "zip.iptables.pandar.android://auth/callback?state=1",
+        "zip.iptables.pandar.android://auth/callback#fragment",
         "http://localhost:4100/callback",
         "https://pandar.example/mobile",
     ] {
-        assert!(auth.validate_mobile_redirect_url(invalid).is_err());
+        assert!(
+            auth.validate_mobile_redirect_url(invalid).is_err(),
+            "accepted invalid mobile redirect {invalid}"
+        );
     }
 }
 

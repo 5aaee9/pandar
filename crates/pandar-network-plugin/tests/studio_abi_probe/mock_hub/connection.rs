@@ -27,14 +27,14 @@ pub(super) fn serve_connection_readiness(
             "HTTP/1.1 503 Service Unavailable",
             r#"{"status":"not_ready","checks":{}}"#,
         ),
-        ("HTTP/1.1 200 OK", r#"{"status":"ready","checks":{}}"#),
-        ("HTTP/1.1 200 OK", r#"{"status":"ready","checks":{}}"#),
-        ("HTTP/1.1 200 OK", r#"{"status":"ready"#),
+        ("HTTP/1.1 200 OK", r#"{"status":"ok","checks":{}}"#),
+        ("HTTP/1.1 200 OK", r#"{"status":"ok","checks":{}}"#),
+        ("HTTP/1.1 200 OK", r#"{"status":"ok"#),
         (
             "HTTP/1.1 503 Service Unavailable",
             r#"{"status":"not_ready","checks":{}}"#,
         ),
-        ("HTTP/1.1 200 OK", r#"{"status":"ready","checks":{}}"#),
+        ("HTTP/1.1 200 OK", r#"{"status":"ok","checks":{}}"#),
     ];
     for (status, body) in responses {
         let Some((mut stream, request)) =
@@ -42,7 +42,7 @@ pub(super) fn serve_connection_readiness(
         else {
             return;
         };
-        assert_request(&request, "GET", "/readyz", false);
+        assert_request(&request, "GET", "/healthz", false);
         write_response(&mut stream, status, body);
     }
 }
@@ -98,11 +98,11 @@ pub(super) fn serve_no_auth_recovery(
                     break;
                 }
             }
-            "GET /readyz HTTP/1.1" => {
+            "GET /healthz HTTP/1.1" => {
                 write_response(
                     &mut stream,
                     "HTTP/1.1 200 OK",
-                    r#"{"status":"ready","checks":{}}"#,
+                    r#"{"status":"ok","checks":{}}"#,
                 );
                 break;
             }
@@ -150,12 +150,12 @@ pub(super) fn serve_background_timeout(
     );
     write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
 
-    let (mut stream, request) = next_request(listener, stop, deadline, "GET", "/readyz");
-    assert_request(&request, "GET", "/readyz", false);
+    let (mut stream, request) = next_request(listener, stop, deadline, "GET", "/healthz");
+    assert_request(&request, "GET", "/healthz", false);
     write_response(
         &mut stream,
         "HTTP/1.1 200 OK",
-        r#"{"status":"ready","checks":{}}"#,
+        r#"{"status":"ok","checks":{}}"#,
     );
 
     let (_stream, request) =
@@ -180,12 +180,12 @@ pub(super) fn serve_auth_rejected(listener: &TcpListener, stop: &AtomicBool, dea
     );
     write_response(&mut stream, "HTTP/1.1 200 OK", PRINTERS_RESPONSE);
 
-    let (mut stream, request) = next_request(listener, stop, deadline, "GET", "/readyz");
-    assert_request(&request, "GET", "/readyz", false);
+    let (mut stream, request) = next_request(listener, stop, deadline, "GET", "/healthz");
+    assert_request(&request, "GET", "/healthz", false);
     write_response(
         &mut stream,
         "HTTP/1.1 200 OK",
-        r#"{"status":"ready","checks":{}}"#,
+        r#"{"status":"ok","checks":{}}"#,
     );
 
     let (mut stream, request) =

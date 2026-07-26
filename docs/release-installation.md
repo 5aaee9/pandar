@@ -67,13 +67,15 @@ If startup fails, keep the archive, checksum, target label, OS version, and term
 
 The release archive provides the operator CLI and Bambu Studio plugin library. Deploy the running services with the existing container or NixOS paths:
 
-- `pandar-hub`: Rust API server, default HTTP/WebSocket bind `0.0.0.0:8080`, default gRPC bind `0.0.0.0:50051`.
+- `pandar-hub`: Rust API server, default HTTP/WebSocket bind `127.0.0.1:8080`, default gRPC bind `127.0.0.1:50051`, and default observability bind `127.0.0.1:9090`. External publication must be configured explicitly; non-loopback gRPC also requires TLS.
 - `pandar-web`: Next.js frontend, default bind `0.0.0.0:3000`.
 - `pandar-agent`: local-network agent that connects outward to Hub gRPC and talks to Bambu machines.
 
-The hub needs `PANDAR_DATABASE_URL` and `PANDAR_PRINTER_ACCESS_CODE_KEY`. The latter is the unpadded base64url encoding of exactly 32 random bytes (`openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`) and encrypts persisted Bambu access codes with versioned AES-256-GCM envelopes. Use the same key on every Hub replica and retain it with database backups; a missing or incorrect key prevents startup. The frontend needs `APP_API_URL`, `APP_BASE_URL`, and provider metadata when external auth is used. The agent needs `PANDAR_HUB_GRPC_URL`, tenant and agent IDs, an agent credential, and any `PANDAR_PRINTERS` entries for local machines.
+Hub gRPC accepts at most 1,024 transports globally and, by default, 64 simultaneous unauthenticated/setup transports per source IP. Successful Agent or camera credential authentication transfers that transport into bounded established quotas of 8 connections per Agent and 128 per tenant. Agent messages are capped at 1 MiB; camera chunks have a stricter 64 KiB limit, and retained camera HTTP responses are capped at 32 globally and 2 per tenant. Set `PANDAR_HUB_GRPC_MAX_UNAUTHENTICATED_CONNECTIONS_PER_PEER` to a positive integer when a trusted reverse proxy or NAT requires a different startup burst, and enforce connection/rate limits at that proxy because Hub sees the proxy address rather than the original client.
 
-For Clerk, Logto, or Better Auth deployments, configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, optional audience, and allowed algorithms. Configure `pandar-web` with `APP_AUTH_PROVIDER` and the matching provider metadata, and leave `APP_API_TOKEN` and `APP_AUTH_BEARER_TOKEN` unset. Unknown Web provider values and external-auth/static-token combinations fail startup. Better Auth 1.6.23 uses `keyPairConfig.alg = "RS256"` for RSA JWT signing, matching Pandar's `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` verifier setting.
+The hub needs `PANDAR_DATABASE_URL` and `PANDAR_PRINTER_ACCESS_CODE_KEY`. The latter is the unpadded base64url encoding of exactly 32 random bytes (`openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`) and encrypts persisted Bambu access codes with versioned AES-256-GCM envelopes. Use the same key on every Hub replica and retain it with database backups; a missing or incorrect key prevents startup. The frontend needs `APP_API_URL`, `APP_BASE_URL`, and provider metadata when external auth is used. The agent needs `PANDAR_HUB_GRPC_URL`, tenant and agent IDs, an agent credential, and any `PANDAR_PRINTERS` entries for local machines. If a printer sends a leaf-only TLS certificate that does not chain to Studio's bundled Bambu CA set (observed on P2S), set `PANDAR_BAMBU_CERTIFICATE_SHA256_PINS` to a JSON object such as `{"22E8BJ610801473":"AA:BB:…"}` using a SHA-256 fingerprint verified through a separate trusted channel.
+
+For Clerk, Logto, or Better Auth deployments, configure `pandar-hub` with `PANDAR_EXTERNAL_AUTH_PROVIDER`, issuer, JWKS URL, required audience, and allowed algorithms. Non-loopback JWKS URLs must use HTTPS, and JWKS redirects are rejected. Configure `pandar-web` with `APP_AUTH_PROVIDER` and the matching provider metadata, and leave `APP_API_TOKEN` and `APP_AUTH_BEARER_TOKEN` unset. Unknown Web provider values and external-auth/static-token combinations fail startup. Better Auth 1.6.25 uses `keyPairConfig.alg = "RS256"` for RSA JWT signing, matching Pandar's `PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256` verifier setting.
 
 For local development or explicitly trusted single-user deployments, `PANDAR_HUB_NO_AUTH=true` disables hub HTTP/WebSocket bearer authentication and role checks and emits a startup warning. Do not enable it on an untrusted network. Agent reverse gRPC authentication remains credential-based.
 
@@ -105,6 +107,8 @@ PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256
 PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE=true
 ```
 
+Production startup rejects non-HTTPS Auth base, trusted-origin, Dashboard callback, and sign-out URLs so bearer delivery and session transitions cannot fall back to cleartext.
+
 For SMTP delivery, set `PANDAR_AUTH_EMAIL_PROVIDER=smtp` instead of `resend` and provide `PANDAR_AUTH_SMTP_HOST`, `PANDAR_AUTH_SMTP_PORT`, `PANDAR_AUTH_SMTP_USERNAME`, `PANDAR_AUTH_SMTP_PASSWORD`, and `PANDAR_AUTH_SMTP_TLS=starttls|tls|none`. Runtime startup fails when the selected email provider is incomplete; builds use dummy email settings only so the Next.js package can be compiled without production secrets.
 
 `BETTER_AUTH_SECRET` is also used by Better Auth to encrypt stored JWKS private keys by default. Rotating it without re-encrypting or clearing the issuer `jwks` table makes existing signing keys undecryptable and breaks JWT issuance.
@@ -120,7 +124,7 @@ For agent artifact downloads, set `PANDAR_HUB_API_URL` when `PANDAR_HUB_GRPC_URL
 
 ## Docker Compose Shapes
 
-Use the SQLite compose shape for single-process or local deployments:
+Use the SQLite compose shape for single-process or local deployments. All Compose shapes require `PANDAR_HUB_GRPC_TLS_CERT_FILE` and `PANDAR_HUB_GRPC_TLS_KEY_FILE` host paths because the remotely published Agent gRPC port is TLS-only. HTTP API and Web ports bind to host loopback for termination by a same-host HTTPS reverse proxy:
 
 ```bash
 PANDAR_PRINTER_ACCESS_CODE_KEY=<base64url key> APP_API_TOKEN=<tenant token> APP_TENANT_ID=<tenant uuid> docker compose -f docker-compose.sqlite.yml up --build
@@ -135,7 +139,7 @@ PANDAR_PRINTER_ACCESS_CODE_KEY=<base64url key> POSTGRES_PASSWORD=<db password> A
 Use external auth by setting both Hub verification variables and Web provider variables:
 
 ```bash
-PANDAR_PRINTER_ACCESS_CODE_KEY=<base64url key> PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth PANDAR_EXTERNAL_AUTH_ISSUER=https://auth.example.com PANDAR_EXTERNAL_AUTH_JWKS_URL=https://auth.example.com/api/auth/jwks PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256 APP_AUTH_PROVIDER=betterauth APP_AUTH_BETTER_AUTH_BASE_URL=https://auth.example.com docker compose -f docker-compose.sqlite.yml up --build
+PANDAR_PRINTER_ACCESS_CODE_KEY=<base64url key> PANDAR_EXTERNAL_AUTH_PROVIDER=betterauth PANDAR_EXTERNAL_AUTH_ISSUER=https://auth.example.com PANDAR_EXTERNAL_AUTH_JWKS_URL=https://auth.example.com/api/auth/jwks PANDAR_EXTERNAL_AUTH_AUDIENCE=https://auth.example.com PANDAR_EXTERNAL_AUTH_ALGORITHMS=RS256 APP_BASE_URL=https://pandar.example.com APP_AUTH_PROVIDER=betterauth APP_AUTH_BETTER_AUTH_BASE_URL=https://auth.example.com docker compose -f docker-compose.sqlite.yml up --build
 ```
 
 Use the PostgreSQL plus NATS profile to run the broker-backed deployment shape with S3-compatible artifact storage:
@@ -161,11 +165,11 @@ Use root-owned runtime `EnvironmentFile` paths outside `/nix/store` for every Ni
 Pinned Studio commit `ba049f6a2e08c3b6033660bb84da80c08722974b` (`02.08.01.55`) requires
 both libraries before agent creation. Use the archive's platform files:
 
-| OS      | Network plugin                 | BambuSource companion          | Current native candidate |
-| ------- | ------------------------------ | ------------------------------ | ------------------------ |
-| Linux   | `libpandar_network_plugin.so`  | `libpandar_bambu_source.so`    | `pandar-final16-linux-amd64-019f7b10.tar.gz` |
-| Windows | `pandar_network_plugin.dll`    | `pandar_bambu_source.dll`      | none; successor unbuilt  |
-| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | none; untested          |
+| OS      | Network plugin                   | BambuSource companion          | Current native candidate                     |
+| ------- | -------------------------------- | ------------------------------ | -------------------------------------------- |
+| Linux   | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    | `pandar-final16-linux-amd64-019f7b10.tar.gz` |
+| Windows | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      | none; successor unbuilt                      |
+| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | none; untested                               |
 
 Install both with the CLI:
 
@@ -191,12 +195,12 @@ Keep both original Studio library files for rollback. Typical locations vary by 
 The selected Studio config directory contains account state that must move as one serialized
 namespace:
 
-| File | Purpose | Cleanup rule |
-| --- | --- | --- |
-| `.pandar-plugin-account.lock` | Cross-process account mutation lock. | Leave it in place. Never remove it while any Studio process using this directory is running. |
-| `pandar-plugin-login.json` | Current persisted Studio login, including its bearer credential. | Do not copy, restore, or delete it independently while Studio is running. |
-| `pandar-plugin-pending-revocations.json` | Durable pending-first revocation queue. | Do not delete it merely to suppress a retry; it may be the only recovery path for a still-valid Hub session. |
-| `pandar-plugin-direct-revocation.json` | Fallback intent that must be confirmed before an unstaged DELETE. | Keep it until replay completes or the corresponding Hub session is independently invalidated. |
+| File                                       | Purpose                                                             | Cleanup rule                                                                                                         |
+| ------------------------------------------ | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `.pandar-plugin-account.lock`              | Cross-process account mutation lock.                                | Leave it in place. Never remove it while any Studio process using this directory is running.                         |
+| `pandar-plugin-login.json`                 | Current persisted Studio login, including its bearer credential.    | Do not copy, restore, or delete it independently while Studio is running.                                            |
+| `pandar-plugin-pending-revocations.json`   | Durable pending-first revocation queue.                             | Do not delete it merely to suppress a retry; it may be the only recovery path for a still-valid Hub session.         |
+| `pandar-plugin-direct-revocation.json`     | Fallback intent that must be confirmed before an unstaged DELETE.   | Keep it until replay completes or the corresponding Hub session is independently invalidated.                        |
 | `pandar-plugin-completed-revocations.json` | Hub URL plus token-hash tombstones that block stale login rewrites. | It is unbounded and has no automatic compaction; apply the full manual-reset prerequisites below before clearing it. |
 
 For a manual account-state reset, first stop every Bambu Studio process that uses this config
@@ -354,28 +358,28 @@ Historical final13 PostgreSQL 16.14 harness `0c292295-f9ab-459b-89c2-ea74f2c9ff5
 `7e04ae355f7bca3fb409bbc700b5c8f160194c0d2f9ec82df823c859566a2db7`; source read-only and
 cleanup checks passed.
 
-| Target label | Current operator status | Reason | Next action |
-| --- | --- | --- | --- |
-| `linux-amd64` | `in_progress` | Current final16 passed native package/ABI/release-smoke/runtime, ASan/LSan, and the narrow exact-AppImage model-task callback gate. Real authentication and the live Hub/Agent/printer path remain pending. | Use only the checksum-verified final16 Linux archive for this slice. Do not claim full compatibility until real sign-in/ticket/token/profile/printer/job/outage/logout rows pass; hardware and live firmware require separate authorization. |
-| `windows-amd64` | `in_progress` | Historical final13 passed native MSVC layout, CLI, ABI, export, companion, and packaged-smoke gates, but predates the later fixes. No final16 Windows package or real Windows Studio evidence exists. | Build and validate a native MSVC final16 successor, then keep operator status `in_progress` until a real exact-version Windows Studio session is recorded. |
-| `linux-arm64` | `untested` | No current three-file native candidate exists. | Do not publish a Studio compatibility claim. |
-| `windows-arm64` | `untested` | No current three-file native candidate exists. | Do not publish a Studio compatibility claim. |
-| `macos-amd64` | `untested` | No current native candidate or real Studio evidence exists. | Do not publish a Studio compatibility claim. |
-| `macos-arm64` | `untested` | No current native candidate or real Studio evidence exists. | Do not publish a Studio compatibility claim. |
+| Target label    | Current operator status | Reason                                                                                                                                                                                                      | Next action                                                                                                                                                                                                                                  |
+| --------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `linux-amd64`   | `in_progress`           | Current final16 passed native package/ABI/release-smoke/runtime, ASan/LSan, and the narrow exact-AppImage model-task callback gate. Real authentication and the live Hub/Agent/printer path remain pending. | Use only the checksum-verified final16 Linux archive for this slice. Do not claim full compatibility until real sign-in/ticket/token/profile/printer/job/outage/logout rows pass; hardware and live firmware require separate authorization. |
+| `windows-amd64` | `in_progress`           | Historical final13 passed native MSVC layout, CLI, ABI, export, companion, and packaged-smoke gates, but predates the later fixes. No final16 Windows package or real Windows Studio evidence exists.       | Build and validate a native MSVC final16 successor, then keep operator status `in_progress` until a real exact-version Windows Studio session is recorded.                                                                                   |
+| `linux-arm64`   | `untested`              | No current three-file native candidate exists.                                                                                                                                                              | Do not publish a Studio compatibility claim.                                                                                                                                                                                                 |
+| `windows-arm64` | `untested`              | No current three-file native candidate exists.                                                                                                                                                              | Do not publish a Studio compatibility claim.                                                                                                                                                                                                 |
+| `macos-amd64`   | `untested`              | No current native candidate or real Studio evidence exists.                                                                                                                                                 | Do not publish a Studio compatibility claim.                                                                                                                                                                                                 |
+| `macos-arm64`   | `untested`              | No current native candidate or real Studio evidence exists.                                                                                                                                                 | Do not publish a Studio compatibility claim.                                                                                                                                                                                                 |
 
 ## Operations Runbook
 
 SQLite single-node checks:
 
-- Check `/readyz` before exposing the deployment. `database=1`, `artifact_storage=1`, and `grpc=1` are required for normal service.
-- Check `/metrics` for `pandar_readyz`, command/job counts, WebSocket ticket counters, control-plane counters, and print-report counters.
+- Check `/readyz` on the private observability listener (default `127.0.0.1:9090`) before exposing the deployment. `database=1`, `artifact_storage=1`, and `grpc=1` are required for normal service.
+- Check `/metrics` on the private observability listener for `pandar_readyz`, command/job counts, WebSocket ticket counters, control-plane counters, and print-report counters.
 - Back up both the SQLite database and filesystem artifact directory together. A database backup without matching artifact files cannot restore pending print artifacts.
 
 PostgreSQL + NATS + object-storage checks:
 
 - Verify PostgreSQL readiness and migration completion before adding additional Hub replicas.
 - Verify `PANDAR_CONTROL_PLANE=nats`, `PANDAR_NATS_URL`, and object-storage variables on every Hub replica.
-- Check `/metrics` for `pandar_control_plane_messages_total`, `pandar_agent_sessions`, `pandar_commands_total`, `pandar_jobs_total`, `pandar_print_reports_total`, and `pandar_readyz`.
+- Check `/metrics` on the private observability listener for `pandar_control_plane_messages_total`, `pandar_agent_sessions`, `pandar_commands_total`, `pandar_jobs_total`, `pandar_print_reports_total`, and `pandar_readyz`.
 - Run the local Phase 26 dry-run harness and `--live-preflight` during release validation, then record any disposable live PostgreSQL/NATS/object-storage soak in `docs/compatibility/phase-26-soak-evidence.md`.
 
 Recovery checks:

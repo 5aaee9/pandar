@@ -1,6 +1,9 @@
 use anyhow::{Context, ensure};
 
-use crate::{PluginHttpResult, RequestKind, cancellation::RequestCancellation, http, result};
+use crate::{
+    PluginHttpResult, RequestKind, cancellation::RequestCancellation, http, normalize_hub_url,
+    result,
+};
 
 use super::{
     account_result, borrowed, canonical_hub_identity, diagnosed, persistence,
@@ -123,7 +126,7 @@ fn revoke_with_cancellation(
         .report("pandar staged-revocation login removal durability warning");
     persistence::confirm(config_dir)
         .context("confirm pending revocation and login removal before plugin revocation")?;
-    let url = format!("{}/api/v1/plugin/session", revocation.hub_url);
+    let url = revocation_url(&revocation)?;
     let response = http::cancellable::delete_session(
         &url,
         &revocation.token,
@@ -157,13 +160,15 @@ pub(super) fn revoke_orphan(
         }
         Err(error) => {
             eprintln!("pandar direct orphan revocation persistence failed: {error:#}");
-            Ok(revoke_best_effort_orphan(revocation))
+            revoke_best_effort_orphan(revocation)
         }
     }
 }
 
-fn revoke_best_effort_orphan(revocation: PendingRevocation) -> Option<PluginHttpResult> {
-    let url = format!("{}/api/v1/plugin/session", revocation.hub_url);
+fn revoke_best_effort_orphan(
+    revocation: PendingRevocation,
+) -> anyhow::Result<Option<PluginHttpResult>> {
+    let url = revocation_url(&revocation)?;
     let response = http::delete_session(&url, &revocation.token, RequestKind::PluginSession);
     if response.status == 0 || matches!(response.http_code, 401 | 410) {
         crate::pandar_plugin_free_with_capacity(
@@ -171,9 +176,9 @@ fn revoke_best_effort_orphan(revocation: PendingRevocation) -> Option<PluginHttp
             response.body_len,
             response.body_cap,
         );
-        None
+        Ok(None)
     } else {
-        Some(response)
+        Ok(Some(response))
     }
 }
 
@@ -182,7 +187,7 @@ fn revoke_direct(
     revocation: PendingRevocation,
     cancellation: RequestCancellation,
 ) -> anyhow::Result<Option<PluginHttpResult>> {
-    let url = format!("{}/api/v1/plugin/session", revocation.hub_url);
+    let url = revocation_url(&revocation)?;
     let response = http::cancellable::delete_session(
         &url,
         &revocation.token,
@@ -203,6 +208,12 @@ fn revoke_direct(
     }
 }
 
+fn revocation_url(revocation: &PendingRevocation) -> anyhow::Result<String> {
+    let hub_url = normalize_hub_url(revocation.hub_url.clone())
+        .context("pending revocation has an insecure or invalid Hub URL")?;
+    Ok(format!("{hub_url}/api/v1/plugin/session"))
+}
+
 pub(super) fn revocation_result(
     work: anyhow::Result<Option<PluginHttpResult>>,
 ) -> PluginHttpResult {
@@ -210,5 +221,20 @@ pub(super) fn revocation_result(
         Ok(Some(response)) => response,
         Ok(None) => result(0, 204, ""),
         Err(error) => diagnosed(error),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn revocation_url_rejects_remote_cleartext_hub() {
+        let revocation = PendingRevocation {
+            hub_url: "http://hub.example.test".to_owned(),
+            token: "secret".to_owned(),
+        };
+
+        assert!(revocation_url(&revocation).is_err());
     }
 }

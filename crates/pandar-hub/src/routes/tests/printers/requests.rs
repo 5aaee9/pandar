@@ -91,7 +91,7 @@ pub(super) fn printer_select_extruder_body(extruder_id: u32) -> Option<Value> {
 }
 
 pub(super) fn link_printer_body(access_code: &str) -> Value {
-    link_printer_value("BambuLab", "192.0.2.10", access_code, Some("Office X1C"))
+    link_printer_value("BambuLab", "192.168.2.10", access_code, Some("Office X1C"))
 }
 
 pub(super) fn link_printer_value(

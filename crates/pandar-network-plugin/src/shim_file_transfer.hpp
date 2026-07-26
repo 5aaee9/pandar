@@ -62,6 +62,9 @@ PANDAR_ABI void ft_tunnel_release(FT_TunnelHandle* h) { release(reinterpret_cast
 PANDAR_ABI ft_err ft_tunnel_start_connect(FT_TunnelHandle* h, ft_tunnel_connect_cb cb, void* user) {
     auto* tunnel = reinterpret_cast<Tunnel*>(h);
     if (!tunnel) return FT_EINVAL;
+    retain(tunnel);
+    auto status_cb = tunnel->status_cb;
+    auto* status_user = tunnel->status_user;
     auto result = pandar::network_plugin::pandar_plugin_studio_file_transfer_unavailable();
     std::string message;
     if (result.body_ptr && result.body_len > 0) {
@@ -71,9 +74,10 @@ PANDAR_ABI ft_err ft_tunnel_start_connect(FT_TunnelHandle* h, ft_tunnel_connect_
         result.body_ptr, result.body_len, result.body_cap
     );
     if (cb) cb(user, 1, FT_EIO, message.c_str());
-    if (tunnel->status_cb) {
-        tunnel->status_cb(tunnel->status_user, 0, -1, FT_EIO, message.c_str());
+    if (status_cb) {
+        status_cb(status_user, 0, -1, FT_EIO, message.c_str());
     }
+    release(tunnel);
     return FT_OK;
 }
 

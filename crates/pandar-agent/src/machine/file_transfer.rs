@@ -159,26 +159,11 @@ pub trait MachineFileTransfer: Send + Sync {
 }
 
 pub fn transfer_attempt_order(
-    endpoint: &BambuPrinterEndpoint,
-    cache: &TransferModeCache,
-    force_clear: bool,
+    _endpoint: &BambuPrinterEndpoint,
+    _cache: &TransferModeCache,
+    _force_clear: bool,
 ) -> Vec<TransferProtectionMode> {
-    if let Some(mode) = cache.get(&endpoint.host) {
-        return vec![mode];
-    }
-
-    if force_clear {
-        return vec![TransferProtectionMode::ClearData];
-    }
-
-    if ftps_clear_data_fallback(endpoint.model.as_deref()) {
-        vec![
-            TransferProtectionMode::ProtectedData,
-            TransferProtectionMode::ClearData,
-        ]
-    } else {
-        vec![TransferProtectionMode::ProtectedData]
-    }
+    vec![TransferProtectionMode::ProtectedData]
 }
 
 pub async fn run_with_transfer_mode<F, Fut, T>(

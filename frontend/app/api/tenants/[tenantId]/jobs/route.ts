@@ -1,37 +1,40 @@
-import { apiHeaders } from '../../../../api-auth'
-import { apiIdSegment, invalidApiIdResponse, isApiId } from '@/app/api-path'
+import { apiHeaders } from "../../../../api-auth";
+import { apiIdSegment, invalidApiIdResponse, isApiId } from "@/app/api-path";
+import { rejectCrossOriginMutation } from "@/app/request-security";
 
-const apiUrl = process.env.APP_API_URL ?? 'http://localhost:8080'
+const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function DELETE(
   request: Request,
   context: { params: Promise<{ tenantId: string }> },
 ): Promise<Response> {
-  const { tenantId } = await context.params
+  const rejected = rejectCrossOriginMutation(request);
+  if (rejected) return rejected;
+  const { tenantId } = await context.params;
   if (!isApiId(tenantId)) {
-    return invalidApiIdResponse()
+    return invalidApiIdResponse();
   }
   const upstream = await fetch(
-    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, 'tenant_id')}/jobs`,
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/jobs`,
     {
-      method: 'DELETE',
-      cache: 'no-store',
+      method: "DELETE",
+      cache: "no-store",
       headers: await apiHeaders(),
       signal: request.signal,
     },
-  )
+  );
 
-  const headers = new Headers({ 'cache-control': 'no-store' })
-  const contentType = upstream.headers.get('content-type')
+  const headers = new Headers({ "cache-control": "no-store" });
+  const contentType = upstream.headers.get("content-type");
   if (contentType) {
-    headers.set('content-type', contentType)
+    headers.set("content-type", contentType);
   }
 
   return new Response(upstream.body, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers,
-  })
+  });
 }

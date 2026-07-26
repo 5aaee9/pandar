@@ -25,7 +25,7 @@ pub(super) async fn authorize_tenant(
             }
         }
         AuthenticatedPrincipal::TenantToken(authenticated) => {
-            if !(authenticated.token.has_scope(TenantTokenScope::All)
+            if !(tenant_token_allows_role(authenticated, required_role)
                 || required_role == UserRole::Viewer && authenticated.token.scopes.is_empty())
             {
                 return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
@@ -103,17 +103,32 @@ pub(super) async fn authorize_plugin_login_ticket_creation(
     headers: &HeaderMap,
     tenant_id: TenantId,
 ) -> Result<AuthenticatedPrincipal, ApiError> {
+    authorize_user_login_ticket_creation(state, headers, tenant_id, UserRole::Operator).await
+}
+
+pub(super) async fn authorize_mobile_login_ticket_creation(
+    state: &AppState,
+    headers: &HeaderMap,
+    tenant_id: TenantId,
+) -> Result<AuthenticatedPrincipal, ApiError> {
+    authorize_user_login_ticket_creation(state, headers, tenant_id, UserRole::Operator).await
+}
+
+async fn authorize_user_login_ticket_creation(
+    state: &AppState,
+    headers: &HeaderMap,
+    tenant_id: TenantId,
+    required_role: UserRole,
+) -> Result<AuthenticatedPrincipal, ApiError> {
     let principal = authorize_principal(state, headers, tenant_id).await?;
     match &principal {
         AuthenticatedPrincipal::User(authenticated) => {
-            if !authenticated.user.role.allows(UserRole::Viewer) {
+            if !authenticated.user.role.allows(required_role) {
                 return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
             }
         }
-        AuthenticatedPrincipal::TenantToken(authenticated) => {
-            if !authenticated.token.has_scope(TenantTokenScope::All) {
-                return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
-            }
+        AuthenticatedPrincipal::TenantToken(_) => {
+            return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
         }
         AuthenticatedPrincipal::NoAuth { .. } => {}
     }
@@ -130,7 +145,13 @@ pub(super) async fn authorize_plugin_studio(
         .authenticate_tenant_token(token)
         .await?
         .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "invalid_auth_token"))?;
-    if authenticated.token.scopes != [TenantTokenScope::PluginStudio] {
+    if authenticated.token.scopes != [TenantTokenScope::PluginStudio]
+        || !state.no_auth_enabled()
+            && !authenticated
+                .session_user
+                .as_ref()
+                .is_some_and(|user| user.role.allows(UserRole::Operator))
+    {
         return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
     }
     Ok(authenticated)
@@ -221,13 +242,25 @@ async fn authorize_principal_for_role(
             }
         }
         AuthenticatedPrincipal::TenantToken(authenticated) => {
-            if !authenticated.token.has_scope(TenantTokenScope::All) {
+            if !tenant_token_allows_role(authenticated, required_role) {
                 return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
             }
         }
         AuthenticatedPrincipal::NoAuth { .. } => {}
     }
     Ok(principal)
+}
+
+fn tenant_token_allows_role(
+    authenticated: &crate::repositories::AuthenticatedTenantToken,
+    required_role: UserRole,
+) -> bool {
+    authenticated.token.has_scope(TenantTokenScope::All)
+        || authenticated.token.scopes == [TenantTokenScope::MobileSession]
+            && authenticated
+                .session_user
+                .as_ref()
+                .is_some_and(|user| user.role.allows(required_role))
 }
 
 pub(super) async fn authorize_principal(

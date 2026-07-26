@@ -27,7 +27,13 @@ struct ReadyzCheck {
 
 #[tokio::test]
 async fn readyz_reports_disabled_external_auth_as_ready() {
-    let (status, body) = request(router(raw_state().await), Method::GET, "/readyz", None).await;
+    let (status, body) = request(
+        observability_router(raw_state().await),
+        Method::GET,
+        "/readyz",
+        None,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     let body = decode::<ReadyzResponse>(body);
@@ -52,7 +58,7 @@ async fn readyz_reports_artifact_storage_failure() {
     let file_path = temp_dir.path().join("not-a-directory");
     std::fs::write(&file_path, b"file").unwrap();
     let storage = crate::jobs::JobStorageConfig::new(&file_path, 1024).unwrap();
-    let app = router(AppState::from_database(database, storage).await.unwrap());
+    let app = observability_router(AppState::from_database(database, storage).await.unwrap());
 
     let (status, body) = request(app, Method::GET, "/readyz", None).await;
 
@@ -71,7 +77,7 @@ async fn readyz_reports_filesystem_not_shared_for_postgres_nats() {
         .await
         .with_database_backend_for_tests(crate::db::DatabaseBackend::Postgres)
         .with_control_plane_for_tests(crate::cluster::ControlPlane::nats_for_tests());
-    let app = router(state);
+    let app = observability_router(state);
 
     let (status, body) = request(app, Method::GET, "/readyz", None).await;
 
@@ -93,7 +99,7 @@ async fn metrics_reports_ready_with_explicit_shared_filesystem_override() {
         .await
         .with_database_backend_for_tests(crate::db::DatabaseBackend::Postgres)
         .with_control_plane_for_tests(crate::cluster::ControlPlane::nats_for_tests());
-    let app = router(state);
+    let app = observability_router(state);
 
     let (status, body) = request(app.clone(), Method::GET, "/readyz", None).await;
     assert_eq!(status, StatusCode::OK);
@@ -121,7 +127,7 @@ async fn metrics_reports_ready_with_explicit_shared_filesystem_override() {
 #[tokio::test]
 async fn metrics_redacts_tenant_ids_and_reports_required_series() {
     let state = state().await;
-    let app = router(state.clone());
+    let app = observability_router(state.clone());
     let tenant = state
         .tenants()
         .create("metrics-acme", "Metrics Acme")

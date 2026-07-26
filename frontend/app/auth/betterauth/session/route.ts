@@ -3,8 +3,11 @@ import { NextResponse } from "next/server";
 import { authProviderConfig } from "../../../auth-provider";
 import { clearedAuthCookieOptions, readAuthCookieConfig } from "../cookie";
 import { safeSignOutRedirectTarget } from "../sign-out-redirect";
+import { rejectTrustedAuthSignOutMutation } from "../../../request-security";
 
 export function POST(request: Request) {
+  const rejected = rejectTrustedAuthSignOutMutation(request);
+  if (rejected) return rejected;
   const requestUrl = new URL(request.url);
   const target = safeSignOutRedirectTarget(
     requestUrl.searchParams.get("next"),

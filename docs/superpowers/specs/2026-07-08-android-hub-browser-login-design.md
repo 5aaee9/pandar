@@ -18,13 +18,13 @@ Existing plugin callback validation only accepts loopback `http://localhost|127.
 2. Android sign-in builds a browser URL:
 
    ```text
-   {hubBaseUrl}/mobile-sign-in?redirect_url=zip.iptables.pandar.android:/auth/callback
+   {hubBaseUrl}/mobile-sign-in?redirect_url=zip.iptables.pandar.android://auth/callback
    ```
 
 3. The mobile sign-in frontend page reuses the authenticated dashboard session and tenant selection behavior from `/plugin-sign-in`.
 4. On submit, the frontend calls a Hub mobile login-ticket creation endpoint for the selected tenant.
 5. The frontend redirects the browser to the provided Android callback URL with `ticket=<one-use ticket>` and `redirect_url=<callback URL>`.
-6. `MainActivity` receives `zip.iptables.pandar.android:/auth/callback?...`, forwards it to `AuthRepository`, and `AuthRepository` exchanges the ticket with Hub.
+6. `MainActivity` receives `zip.iptables.pandar.android://auth/callback?...`, forwards it to `AuthRepository`, and `AuthRepository` exchanges the ticket with Hub.
 7. The exchange response stores the returned tenant token, token expiry, and tenant id in Android settings.
 8. Existing tenant-scoped Android API and WebSocket calls continue to use `SettingsRepository.currentToken()` and `currentTenant()`.
 
@@ -40,7 +40,7 @@ POST /api/v1/mobile/login-tickets/exchange
 The mobile callback validator accepts only:
 
 ```text
-zip.iptables.pandar.android:/auth/callback
+zip.iptables.pandar.android://auth/callback
 ```
 
 without fragments or userinfo. Plugin redirect validation remains loopback-only.

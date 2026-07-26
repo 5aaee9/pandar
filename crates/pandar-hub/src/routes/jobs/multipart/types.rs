@@ -42,6 +42,7 @@ pub(in crate::routes::jobs) struct MultipartPrintFields {
     pub(super) slicer_uid: Option<String>,
     pub(super) unknown_field: bool,
     pub(in crate::routes::jobs) file: Option<StagedUpload>,
+    pub(super) _staging_permit: Option<super::staging::StagingPermit>,
 }
 
 impl MultipartPrintFields {
@@ -57,6 +58,12 @@ pub(in crate::routes::jobs) struct StagedUpload {
     pub(in crate::routes::jobs) path: std::path::PathBuf,
     pub(in crate::routes::jobs) filename: Option<String>,
     pub(in crate::routes::jobs) content_type: Option<String>,
+}
+
+impl Drop for StagedUpload {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 pub(super) struct PreparedPrintJob {

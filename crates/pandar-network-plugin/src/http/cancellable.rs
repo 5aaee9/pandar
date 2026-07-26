@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    NO_AUTH_SESSION_POST_TIMEOUT, PLUGIN_SESSION_DELETE_TIMEOUT, execute_request,
+    NO_AUTH_SESSION_POST_TIMEOUT, PLUGIN_SESSION_DELETE_TIMEOUT, client, execute_request,
     post_request_context, response_result_with_writer, write_network_error,
 };
 
@@ -35,7 +35,7 @@ pub(super) fn post_json_with_connect_failure_with_writer(
     writer: &mut impl Write,
 ) -> PluginHttpResult {
     let response = runtime().block_on(async {
-        let request = reqwest::Client::new().post(url).json(&body);
+        let request = client().post(url).json(&body);
         tokio::select! {
             biased;
             () = cancellation.wait() => None,
@@ -84,7 +84,7 @@ fn delete_session_with_writer(
     writer: &mut impl Write,
 ) -> PluginHttpResult {
     let response = runtime().block_on(async {
-        let request = reqwest::Client::new().delete(url).bearer_auth(token);
+        let request = client().delete(url).bearer_auth(token);
         tokio::select! {
             biased;
             () = cancellation.wait() => None,

@@ -74,7 +74,7 @@ fn unchanged_readyz_does_not_swallow_pending_printer_recovery_transition() {
             "HTTP/1.1 200 OK",
             PRINTERS_RESPONSE,
         ),
-        ("/readyz", "HTTP/1.1 200 OK", r#"{"status":"ready"}"#),
+        ("/healthz", "HTTP/1.1 200 OK", r#"{"status":"ok"}"#),
     ]);
     let session = create_session(&hub_url);
 
@@ -113,7 +113,7 @@ fn authenticated_rejection_proves_hub_reachability_from_unknown_and_disconnected
             r#"{"error":"invalid_auth_token"}"#,
         ),
         (
-            "/readyz",
+            "/healthz",
             "HTTP/1.1 503 Service Unavailable",
             r#"{"status":"not_ready"}"#,
         ),
@@ -160,11 +160,11 @@ fn authenticated_rejection_proves_hub_reachability_from_unknown_and_disconnected
 fn newer_reachability_invalidates_old_ticket_and_claim_is_once_only() {
     let (hub_url, server) = spawn_server(vec![
         (
-            "/readyz",
+            "/healthz",
             "HTTP/1.1 503 Service Unavailable",
             r#"{"status":"not_ready"}"#,
         ),
-        ("/readyz", "HTTP/1.1 200 OK", r#"{"status":"ready"}"#),
+        ("/healthz", "HTTP/1.1 200 OK", r#"{"status":"ok"}"#),
     ]);
     let session = create_session(&hub_url);
 

@@ -33,7 +33,41 @@ export function validateAuthConfiguration(): AuthProvider {
       "APP_API_TOKEN and APP_AUTH_BEARER_TOKEN are mutually exclusive",
     );
   }
+  if (process.env.NODE_ENV === "production" && provider !== "none") {
+    if (!process.env.APP_BASE_URL?.trim().startsWith("https://")) {
+      throw new Error(
+        "APP_BASE_URL must use https when external authentication is enabled in production",
+      );
+    }
+    if (provider === "logto") {
+      requireHttpsUrl(
+        "APP_AUTH_LOGTO_ENDPOINT",
+        process.env.APP_AUTH_LOGTO_ENDPOINT,
+      );
+    }
+    if (provider === "betterauth") {
+      requireHttpsUrl(
+        "APP_AUTH_BETTER_AUTH_BASE_URL",
+        process.env.APP_AUTH_BETTER_AUTH_BASE_URL,
+      );
+    }
+  }
   return provider;
+}
+
+function requireHttpsUrl(name: string, value: string | undefined) {
+  if (!value) {
+    return;
+  }
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a valid https URL in production`);
+  }
+  if (url.protocol !== "https:") {
+    throw new Error(`${name} must use https in production`);
+  }
 }
 
 function providerValue(value: string | undefined): AuthProvider {
@@ -54,7 +88,7 @@ function signInUrl(
     return `${config.logtoEndpoint.replace(/\/$/, "")}/sign-in`;
   }
   if (provider === "betterauth" && config.betterAuthBaseUrl) {
-    return `${config.betterAuthBaseUrl.replace(/\/$/, "")}/sign-in`;
+    return "/auth/betterauth/start";
   }
   return provider === "clerk" ? "/sign-in" : null;
 }

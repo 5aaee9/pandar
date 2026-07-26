@@ -1,15 +1,13 @@
 use std::path::PathBuf;
 
-use base64::{Engine as _, engine::general_purpose::STANDARD};
-use rsa::{
-    RsaPrivateKey,
-    pkcs1v15::SigningKey,
-    pkcs8::DecodePrivateKey,
-    signature::{SignatureEncoding, Signer},
+use aws_lc_rs::{
+    rand::SystemRandom,
+    signature::{RSA_PKCS1_SHA256, RsaKeyPair},
 };
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use rustls::pki_types::{PrivateKeyDer, pem::PemObject};
 use serde::Serialize;
 use serde_json::Value;
-use sha2::Sha256;
 
 use super::commands::payload::{ProjectFilePayload, ProjectFilePayloadPrint, json_payload};
 
@@ -32,14 +30,25 @@ pub(crate) fn maybe_sign_project_file_payload(
     let Ok(to_sign_bytes) = serde_json::to_vec(&to_sign) else {
         return json_payload(project);
     };
-    let signing_key = SigningKey::<Sha256>::new(key);
-    let signature = signing_key.sign(&to_sign_bytes);
+    let mut signature = vec![0_u8; key.public_modulus_len()];
+    if key
+        .sign(
+            &RSA_PKCS1_SHA256,
+            &SystemRandom::new(),
+            &to_sign_bytes,
+            &mut signature,
+        )
+        .is_err()
+    {
+        tracing::warn!("failed to sign Bambu project_file payload");
+        return json_payload(project);
+    }
     serde_json::to_value(SignedProjectFileEnvelope {
         header: SignedProjectFileHeader {
             cert_id: slicer_cert_id().unwrap_or_default(),
             payload_len: to_sign_bytes.len(),
             sign_alg: "RSA_SHA256",
-            sign_string: STANDARD.encode(signature.to_bytes()),
+            sign_string: STANDARD.encode(signature),
             sign_ver: "v1.0",
         },
         print: project.print,
@@ -67,10 +76,13 @@ struct SignedProjectFileHeader {
     sign_ver: &'static str,
 }
 
-fn slicer_key() -> Option<RsaPrivateKey> {
+fn slicer_key() -> Option<RsaKeyPair> {
     let path = slicer_key_path()?;
-    let pem = std::fs::read_to_string(path).ok()?;
-    RsaPrivateKey::from_pkcs8_pem(&pem).ok()
+    let pem = std::fs::read(path).ok()?;
+    let key = PrivateKeyDer::from_pem_slice(&pem).ok()?;
+    RsaKeyPair::from_pkcs8(key.secret_der())
+        .or_else(|_| RsaKeyPair::from_der(key.secret_der()))
+        .ok()
 }
 
 fn slicer_cert_id() -> Option<String> {

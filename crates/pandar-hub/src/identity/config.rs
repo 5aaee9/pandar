@@ -11,8 +11,9 @@ const ALGORITHMS_VAR: &str = "PANDAR_EXTERNAL_AUTH_ALGORITHMS";
 const AUTHORIZED_PARTIES_VAR: &str = "PANDAR_EXTERNAL_AUTH_AUTHORIZED_PARTIES";
 const REQUIRED_SCOPES_VAR: &str = "PANDAR_EXTERNAL_AUTH_REQUIRED_SCOPES";
 const LEEWAY_SECONDS_VAR: &str = "PANDAR_EXTERNAL_AUTH_LEEWAY_SECONDS";
+const MAX_TOKEN_LIFETIME_SECONDS_VAR: &str = "PANDAR_EXTERNAL_AUTH_MAX_TOKEN_LIFETIME_SECONDS";
 
-const EXTERNAL_AUTH_VARS: [&str; 8] = [
+const EXTERNAL_AUTH_VARS: [&str; 9] = [
     PROVIDER_VAR,
     ISSUER_VAR,
     JWKS_URL_VAR,
@@ -21,6 +22,7 @@ const EXTERNAL_AUTH_VARS: [&str; 8] = [
     AUTHORIZED_PARTIES_VAR,
     REQUIRED_SCOPES_VAR,
     LEEWAY_SECONDS_VAR,
+    MAX_TOKEN_LIFETIME_SECONDS_VAR,
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,11 +30,12 @@ pub struct ExternalAuthConfig {
     pub provider: String,
     pub issuer: String,
     pub jwks_url: String,
-    pub audience: Option<String>,
+    pub audience: String,
     pub algorithms: Vec<Algorithm>,
     pub authorized_parties: Vec<String>,
     pub required_scopes: Vec<String>,
     pub leeway_seconds: u64,
+    pub max_token_lifetime_seconds: u64,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -47,6 +50,12 @@ pub enum ExternalAuthConfigError {
     UnsupportedAlgorithm(String),
     #[error("invalid external auth leeway seconds")]
     InvalidLeeway,
+    #[error("invalid external auth maximum token lifetime seconds")]
+    InvalidMaxTokenLifetime,
+    #[error("invalid external auth JWKS URL")]
+    InvalidJwksUrl,
+    #[error("external auth JWKS URL must use https for a non-loopback host")]
+    InsecureJwksUrl,
 }
 
 impl ExternalAuthConfig {
@@ -77,8 +86,8 @@ impl ExternalAuthConfig {
         }
 
         let issuer = required(&vars, ISSUER_VAR)?;
-        let jwks_url = required(&vars, JWKS_URL_VAR)?;
-        let audience = value(&vars, AUDIENCE_VAR);
+        let jwks_url = validate_jwks_url(required(&vars, JWKS_URL_VAR)?)?;
+        let audience = required(&vars, AUDIENCE_VAR)?;
         let algorithms = value(&vars, ALGORITHMS_VAR)
             .map(|value| parse_algorithms(&value))
             .transpose()?
@@ -93,6 +102,16 @@ impl ExternalAuthConfig {
             })
             .transpose()?
             .unwrap_or(60);
+        let max_token_lifetime_seconds = value(&vars, MAX_TOKEN_LIFETIME_SECONDS_VAR)
+            .map(|value| {
+                value
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|value| *value > 0)
+                    .ok_or(ExternalAuthConfigError::InvalidMaxTokenLifetime)
+            })
+            .transpose()?
+            .unwrap_or(86_400);
 
         Ok(Some(Self {
             provider,
@@ -103,7 +122,27 @@ impl ExternalAuthConfig {
             authorized_parties,
             required_scopes,
             leeway_seconds,
+            max_token_lifetime_seconds,
         }))
+    }
+}
+
+fn validate_jwks_url(value: String) -> Result<String, ExternalAuthConfigError> {
+    let url = reqwest::Url::parse(&value).map_err(|_| ExternalAuthConfigError::InvalidJwksUrl)?;
+    match url.scheme() {
+        "https" => Ok(value),
+        "http"
+            if url.host_str().is_some_and(|host| {
+                host.eq_ignore_ascii_case("localhost")
+                    || host
+                        .parse::<std::net::IpAddr>()
+                        .is_ok_and(|address| address.is_loopback())
+            }) =>
+        {
+            Ok(value)
+        }
+        "http" => Err(ExternalAuthConfigError::InsecureJwksUrl),
+        _ => Err(ExternalAuthConfigError::InvalidJwksUrl),
     }
 }
 
@@ -177,6 +216,7 @@ pub(crate) mod tests_support {
                 JWKS_URL_VAR.to_owned(),
                 "https://issuer.example.test/.well-known/jwks.json".to_owned(),
             ),
+            (AUDIENCE_VAR.to_owned(), "pandar".to_owned()),
         ];
         vars.extend(
             extra
@@ -189,6 +229,7 @@ pub(crate) mod tests_support {
     pub(crate) const AUDIENCE_VAR: &str = super::AUDIENCE_VAR;
     pub(crate) const ALGORITHMS_VAR: &str = super::ALGORITHMS_VAR;
     pub(crate) const ISSUER_VAR: &str = super::ISSUER_VAR;
+    pub(crate) const JWKS_URL_VAR: &str = super::JWKS_URL_VAR;
     pub(crate) const REQUIRED_SCOPES_VAR: &str = super::REQUIRED_SCOPES_VAR;
 }
 
@@ -196,7 +237,9 @@ pub(crate) mod tests_support {
 mod tests {
     use super::{
         ExternalAuthConfig, ExternalAuthConfigError,
-        tests_support::{ALGORITHMS_VAR, ISSUER_VAR, base_vars, config_from_vars},
+        tests_support::{
+            ALGORITHMS_VAR, AUDIENCE_VAR, ISSUER_VAR, JWKS_URL_VAR, base_vars, config_from_vars,
+        },
     };
     use jsonwebtoken::Algorithm;
 
@@ -208,6 +251,34 @@ mod tests {
         )]);
 
         assert_eq!(result, Err(ExternalAuthConfigError::PartialWithoutProvider));
+    }
+
+    #[test]
+    fn external_auth_requires_audience() {
+        let mut vars = base_vars([]);
+        vars.retain(|(name, _)| name != AUDIENCE_VAR);
+
+        assert_eq!(
+            ExternalAuthConfig::from_vars(vars),
+            Err(ExternalAuthConfigError::Missing(AUDIENCE_VAR))
+        );
+    }
+
+    #[test]
+    fn external_auth_rejects_cleartext_remote_jwks() {
+        let result = ExternalAuthConfig::from_vars(base_vars([(
+            JWKS_URL_VAR,
+            "http://issuer.example.test/.well-known/jwks.json",
+        )]));
+
+        assert_eq!(result, Err(ExternalAuthConfigError::InsecureJwksUrl));
+        assert!(
+            ExternalAuthConfig::from_vars(base_vars([(
+                JWKS_URL_VAR,
+                "http://127.0.0.1:4100/.well-known/jwks.json",
+            )]))
+            .is_ok()
+        );
     }
 
     #[test]

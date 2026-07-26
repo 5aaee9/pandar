@@ -18,6 +18,7 @@ pub mod machine;
 pub mod protocol;
 mod session_supervisor;
 mod startup;
+mod transport_security;
 
 pub use backoff::ReconnectBackoff;
 use backoff::{DEFAULT_REPORT_TIMEOUT, HEARTBEAT_INTERVAL, RunOutcome};
@@ -33,6 +34,7 @@ use session_supervisor::SessionSupervisor;
 #[cfg(test)]
 use session_supervisor::reap_session_task;
 use startup::startup_printers;
+use transport_security::validate_hub_transport_urls;
 
 #[cfg(test)]
 pub(crate) static TRACING_CAPTURE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -243,6 +245,7 @@ pub fn heartbeat_event(config: &AgentConfig) -> AgentEvent {
 }
 
 pub async fn run(config: AgentConfig) -> anyhow::Result<()> {
+    validate_hub_transport_urls(&config)?;
     let printers = startup_printers(&config).await?;
     let gateway = Arc::new(RuntimeBambuMachineGateway::new(
         config.clone(),

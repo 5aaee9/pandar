@@ -314,7 +314,12 @@ pub(crate) fn normalize_hub_url(value: String) -> Option<String> {
         return None;
     }
     let url = reqwest::Url::parse(&value).ok()?;
-    if matches!(url.scheme(), "http" | "https") && url.host_str().is_some() {
+    let host = url.host_str()?;
+    let loopback = host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|address| address.is_loopback());
+    if url.scheme() == "https" || url.scheme() == "http" && loopback {
         Some(value)
     } else {
         None
@@ -366,4 +371,17 @@ fn parse_optional_json<T: DeserializeOwned>(ptr: *const u8, len: usize) -> Resul
         return Ok(None);
     }
     serde_json::from_str(&value).map(Some).map_err(|_| ())
+}
+
+#[cfg(test)]
+#[test]
+fn hub_url_normalization_allows_loopback_http() {
+    assert_eq!(
+        normalize_hub_url("http://localhost:3000/".to_owned()),
+        Some("http://localhost:3000".to_owned())
+    );
+    assert_eq!(
+        normalize_hub_url("http://127.0.0.1:8080/".to_owned()),
+        Some("http://127.0.0.1:8080".to_owned())
+    );
 }

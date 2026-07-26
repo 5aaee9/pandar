@@ -47,8 +47,8 @@ fn concurrent_first_start_uses_one_local_webserver() {
             thread::spawn(move || {
                 barrier.wait();
                 start_local(
-                    &format!("http://web-{index}.example.test"),
-                    &format!("http://hub-{index}.example.test"),
+                    &format!("https://web-{index}.example.test"),
+                    &format!("https://hub-{index}.example.test"),
                 )
             })
         })

@@ -220,7 +220,7 @@ mod tests {
 
     #[test]
     fn each_credential_key_can_claim_only_one_rotation() {
-        let hub = b"http://hub";
+        let hub = b"http://127.0.0.1:1";
         let token = b"old-token";
         let session = pandar_plugin_printer_refresh_session_create(
             hub.as_ptr(),

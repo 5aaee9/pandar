@@ -1,16 +1,26 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Context;
 use async_trait::async_trait;
+use futures_util::StreamExt;
 use jsonwebtoken::{
     Algorithm, DecodingKey, Validation, decode, decode_header,
     jwk::{AlgorithmParameters, Jwk, JwkSet, KeyAlgorithm},
 };
-use serde::Deserialize;
 use thiserror::Error;
-use tokio::sync::RwLock;
+use tokio::{
+    sync::{Mutex, RwLock},
+    time::Instant,
+};
 
 use super::ExternalAuthConfig;
+
+mod claims;
+
+#[cfg(test)]
+pub(super) use claims::AudienceClaim;
+pub use claims::VerifiedExternalIdentity;
+use claims::{JwtClaims, verified_identity};
 
 #[derive(Debug, Error)]
 pub enum JwtVerifyError {
@@ -36,92 +46,14 @@ pub enum JwtVerifyError {
     UnauthorizedParty,
     #[error("missing required jwt scope")]
     MissingScope,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct JwtClaims {
-    iss: String,
-    sub: String,
-    #[allow(dead_code)]
-    exp: u64,
-    #[serde(default)]
-    #[allow(dead_code)]
-    nbf: Option<u64>,
-    #[serde(default)]
-    aud: Option<AudienceClaim>,
-    #[serde(default)]
-    azp: Option<String>,
-    #[serde(default)]
-    scope: Option<String>,
-    #[serde(default)]
-    scp: Vec<String>,
-    #[serde(default)]
-    email: Option<String>,
-    #[serde(default)]
-    email_verified: Option<bool>,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    preferred_username: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(untagged)]
-pub(super) enum AudienceClaim {
-    One(String),
-    Many(Vec<String>),
-}
-
-impl AudienceClaim {
-    fn values(&self) -> Vec<String> {
-        match self {
-            Self::One(value) => vec![value.clone()],
-            Self::Many(values) => values.clone(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VerifiedExternalIdentity {
-    pub provider: String,
-    pub subject: String,
-    pub issuer: String,
-    pub audiences: Vec<String>,
-    pub authorized_party: Option<String>,
-    pub scopes: Vec<String>,
-    pub email: Option<String>,
-    pub email_verified: Option<bool>,
-    pub name: Option<String>,
-    pub preferred_username: Option<String>,
-}
-
-impl VerifiedExternalIdentity {
-    pub fn verified_email(&self) -> Option<&str> {
-        match (self.email.as_deref(), self.email_verified) {
-            (Some(email), Some(true)) if !email.trim().is_empty() => Some(email.trim()),
-            _ => None,
-        }
-    }
-
-    pub fn display_name(&self) -> String {
-        self.name
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .or_else(|| {
-                self.preferred_username
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-            })
-            .or_else(|| self.verified_email())
-            .unwrap_or("")
-            .to_owned()
-    }
+    #[error("invalid jwt issued-at or expiration ordering")]
+    InvalidTokenLifetime,
+    #[error("jwt lifetime exceeds configured maximum")]
+    TokenLifetimeExceeded,
 }
 
 #[async_trait]
-trait JwksSource: Send + Sync {
+pub(super) trait JwksSource: Send + Sync {
     async fn load_jwks(&self) -> anyhow::Result<JwkSet>;
 }
 
@@ -134,7 +66,12 @@ struct RemoteJwksSource {
 impl RemoteJwksSource {
     fn new(jwks_url: String) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(5))
+                .timeout(Duration::from_secs(10))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("JWKS HTTP client configuration is valid"),
             jwks_url,
         }
     }
@@ -143,24 +80,50 @@ impl RemoteJwksSource {
 #[async_trait]
 impl JwksSource for RemoteJwksSource {
     async fn load_jwks(&self) -> anyhow::Result<JwkSet> {
-        self.client
+        let response = self
+            .client
             .get(&self.jwks_url)
             .send()
             .await
             .with_context(|| format!("failed to fetch JWKS from {}", self.jwks_url))?
             .error_for_status()
-            .with_context(|| format!("JWKS endpoint returned error for {}", self.jwks_url))?
-            .json::<JwkSet>()
-            .await
+            .with_context(|| format!("JWKS endpoint returned error for {}", self.jwks_url))?;
+        const MAX_JWKS_BYTES: usize = 1024 * 1024;
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_JWKS_BYTES as u64)
+        {
+            anyhow::bail!("JWKS response exceeds {MAX_JWKS_BYTES} bytes");
+        }
+        let mut body = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.context("failed to read JWKS response body")?;
+            if body.len().saturating_add(chunk.len()) > MAX_JWKS_BYTES {
+                anyhow::bail!("JWKS response exceeds {MAX_JWKS_BYTES} bytes");
+            }
+            body.extend_from_slice(&chunk);
+        }
+        serde_json::from_slice::<JwkSet>(&body)
             .with_context(|| format!("failed to decode JWKS from {}", self.jwks_url))
     }
+}
+
+const JWKS_CACHE_TTL: Duration = Duration::from_secs(300);
+const JWKS_REFRESH_COOLDOWN: Duration = Duration::from_secs(30);
+
+#[derive(Clone)]
+struct CachedJwks {
+    keys: JwkSet,
+    fetched_at: Instant,
 }
 
 #[derive(Clone)]
 pub struct JwtVerifier {
     config: ExternalAuthConfig,
     jwks_source: Arc<dyn JwksSource>,
-    cache: Arc<RwLock<Option<JwkSet>>>,
+    cache: Arc<RwLock<Option<CachedJwks>>>,
+    refresh_lock: Arc<Mutex<()>>,
 }
 
 impl std::fmt::Debug for JwtVerifier {
@@ -182,15 +145,20 @@ impl JwtVerifier {
         Self {
             config,
             jwks_source: Arc::new(StaticJwksSource { jwks: jwks.clone() }),
-            cache: Arc::new(RwLock::new(Some(jwks))),
+            cache: Arc::new(RwLock::new(Some(CachedJwks {
+                keys: jwks,
+                fetched_at: Instant::now(),
+            }))),
+            refresh_lock: Arc::new(Mutex::new(())),
         }
     }
 
-    fn new(config: ExternalAuthConfig, jwks_source: Arc<dyn JwksSource>) -> Self {
+    pub(super) fn new(config: ExternalAuthConfig, jwks_source: Arc<dyn JwksSource>) -> Self {
         Self {
             config,
             jwks_source,
             cache: Arc::new(RwLock::new(None)),
+            refresh_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -205,7 +173,7 @@ impl JwtVerifier {
         let jwk = match jwks.find(kid) {
             Some(jwk) => jwk.clone(),
             None => {
-                let jwks = self.fetch_and_cache().await?;
+                let jwks = self.refresh_for_unknown_key().await?;
                 jwks.find(kid)
                     .cloned()
                     .ok_or(JwtVerifyError::UnknownKeyId)?
@@ -221,17 +189,19 @@ impl JwtVerifier {
         validation.validate_nbf = true;
         validation.leeway = self.config.leeway_seconds;
 
-        if let Some(audience) = &self.config.audience {
-            validation.set_audience(&[audience.as_str()]);
-            validation.set_required_spec_claims(&["exp", "iss", "sub", "aud"]);
-        } else {
-            validation.validate_aud = false;
-            validation.set_required_spec_claims(&["exp", "iss", "sub"]);
-        }
+        validation.set_audience(&[self.config.audience.as_str()]);
+        validation.set_required_spec_claims(&["exp", "iat", "iss", "sub", "aud"]);
 
         let claims = decode::<JwtClaims>(token, &key, &validation)
             .map_err(JwtVerifyError::InvalidClaims)?
             .claims;
+        let now = time::OffsetDateTime::now_utc().unix_timestamp().max(0) as u64;
+        if claims.exp < claims.iat || claims.iat > now.saturating_add(self.config.leeway_seconds) {
+            return Err(JwtVerifyError::InvalidTokenLifetime);
+        }
+        if claims.exp - claims.iat > self.config.max_token_lifetime_seconds {
+            return Err(JwtVerifyError::TokenLifetimeExceeded);
+        }
         verified_identity(&self.config, claims)
     }
 
@@ -239,21 +209,48 @@ impl JwtVerifier {
         self.cached_or_fetch().await.map(|_| ())
     }
 
-    async fn cached_or_fetch(&self) -> Result<JwkSet, JwtVerifyError> {
-        if let Some(jwks) = self.cache.read().await.clone() {
-            return Ok(jwks);
+    #[cfg(test)]
+    pub(super) async fn expire_cache_for_test(&self) {
+        if let Some(cached) = self.cache.write().await.as_mut() {
+            cached.fetched_at = Instant::now() - JWKS_CACHE_TTL;
         }
-
-        self.fetch_and_cache().await
     }
 
-    async fn fetch_and_cache(&self) -> Result<JwkSet, JwtVerifyError> {
+    async fn cached_or_fetch(&self) -> Result<JwkSet, JwtVerifyError> {
+        if let Some(cached) = self.cache.read().await.clone()
+            && cached.fetched_at.elapsed() < JWKS_CACHE_TTL
+        {
+            return Ok(cached.keys);
+        }
+
+        self.refresh(false).await
+    }
+
+    async fn refresh_for_unknown_key(&self) -> Result<JwkSet, JwtVerifyError> {
+        self.refresh(true).await
+    }
+
+    async fn refresh(&self, unknown_key: bool) -> Result<JwkSet, JwtVerifyError> {
+        let _guard = self.refresh_lock.lock().await;
+        if let Some(cached) = self.cache.read().await.clone() {
+            let max_age = if unknown_key {
+                JWKS_REFRESH_COOLDOWN
+            } else {
+                JWKS_CACHE_TTL
+            };
+            if cached.fetched_at.elapsed() < max_age {
+                return Ok(cached.keys);
+            }
+        }
         let jwks = self
             .jwks_source
             .load_jwks()
             .await
             .map_err(JwtVerifyError::Jwks)?;
-        *self.cache.write().await = Some(jwks.clone());
+        *self.cache.write().await = Some(CachedJwks {
+            keys: jwks.clone(),
+            fetched_at: Instant::now(),
+        });
         Ok(jwks)
     }
 }
@@ -282,70 +279,6 @@ fn key_algorithm_to_algorithm(key_algorithm: KeyAlgorithm) -> Option<Algorithm> 
         KeyAlgorithm::RS512 => Some(Algorithm::RS512),
         _ => None,
     }
-}
-
-fn verified_identity(
-    config: &ExternalAuthConfig,
-    claims: JwtClaims,
-) -> Result<VerifiedExternalIdentity, JwtVerifyError> {
-    let subject = claims.sub.trim();
-    if subject.is_empty() {
-        return Err(JwtVerifyError::MissingSubject);
-    }
-
-    if !config.authorized_parties.is_empty() {
-        let authorized_party = claims
-            .azp
-            .as_deref()
-            .ok_or(JwtVerifyError::UnauthorizedParty)?;
-        if !config
-            .authorized_parties
-            .iter()
-            .any(|allowed| allowed == authorized_party)
-        {
-            return Err(JwtVerifyError::UnauthorizedParty);
-        }
-    }
-
-    let scopes = scopes_from_claims(&claims);
-    if !config.required_scopes.is_empty() {
-        let scope_set = scopes.iter().map(String::as_str).collect::<HashSet<_>>();
-        if !config
-            .required_scopes
-            .iter()
-            .all(|scope| scope_set.contains(scope.as_str()))
-        {
-            return Err(JwtVerifyError::MissingScope);
-        }
-    }
-
-    Ok(VerifiedExternalIdentity {
-        provider: config.provider.clone(),
-        subject: subject.to_owned(),
-        issuer: claims.iss,
-        audiences: claims
-            .aud
-            .map(|audience| audience.values())
-            .unwrap_or_default(),
-        authorized_party: claims.azp,
-        scopes,
-        email: claims.email,
-        email_verified: claims.email_verified,
-        name: claims.name,
-        preferred_username: claims.preferred_username,
-    })
-}
-
-fn scopes_from_claims(claims: &JwtClaims) -> Vec<String> {
-    let mut scopes = claims
-        .scope
-        .as_deref()
-        .unwrap_or_default()
-        .split_whitespace()
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
-    scopes.extend(claims.scp.iter().cloned());
-    scopes
 }
 
 #[cfg(test)]

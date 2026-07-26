@@ -60,7 +60,7 @@ Open the app, go to **Settings**, and enter:
 
 Tap **Save**, then **Sign in**. The browser opens the Hub's `/mobile-sign-in`
 page. After authentication and tenant selection, Hub redirects back to
-`zip.iptables.pandar.android:/auth/callback` with a one-use ticket that the app
+`zip.iptables.pandar.android://auth/callback` with a one-use ticket that the app
 exchanges for its tenant token and tenant id.
 
 ## Architecture

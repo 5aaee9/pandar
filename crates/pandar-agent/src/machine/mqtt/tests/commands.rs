@@ -124,7 +124,7 @@ fn mqtt_report_error_log_preserves_error_chain() {
 #[test]
 fn lan_tls_uses_rustls_certificate_policy_for_printer_certificates() {
     assert!(matches!(
-        bambu_lan_tls_config(),
+        bambu_lan_tls_config("test-bambu-v1"),
         TlsConfiguration::Rustls(_)
     ));
 }

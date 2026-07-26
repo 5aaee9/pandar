@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:17
+    image: postgres:17@sha256:a426e44bac0b759c95894d68e1a0ac03ecc20b619f498a91aae373bf06d8508d
     environment:
       POSTGRES_DB: pandar
       POSTGRES_USER: pandar
@@ -14,7 +14,7 @@ services:
       retries: 12
 
   nats:
-    image: nats:2-alpine
+    image: nats:2-alpine@sha256:c11af972c99ae542de8925e6a7d9c533aa1eb039660420d2074beed6089b3bf0
     profiles: ["nats"]
     command: ["-js", "-m", "8222"]
     expose:
@@ -32,10 +32,17 @@ services:
       context: .
       dockerfile: Dockerfile
     image: pandar-api
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp
     environment:
       PANDAR_DATABASE_URL: postgres://pandar:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/pandar
       PANDAR_HUB_BIND: 0.0.0.0:8080
       PANDAR_HUB_GRPC_BIND: 0.0.0.0:50051
+      PANDAR_HUB_GRPC_TLS_CERT: /run/pandar-grpc/tls.crt
+      PANDAR_HUB_GRPC_TLS_KEY: /run/pandar-grpc/tls.key
       PANDAR_PRINTER_ACCESS_CODE_KEY: ${PANDAR_PRINTER_ACCESS_CODE_KEY:?set PANDAR_PRINTER_ACCESS_CODE_KEY}
       PANDAR_CONTROL_PLANE: ${PANDAR_CONTROL_PLANE:-in-process}
       PANDAR_NATS_URL: ${PANDAR_NATS_URL:-nats://nats:4222}
@@ -59,9 +66,11 @@ services:
     # PANDAR_ARTIFACT_FILESYSTEM_SHARED=true and a genuinely shared mount.
     volumes:
       - pandar-spool:/spool
+      - ${PANDAR_HUB_GRPC_TLS_CERT_FILE:?set PANDAR_HUB_GRPC_TLS_CERT_FILE}:/run/pandar-grpc/tls.crt:ro
+      - ${PANDAR_HUB_GRPC_TLS_KEY_FILE:?set PANDAR_HUB_GRPC_TLS_KEY_FILE}:/run/pandar-grpc/tls.key:ro
     ports:
-      - "8080:8080"
-      - "50051:50051"
+      - "127.0.0.1:${PANDAR_HTTP_PORT:-8080}:8080"
+      - "${PANDAR_GRPC_PORT:-50051}:50051"
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,8 +83,15 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     image: pandar-web
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp
+      - /app/frontend/.next/cache:uid=1000,gid=1000
     environment:
       APP_API_URL: http://pandar-api:8080
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
       APP_API_TOKEN: ${APP_API_TOKEN:-}
       APP_TENANT_ID: ${APP_TENANT_ID:-}
       APP_AUTH_PROVIDER: ${APP_AUTH_PROVIDER:-none}
@@ -86,7 +102,7 @@ services:
       APP_AUTH_BETTER_AUTH_BASE_URL: ${APP_AUTH_BETTER_AUTH_BASE_URL:-}
       PORT: 3000
     ports:
-      - "3000:3000"
+      - "127.0.0.1:${PANDAR_WEB_PORT:-3000}:3000"
     depends_on:
       - pandar-api
 

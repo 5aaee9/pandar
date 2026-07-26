@@ -75,7 +75,7 @@ unsafe extern "C" fn follower_account(
 
 fn account(token: &str, account_epoch: u64) -> AccountState {
     AccountState {
-        hub_url: "http://hub".to_owned(),
+        hub_url: "http://127.0.0.1:1".to_owned(),
         token: token.to_owned(),
         account_epoch,
         config_epoch: 9,
@@ -85,7 +85,7 @@ fn account(token: &str, account_epoch: u64) -> AccountState {
 
 fn expected() -> NoAuthExpected {
     NoAuthExpected {
-        hub_url: "http://hub".to_owned(),
+        hub_url: "http://127.0.0.1:1".to_owned(),
         token: "old-a-token".to_owned(),
         account_epoch: 7,
         config_epoch: 9,
@@ -94,7 +94,7 @@ fn expected() -> NoAuthExpected {
 }
 
 fn finished_session() -> *mut c_void {
-    let hub = b"http://hub";
+    let hub = b"http://127.0.0.1:1";
     let token = b"old-a-token";
     let session_ptr = pandar_plugin_printer_refresh_session_create(
         hub.as_ptr(),
@@ -107,7 +107,12 @@ fn finished_session() -> *mut c_void {
         pandar_plugin_connection_set_account_epoch(session_ptr, 7),
         0
     );
-    let key = NoAuthRotationKey::new("http://hub".to_owned(), "old-a-token".to_owned(), 7, 9);
+    let key = NoAuthRotationKey::new(
+        "http://127.0.0.1:1".to_owned(),
+        "old-a-token".to_owned(),
+        7,
+        9,
+    );
     assert_eq!(
         session.begin_no_auth_rotation(key.clone()),
         NoAuthRotationBegin::Started

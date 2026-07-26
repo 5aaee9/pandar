@@ -1,21 +1,14 @@
 use std::{fmt, sync::Arc, time::Duration};
 
+use crate::machine::BambuPrinterEndpoint;
 use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
 use rumqttc::{AsyncClient, MqttOptions, QoS, TlsConfiguration, Transport};
-use rustls::{
-    CertificateError, ClientConfig, DigitallySignedStruct, Error as TlsError, PeerMisbehaved,
-    SignatureScheme,
-    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime},
-};
+use rustls::{ClientConfig, pki_types::ServerName};
 use serde_json::Value;
 use tokio::{net::TcpStream, sync::OnceCell};
 use tokio_rustls::TlsConnector;
 use uuid::Uuid;
-use x509_parser::prelude::{FromDer, X509Certificate};
-
-use crate::machine::BambuPrinterEndpoint;
 
 use super::{
     BAMBU_MQTT_MAX_PACKET_SIZE, BAMBU_MQTT_PORT, BAMBU_MQTT_RETAIN, BAMBU_MQTT_USERNAME,
@@ -23,8 +16,10 @@ use super::{
 };
 
 mod pump;
+mod tls;
 
 use pump::MqttEventLoopPump;
+pub(crate) use tls::{BambuLanCertificateVerifier, bambu_mqtt_serial_from_certificate};
 
 #[derive(Debug)]
 struct MqttReportIdleTimeout(Duration);
@@ -98,7 +93,7 @@ impl RumqttcBambuMqttTransport {
     async fn mqtt_topic(&self, topic: &str) -> anyhow::Result<String> {
         let mqtt_serial = self
             .mqtt_serial
-            .get_or_try_init(|| resolve_bambu_mqtt_serial(&self.host))
+            .get_or_try_init(|| resolve_bambu_mqtt_serial(&self.host, &self.endpoint_serial))
             .await?;
         Ok(mqtt_topic_for_serial(
             &self.endpoint_serial,
@@ -122,124 +117,31 @@ pub fn bambu_lan_mqtt_options(
     };
     let mut options = MqttOptions::new(client_id, endpoint.host.as_str(), BAMBU_MQTT_PORT);
     options.set_credentials(BAMBU_MQTT_USERNAME, endpoint.access_code.as_str());
-    options.set_transport(Transport::tls_with_config(bambu_lan_tls_config()));
+    options.set_transport(Transport::tls_with_config(bambu_lan_tls_config(
+        &endpoint.serial,
+    )));
     options.set_keep_alive(Duration::from_secs(30));
     options.set_max_packet_size(BAMBU_MQTT_MAX_PACKET_SIZE, BAMBU_MQTT_MAX_PACKET_SIZE);
 
     options
 }
 
-pub fn bambu_lan_tls_config() -> TlsConfiguration {
-    TlsConfiguration::Rustls(bambu_lan_client_config())
+pub fn bambu_lan_tls_config(expected_serial: &str) -> TlsConfiguration {
+    TlsConfiguration::Rustls(bambu_lan_client_config(expected_serial))
 }
 
-fn bambu_lan_client_config() -> Arc<ClientConfig> {
+fn bambu_lan_client_config(expected_serial: &str) -> Arc<ClientConfig> {
     let mut config =
         ClientConfig::builder_with_provider(rustls::crypto::aws_lc_rs::default_provider().into())
             .with_safe_default_protocol_versions()
             .expect("aws-lc-rs provider supports rustls safe default protocol versions")
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(BambuLanCertificateVerifier))
+            .with_custom_certificate_verifier(Arc::new(BambuLanCertificateVerifier::new(
+                expected_serial,
+            )))
             .with_no_client_auth();
     config.alpn_protocols = Vec::new();
     Arc::new(config)
-}
-
-#[derive(Debug)]
-pub(crate) struct BambuLanCertificateVerifier;
-
-impl ServerCertVerifier for BambuLanCertificateVerifier {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &CertificateDer<'_>,
-        _intermediates: &[CertificateDer<'_>],
-        _server_name: &ServerName<'_>,
-        _ocsp_response: &[u8],
-        _now: UnixTime,
-    ) -> Result<ServerCertVerified, TlsError> {
-        Ok(ServerCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TlsError> {
-        let provider = rustls::crypto::aws_lc_rs::default_provider();
-        let algorithms = provider
-            .signature_verification_algorithms
-            .mapping
-            .iter()
-            .find_map(|(scheme, algorithms)| (*scheme == dss.scheme).then_some(*algorithms))
-            .ok_or(TlsError::PeerMisbehaved(
-                PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme,
-            ))?;
-        let certificate = parse_bambu_certificate(cert)?;
-        let public_key = &certificate.public_key().subject_public_key.data;
-
-        algorithms
-            .iter()
-            .find_map(|algorithm| {
-                algorithm
-                    .verify_signature(public_key, message, dss.signature())
-                    .is_ok()
-                    .then_some(HandshakeSignatureValid::assertion())
-            })
-            .ok_or(TlsError::InvalidCertificate(CertificateError::BadSignature))
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, TlsError> {
-        let provider = rustls::crypto::aws_lc_rs::default_provider();
-        let certificate = parse_bambu_certificate(cert)?;
-        let public_key = SubjectPublicKeyInfoDer::from(certificate.public_key().raw);
-        rustls::crypto::verify_tls13_signature_with_raw_key(
-            message,
-            &public_key,
-            dss,
-            &provider.signature_verification_algorithms,
-        )
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        rustls::crypto::aws_lc_rs::default_provider()
-            .signature_verification_algorithms
-            .supported_schemes()
-    }
-}
-
-fn parse_bambu_certificate<'a>(
-    certificate: &'a CertificateDer<'_>,
-) -> Result<X509Certificate<'a>, TlsError> {
-    let (remainder, certificate) = X509Certificate::from_der(certificate.as_ref())
-        .map_err(|_| TlsError::InvalidCertificate(CertificateError::BadEncoding))?;
-    if !remainder.is_empty() {
-        return Err(TlsError::InvalidCertificate(CertificateError::BadEncoding));
-    }
-    Ok(certificate)
-}
-
-pub(crate) fn bambu_mqtt_serial_from_certificate(
-    certificate: &CertificateDer<'_>,
-) -> anyhow::Result<String> {
-    let certificate = parse_bambu_certificate(certificate).context("parse Bambu certificate")?;
-    let common_name = certificate
-        .subject()
-        .iter_common_name()
-        .next()
-        .ok_or_else(|| anyhow!("Bambu certificate is missing a common name"))?
-        .as_str()
-        .context("decode Bambu certificate common name")?
-        .trim();
-    if common_name.is_empty() {
-        bail!("Bambu certificate has a blank common name");
-    }
-    Ok(common_name.to_owned())
 }
 
 pub(crate) fn mqtt_topic_for_serial(
@@ -254,14 +156,17 @@ pub(crate) fn mqtt_topic_for_serial(
     }
 }
 
-pub(crate) async fn resolve_bambu_mqtt_serial(host: &str) -> anyhow::Result<String> {
+pub(crate) async fn resolve_bambu_mqtt_serial(
+    host: &str,
+    expected_serial: &str,
+) -> anyhow::Result<String> {
     let server_name = ServerName::try_from(host.to_owned())
         .map_err(|_| anyhow!("invalid Bambu MQTT TLS server name {host}"))?;
     let tls_stream = tokio::time::timeout(Duration::from_secs(10), async {
         let stream = TcpStream::connect((host, BAMBU_MQTT_PORT))
             .await
             .with_context(|| format!("connect to Bambu MQTT TLS at {host}:{BAMBU_MQTT_PORT}"))?;
-        TlsConnector::from(bambu_lan_client_config())
+        TlsConnector::from(bambu_lan_client_config(expected_serial))
             .connect(server_name, stream)
             .await
             .with_context(|| format!("complete Bambu MQTT TLS handshake with {host}"))
@@ -282,7 +187,7 @@ pub(crate) async fn resolve_bambu_mqtt_serial(host: &str) -> anyhow::Result<Stri
 pub(super) async fn resolved_request_topic(
     endpoint: &BambuPrinterEndpoint,
 ) -> anyhow::Result<String> {
-    let mqtt_serial = resolve_bambu_mqtt_serial(&endpoint.host).await?;
+    let mqtt_serial = resolve_bambu_mqtt_serial(&endpoint.host, &endpoint.serial).await?;
     Ok(mqtt_topic_for_serial(
         &endpoint.serial,
         &mqtt_serial,

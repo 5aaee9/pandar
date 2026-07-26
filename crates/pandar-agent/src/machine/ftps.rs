@@ -56,7 +56,7 @@ impl FtpsMachineFileTransfer {
         timeout(
             Duration::from_secs(DEFAULT_FTPS_TIMEOUT_SECONDS),
             async move {
-                let connector = bambu_lan_ftps_connector(profile);
+                let connector = bambu_lan_ftps_connector(profile, &self.endpoint.serial);
                 let mut stream = AsyncRustlsFtpStream::connect_secure_implicit(
                     (host.as_str(), BAMBU_FILE_TRANSFER_PORT),
                     connector,
@@ -97,7 +97,10 @@ impl FtpsProfile {
     }
 }
 
-pub(crate) fn bambu_lan_ftps_tls_config(profile: FtpsProfile) -> Arc<ClientConfig> {
+pub(crate) fn bambu_lan_ftps_tls_config(
+    profile: FtpsProfile,
+    expected_serial: &str,
+) -> Arc<ClientConfig> {
     let provider = rustls::crypto::aws_lc_rs::default_provider().into();
     let builder = ClientConfig::builder_with_provider(provider);
     let builder = if profile.cap_tls_1_2 {
@@ -111,15 +114,17 @@ pub(crate) fn bambu_lan_ftps_tls_config(profile: FtpsProfile) -> Arc<ClientConfi
     };
     let mut config = builder
         .dangerous()
-        .with_custom_certificate_verifier(Arc::new(BambuLanCertificateVerifier))
+        .with_custom_certificate_verifier(Arc::new(BambuLanCertificateVerifier::new(
+            expected_serial,
+        )))
         .with_no_client_auth();
     config.alpn_protocols = Vec::new();
     Arc::new(config)
 }
 
 #[allow(dead_code)]
-fn bambu_lan_ftps_connector(profile: FtpsProfile) -> AsyncRustlsConnector {
-    tokio_rustls::TlsConnector::from(bambu_lan_ftps_tls_config(profile)).into()
+fn bambu_lan_ftps_connector(profile: FtpsProfile, expected_serial: &str) -> AsyncRustlsConnector {
+    tokio_rustls::TlsConnector::from(bambu_lan_ftps_tls_config(profile, expected_serial)).into()
 }
 
 async fn apply_transfer_mode(
@@ -181,7 +186,7 @@ async fn upload_in_bambu_chunks(
 
 #[allow(dead_code)]
 pub(crate) fn bambu_lan_ftps_tls_config_for_default_profile() -> Arc<ClientConfig> {
-    bambu_lan_ftps_tls_config(FtpsProfile::for_model(None))
+    bambu_lan_ftps_tls_config(FtpsProfile::for_model(None), "test-printer")
 }
 
 #[allow(dead_code)]

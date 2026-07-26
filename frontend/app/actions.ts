@@ -253,10 +253,13 @@ export async function createPluginTicket(formData: FormData) {
 export async function createMobileTicket(formData: FormData) {
   const tenantId = stringField(formData, "tenant_id");
   const redirectUrl = stringField(formData, "redirect_url");
+  const codeChallenge = stringField(formData, "code_challenge");
+  const state = stringField(formData, "state");
   const response = await postJson(
     `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/mobile/login-tickets`,
     {
       redirect_url: redirectUrl,
+      code_challenge: codeChallenge,
     },
   );
   if (!response.ok) {
@@ -269,5 +272,6 @@ export async function createMobileTicket(formData: FormData) {
   const url = new URL(body.redirect_url);
   url.searchParams.set("ticket", body.ticket);
   url.searchParams.set("redirect_url", body.redirect_url);
+  url.searchParams.set("state", state);
   redirect(url.toString());
 }

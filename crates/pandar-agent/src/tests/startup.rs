@@ -4,7 +4,11 @@ use tokio::{
     sync::oneshot,
 };
 
-use crate::{AgentConfig, machine::BambuPrinterEndpoint, startup::startup_printers};
+use crate::{
+    AgentConfig,
+    machine::BambuPrinterEndpoint,
+    startup::{fetch_saved_printer_connections, startup_printers},
+};
 
 #[tokio::test]
 async fn startup_printers_loads_saved_hub_connections() {
@@ -68,13 +72,29 @@ async fn startup_printers_prefers_saved_hub_connection_for_same_serial() {
     server.request().await;
 }
 
+#[tokio::test]
+async fn saved_printer_connections_reject_oversized_response() {
+    let server =
+        TestHubPrinterServer::start("agent-id", "pandar_ac_test", "x".repeat(1024 * 1024 + 1))
+            .await;
+    let config = super::test_config();
+
+    let error = fetch_saved_printer_connections(&config, &server.base_url())
+        .await
+        .unwrap_err();
+
+    assert!(error.to_string().contains("response exceeds 1048576 bytes"));
+    server.request().await;
+}
+
 struct TestHubPrinterServer {
     address: std::net::SocketAddr,
     request_receiver: oneshot::Receiver<TestHubPrinterRequest>,
 }
 
 impl TestHubPrinterServer {
-    async fn start(agent_id: &str, credential: &str, body: &'static str) -> Self {
+    async fn start(agent_id: &str, credential: &str, body: impl Into<String>) -> Self {
+        let body = body.into();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         let expected_path = format!("/api/v1/agents/{agent_id}/printers");

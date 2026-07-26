@@ -14,6 +14,7 @@ describe("passkey sign-in UI", () => {
   it("exposes a passkey sign-in action that returns through the dashboard token flow", async () => {
     const loginForm = await readSource("components/login-form.tsx");
     const signInPage = await readSource("app/sign-in/page.tsx");
+    const tokenFlow = await readSource("lib/token.ts");
     const i18n = await readSource("lib/i18n.ts");
 
     expect(loginForm).toMatch(/authClient\.signIn\.passkey\(/);
@@ -42,9 +43,12 @@ describe("passkey sign-in UI", () => {
       /redirectWithAuthToken\(dashboardCallbackUrl, messages\)/,
     );
     expect(signInPage).toMatch(/normalizePluginReturnTo/);
+    expect(signInPage).toMatch(/normalizeDashboardState/);
     expect(signInPage).toMatch(
-      /dashboardCallbackUrl=\{withPluginReturnTo\([\s\S]*env\.dashboardCallbackUrl,[\s\S]*returnTo/,
+      /dashboardCallbackUrl=\{withDashboardState\([\s\S]*withPluginReturnTo\(env\.dashboardCallbackUrl, returnTo\),[\s\S]*state/,
     );
+    expect(tokenFlow).toMatch(/form\.method = "POST"/);
+    expect(tokenFlow).not.toMatch(/searchParams\.set\("token"/);
     expect(loginForm).toMatch(/callbackURL: completionUrl/);
     expect(loginForm).toMatch(/newUserCallbackURL: completionUrl/);
     expect(loginForm).toMatch(/errorCallbackURL: errorUrl/);
@@ -89,7 +93,9 @@ describe("passkey sign-in UI", () => {
 
   it("marks only rare conditional Auth feedback for entry motion", async () => {
     const loginForm = await readSource("components/login-form.tsx");
-    const completeAuth = await readSource("app/auth/complete/complete-auth.tsx");
+    const completeAuth = await readSource(
+      "app/auth/complete/complete-auth.tsx",
+    );
     const signOutClient = await readSource("app/sign-out/sign-out-client.tsx");
 
     expect(loginForm).toContain('<FieldError className="auth-feedback-enter">');

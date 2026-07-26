@@ -9,11 +9,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+
 import okhttp3.OkHttpClient
 import zip.iptables.pandar.android.core.util.Logger
 import zip.iptables.pandar.android.data.auth.AuthRepository
 import zip.iptables.pandar.android.data.remote.ApiModule
+import zip.iptables.pandar.android.data.remote.secureHubHttpUrl
 import zip.iptables.pandar.android.data.remote.PandarApi
 import zip.iptables.pandar.android.data.remote.ws.PrinterEventsRepository
 import zip.iptables.pandar.android.data.repository.PandarRepository
@@ -75,8 +76,7 @@ class AppContainer(context: Context) {
     }
 
     private fun rebuildApi(baseUrl: String?) {
-        val trimmed = baseUrl?.trim()?.takeIf { it.isNotEmpty() }
-        val httpUrl = trimmed?.toHttpUrlOrNull()
+        val httpUrl = secureHubHttpUrl(baseUrl)
         _apiState.value = httpUrl?.let { ApiModule.pandarApi(it, okHttpClient) }
     }
 

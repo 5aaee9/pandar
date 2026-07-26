@@ -1,4 +1,7 @@
+use std::time::Duration;
+
 use anyhow::{Context, bail};
+use futures_util::StreamExt;
 use serde::Deserialize;
 
 use crate::{AgentConfig, commands::parse_printer_config, machine::BambuPrinterEndpoint};
@@ -42,7 +45,12 @@ pub(crate) async fn fetch_saved_printer_connections(
         hub_api_url.trim_end_matches('/'),
         config.agent_id
     );
-    let response = reqwest::Client::new()
+    let response = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(15))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("saved printer HTTP client configuration is valid")
         .get(url)
         .bearer_auth(&config.agent_credential)
         .send()
@@ -53,9 +61,29 @@ pub(crate) async fn fetch_saved_printer_connections(
         bail!("hub saved printer connection request failed with HTTP {status}");
     }
 
-    let response = response
-        .json::<SavedPrinterConnectionsResponse>()
-        .await
+    const MAX_SAVED_PRINTER_RESPONSE_BYTES: usize = 1024 * 1024;
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_SAVED_PRINTER_RESPONSE_BYTES as u64)
+    {
+        bail!(
+            "hub saved printer connection response exceeds {MAX_SAVED_PRINTER_RESPONSE_BYTES} bytes"
+        );
+    }
+    let mut body = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk
+            .map_err(reqwest::Error::without_url)
+            .context("read saved printer connection response")?;
+        if body.len().saturating_add(chunk.len()) > MAX_SAVED_PRINTER_RESPONSE_BYTES {
+            bail!(
+                "hub saved printer connection response exceeds {MAX_SAVED_PRINTER_RESPONSE_BYTES} bytes"
+            );
+        }
+        body.extend_from_slice(&chunk);
+    }
+    let response = serde_json::from_slice::<SavedPrinterConnectionsResponse>(&body)
         .context("decode saved printer connections")?;
     response
         .printers

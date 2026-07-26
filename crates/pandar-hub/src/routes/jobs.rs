@@ -127,7 +127,8 @@ pub async fn preview_artifact_metadata(
     let tenant_id = parse_tenant_id(&tenant_id)?;
     auth::authorize_tenant_principal(&state, &headers, tenant_id, UserRole::Operator).await?;
     let metadata =
-        metadata_preview::preview_artifact_metadata_from_multipart(&state, multipart).await?;
+        metadata_preview::preview_artifact_metadata_from_multipart(&state, tenant_id, multipart)
+            .await?;
     Ok(Json(ArtifactMetadataPreviewResponse { metadata }))
 }
 

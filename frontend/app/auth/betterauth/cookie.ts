@@ -21,7 +21,9 @@ export function readAuthCookieConfig(): AuthCookieConfig {
   return {
     name: process.env.APP_AUTH_COOKIE_NAME || defaultCookieName,
     maxAgeSeconds: maxAgeSeconds(),
-    secure: process.env.APP_BASE_URL?.startsWith("https://") ?? false,
+    secure:
+      process.env.NODE_ENV === "production" ||
+      (process.env.APP_BASE_URL?.startsWith("https://") ?? false),
     issuer: issuer(),
   };
 }

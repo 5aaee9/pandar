@@ -29,6 +29,8 @@ pub(super) use studio_jobs::{
 #[derive(Debug, Deserialize)]
 pub(super) struct CreateLoginTicketRequest {
     redirect_url: String,
+    #[serde(default)]
+    code_challenge: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -41,6 +43,8 @@ pub(super) struct LoginTicketResponse {
 #[derive(Debug, Deserialize)]
 pub(super) struct ExchangeLoginTicketRequest {
     ticket: String,
+    #[serde(default)]
+    code_verifier: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -103,14 +107,19 @@ pub(super) async fn create_mobile_login_ticket(
 ) -> Result<(StatusCode, Json<LoginTicketResponse>), ApiError> {
     let tenant_id = super::parse_tenant_id(&tenant_id)?;
     let principal =
-        auth::authorize_plugin_login_ticket_creation(&state, &headers, tenant_id).await?;
+        auth::authorize_mobile_login_ticket_creation(&state, &headers, tenant_id).await?;
     let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
+    let code_challenge = payload
+        .code_challenge
+        .filter(|value| valid_pkce_challenge(value))
+        .ok_or_else(|| ApiError::bad_request("invalid_code_challenge"))?;
     let created = state
         .auth()
         .create_mobile_login_ticket_with_audit(
             tenant_id,
             user_id(&principal),
             payload.redirect_url,
+            code_challenge,
             plugin_login_ticket_expires_at()?,
             auth::audit_actor(&principal),
         )
@@ -167,7 +176,10 @@ pub(super) async fn exchange_mobile_login_ticket(
     let Json(payload) = payload.map_err(|_| ApiError::bad_request("bad_request"))?;
     let exchanged = state
         .auth()
-        .exchange_mobile_login_ticket(&payload.ticket)
+        .exchange_mobile_login_ticket(
+            &payload.ticket,
+            payload.code_verifier.as_deref().unwrap_or_default(),
+        )
         .await
         .map_err(plugin_ticket_error)?
         .ok_or_else(|| ApiError::new(StatusCode::UNAUTHORIZED, "invalid_plugin_ticket"))?;
@@ -303,6 +315,13 @@ fn user_id(principal: &AuthenticatedPrincipal) -> Option<String> {
         }
         AuthenticatedPrincipal::NoAuth { .. } => None,
     }
+}
+
+fn valid_pkce_challenge(value: &str) -> bool {
+    value.len() == 43
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
 fn plugin_ticket_error(err: RepositoryError) -> ApiError {

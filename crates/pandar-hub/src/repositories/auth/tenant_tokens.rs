@@ -8,16 +8,18 @@ mod helpers;
 mod mobile;
 mod no_auth_session;
 mod revocation;
+mod types;
+
+pub use types::{
+    AuthenticatedTenantToken, TenantToken, TenantTokenScope, TenantTokenWithPlaintext,
+};
 
 #[cfg(test)]
 pub(crate) use no_auth_session::test_pause as no_auth_session_test_pause;
 pub use no_auth_session::{NoAuthPluginSession, NoAuthPluginSessionOutcome};
 
-use helpers::{is_expired, tenant_token_audit_event, tenant_token_model};
-use serde::Serialize;
-
 use crate::{
-    entities::tenant_tokens,
+    entities::{tenant_tokens, users},
     repositories::{
         AuditActor, AuthRepository, RepositoryError, RepositoryResult,
         audit::insert_audit_event_tx,
@@ -25,66 +27,11 @@ use crate::{
         is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
     },
 };
+use helpers::{is_expired, tenant_token_audit_event, tenant_token_model};
 
 const TENANT_TOKEN_PREFIX: &str = "pandar_tenant_";
 const PLUGIN_TOKEN_PREFIX: &str = "pandar_plugin_";
 const MOBILE_TOKEN_PREFIX: &str = "pandar_mobile_";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-pub enum TenantTokenScope {
-    All,
-    AgentRegister,
-    PluginStudio,
-}
-
-impl TenantTokenScope {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::All => "*",
-            Self::AgentRegister => "agent:register",
-            Self::PluginStudio => "plugin:studio",
-        }
-    }
-
-    pub fn parse(value: &str) -> RepositoryResult<Self> {
-        match value {
-            "*" => Ok(Self::All),
-            "agent:register" => Ok(Self::AgentRegister),
-            "plugin:studio" => Ok(Self::PluginStudio),
-            other => Err(RepositoryError::InvalidTokenScope(other.to_owned())),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct TenantToken {
-    pub id: String,
-    pub tenant_id: TenantId,
-    pub name: String,
-    pub scopes: Vec<TenantTokenScope>,
-    pub created_by_user_id: Option<String>,
-    pub created_at: String,
-    pub last_used_at: Option<String>,
-    pub expires_at: Option<String>,
-    pub revoked_at: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TenantTokenWithPlaintext {
-    pub token: TenantToken,
-    pub plaintext_token: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AuthenticatedTenantToken {
-    pub token: TenantToken,
-}
-
-impl TenantToken {
-    pub fn has_scope(&self, scope: TenantTokenScope) -> bool {
-        self.scopes.contains(&TenantTokenScope::All) || self.scopes.contains(&scope)
-    }
-}
 
 impl AuthRepository {
     pub async fn create_tenant_token_with_audit(
@@ -173,7 +120,30 @@ impl AuthRepository {
             .await
             .context("failed to update tenant token last_used_at")?;
 
-        Ok(Some(AuthenticatedTenantToken { token }))
+        let session_user = if token.scopes.contains(&TenantTokenScope::MobileSession)
+            || token.created_by_user_id.is_some()
+                && token.scopes.contains(&TenantTokenScope::PluginStudio)
+        {
+            let Some(user_id) = token.created_by_user_id.as_deref() else {
+                return Ok(None);
+            };
+            let Some(model) = users::Entity::find_by_id(user_id)
+                .filter(users::Column::TenantId.eq(token.tenant_id.to_string()))
+                .one(&connection)
+                .await
+                .context("failed to authenticate session token user")?
+            else {
+                return Ok(None);
+            };
+            Some(super::user_from_model(model)?)
+        } else {
+            None
+        };
+
+        Ok(Some(AuthenticatedTenantToken {
+            token,
+            session_user,
+        }))
     }
 
     pub async fn revoke_tenant_token_with_audit(

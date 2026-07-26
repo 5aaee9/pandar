@@ -280,17 +280,19 @@ async fn tenant_token_create_rejects_unknown_scope() {
     )
     .await;
 
-    let (status, body) = request_as(
-        app,
-        Method::POST,
-        &format!("/api/v1/tenants/{}/tenant-tokens", tenant.id),
-        tenant_token_create_body("Bad", &["jobs:write"], None),
-        &admin,
-    )
-    .await;
+    for scope in ["jobs:write", "plugin:session", "mobile:session"] {
+        let (status, body) = request_as(
+            app.clone(),
+            Method::POST,
+            &format!("/api/v1/tenants/{}/tenant-tokens", tenant.id),
+            tenant_token_create_body("Bad", &[scope], None),
+            &admin,
+        )
+        .await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(decode::<ErrorResponse>(body).error, "invalid_scope");
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(decode::<ErrorResponse>(body).error, "invalid_scope");
+    }
 }
 
 #[tokio::test]

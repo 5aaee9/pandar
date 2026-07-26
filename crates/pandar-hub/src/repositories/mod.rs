@@ -37,9 +37,9 @@ pub use commands::{
 #[cfg(test)]
 pub(crate) use jobs::studio_task_test_pause;
 pub use jobs::{
-    AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, ClearJobsOutcome, CreatePrintJob,
-    DuplicatePrintJob, JobRepository, JobWithArtifact, PrintReportDiagnostic, StudioTaskPage,
-    StudioTaskQuery, StudioTaskStatus,
+    AgentArtifactAccess, AppliedPrintReport, ApplyPrintReport, ArtifactQuotaLimits,
+    ClearJobsOutcome, CreatePrintJob, DuplicatePrintJob, JobRepository, JobWithArtifact,
+    PrintReportDiagnostic, StudioTaskPage, StudioTaskQuery, StudioTaskStatus,
 };
 pub(crate) use materials::CurrentMaterialPatchOutcome;
 pub use materials::{
@@ -105,6 +105,8 @@ pub enum RepositoryError {
     MissingCommand,
     #[error("job not found")]
     MissingJob,
+    #[error("tenant artifact quota exceeded")]
+    ArtifactQuotaExceeded,
     #[error("job cannot be deleted while it may still be active")]
     JobNotClearable,
     #[error("command belongs to a different tenant or agent")]

@@ -1,7 +1,11 @@
 use std::process::Stdio;
 
 use anyhow::{Context, bail};
-use tokio::{io::AsyncReadExt, process::Command, sync::mpsc};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    process::Command,
+    sync::mpsc,
+};
 
 use crate::machine::BambuPrinterEndpoint;
 
@@ -21,7 +25,7 @@ pub async fn stream_camera_mjpeg(
     }
 
     let camera_url = build_camera_url(&endpoint.host, &endpoint.access_code);
-    let mut process = spawn_ffmpeg_command(ffmpeg_mjpeg_command(&camera_url))
+    let mut process = spawn_ffmpeg_command(ffmpeg_mjpeg_command(), &camera_url)
         .await
         .context("spawn ffmpeg for Bambu camera stream")?;
     let mut stdout = process
@@ -70,7 +74,7 @@ pub async fn stream_camera_fragmented_mp4(
     }
 
     let camera_url = build_camera_url(&endpoint.host, &endpoint.access_code);
-    let mut process = spawn_ffmpeg_command(ffmpeg_fragmented_mp4_command(&camera_url))
+    let mut process = spawn_ffmpeg_command(ffmpeg_fragmented_mp4_command(), &camera_url)
         .await
         .context("spawn ffmpeg for Bambu camera stream")?;
     let mut stdout = process
@@ -119,10 +123,13 @@ pub fn supports_rtsp(model: Option<&str>) -> bool {
 }
 
 pub fn build_camera_url(host: &str, access_code: &str) -> String {
-    format!("rtsps://bblp:{access_code}@{host}:{BAMBU_RTSP_PORT}/streaming/live/1")
+    format!(
+        "rtsps://bblp:{}@{host}:{BAMBU_RTSP_PORT}/streaming/live/1",
+        percent_encode_userinfo(access_code)
+    )
 }
 
-fn ffmpeg_mjpeg_command(camera_url: &str) -> Command {
+fn ffmpeg_mjpeg_command() -> Command {
     let mut command = Command::new(ffmpeg_executable());
     command
         .arg("-rtsp_transport")
@@ -139,8 +146,14 @@ fn ffmpeg_mjpeg_command(camera_url: &str) -> Command {
         .arg("nobuffer")
         .arg("-flags")
         .arg("low_delay")
+        .arg("-f")
+        .arg("concat")
+        .arg("-safe")
+        .arg("0")
+        .arg("-protocol_whitelist")
+        .arg("file,pipe,tcp,tls,rtp,rtsp,crypto")
         .arg("-i")
-        .arg(camera_url)
+        .arg("pipe:0")
         .arg("-f")
         .arg("mjpeg")
         .arg("-q:v")
@@ -149,13 +162,14 @@ fn ffmpeg_mjpeg_command(camera_url: &str) -> Command {
         .arg("5")
         .arg("-an")
         .arg("-")
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true);
     command
 }
 
-fn ffmpeg_fragmented_mp4_command(camera_url: &str) -> Command {
+fn ffmpeg_fragmented_mp4_command() -> Command {
     let mut command = Command::new(ffmpeg_executable());
     command
         .arg("-rtsp_transport")
@@ -172,8 +186,14 @@ fn ffmpeg_fragmented_mp4_command(camera_url: &str) -> Command {
         .arg("nobuffer")
         .arg("-flags")
         .arg("low_delay")
+        .arg("-f")
+        .arg("concat")
+        .arg("-safe")
+        .arg("0")
+        .arg("-protocol_whitelist")
+        .arg("file,pipe,tcp,tls,rtp,rtsp,crypto")
         .arg("-i")
-        .arg(camera_url)
+        .arg("pipe:0")
         .arg("-an")
         .arg("-c:v")
         .arg("libx264")
@@ -194,6 +214,7 @@ fn ffmpeg_fragmented_mp4_command(camera_url: &str) -> Command {
         .arg("-f")
         .arg("mp4")
         .arg("-")
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true);
@@ -211,15 +232,41 @@ fn ffmpeg_executable_from_env(value: Option<String>) -> String {
         .unwrap_or_else(|| "ffmpeg".to_owned())
 }
 
-async fn spawn_ffmpeg_command(mut command: Command) -> anyhow::Result<tokio::process::Child> {
+async fn spawn_ffmpeg_command(
+    mut command: Command,
+    camera_url: &str,
+) -> anyhow::Result<tokio::process::Child> {
     let program = command
         .as_std()
         .get_program()
         .to_string_lossy()
         .into_owned();
-    command
+    let mut child = command
         .spawn()
-        .with_context(|| format!("spawn ffmpeg executable {program}"))
+        .with_context(|| format!("spawn ffmpeg executable {program}"))?;
+    let mut stdin = child.stdin.take().context("ffmpeg stdin should be piped")?;
+    stdin
+        .write_all(format!("ffconcat version 1.0\nfile '{camera_url}'\n").as_bytes())
+        .await
+        .context("write protected ffmpeg camera input")?;
+    stdin
+        .shutdown()
+        .await
+        .context("close ffmpeg camera input")?;
+    Ok(child)
+}
+
+fn percent_encode_userinfo(value: &str) -> String {
+    value
+        .bytes()
+        .map(|byte| {
+            if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+                (byte as char).to_string()
+            } else {
+                format!("%{byte:02X}")
+            }
+        })
+        .collect()
 }
 
 fn take_jpeg_frame(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
@@ -258,6 +305,10 @@ mod tests {
             build_camera_url("10.1.61.124", "secret"),
             "rtsps://bblp:secret@10.1.61.124:322/streaming/live/1"
         );
+        assert_eq!(
+            build_camera_url("10.1.61.124", "secret'\n"),
+            "rtsps://bblp:secret%27%0A@10.1.61.124:322/streaming/live/1"
+        );
     }
 
     #[test]
@@ -275,7 +326,7 @@ mod tests {
 
     #[test]
     fn builds_fragmented_mp4_ffmpeg_command() {
-        let command = ffmpeg_fragmented_mp4_command("rtsps://example.test/stream");
+        let command = ffmpeg_fragmented_mp4_command();
         let args = command
             .as_std()
             .get_args()
@@ -285,6 +336,7 @@ mod tests {
         assert!(args.windows(2).any(|args| args == ["-c:v", "libx264"]));
         assert!(args.windows(2).any(|args| args == ["-g", "30"]));
         assert!(args.windows(2).any(|args| args == ["-f", "mp4"]));
+        assert!(!args.iter().any(|arg| arg.contains("rtsps://")));
         assert!(
             args.windows(2).any(|args| {
                 args == ["-movflags", "frag_keyframe+empty_moov+default_base_moof"]
@@ -311,7 +363,9 @@ mod tests {
         let mut command = Command::new("C:\\definitely-missing-pandar-ffmpeg\\ffmpeg.exe");
         command.stdout(Stdio::piped()).stderr(Stdio::null());
 
-        let err = spawn_ffmpeg_command(command).await.unwrap_err();
+        let err = spawn_ffmpeg_command(command, "rtsps://example.test/stream")
+            .await
+            .unwrap_err();
         let formatted = format!("{err:#}");
 
         assert!(formatted.contains("spawn ffmpeg executable"));

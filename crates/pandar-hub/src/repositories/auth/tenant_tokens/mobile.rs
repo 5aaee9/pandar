@@ -23,7 +23,7 @@ impl AuthRepository {
             id: uuid::Uuid::new_v4().to_string(),
             tenant_id,
             name: name.into(),
-            scopes: vec![TenantTokenScope::All],
+            scopes: vec![TenantTokenScope::MobileSession],
             created_by_user_id,
             created_at: created_at_now(),
             last_used_at: None,

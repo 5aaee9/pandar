@@ -295,6 +295,15 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(bytes, b"abc");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(temp_dir.path().join(&artifact.storage_key))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
 
         storage
             .delete_artifact(&artifact.storage_key)

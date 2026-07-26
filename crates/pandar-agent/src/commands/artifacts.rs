@@ -2,6 +2,8 @@ use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, bail};
 use async_trait::async_trait;
+use futures_util::StreamExt;
+use std::time::Duration;
 
 use crate::{AgentConfig, protocol::agent::v1::PrintProjectFile};
 
@@ -23,11 +25,16 @@ impl FilesystemArtifactReader {
 #[async_trait]
 impl ArtifactReader for FilesystemArtifactReader {
     async fn read_artifact(&self, storage_path: &str) -> anyhow::Result<Vec<u8>> {
-        let artifact_path = resolve_artifact_path(&self.root, storage_path)?;
-        tokio::task::spawn_blocking(move || std::fs::read(&artifact_path))
-            .await
-            .context("join print artifact read task")?
-            .with_context(|| format!("read print artifact {storage_path}"))
+        resolve_artifact_path(&self.root, storage_path)?;
+        let root = self.root.clone();
+        let relative_path = storage_path.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let directory = cap_std::fs::Dir::open_ambient_dir(root, cap_std::ambient_authority())?;
+            directory.read(relative_path)
+        })
+        .await
+        .context("join print artifact read task")?
+        .with_context(|| format!("read print artifact {storage_path}"))
     }
 }
 
@@ -100,7 +107,12 @@ impl HubArtifactReader {
             hub_api_url: config.hub_api_url.clone(),
             hub_grpc_url: config.hub_grpc_url.clone(),
             agent_credential: config.agent_credential.clone(),
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(5))
+                .timeout(Duration::from_secs(60))
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("hub artifact HTTP client configuration is valid"),
         }
     }
 }
@@ -126,12 +138,25 @@ impl ArtifactReader for HubArtifactReader {
             bail!("hub artifact download failed with HTTP {status}");
         }
 
-        Ok(response
-            .bytes()
-            .await
-            .map_err(reqwest::Error::without_url)
-            .context("read print artifact response from hub")?
-            .to_vec())
+        const MAX_ARTIFACT_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_ARTIFACT_RESPONSE_BYTES as u64)
+        {
+            bail!("hub artifact exceeds {MAX_ARTIFACT_RESPONSE_BYTES} bytes");
+        }
+        let mut artifact = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk
+                .map_err(reqwest::Error::without_url)
+                .context("read print artifact response from hub")?;
+            if artifact.len().saturating_add(chunk.len()) > MAX_ARTIFACT_RESPONSE_BYTES {
+                bail!("hub artifact exceeds {MAX_ARTIFACT_RESPONSE_BYTES} bytes");
+            }
+            artifact.extend_from_slice(&chunk);
+        }
+        Ok(artifact)
     }
 }
 
@@ -172,4 +197,21 @@ pub fn resolve_artifact_path(root: &Path, storage_path: &str) -> anyhow::Result<
     }
 
     Ok(root.join(storage_path))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ArtifactReader, FilesystemArtifactReader};
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn filesystem_reader_rejects_symlink_escape() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("secret.3mf"), b"secret").unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.path().join("escape")).unwrap();
+        let reader = FilesystemArtifactReader::new(root.path());
+
+        assert!(reader.read_artifact("escape/secret.3mf").await.is_err());
+    }
 }

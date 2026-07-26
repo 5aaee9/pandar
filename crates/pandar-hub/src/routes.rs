@@ -38,8 +38,6 @@ pub fn router(state: AppState) -> Router {
 
     Router::new()
         .route("/healthz", get(status::healthz))
-        .route("/readyz", get(status::readyz))
-        .route("/metrics", get(status::metrics))
         .route("/api/v1/me", get(onboarding::me))
         .route(
             "/api/v1/onboarding/tenants",
@@ -266,6 +264,13 @@ pub fn router(state: AppState) -> Router {
             post(printer_events::create_printer_event_ticket),
         )
         .layer(DefaultBodyLimit::max(default_body_limit))
+        .with_state(state)
+}
+
+pub fn observability_router(state: AppState) -> Router {
+    Router::new()
+        .route("/readyz", get(status::readyz))
+        .route("/metrics", get(status::metrics))
         .with_state(state)
 }
 

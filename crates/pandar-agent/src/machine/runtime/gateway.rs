@@ -92,7 +92,7 @@ impl BambuMachineGateway for RuntimeBambuMachineGateway {
         &self,
         endpoint: &BambuPrinterEndpoint,
     ) -> anyhow::Result<()> {
-        let actual_serial = resolve_bambu_mqtt_serial(&endpoint.host).await?;
+        let actual_serial = resolve_bambu_mqtt_serial(&endpoint.host, &endpoint.serial).await?;
         if actual_serial != endpoint.serial {
             anyhow::bail!(
                 "printer at {} reported serial {actual_serial}, expected {}",

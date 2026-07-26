@@ -19,7 +19,7 @@ fn default_profile_builds_tls_config() {
 
 #[test]
 fn p2s_profile_builds_tls_config() {
-    let config = bambu_lan_ftps_tls_config(FtpsProfile::for_model(Some("P2S")));
+    let config = bambu_lan_ftps_tls_config(FtpsProfile::for_model(Some("P2S")), "test-printer");
 
     assert!(config.alpn_protocols.is_empty());
 }

@@ -25,6 +25,23 @@ export async function redirectWithAuthToken(
   }
 
   const callbackUrl = new URL(dashboardCallbackUrl);
-  callbackUrl.searchParams.set("token", body.token);
-  window.location.href = callbackUrl.toString();
+  const state = callbackUrl.searchParams.get("state");
+  if (!state) {
+    throw new Error(messages.dashboardTokenFailed);
+  }
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = callbackUrl.toString();
+  for (const [name, value] of [
+    ["token", body.token],
+    ["state", state],
+  ]) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.append(input);
+  }
+  document.body.append(form);
+  form.submit();
 }

@@ -10,10 +10,12 @@ use crate::{
 
 use super::metadata_preview::{artifact_metadata_json, parsed_artifact_metadata};
 use parsing::{parse_bool, parse_calibration_mode, parse_i64, parse_optional_json_field, required};
-use staging::{cleanup_staged_upload, read_text_field, stage_file_field};
+use quota::{artifact_quota, staged_artifact_size};
+use staging::{acquire_staging_permit, cleanup_staged_upload, read_text_field, stage_file_field};
 use types::PreparedPrintJob;
 
 mod parsing;
+mod quota;
 mod staging;
 mod studio;
 mod types;
@@ -35,7 +37,7 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
     log_context: &'static str,
     kind: MultipartPrintKind,
 ) -> Result<JobWithArtifact, ApiError> {
-    let parsed = parse_multipart_print_fields(state, multipart).await?;
+    let parsed = parse_multipart_print_fields(state, tenant_id, multipart).await?;
     let studio_metadata = match kind {
         MultipartPrintKind::Web => None,
         MultipartPrintKind::Studio => match studio::metadata(&parsed) {
@@ -75,24 +77,55 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
         .file
         .as_ref()
         .expect("prepared print job requires staged file");
-    let artifact_id = uuid::Uuid::new_v4().to_string();
-    let stored = state
-        .artifact_storage()
-        .put_artifact(crate::artifacts::StoreArtifactInput {
-            tenant_id,
-            artifact_id: &artifact_id,
-            filename: &filename,
-            body: crate::artifacts::ArtifactUploadBody::reader(upload_file),
-        })
+    let artifact_quota = artifact_quota();
+    let upload_bytes = match staged_artifact_size(file).await {
+        Ok(upload_bytes) => upload_bytes,
+        Err(error) => {
+            cleanup_staged_upload(file).await;
+            return Err(error);
+        }
+    };
+    let reservation = match state
+        .jobs()
+        .reserve_artifact_quota(tenant_id, upload_bytes, artifact_quota)
         .await
-        .map_err(|err| {
-            tracing::error!(
-                error = %super::redact_artifact_error(&format!("{err:#}")),
-                context = log_context,
-                "failed to write print artifact"
-            );
-            ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
-        });
+    {
+        Ok(reservation) => reservation,
+        Err(error) => {
+            cleanup_staged_upload(file).await;
+            return Err(error.into());
+        }
+    };
+    let artifact_metadata_json = match artifact_metadata_json(artifact_metadata.as_ref()) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            cleanup_staged_upload(file).await;
+            return Err(error);
+        }
+    };
+    let artifact_id = uuid::Uuid::new_v4().to_string();
+    let stored = tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        state
+            .artifact_storage()
+            .put_artifact(crate::artifacts::StoreArtifactInput {
+                tenant_id,
+                artifact_id: &artifact_id,
+                filename: &filename,
+                body: crate::artifacts::ArtifactUploadBody::reader(upload_file),
+            }),
+    )
+    .await
+    .map_err(|err| anyhow::Error::new(err).context("print artifact storage timed out"))
+    .and_then(|stored| stored)
+    .map_err(|err| {
+        tracing::error!(
+            error = %super::redact_artifact_error(&format!("{err:#}")),
+            context = log_context,
+            "failed to write print artifact"
+        );
+        ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
+    });
     cleanup_staged_upload(file).await;
     let stored = stored?;
 
@@ -105,7 +138,7 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
         artifact_content_type: content_type,
         artifact_size_bytes: stored.size_bytes,
         artifact_storage_path: stored.storage_path.clone(),
-        artifact_metadata_json: artifact_metadata_json(artifact_metadata.as_ref())?,
+        artifact_metadata_json,
         plate_id,
         use_ams,
         bed_leveling,
@@ -120,14 +153,12 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
     };
     let created = match studio_metadata {
         Some(metadata) => {
-            state
-                .jobs()
+            reservation
                 .create_studio_print_job_with_audit(input, metadata, audit_actor)
                 .await
         }
         None => {
-            state
-                .jobs()
+            reservation
                 .create_print_job_with_audit(input, audit_actor)
                 .await
         }
@@ -154,9 +185,28 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
 
 pub(super) async fn parse_multipart_print_fields(
     state: &AppState,
+    tenant_id: TenantId,
+    multipart: Multipart,
+) -> Result<MultipartPrintFields, ApiError> {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        parse_multipart_print_fields_inner(state, tenant_id, multipart),
+    )
+    .await
+    .map_err(|_| ApiError::new(StatusCode::REQUEST_TIMEOUT, "artifact_upload_timeout"))?
+}
+
+async fn parse_multipart_print_fields_inner(
+    state: &AppState,
+    tenant_id: TenantId,
     mut multipart: Multipart,
 ) -> Result<MultipartPrintFields, ApiError> {
-    let mut fields = MultipartPrintFields::default();
+    let mut fields = MultipartPrintFields {
+        _staging_permit: Some(acquire_staging_permit(tenant_id)?),
+        ..MultipartPrintFields::default()
+    };
+    let mut field_count = 0_usize;
+    let mut text_bytes = 0_usize;
     loop {
         let Some(field) = (match multipart.next_field().await {
             Ok(field) => field,
@@ -171,6 +221,11 @@ pub(super) async fn parse_multipart_print_fields(
         }) else {
             break;
         };
+        field_count += 1;
+        if field_count > 64 {
+            fields.cleanup_staged_uploads().await;
+            return Err(ApiError::bad_request("artifact_too_many_fields"));
+        }
         let name = match field.name() {
             Some(name) => name.to_string(),
             None => {
@@ -210,6 +265,11 @@ pub(super) async fn parse_multipart_print_fields(
                 return Err(err);
             }
         };
+        text_bytes = text_bytes.saturating_add(text.len());
+        if text_bytes > 256 * 1024 {
+            fields.cleanup_staged_uploads().await;
+            return Err(ApiError::bad_request("artifact_text_fields_too_large"));
+        }
         let parsed = match name.as_str() {
             "printer_id" => {
                 fields.printer_id = Some(text);

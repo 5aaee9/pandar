@@ -7,12 +7,15 @@ use rustls::{
     server::{ClientHello, ResolvesServerCert},
     sign::CertifiedKey,
 };
+use sha2::{Digest, Sha256};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 
 use super::{
     bambu_lan_tls_config,
-    transport::{bambu_mqtt_serial_from_certificate, mqtt_topic_for_serial},
+    transport::{
+        BambuLanCertificateVerifier, bambu_mqtt_serial_from_certificate, mqtt_topic_for_serial,
+    },
 };
 
 #[test]
@@ -33,46 +36,74 @@ fn mqtt_topic_uses_certificate_common_name_without_changing_inventory_serial() {
 }
 
 #[tokio::test]
-async fn lan_tls_accepts_bambu_x509_v1_certificates() {
-    connect_to_v1_server(
+async fn lan_tls_rejects_untrusted_bambu_x509_v1_certificates() {
+    let error = connect_to_v1_server(
         include_bytes!("tls/bambu-v1-key.pem"),
         TestTlsVersion::Tls13,
+        None,
     )
     .await
-    .unwrap();
+    .unwrap_err();
+
+    assert!(
+        error.contains("UnknownIssuer") || error.contains("UnsupportedCertVersion"),
+        "unexpected error: {error}"
+    );
 }
 
 #[tokio::test]
-async fn lan_tls_rejects_invalid_handshake_signatures() {
-    let error = connect_to_v1_server(include_bytes!("tls/wrong-key.pem"), TestTlsVersion::Tls13)
-        .await
-        .unwrap_err();
-
-    assert!(error.contains("BadSignature"), "unexpected error: {error}");
-}
-
-#[tokio::test]
-async fn lan_tls12_accepts_bambu_x509_v1_certificates() {
-    connect_to_v1_server(
+async fn lan_tls12_rejects_untrusted_bambu_x509_v1_certificates() {
+    let error = connect_to_v1_server(
         include_bytes!("tls/bambu-v1-key.pem"),
         TestTlsVersion::Tls12,
+        None,
     )
     .await
-    .unwrap();
+    .unwrap_err();
+
+    assert!(
+        error.contains("UnknownIssuer") || error.contains("UnsupportedCertVersion"),
+        "unexpected error: {error}"
+    );
 }
 
 #[tokio::test]
-async fn lan_tls12_rejects_invalid_handshake_signatures() {
-    let error = connect_to_v1_server(include_bytes!("tls/wrong-key.pem"), TestTlsVersion::Tls12)
-        .await
-        .unwrap_err();
+async fn lan_tls_rejects_leaf_only_certificate_with_wrong_pin() {
+    let error = connect_to_v1_server(
+        include_bytes!("tls/bambu-v1-key.pem"),
+        TestTlsVersion::Tls13,
+        Some([0_u8; 32]),
+    )
+    .await
+    .unwrap_err();
 
-    assert!(error.contains("BadSignature"), "unexpected error: {error}");
+    assert!(
+        error.contains("ApplicationVerificationFailure"),
+        "unexpected error: {error}"
+    );
+}
+
+#[tokio::test]
+async fn lan_tls_accepts_pinned_leaf_only_certificate_without_san() {
+    let certificate =
+        CertificateDer::from_pem_slice(include_bytes!("tls/bambu-v1-cert.pem")).unwrap();
+    let fingerprint: [u8; 32] = Sha256::digest(certificate.as_ref()).into();
+
+    for tls_version in [TestTlsVersion::Tls12, TestTlsVersion::Tls13] {
+        connect_to_v1_server(
+            include_bytes!("tls/bambu-v1-key.pem"),
+            tls_version,
+            Some(fingerprint),
+        )
+        .await
+        .unwrap();
+    }
 }
 
 async fn connect_to_v1_server(
     private_key_pem: &[u8],
     tls_version: TestTlsVersion,
+    trusted_leaf_sha256: Option<[u8; 32]>,
 ) -> Result<(), String> {
     let certificate =
         CertificateDer::from_pem_slice(include_bytes!("tls/bambu-v1-cert.pem")).unwrap();
@@ -94,7 +125,7 @@ async fn connect_to_v1_server(
             .await
     });
 
-    let client_config = tls_version.client_config();
+    let client_config = tls_version.client_config(trusted_leaf_sha256);
     let stream = TcpStream::connect(address).await.unwrap();
     let result = tokio::time::timeout(
         Duration::from_secs(2),
@@ -131,20 +162,37 @@ impl TestTlsVersion {
         }
     }
 
-    fn client_config(self) -> Arc<ClientConfig> {
-        match self {
-            Self::Tls12 => {
-                crate::machine::ftps::bambu_lan_ftps_tls_config(crate::machine::ftps::FtpsProfile {
-                    cap_tls_1_2: true,
-                })
-            }
-            Self::Tls13 => {
-                let TlsConfiguration::Rustls(config) = bambu_lan_tls_config() else {
-                    panic!("Bambu LAN MQTT must use rustls");
-                };
-                config
-            }
-        }
+    fn client_config(self, trusted_leaf_sha256: Option<[u8; 32]>) -> Arc<ClientConfig> {
+        let Some(trusted_leaf_sha256) = trusted_leaf_sha256 else {
+            return match self {
+                Self::Tls12 => crate::machine::ftps::bambu_lan_ftps_tls_config(
+                    crate::machine::ftps::FtpsProfile { cap_tls_1_2: true },
+                    "test-bambu-v1",
+                ),
+                Self::Tls13 => {
+                    let TlsConfiguration::Rustls(config) = bambu_lan_tls_config("test-bambu-v1")
+                    else {
+                        panic!("Bambu LAN MQTT must use rustls");
+                    };
+                    config
+                }
+            };
+        };
+        Arc::new(
+            ClientConfig::builder_with_provider(
+                rustls::crypto::aws_lc_rs::default_provider().into(),
+            )
+            .with_protocol_versions(&[self.protocol_version()])
+            .unwrap()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(
+                BambuLanCertificateVerifier::with_trusted_leaf_sha256(
+                    "test-bambu-v1",
+                    trusted_leaf_sha256,
+                ),
+            ))
+            .with_no_client_auth(),
+        )
     }
 }
 

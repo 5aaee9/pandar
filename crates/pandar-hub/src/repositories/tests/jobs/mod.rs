@@ -19,7 +19,7 @@ mod studio_tasks;
 pub(super) mod submission_correlation;
 mod transitions;
 
-pub(super) fn create_input(
+pub(crate) fn create_input(
     tenant_id: pandar_core::TenantId,
     agent_id: AgentId,
     printer_id: &str,

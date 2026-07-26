@@ -69,13 +69,13 @@ pub(super) fn serve_freshness_claim(
                 stream.set_nonblocking(false).unwrap();
                 let request =
                     read_http_request_with_timeout(&mut stream, Some(Duration::from_millis(500)));
-                if request.starts_with("GET /readyz HTTP/1.1") {
-                    assert_request(&request, "GET", "/readyz", false);
+                if request.starts_with("GET /healthz HTTP/1.1") {
+                    assert_request(&request, "GET", "/healthz", false);
                     connection_ready_seen = true;
                     write_response(
                         &mut stream,
                         "HTTP/1.1 200 OK",
-                        r#"{"status":"ready","checks":{}}"#,
+                        r#"{"status":"ok","checks":{}}"#,
                     );
                 } else {
                     assert_request_with_token(
@@ -115,12 +115,12 @@ pub(super) fn serve_freshness_claim(
 
     if !connection_ready_seen {
         let (mut ready_stream, ready_request) =
-            next_request(listener, stop, deadline, "GET", "/readyz");
-        assert_request(&ready_request, "GET", "/readyz", false);
+            next_request(listener, stop, deadline, "GET", "/healthz");
+        assert_request(&ready_request, "GET", "/healthz", false);
         write_response(
             &mut ready_stream,
             "HTTP/1.1 200 OK",
-            r#"{"status":"ready","checks":{}}"#,
+            r#"{"status":"ok","checks":{}}"#,
         );
     }
 
@@ -211,11 +211,11 @@ pub(super) fn serve_firmware_claim_race(
                 Some("rotated-token"),
             );
             assert!(firmware_compat::try_respond(&mut stream, &request));
-        } else if line == "GET /readyz HTTP/1.1" {
+        } else if line == "GET /healthz HTTP/1.1" {
             write_response(
                 &mut stream,
                 "HTTP/1.1 200 OK",
-                r#"{"status":"ready","checks":{}}"#,
+                r#"{"status":"ok","checks":{}}"#,
             );
         } else if line == "GET /api/v1/plugin/printers HTTP/1.1" {
             assert_request_with_token(

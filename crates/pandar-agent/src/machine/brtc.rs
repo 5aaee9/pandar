@@ -74,7 +74,7 @@ impl BrtcSession {
             .with_context(|| format!("connect Bambu BRTC tunnel to {}:6000", endpoint.host))?;
         let server_name = ServerName::try_from(endpoint.serial.clone())
             .with_context(|| format!("build BRTC TLS server name for {}", endpoint.serial))?;
-        let connector = TlsConnector::from(brtc_tls_config());
+        let connector = TlsConnector::from(brtc_tls_config(&endpoint.serial));
         let stream = connector
             .connect(server_name, tcp)
             .await
@@ -329,13 +329,15 @@ struct BrtcFrame {
     payload: Vec<u8>,
 }
 
-fn brtc_tls_config() -> Arc<ClientConfig> {
+fn brtc_tls_config(expected_serial: &str) -> Arc<ClientConfig> {
     let mut config =
         ClientConfig::builder_with_provider(rustls::crypto::aws_lc_rs::default_provider().into())
             .with_safe_default_protocol_versions()
             .expect("aws-lc-rs provider supports rustls safe default protocol versions")
             .dangerous()
-            .with_custom_certificate_verifier(Arc::new(BambuLanCertificateVerifier))
+            .with_custom_certificate_verifier(Arc::new(BambuLanCertificateVerifier::new(
+                expected_serial,
+            )))
             .with_no_client_auth();
     config.alpn_protocols = Vec::new();
     Arc::new(config)

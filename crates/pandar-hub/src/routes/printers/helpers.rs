@@ -30,8 +30,7 @@ impl super::LinkPrinterRequest {
         }
 
         let host = trim_required(self.host)?;
-        host.parse::<Ipv4Addr>()
-            .map_err(|_| ApiError::bad_request("bad_request"))?;
+        parse_lan_host(&host)?;
 
         Ok(LinkPrinterPayload {
             printer_type,
@@ -48,17 +47,37 @@ impl super::UpdatePrinterRequest {
         existing_host: Option<String>,
         existing_access_code: Option<String>,
     ) -> Result<(String, String, String), ApiError> {
-        let host = trim_optional(Some(self.host))
-            .or(existing_host)
+        let requested_host = trim_optional(Some(self.host));
+        let host = requested_host
+            .clone()
+            .or_else(|| existing_host.clone())
             .ok_or_else(|| ApiError::bad_request("bad_request"))?;
-        host.parse::<Ipv4Addr>()
-            .map_err(|_| ApiError::bad_request("bad_request"))?;
-        let access_code = trim_optional(Some(self.access_code))
+        parse_lan_host(&host)?;
+        let requested_access_code = trim_optional(Some(self.access_code));
+        if requested_host.is_some()
+            && existing_host.as_deref() != Some(host.as_str())
+            && requested_access_code.is_none()
+        {
+            return Err(ApiError::bad_request(
+                "access_code_required_for_host_change",
+            ));
+        }
+        let access_code = requested_access_code
             .or(existing_access_code)
             .ok_or_else(|| ApiError::bad_request("bad_request"))?;
 
         Ok((trim_required(self.name)?, host, access_code))
     }
+}
+
+fn parse_lan_host(value: &str) -> Result<Ipv4Addr, ApiError> {
+    let address = value
+        .parse::<Ipv4Addr>()
+        .map_err(|_| ApiError::bad_request("bad_request"))?;
+    if !(address.is_private() || address.is_link_local()) {
+        return Err(ApiError::bad_request("printer_host_must_be_private"));
+    }
+    Ok(address)
 }
 
 pub(super) fn trim_required(value: String) -> Result<String, ApiError> {

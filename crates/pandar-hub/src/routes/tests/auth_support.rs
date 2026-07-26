@@ -8,11 +8,12 @@ pub(super) fn external_auth_state(state: AppState) -> AppState {
         provider: TEST_PROVIDER.to_owned(),
         issuer: TEST_ISSUER.to_owned(),
         jwks_url: "https://identity.example.test/.well-known/jwks.json".to_owned(),
-        audience: Some(TEST_AUDIENCE.to_owned()),
+        audience: TEST_AUDIENCE.to_owned(),
         algorithms: vec![Algorithm::RS256],
         authorized_parties: Vec::new(),
         required_scopes: Vec::new(),
         leeway_seconds: 60,
+        max_token_lifetime_seconds: 86_400,
     };
     let jwks = serde_json::from_str::<JwkSet>(TEST_PUBLIC_JWK_JSON).unwrap();
     state.with_external_auth(crate::identity::JwtVerifier::static_jwks(config, jwks))
@@ -70,6 +71,7 @@ fn jwt_for_claims(claims: ExternalAuthClaims<'_>) -> String {
             sub: claims.sub,
             aud: claims.aud,
             exp,
+            iat: nbf,
             nbf,
             email: claims.email,
             email_verified: claims.email_verified,
@@ -129,6 +131,7 @@ struct EncodedExternalAuthClaims<'a> {
     sub: &'a str,
     aud: &'a str,
     exp: u64,
+    iat: u64,
     nbf: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     email: Option<&'a str>,

@@ -1,0 +1,212 @@
+use std::collections::HashMap;
+
+use anyhow::{Context, anyhow, bail};
+use rustls::{
+    CertificateError, DigitallySignedStruct, Error as TlsError, PeerMisbehaved, RootCertStore,
+    SignatureScheme,
+    client::{
+        danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+        verify_server_cert_signed_by_trust_anchor,
+    },
+    pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime, pem::PemObject},
+};
+use sha2::{Digest, Sha256};
+use x509_parser::prelude::{FromDer, X509Certificate};
+
+#[derive(Debug)]
+pub(crate) struct BambuLanCertificateVerifier {
+    expected_serial: String,
+    roots: RootCertStore,
+    trusted_leaf_sha256: Result<Option<[u8; 32]>, String>,
+}
+
+impl BambuLanCertificateVerifier {
+    pub(crate) fn new(expected_serial: &str) -> Self {
+        let mut roots = RootCertStore::empty();
+        for certificate in
+            CertificateDer::pem_slice_iter(include_bytes!("../../bambu-printer-ca.pem"))
+        {
+            roots
+                .add(certificate.expect("bundled Bambu printer CA must be valid PEM"))
+                .expect("bundled Bambu printer CA must be a valid trust anchor");
+        }
+        Self {
+            expected_serial: expected_serial.to_owned(),
+            roots,
+            trusted_leaf_sha256: configured_bambu_leaf_pin(expected_serial),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_trusted_leaf_sha256(
+        expected_serial: &str,
+        trusted_leaf_sha256: [u8; 32],
+    ) -> Self {
+        let mut verifier = Self::new(expected_serial);
+        verifier.trusted_leaf_sha256 = Ok(Some(trusted_leaf_sha256));
+        verifier
+    }
+}
+
+fn configured_bambu_leaf_pin(expected_serial: &str) -> Result<Option<[u8; 32]>, String> {
+    let value = match std::env::var("PANDAR_BAMBU_CERTIFICATE_SHA256_PINS") {
+        Ok(value) => value,
+        Err(std::env::VarError::NotPresent) => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "read PANDAR_BAMBU_CERTIFICATE_SHA256_PINS: {error}"
+            ));
+        }
+    };
+    let pins = serde_json::from_str::<HashMap<String, String>>(&value)
+        .map_err(|error| format!("parse PANDAR_BAMBU_CERTIFICATE_SHA256_PINS: {error}"))?;
+    pins.get(expected_serial)
+        .map(|fingerprint| parse_sha256_fingerprint(fingerprint))
+        .transpose()
+}
+
+fn parse_sha256_fingerprint(value: &str) -> Result<[u8; 32], String> {
+    let value = value.replace(':', "");
+    if value.len() != 64 {
+        return Err("Bambu certificate SHA-256 fingerprint must contain 64 hex digits".to_owned());
+    }
+    let mut fingerprint = [0_u8; 32];
+    for (index, byte) in fingerprint.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16)
+            .map_err(|_| "Bambu certificate SHA-256 fingerprint contains non-hex digits")?;
+    }
+    Ok(fingerprint)
+}
+
+impl ServerCertVerifier for BambuLanCertificateVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        now: UnixTime,
+    ) -> Result<ServerCertVerified, TlsError> {
+        let certificate = parse_bambu_certificate(end_entity)?;
+        let actual_serial = bambu_mqtt_serial_from_certificate(end_entity)
+            .map_err(|_| TlsError::InvalidCertificate(CertificateError::BadEncoding))?;
+        if actual_serial != self.expected_serial {
+            return Err(TlsError::InvalidCertificate(
+                CertificateError::ApplicationVerificationFailure,
+            ));
+        }
+
+        match &self.trusted_leaf_sha256 {
+            Ok(Some(expected_sha256)) => {
+                if Sha256::digest(end_entity.as_ref()).as_slice() != expected_sha256 {
+                    return Err(TlsError::InvalidCertificate(
+                        CertificateError::ApplicationVerificationFailure,
+                    ));
+                }
+                let now = i64::try_from(now.as_secs())
+                    .map_err(|_| TlsError::InvalidCertificate(CertificateError::BadEncoding))?;
+                if now < certificate.validity().not_before.timestamp() {
+                    return Err(TlsError::InvalidCertificate(CertificateError::NotValidYet));
+                }
+                if now > certificate.validity().not_after.timestamp() {
+                    return Err(TlsError::InvalidCertificate(CertificateError::Expired));
+                }
+            }
+            Ok(None) => {
+                let provider = rustls::crypto::aws_lc_rs::default_provider();
+                let certificate = rustls::server::ParsedCertificate::try_from(end_entity)?;
+                verify_server_cert_signed_by_trust_anchor(
+                    &certificate,
+                    &self.roots,
+                    intermediates,
+                    now,
+                    provider.signature_verification_algorithms.all,
+                )?;
+            }
+            Err(error) => return Err(TlsError::General(error.clone())),
+        }
+
+        Ok(ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TlsError> {
+        let provider = rustls::crypto::aws_lc_rs::default_provider();
+        let algorithms = provider
+            .signature_verification_algorithms
+            .mapping
+            .iter()
+            .find_map(|(scheme, algorithms)| (*scheme == dss.scheme).then_some(*algorithms))
+            .ok_or(TlsError::PeerMisbehaved(
+                PeerMisbehaved::SignedHandshakeWithUnadvertisedSigScheme,
+            ))?;
+        let certificate = parse_bambu_certificate(cert)?;
+        let public_key = &certificate.public_key().subject_public_key.data;
+
+        algorithms
+            .iter()
+            .find_map(|algorithm| {
+                algorithm
+                    .verify_signature(public_key, message, dss.signature())
+                    .is_ok()
+                    .then_some(HandshakeSignatureValid::assertion())
+            })
+            .ok_or(TlsError::InvalidCertificate(CertificateError::BadSignature))
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, TlsError> {
+        let provider = rustls::crypto::aws_lc_rs::default_provider();
+        let certificate = parse_bambu_certificate(cert)?;
+        let public_key = SubjectPublicKeyInfoDer::from(certificate.public_key().raw);
+        rustls::crypto::verify_tls13_signature_with_raw_key(
+            message,
+            &public_key,
+            dss,
+            &provider.signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        rustls::crypto::aws_lc_rs::default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
+    }
+}
+
+fn parse_bambu_certificate<'a>(
+    certificate: &'a CertificateDer<'_>,
+) -> Result<X509Certificate<'a>, TlsError> {
+    let (remainder, certificate) = X509Certificate::from_der(certificate.as_ref())
+        .map_err(|_| TlsError::InvalidCertificate(CertificateError::BadEncoding))?;
+    if !remainder.is_empty() {
+        return Err(TlsError::InvalidCertificate(CertificateError::BadEncoding));
+    }
+    Ok(certificate)
+}
+
+pub(crate) fn bambu_mqtt_serial_from_certificate(
+    certificate: &CertificateDer<'_>,
+) -> anyhow::Result<String> {
+    let certificate = parse_bambu_certificate(certificate).context("parse Bambu certificate")?;
+    let common_name = certificate
+        .subject()
+        .iter_common_name()
+        .next()
+        .ok_or_else(|| anyhow!("Bambu certificate is missing a common name"))?
+        .as_str()
+        .context("decode Bambu certificate common name")?
+        .trim();
+    if common_name.is_empty() {
+        bail!("Bambu certificate has a blank common name");
+    }
+    Ok(common_name.to_owned())
+}

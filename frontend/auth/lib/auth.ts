@@ -16,6 +16,9 @@ export const auth = betterAuth({
   basePath: "/api/auth",
   secret: env.secret,
   trustedOrigins: env.trustedOrigins,
+  advanced: {
+    useSecureCookies: process.env.NODE_ENV === "production",
+  },
   plugins: [
     passkey(),
     magicLink({

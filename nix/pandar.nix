@@ -188,7 +188,7 @@
         src = frontendWorkspaceSource;
         npmWorkspace = "pandar-auth";
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-3mKEkgEb/FBDCDZWlhwP8YeN7Hnua9uqtAV8uBDaTRc=";
+        npmDepsHash = "sha256-fnv8609S3/zy8ZzSi/Kr5+nw7ocKHhgnmIfXGoRFUvk=";
 
         nativeBuildInputs = [
           pkgs.makeWrapper
@@ -226,7 +226,6 @@
           cp -r frontend/auth/lib "$out/share/pandar-auth/migrate-src/lib"
           cp -r frontend/auth/scripts "$out/share/pandar-auth/migrate-src/scripts"
           cp -r node_modules "$out/share/pandar-auth/migrate-src/node_modules"
-          cp -r frontend/node_modules/. "$out/share/pandar-auth/migrate-src/node_modules/"
           mkdir -p "$out/share/pandar-auth/migrate-src/frontend"
           mkdir -p "$out/share/pandar-auth/migrate-src/frontend/auth"
           mkdir -p "$out/share/pandar-auth/migrate-src/frontend/plugin-local"
@@ -273,7 +272,7 @@
         version = "0.1.0";
         src = frontendWorkspaceSource;
         npmDepsFetcherVersion = 2;
-        npmDepsHash = "sha256-3mKEkgEb/FBDCDZWlhwP8YeN7Hnua9uqtAV8uBDaTRc=";
+        npmDepsHash = "sha256-fnv8609S3/zy8ZzSi/Kr5+nw7ocKHhgnmIfXGoRFUvk=";
         npmBuildScript = "build:web";
 
         nativeBuildInputs = [

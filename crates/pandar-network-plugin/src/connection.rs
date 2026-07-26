@@ -76,7 +76,7 @@ pub(super) struct ConnectionState {
 }
 
 #[derive(Deserialize)]
-struct ReadinessResponse {
+struct HealthResponse {
     status: String,
 }
 
@@ -178,8 +178,8 @@ impl ConnectionSession {
         let (http_code, connected) = match observation {
             Ok(response) => {
                 let ready = if response.http_code == 200 {
-                    match serde_json::from_str::<ReadinessResponse>(&response.body) {
-                        Ok(body) => body.status == "ready",
+                    match serde_json::from_str::<HealthResponse>(&response.body) {
+                        Ok(body) => body.status == "ok",
                         Err(error) => {
                             eprintln!(
                                 "pandar Hub readiness refresh failed: {:#}",

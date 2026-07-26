@@ -13,11 +13,12 @@ use uuid::Uuid;
 use crate::{PluginHttpResult, result, stable_error_body};
 
 mod callback;
+mod connection_limit;
 pub mod ffi;
 mod response;
 mod routes;
 
-use response::{BaseUrlBody, ConfigBody, HttpConfigBody, StartBody, json_string};
+use response::{BaseUrlBody, ConfigBody, HttpConfigBody, StartBody, content_type, json_string};
 use routes::LocalRoute;
 
 #[derive(RustEmbed)]
@@ -144,11 +145,16 @@ fn bind_local_webserver(config: LocalWebserverConfig) -> std::io::Result<LocalWe
     let config = Arc::new(Mutex::new(config));
     let thread_config = Arc::clone(&config);
     let thread_base_url = base_url.clone();
+    let active_connections = connection_limit::counter();
     thread::spawn(move || {
         for stream in listener.incoming().flatten() {
+            let Some(permit) = connection_limit::try_acquire(&active_connections) else {
+                continue;
+            };
             let connection_config = Arc::clone(&thread_config);
             let connection_base_url = thread_base_url.clone();
             thread::spawn(move || {
+                let _permit = permit;
                 handle_local_connection(stream, connection_config, &connection_base_url);
             });
         }
@@ -368,31 +374,8 @@ fn local_response(status: u16, content_type: &str, body: &[u8]) -> String {
     )
 }
 
-fn content_type(path: &str) -> &'static str {
-    if path.ends_with(".html") {
-        "text/html; charset=utf-8"
-    } else if path.ends_with(".css") {
-        "text/css; charset=utf-8"
-    } else if path.ends_with(".js") {
-        "application/javascript; charset=utf-8"
-    } else if path.ends_with(".json") {
-        "application/json; charset=utf-8"
-    } else {
-        "application/octet-stream"
-    }
-}
-
 fn normalize_target_url(value: String) -> Option<String> {
-    let value = value.trim().trim_end_matches('/').to_string();
-    if value.is_empty() {
-        return None;
-    }
-    let url = reqwest::Url::parse(&value).ok()?;
-    if matches!(url.scheme(), "http" | "https") && url.host_str().is_some() {
-        Some(value)
-    } else {
-        None
-    }
+    crate::normalize_hub_url(value)
 }
 
 fn invalid_target_server() -> PluginHttpResult {

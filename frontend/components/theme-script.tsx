@@ -2,7 +2,7 @@ import Script from "next/script";
 
 const mediaQuery = "(prefers-color-scheme: dark)";
 
-export function ThemeScript() {
+export function ThemeScript({ nonce }: { nonce?: string } = {}) {
   const code = `(() => {
   try {
     const raw = localStorage.getItem("pandar.settings");
@@ -21,6 +21,7 @@ export function ThemeScript() {
   return (
     <Script
       id="pandar-theme"
+      nonce={nonce}
       strategy="beforeInteractive"
       dangerouslySetInnerHTML={{ __html: code }}
     />
