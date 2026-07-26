@@ -23,6 +23,8 @@ mod capacity;
 
 use capacity::{CameraCapacity, CameraCapacityPermit};
 
+pub(crate) const DEFAULT_MAX_CAMERA_STREAMS_PER_TENANT: usize = 8;
+
 #[derive(Debug, Clone)]
 pub struct CameraSessionRegistry {
     streams: Arc<Mutex<HashMap<String, CameraStreamHandle>>>,
@@ -56,9 +58,13 @@ pub(crate) const MAX_CAMERA_CHUNK_BYTES: usize = 64 * 1024;
 
 impl CameraSessionRegistry {
     pub fn new() -> Self {
+        Self::with_max_streams_per_tenant(DEFAULT_MAX_CAMERA_STREAMS_PER_TENANT)
+    }
+
+    pub(crate) fn with_max_streams_per_tenant(max_streams_per_tenant: usize) -> Self {
         Self {
             streams: Arc::new(Mutex::new(HashMap::new())),
-            capacity: Arc::new(CameraCapacity::new()),
+            capacity: Arc::new(CameraCapacity::new(max_streams_per_tenant)),
         }
     }
 

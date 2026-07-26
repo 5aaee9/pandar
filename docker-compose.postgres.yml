@@ -61,6 +61,7 @@ services:
       PANDAR_EXTERNAL_AUTH_AUDIENCE: ${PANDAR_EXTERNAL_AUTH_AUDIENCE:-}
       PANDAR_EXTERNAL_AUTH_ALGORITHMS: ${PANDAR_EXTERNAL_AUTH_ALGORITHMS:-}
       PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE: ${PANDAR_AUTH_ALLOW_TENANT_SELF_CREATE:-true}
+      PANDAR_HUB_CAMERA_MAX_STREAMS_PER_TENANT: ${PANDAR_HUB_CAMERA_MAX_STREAMS_PER_TENANT:-8}
     # The default single-Hub filesystem backend persists /spool in pandar-spool.
     # For PostgreSQL+NATS replicas, prefer S3; a shared filesystem requires
     # PANDAR_ARTIFACT_FILESYSTEM_SHARED=true and a genuinely shared mount.

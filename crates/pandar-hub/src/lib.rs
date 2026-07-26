@@ -31,7 +31,10 @@ use std::{fmt, sync::Arc};
 use crate::{
     artifacts::{ArtifactStorage, ArtifactStorageConfig, IntoArtifactStorage, JobStorageAlias},
     camera_sessions::CameraSessionRegistry,
-    config::{no_auth_from_env, tenant_self_create_allowed_from_env},
+    config::{
+        camera_max_streams_per_tenant_from_env, no_auth_from_env,
+        tenant_self_create_allowed_from_env,
+    },
     db::{Database, DatabaseConfig},
     identity::{ExternalAuthConfig, JwtVerifier},
     metrics::{ControlPlaneMetric, MetricsState},
@@ -143,6 +146,7 @@ impl AppState {
             .filter(|value| !value.trim().is_empty());
         let tenant_self_create_allowed = tenant_self_create_allowed_from_env()?;
         let no_auth = no_auth_from_env()?;
+        let camera_max_streams_per_tenant = camera_max_streams_per_tenant_from_env()?;
 
         Ok(Self::from_database_with_control_plane_and_cipher(
             database,
@@ -153,6 +157,7 @@ impl AppState {
         .with_external_auth_option(external_auth)
         .with_no_auth(no_auth)
         .with_tenant_self_create_allowed(tenant_self_create_allowed)
+        .with_camera_max_streams_per_tenant(camera_max_streams_per_tenant)
         .with_bootstrap_token_option(bootstrap_token))
     }
 
@@ -293,6 +298,12 @@ impl AppState {
 
     fn with_tenant_self_create_allowed(mut self, allowed: bool) -> Self {
         self.tenant_self_create_allowed = allowed;
+        self
+    }
+
+    fn with_camera_max_streams_per_tenant(mut self, max_streams_per_tenant: usize) -> Self {
+        self.camera_sessions =
+            CameraSessionRegistry::with_max_streams_per_tenant(max_streams_per_tenant);
         self
     }
 

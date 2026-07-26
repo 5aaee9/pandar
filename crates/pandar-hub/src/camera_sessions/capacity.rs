@@ -4,29 +4,24 @@ use std::{
 };
 
 use pandar_core::TenantId;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use super::CameraOpenError;
 
-const MAX_CAMERA_STREAMS: usize = 32;
-const MAX_CAMERA_STREAMS_PER_TENANT: usize = 2;
-
 #[derive(Debug)]
 pub(super) struct CameraCapacity {
-    global: Arc<Semaphore>,
+    max_streams_per_tenant: usize,
     tenants: Mutex<HashMap<TenantId, usize>>,
 }
 
 pub(super) struct CameraCapacityPermit {
-    _global: OwnedSemaphorePermit,
     capacity: Arc<CameraCapacity>,
     tenant_id: TenantId,
 }
 
 impl CameraCapacity {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(max_streams_per_tenant: usize) -> Self {
         Self {
-            global: Arc::new(Semaphore::new(MAX_CAMERA_STREAMS)),
+            max_streams_per_tenant,
             tenants: Mutex::new(HashMap::new()),
         }
     }
@@ -35,19 +30,15 @@ impl CameraCapacity {
         self: &Arc<Self>,
         tenant_id: TenantId,
     ) -> Result<CameraCapacityPermit, CameraOpenError> {
-        let global = Arc::clone(&self.global)
-            .try_acquire_owned()
-            .map_err(|_| CameraOpenError::Capacity)?;
         {
             let mut tenants = self.tenants.lock().expect("camera capacity tenants");
             let count = tenants.entry(tenant_id).or_default();
-            if *count >= MAX_CAMERA_STREAMS_PER_TENANT {
+            if *count >= self.max_streams_per_tenant {
                 return Err(CameraOpenError::Capacity);
             }
             *count += 1;
         }
         Ok(CameraCapacityPermit {
-            _global: global,
             capacity: Arc::clone(self),
             tenant_id,
         })
@@ -77,7 +68,7 @@ mod tests {
 
     #[test]
     fn capacity_is_bounded_per_tenant_and_released() {
-        let capacity = Arc::new(CameraCapacity::new());
+        let capacity = Arc::new(CameraCapacity::new(2));
         let tenant_id = TenantId::new();
         let first = capacity.acquire(tenant_id).unwrap();
         let _second = capacity.acquire(tenant_id).unwrap();
@@ -92,15 +83,11 @@ mod tests {
     }
 
     #[test]
-    fn capacity_is_bounded_globally() {
-        let capacity = Arc::new(CameraCapacity::new());
-        let permits = (0..MAX_CAMERA_STREAMS)
+    fn capacity_has_no_global_limit() {
+        let capacity = Arc::new(CameraCapacity::new(8));
+        let permits = (0..64)
             .map(|_| capacity.acquire(TenantId::new()).unwrap())
             .collect::<Vec<_>>();
-        assert!(matches!(
-            capacity.acquire(TenantId::new()),
-            Err(CameraOpenError::Capacity)
-        ));
 
         drop(permits);
         assert!(capacity.acquire(TenantId::new()).is_ok());

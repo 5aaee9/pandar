@@ -75,7 +75,7 @@ async fn open_stream_replaces_existing_stream_for_same_printer() {
 
 #[tokio::test]
 async fn full_replaced_stream_is_nonblocking_and_counts_toward_capacity() {
-    let registry = CameraSessionRegistry::new();
+    let registry = CameraSessionRegistry::with_max_streams_per_tenant(2);
     let tenant_id = TenantId::new();
     let agent_id = AgentId::new();
     let (command_sender, mut command_receiver) = mpsc::channel(4);

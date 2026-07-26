@@ -696,6 +696,7 @@ Readiness and metrics:
 - `GET /readyz` on `PANDAR_HUB_OBSERVABILITY_BIND` checks database access, artifact storage access, scaled storage topology, gRPC bind configuration, and external-auth JWKS readiness when configured. Public details are sanitized.
 - `GET /metrics` on `PANDAR_HUB_OBSERVABILITY_BIND` exposes Prometheus text metrics for agent sessions, command/job/report counters, WebSocket tickets/subscriptions, control-plane publish/receive counters, and readiness gauges. Tenant labels are hashed before export.
 - Artifact uploads reserve tenant/global capacity in the database before writing filesystem/S3 data and hold that reservation through the artifact-row commit. They default to 1 GiB/10,000 objects per tenant and 10 GiB/100,000 objects globally. Override with `PANDAR_TENANT_ARTIFACT_QUOTA_BYTES`, `PANDAR_TENANT_ARTIFACT_QUOTA_COUNT`, `PANDAR_GLOBAL_ARTIFACT_QUOTA_BYTES`, and `PANDAR_GLOBAL_ARTIFACT_QUOTA_COUNT`. Multipart staging is separately capped at 16 concurrent uploads globally and 2 per tenant, with a 120-second total parse deadline; cancellation removes both partial and completed staging files.
+- Retained camera HTTP responses are limited per tenant, defaulting to 8. Override the limit with the positive integer `PANDAR_HUB_CAMERA_MAX_STREAMS_PER_TENANT`. Hub does not apply a process-wide camera response limit, so production multi-tenant deployments should bound aggregate camera connections at the reverse proxy.
 
 Cleanup CLI:
 
