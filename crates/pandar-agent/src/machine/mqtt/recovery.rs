@@ -34,7 +34,7 @@ pub(super) async fn dispatch_rumqttc_attempt(
     topic: String,
     command: BambuMqttCommand,
 ) -> anyhow::Result<PrinterOperationDispatchResult> {
-    let (client, event_loop) = AsyncClient::new(options, 1);
+    let (client, event_loop) = AsyncClient::builder(options).capacity(1).build();
     dispatch_with_attempt(
         RumqttcRecoveryAttempt { client, event_loop },
         topic,

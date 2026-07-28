@@ -22,9 +22,9 @@ struct MqttFrame {
 }
 
 pub(super) fn local_mqtt_options(address: SocketAddr, client_id: &str) -> MqttOptions {
-    let mut options = MqttOptions::new(client_id, address.ip().to_string(), address.port());
+    let mut options = MqttOptions::new(client_id, (address.ip().to_string(), address.port()));
     options.set_clean_session(true);
-    options.set_keep_alive(Duration::from_secs(30));
+    options.set_keep_alive(30);
     options
 }
 

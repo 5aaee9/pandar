@@ -48,8 +48,7 @@ async fn delayed_old_ack_with_reused_command_and_sequence_remains_wire_indisting
     });
     let mut options = MqttOptions::new(
         "pandar-agent-fw-ambiguity",
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     options.set_clean_session(true);
     let mut session = FirmwareMqttSession::connect_with_options(

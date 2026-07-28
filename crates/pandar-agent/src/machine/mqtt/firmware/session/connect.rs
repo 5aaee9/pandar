@@ -236,7 +236,9 @@ impl FirmwareMqttSession {
         mut hooks: ConnectHooks,
         task_set: FirmwareMqttTaskSet,
     ) -> anyhow::Result<Self> {
-        let (client, event_loop) = AsyncClient::new(options, SESSION_QUEUE_CAPACITY);
+        let (client, event_loop) = AsyncClient::builder(options)
+            .capacity(SESSION_QUEUE_CAPACITY)
+            .build();
         client
             .subscribe(&report_topic, QoS::AtLeastOnce)
             .await

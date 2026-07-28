@@ -80,7 +80,7 @@ impl RumqttcBambuMqttTransport {
         host: String,
         mqtt_serial: Arc<OnceCell<String>>,
     ) -> Self {
-        let (client, event_loop) = AsyncClient::new(options, 10);
+        let (client, event_loop) = AsyncClient::builder(options).capacity(10).build();
         Self {
             client,
             pump: Arc::new(MqttEventLoopPump::spawn(event_loop)),
@@ -115,12 +115,12 @@ pub fn bambu_lan_mqtt_options(
         Some(suffix) => format!("pandar-agent-{}-{suffix}", endpoint.serial),
         None => format!("pandar-agent-{}", endpoint.serial),
     };
-    let mut options = MqttOptions::new(client_id, endpoint.host.as_str(), BAMBU_MQTT_PORT);
-    options.set_credentials(BAMBU_MQTT_USERNAME, endpoint.access_code.as_str());
+    let mut options = MqttOptions::new(client_id, (endpoint.host.as_str(), BAMBU_MQTT_PORT));
+    options.set_credentials(BAMBU_MQTT_USERNAME, endpoint.access_code.clone());
     options.set_transport(Transport::tls_with_config(bambu_lan_tls_config(
         &endpoint.serial,
     )));
-    options.set_keep_alive(Duration::from_secs(30));
+    options.set_keep_alive(30);
     options.set_max_packet_size(BAMBU_MQTT_MAX_PACKET_SIZE, BAMBU_MQTT_MAX_PACKET_SIZE);
 
     options

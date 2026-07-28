@@ -32,8 +32,7 @@ async fn publish_reaches_broker_without_calling_next_report() {
 
     let options = MqttOptions::new(
         "command-pump-test",
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     let transport = RumqttcBambuMqttTransport::connect_with_options(
         options,
@@ -81,8 +80,7 @@ async fn queued_reports_do_not_block_publish_event_loop() {
 
     let options = MqttOptions::new(
         "command-pump-backpressure-test",
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     let transport = RumqttcBambuMqttTransport::connect_with_options(
         options,
@@ -130,8 +128,7 @@ async fn report_precedes_connection_error_with_source_chain() {
 
     let options = MqttOptions::new(
         "command-pump-order-test",
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     let transport = RumqttcBambuMqttTransport::connect_with_options(
         options,

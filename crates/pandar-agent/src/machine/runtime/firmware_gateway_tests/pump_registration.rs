@@ -151,12 +151,11 @@ async fn wait_finished(finished: &AtomicBool) {
 fn test_options(address: std::net::SocketAddr) -> MqttOptions {
     let mut options = MqttOptions::new(
         format!("firmware-registration-test-{}", uuid::Uuid::new_v4()),
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     options
         .set_clean_session(true)
-        .set_keep_alive(Duration::from_secs(30))
+        .set_keep_alive(30)
         .set_max_packet_size(256 * 1024, 256 * 1024);
     options
 }

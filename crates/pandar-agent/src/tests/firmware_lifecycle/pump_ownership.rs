@@ -276,12 +276,11 @@ async fn connect_session(
 ) -> FirmwareMqttSession {
     let mut options = MqttOptions::new(
         format!("firmware-parent-owner-{}", uuid::Uuid::new_v4()),
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     options
         .set_clean_session(true)
-        .set_keep_alive(Duration::from_secs(30))
+        .set_keep_alive(30)
         .set_max_packet_size(256 * 1024, 256 * 1024);
     FirmwareMqttSession::connect_with_options_and_task_set(
         options,
@@ -296,12 +295,11 @@ async fn connect_session(
 fn test_options(address: std::net::SocketAddr) -> MqttOptions {
     let mut options = MqttOptions::new(
         format!("firmware-cancel-order-{}", uuid::Uuid::new_v4()),
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     options
         .set_clean_session(true)
-        .set_keep_alive(Duration::from_secs(30))
+        .set_keep_alive(30)
         .set_max_packet_size(256 * 1024, 256 * 1024);
     options
 }

@@ -106,9 +106,9 @@ async fn fresh_firmware_sessions_do_not_disconnect_persistent_command_or_report_
 }
 
 fn persistent_client(client_id: &str, address: std::net::SocketAddr) -> (AsyncClient, EventLoop) {
-    let mut options = MqttOptions::new(client_id, address.ip().to_string(), address.port());
-    options.set_keep_alive(Duration::from_secs(30));
-    AsyncClient::new(options, 10)
+    let mut options = MqttOptions::new(client_id, (address.ip().to_string(), address.port()));
+    options.set_keep_alive(30);
+    AsyncClient::builder(options).capacity(10).build()
 }
 
 async fn poll_persistent(mut event_loop: EventLoop) {
@@ -126,8 +126,7 @@ async fn connect_firmware_session(address: std::net::SocketAddr) -> FirmwareMqtt
     let production = firmware_mqtt_options(&endpoint);
     let mut options = MqttOptions::new(
         production.client_id(),
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     options
         .set_clean_session(production.clean_session())

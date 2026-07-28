@@ -99,12 +99,11 @@ async fn firmware_refresh_attempt_ignores_matching_upgrade_identity_until_info_r
 async fn connect_session(address: std::net::SocketAddr) -> FirmwareMqttSession {
     let mut options = MqttOptions::new(
         format!("firmware-domain-test-{}", uuid::Uuid::new_v4()),
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     options
         .set_clean_session(true)
-        .set_keep_alive(Duration::from_secs(30))
+        .set_keep_alive(30)
         .set_max_packet_size(256 * 1024, 256 * 1024);
     FirmwareMqttSession::connect_with_options(options, REQUEST_TOPIC.into(), REPORT_TOPIC.into())
         .await

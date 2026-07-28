@@ -321,12 +321,11 @@ async fn claimed_execution(
 fn test_options(address: std::net::SocketAddr) -> MqttOptions {
     let mut options = MqttOptions::new(
         format!("firmware-cleanup-test-{}", uuid::Uuid::new_v4()),
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     options
         .set_clean_session(true)
-        .set_keep_alive(Duration::from_secs(30))
+        .set_keep_alive(30)
         .set_max_packet_size(256 * 1024, 256 * 1024);
     options
 }

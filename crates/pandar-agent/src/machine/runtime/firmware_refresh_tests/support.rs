@@ -53,8 +53,7 @@ impl FirmwareSessionConnector for LoopbackConnector {
             .push(production.max_packet_size());
         let mut options = MqttOptions::new(
             production.client_id(),
-            self.address.ip().to_string(),
-            self.address.port(),
+            (self.address.ip().to_string(), self.address.port()),
         );
         options
             .set_clean_session(production.clean_session())

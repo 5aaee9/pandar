@@ -91,12 +91,11 @@ async fn firmware_session_tcp_loopback_gates_matching_on_suback_and_own_publish(
 
     let mut options = MqttOptions::new(
         "pandar-agent-fw-loopback-unique",
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     options
         .set_clean_session(true)
-        .set_keep_alive(Duration::from_secs(30))
+        .set_keep_alive(30)
         .set_max_packet_size(256 * 1024, 256 * 1024);
     let mut session = FirmwareMqttSession::connect_with_options(
         options,
@@ -181,8 +180,7 @@ async fn firmware_session_barrier_and_publish_enqueue_are_pump_atomic() {
 
     let mut options = MqttOptions::new(
         "pandar-agent-fw-barrier",
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     options
         .set_clean_session(true)
@@ -232,8 +230,7 @@ async fn firmware_session_barrier_cancellation_is_pre_publish_failure() {
 
     let mut options = MqttOptions::new(
         "pandar-agent-fw-pre-publish",
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     options.set_clean_session(true);
     let (barrier_pause, mut barrier_control) = firmware_barrier_pause();
@@ -292,8 +289,7 @@ async fn malformed_report_after_own_publish_preserves_outcome_unknown_phase() {
     });
     let mut options = MqttOptions::new(
         "pandar-agent-fw-malformed-post-publish",
-        address.ip().to_string(),
-        address.port(),
+        (address.ip().to_string(), address.port()),
     );
     options.set_clean_session(true);
     let mut session = FirmwareMqttSession::connect_with_options(
