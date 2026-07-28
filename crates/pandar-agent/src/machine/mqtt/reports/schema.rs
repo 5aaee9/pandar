@@ -26,7 +26,7 @@ pub(super) struct PrintReportSection {
     #[serde(default)]
     pub(super) gcode_state: Option<String>,
     #[serde(default)]
-    pub(super) state: Option<String>,
+    pub(super) state: Option<ReportJson>,
     #[serde(default)]
     pub(super) mc_percent: Option<NumericValue>,
     #[serde(default)]

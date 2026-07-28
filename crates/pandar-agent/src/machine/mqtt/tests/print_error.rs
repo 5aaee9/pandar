@@ -50,6 +50,27 @@ fn numeric_print_error_matches_studio_int_state_semantics() {
 }
 
 #[test]
+fn x2d_numeric_legacy_state_does_not_drop_recovery_fields() {
+    let progress = print_report_from_report(
+        &endpoint(),
+        &serde_json::json!({
+            "print": {
+                "gcode_state": "PAUSE",
+                "state": 2,
+                "print_error": 83_918_946,
+                "job_attr": 18,
+                "hms": [{"attr": 83_952_640, "code": 196_610}]
+            }
+        }),
+    );
+
+    assert_eq!(progress.gcode_state.as_deref(), Some("PAUSE"));
+    assert_eq!(progress.print_error, Some(83_918_946));
+    assert_eq!(progress.job_attr, Some(18));
+    assert_eq!(progress.hms.as_deref().map(|hms| hms.len()), Some(1));
+}
+
+#[test]
 fn zero_print_error_is_state_not_a_generic_diagnostic() {
     let progress = print_report_from_report(
         &endpoint(),

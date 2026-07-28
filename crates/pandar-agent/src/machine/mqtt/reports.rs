@@ -10,7 +10,7 @@ pub(crate) use forwarding::{
 pub use forwarding::{forward_print_reports, forward_print_reports_with_firmware};
 use pandar_core::created_at_now;
 pub use protocol::print_job_report_event;
-use schema::PrintReportEnvelope;
+use schema::{PrintReportEnvelope, ReportJson};
 use serde_json::Value;
 
 use crate::{
@@ -94,8 +94,10 @@ pub(crate) fn print_report_from_parsed_report(
         printer_job_id: print.job_id.clone(),
         artifact_id: subtask_id.clone(),
         subtask_id,
-        gcode_state: trimmed_string(print.gcode_state.as_deref())
-            .or_else(|| trimmed_string(print.state.as_deref())),
+        gcode_state: trimmed_string(print.gcode_state.as_deref()).or_else(|| match &print.state {
+            Some(ReportJson::String(state)) => trimmed_string(Some(state)),
+            _ => None,
+        }),
         percent: bounded_u32(print.mc_percent.as_ref(), 0, 100).map(|value| value as u8),
         remaining_time_minutes: bounded_u32(print.mc_remaining_time.as_ref(), 0, 4320),
         current_layer: bounded_u32(print.layer_num.as_ref(), 0, 100_000),

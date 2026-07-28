@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Fixed X2D paused-fault recovery reporting: Agent MQTT print-report decoding now tolerates the numeric legacy `print.state` field emitted alongside canonical `gcode_state`, preserving `print_error`, HMS, job attributes, and pause state so the existing Devices recovery reminder can surface supported faults such as `0500-8062` instead of showing only ordinary paused progress.
 - Restored the missing Print Jobs row action for backend-safe dispatch retries: failed jobs now show Retry dispatch only while the source command failed and physical print status is still pending with no start, progress, or layer evidence, reuse the existing audited Hub retry endpoint, return to the Jobs view, and remain hidden once physical evidence makes retry ambiguous.
 - Added reviewed Bambu intermediate-chain completion for X2D/N6-V2: Agent TLS verification now combines the bundled `BBL Device CA N6-V2` certificate with any peer-provided intermediates before validating against the existing Bambu roots, so leaf-only BRTC handshakes remain strict without per-device pins. Regression coverage locks the reviewed intermediate fingerprint and proves a leaf-only root/intermediate/leaf chain validates; per-serial SHA-256 pins remain available for unknown issuers.
 - Migrated Agent MQTT from the locally patched `rumqttc 0.25.1` source tree to the exact-pinned independent `rumqttc-v4-next 0.33.3` fork, preserving MQTT 3.1.1, Bambu-specific rustls configuration, bounded client queues, and the existing event-loop/PUBACK ownership model. Removed the crates.io path patch, the tracked `vendor/rumqttc` tree, and its Nix source-filter exception; the full 477-test Agent suite and 1,843-test workspace suite pass, including raw-broker, firmware-session, recovery, TLS, and pump-ordering coverage, without live printer commands or file uploads.
@@ -1355,7 +1356,7 @@ Exit criteria:
 
 ## Immediate Next
 
-- After deploying the updated Web and Agent, use the restored Jobs-row Retry dispatch action for the failed X2D job and confirm the leaf-only BRTC path succeeds end to end; keep real file uploads outside automated validation.
+- After deploying the updated Web and Agent, confirm the paused X2D `0500-8062` report surfaces the existing Devices recovery reminder, then use its operator-approved action to continue the print; keep additional real file uploads outside automated validation.
 - Track stable `rumqttc-v4-next` releases and security advisories; keep the Agent on the MQTT 3.1.1 package, and rerun raw-broker, PUBACK, firmware-session, reconnect, TLS, and native package gates before any fork upgrade.
 - Treat real Better Auth WebView/ticket/session, real Hub/Agent/database integration, and all hardware,
   print, control, cancel, and firmware behavior as separate unclaimed follow-up evidence. Final16's
