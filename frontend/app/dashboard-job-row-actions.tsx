@@ -1,10 +1,11 @@
 'use client'
 
 import { useId } from 'react'
-import { RotateCcwIcon, Trash2Icon } from 'lucide-react'
+import { RefreshCwIcon, RotateCcwIcon, Trash2Icon } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 
 import { Button } from '@/components/ui/button'
+import { retryDispatchJob } from './job-actions'
 
 const REPRINTABLE_PRINT_STATUSES = new Set([
   'stalled',
@@ -16,6 +17,7 @@ const REPRINTABLE_PRINT_STATUSES = new Set([
 export function JobRowActions({
   job,
   canDelete,
+  canRetryDispatch,
   deleteUnavailableReason,
   onDelete,
   onReprint,
@@ -23,10 +25,11 @@ export function JobRowActions({
   job: {
     id: string
     status: string
-    artifact: { filename: string }
+    artifact: { filename: string; tenant_id: string }
     print: { status: string }
   }
   canDelete: boolean
+  canRetryDispatch: boolean
   deleteUnavailableReason: string
   onDelete: () => void
   onReprint: () => void
@@ -39,6 +42,24 @@ export function JobRowActions({
 
   return (
     <>
+      {canRetryDispatch ? (
+        <form action={retryDispatchJob}>
+          <input name="tenant_id" type="hidden" value={job.artifact.tenant_id} />
+          <input name="job_id" type="hidden" value={job.id} />
+          <input name="return_to" type="hidden" value="jobs" />
+          <Button
+            aria-label={t('retryDispatchJobAriaLabel', {
+              filename: job.artifact.filename,
+            })}
+            size="sm"
+            type="submit"
+            variant="outline"
+          >
+            <RefreshCwIcon aria-hidden="true" />
+            {t('retryDispatchJob')}
+          </Button>
+        </form>
+      ) : null}
       {canReprint ? (
         <Button
           aria-haspopup="dialog"

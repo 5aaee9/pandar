@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import en from '../messages/en.json'
 import { JobHistory } from './dashboard-job-history'
+import { isRetryDispatchSafe } from './dashboard-job-status'
 import type { Job, Tenant } from './dashboard-types'
 import { DashboardViewContent } from './dashboard-view-content'
 
@@ -114,6 +115,39 @@ afterEach(() => {
 })
 
 describe('JobHistory row actions', () => {
+  it('mirrors every backend dispatch retry safety predicate', () => {
+    const safe = job({
+      status: 'failed',
+      print: {
+        ...job().print,
+        status: 'pending',
+        progress_percent: 0,
+        current_layer: 0,
+        started_at: null,
+      },
+      command: {
+        id: 'command-1',
+        kind: 'other',
+        status: 'failed',
+      },
+    })
+
+    expect(isRetryDispatchSafe(safe)).toBe(true)
+    for (const unsafe of [
+      { ...safe, status: 'queued' },
+      { ...safe, command: { ...safe.command, status: 'succeeded' } },
+      { ...safe, print: { ...safe.print, status: 'running' } },
+      {
+        ...safe,
+        print: { ...safe.print, started_at: '2026-07-15T00:00:00Z' },
+      },
+      { ...safe, print: { ...safe.print, progress_percent: 1 } },
+      { ...safe, print: { ...safe.print, current_layer: 1 } },
+    ]) {
+      expect(isRetryDispatchSafe(unsafe)).toBe(false)
+    }
+  })
+
   it('confirms the selected job and can cancel without a request', async () => {
     const user = userEvent.setup()
     const fetchMock = vi.fn()
@@ -180,6 +214,71 @@ describe('JobHistory row actions', () => {
     ).toBeEnabled()
     expect(screen.getByText('Stalled')).toBeVisible()
     expect(screen.getByText('Print did not start within 15 minutes')).toBeVisible()
+  })
+
+  it('offers dispatch retry when dispatch failed before printing started', () => {
+    renderHistory({
+      jobs: [
+        job({
+          status: 'failed',
+          print: {
+            ...job().print,
+            status: 'pending',
+            progress_percent: 0,
+            current_layer: 0,
+            started_at: null,
+            finished_at: null,
+            updated_at: null,
+          },
+          command: {
+            id: 'command-1',
+            kind: 'print_project_file',
+            status: 'failed',
+          },
+        }),
+      ],
+    })
+
+    const retry = screen.getByRole('button', {
+      name: 'Retry dispatch benchy.3mf',
+    })
+    expect(retry).toBeEnabled()
+    const form = retry.closest('form')
+    if (!form) throw new Error('retry action must submit a form')
+    const formData = new FormData(form)
+    expect(formData.get('tenant_id')).toBe('tenant-1')
+    expect(formData.get('job_id')).toBe('job-1')
+    expect(formData.get('return_to')).toBe('jobs')
+    expect(
+      screen.queryByRole('button', { name: 'Reprint benchy.3mf' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('hides dispatch retry after physical print evidence appears', () => {
+    renderHistory({
+      jobs: [
+        job({
+          status: 'failed',
+          print: {
+            ...job().print,
+            status: 'pending',
+            progress_percent: 1,
+            current_layer: 0,
+            started_at: null,
+            finished_at: null,
+          },
+          command: {
+            id: 'command-1',
+            kind: 'print_project_file',
+            status: 'failed',
+          },
+        }),
+      ],
+    })
+
+    expect(
+      screen.queryByRole('button', { name: 'Retry dispatch benchy.3mf' }),
+    ).not.toBeInTheDocument()
   })
 
   it('disables deletion while a job may still be active', () => {

@@ -27,6 +27,7 @@ export function JobRow({
   printerName,
   agentName,
   canDelete,
+  canRetryDispatch,
   deleteUnavailableReason,
   onDelete,
   onReprint,
@@ -35,6 +36,7 @@ export function JobRow({
   printerName?: string
   agentName?: string
   canDelete: boolean
+  canRetryDispatch: boolean
   deleteUnavailableReason: string
   onDelete: () => void
   onReprint: () => void
@@ -80,6 +82,7 @@ export function JobRow({
             <JobRowActions
               job={job}
               canDelete={canDelete}
+              canRetryDispatch={canRetryDispatch}
               deleteUnavailableReason={deleteUnavailableReason}
               onDelete={onDelete}
               onReprint={onReprint}

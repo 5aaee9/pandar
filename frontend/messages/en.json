@@ -397,6 +397,8 @@
     "clearJobFilters": "Clear filters",
     "clearJobsTitle": "Clear terminal and stalled waiting jobs?",
     "clearJobsDescription": "This removes {count, plural, =1 {1 terminal or stalled waiting job} other {# terminal or stalled waiting jobs}}. Running and other active jobs are kept.",
+    "retryDispatchJob": "Retry dispatch",
+    "retryDispatchJobAriaLabel": "Retry dispatch {filename}",
     "reprintJob": "Reprint",
     "reprintJobAriaLabel": "Reprint {filename}",
     "confirmClearJobs": "Clear jobs",

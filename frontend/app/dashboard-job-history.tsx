@@ -17,7 +17,11 @@ import {
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
 import { apiIdSegment } from './api-path'
 import { FilterBar } from './dashboard-filter-bar'
-import { isClearableJob, jobMatchesStatus } from './dashboard-job-status'
+import {
+  isClearableJob,
+  isRetryDispatchSafe,
+  jobMatchesStatus,
+} from './dashboard-job-status'
 import { EmptyState, SectionHeader } from './dashboard-ui'
 import { JobRow } from './dashboard-job-row'
 
@@ -258,6 +262,9 @@ export function JobHistory({
                     printerName={printerNames.get(job.printer_id)}
                     agentName={agentNames.get(job.agent_id)}
                     canDelete={canManageJobs && isClearableJob(job)}
+                    canRetryDispatch={
+                      canManageJobs && isRetryDispatchSafe(job)
+                    }
                     deleteUnavailableReason={
                       canManageJobs
                         ? t('deleteJobUnavailable')

@@ -14,6 +14,17 @@ const CLEARABLE_PRINT_STATUSES = new Set([
   'cancelled',
 ])
 
+export function isRetryDispatchSafe(job: Job): boolean {
+  return (
+    job.status.toLowerCase() === 'failed' &&
+    job.command.status.toLowerCase() === 'failed' &&
+    job.print.status.toLowerCase() === 'pending' &&
+    job.print.started_at === null &&
+    (job.print.progress_percent ?? 0) === 0 &&
+    (job.print.current_layer ?? 0) === 0
+  )
+}
+
 export function isClearableJob(job: Job): boolean {
   const status = job.status.toLowerCase()
   const commandStatus = job.command.status.toLowerCase()

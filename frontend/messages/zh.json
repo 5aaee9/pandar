@@ -394,6 +394,8 @@
     "clearJobFilters": "清除筛选",
     "clearJobsTitle": "清除终态和等待超时任务？",
     "clearJobsDescription": "将删除 {count} 个终态或超过 15 分钟仍未开始打印的任务，正在打印和其他进行中的任务会保留。",
+    "retryDispatchJob": "重试派发",
+    "retryDispatchJobAriaLabel": "重试派发 {filename}",
     "reprintJob": "重新打印",
     "reprintJobAriaLabel": "重新打印 {filename}",
     "confirmClearJobs": "清除任务",
