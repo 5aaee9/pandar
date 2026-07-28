@@ -1,9 +1,14 @@
 use std::{sync::Arc, time::Duration};
 
+use rcgen::{
+    BasicConstraints, CertificateParams, CertifiedIssuer, DistinguishedName, DnType,
+    ExtendedKeyUsagePurpose, IsCa, KeyPair, KeyUsagePurpose,
+};
 use rumqttc::TlsConfiguration;
 use rustls::{
-    ClientConfig, ServerConfig, SupportedProtocolVersion,
-    pki_types::{CertificateDer, PrivateKeyDer, ServerName, pem::PemObject},
+    ClientConfig, RootCertStore, ServerConfig, SupportedProtocolVersion,
+    client::danger::ServerCertVerifier,
+    pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime, pem::PemObject},
     server::{ClientHello, ResolvesServerCert},
     sign::CertifiedKey,
 };
@@ -98,6 +103,65 @@ async fn lan_tls_accepts_pinned_leaf_only_certificate_without_san() {
         .await
         .unwrap();
     }
+}
+
+#[test]
+fn lan_tls_accepts_leaf_only_certificate_with_bundled_intermediate() {
+    let root_key = KeyPair::generate().unwrap();
+    let root = CertifiedIssuer::self_signed(
+        test_certificate_params("test root", IsCa::Ca(BasicConstraints::Unconstrained)),
+        root_key,
+    )
+    .unwrap();
+    let intermediate_key = KeyPair::generate().unwrap();
+    let intermediate = CertifiedIssuer::signed_by(
+        test_certificate_params(
+            "test intermediate",
+            IsCa::Ca(BasicConstraints::Unconstrained),
+        ),
+        intermediate_key,
+        &root,
+    )
+    .unwrap();
+    let leaf_key = KeyPair::generate().unwrap();
+    let leaf = test_certificate_params("test-bambu-chain", IsCa::NoCa)
+        .signed_by(&leaf_key, &intermediate)
+        .unwrap();
+    let mut roots = RootCertStore::empty();
+    roots.add(root.der().clone()).unwrap();
+    let verifier = BambuLanCertificateVerifier::with_trust_material(
+        "test-bambu-chain",
+        roots,
+        vec![intermediate.der().clone()],
+    );
+
+    verifier
+        .verify_server_cert(
+            leaf.der(),
+            &[],
+            &ServerName::try_from("localhost").unwrap(),
+            &[],
+            UnixTime::now(),
+        )
+        .unwrap();
+}
+
+fn test_certificate_params(common_name: &str, is_ca: IsCa) -> CertificateParams {
+    let mut distinguished_name = DistinguishedName::new();
+    distinguished_name.push(DnType::CommonName, common_name);
+    let mut params = CertificateParams::default();
+    params.distinguished_name = distinguished_name;
+    params.is_ca = is_ca;
+    if matches!(is_ca, IsCa::Ca(_)) {
+        params.key_usages = vec![
+            KeyUsagePurpose::DigitalSignature,
+            KeyUsagePurpose::KeyCertSign,
+            KeyUsagePurpose::CrlSign,
+        ];
+    } else {
+        params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    }
+    params
 }
 
 async fn connect_to_v1_server(

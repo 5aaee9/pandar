@@ -17,6 +17,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 pub(crate) struct BambuLanCertificateVerifier {
     expected_serial: String,
     roots: RootCertStore,
+    bundled_intermediates: Vec<CertificateDer<'static>>,
     trusted_leaf_sha256: Result<Option<[u8; 32]>, String>,
 }
 
@@ -30,10 +31,31 @@ impl BambuLanCertificateVerifier {
                 .add(certificate.expect("bundled Bambu printer CA must be valid PEM"))
                 .expect("bundled Bambu printer CA must be a valid trust anchor");
         }
+        let bundled_intermediates =
+            CertificateDer::pem_slice_iter(include_bytes!("../../bambu-printer-intermediates.pem"))
+                .map(|certificate| {
+                    certificate.expect("bundled Bambu printer intermediate must be valid PEM")
+                })
+                .collect();
         Self {
             expected_serial: expected_serial.to_owned(),
             roots,
+            bundled_intermediates,
             trusted_leaf_sha256: configured_bambu_leaf_pin(expected_serial),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_trust_material(
+        expected_serial: &str,
+        roots: RootCertStore,
+        bundled_intermediates: Vec<CertificateDer<'static>>,
+    ) -> Self {
+        Self {
+            expected_serial: expected_serial.to_owned(),
+            roots,
+            bundled_intermediates,
+            trusted_leaf_sha256: Ok(None),
         }
     }
 
@@ -82,7 +104,7 @@ impl ServerCertVerifier for BambuLanCertificateVerifier {
     fn verify_server_cert(
         &self,
         end_entity: &CertificateDer<'_>,
-        intermediates: &[CertificateDer<'_>],
+        server_intermediates: &[CertificateDer<'_>],
         _server_name: &ServerName<'_>,
         _ocsp_response: &[u8],
         now: UnixTime,
@@ -115,10 +137,19 @@ impl ServerCertVerifier for BambuLanCertificateVerifier {
             Ok(None) => {
                 let provider = rustls::crypto::aws_lc_rs::default_provider();
                 let certificate = rustls::server::ParsedCertificate::try_from(end_entity)?;
+                let mut intermediates = server_intermediates.to_vec();
+                for bundled in &self.bundled_intermediates {
+                    if !intermediates
+                        .iter()
+                        .any(|certificate| certificate.as_ref() == bundled.as_ref())
+                    {
+                        intermediates.push(bundled.clone());
+                    }
+                }
                 verify_server_cert_signed_by_trust_anchor(
                     &certificate,
                     &self.roots,
-                    intermediates,
+                    &intermediates,
                     now,
                     provider.signature_verification_algorithms.all,
                 )?;
@@ -209,4 +240,29 @@ pub(crate) fn bambu_mqtt_serial_from_certificate(
         bail!("Bambu certificate has a blank common name");
     }
     Ok(common_name.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundles_reviewed_n6_v2_intermediate() {
+        let expected_sha256 = [
+            0x68, 0xbf, 0x31, 0x82, 0xbc, 0x32, 0xd5, 0xa5, 0x45, 0x4f, 0x86, 0x49, 0x28, 0xab,
+            0xaa, 0x29, 0x19, 0x41, 0xf6, 0xd5, 0xac, 0x6a, 0x86, 0xa0, 0xe5, 0xad, 0x6e, 0xcf,
+            0xe2, 0xd5, 0x47, 0x7b,
+        ];
+        let verifier = BambuLanCertificateVerifier::new("test-serial");
+
+        assert!(
+            verifier
+                .bundled_intermediates
+                .iter()
+                .any(
+                    |certificate| Sha256::digest(certificate.as_ref()).as_slice()
+                        == expected_sha256
+                )
+        );
+    }
 }
