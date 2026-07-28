@@ -3,9 +3,13 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "../../api-client";
+import { OFFLINE_PRINTER_STATUSES } from "../../dashboard-attention";
 import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
-import type { AuthMetadata, Tenant } from "../../dashboard-types";
+import type { AuthMetadata, Printer, Tenant } from "../../dashboard-types";
+import { useDashboardClock } from "../../use-dashboard-clock";
+
+const EMPTY_PRINTERS: Printer[] = [];
 
 export function DevicesPageClient({
   auth,
@@ -31,6 +35,7 @@ export function DevicesPageClient({
     staleTime: 10 * 1000,
     refetchInterval: 30 * 1000,
   });
+  const nowMs = useDashboardClock(data?.printers ?? EMPTY_PRINTERS);
 
   if (isLoading) {
     return (
@@ -61,7 +66,9 @@ export function DevicesPageClient({
       jobs={jobs}
       health={{
         printersTotal: printers.length,
-        printersOnline: printers.filter((p) => p.status === "online").length,
+        printersOnline: printers.filter(
+          (printer) => !OFFLINE_PRINTER_STATUSES.has(printer.status.toLowerCase()),
+        ).length,
         agentsTotal: agents.length,
         agentsConnected: agents.filter((a) => a.status === "online").length,
         jobsActive: jobs.filter((j) => j.status === "running").length,
@@ -72,7 +79,7 @@ export function DevicesPageClient({
       liveState="idle"
       lastEventAt={null}
       fleetEmpty={printers.length === 0}
-      nowMs={0}
+      nowMs={nowMs}
       selectedCommand={null}
       commandData={null}
       notifications={[]}
