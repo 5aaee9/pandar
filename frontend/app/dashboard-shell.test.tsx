@@ -10,6 +10,7 @@ import { DashboardShellHeader } from "./dashboard-shell-header";
 import { DashboardViewContent } from "./dashboard-view-content";
 import {
   DASHBOARD_VIEWS,
+  agentSettingsHref,
   dashboardRootRedirectTarget,
   dashboardSidebarHref,
   dashboardTenantHref,
@@ -110,6 +111,12 @@ describe("dashboard shell helpers", () => {
       }),
     ).toBe("/jobs?tenant=t1");
     expect(dashboardSidebarHref("users", {})).toBe("/users");
+    expect(agentSettingsHref("tenant 1", "agent/1")).toBe(
+      "/agents/agent%2F1/settings?tenant=tenant+1",
+    );
+    expect(agentSettingsHref("t1", "a1", "cmd1")).toBe(
+      "/agents/a1/settings?tenant=t1&command=cmd1",
+    );
 
     expect(
       dashboardTenantHref("agents", "t2", {

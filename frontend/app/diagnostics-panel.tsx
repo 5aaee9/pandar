@@ -1,12 +1,13 @@
+import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 
 import { FormattedDate } from '../components/formatted-date'
 import { AgentDeleteForm } from './agent-delete-form'
 import {
   deleteAgent,
-  discoverPrinters,
   refreshPrinters,
 } from './actions'
+import { agentSettingsHref } from './dashboard-shell'
 import { EmptyState, StatusBadge } from './dashboard-ui'
 import type {
   Agent,
@@ -47,7 +48,6 @@ export function LinkedAgentsSection({
                 <th className="px-4 py-2">{t('colAgent')}</th>
                 <th className="px-4 py-2">{t('colStatus')}</th>
                 <th className="px-4 py-2">{t('colCreated')}</th>
-                <th className="px-4 py-2">{t('colDiscovery')}</th>
                 <th className="px-4 py-2">{t('colActions')}</th>
               </tr>
             </thead>
@@ -65,31 +65,14 @@ export function LinkedAgentsSection({
                     <FormattedDate value={agent.created_at} />
                   </td>
                   <td className="px-4 py-3">
-                    <form action={discoverPrinters} className="flex flex-wrap items-end gap-2">
-                      <input name="tenant_id" type="hidden" value={selectedTenant.id} />
-                      <input name="agent_id" type="hidden" value={agent.id} />
-                      <label className="flex flex-col gap-1 text-xs font-medium text-muted-foreground">
-                        {t('timeout')}
-                        <input
-                          className="h-9 w-20 rounded-md border border-input px-2 text-sm font-normal text-foreground"
-                          defaultValue="5"
-                          max="15"
-                          min="1"
-                          name="timeout_seconds"
-                          type="number"
-                        />
-                      </label>
-                      <button
-                        aria-label={t('discoverFor', { name: agent.name })}
-                        className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors duration-150 ease-out hover:bg-primary/80"
-                        type="submit"
-                      >
-                        {t('discover')}
-                      </button>
-                    </form>
-                  </td>
-                  <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        aria-label={t('settingsAgentAriaLabel', { name: agent.name })}
+                        className="inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors duration-150 ease-out hover:bg-muted"
+                        href={agentSettingsHref(selectedTenant.id, agent.id)}
+                      >
+                        {t('settingsAgent')}
+                      </Link>
                       <form action={refreshPrinters}>
                         <input name="tenant_id" type="hidden" value={selectedTenant.id} />
                         <input name="agent_id" type="hidden" value={agent.id} />

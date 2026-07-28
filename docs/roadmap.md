@@ -1345,6 +1345,8 @@ Goal: improve artifact inspection and print defaults by reading safe metadata fr
   `401`/`410` session decisions, and versioned unsupported ABI dispositions into Rust. The thin C++
   shim now retains all eight callback registrations, rejects Debug Studio STL mode, and reports local-
   print-with-record and other unimplemented cloud surfaces explicitly instead of silently succeeding.
+- Added a dedicated settings page for each linked Agent, moved printer discovery and its timeout
+  control out of the Agent list, and kept discovery command results on the selected Agent's page.
 
 Exit criteria:
 

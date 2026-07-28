@@ -9,6 +9,7 @@ import {
   controlPrinter,
   createMobileTicket,
   deletePrinter,
+  discoverPrinters,
   linkPrinter,
   refreshPrinterMaterials,
   refreshPrinters,
@@ -39,6 +40,41 @@ vi.mock("./api-auth", () => ({
   requireAuth: vi.fn(async () => undefined),
   apiHeaders: vi.fn(async () => ({ "content-type": "application/json" })),
 }));
+
+describe("discoverPrinters", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: "command-1" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+  });
+
+  it("returns discovery commands to the agent settings page", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("agent_id", "agent-1");
+    formData.set("timeout_seconds", "9");
+    formData.set("return_to", "agent_settings");
+
+    await expect(discoverPrinters(formData)).rejects.toThrow(
+      "NEXT_REDIRECT:/agents/agent-1/settings?tenant=tenant-1&command=command-1",
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/tenants/tenant-1/agents/agent-1/discover-printers",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ timeout_seconds: 9 }),
+      }),
+    );
+  });
+});
 
 describe("linkPrinter", () => {
   beforeEach(() => {

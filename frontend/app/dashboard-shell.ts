@@ -41,6 +41,16 @@ export function dashboardTenantHref(
   });
 }
 
+export function agentSettingsHref(
+  tenantId: string,
+  agentId: string,
+  commandId?: string,
+) {
+  const params = new URLSearchParams({ tenant: tenantId });
+  if (commandId) params.set("command", commandId);
+  return `/agents/${encodeURIComponent(agentId)}/settings?${params.toString()}`;
+}
+
 function dashboardPath(view: DashboardView, query: DashboardQuery = {}) {
   const params = new URLSearchParams();
   if (query.tenant) params.set("tenant", query.tenant);

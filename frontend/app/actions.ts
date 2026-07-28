@@ -15,6 +15,7 @@ import {
 } from "./action-helpers";
 import { apiHeaders, requireAuth } from "./api-auth";
 import { apiIdSegment } from "./api-path";
+import { agentSettingsHref } from "./dashboard-shell";
 
 export async function discoverPrinters(formData: FormData) {
   await requireAuth();
@@ -37,7 +38,11 @@ export async function discoverPrinters(formData: FormData) {
   }
 
   const command = (await response.json()) as { id: string };
-  redirect(commandUrl(tenantId, command.id));
+  redirect(
+    stringField(formData, "return_to") === "agent_settings"
+      ? agentSettingsHref(tenantId, agentId, command.id)
+      : commandUrl(tenantId, command.id),
+  );
 }
 
 export async function refreshPrinters(formData: FormData) {
