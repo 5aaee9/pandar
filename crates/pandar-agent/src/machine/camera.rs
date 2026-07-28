@@ -132,16 +132,6 @@ pub fn build_camera_url(host: &str, access_code: &str) -> String {
 fn ffmpeg_mjpeg_command() -> Command {
     let mut command = Command::new(ffmpeg_executable());
     command
-        .arg("-rtsp_transport")
-        .arg("tcp")
-        .arg("-rtsp_flags")
-        .arg("prefer_tcp")
-        .arg("-timeout")
-        .arg("30000000")
-        .arg("-buffer_size")
-        .arg("1024000")
-        .arg("-max_delay")
-        .arg("500000")
         .arg("-fflags")
         .arg("nobuffer")
         .arg("-flags")
@@ -172,16 +162,6 @@ fn ffmpeg_mjpeg_command() -> Command {
 fn ffmpeg_fragmented_mp4_command() -> Command {
     let mut command = Command::new(ffmpeg_executable());
     command
-        .arg("-rtsp_transport")
-        .arg("tcp")
-        .arg("-rtsp_flags")
-        .arg("prefer_tcp")
-        .arg("-timeout")
-        .arg("30000000")
-        .arg("-buffer_size")
-        .arg("1024000")
-        .arg("-max_delay")
-        .arg("500000")
         .arg("-fflags")
         .arg("nobuffer")
         .arg("-flags")
@@ -246,7 +226,7 @@ async fn spawn_ffmpeg_command(
         .with_context(|| format!("spawn ffmpeg executable {program}"))?;
     let mut stdin = child.stdin.take().context("ffmpeg stdin should be piped")?;
     stdin
-        .write_all(format!("ffconcat version 1.0\nfile '{camera_url}'\n").as_bytes())
+        .write_all(ffconcat_camera_input(camera_url).as_bytes())
         .await
         .context("write protected ffmpeg camera input")?;
     stdin
@@ -254,6 +234,18 @@ async fn spawn_ffmpeg_command(
         .await
         .context("close ffmpeg camera input")?;
     Ok(child)
+}
+
+fn ffconcat_camera_input(camera_url: &str) -> String {
+    format!(
+        "ffconcat version 1.0\n\
+         file '{camera_url}'\n\
+         option rtsp_transport tcp\n\
+         option rtsp_flags prefer_tcp\n\
+         option timeout 30000000\n\
+         option buffer_size 1024000\n\
+         option max_delay 500000\n"
+    )
 }
 
 fn percent_encode_userinfo(value: &str) -> String {
@@ -342,6 +334,29 @@ mod tests {
                 args == ["-movflags", "frag_keyframe+empty_moov+default_base_moof"]
             })
         );
+    }
+
+    #[test]
+    fn scopes_rtsp_options_to_the_concat_file() {
+        for command in [ffmpeg_mjpeg_command(), ffmpeg_fragmented_mp4_command()] {
+            let args = command
+                .as_std()
+                .get_args()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect::<Vec<_>>();
+            assert!(!args.iter().any(|arg| arg == "-rtsp_transport"));
+        }
+
+        let input = ffconcat_camera_input("rtsps://example.test/stream");
+        for option in [
+            "option rtsp_transport tcp",
+            "option rtsp_flags prefer_tcp",
+            "option timeout 30000000",
+            "option buffer_size 1024000",
+            "option max_delay 500000",
+        ] {
+            assert!(input.lines().any(|line| line == option));
+        }
     }
 
     #[test]
