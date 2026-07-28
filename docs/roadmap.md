@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Fixed paused-task controls on Devices: the Web control panel now uses the live `gcode_state` instead of only the printer's coarse status, replacing Pause with a localized Resume action for `PAUSE`/`PAUSED` tasks while keeping offline, idle, and failed printers blocked.
 - Fixed X2D paused-fault recovery reporting: Agent MQTT print-report decoding now tolerates the numeric legacy `print.state` field emitted alongside canonical `gcode_state`, preserving `print_error`, HMS, job attributes, and pause state so the existing Devices recovery reminder can surface supported faults such as `0500-8062` instead of showing only ordinary paused progress.
 - Restored the missing Print Jobs row action for backend-safe dispatch retries: failed jobs now show Retry dispatch only while the source command failed and physical print status is still pending with no start, progress, or layer evidence, reuse the existing audited Hub retry endpoint, return to the Jobs view, and remain hidden once physical evidence makes retry ambiguous.
 - Added reviewed Bambu intermediate-chain completion for X2D/N6-V2: Agent TLS verification now combines the bundled `BBL Device CA N6-V2` certificate with any peer-provided intermediates before validating against the existing Bambu roots, so leaf-only BRTC handshakes remain strict without per-device pins. Regression coverage locks the reviewed intermediate fingerprint and proves a leaf-only root/intermediate/leaf chain validates; per-serial SHA-256 pins remain available for unknown issuers.

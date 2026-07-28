@@ -339,6 +339,7 @@
     "stopPrintTitle": "停止打印",
     "stopPrintMessage": "停止当前打印任务？任务将无法恢复。",
     "pausePrint": "暂停打印",
+    "resumePrint": "恢复打印",
     "lightControl": "灯光",
     "lightStateOn": "已开启",
     "lightStateOff": "已关闭",

@@ -322,6 +322,40 @@ describe("PrinterInventory", () => {
     expect(lightForm?.querySelector('input[name="light_on"]')).toHaveValue("true");
   });
 
+  it("replaces pause with resume when the live print task is paused", () => {
+    const pausedPrinter: Printer = {
+      ...printer,
+      status: "RUNNING",
+      print: {
+        task_generation: 3,
+        error_generation: 0,
+        hms: [],
+        job_state: 0,
+        gcode_state: "PAUSE",
+        task_id: "task-1",
+        subtask_id: "subtask-1",
+        subtask_name: "Paused Benchy",
+        gcode_file: null,
+        progress_percent: 42,
+        remaining_time_minutes: 10,
+        current_layer: 12,
+        total_layers: 100,
+        print_error: 0,
+        printer_job_id: "native-job",
+      },
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[pausedPrinter]} agents={[agent]} nowMs={0} />,
+      "zh",
+    );
+
+    const resumeButton = screen.getByRole("button", { name: "恢复打印" });
+    const resumeForm = resumeButton.closest("form");
+    expect(resumeForm?.querySelector('input[name="action"]')).toHaveValue("resume");
+    expect(screen.queryByRole("button", { name: "暂停打印" })).not.toBeInTheDocument();
+  });
+
   it("opens camera video using the MP4 stream route with custom controls", async () => {
     const user = userEvent.setup();
     const heatingPrinter: Printer = {

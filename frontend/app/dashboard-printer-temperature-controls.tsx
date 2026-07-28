@@ -7,6 +7,7 @@ import {
   LightbulbIcon,
   MaximizeIcon,
   PauseIcon,
+  PlayIcon,
   SquareIcon,
   ThermometerIcon,
   VideoIcon,
@@ -88,7 +89,7 @@ export function PrinterTemperatureControls({ printer }: { printer: Printer }) {
 
 export function PrinterControlsPanel({ printer }: { printer: Printer }) {
   const t = useTranslations('inventory')
-  const controlsEnabled = printerControlEnabled(printer.status)
+  const controlsEnabled = printerControlEnabled(printer)
 
   return (
     <div className="mt-4 space-y-2">
@@ -109,12 +110,12 @@ export function PrinterControlsPanel({ printer }: { printer: Printer }) {
           <input name="action" type="hidden" value="stop" />
         </ConfirmForm>
         <PrinterInlineControl
-          action="pause"
-          enabled={controlsEnabled.pause}
-          icon={<PauseIcon />}
-          label={t('pausePrint')}
+          action={controlsEnabled.resume ? 'resume' : 'pause'}
+          enabled={controlsEnabled.resume || controlsEnabled.pause}
+          icon={controlsEnabled.resume ? <PlayIcon /> : <PauseIcon />}
+          label={controlsEnabled.resume ? t('resumePrint') : t('pausePrint')}
           printer={printer}
-          tone="warning"
+          tone={controlsEnabled.resume ? 'neutral' : 'warning'}
         />
         <PrinterInlineControl
           action="set_chamber_light"
@@ -339,11 +340,14 @@ function PrinterInlineControl({
   )
 }
 
-function printerControlEnabled(status: string) {
-  const normalized = status.toLowerCase()
+function printerControlEnabled(printer: Printer) {
+  const coarseStatus = printer.status.toLowerCase()
+  const printState = printer.print?.gcode_state?.toLowerCase() ?? coarseStatus
+  const blocked = ['idle', 'offline', 'failed'].includes(coarseStatus)
   return {
-    stop: ['running', 'printing', 'paused', 'pause'].includes(normalized),
-    pause: ['running', 'printing'].includes(normalized),
+    stop: !blocked && ['running', 'printing', 'paused', 'pause'].includes(printState),
+    pause: !blocked && ['running', 'printing'].includes(printState),
+    resume: !blocked && ['paused', 'pause'].includes(printState),
     light: true,
   }
 }
