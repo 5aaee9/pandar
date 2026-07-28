@@ -1,5 +1,6 @@
 'use client'
 
+import { unstable_rethrow } from 'next/navigation'
 import { Component, type ReactNode } from 'react'
 
 interface Props {
@@ -20,6 +21,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
+    unstable_rethrow(error)
     return { hasError: true, error }
   }
 

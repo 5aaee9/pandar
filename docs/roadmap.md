@@ -16,6 +16,7 @@
 
 ## Completed
 
+- Fixed dashboard printer controls such as Pause replacing the page with `Failed to load data`: the shared client error boundary now rethrows Next.js navigation control-flow errors for the App Router to handle while retaining its fallback for ordinary descendant failures. Focused form-action regression coverage reproduces the original `NEXT_REDIRECT` interception and verifies both redirect passthrough and normal error handling.
 - Fixed X2D camera streams producing an HTTP 200 response with zero media bytes under FFmpeg 8.1: Agent now keeps the credential-bearing RTSP URL in the protected stdin concat document while scoping `rtsp_transport`, `rtsp_flags`, timeout, buffer, and delay settings to that concat file entry instead of incorrectly applying them to the concat demuxer. Regression coverage locks both camera command variants, and an Agent-local live RTSP/fragmented-MP4 probe produced 7.8 MB in 12 seconds without issuing a printer control or print command.
 - Fixed paused-task controls on Devices: the Web control panel now uses the live `gcode_state` instead of only the printer's coarse status, replacing Pause with a localized Resume action for `PAUSE`/`PAUSED` tasks while keeping offline, idle, and failed printers blocked.
 - Fixed X2D paused-fault recovery reporting: Agent MQTT print-report decoding now tolerates the numeric legacy `print.state` field emitted alongside canonical `gcode_state`, preserving `print_error`, HMS, job attributes, and pause state so the existing Devices recovery reminder can surface supported faults such as `0500-8062` instead of showing only ordinary paused progress.
@@ -1358,6 +1359,7 @@ Exit criteria:
 
 ## Immediate Next
 
+- Deploy the updated Web frontend and confirm Pause/Resume and the other printer server-form controls navigate to their status feedback without logging `NEXT_REDIRECT` or replacing the dashboard with the data-load fallback.
 - Deploy the camera-option fix to the local Agent, restart only `pandar-agent`, and rerun the authenticated Hub camera probe to confirm the production route changes from HTTP 200 with zero bytes to a non-empty fragmented MP4 stream before checking browser playback.
 - After deploying the updated Web and Agent, confirm the paused X2D `0500-8062` report surfaces the existing Devices recovery reminder, then use its operator-approved action to continue the print; keep additional real file uploads outside automated validation.
 - Track stable `rumqttc-v4-next` releases and security advisories; keep the Agent on the MQTT 3.1.1 package, and rerun raw-broker, PUBACK, firmware-session, reconnect, TLS, and native package gates before any fork upgrade.
