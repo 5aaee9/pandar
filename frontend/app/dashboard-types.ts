@@ -380,11 +380,6 @@ export type PrinterEvent =
       command: Command;
     };
 
-export type PrinterEventTicket = {
-  ticket: string;
-  expires_at: string;
-};
-
 export type FetchResult<T> =
   | { data: T; error: null; status?: number }
   | { data: null; error: null; status?: number }
