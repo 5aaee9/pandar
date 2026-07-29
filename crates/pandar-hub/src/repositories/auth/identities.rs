@@ -14,8 +14,6 @@ use crate::{
     },
 };
 
-mod provisioning;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserIdentity {
     pub id: String,

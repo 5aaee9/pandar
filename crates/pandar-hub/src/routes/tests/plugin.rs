@@ -2,6 +2,7 @@ use super::*;
 use requests::{
     mobile_login_ticket_body, mobile_ticket_exchange_body, plugin_login_ticket_body,
     plugin_ticket_exchange_body, redacted_audit_metadata_fixture, safe_audit_metadata_fixture,
+    tenant_token_create_body,
 };
 use serde::{Deserialize, Serialize, de::IgnoredAny};
 

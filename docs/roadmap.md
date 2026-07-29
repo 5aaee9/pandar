@@ -23,6 +23,7 @@
 - Fixed X2D paused-fault recovery reporting: Agent MQTT print-report decoding now tolerates the numeric legacy `print.state` field emitted alongside canonical `gcode_state`, preserving `print_error`, HMS, job attributes, and pause state so the existing Devices recovery reminder can surface supported faults such as `0500-8062` instead of showing only ordinary paused progress.
 - Restored the missing Print Jobs row action for backend-safe dispatch retries: failed jobs now show Retry dispatch only while the source command failed and physical print status is still pending with no start, progress, or layer evidence, reuse the existing audited Hub retry endpoint, return to the Jobs view, and remain hidden once physical evidence makes retry ambiguous.
 - Added reviewed Bambu intermediate-chain completion for X2D/N6-V2: Agent TLS verification now combines the bundled `BBL Device CA N6-V2` certificate with any peer-provided intermediates before validating against the existing Bambu roots, so leaf-only BRTC handshakes remain strict without per-device pins. Regression coverage locks the reviewed intermediate fingerprint and proves a leaf-only root/intermediate/leaf chain validates; per-serial SHA-256 pins remain available for unknown issuers.
+- Completed Phase 32's external-account cutover: removed manual tenant-user creation and identity-linking HTTP methods plus their dormant frontend actions, retained tenant-scoped user/identity reads and local role updates, and preserved all existing user and identity rows. The dashboard now uses the same tenant-access switcher vocabulary and popover interaction as onboarding while keeping route-backed tenant context.
 - Migrated Agent MQTT from the locally patched `rumqttc 0.25.1` source tree to the exact-pinned independent `rumqttc-v4-next 0.33.3` fork, preserving MQTT 3.1.1, Bambu-specific rustls configuration, bounded client queues, and the existing event-loop/PUBACK ownership model. Removed the crates.io path patch, the tracked `vendor/rumqttc` tree, and its Nix source-filter exception; the full 477-test Agent suite and 1,843-test workspace suite pass, including raw-broker, firmware-session, recovery, TLS, and pump-ordering coverage, without live printer commands or file uploads.
 - Fixed the GitHub Actions Nix failures caused by the patched local `rumqttc` crate being omitted from the filtered Rust package source; `rustSrc` now carries the tracked `vendor/rumqttc` tree so package, quality, and NixOS VM jobs can resolve the workspace lockfile, allowing Docker publishing to pass its exact-SHA Checks gate.
 - Completed the repository security hardening pass: login tickets are type-bound and mobile sessions use PKCE plus current-role authorization; external JWT validation requires audience, bounded-lifetime JWKS refresh, HTTPS outside loopback, and no redirects; plugin account revocation revalidates every persisted Hub URL before sending a bearer; printer MQTT/FTPS/BRTC certificate chains fail closed, with explicit per-serial SHA-256 pins for leaf-only printer certificates; Hub gRPC requires TLS off loopback, advertises only HTTP/2, applies handshake/preface deadlines, and bounds setup connections globally/per peer plus established connections per Agent/tenant; camera chunks, retained HTTP camera responses, and command resources are bounded per tenant where applicable, and rejected camera streams no longer spawn untracked gRPC work; Hub/Agent/plugin response reads, artifact reads, and multipart parsing are constrained, with per-tenant/global staging admission, total parse deadlines, cancellation cleanup, private artifact file modes, and pre-storage transactional quota reservations preventing concurrent disk/S3 oversubscription; dashboard/Auth/Android login flows use state, secure cookies, POST token delivery, same-origin mutation checks, an exact custom-scheme callback host, and non-backup mobile storage; observability and deployment defaults are private/least-privilege; and patched Rust/npm dependencies plus digest-pinned container bases and CI inputs are enforced. Remaining work is routine dependency refresh and ongoing security regression review rather than a known open finding from this pass.
@@ -218,7 +219,7 @@
 - Preserved the operator-provided printer name after runtime link by keeping subsequent agent snapshots from overwriting the stored printer display name for the same serial number.
 - Moved the printer card agent detail into the top summary status row beside the status badge, showing the agent icon and name without a separate information card.
 - Added a printer card actions dropdown with a confirmed Delete printer flow backed by the Hub printer delete API and audit event.
-- Moved dashboard language selection from the top bar into Settings and kept tenant selection in the sidebar Tenants list.
+- Moved dashboard language selection from the top bar into Settings and kept tenant selection in the sidebar, now presented through the tenant-access switcher.
 - Added Agent-backed AMS refresh: printer refresh now opportunistically refreshes AMS/external-spool snapshots from Bambu MQTT `pushall`, operators can queue per-printer AMS refreshes from the printer inventory, Agent material-only updates sync to Hub over gRPC, and Hub publishes material-aware printer updates to the browser event stream.
 - Replaced printer-card filament counts with an AMS/external loading view that shows slot color, remaining estimate, K value, unit temperature/humidity, toolhead assignment, and hover actions for RFID reread, filament load, and filament unload through the Hub-to-Agent printer-operation path.
 - Fixed the AMS slot hover menu so moving from a filament slot into its dropdown crosses a hover bridge instead of closing on the spacer gap.
@@ -392,17 +393,16 @@ Goal: make external account sign-in the primary user entry point while Pandar re
 - Completed provider-configured `pandar-web` onboarding for Clerk, Logto, and Better Auth while preserving the bearer-token boundary to `pandar-hub`.
 - Hid manual user creation and manual identity-link forms from the primary frontend path while keeping the API as a transitional/admin-only capability.
 
-## Planned: Phase 32 Remove Manual Pandar User Creation And Linking
+## Completed: Phase 32 Remove Manual Pandar User Creation And Linking
 
 Goal: finish the transition from Pandar-managed user provisioning to external-account-backed tenant membership.
 
-- Decide whether the new tenant access switcher vocabulary should also replace the dashboard's route-backed tenant selector/list, or remain limited to onboarding and join flows.
-
-- Remove manual `POST /api/v1/tenants/{tenant_id}/users`.
-- Remove manual `POST /api/v1/tenants/{tenant_id}/users/{user_id}/identities`.
-- Keep user listing, identity listing, and tenant-local role updates.
-- Keep join links as the supported invite/onboarding path.
-- Preserve existing data without migrating away valid `users` or `user_identities` rows.
+- Unified the dashboard's route-backed tenant selector with the onboarding tenant-access vocabulary and popover interaction while preserving view, command, and status URL context.
+- Removed manual `POST /api/v1/tenants/{tenant_id}/users`.
+- Removed manual `POST /api/v1/tenants/{tenant_id}/users/{user_id}/identities`.
+- Kept user listing, identity listing, and tenant-local role updates.
+- Kept join links as the supported invite/onboarding path.
+- Preserved existing `users` and `user_identities` rows without a data migration.
 
 ## Completed: Phase 33 Self-Hosted Better Auth Bundle
 

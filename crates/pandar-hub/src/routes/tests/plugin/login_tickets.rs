@@ -119,12 +119,8 @@ async fn mobile_session_observes_current_user_role() {
     let (status, _) = request_as(
         app,
         Method::POST,
-        &format!("/api/v1/tenants/{}/users", tenant.id),
-        Some(serde_json::json!({
-            "email": "role-downgrade@example.test",
-            "display_name": "Role Downgrade",
-            "role": "viewer"
-        })),
+        &format!("/api/v1/tenants/{}/tenant-tokens", tenant.id),
+        tenant_token_create_body("role-downgrade", &[]),
         &session,
     )
     .await;
@@ -407,12 +403,8 @@ async fn mobile_login_ticket_exchange_returns_tenant_token_for_android_callback(
     let (status, _) = request_as(
         app.clone(),
         Method::POST,
-        &format!("/api/v1/tenants/{}/users", tenant.id),
-        Some(serde_json::json!({
-            "email": "forbidden@example.test",
-            "display_name": "Forbidden",
-            "role": "tenant_admin"
-        })),
+        &format!("/api/v1/tenants/{}/tenant-tokens", tenant.id),
+        tenant_token_create_body("forbidden", &[]),
         &exchanged.token,
     )
     .await;

@@ -66,7 +66,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/api/v1/tenants/{tenant_id}/users",
-            get(provisioning::list_users).post(provisioning::create_user),
+            get(provisioning::list_users),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/users/{user_id}/role",
@@ -74,7 +74,7 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/api/v1/tenants/{tenant_id}/users/{user_id}/identities",
-            get(provisioning::list_user_identities).post(provisioning::link_user_identity),
+            get(provisioning::list_user_identities),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/users/{user_id}/api-tokens",

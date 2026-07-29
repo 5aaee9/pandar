@@ -1,5 +1,6 @@
 import { NextIntlClientProvider } from "next-intl";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
@@ -7,6 +8,8 @@ import { AppSidebar } from "../components/app-sidebar";
 import { Sidebar, SidebarProvider } from "../components/ui/sidebar";
 import { FleetStatusStrip } from "./dashboard-overview";
 import { DashboardShellHeader } from "./dashboard-shell-header";
+import { DashboardShellLayout } from "./dashboard-shell-layout";
+import { DashboardShellProvider } from "./dashboard-shell-provider";
 import { DashboardViewContent } from "./dashboard-view-content";
 import {
   DASHBOARD_VIEWS,
@@ -22,6 +25,8 @@ import type { AuthMetadata, Tenant } from "./dashboard-types";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
+  usePathname: () => window.location.pathname,
+  useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
 vi.mock("../components/ui/sidebar", async (importOriginal) => {
@@ -40,6 +45,10 @@ function renderWithMessages(children: React.ReactNode) {
       {children}
     </NextIntlClientProvider>,
   );
+}
+
+function preventNavigation(link: HTMLElement) {
+  link.addEventListener("click", (event) => event.preventDefault(), { once: true });
 }
 
 const tenants: Tenant[] = [
@@ -288,7 +297,44 @@ describe("AppSidebar", () => {
     expect(await screen.findByRole("dialog", { name: "Sidebar" })).toBeVisible();
   });
 
-  it("preserves the agents command context when switching tenants from the sidebar", () => {
+  it("keeps tenant access available inside the mobile sidebar", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("innerWidth", 500);
+    renderWithMessages(
+      <SidebarProvider defaultOpen>
+        <AppSidebar
+          activeView="devices"
+          auth={auth}
+          query={{ tenant: "t1" }}
+          selectedTenant={tenants[0]}
+          tenants={tenants}
+        />
+      </SidebarProvider>,
+    );
+
+    fireEvent.keyDown(window, { key: "b", ctrlKey: true });
+    const sidebar = await screen.findByRole("dialog", { name: "Dashboard" });
+    await user.click(
+      within(sidebar).getByRole("button", { name: "Select tenant access" }),
+    );
+
+    const menu = screen.getByRole("dialog", { name: "Tenant access" });
+    const tenantLink = within(menu).getByRole("link", { name: "Tenant Two" });
+    expect(tenantLink).toHaveAttribute(
+      "href",
+      "/devices?tenant=t2",
+    );
+    preventNavigation(tenantLink);
+    await user.click(tenantLink);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Tenant access" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "Dashboard" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("switches tenant access while preserving the agents command context", async () => {
+    const user = userEvent.setup();
     const query: DashboardQuery = {
       tenant: "t1",
       command: "cmd1",
@@ -307,9 +353,76 @@ describe("AppSidebar", () => {
       </SidebarProvider>,
     );
 
-    expect(screen.getByRole("link", { name: "Tenant Two" })).toHaveAttribute(
+    const trigger = screen.getByRole("button", { name: "Select tenant access" });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await user.click(trigger);
+
+    const menu = screen.getByRole("dialog", { name: "Tenant access" });
+    expect(within(menu).getByText("Tenant access")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Tenant One" })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    const tenantLink = screen.getByRole("link", { name: "Tenant Two" });
+    expect(tenantLink).toHaveAttribute(
       "href",
       dashboardTenantHref("agents", "t2", query),
+    );
+    preventNavigation(tenantLink);
+    await user.click(tenantLink);
+    await waitFor(() => {
+      expect(trigger).toHaveAttribute("aria-expanded", "false");
+      expect(screen.queryByRole("dialog", { name: "Tenant access" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("opens and closes tenant access from the collapsed desktop sidebar", async () => {
+    const user = userEvent.setup();
+    const { container } = renderWithMessages(
+      <SidebarProvider defaultOpen={false}>
+        <AppSidebar
+          activeView="devices"
+          auth={auth}
+          query={{ tenant: "t1" }}
+          selectedTenant={tenants[0]}
+          tenants={tenants}
+        />
+      </SidebarProvider>,
+    );
+
+    expect(container.querySelector('[data-slot="sidebar"][data-state]')).toHaveAttribute(
+      "data-state",
+      "collapsed",
+    );
+    await user.click(screen.getByRole("button", { name: "Select tenant access" }));
+    const tenantLink = screen.getByRole("link", { name: "Tenant Two" });
+    preventNavigation(tenantLink);
+    await user.click(tenantLink);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Tenant access" })).not.toBeInTheDocument();
+    });
+  });
+
+  it("wires route command and status context through the dashboard layout", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/agents?tenant=t1&command=cmd1&status=done");
+    renderWithMessages(
+      <DashboardShellProvider initialTenants={tenants}>
+        <DashboardShellLayout
+          auth={auth}
+          sidebarDefaultOpen
+          tenants={tenants}
+        >
+          Dashboard content
+        </DashboardShellLayout>
+      </DashboardShellProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Select tenant access" }));
+    expect(screen.getByRole("link", { name: "Tenant Two" })).toHaveAttribute(
+      "href",
+      "/agents?tenant=t2&command=cmd1&status=done",
     );
   });
 

@@ -1,7 +1,6 @@
 use super::*;
 use requests::{
-    agent_name_value, retired_api_token_value, tenant_token_create_value, user_create_value,
-    user_identity_value, user_role_value,
+    agent_name_value, retired_api_token_value, tenant_token_create_value, user_role_value,
 };
 use serde::{Deserialize, de::DeserializeOwned};
 
@@ -9,9 +8,6 @@ mod requests;
 
 #[derive(Debug, Deserialize)]
 struct UserResponse {
-    id: String,
-    tenant_id: String,
-    email: String,
     role: String,
 }
 
@@ -73,13 +69,6 @@ struct UserRoleAuditMetadata {
     tenant_token_scopes: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct UserIdentityAuditMetadata {
-    provider: String,
-    tenant_token_id: String,
-    subject: Option<String>,
-}
-
 fn decode<T>(body: Value) -> T
 where
     T: DeserializeOwned,
@@ -88,28 +77,43 @@ where
 }
 
 #[tokio::test]
-async fn tenant_admin_can_manage_users_identities_and_tokens() {
+async fn manual_user_provisioning_write_routes_are_not_available() {
+    let (_state, app, tenant_id, admin_token) = admin_tenant().await;
+    let user_id = uuid::Uuid::new_v4();
+
+    for uri in [
+        format!("/api/v1/tenants/{tenant_id}/users"),
+        format!("/api/v1/tenants/{tenant_id}/users/{user_id}/identities"),
+    ] {
+        let response = raw_request_as(app.clone(), Method::POST, &uri, &admin_token).await;
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    }
+}
+
+#[tokio::test]
+async fn tenant_admin_can_list_users_identities_and_manage_roles_and_tokens() {
     let (state, app, tenant_id, admin_token) = admin_tenant().await;
     let tenant = state.tenants().list().await.unwrap().remove(0);
-
-    let (status, user) = request_as(
-        app.clone(),
-        Method::POST,
-        &format!("/api/v1/tenants/{tenant_id}/users"),
-        Some(user_create_value(
+    let user = state
+        .auth()
+        .create_user(
+            tenant.id,
             "operator@example.test",
             "Operator",
-            "operator",
-        )),
-        &admin_token,
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED);
-    let user = decode::<UserResponse>(user);
-    assert_eq!(user.tenant_id, tenant_id);
-    assert_eq!(user.email, "operator@example.test");
-    assert_eq!(user.role, "operator");
+            crate::repositories::UserRole::Operator,
+        )
+        .await
+        .unwrap();
+    let identity = state
+        .auth()
+        .link_external_identity(tenant.id, &user.id, "clerk", "user_123")
+        .await
+        .unwrap();
     let user_id = user.id;
+    let identity = UserIdentityResponse {
+        provider: identity.provider,
+        subject: identity.subject,
+    };
 
     let (status, users) = request_as(
         app.clone(),
@@ -122,7 +126,7 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     assert_eq!(status, StatusCode::OK);
     let users = decode::<UserListResponse>(users);
     assert_eq!(users.users.len(), 2);
-    assert!(users.identities.is_empty());
+    assert_eq!(users.identities, vec![identity.clone()]);
 
     let (status, updated) = request_as(
         app.clone(),
@@ -135,19 +139,6 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     assert_eq!(status, StatusCode::OK);
     let updated = decode::<UserResponse>(updated);
     assert_eq!(updated.role, "viewer");
-
-    let (status, identity) = request_as(
-        app.clone(),
-        Method::POST,
-        &format!("/api/v1/tenants/{tenant_id}/users/{user_id}/identities"),
-        Some(user_identity_value("clerk", "user_123")),
-        &admin_token,
-    )
-    .await;
-    assert_eq!(status, StatusCode::CREATED);
-    let identity = decode::<UserIdentityResponse>(identity);
-    assert_eq!(identity.provider, "clerk");
-    assert_eq!(identity.subject, "user_123");
 
     let (status, identities) = request_as(
         app.clone(),
@@ -254,34 +245,22 @@ async fn tenant_admin_can_manage_users_identities_and_tokens() {
     assert_eq!(
         actions,
         vec![
-            "user.create",
             "user.role_update",
-            "user_identity.link",
             "tenant_token.create",
             "tenant_token.revoke"
         ]
     );
     let role_metadata =
-        serde_json::from_str::<UserRoleAuditMetadata>(&events[1].metadata_json).unwrap();
+        serde_json::from_str::<UserRoleAuditMetadata>(&events[0].metadata_json).unwrap();
     assert_eq!(role_metadata.previous_role, "operator");
     assert_eq!(role_metadata.new_role, "viewer");
     assert!(!role_metadata.tenant_token_id.is_empty());
     assert_eq!(role_metadata.tenant_token_scopes, vec!["*".to_owned()]);
-    let identity_metadata =
-        serde_json::from_str::<UserIdentityAuditMetadata>(&events[2].metadata_json).unwrap();
-    assert_eq!(identity_metadata.provider, "clerk");
-    assert_eq!(identity_metadata.subject, None);
-    assert!(!identity_metadata.tenant_token_id.is_empty());
-
     let (status, body) = request_as(
         app,
-        Method::POST,
-        &format!("/api/v1/tenants/{tenant_id}/users"),
-        Some(user_create_value(
-            "bad-role@example.test",
-            "Bad Role",
-            "admin",
-        )),
+        Method::PATCH,
+        &format!("/api/v1/tenants/{tenant_id}/users/{user_id}/role"),
+        Some(user_role_value("admin")),
         &admin_token,
     )
     .await;
@@ -306,28 +285,8 @@ async fn provisioning_mutations_reject_empty_required_strings() {
 
     for (uri, body) in [
         (
-            format!("/api/v1/tenants/{tenant_id}/users"),
-            user_create_value("", "Target", "viewer"),
-        ),
-        (
-            format!("/api/v1/tenants/{tenant_id}/users"),
-            user_create_value("empty-name@example.test", "", "viewer"),
-        ),
-        (
-            format!("/api/v1/tenants/{tenant_id}/users"),
-            user_create_value("empty-role@example.test", "Target", ""),
-        ),
-        (
             format!("/api/v1/tenants/{tenant_id}/users/{}/role", user.id),
             user_role_value(""),
-        ),
-        (
-            format!("/api/v1/tenants/{tenant_id}/users/{}/identities", user.id),
-            user_identity_value("", "subject"),
-        ),
-        (
-            format!("/api/v1/tenants/{tenant_id}/users/{}/identities", user.id),
-            user_identity_value("clerk", ""),
         ),
         (
             format!("/api/v1/tenants/{tenant_id}/agent-pairings"),

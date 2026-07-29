@@ -24,6 +24,12 @@ struct MobileTicketExchangeRequest<'a> {
 }
 
 #[derive(Serialize)]
+struct TenantTokenCreateRequest<'a> {
+    name: &'a str,
+    scopes: &'a [&'a str],
+}
+
+#[derive(Serialize)]
 struct RedactedAuditMetadataFixture {
     safe: &'static str,
     subject: &'static str,
@@ -75,6 +81,10 @@ pub(super) fn mobile_ticket_exchange_body(ticket: &str) -> Option<Value> {
         ticket,
         code_verifier: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     }))
+}
+
+pub(super) fn tenant_token_create_body(name: &str, scopes: &[&str]) -> Option<Value> {
+    Some(value(TenantTokenCreateRequest { name, scopes }))
 }
 
 pub(super) fn redacted_audit_metadata_fixture() -> Value {

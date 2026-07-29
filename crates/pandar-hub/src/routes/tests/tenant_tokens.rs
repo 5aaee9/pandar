@@ -5,7 +5,7 @@ use super::*;
 use crate::entities::{audit_events, tenant_tokens};
 use requests::{
     agent_name_body, retired_api_token_body, tenant_token_create_body,
-    tenant_token_create_without_scopes_body, tenant_token_rotate_body, user_create_body,
+    tenant_token_create_without_scopes_body, tenant_token_rotate_body,
 };
 
 mod requests;
@@ -66,21 +66,8 @@ struct AgentsResponse {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[allow(dead_code)]
-struct UserResponse {
-    id: String,
-    tenant_id: String,
-    email: String,
-    display_name: String,
-    role: String,
-    created_at: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct UserCreateAuditMetadata {
-    email: String,
-    role: String,
+struct TenantTokenCreateAuditMetadata {
+    name: String,
     tenant_token_id: String,
     tenant_token_scopes: Vec<String>,
 }
@@ -427,25 +414,23 @@ async fn all_scope_tenant_token_without_creator_can_perform_admin_mutation() {
     let (status, body) = request_as(
         app,
         Method::POST,
-        &format!("/api/v1/tenants/{}/users", tenant.id),
-        user_create_body(
-            "created-by-token@example.test",
-            "Created By Token",
-            "viewer",
-        ),
+        &format!("/api/v1/tenants/{}/tenant-tokens", tenant.id),
+        tenant_token_create_body("created-by-token", &[], None),
         &plaintext,
     )
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(
-        decode::<UserResponse>(body).email,
-        "created-by-token@example.test"
+        decode::<TenantTokenWithPlaintextResponse>(body)
+            .tenant_token
+            .name,
+        "created-by-token"
     );
 
     let event = audit_events::Entity::find()
         .filter(audit_events::Column::TenantId.eq(tenant.id.to_string()))
-        .filter(audit_events::Column::Action.eq("user.create"))
+        .filter(audit_events::Column::Action.eq("tenant_token.create"))
         .one(&state.database().sea_orm_connection())
         .await
         .unwrap()
@@ -496,36 +481,34 @@ async fn tenant_token_audit_actor_preserves_creator_and_token_metadata() {
     let (status, body) = request_as(
         app,
         Method::POST,
-        &format!("/api/v1/tenants/{}/users", tenant.id),
-        user_create_body(
-            "created-by-creator-token@example.test",
-            "Created By Creator Token",
-            "viewer",
-        ),
+        &format!("/api/v1/tenants/{}/tenant-tokens", tenant.id),
+        tenant_token_create_body("created-by-creator-token", &[], None),
         &plaintext,
     )
     .await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert_eq!(
-        decode::<UserResponse>(body).email,
-        "created-by-creator-token@example.test"
+        decode::<TenantTokenWithPlaintextResponse>(body)
+            .tenant_token
+            .name,
+        "created-by-creator-token"
     );
 
     let event = audit_events::Entity::find()
         .filter(audit_events::Column::TenantId.eq(tenant.id.to_string()))
-        .filter(audit_events::Column::Action.eq("user.create"))
+        .filter(audit_events::Column::Action.eq("tenant_token.create"))
         .one(&state.database().sea_orm_connection())
         .await
         .unwrap()
         .unwrap();
     assert_eq!(event.actor_type, "tenant_token");
     assert_eq!(event.user_id, Some(user.id));
-    let metadata = serde_json::from_str::<UserCreateAuditMetadata>(&event.metadata_json).unwrap();
+    let metadata =
+        serde_json::from_str::<TenantTokenCreateAuditMetadata>(&event.metadata_json).unwrap();
     assert_eq!(metadata.tenant_token_id, token_id);
     assert_eq!(metadata.tenant_token_scopes, vec!["*".to_owned()]);
-    assert_eq!(metadata.email, "created-by-creator-token@example.test");
-    assert_eq!(metadata.role, "viewer");
+    assert_eq!(metadata.name, "created-by-creator-token");
 }
 
 #[tokio::test]

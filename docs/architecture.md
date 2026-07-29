@@ -288,15 +288,15 @@ Phase 31 adds external self-service tenant onboarding:
 - Tenant admins create hash-stored join links with role, optional verified-email restriction, expiry, max uses, one-time plaintext token response, and audit records.
 - `POST /api/v1/join-links/accept` verifies the caller's external account, checks the join link, creates the tenant-local user projection and identity link, assigns the join-link role, and preserves an existing member's current role without consuming a use.
 - `pandar-web` can be configured for Clerk, Logto, or Better Auth provider metadata while the hub remains the authorization source.
-- Manual user creation and identity linking remain transitional/admin-only and are scheduled for deletion in Phase 32.
+- Phase 32 removed manual user creation and identity linking. Join links and external tenant self-create are the supported membership-entry paths; user/identity reads and tenant-local role updates remain available.
 
 Phase 11 adds explicit provisioning and bootstrap boundaries:
 
 - `PANDAR_BOOTSTRAP_TOKEN` is the only credential accepted by cross-tenant endpoints: `GET /api/v1/summary`, `GET /api/v1/tenants`, `POST /api/v1/tenants`, and `POST /api/v1/bootstrap/tenant-admin`.
 - `POST /api/v1/bootstrap/tenant-admin` creates a tenant, tenant admin user, initial tenant token, and bootstrap audit events in one SQLite/PostgreSQL transaction. The plaintext token is returned once and only its hash is stored.
-- Tenant admins can list/create users, update local user roles, link Clerk/Logto provider subjects, create/list/revoke tenant tokens, and create agent pairing bundles through tenant-scoped APIs.
+- Tenant admins can list users and linked identities, update local user roles, create/list/revoke tenant tokens, manage join links, and create agent pairing bundles through tenant-scoped APIs.
 - Tenant-token revocation sets `tenant_tokens.revoked_at`; revoked tokens are excluded from bearer authentication.
-- Provisioning actions are represented in `audit_events` with actions such as `tenant.bootstrap`, `tenant.create`, `user.create`, `user.role_update`, `user_identity.link`, `tenant_token.create`, `tenant_token.revoke`, and `agent.pairing_bundle`.
+- Provisioning actions are represented in `audit_events` with actions such as `tenant.bootstrap`, `tenant.create`, `user.create`, `user.role_update`, `tenant_token.create`, `tenant_token.revoke`, and `agent.pairing_bundle`; historical `user_identity.link` events remain readable.
 - Agent pairing bundles return `PANDAR_TENANT_ID`, `PANDAR_AGENT_ID`, `PANDAR_AGENT_NAME`, and `PANDAR_AGENT_CREDENTIAL` for deployment.
 
 Phase 16 replaced the Phase 6/11 user-owned API token model with tenant-owned tokens:
@@ -311,7 +311,7 @@ Phase 16 replaced the Phase 6/11 user-owned API token model with tenant-owned to
 
 Phase 17-20 add the product and operational surfaces over these foundations:
 
-- Tenant admins can manage users, roles, identity links, tenant tokens, agent pairings, and recent audit events from the frontend. Admin API failures render a compact unavailable state.
+- Tenant admins can inspect users and identity links, manage roles, join links, tenant tokens, agent pairings, and recent audit events from the frontend. Admin API failures render a compact unavailable state.
 - Operators can manually refresh printers, retry dispatch, reprint, duplicate jobs, and queue typed live printer controls while the UI keeps dispatch lifecycle wording separate from physical print state.
 - `/readyz` and `/metrics` expose deployment readiness and Prometheus metrics with redaction and hashed tenant labels.
 - `pandar cleanup` performs retention cleanup for terminal jobs, commands, machine events, audit rows, expired/used plugin tickets, revoked/expired tenant tokens, and unreferenced artifacts.
@@ -345,26 +345,16 @@ curl -sS -X POST "$PANDAR_API/api/v1/bootstrap/tenant-admin" \
   -d '{"tenant_slug":"acme","tenant_display_name":"Acme","admin_email":"admin@example.com","admin_display_name":"Admin","api_token_name":"bootstrap-admin"}'
 ```
 
-Tenant-admin provisioning examples:
+Tenant-admin membership inspection and role update examples:
 
 ```bash
-curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users" \
-  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
-  -H "content-type: application/json" \
-  -d '{"email":"operator@example.com","display_name":"Operator","role":"operator"}'
-
-curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/identities" \
-  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
-  -H "content-type: application/json" \
-  -d '{"provider":"logto","subject":"user_123"}'
-
-curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/api-tokens" \
-  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
-  -H "content-type: application/json" \
-  -d '{"name":"automation","scopes":[]}'
-
-curl -sS -X DELETE "$PANDAR_API/api/v1/tenants/$TENANT_ID/api-tokens/$TOKEN_ID" \
+curl -sS "$PANDAR_API/api/v1/tenants/$TENANT_ID/users" \
   -H "Authorization: Bearer $TENANT_ADMIN_TOKEN"
+
+curl -sS -X PATCH "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/role" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"role":"operator"}'
 ```
 
 Agent pairing bundle example:

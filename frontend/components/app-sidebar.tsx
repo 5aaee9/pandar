@@ -6,6 +6,8 @@ import { useTranslations } from "next-intl"
 import {
   BotIcon,
   Building2Icon,
+  CheckIcon,
+  ChevronsUpDownIcon,
   ClipboardListIcon,
   LogOutIcon,
   MonitorIcon,
@@ -31,7 +33,14 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   activeView: DashboardView
@@ -62,6 +71,15 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const t = useTranslations("dashboardShell")
   const signOutHref = logoutHref(auth)
+  const [tenantAccessOpen, setTenantAccessOpen] = React.useState(false)
+  const { isMobile, setOpenMobile } = useSidebar()
+
+  function closeTenantAccess() {
+    setTenantAccessOpen(false)
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }
 
   return (
     <Sidebar
@@ -74,22 +92,63 @@ export function AppSidebar({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              size="lg"
-              render={
-                <Link href={dashboardSidebarHref("devices", query)} prefetch={false}>
-                  <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-                    <Building2Icon className="size-4" />
-                  </div>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">{t("brand")}</span>
-                    <span className="truncate text-xs text-sidebar-foreground/70">
-                      {selectedTenant ? selectedTenant.display_name : t("noTenant")}
-                    </span>
-                  </div>
-                </Link>
-              }
-            />
+            <Popover open={tenantAccessOpen} onOpenChange={setTenantAccessOpen}>
+              <PopoverTrigger
+                render={
+                  <SidebarMenuButton
+                    aria-expanded={tenantAccessOpen}
+                    aria-haspopup="dialog"
+                    aria-label={t("selectTenantAccess")}
+                    size="lg"
+                    tooltip={selectedTenant?.display_name ?? t("noTenant")}
+                  />
+                }
+              >
+                <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+                  <Building2Icon className="size-4" />
+                </div>
+                <div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">
+                    {selectedTenant ? selectedTenant.display_name : t("noTenant")}
+                  </span>
+                  <span className="truncate text-xs text-sidebar-foreground/70">
+                    {t("tenantAccess")}
+                  </span>
+                </div>
+                <ChevronsUpDownIcon className="ml-auto size-4 text-sidebar-foreground/70" />
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-64 p-0" sideOffset={6}>
+                <PopoverTitle className="px-2 py-1.5 text-xs text-muted-foreground">
+                  {t("tenantAccess")}
+                </PopoverTitle>
+                <div className="pb-1">
+                  {tenants.length === 0 ? (
+                    <div className="px-2 py-2 text-sm text-muted-foreground">
+                      {t("noTenant")}
+                    </div>
+                  ) : (
+                    tenants.map((tenant) => {
+                      const isSelected = tenant.id === selectedTenant?.id
+                      return (
+                        <Link
+                          aria-current={isSelected ? "true" : undefined}
+                          className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-foreground transition-colors duration-150 ease-out hover:bg-muted focus-visible:bg-muted"
+                          href={dashboardTenantHref(activeView, tenant.id, query)}
+                          key={tenant.id}
+                          onClick={closeTenantAccess}
+                          prefetch={false}
+                        >
+                          <span className="flex size-5 items-center justify-center">
+                            {isSelected ? <CheckIcon className="size-4" /> : null}
+                          </span>
+                          <span className="truncate">{tenant.display_name}</span>
+                        </Link>
+                      )
+                    })
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -124,38 +183,6 @@ export function AppSidebar({
           </SidebarGroup>
         </nav>
 
-        <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-          <SidebarGroupLabel>{t("tenants")}</SidebarGroupLabel>
-          <SidebarMenu>
-            {tenants.length === 0 ? (
-              <SidebarMenuItem>
-                <SidebarMenuButton disabled>
-                  <span>{t("noTenant")}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ) : (
-              tenants.map((tenant) => {
-                const isSelected = tenant.id === selectedTenant?.id
-                return (
-                  <SidebarMenuItem key={tenant.id}>
-                    <SidebarMenuButton
-                      isActive={isSelected}
-                      render={
-                        <Link
-                          aria-current={isSelected ? "true" : undefined}
-                          href={dashboardTenantHref(activeView, tenant.id, query)}
-                          prefetch={false}
-                        >
-                          <span>{tenant.display_name}</span>
-                        </Link>
-                      }
-                    />
-                  </SidebarMenuItem>
-                )
-              })
-            )}
-          </SidebarMenu>
-        </SidebarGroup>
       </SidebarContent>
       {signOutHref ? (
         <SidebarFooter>

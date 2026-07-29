@@ -188,25 +188,6 @@ export async function acceptJoinLink(formData: FormData) {
   );
 }
 
-export async function createTenantUser(formData: FormData) {
-  await requireAuth();
-  const tenantId = stringField(formData, "tenant_id");
-  const response = await postJson(
-    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/users`,
-    {
-      email: stringField(formData, "email"),
-      display_name: stringField(formData, "display_name"),
-      role: stringField(formData, "role"),
-    },
-  );
-  redirect(
-    statusUrl(
-      tenantId,
-      response.ok ? "user_created" : await errorCode(response),
-    ),
-  );
-}
-
 export async function updateTenantUserRole(formData: FormData) {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
@@ -227,25 +208,6 @@ export async function updateTenantUserRole(formData: FormData) {
     statusUrl(
       tenantId,
       response.ok ? "user_role_updated" : await errorCode(response),
-    ),
-  );
-}
-
-export async function linkUserIdentity(formData: FormData) {
-  await requireAuth();
-  const tenantId = stringField(formData, "tenant_id");
-  const userId = stringField(formData, "user_id");
-  const response = await postJson(
-    `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/users/${apiIdSegment(userId, "user_id")}/identities`,
-    {
-      provider: stringField(formData, "provider"),
-      subject: stringField(formData, "subject"),
-    },
-  );
-  redirect(
-    statusUrl(
-      tenantId,
-      response.ok ? "identity_linked" : await errorCode(response),
     ),
   );
 }

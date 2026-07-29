@@ -642,21 +642,19 @@ curl -sS -X POST "$PANDAR_API/api/v1/bootstrap/tenant-admin" \
   }'
 ```
 
-Tenant-admin provisioning examples:
+Tenant-admin membership inspection and role update examples:
 
 ```bash
-curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users" \
-  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
-  -H "content-type: application/json" \
-  -d '{"email":"operator@example.com","display_name":"Operator","role":"operator"}'
+curl -sS "$PANDAR_API/api/v1/tenants/$TENANT_ID/users" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN"
 
-curl -sS -X POST "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/identities" \
+curl -sS -X PATCH "$PANDAR_API/api/v1/tenants/$TENANT_ID/users/$USER_ID/role" \
   -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
   -H "content-type: application/json" \
-  -d '{"provider":"clerk","subject":"user_123"}'
+  -d '{"role":"operator"}'
 ```
 
-Manual user creation and identity linking are transitional/admin-only compatibility APIs. New deployments should use external JWT sign-in plus self-create or join links instead.
+Manual user creation and identity linking are not exposed. Use external JWT sign-in plus tenant self-create or join links; existing tenant-local roles remain editable.
 
 Tenant-token examples:
 

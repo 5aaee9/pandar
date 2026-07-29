@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import en from "../messages/en.json";
@@ -161,10 +162,12 @@ function DashboardSidebarWithActionStatus({ actionStatus }: { actionStatus: stri
 
 describe("action status navigation", () => {
   it("does not preserve action status when switching tenants", async () => {
+    const user = userEvent.setup();
     setUrl("/agents?tenant=t1&command=cmd1&status=refresh_queued");
 
     renderWithMessages(<DashboardSidebarWithActionStatus actionStatus="refresh_queued" />);
     await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("button", { name: "Select tenant access" }));
 
     expect(screen.getByRole("link", { name: "Tenant Two" })).toHaveAttribute(
       "href",

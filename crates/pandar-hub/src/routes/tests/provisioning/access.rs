@@ -6,21 +6,8 @@ struct ErrorResponse {
 }
 
 #[derive(serde::Serialize)]
-struct UserCreateRequest {
-    email: &'static str,
-    display_name: &'static str,
-    role: &'static str,
-}
-
-#[derive(serde::Serialize)]
 struct RoleRequest {
     role: &'static str,
-}
-
-#[derive(serde::Serialize)]
-struct IdentityRequest {
-    provider: &'static str,
-    subject: &'static str,
 }
 
 #[derive(serde::Serialize)]
@@ -81,15 +68,6 @@ async fn operator_and_viewer_cannot_use_provisioning_routes() {
                 None,
             ),
             (
-                Method::POST,
-                format!("/api/v1/tenants/{tenant_id}/users"),
-                request_body(UserCreateRequest {
-                    email: "blocked@example.test",
-                    display_name: "Blocked",
-                    role: "viewer",
-                }),
-            ),
-            (
                 Method::PATCH,
                 format!("/api/v1/tenants/{tenant_id}/users/{target_user_id}/role"),
                 request_body(RoleRequest { role: "operator" }),
@@ -98,14 +76,6 @@ async fn operator_and_viewer_cannot_use_provisioning_routes() {
                 Method::GET,
                 format!("/api/v1/tenants/{tenant_id}/users/{target_user_id}/identities"),
                 None,
-            ),
-            (
-                Method::POST,
-                format!("/api/v1/tenants/{tenant_id}/users/{target_user_id}/identities"),
-                request_body(IdentityRequest {
-                    provider: "clerk",
-                    subject: "blocked",
-                }),
             ),
             (
                 Method::POST,

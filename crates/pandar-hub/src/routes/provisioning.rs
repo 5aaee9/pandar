@@ -11,9 +11,7 @@ use crate::{
 
 pub(super) use agents::{create_agent_pairing, revoke_agent_credential, rotate_agent_credential};
 pub(super) use tokens::{create_api_token, list_api_tokens, revoke_api_token};
-pub(super) use users::{
-    create_user, link_user_identity, list_user_identities, list_users, update_user_role,
-};
+pub(super) use users::{list_user_identities, list_users, update_user_role};
 
 #[derive(Debug, Serialize)]
 pub(super) struct UserResponse {
