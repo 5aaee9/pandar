@@ -83,10 +83,7 @@ export function DevicesPageClient({
       selectedCommand={null}
       commandData={null}
       notifications={[]}
-      users={[]}
-      userIdentities={[]}
       tenantTokens={[]}
-      joinLinks={[]}
       auditEvents={[]}
       adminUnavailable={false}
       adminLoadError={false}

@@ -97,6 +97,9 @@ impl From<RepositoryError> for ApiError {
             }
             RepositoryError::MissingTenant => Self::new(StatusCode::NOT_FOUND, "tenant_not_found"),
             RepositoryError::MissingUser => Self::new(StatusCode::NOT_FOUND, "user_not_found"),
+            RepositoryError::LastTenantAdmin => {
+                Self::new(StatusCode::CONFLICT, "last_tenant_admin")
+            }
             RepositoryError::MissingApiToken => {
                 Self::new(StatusCode::NOT_FOUND, "api_token_not_found")
             }

@@ -87,10 +87,7 @@ export function AgentsPageClient({
       selectedCommand={command}
       commandData={commandData}
       notifications={[]}
-      users={[]}
-      userIdentities={[]}
       tenantTokens={[]}
-      joinLinks={[]}
       auditEvents={[]}
       adminUnavailable={adminUnavailable}
       adminLoadError={false}

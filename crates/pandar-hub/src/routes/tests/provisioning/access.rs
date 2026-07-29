@@ -73,6 +73,11 @@ async fn operator_and_viewer_cannot_use_provisioning_routes() {
                 request_body(RoleRequest { role: "operator" }),
             ),
             (
+                Method::DELETE,
+                format!("/api/v1/tenants/{tenant_id}/users/{target_user_id}"),
+                None,
+            ),
+            (
                 Method::GET,
                 format!("/api/v1/tenants/{tenant_id}/users/{target_user_id}/identities"),
                 None,

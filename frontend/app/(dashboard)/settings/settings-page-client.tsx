@@ -96,10 +96,7 @@ export function SettingsPageClient({
       selectedCommand={null}
       commandData={null}
       notifications={[]}
-      users={[]}
-      userIdentities={[]}
       tenantTokens={tenantTokens}
-      joinLinks={[]}
       auditEvents={auditEvents}
       adminUnavailable={adminUnavailable}
       adminLoadError={adminLoadError}

@@ -11,8 +11,6 @@ const knownPositiveActionStatuses = new Set([
   "tenant_created",
   "tenant_token_revoked",
   "join_link_accepted",
-  "join_link_revoked",
-  "user_role_updated",
   "retry_queued",
   "retry_partial",
   "reprint_queued",

@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { AgentPairingGuidance } from "./agent-pairing-guidance";
-import { SettingsView, UsersView } from "./dashboard-admin-views";
+import { SettingsView } from "./dashboard-admin-views";
 import type { AttentionItem, Health, Severity } from "./dashboard-attention";
 import { JobHistory, PrinterInventory } from "./dashboard-inventory";
 import { FleetStatusStrip } from "./dashboard-overview";
@@ -29,12 +29,9 @@ import type {
   Command,
   CommandResultData,
   Job,
-  JoinLink,
   Printer,
   Tenant,
   TenantToken,
-  User,
-  UserIdentity,
 } from "./dashboard-types";
 import type {
   LiveState,
@@ -46,7 +43,7 @@ import { NeedsAttention } from "./needs-attention";
 import { PrinterMismatchCoordinator } from "./printer-mismatch-dialog";
 
 export type DashboardViewContentProps = {
-  view: DashboardView;
+  view: Exclude<DashboardView, "users">;
   auth: AuthMetadata;
   selectedTenant: Tenant | null;
   health: Health;
@@ -62,17 +59,13 @@ export type DashboardViewContentProps = {
   selectedCommand: Command | null;
   commandData: CommandResultData | null;
   notifications: RuntimeNotification[];
-  users: User[];
-  userIdentities: UserIdentity[];
   tenantTokens: TenantToken[];
-  joinLinks: JoinLink[];
   auditEvents: AuditEvent[];
   adminUnavailable: boolean;
   adminLoadError: boolean;
   canManageJobs: boolean;
   settingsStaticPanels?: React.ReactNode;
   tenantSettingsStatic?: React.ReactNode;
-  usersStaticPanels?: React.ReactNode;
 };
 
 export function DashboardViewContent(props: DashboardViewContentProps) {
@@ -84,9 +77,6 @@ export function DashboardViewContent(props: DashboardViewContentProps) {
   }
   if (props.view === "agents") {
     return <AgentsView {...props} />;
-  }
-  if (props.view === "users") {
-    return <UsersView {...props} />;
   }
   return <SettingsView {...props} />;
 }

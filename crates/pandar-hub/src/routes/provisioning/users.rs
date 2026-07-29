@@ -81,3 +81,23 @@ pub(in crate::routes) async fn list_user_identities(
 
     Ok(Json(UserIdentityListResponse { identities }))
 }
+
+pub(in crate::routes) async fn remove_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((tenant_id, user_id)): Path<(String, String)>,
+) -> Result<Json<UserResponse>, ApiError> {
+    let tenant_id = parse_tenant_id(&tenant_id)?;
+    let principal = auth::authorize_tenant_admin_principal(&state, &headers, tenant_id).await?;
+    if let crate::repositories::AuthenticatedPrincipal::User(authenticated) = &principal
+        && authenticated.user.id == user_id
+    {
+        return Err(ApiError::new(StatusCode::CONFLICT, "cannot_remove_self"));
+    }
+    let user = state
+        .auth()
+        .remove_user_with_audit(tenant_id, &user_id, auth::audit_actor(&principal))
+        .await?;
+
+    Ok(Json(UserResponse::from(user)))
+}

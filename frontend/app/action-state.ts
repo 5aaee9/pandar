@@ -1,5 +1,10 @@
 import type { Agent, JoinLink, TenantToken } from "./dashboard-types";
 
+export type MutationActionState =
+  | { ok: true }
+  | { ok: false; error: string }
+  | null;
+
 export type SecretActionState =
   | {
       ok: true;

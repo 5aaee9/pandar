@@ -69,6 +69,10 @@ pub fn router(state: AppState) -> Router {
             get(provisioning::list_users),
         )
         .route(
+            "/api/v1/tenants/{tenant_id}/users/{user_id}",
+            axum::routing::delete(provisioning::remove_user),
+        )
+        .route(
             "/api/v1/tenants/{tenant_id}/users/{user_id}/role",
             axum::routing::patch(provisioning::update_user_role),
         )

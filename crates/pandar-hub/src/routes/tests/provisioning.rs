@@ -5,6 +5,7 @@ use super::*;
 
 mod access;
 mod agents;
+mod users;
 mod workflow;
 
 async fn admin_tenant() -> (AppState, Router, String, String) {

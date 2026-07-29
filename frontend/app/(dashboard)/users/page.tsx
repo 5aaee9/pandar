@@ -42,10 +42,10 @@ export default async function UsersPage({
 
   return (
     <UsersPageClient
-      auth={auth}
       selectedTenant={selectedTenant}
       adminUnavailable={adminUnavailable}
       adminLoadError={adminLoadError}
+      meEmail={identity.me?.identity.email ?? null}
     />
   );
 }

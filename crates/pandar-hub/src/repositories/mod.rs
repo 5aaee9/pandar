@@ -83,6 +83,8 @@ pub enum RepositoryError {
     MissingTenant,
     #[error("user not found")]
     MissingUser,
+    #[error("cannot remove the last tenant admin")]
+    LastTenantAdmin,
     #[error("api token not found")]
     MissingApiToken,
     #[error("tenant token not found")]

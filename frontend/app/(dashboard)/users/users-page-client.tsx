@@ -3,23 +3,24 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { apiClient } from "../../api-client";
-import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
-import type { AuthMetadata, Tenant } from "../../dashboard-types";
+import type { Tenant } from "../../dashboard-types";
+import { UsersDashboard } from "../../users-dashboard";
+import { usersQueryKey } from "../../users-query";
 
 export function UsersPageClient({
-  auth,
   selectedTenant,
   adminUnavailable,
   adminLoadError,
+  meEmail,
 }: {
-  auth: AuthMetadata;
   selectedTenant: Tenant;
   adminUnavailable: boolean;
   adminLoadError: boolean;
+  meEmail: string | null;
 }) {
   const { data, isLoading, error } = useQuery({
-    queryKey: ["route", "users", selectedTenant.id],
+    queryKey: usersQueryKey(selectedTenant.id),
     queryFn: async () => {
       const [users, joinLinks] = await Promise.all([
         apiClient.users.list(selectedTenant.id),
@@ -32,7 +33,24 @@ export function UsersPageClient({
       };
     },
     staleTime: 60 * 1000,
+    enabled: !adminUnavailable,
   });
+
+  if (adminUnavailable) {
+    return (
+      <QueryErrorBoundary>
+        <UsersDashboard
+          adminLoadError={adminLoadError}
+          adminUnavailable={adminUnavailable}
+          identities={[]}
+          joinLinks={[]}
+          meEmail={meEmail}
+          selectedTenant={selectedTenant}
+          users={[]}
+        />
+      </QueryErrorBoundary>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -54,39 +72,15 @@ export function UsersPageClient({
 
   return (
     <QueryErrorBoundary>
-      <DashboardViewContent
-      view="users"
-      auth={auth}
-      selectedTenant={selectedTenant}
-      printers={[]}
-      agents={[]}
-      jobs={[]}
-      health={{
-        printersTotal: 0,
-        printersOnline: 0,
-        agentsTotal: 0,
-        agentsConnected: 0,
-        jobsActive: 0,
-        jobsFailed: 0,
-      }}
-      attentionItems={[]}
-      topSeverity={null}
-      liveState="idle"
-      lastEventAt={null}
-      fleetEmpty={true}
-      nowMs={0}
-      selectedCommand={null}
-      commandData={null}
-      notifications={[]}
-      users={users}
-      userIdentities={identities}
-      tenantTokens={[]}
-      joinLinks={joinLinks}
-      auditEvents={[]}
-      adminUnavailable={adminUnavailable}
-      adminLoadError={adminLoadError}
-      canManageJobs={true}
-    />
+      <UsersDashboard
+        adminLoadError={adminLoadError}
+        adminUnavailable={adminUnavailable}
+        identities={identities}
+        joinLinks={joinLinks}
+        meEmail={meEmail}
+        selectedTenant={selectedTenant}
+        users={users}
+      />
     </QueryErrorBoundary>
   );
 }

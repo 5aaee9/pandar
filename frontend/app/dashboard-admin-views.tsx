@@ -12,17 +12,13 @@ import {
   TenantAuditPanel,
   TenantSecretsPanel,
 } from "./admin-settings-panel";
-import { CreateJoinLinkForm, TenantUsersPanel } from "./admin-users-panel";
 import type { DashboardViewContentProps } from "./dashboard-view-content";
 import type {
   Agent,
   AuditEvent,
   AuthMetadata,
-  JoinLink,
   Tenant,
   TenantToken,
-  User,
-  UserIdentity,
 } from "./dashboard-types";
 import {
   RuntimeStatusPanel,
@@ -30,30 +26,6 @@ import {
 } from "./dashboard-runtime-sections";
 import { logoutHref } from "./dashboard-shell";
 import { SectionHeader } from "./dashboard-ui";
-
-export function UsersView({
-  auth,
-  selectedTenant,
-  users,
-  userIdentities,
-  joinLinks,
-  adminUnavailable,
-  adminLoadError,
-}: DashboardViewContentProps) {
-  return (
-    <>
-      <LogoutPanel auth={auth} />
-      <UsersAdminSection
-        selectedTenant={selectedTenant}
-        users={users}
-        userIdentities={userIdentities}
-        joinLinks={joinLinks}
-        unavailable={adminUnavailable}
-        loadError={adminLoadError}
-      />
-    </>
-  );
-}
 
 export function SettingsView({
   auth,
@@ -95,6 +67,7 @@ export function SettingsView({
         notifications={notifications}
         selectedTenant={selectedTenant}
       />
+      <LogoutPanel auth={auth} />
     </>
   );
 }
@@ -140,51 +113,6 @@ function ThemeSettingsPanel() {
     <PreferencePanel title={t("themeTitle")} description={t("themeDescription")}>
       <ThemeSwitcher />
     </PreferencePanel>
-  );
-}
-
-function UsersAdminSection({
-  selectedTenant,
-  users,
-  userIdentities,
-  joinLinks,
-  unavailable,
-  loadError,
-}: {
-  selectedTenant: Tenant | null;
-  users: User[];
-  userIdentities: UserIdentity[];
-  joinLinks: JoinLink[];
-  unavailable: boolean;
-  loadError: boolean;
-}) {
-  const t = useTranslations("admin");
-  return (
-    <AdminSectionGuard
-      title={t("users")}
-      selectedTenant={selectedTenant}
-      loadError={loadError}
-      unavailable={unavailable}
-    >
-      {(tenant) => (
-        <section className="overflow-hidden rounded-md border border-border bg-card">
-          <SectionHeader
-            title={t("users")}
-            subtitle={t("subtitleTenant", { name: tenant.display_name })}
-            meta={t("usersMeta", { count: users.length })}
-          />
-          <div className={`border-b border-border ${mutedBgClasses} px-4 py-4`}>
-            <CreateJoinLinkForm tenantId={tenant.id} />
-          </div>
-          <TenantUsersPanel
-            selectedTenant={tenant}
-            users={users}
-            userIdentities={userIdentities}
-            joinLinks={joinLinks}
-          />
-        </section>
-      )}
-    </AdminSectionGuard>
   );
 }
 

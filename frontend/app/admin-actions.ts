@@ -9,11 +9,10 @@ import {
   nullableField,
   numberOrNull,
   postJson,
-  statusUrl,
   statusUrlForForm,
   stringField,
 } from "./action-helpers";
-import type { SecretActionState } from "./action-state";
+import type { MutationActionState, SecretActionState } from "./action-state";
 import { apiHeaders, requireAuth } from "./api-auth";
 import { apiIdSegment } from "./api-path";
 import type { Agent, JoinLink, Tenant, TenantToken } from "./dashboard-types";
@@ -153,7 +152,10 @@ export async function createJoinLink(
   };
 }
 
-export async function revokeJoinLink(formData: FormData) {
+export async function revokeJoinLink(
+  _previousState: MutationActionState,
+  formData: FormData,
+): Promise<MutationActionState> {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const joinLinkId = stringField(formData, "join_link_id");
@@ -164,12 +166,10 @@ export async function revokeJoinLink(formData: FormData) {
       headers: await apiHeaders("application/json"),
     },
   );
-  redirect(
-    statusUrl(
-      tenantId,
-      response.ok ? "join_link_revoked" : await errorCode(response),
-    ),
-  );
+  if (!response.ok) {
+    return { ok: false, error: await errorCode(response) };
+  }
+  return { ok: true };
 }
 
 export async function acceptJoinLink(formData: FormData) {
@@ -188,7 +188,10 @@ export async function acceptJoinLink(formData: FormData) {
   );
 }
 
-export async function updateTenantUserRole(formData: FormData) {
+export async function updateTenantUserRole(
+  _previousState: MutationActionState,
+  formData: FormData,
+): Promise<MutationActionState> {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const userId = stringField(formData, "user_id");
@@ -200,16 +203,30 @@ export async function updateTenantUserRole(formData: FormData) {
       body: JSON.stringify({ role: stringField(formData, "role") }),
     },
   );
-  if (response.ok) {
-    const { revalidatePath } = await import("next/cache");
-    revalidatePath("/(dashboard)", "layout");
+  if (!response.ok) {
+    return { ok: false, error: await errorCode(response) };
   }
-  redirect(
-    statusUrl(
-      tenantId,
-      response.ok ? "user_role_updated" : await errorCode(response),
-    ),
+  return { ok: true };
+}
+
+export async function removeTenantUser(
+  _previousState: MutationActionState,
+  formData: FormData,
+): Promise<MutationActionState> {
+  await requireAuth();
+  const tenantId = stringField(formData, "tenant_id");
+  const userId = stringField(formData, "user_id");
+  const response = await fetch(
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/users/${apiIdSegment(userId, "user_id")}`,
+    {
+      method: "DELETE",
+      headers: await apiHeaders("application/json"),
+    },
   );
+  if (!response.ok) {
+    return { ok: false, error: await errorCode(response) };
+  }
+  return { ok: true };
 }
 
 export async function createAgentPairing(
