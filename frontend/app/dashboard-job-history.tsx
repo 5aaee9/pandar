@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
 import { apiIdSegment } from './api-path'
+import { JobsRouteData, routeDataKeys } from './route-data'
 import { FilterBar } from './dashboard-filter-bar'
 import {
   isClearableJob,
@@ -71,9 +72,9 @@ export function JobHistory({
       return response
     },
     onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: ['route', 'jobs', selectedTenant!.id] })
-      const previousData = queryClient.getQueryData(['route', 'jobs', selectedTenant!.id])
-      queryClient.setQueryData(['route', 'jobs', selectedTenant!.id], (old: { jobs: Job[] } | undefined) => {
+      await queryClient.cancelQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
+      const previousData = queryClient.getQueryData(routeDataKeys.jobs(selectedTenant!.id))
+      queryClient.setQueryData(routeDataKeys.jobs(selectedTenant!.id), (old: JobsRouteData | undefined) => {
         if (!old) return old
         return { ...old, jobs: old.jobs.filter((job) => !isClearableJob(job)) }
       })
@@ -81,14 +82,14 @@ export function JobHistory({
     },
     onSuccess: () => {
       setClearOpen(false)
-      queryClient.invalidateQueries({ queryKey: ['route', 'jobs', selectedTenant!.id] })
+      queryClient.invalidateQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
       onClearRedirect(
         `/jobs?tenant=${encodeURIComponent(selectedTenant!.id)}&status=jobs_cleared`,
       )
     },
     onError: (error: { status?: number }, _variables, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(['route', 'jobs', selectedTenant!.id], context.previousData)
+        queryClient.setQueryData(routeDataKeys.jobs(selectedTenant!.id), context.previousData)
       }
       setClearError(
         error.status === 401 || error.status === 403 ? 'permission' : 'generic',
@@ -108,9 +109,9 @@ export function JobHistory({
       return response
     },
     onMutate: async (jobId) => {
-      await queryClient.cancelQueries({ queryKey: ['route', 'jobs', selectedTenant!.id] })
-      const previousData = queryClient.getQueryData(['route', 'jobs', selectedTenant!.id])
-      queryClient.setQueryData(['route', 'jobs', selectedTenant!.id], (old: { jobs: Job[] } | undefined) => {
+      await queryClient.cancelQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
+      const previousData = queryClient.getQueryData(routeDataKeys.jobs(selectedTenant!.id))
+      queryClient.setQueryData(routeDataKeys.jobs(selectedTenant!.id), (old: JobsRouteData | undefined) => {
         if (!old) return old
         return { ...old, jobs: old.jobs.filter((job) => job.id !== jobId) }
       })
@@ -118,14 +119,14 @@ export function JobHistory({
     },
     onSuccess: () => {
       setDeleteTarget(null)
-      queryClient.invalidateQueries({ queryKey: ['route', 'jobs', selectedTenant!.id] })
+      queryClient.invalidateQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
       onDeleteRedirect(
         `/jobs?tenant=${encodeURIComponent(selectedTenant!.id)}&status=job_deleted`,
       )
     },
     onError: (_error, _jobId, context) => {
       if (context?.previousData) {
-        queryClient.setQueryData(['route', 'jobs', selectedTenant!.id], context.previousData)
+        queryClient.setQueryData(routeDataKeys.jobs(selectedTenant!.id), context.previousData)
       }
       setDeleteError(true)
     },

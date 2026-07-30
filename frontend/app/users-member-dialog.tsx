@@ -18,7 +18,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { isLastTenantAdmin, isSelf } from "./users-model";
-import { useInvalidateUsers, useMutationFeedback } from "./users-query";
+import { useMutationFeedback } from "./mutation-feedback";
+import { routeDataKeys } from "./route-data";
+import { useQueryClient } from "@tanstack/react-query";
 import { UserAvatar, YouBadge } from "./users-shared";
 
 export function MemberDialog({
@@ -90,7 +92,7 @@ export function MemberDialog({
 function RoleForm({ tenant, user }: { tenant: Tenant; user: User }) {
   const t = useTranslations("usersPage");
   const tTokens = useTranslations("tokens");
-  const invalidate = useInvalidateUsers(tenant.id);
+  const queryClient = useQueryClient();
   const [state, formAction, pending] = useActionState(
     updateTenantUserRole,
     null,
@@ -99,7 +101,10 @@ function RoleForm({ tenant, user }: { tenant: Tenant; user: User }) {
 
   useMutationFeedback(state, {
     successMessage: t("roleUpdated"),
-    onSuccess: () => void invalidate(),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({
+        queryKey: routeDataKeys.users(tenant.id),
+      }),
   });
 
   return (
@@ -184,7 +189,7 @@ function RemoveMemberSection({
   onRemoved: () => void;
 }) {
   const t = useTranslations("usersPage");
-  const invalidate = useInvalidateUsers(tenant.id);
+  const queryClient = useQueryClient();
   const [state, formAction] = useActionState(removeTenantUser, null);
 
   useMutationFeedback(state, {
@@ -193,7 +198,9 @@ function RemoveMemberSection({
       t.has(`removeError.${code}`) ? t(`removeError.${code}`) : code,
     onSuccess: () => {
       onRemoved();
-      void invalidate();
+      void queryClient.invalidateQueries({
+        queryKey: routeDataKeys.users(tenant.id),
+      });
     },
   });
 

@@ -2,9 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { apiClient } from "../../api-client";
 import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
+import { settingsRouteQuery } from "../../route-data";
 import type { AuthMetadata, Tenant } from "../../dashboard-types";
 
 export function SettingsPageClient({
@@ -20,24 +20,9 @@ export function SettingsPageClient({
   settingsStaticPanels: React.ReactNode;
   tenantSettingsStatic: React.ReactNode;
 }) {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["route", "settings", selectedTenant.id],
-    queryFn: async () => {
-      const [tenantTokens, agents, printers, auditEvents] = await Promise.all([
-        apiClient.settings.tenantTokens(selectedTenant.id),
-        apiClient.agents.list(selectedTenant.id),
-        apiClient.printers.list(selectedTenant.id),
-        apiClient.settings.auditEvents(selectedTenant.id),
-      ]);
-      return {
-        tenantTokens: tenantTokens.tenant_tokens,
-        agents: agents.agents,
-        printers: printers.printers,
-        auditEvents: auditEvents.audit_events,
-      };
-    },
-    staleTime: 60 * 1000,
-  });
+  const { data, isLoading, error } = useQuery(
+    settingsRouteQuery(selectedTenant.id),
+  );
 
   const adminUnavailable =
     auth.provider !== "none" &&

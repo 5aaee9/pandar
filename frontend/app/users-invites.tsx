@@ -30,7 +30,9 @@ import {
   inviteStatus,
   sortJoinLinks,
 } from "./users-model";
-import { useInvalidateUsers, useMutationFeedback } from "./users-query";
+import { useMutationFeedback } from "./mutation-feedback";
+import { routeDataKeys } from "./route-data";
+import { useQueryClient } from "@tanstack/react-query";
 import { InviteStatusChip, useNowMs } from "./users-shared";
 
 export function InvitesSection({
@@ -159,12 +161,15 @@ function RevokeInviteButton({
   link: JoinLink;
 }) {
   const t = useTranslations("usersPage");
-  const invalidate = useInvalidateUsers(tenant.id);
+  const queryClient = useQueryClient();
   const [state, formAction] = useActionState(revokeJoinLink, null);
 
   useMutationFeedback(state, {
     successMessage: t("inviteRevoked"),
-    onSuccess: () => void invalidate(),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({
+        queryKey: routeDataKeys.users(tenant.id),
+      }),
   });
 
   return (
@@ -232,13 +237,16 @@ function CreateInviteForm({
 }) {
   const t = useTranslations("usersPage");
   const tTokens = useTranslations("tokens");
-  const invalidate = useInvalidateUsers(tenant.id);
+  const queryClient = useQueryClient();
   const [state, formAction, pending] = useActionState(createJoinLink, null);
   const locked = pending || state?.ok === true;
 
   useMutationFeedback(state, {
     silentError: true,
-    onSuccess: () => void invalidate(),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({
+        queryKey: routeDataKeys.users(tenant.id),
+      }),
   });
 
   return (

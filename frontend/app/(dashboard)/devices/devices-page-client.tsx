@@ -2,10 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { apiClient } from "../../api-client";
 import { OFFLINE_PRINTER_STATUSES } from "../../dashboard-attention";
 import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
+import { devicesRouteQuery } from "../../route-data";
 import type { AuthMetadata, Printer, Tenant } from "../../dashboard-types";
 import { useDashboardClock } from "../../use-dashboard-clock";
 
@@ -18,23 +18,9 @@ export function DevicesPageClient({
   auth: AuthMetadata;
   selectedTenant: Tenant;
 }) {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["route", "devices", selectedTenant.id],
-    queryFn: async () => {
-      const [printers, agents, jobs] = await Promise.all([
-        apiClient.printers.list(selectedTenant.id),
-        apiClient.agents.list(selectedTenant.id),
-        apiClient.jobs.list(selectedTenant.id),
-      ]);
-      return {
-        printers: printers.printers,
-        agents: agents.agents,
-        jobs: jobs.jobs,
-      };
-    },
-    staleTime: 10 * 1000,
-    refetchInterval: 30 * 1000,
-  });
+  const { data, isLoading, error } = useQuery(
+    devicesRouteQuery(selectedTenant.id),
+  );
   const nowMs = useDashboardClock(data?.printers ?? EMPTY_PRINTERS);
 
   if (isLoading) {

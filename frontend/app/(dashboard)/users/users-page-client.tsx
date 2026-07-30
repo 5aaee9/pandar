@@ -2,11 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { apiClient } from "../../api-client";
 import { QueryErrorBoundary } from "../../query-error-boundary";
+import { usersRouteQuery } from "../../route-data";
 import type { Tenant } from "../../dashboard-types";
 import { UsersDashboard } from "../../users-dashboard";
-import { usersQueryKey } from "../../users-query";
 
 export function UsersPageClient({
   selectedTenant,
@@ -20,19 +19,7 @@ export function UsersPageClient({
   meEmail: string | null;
 }) {
   const { data, isLoading, error } = useQuery({
-    queryKey: usersQueryKey(selectedTenant.id),
-    queryFn: async () => {
-      const [users, joinLinks] = await Promise.all([
-        apiClient.users.list(selectedTenant.id),
-        apiClient.users.joinLinks(selectedTenant.id),
-      ]);
-      return {
-        users: users.users,
-        identities: users.identities,
-        joinLinks: joinLinks.join_links,
-      };
-    },
-    staleTime: 60 * 1000,
+    ...usersRouteQuery(selectedTenant.id),
     enabled: !adminUnavailable,
   });
 

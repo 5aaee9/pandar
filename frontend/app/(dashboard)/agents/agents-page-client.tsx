@@ -2,10 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { apiClient } from "../../api-client";
-import { parseCommandResult } from "../../command-result-parser";
 import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
+import { agentsRouteQuery } from "../../route-data";
 import type { AuthMetadata, Tenant } from "../../dashboard-types";
 
 export function AgentsPageClient({
@@ -19,24 +18,9 @@ export function AgentsPageClient({
   adminUnavailable: boolean;
   commandId: string | null;
 }) {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["route", "agents", selectedTenant.id, commandId],
-    queryFn: async () => {
-      const [agents, printers, command] = await Promise.all([
-        apiClient.agents.list(selectedTenant.id),
-        apiClient.printers.list(selectedTenant.id),
-        commandId ? apiClient.commands.get(selectedTenant.id, commandId) : Promise.resolve(null),
-      ]);
-      return {
-        agents: agents.agents,
-        printers: printers.printers,
-        command,
-        commandData: command ? parseCommandResult(command) : null,
-      };
-    },
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
-  });
+  const { data, isLoading, error } = useQuery(
+    agentsRouteQuery(selectedTenant.id, commandId),
+  );
 
   if (isLoading) {
     return (

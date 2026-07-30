@@ -4,8 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslations } from 'next-intl'
 
 import { AgentSettingsPanel } from '../../../../agent-settings-panel'
-import { apiClient } from '../../../../api-client'
-import { parseCommandResult } from '../../../../command-result-parser'
+import { agentSettingsRouteQuery } from '../../../../route-data'
 import { DiagnosticsSection } from '../../../../diagnostics-section'
 import { EmptyState } from '../../../../dashboard-ui'
 import type { Tenant } from '../../../../dashboard-types'
@@ -21,24 +20,9 @@ export function AgentSettingsPageClient({
   selectedTenant: Tenant
 }) {
   const t = useTranslations('agentSettings')
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['route', 'agent-settings', selectedTenant.id, agentId, commandId],
-    queryFn: async () => {
-      const [agents, printers, command] = await Promise.all([
-        apiClient.agents.list(selectedTenant.id),
-        apiClient.printers.list(selectedTenant.id),
-        commandId ? apiClient.commands.get(selectedTenant.id, commandId) : Promise.resolve(null),
-      ])
-      return {
-        agent: agents.agents.find((candidate) => candidate.id === agentId) ?? null,
-        printers: printers.printers.filter((printer) => printer.agent_id === agentId),
-        command,
-        commandData: command ? parseCommandResult(command) : null,
-      }
-    },
-    staleTime: 30 * 1000,
-    refetchInterval: commandId ? 15 * 1000 : false,
-  })
+  const { data, isLoading, error } = useQuery(
+    agentSettingsRouteQuery(selectedTenant.id, agentId, commandId),
+  )
 
   if (isLoading) {
     return (

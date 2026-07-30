@@ -2,9 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { apiClient } from "../../api-client";
 import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
+import { jobsRouteQuery } from "../../route-data";
 import type { AuthMetadata, Tenant } from "../../dashboard-types";
 
 export function JobsPageClient({
@@ -16,23 +16,9 @@ export function JobsPageClient({
   selectedTenant: Tenant;
   canManageJobs: boolean;
 }) {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["route", "jobs", selectedTenant.id],
-    queryFn: async () => {
-      const [jobs, printers, agents] = await Promise.all([
-        apiClient.jobs.list(selectedTenant.id),
-        apiClient.printers.list(selectedTenant.id),
-        apiClient.agents.list(selectedTenant.id),
-      ]);
-      return {
-        jobs: jobs.jobs,
-        printers: printers.printers,
-        agents: agents.agents,
-      };
-    },
-    staleTime: 10 * 1000,
-    refetchInterval: 30 * 1000,
-  });
+  const { data, isLoading, error } = useQuery(
+    jobsRouteQuery(selectedTenant.id),
+  );
 
   if (isLoading) {
     return (

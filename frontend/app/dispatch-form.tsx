@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { inputClasses } from '@/lib/utils'
 import type { ArtifactMetadata, Job, Printer } from './dashboard-types'
 import { apiIdSegment } from './api-path'
+import { routeDataKeys } from './route-data'
 import { ConfirmDialog } from './confirm-dialog'
 import {
   DispatchArtifactField,
@@ -76,7 +77,7 @@ export function DispatchForm({
       return response
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['jobs'] })
+      queryClient.invalidateQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
       onRedirect(
         `/jobs?tenant=${encodeURIComponent(selectedTenant!.id)}&status=${encodeURIComponent(
           sourceJob ? 'reprint_queued' : 'job_created',

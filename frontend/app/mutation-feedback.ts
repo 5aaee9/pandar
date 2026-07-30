@@ -1,22 +1,9 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 import type { MutationActionState } from "./action-state";
-
-export function usersQueryKey(tenantId: string) {
-  return ["route", "users", tenantId] as const;
-}
-
-export function useInvalidateUsers(tenantId: string) {
-  const queryClient = useQueryClient();
-  return useCallback(
-    () => queryClient.invalidateQueries({ queryKey: usersQueryKey(tenantId) }),
-    [queryClient, tenantId],
-  );
-}
 
 export function useMutationFeedback(
   state: MutationActionState,
