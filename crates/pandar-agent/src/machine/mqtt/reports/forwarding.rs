@@ -14,21 +14,18 @@ use crate::{
     AgentConfig,
     machine::{
         BambuPrinterEndpoint, DeviceFeatureCache, FirmwareReportContext, MachineSnapshot,
-        MaterialRefreshResult,
-        materials::{normalize_material_patch, parse_materials_report},
+        MaterialRefreshResult, materials::normalize_material_patch,
     },
     protocol::agent::v1::AgentEvent,
 };
 
 use super::{
-    parse_print_report, print_job_report_event, print_report_from_parsed_report,
-    printer_materials_snapshot_event, printer_snapshot_event,
+    print_job_report_event, print_report_from_parsed_report, printer_materials_snapshot_event,
+    printer_snapshot_event,
 };
-use crate::machine::mqtt::device_features::is_feature_only_report;
 use crate::machine::mqtt::{
-    BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, PublishedMqttCommand,
-    device_feature_observation, feature_event, is_mqtt_report_idle_timeout, parse_snapshot_report,
-    snapshot_from_parsed_report,
+    BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, MachineReports,
+    PublishedMqttCommand, feature_event, is_mqtt_report_idle_timeout, snapshot_from_parsed_report,
 };
 const PRINTER_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 
@@ -55,6 +52,7 @@ fn snapshot_has_telemetry(snapshot: &MachineSnapshot) -> bool {
         || snapshot.chamber_light_on.is_some()
 }
 
+#[cfg(test)]
 pub async fn forward_print_reports<T>(
     config: &AgentConfig,
     transport: &T,
@@ -82,6 +80,7 @@ where
     .await
 }
 
+#[cfg(test)]
 pub async fn forward_print_reports_with_firmware<T>(
     config: &AgentConfig,
     transport: &T,
@@ -148,7 +147,8 @@ where
     T: BambuMqttTransport + ?Sized,
 {
     let topics = BambuMqttTopics::for_serial(&endpoint.serial);
-    transport
+    let reports = MachineReports::new(transport);
+    reports
         .subscribe(&topics.report)
         .await
         .with_context(|| format!("subscribe to report topic {}", topics.report))?;
@@ -158,7 +158,7 @@ where
                 endpoint,
                 firmware,
                 report_timeout,
-                transport,
+                &reports,
                 &topics,
             )
             .await?,
@@ -167,7 +167,7 @@ where
         None
     };
     let (pushall, sequence_id) = pushall_command(&topics.request);
-    transport
+    reports
         .publish(pushall)
         .await
         .with_context(|| format!("publish pushall to request topic {}", topics.request))?;
@@ -185,7 +185,7 @@ where
             _ = sender.closed() => break,
             _ = refresh_interval.tick() => {
                 let (pushall, sequence_id) = pushall_command(&topics.request);
-                transport
+                reports
                     .publish(pushall)
                     .await
                     .with_context(|| {
@@ -196,34 +196,27 @@ where
                     })?;
                 outstanding_pushall = Some(sequence_id);
             },
-            report = transport.next_report(report_timeout) => {
+            report = reports.next_report(report_timeout) => {
                 match report {
             Ok(report) => {
                 if let Some(processor) = &mut firmware_processor {
                     processor.observe(config, &report, sender).await?;
                 }
                 let observed_at = created_at_now();
-                let print_report = parse_print_report(&report);
-                let materials_report = parse_materials_report(&report);
-                let printer_materials_json = materials_report
-                    .as_ref()
+                let printer_materials_json = report
+                    .materials()
                     .and_then(|report| normalize_material_patch(report, &observed_at))
                     .and_then(|patch| serde_json::to_string(&patch).ok())
                     .unwrap_or_default();
                 let progress = print_report_from_parsed_report(
                     endpoint,
-                    print_report.as_ref(),
-                    super::raw_print_payload(&report),
+                    report.print(),
+                    report.raw_print_payload(),
                     observed_at,
                     printer_materials_json,
                 );
-                let snapshot_report = parse_snapshot_report(&report);
-                let device_features = match snapshot_report
-                    .as_ref()
-                    .map(|report| device_feature_observation(&endpoint.serial, report))
-                    .transpose()
-                {
-                    Ok(value) => value.flatten(),
+                let device_features = match report.device_feature_observation(&endpoint.serial) {
+                    Ok(value) => value,
                     Err(error) => {
                         tracing::warn!(
                             serial = %endpoint.serial,
@@ -236,11 +229,11 @@ where
                 if let Some(value) = device_features {
                     context.device_features.update(&endpoint.serial, value).await;
                 }
-                let mut snapshot = snapshot_from_parsed_report(endpoint, snapshot_report.as_ref());
+                let mut snapshot = snapshot_from_parsed_report(endpoint, report.snapshot());
                 snapshot.telemetry_authoritative = outstanding_pushall.as_deref().is_some_and(
                     |sequence_id| {
-                        snapshot_report
-                            .as_ref()
+                        report
+                            .snapshot()
                             .is_some_and(|report| report.is_full_push_status(sequence_id))
                     },
                 );
@@ -263,8 +256,8 @@ where
                         printer_id: None,
                         printer_materials_json: progress.printer_materials_json.clone(),
                     });
-                if crate::machine::mqtt::has_non_firmware_print_telemetry(&report)
-                    && !is_feature_only_report(&report)
+                if report.has_non_firmware_print_telemetry()
+                    && !report.is_feature_only_report()
                     && sender
                         .send(print_job_report_event(config, progress))
                         .await

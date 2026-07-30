@@ -2,8 +2,6 @@ use std::time::Duration;
 
 use anyhow::{Context, anyhow};
 use pandar_core::BambuDeviceFeatures;
-use serde::Deserialize;
-use serde_json::Value;
 
 use crate::{
     AgentConfig,
@@ -14,49 +12,9 @@ use crate::{
 };
 
 use super::{
-    BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, PublishedMqttCommand,
-    SnapshotReport, parse_snapshot_report,
+    BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, MachineReports,
+    PublishedMqttCommand,
 };
-
-#[derive(Debug, Default)]
-pub(super) enum FunField {
-    #[default]
-    Missing,
-    String(String),
-    Invalid,
-}
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum PresentFun {
-    String(String),
-    Invalid(serde::de::IgnoredAny),
-}
-
-pub(super) fn deserialize_fun_field<'de, D>(deserializer: D) -> Result<FunField, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    PresentFun::deserialize(deserializer).map(|value| match value {
-        PresentFun::String(value) => FunField::String(value),
-        PresentFun::Invalid(_) => FunField::Invalid,
-    })
-}
-
-pub(crate) fn device_feature_observation(
-    serial: &str,
-    report: &SnapshotReport,
-) -> anyhow::Result<Option<BambuDeviceFeatures>> {
-    match &report.print.as_ref().map(|print| &print.fun) {
-        None | Some(FunField::Missing) => Ok(None),
-        Some(FunField::String(value)) => BambuDeviceFeatures::from_hex(value)
-            .with_context(|| format!("parse printer {serial} print.fun"))
-            .map(Some),
-        Some(FunField::Invalid) => Err(anyhow!(
-            "printer {serial} print.fun expected a hexadecimal string"
-        )),
-    }
-}
 
 pub(crate) fn feature_event(
     config: &AgentConfig,
@@ -78,14 +36,6 @@ pub(crate) fn feature_event(
     }
 }
 
-pub(super) fn is_feature_only_report(report: &Value) -> bool {
-    report.as_object().is_some_and(|fields| fields.len() == 1)
-        && report
-            .get("print")
-            .and_then(Value::as_object)
-            .is_some_and(|fields| fields.len() == 1 && fields.contains_key("fun"))
-}
-
 pub(crate) async fn probe_device_features<T>(
     transport: &T,
     endpoint: &BambuPrinterEndpoint,
@@ -95,12 +45,13 @@ pub(crate) async fn probe_device_features<T>(
 where
     T: BambuMqttTransport + ?Sized,
 {
+    let reports = MachineReports::new(transport);
     let topics = BambuMqttTopics::for_serial(&endpoint.serial);
-    transport
+    reports
         .subscribe(&topics.report)
         .await
         .with_context(|| format!("subscribe to report topic {}", topics.report))?;
-    transport
+    reports
         .publish(PublishedMqttCommand {
             topic: topics.request.clone(),
             payload: BambuMqttCommand::RequestPushAll.payload(),
@@ -119,7 +70,7 @@ where
                 topics.report
             ));
         }
-        let report = tokio::time::timeout(remaining, transport.next_report(remaining))
+        let report = tokio::time::timeout(remaining, reports.next_report(remaining))
             .await
             .map_err(|_| {
                 anyhow!(
@@ -134,10 +85,7 @@ where
                     endpoint.serial, topics.report
                 )
             })?;
-        let Some(report) = parse_snapshot_report(&report) else {
-            continue;
-        };
-        let Some(value) = device_feature_observation(&endpoint.serial, &report)? else {
+        let Some(value) = report.device_feature_observation(&endpoint.serial)? else {
             continue;
         };
         cache.update(&endpoint.serial, value).await;

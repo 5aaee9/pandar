@@ -1,23 +1,17 @@
 mod external;
 mod identifiers;
 mod patch;
-mod schema;
 
 use external::{has_dual_external_slots, normalize_external_spools};
 use identifiers::*;
 use patch::*;
-use schema::*;
-use serde_json::{Number, Value};
+use serde_json::Number;
 
-use super::types::decode_json_payload;
+use super::mqtt::report::materials::*;
 
 struct NormalizedTrayPatch {
     tray_id: String,
     value: MaterialTrayPatch,
-}
-
-pub(crate) fn parse_materials_report(report: &Value) -> Option<MaterialsReport> {
-    decode_json_payload(report)
 }
 
 pub(crate) fn normalize_material_patch<'a>(

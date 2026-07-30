@@ -8,13 +8,14 @@ use std::{
 
 use anyhow::{Context, anyhow};
 use rumqttc::{AsyncClient, Event, EventLoop, Outgoing, Packet, QoS, SubscribeReasonCode};
-use serde::Deserialize;
-use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::machine::{
     FirmwarePublishTransition,
-    mqtt::{BAMBU_MQTT_RETAIN, decode_mqtt_report_payload, firmware::FirmwareResponseDomain},
+    mqtt::{
+        BAMBU_MQTT_RETAIN, MachineReport, decode_mqtt_report_payload,
+        firmware::FirmwareResponseDomain,
+    },
 };
 
 use super::{FirmwareBarrierPause, FirmwareMqttCommand, FirmwareMqttReport};
@@ -214,21 +215,22 @@ pub(super) async fn run_pump(
                         && ordinal > active.barrier
                     {
                         let report = decode_mqtt_report_payload(publish.payload.as_ref())
-                            .and_then(|payload| {
-                                report_matches(
-                                    &payload,
-                                    active.response_domain,
-                                    &active.command,
-                                    &active.sequence_id,
-                                )
-                                    .map(|matches| (matches, payload))
+                            .map(MachineReport::decode)
+                            .and_then(|report| {
+                                report
+                                    .firmware_report_matches(
+                                        active.response_domain,
+                                        &active.command,
+                                        &active.sequence_id,
+                                    )
+                                    .map(|matches| (matches, report))
                             });
                         match report {
-                            Ok((true, payload)) => {
+                            Ok((true, report)) => {
                                 let _ = active.events.send(AttemptEvent::Report(FirmwareMqttReport {
                                     #[cfg(test)]
                                     ordinal,
-                                    payload,
+                                    payload: report,
                                 }));
                             }
                             Ok((false, _)) => {}
@@ -279,38 +281,4 @@ pub(super) fn attempt_failure(after_publish: bool, error: String) -> anyhow::Err
         after_publish,
         message: error,
     })
-}
-
-fn report_matches(
-    report: &Value,
-    response_domain: FirmwareResponseDomain,
-    command: &str,
-    sequence_id: &str,
-) -> anyhow::Result<bool> {
-    let envelope = serde_json::from_value::<ReportIdentityEnvelope>(report.clone())
-        .context("parse firmware MQTT response identity")?;
-    let identity = match response_domain {
-        FirmwareResponseDomain::Info => envelope.info,
-        FirmwareResponseDomain::Upgrade => envelope.upgrade,
-    };
-    Ok(identity.is_some_and(|identity| {
-        identity.command.as_deref() == Some(command)
-            && identity.sequence_id.as_deref() == Some(sequence_id)
-    }))
-}
-
-#[derive(Deserialize)]
-struct ReportIdentityEnvelope {
-    #[serde(default)]
-    info: Option<ReportIdentity>,
-    #[serde(default)]
-    upgrade: Option<ReportIdentity>,
-}
-
-#[derive(Deserialize)]
-struct ReportIdentity {
-    #[serde(default)]
-    command: Option<String>,
-    #[serde(default)]
-    sequence_id: Option<String>,
 }

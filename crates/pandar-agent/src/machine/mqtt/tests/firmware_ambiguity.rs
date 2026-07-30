@@ -4,9 +4,7 @@ use pandar_core::FirmwareCommand;
 use rumqttc::MqttOptions;
 use tokio::{io::AsyncWriteExt, net::TcpListener};
 
-use super::super::firmware::{
-    FirmwareMqttSession, firmware_command_payload, parse_firmware_acknowledgement,
-};
+use super::super::firmware::{FirmwareMqttSession, firmware_command_payload};
 use super::firmware_session::{
     REPORT_TOPIC, REQUEST_TOPIC, mqtt_string, read_packet, write_publish,
 };
@@ -71,10 +69,11 @@ async fn delayed_old_ack_with_reused_command_and_sequence_remains_wire_indisting
         .wait_matching_report(Duration::from_secs(1))
         .await
         .unwrap();
-    let acknowledgement =
-        parse_firmware_acknowledgement(&report.payload, "upgrade_confirm", "reused")
-            .unwrap()
-            .unwrap();
+    let acknowledgement = report
+        .payload
+        .firmware_acknowledgement("upgrade_confirm", "reused")
+        .unwrap()
+        .unwrap();
 
     assert_eq!(
         acknowledgement.reason.as_deref(),

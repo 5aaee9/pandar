@@ -39,11 +39,12 @@ pub use firmware::{
     FirmwareExecutionLease, FirmwareGenerationTransition, FirmwareMachineGateway,
     FirmwareModulesDelivery, FirmwareModulesObservation, FirmwareObservationCache,
     FirmwarePrepareRequest, FirmwarePreparedObservation, FirmwarePublishTransition,
-    FirmwareRefreshRequest, FirmwareReportContext, FirmwareReportReducer, FirmwareReservationState,
+    FirmwareRefreshRequest, FirmwareReportContext, FirmwareReservationState,
     FirmwareStatusObservation, FirmwareVersionObservation, firmware_modules_event,
     firmware_status_event,
 };
 pub(crate) use firmware::{proto_module as proto_firmware_module, proto_upgrade_state};
+pub(crate) use mqtt::report::FirmwareReportReducer;
 use mqtt::{BambuMqttTransport, refresh_printer, refresh_printer_materials};
 pub use noop::NoopMachineGateway;
 use operations::dispatch_printer_operation;

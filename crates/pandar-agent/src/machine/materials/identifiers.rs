@@ -1,4 +1,5 @@
-use super::{normalized_string, schema::*};
+use super::normalized_string;
+use crate::machine::mqtt::report::materials::*;
 
 pub(super) fn derive_setting_id(filament_id: &str) -> String {
     let base = strip_version_suffix(filament_id);

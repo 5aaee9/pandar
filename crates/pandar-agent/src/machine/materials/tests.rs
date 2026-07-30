@@ -1,20 +1,21 @@
 use serde_json::Value;
 
 use super::*;
+use crate::machine::mqtt::MachineReport;
 
 mod fixtures;
 
 use fixtures::*;
 
 fn normalize(report: Value) -> Option<TestMaterialPatch> {
-    let report = parse_materials_report(&report)?;
-    let patch = normalize_material_patch(&report, "2026-06-23T00:00:00Z")?;
+    let report = MachineReport::decode(report);
+    let patch = normalize_material_patch(report.materials()?, "2026-06-23T00:00:00Z")?;
     Some(decode_patch(&patch))
 }
 
 fn normalize_json(report: Value) -> Option<String> {
-    let report = parse_materials_report(&report)?;
-    let patch = normalize_material_patch(&report, "2026-06-23T00:00:00Z")?;
+    let report = MachineReport::decode(report);
+    let patch = normalize_material_patch(report.materials()?, "2026-06-23T00:00:00Z")?;
     Some(serde_json::to_string(&patch).unwrap())
 }
 

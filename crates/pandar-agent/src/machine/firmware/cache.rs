@@ -225,7 +225,7 @@ impl FirmwareObservationCache {
         Ok(true)
     }
 
-    pub(super) async fn apply_report_status(
+    pub(crate) async fn apply_report_status(
         &self,
         config: &AgentConfig,
         observation: FirmwareStatusObservation,

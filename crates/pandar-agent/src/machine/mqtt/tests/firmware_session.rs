@@ -11,7 +11,6 @@ use tokio::{
 use super::super::firmware::{
     FirmwareMqttCommand, FirmwareMqttSession, firmware_barrier_pause, firmware_command_payload,
     is_firmware_post_publish_failure, is_firmware_pre_publish_failure,
-    parse_firmware_acknowledgement,
 };
 
 pub(super) const REQUEST_TOPIC: &str = "device/SERIAL/request";
@@ -126,10 +125,11 @@ async fn firmware_session_tcp_loopback_gates_matching_on_suback_and_own_publish(
         .await
         .unwrap();
     assert_eq!(report.ordinal, 4);
-    let acknowledgement =
-        parse_firmware_acknowledgement(&report.payload, "upgrade_confirm", "90001")
-            .unwrap()
-            .unwrap();
+    let acknowledgement = report
+        .payload
+        .firmware_acknowledgement("upgrade_confirm", "90001")
+        .unwrap()
+        .unwrap();
     assert_eq!(acknowledgement.result.as_deref(), Some("success"));
     assert_eq!(acknowledgement.error_code, Some(0));
     assert_eq!(acknowledgement.reason.as_deref(), Some("accepted"));

@@ -6,121 +6,121 @@ use serde_json::Number;
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct MaterialsReport {
     #[serde(default)]
-    pub(super) print: Option<PrintMaterialsReport>,
+    pub(in crate::machine) print: Option<PrintMaterialsReport>,
 }
 
 #[derive(Debug, Default, Deserialize)]
-pub(super) struct PrintMaterialsReport {
+pub(in crate::machine) struct PrintMaterialsReport {
     #[serde(default)]
-    pub(super) cfg: Option<ScalarValue>,
+    pub(in crate::machine) cfg: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) aux: Option<ScalarValue>,
+    pub(in crate::machine) aux: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) stat: Option<ScalarValue>,
+    pub(in crate::machine) stat: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) ams: Option<AmsReport>,
+    pub(in crate::machine) ams: Option<AmsReport>,
     #[serde(default)]
-    pub(super) vt_tray: Option<ExternalMaterialSource>,
+    pub(in crate::machine) vt_tray: Option<ExternalMaterialSource>,
     #[serde(default)]
-    pub(super) vir_slot: Option<ExternalMaterialSource>,
+    pub(in crate::machine) vir_slot: Option<ExternalMaterialSource>,
     #[serde(default)]
-    pub(super) nozzle_temper2: Option<ScalarValue>,
+    pub(in crate::machine) nozzle_temper2: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) right_nozzle_temper: Option<ScalarValue>,
+    pub(in crate::machine) right_nozzle_temper: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) nozzles: Option<Vec<NozzleReport>>,
+    pub(in crate::machine) nozzles: Option<Vec<NozzleReport>>,
 }
 
 #[derive(Debug, Deserialize)]
-pub(super) struct NozzleReport {
+pub(in crate::machine) struct NozzleReport {
     #[serde(flatten)]
     _fields: BTreeMap<String, IgnoredAny>,
 }
 
 #[derive(Debug, Default, Deserialize)]
-pub(super) struct AmsReport {
+pub(in crate::machine) struct AmsReport {
     #[serde(default)]
-    pub(super) ams: Vec<AmsUnitReport>,
+    pub(in crate::machine) ams: Vec<AmsUnitReport>,
     #[serde(default)]
-    pub(super) tray_now: Option<ScalarValue>,
+    pub(in crate::machine) tray_now: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) power_on_flag: Option<bool>,
+    pub(in crate::machine) power_on_flag: Option<bool>,
     #[serde(default)]
-    pub(super) tray_exist_bits: Option<ScalarValue>,
+    pub(in crate::machine) tray_exist_bits: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) vt_tray: Option<ExternalMaterialSource>,
+    pub(in crate::machine) vt_tray: Option<ExternalMaterialSource>,
     #[serde(default)]
-    pub(super) vir_slot: Option<ExternalMaterialSource>,
+    pub(in crate::machine) vir_slot: Option<ExternalMaterialSource>,
 }
 
 #[derive(Debug, Default, Deserialize)]
-pub(super) struct AmsUnitReport {
+pub(in crate::machine) struct AmsUnitReport {
     #[serde(default)]
-    pub(super) id: Option<ScalarValue>,
+    pub(in crate::machine) id: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) ams_id: Option<ScalarValue>,
+    pub(in crate::machine) ams_id: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) info: Option<ScalarValue>,
+    pub(in crate::machine) info: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) humidity: Option<ScalarValue>,
+    pub(in crate::machine) humidity: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) humidity_raw: Option<ScalarValue>,
+    pub(in crate::machine) humidity_raw: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) temperature_celsius: Option<ScalarValue>,
+    pub(in crate::machine) temperature_celsius: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) temp: Option<ScalarValue>,
+    pub(in crate::machine) temp: Option<ScalarValue>,
     #[serde(default, rename = "tray")]
-    pub(super) trays: Vec<MaterialSlotReport>,
+    pub(in crate::machine) trays: Vec<MaterialSlotReport>,
 }
 
 #[derive(Debug, Default, Deserialize)]
-pub(super) struct MaterialSlotReport {
+pub(in crate::machine) struct MaterialSlotReport {
     #[serde(default)]
-    pub(super) id: Option<ScalarValue>,
+    pub(in crate::machine) id: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) tray_id: Option<ScalarValue>,
+    pub(in crate::machine) tray_id: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) external_id: Option<ScalarValue>,
+    pub(in crate::machine) external_id: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) state: Option<ScalarValue>,
+    pub(in crate::machine) state: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) tray_info_idx: Option<ScalarValue>,
+    pub(in crate::machine) tray_info_idx: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) setting_id: Option<ScalarValue>,
+    pub(in crate::machine) setting_id: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) tray_type: Option<ScalarValue>,
+    pub(in crate::machine) tray_type: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) tag_uid: Option<ScalarValue>,
+    pub(in crate::machine) tag_uid: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) tray_uuid: Option<ScalarValue>,
+    pub(in crate::machine) tray_uuid: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) tray_sub_brands: Option<ScalarValue>,
+    pub(in crate::machine) tray_sub_brands: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) remain: Option<ScalarValue>,
+    pub(in crate::machine) remain: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) k: Option<ScalarValue>,
+    pub(in crate::machine) k: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) k_value: Option<ScalarValue>,
+    pub(in crate::machine) k_value: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) tray_color: Option<ScalarValue>,
+    pub(in crate::machine) tray_color: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) cols: Option<ColorSource>,
+    pub(in crate::machine) cols: Option<ColorSource>,
     #[serde(default)]
-    pub(super) toolhead: Option<ScalarValue>,
+    pub(in crate::machine) toolhead: Option<ScalarValue>,
     #[serde(default)]
-    pub(super) extruder_id: Option<ScalarValue>,
+    pub(in crate::machine) extruder_id: Option<ScalarValue>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-pub(super) enum ExternalMaterialSource {
+pub(in crate::machine) enum ExternalMaterialSource {
     Array(Vec<MaterialSlotReport>),
     Object(Box<MaterialSlotReport>),
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
-pub(super) enum ScalarValue {
+pub(in crate::machine) enum ScalarValue {
     String(String),
     Number(Number),
     Bool(bool),
@@ -128,13 +128,13 @@ pub(super) enum ScalarValue {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
-pub(super) enum ColorSource {
+pub(in crate::machine) enum ColorSource {
     Single(ScalarValue),
     List(Vec<ScalarValue>),
 }
 
 impl ScalarValue {
-    pub(super) fn string(&self) -> Option<String> {
+    pub(in crate::machine) fn string(&self) -> Option<String> {
         match self {
             Self::String(raw) => {
                 let trimmed = raw.trim();
@@ -145,7 +145,7 @@ impl ScalarValue {
         }
     }
 
-    pub(super) fn number(&self) -> Option<Number> {
+    pub(in crate::machine) fn number(&self) -> Option<Number> {
         match self {
             Self::Number(number) => Some(number.clone()),
             Self::String(raw) => {
@@ -159,7 +159,7 @@ impl ScalarValue {
         }
     }
 
-    pub(super) fn parse_i64(&self) -> Option<i64> {
+    pub(in crate::machine) fn parse_i64(&self) -> Option<i64> {
         match self {
             Self::Number(number) => number.as_i64().or_else(|| number.as_u64()?.try_into().ok()),
             Self::String(raw) => raw.trim().parse().ok(),
@@ -167,7 +167,7 @@ impl ScalarValue {
         }
     }
 
-    pub(super) fn parse_u64_or_hex(&self) -> Option<u64> {
+    pub(in crate::machine) fn parse_u64_or_hex(&self) -> Option<u64> {
         match self {
             Self::Number(number) => number.as_u64(),
             Self::String(raw) => {

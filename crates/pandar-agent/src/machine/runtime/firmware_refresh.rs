@@ -6,10 +6,7 @@ use async_trait::async_trait;
 use crate::machine::{
     BambuPrinterEndpoint, FirmwareModulesDelivery, FirmwareObservationCache,
     FirmwareRefreshRequest,
-    mqtt::{
-        FirmwareMqttCommand, FirmwareMqttSession, FirmwareMqttTaskSet,
-        parse_firmware_refresh_modules,
-    },
+    mqtt::{FirmwareMqttCommand, FirmwareMqttSession, FirmwareMqttTaskSet},
 };
 
 const MAX_REFRESH_ATTEMPTS: usize = 3;
@@ -106,7 +103,9 @@ where
             .await?;
         attempt.wait_published().await?;
         let report = attempt.wait_matching_report(report_timeout).await?;
-        parse_firmware_refresh_modules(&report.payload)?
+        report
+            .payload
+            .firmware_refresh_modules()?
             .ok_or_else(|| anyhow!("matching get_version report had no firmware modules"))
     }
     .await;

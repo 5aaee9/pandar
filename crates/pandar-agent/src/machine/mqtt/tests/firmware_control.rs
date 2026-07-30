@@ -1,8 +1,8 @@
 use pandar_core::{FirmwareAcknowledgement, FirmwareCommand};
 
+use super::super::MachineReport;
 use super::super::firmware::{
     FirmwareMqttCommand, firmware_command_payload, firmware_mqtt_options,
-    parse_firmware_acknowledgement,
 };
 use crate::machine::BambuPrinterEndpoint;
 
@@ -79,10 +79,10 @@ fn firmware_mqtt_acknowledgement_preserves_all_typed_fields() {
         }
     });
 
-    let acknowledgement =
-        parse_firmware_acknowledgement(&report, "mc_for_ams_firmware_upgrade", "88001")
-            .unwrap()
-            .unwrap();
+    let acknowledgement = MachineReport::decode(report.clone())
+        .firmware_acknowledgement("mc_for_ams_firmware_upgrade", "88001")
+        .unwrap()
+        .unwrap();
 
     assert_eq!(
         acknowledgement,
@@ -96,18 +96,16 @@ fn firmware_mqtt_acknowledgement_preserves_all_typed_fields() {
         }
     );
     assert!(
-        parse_firmware_acknowledgement(&report, "upgrade_confirm", "88001")
+        MachineReport::decode(report.clone())
+            .firmware_acknowledgement("upgrade_confirm", "88001")
             .unwrap()
             .is_none()
     );
     assert!(
-        parse_firmware_acknowledgement(
-            &report,
-            "mc_for_ams_firmware_upgrade",
-            "different-sequence",
-        )
-        .unwrap()
-        .is_none()
+        MachineReport::decode(report.clone())
+            .firmware_acknowledgement("mc_for_ams_firmware_upgrade", "different-sequence",)
+            .unwrap()
+            .is_none()
     );
 }
 

@@ -2,10 +2,7 @@ use std::time::Duration;
 
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
-use pandar_core::{
-    FirmwareAcknowledgement, FirmwareTerminalOutcome, PrinterFirmwareStatus, PrinterUpgradeState,
-};
-use serde::Deserialize;
+use pandar_core::{FirmwareAcknowledgement, FirmwareTerminalOutcome, PrinterFirmwareStatus};
 use tokio::sync::mpsc;
 
 use crate::machine::{
@@ -14,7 +11,7 @@ use crate::machine::{
     FirmwarePublishTransition, FirmwareRefreshRequest,
     mqtt::{
         FirmwareMqttCommand, FirmwareMqttSession, firmware_command_payload, firmware_mqtt_failure,
-        firmware_mqtt_failure_phase, parse_firmware_acknowledgement,
+        firmware_mqtt_failure_phase,
     },
 };
 
@@ -202,14 +199,13 @@ async fn complete_firmware_control_operation(
         )
     } else {
         match attempt.wait_matching_report(CONTROL_ACK_TIMEOUT).await {
-            Ok(report) => match parse_firmware_acknowledgement(
-                &report.payload,
-                &expected_command,
-                &expected_sequence_id,
-            ) {
+            Ok(report) => match report
+                .payload
+                .firmware_acknowledgement(&expected_command, &expected_sequence_id)
+            {
                 Ok(Some(acknowledgement)) => {
                     let acknowledgement = redact_acknowledgement(acknowledgement, pending_url);
-                    let transient_status = match parse_transient_status(&report.payload) {
+                    let transient_status = match report.payload.transient_firmware_status() {
                         Ok(status) => {
                             status.map(|status| redact_transient_status(status, pending_url))
                         }
@@ -350,31 +346,4 @@ pub(super) fn redact_pending_url(error: anyhow::Error, pending_url: Option<&str>
         Some(after_publish) => firmware_mqtt_failure(after_publish, message),
         None => anyhow!(message),
     }
-}
-
-fn parse_transient_status(
-    report: &serde_json::Value,
-) -> anyhow::Result<Option<PrinterFirmwareStatus>> {
-    let envelope = serde_json::from_value::<TransientStatusEnvelope>(report.clone())
-        .context("parse transient firmware command status")?;
-    Ok(envelope.print.and_then(|print| {
-        (print.upgrade_state.is_some() || print.cfg.is_some()).then_some(PrinterFirmwareStatus {
-            upgrade_state: print.upgrade_state,
-            cfg: print.cfg,
-        })
-    }))
-}
-
-#[derive(Deserialize)]
-struct TransientStatusEnvelope {
-    #[serde(default)]
-    print: Option<TransientStatusFields>,
-}
-
-#[derive(Deserialize)]
-struct TransientStatusFields {
-    #[serde(default)]
-    upgrade_state: Option<PrinterUpgradeState>,
-    #[serde(default)]
-    cfg: Option<String>,
 }

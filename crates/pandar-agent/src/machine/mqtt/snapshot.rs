@@ -1,23 +1,18 @@
-mod schema;
-
-use serde_json::Value;
-
+#[cfg(test)]
+use crate::machine::mqtt::MachineReport;
 use crate::machine::{
-    BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot, types::decode_json_payload,
+    BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot, mqtt::report::SnapshotReport,
 };
 
-use self::schema::{NozzleInfo, ScalarValue, SnapshotPrint, TemperatureValue};
-use super::device_features::device_feature_observation;
+use super::report::device_feature_observation;
+use super::report::snapshot::{NozzleInfo, ScalarValue, SnapshotPrint, TemperatureValue};
 
-pub(crate) use self::schema::SnapshotReport;
-
-pub fn snapshot_from_report(endpoint: &BambuPrinterEndpoint, report: &Value) -> MachineSnapshot {
-    let report = parse_snapshot_report(report);
-    snapshot_from_parsed_report(endpoint, report.as_ref())
-}
-
-pub(crate) fn parse_snapshot_report(report: &Value) -> Option<SnapshotReport> {
-    decode_json_payload(report)
+#[cfg(test)]
+pub(crate) fn snapshot_from_report(
+    endpoint: &BambuPrinterEndpoint,
+    report: &MachineReport,
+) -> MachineSnapshot {
+    snapshot_from_parsed_report(endpoint, report.snapshot())
 }
 
 pub(crate) fn snapshot_from_parsed_report(

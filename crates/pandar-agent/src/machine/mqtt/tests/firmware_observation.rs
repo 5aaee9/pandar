@@ -1,11 +1,8 @@
 use pandar_core::PrinterFirmwareModule;
 use serde_json::json;
 
-use super::super::{
-    FakeMqttTransport, parse_firmware_refresh_modules, parse_firmware_version_observation,
-    parse_snapshot_report, print_report_from_report, refresh_printer_with_firmware,
-};
-use super::endpoint;
+use super::super::{FakeMqttTransport, MachineReport, refresh_printer_with_firmware};
+use super::{endpoint, print_report_from_json};
 
 #[test]
 fn firmware_observation_preserves_order_duplicates_and_all_module_fields() {
@@ -34,7 +31,8 @@ fn firmware_observation_preserves_order_duplicates_and_all_module_fields() {
         }
     });
 
-    let observation = parse_firmware_version_observation(&report)
+    let observation = MachineReport::decode(report)
+        .firmware_version_observation()
         .unwrap()
         .expect("get_version observation");
 
@@ -96,23 +94,26 @@ fn firmware_observation_malformed_fields_do_not_discard_sibling_telemetry() {
         }
     });
 
-    let error = parse_firmware_version_observation(&report).unwrap_err();
+    let error = MachineReport::decode(report.clone())
+        .firmware_version_observation()
+        .unwrap_err();
     assert!(format!("{error:#}").contains("firmware get_version"));
     assert_eq!(
-        print_report_from_report(&endpoint(), &report)
+        print_report_from_json(&endpoint(), &report)
             .job_id
             .as_deref(),
         Some("job-9")
     );
-    assert!(parse_snapshot_report(&report).is_some());
+    assert!(MachineReport::decode(report.clone()).snapshot().is_some());
 }
 
 #[test]
 fn firmware_observation_ignores_non_version_reports() {
     assert!(
-        parse_firmware_version_observation(&json!({
+        MachineReport::decode(json!({
             "print": { "upgrade_state": { "status": "DOWNLOADING" } }
         }))
+        .firmware_version_observation()
         .unwrap()
         .is_none()
     );
@@ -135,15 +136,17 @@ fn firmware_observation_rejects_empty_module_name_without_discarding_sibling_tel
         }
     });
 
-    let error = parse_firmware_version_observation(&report).unwrap_err();
+    let error = MachineReport::decode(report.clone())
+        .firmware_version_observation()
+        .unwrap_err();
     assert!(format!("{error:#}").contains("non-empty name"));
     assert_eq!(
-        print_report_from_report(&endpoint(), &report)
+        print_report_from_json(&endpoint(), &report)
             .job_id
             .as_deref(),
         Some("job-empty-name")
     );
-    assert!(parse_snapshot_report(&report).is_some());
+    assert!(MachineReport::decode(report.clone()).snapshot().is_some());
 }
 
 #[test]
@@ -160,7 +163,8 @@ fn firmware_observation_preserves_opaque_whitespace_and_future_module_names() {
         }
     });
 
-    let observation = parse_firmware_version_observation(&report)
+    let observation = MachineReport::decode(report)
+        .firmware_version_observation()
         .unwrap()
         .unwrap();
     assert_eq!(observation.model, "X1");
@@ -200,7 +204,8 @@ fn firmware_refresh_parser_accepts_no_ota_and_ota_without_product_name() {
             }
         }),
     ] {
-        let modules = parse_firmware_refresh_modules(&report)
+        let modules = MachineReport::decode(report)
+            .firmware_refresh_modules()
             .unwrap()
             .expect("typed get_version modules");
         assert!(!modules.is_empty());

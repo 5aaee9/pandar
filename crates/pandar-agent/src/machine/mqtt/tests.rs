@@ -44,6 +44,13 @@ fn endpoint() -> BambuPrinterEndpoint {
     }
 }
 
+fn print_report_from_json(
+    endpoint: &BambuPrinterEndpoint,
+    report: &serde_json::Value,
+) -> PrintReportProgress {
+    print_report_from_report(endpoint, &MachineReport::decode(report.clone()))
+}
+
 fn get_version_report(model: &str) -> serde_json::Value {
     serde_json::to_value(TestGetVersionReport {
         info: TestGetVersionInfo {

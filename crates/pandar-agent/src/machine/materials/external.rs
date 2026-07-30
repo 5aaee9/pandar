@@ -1,7 +1,8 @@
 use super::{
-    material_fields, normalize_extruder_toolhead, normalized_string,
-    patch::ExternalSpoolPatch,
-    schema::{AmsReport, ExternalMaterialSource, MaterialSlotReport, PrintMaterialsReport},
+    material_fields, normalize_extruder_toolhead, normalized_string, patch::ExternalSpoolPatch,
+};
+use crate::machine::mqtt::report::materials::{
+    AmsReport, ExternalMaterialSource, MaterialSlotReport, PrintMaterialsReport,
 };
 
 pub(super) struct ExternalSpoolsPatch {

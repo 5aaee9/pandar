@@ -14,7 +14,7 @@ fn print_report_from_report_accepts_bambu_hms_shape_without_dropping_progress() 
         }
     });
 
-    let progress = print_report_from_report(&endpoint(), &report);
+    let progress = print_report_from_report(&endpoint(), &MachineReport::decode(report));
 
     assert_eq!(progress.gcode_state.as_deref(), Some("RUNNING"));
     assert_eq!(progress.percent, Some(37));
@@ -58,7 +58,7 @@ fn print_report_empty_hms_preserves_snapshot_presence_in_event() {
         artifact_root: ".".into(),
     };
 
-    let progress = print_report_from_report(&endpoint(), &report);
+    let progress = print_report_from_report(&endpoint(), &MachineReport::decode(report));
 
     assert_eq!(progress.hms, Some(Vec::new()));
     let event = print_job_report_event(&config, progress);
@@ -80,7 +80,7 @@ fn print_report_malformed_hms_does_not_clear_snapshot_or_drop_progress() {
         }
     });
 
-    let progress = print_report_from_report(&endpoint(), &report);
+    let progress = print_report_from_report(&endpoint(), &MachineReport::decode(report));
 
     assert_eq!(progress.gcode_state.as_deref(), Some("RUNNING"));
     assert_eq!(progress.hms, None);
@@ -98,7 +98,7 @@ fn print_report_legacy_hms_diagnostic_does_not_clear_snapshot() {
         }
     });
 
-    let progress = print_report_from_report(&endpoint(), &report);
+    let progress = print_report_from_report(&endpoint(), &MachineReport::decode(report));
 
     assert_eq!(progress.hms, None);
     assert_eq!(progress.diagnostics.len(), 1);

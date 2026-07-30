@@ -152,7 +152,8 @@ fn get_version_payload_matches_reference() {
 
 #[test]
 fn get_version_report_extracts_trimmed_ota_model() {
-    let observation = parse_firmware_version_observation(&get_version_report(" P2S "))
+    let observation = MachineReport::decode(get_version_report(" P2S "))
+        .firmware_version_observation()
         .unwrap()
         .unwrap();
     assert_eq!(observation.model, "P2S");
@@ -162,7 +163,11 @@ fn get_version_report_extracts_trimmed_ota_model() {
 fn get_version_report_rejects_missing_model() {
     let report = get_version_report_with_blank_model();
 
-    assert!(parse_firmware_version_observation(&report).is_err());
+    assert!(
+        MachineReport::decode(report)
+            .firmware_version_observation()
+            .is_err()
+    );
 }
 
 #[test]

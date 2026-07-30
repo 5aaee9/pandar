@@ -4,13 +4,13 @@ use pandar_core::{
 };
 use serde_json::json;
 
-use crate::machine::{FirmwareReportReducer, mqtt::has_non_firmware_print_telemetry};
+use crate::machine::{FirmwareReportReducer, mqtt::MachineReport};
 
 #[test]
 fn firmware_reducer_deep_merges_deltas_and_replaces_arrays() {
     let mut reducer = FirmwareReportReducer::new("SERIAL1", 7);
     let first = reducer
-        .observe(&json!({
+        .observe(&MachineReport::decode(json!({
             "print": {
                 "msg": 0,
                 "cfg": "force-upgrade",
@@ -32,13 +32,13 @@ fn firmware_reducer_deep_merges_deltas_and_replaces_arrays() {
                     }
                 }
             }
-        }))
+        })))
         .unwrap()
         .expect("initial status");
     assert_eq!(first.revision, 1);
 
     let delta = reducer
-        .observe(&json!({
+        .observe(&MachineReport::decode(json!({
             "print": {
                 "msg": 1,
                 "upgrade_state": {
@@ -48,7 +48,7 @@ fn firmware_reducer_deep_merges_deltas_and_replaces_arrays() {
                     }
                 }
             }
-        }))
+        })))
         .unwrap()
         .expect("changed status");
 
@@ -88,9 +88,9 @@ fn firmware_reducer_deep_merges_deltas_and_replaces_arrays() {
 fn firmware_reducer_full_reports_preserve_absent_vs_empty_and_clear_prior_status() {
     let mut reducer = FirmwareReportReducer::new("SERIAL1", 1);
     let present_empty = reducer
-        .observe(&json!({
+        .observe(&MachineReport::decode(json!({
             "print": { "msg": 0, "upgrade_state": { "new_ver_list": [] } }
-        }))
+        })))
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -99,9 +99,9 @@ fn firmware_reducer_full_reports_preserve_absent_vs_empty_and_clear_prior_status
     );
 
     let absent = reducer
-        .observe(&json!({
+        .observe(&MachineReport::decode(json!({
             "print": { "upgrade_state": { "status": "" }, "cfg": "" }
-        }))
+        })))
         .unwrap()
         .unwrap();
     assert_eq!(absent.revision, 2);
@@ -129,7 +129,9 @@ fn firmware_reducer_full_reports_preserve_absent_vs_empty_and_clear_prior_status
     );
 
     let cleared = reducer
-        .observe(&json!({ "print": { "msg": 0, "nozzle_temper": 200 } }))
+        .observe(&MachineReport::decode(
+            json!({ "print": { "msg": 0, "nozzle_temper": 200 } }),
+        ))
         .unwrap()
         .expect("full report clears prior firmware state");
     assert_eq!(cleared.revision, 3);
@@ -146,25 +148,25 @@ fn firmware_reducer_full_reports_preserve_absent_vs_empty_and_clear_prior_status
 fn firmware_reducer_malformed_delta_does_not_poison_next_report() {
     let mut reducer = FirmwareReportReducer::new("SERIAL1", 3);
     reducer
-        .observe(&json!({
+        .observe(&MachineReport::decode(json!({
             "print": {
                 "msg": 0,
                 "upgrade_state": { "status": "DOWNLOADING", "progress": "40" }
             }
-        }))
+        })))
         .unwrap();
 
     let error = reducer
-        .observe(&json!({
+        .observe(&MachineReport::decode(json!({
             "print": { "msg": 1, "upgrade_state": { "progress": 41 } }
-        }))
+        })))
         .unwrap_err();
     assert!(format!("{error:#}").contains("upgrade_state"));
 
     let recovered = reducer
-        .observe(&json!({
+        .observe(&MachineReport::decode(json!({
             "print": { "msg": 1, "upgrade_state": { "message": "still valid" } }
-        }))
+        })))
         .unwrap()
         .unwrap();
     let upgrade = recovered.status.upgrade_state.unwrap();
@@ -177,35 +179,39 @@ fn firmware_reducer_only_revises_changed_status_and_ignores_pure_info() {
     let mut reducer = FirmwareReportReducer::new("SERIAL1", 9);
     assert!(
         reducer
-            .observe(&json!({
+            .observe(&MachineReport::decode(json!({
                 "info": { "command": "get_version", "module": [] }
-            }))
+            })))
             .unwrap()
             .is_none()
     );
     assert!(
         reducer
-            .observe(&json!({ "print": { "msg": 0, "nozzle_temper": 200 } }))
+            .observe(&MachineReport::decode(
+                json!({ "print": { "msg": 0, "nozzle_temper": 200 } })
+            ))
             .unwrap()
             .is_none()
     );
     let first = reducer
-        .observe(&json!({
+        .observe(&MachineReport::decode(json!({
             "print": { "msg": 1, "upgrade_state": { "status": "UPGRADING" } }
-        }))
+        })))
         .unwrap()
         .unwrap();
     assert_eq!(first.revision, 1);
     assert!(
         reducer
-            .observe(&json!({
+            .observe(&MachineReport::decode(json!({
                 "print": { "msg": 1, "upgrade_state": { "status": "UPGRADING" } }
-            }))
+            })))
             .unwrap()
             .is_none()
     );
     let second = reducer
-        .observe(&json!({ "print": { "msg": 1, "cfg": "new-cfg" } }))
+        .observe(&MachineReport::decode(
+            json!({ "print": { "msg": 1, "cfg": "new-cfg" } }),
+        ))
         .unwrap()
         .unwrap();
     assert_eq!(second.revision, 2);
@@ -213,31 +219,40 @@ fn firmware_reducer_only_revises_changed_status_and_ignores_pure_info() {
 
 #[test]
 fn firmware_reducer_firmware_only_reports_do_not_claim_job_or_snapshot_telemetry() {
-    assert!(!has_non_firmware_print_telemetry(&json!({
-        "info": { "command": "get_version", "module": [] }
-    })));
-    assert!(!has_non_firmware_print_telemetry(&json!({
-        "print": {
-            "command": "push_status",
-            "msg": 1,
-            "cfg": "force-upgrade",
-            "upgrade_state": { "status": "DOWNLOADING" }
-        }
-    })));
-    assert!(has_non_firmware_print_telemetry(&json!({
-        "print": {
-            "msg": 1,
-            "upgrade_state": { "status": "DOWNLOADING" },
-            "gcode_state": "RUNNING"
-        }
-    })));
+    assert!(
+        !MachineReport::decode(json!({
+            "info": { "command": "get_version", "module": [] }
+        }))
+        .has_non_firmware_print_telemetry()
+    );
+    assert!(
+        !MachineReport::decode(json!({
+            "print": {
+                "command": "push_status",
+                "msg": 1,
+                "cfg": "force-upgrade",
+                "upgrade_state": { "status": "DOWNLOADING" }
+            }
+        }))
+        .has_non_firmware_print_telemetry()
+    );
+    assert!(
+        MachineReport::decode(json!({
+            "print": {
+                "msg": 1,
+                "upgrade_state": { "status": "DOWNLOADING" },
+                "gcode_state": "RUNNING"
+            }
+        }))
+        .has_non_firmware_print_telemetry()
+    );
 }
 
 #[test]
 fn firmware_reducer_retains_every_known_upgrade_field() {
     let mut reducer = FirmwareReportReducer::new("SERIAL1", 2);
     let observation = reducer
-        .observe(&json!({
+        .observe(&MachineReport::decode(json!({
             "print": {
                 "msg": 0,
                 "cfg": "cfg-value",
@@ -263,7 +278,7 @@ fn firmware_reducer_retains_every_known_upgrade_field() {
                     }
                 }
             }
-        }))
+        })))
         .unwrap()
         .unwrap();
 

@@ -8,11 +8,11 @@ use std::sync::{
     atomic::{AtomicBool, AtomicU64},
 };
 
-use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 
 use super::FirmwareMqttCommand;
 use crate::machine::FirmwarePublishTransition;
+use crate::machine::mqtt::MachineReport;
 
 mod attempt;
 mod connect;
@@ -58,7 +58,7 @@ pub(crate) struct FirmwareMqttAttempt {
 pub(crate) struct FirmwareMqttReport {
     #[cfg(test)]
     pub(crate) ordinal: u64,
-    pub(crate) payload: Value,
+    pub(crate) payload: MachineReport,
 }
 
 pub(crate) struct FirmwareBarrierPause {

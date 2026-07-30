@@ -46,8 +46,14 @@ async fn firmware_control_attempt_ignores_matching_info_identity_until_upgrade_r
         .await
         .unwrap();
 
+    let acknowledgement = report
+        .payload
+        .firmware_acknowledgement("upgrade_confirm", "domain-control")
+        .unwrap()
+        .expect("matching upgrade-domain acknowledgement");
     assert_eq!(
-        report.payload["upgrade"]["result"], "correct-domain",
+        acknowledgement.result.as_deref(),
+        Some("correct-domain"),
         "an info-domain identity must not consume a control attempt"
     );
     session.shutdown().await.unwrap();
@@ -88,8 +94,13 @@ async fn firmware_refresh_attempt_ignores_matching_upgrade_identity_until_info_r
         .await
         .unwrap();
 
+    let modules = report
+        .payload
+        .firmware_refresh_modules()
+        .unwrap()
+        .expect("matching info-domain modules");
     assert_eq!(
-        report.payload["info"]["module"][0]["name"], "future/unit",
+        modules[0].name, "future/unit",
         "an upgrade-domain identity must not consume a refresh attempt"
     );
     session.shutdown().await.unwrap();

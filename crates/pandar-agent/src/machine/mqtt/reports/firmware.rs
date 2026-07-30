@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use anyhow::Context;
-use serde_json::Value;
 use tokio::sync::{OwnedMutexGuard, mpsc};
 
 use crate::{
@@ -11,8 +10,8 @@ use crate::{
 };
 
 use super::super::{
-    BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, PublishedMqttCommand,
-    parse_firmware_refresh_modules,
+    BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, MachineReport,
+    MachineReports, PublishedMqttCommand,
 };
 
 pub(super) struct FirmwareReportProcessor {
@@ -28,7 +27,7 @@ impl FirmwareReportProcessor {
         endpoint: &BambuPrinterEndpoint,
         context: FirmwareReportContext,
         report_timeout: Duration,
-        transport: &T,
+        reports: &MachineReports<'_, T>,
         topics: &BambuMqttTopics,
     ) -> anyhow::Result<Self>
     where
@@ -38,7 +37,7 @@ impl FirmwareReportProcessor {
             .cache
             .version_observation_lease(&endpoint.serial)
             .await;
-        transport
+        reports
             .publish(PublishedMqttCommand {
                 topic: topics.request.clone(),
                 payload: BambuMqttCommand::GetVersion.payload(),
@@ -58,10 +57,10 @@ impl FirmwareReportProcessor {
     pub(super) async fn observe(
         &mut self,
         config: &AgentConfig,
-        report: &Value,
+        report: &MachineReport,
         sender: &mpsc::Sender<AgentEvent>,
     ) -> anyhow::Result<()> {
-        match parse_firmware_refresh_modules(report) {
+        match report.firmware_refresh_modules() {
             Ok(Some(modules)) => {
                 let version_lease = match self.version_lease.take() {
                     Some(lease) => lease,

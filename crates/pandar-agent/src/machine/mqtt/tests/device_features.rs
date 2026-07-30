@@ -8,9 +8,14 @@ use crate::{machine::DeviceFeatureCache, protocol::agent::v1::agent_event};
 
 const HIGH_BITS: u64 = 0x8000_0041_0000_0020;
 
-fn report_from_mqtt_bytes(payload: &[u8]) -> SnapshotReport {
+fn report_from_mqtt_bytes(payload: &[u8]) -> MachineReport {
     let value = decode_mqtt_report_payload(payload).expect("valid MQTT-shaped JSON bytes");
-    parse_snapshot_report(&value).expect("snapshot report should retain sibling telemetry")
+    let report = MachineReport::decode(value);
+    assert!(
+        report.snapshot().is_some(),
+        "snapshot report should retain sibling telemetry"
+    );
+    report
 }
 
 fn feature_report(fun: &str) -> serde_json::Value {
@@ -37,11 +42,11 @@ fn device_features_parser_preserves_presence_and_sibling_telemetry() {
     let valid = report_from_mqtt_bytes(
         br#"{"print":{"fun":"8000004100000020","gcode_state":"RUNNING","bed_temper":60}}"#,
     );
-    let observed = device_feature_observation("SERIAL-1", &valid)
+    let observed = device_feature_observation("SERIAL-1", valid.snapshot().unwrap())
         .unwrap()
         .expect("print.fun is present");
     assert_eq!(observed.bits(), HIGH_BITS);
-    let snapshot = snapshot_from_parsed_report(&endpoint(), Some(&valid));
+    let snapshot = snapshot_from_parsed_report(&endpoint(), valid.snapshot());
     assert_eq!(snapshot.state.as_deref(), Some("RUNNING"));
     assert_eq!(snapshot.bed_temperature_celsius.as_deref(), Some("60"));
 
@@ -51,11 +56,11 @@ fn device_features_parser_preserves_presence_and_sibling_telemetry() {
         br#"{"print":{"fun":"not-hex","gcode_state":"RUNNING","bed_temper":60}}"#.as_slice(),
     ] {
         let report = report_from_mqtt_bytes(payload);
-        let snapshot = snapshot_from_parsed_report(&endpoint(), Some(&report));
+        let snapshot = snapshot_from_parsed_report(&endpoint(), report.snapshot());
         assert_eq!(snapshot.state.as_deref(), Some("RUNNING"));
         assert_eq!(snapshot.bed_temperature_celsius.as_deref(), Some("60"));
 
-        let error = device_feature_observation("SERIAL-1", &report).unwrap_err();
+        let error = device_feature_observation("SERIAL-1", report.snapshot().unwrap()).unwrap_err();
         let error = format!("{error:#}");
         assert!(error.contains("SERIAL-1"), "{error}");
         assert!(error.contains("print.fun"), "{error}");
@@ -74,7 +79,7 @@ fn device_features_parser_does_not_unicode_trim_fun() {
             .as_bytes(),
     );
 
-    let error = device_feature_observation("SERIAL-1", &report).unwrap_err();
+    let error = device_feature_observation("SERIAL-1", report.snapshot().unwrap()).unwrap_err();
     let error = format!("{error:#}");
     assert!(error.contains("SERIAL-1"), "{error}");
     assert!(error.contains("print.fun"), "{error}");

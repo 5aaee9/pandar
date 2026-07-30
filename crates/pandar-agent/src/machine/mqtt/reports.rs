@@ -2,59 +2,53 @@ mod diagnostics;
 mod firmware;
 mod forwarding;
 mod protocol;
-mod schema;
 
+use super::report::print::{PrintReportEnvelope, ReportJson};
 pub(crate) use forwarding::{
     MqttForwardingContext, MqttPresenceState, forward_print_reports_with_context,
 };
+#[cfg(test)]
 pub use forwarding::{forward_print_reports, forward_print_reports_with_firmware};
+#[cfg(test)]
 use pandar_core::created_at_now;
 pub use protocol::print_job_report_event;
-use schema::{PrintReportEnvelope, ReportJson};
-use serde_json::Value;
 
 use crate::{
     AgentConfig,
-    machine::{
-        BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult,
-        materials::{normalize_material_patch, parse_materials_report},
-        types::decode_json_payload,
-    },
+    machine::{BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult},
     protocol::agent::v1::{
         AgentEvent, NozzleTemperature, PrinterDeviceFeatures, PrinterMaterialsSnapshot,
         PrinterSnapshot, agent_event,
     },
 };
 
-use super::{MachineReportDiagnostic, MachineReportDiagnosticPayload, PrintReportProgress};
-use diagnostics::{
-    bounded_u32, collect_hms_diagnostics, print_error_payload, raw_print_payload, trimmed_string,
-};
+#[cfg(test)]
+use crate::machine::materials::normalize_material_patch;
 
-pub fn print_report_from_report(
+#[cfg(test)]
+use super::MachineReport;
+use super::{MachineReportDiagnostic, MachineReportDiagnosticPayload, PrintReportProgress};
+use diagnostics::{bounded_u32, collect_hms_diagnostics, print_error_payload, trimmed_string};
+
+#[cfg(test)]
+pub(crate) fn print_report_from_report(
     endpoint: &BambuPrinterEndpoint,
-    report: &Value,
+    report: &MachineReport,
 ) -> PrintReportProgress {
-    let envelope = parse_print_report(report);
     let observed_at = created_at_now();
-    let materials_report = parse_materials_report(report);
-    let printer_materials_json = materials_report
-        .as_ref()
+    let printer_materials_json = report
+        .materials()
         .and_then(|report| normalize_material_patch(report, &observed_at))
         .and_then(|patch| serde_json::to_string(&patch).ok())
         .unwrap_or_default();
 
     print_report_from_parsed_report(
         endpoint,
-        envelope.as_ref(),
-        raw_print_payload(report),
+        report.print(),
+        report.raw_print_payload(),
         observed_at,
         printer_materials_json,
     )
-}
-
-pub(crate) fn parse_print_report(report: &Value) -> Option<PrintReportEnvelope> {
-    decode_json_payload(report)
 }
 
 pub(crate) fn print_report_from_parsed_report(

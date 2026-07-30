@@ -40,7 +40,7 @@ fn numeric_print_error_matches_studio_int_state_semantics() {
         (serde_json::json!(2147483648_u64), None),
     ];
     for (value, expected) in cases {
-        let progress = print_report_from_report(
+        let progress = print_report_from_json(
             &endpoint(),
             &serde_json::json!({"print": {"print_error": value, "mc_percent": 37}}),
         );
@@ -51,7 +51,7 @@ fn numeric_print_error_matches_studio_int_state_semantics() {
 
 #[test]
 fn x2d_numeric_legacy_state_does_not_drop_recovery_fields() {
-    let progress = print_report_from_report(
+    let progress = print_report_from_json(
         &endpoint(),
         &serde_json::json!({
             "print": {
@@ -72,7 +72,7 @@ fn x2d_numeric_legacy_state_does_not_drop_recovery_fields() {
 
 #[test]
 fn zero_print_error_is_state_not_a_generic_diagnostic() {
-    let progress = print_report_from_report(
+    let progress = print_report_from_json(
         &endpoint(),
         &serde_json::json!({"print": {"print_error": 0}}),
     );
@@ -96,7 +96,7 @@ fn printer_job_id_preserves_presence_and_studio_conversion() {
         (serde_json::json!({"bad": true}), Some(String::new())),
     ];
     for (value, expected) in cases {
-        let progress = print_report_from_report(
+        let progress = print_report_from_json(
             &endpoint(),
             &serde_json::json!({"print": {"task_id": "task-7", "job_id": value}}),
         );
@@ -168,7 +168,7 @@ fn raw_mqtt_printer_job_id_numbers_keep_decimal_boundary_semantics() {
         .map(|(name, raw_job_id, _)| {
             let raw = format!(r#"{{"print":{{"job_id":{raw_job_id},"mc_percent":37}}}}"#);
             let report = decode_mqtt_report_payload(raw.as_bytes()).expect("valid raw MQTT JSON");
-            let progress = print_report_from_report(&endpoint(), &report);
+            let progress = print_report_from_json(&endpoint(), &report);
             (*name, progress.printer_job_id, progress.percent)
         })
         .collect::<Vec<_>>();
@@ -181,14 +181,14 @@ fn raw_mqtt_printer_job_id_numbers_keep_decimal_boundary_semantics() {
 
     let report =
         decode_mqtt_report_payload(br#"{"print":{"mc_percent":37}}"#).expect("valid raw MQTT JSON");
-    let progress = print_report_from_report(&endpoint(), &report);
+    let progress = print_report_from_json(&endpoint(), &report);
     assert_eq!(progress.printer_job_id, None);
     assert_eq!(progress.percent, Some(37));
 }
 
 #[test]
 fn absent_print_error_and_printer_job_id_remain_absent() {
-    let progress = print_report_from_report(
+    let progress = print_report_from_json(
         &endpoint(),
         &serde_json::json!({"print": {"task_id": "task-7"}}),
     );
@@ -207,14 +207,14 @@ fn job_attr_preserves_zero_nonzero_and_absence() {
         (serde_json::json!({"print": {"job_attr": "invalid"}}), None),
     ];
     for (report, expected) in cases {
-        let progress = print_report_from_report(&endpoint(), &report);
+        let progress = print_report_from_json(&endpoint(), &report);
         assert_eq!(progress.job_attr, expected);
     }
 }
 
 #[test]
 fn invalid_job_attr_does_not_discard_other_valid_fields() {
-    let progress = print_report_from_report(
+    let progress = print_report_from_json(
         &endpoint(),
         &serde_json::json!({"print": {"job_attr": "invalid", "mc_percent": 7}}),
     );
@@ -230,7 +230,7 @@ fn structured_job_attr_does_not_discard_valid_sibling_fields() {
         serde_json::json!([1, 2, 3]),
         serde_json::json!({"unexpected": 1}),
     ] {
-        let progress = print_report_from_report(
+        let progress = print_report_from_json(
             &endpoint(),
             &serde_json::json!({
                 "print": {
@@ -272,7 +272,7 @@ fn job_attr_presence_round_trips_to_agent_report() {
 #[test]
 fn null_printer_job_id_is_present_as_an_empty_string() {
     let progress =
-        print_report_from_report(&endpoint(), &serde_json::json!({"print": {"job_id": null}}));
+        print_report_from_json(&endpoint(), &serde_json::json!({"print": {"job_id": null}}));
 
     assert_eq!(progress.printer_job_id, Some(String::new()));
 }
@@ -285,7 +285,7 @@ fn string_and_object_print_error_keep_generic_diagnostics() {
     ];
 
     for value in cases {
-        let progress = print_report_from_report(
+        let progress = print_report_from_json(
             &endpoint(),
             &serde_json::json!({"print": {"print_error": value}}),
         );
@@ -300,7 +300,7 @@ fn string_and_object_print_error_keep_generic_diagnostics() {
 #[test]
 fn boolean_and_null_print_error_do_not_patch_numeric_state() {
     for value in [serde_json::json!(true), serde_json::Value::Null] {
-        let progress = print_report_from_report(
+        let progress = print_report_from_json(
             &endpoint(),
             &serde_json::json!({"print": {"print_error": value, "mc_percent": 37}}),
         );
@@ -313,7 +313,7 @@ fn boolean_and_null_print_error_do_not_patch_numeric_state() {
 
 #[test]
 fn malformed_print_error_does_not_drop_valid_report_fields() {
-    let progress = print_report_from_report(
+    let progress = print_report_from_json(
         &endpoint(),
         &serde_json::json!({
             "print": {
@@ -349,7 +349,7 @@ fn malformed_print_error_does_not_drop_valid_report_fields() {
 
 #[test]
 fn print_job_report_event_preserves_print_error_and_printer_job_id_presence() {
-    let explicit = print_report_from_report(
+    let explicit = print_report_from_json(
         &endpoint(),
         &serde_json::json!({
             "print": {"task_id": "task-7", "print_error": 0, "job_id": ""}
@@ -368,7 +368,7 @@ fn print_job_report_event_preserves_print_error_and_printer_job_id_presence() {
 
     let absent = print_job_report_event(
         &config(),
-        print_report_from_report(&endpoint(), &serde_json::json!({"print": {}})),
+        print_report_from_json(&endpoint(), &serde_json::json!({"print": {}})),
     );
     let Some(agent_event::Event::PrintJobReport(absent)) = absent.event else {
         panic!("expected print job report event");

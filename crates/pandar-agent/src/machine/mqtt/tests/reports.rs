@@ -4,7 +4,7 @@ use super::*;
 fn print_report_from_report_extracts_progress_and_diagnostics() {
     let report = detailed_progress_report();
 
-    let progress = print_report_from_report(&endpoint(), &report);
+    let progress = print_report_from_json(&endpoint(), &report);
 
     assert_eq!(progress.serial, "01S00EXAMPLE");
     assert_eq!(progress.job_id.as_deref(), Some("job-123"));
@@ -43,7 +43,7 @@ fn print_report_diagnostic_payload_includes_raw_print_report() {
         }
     });
 
-    let progress = print_report_from_report(&endpoint(), &report);
+    let progress = print_report_from_json(&endpoint(), &report);
 
     assert_eq!(progress.diagnostics.len(), 1);
     let payload = serde_json::to_value(&progress.diagnostics[0].payload).unwrap();
@@ -57,7 +57,7 @@ fn print_report_diagnostic_payload_includes_raw_print_report() {
 fn print_report_from_report_drops_out_of_range_numeric_values() {
     let report = out_of_range_progress_report();
 
-    let progress = print_report_from_report(&endpoint(), &report);
+    let progress = print_report_from_json(&endpoint(), &report);
 
     assert_eq!(progress.percent, None);
     assert_eq!(progress.remaining_time_minutes, None);
@@ -137,7 +137,7 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
 fn print_report_from_report_populates_printer_materials_json() {
     let report = external_vt_tray_report(254, "GFL05", "#abcdef");
 
-    let progress = print_report_from_report(&endpoint(), &report);
+    let progress = print_report_from_json(&endpoint(), &report);
     let materials = material_patch_json(&progress.printer_materials_json);
 
     assert_eq!(materials.external_spools[0].external_id, "254");

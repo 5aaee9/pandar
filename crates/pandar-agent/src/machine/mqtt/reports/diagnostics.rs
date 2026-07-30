@@ -1,32 +1,8 @@
 use std::collections::BTreeMap;
 
-use serde_json::Value;
-
 use crate::machine::mqtt::{MachineReportDiagnostic, MachineReportDiagnosticPayload};
 
-use super::schema::{HmsValue, NumericValue, PrintReportEnvelope};
-
-pub(super) fn raw_print_payload(report: &Value) -> Option<MachineReportDiagnosticPayload> {
-    report.get("print").map(value_payload)
-}
-
-fn value_payload(value: &Value) -> MachineReportDiagnosticPayload {
-    match value {
-        Value::Object(object) => MachineReportDiagnosticPayload::Object(
-            object
-                .iter()
-                .map(|(key, value)| (key.clone(), value_payload(value)))
-                .collect(),
-        ),
-        Value::Array(values) => {
-            MachineReportDiagnosticPayload::Array(values.iter().map(value_payload).collect())
-        }
-        Value::String(value) => MachineReportDiagnosticPayload::String(value.clone()),
-        Value::Number(value) => MachineReportDiagnosticPayload::Number(value.clone()),
-        Value::Bool(value) => MachineReportDiagnosticPayload::Bool(*value),
-        Value::Null => MachineReportDiagnosticPayload::Null,
-    }
-}
+use super::super::report::print::{HmsValue, NumericValue, PrintReportEnvelope};
 
 pub(super) fn print_error_payload(
     print_error: MachineReportDiagnosticPayload,
