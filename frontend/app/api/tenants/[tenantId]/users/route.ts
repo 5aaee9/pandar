@@ -4,10 +4,5 @@ export const dynamic = "force-dynamic";
 
 export const GET = hubProxy<{ tenantId: string }>({
   method: "GET",
-  path: "/jobs",
-});
-
-export const DELETE = hubProxy<{ tenantId: string }>({
-  method: "DELETE",
-  path: "/jobs",
+  path: "/users",
 });

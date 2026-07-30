@@ -1,19 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Agent, Command, Printer } from "./dashboard-types";
-
-const apiClientMock = vi.hoisted(() => ({
-  printers: { list: vi.fn() },
-  agents: { list: vi.fn() },
-  jobs: { list: vi.fn() },
-  users: { list: vi.fn(), joinLinks: vi.fn() },
-  settings: { tenantTokens: vi.fn(), auditEvents: vi.fn() },
-  commands: { get: vi.fn() },
-}));
-
-vi.mock("./api-client", () => ({
-  apiClient: apiClientMock,
-}));
+import type { Command } from "./dashboard-types";
 
 const parseCommandResultMock = vi.hoisted(() =>
   vi.fn(() => ({ parsed: true }) as never),
@@ -32,6 +19,31 @@ import {
   settingsRouteQuery,
   usersRouteQuery,
 } from "./route-data";
+
+type FetchMock = ReturnType<
+  typeof vi.fn<(input: RequestInfo | URL) => Promise<Response>>
+>;
+
+function stubRouteFetch(routes: Record<string, unknown>): FetchMock {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    for (const [route, payload] of Object.entries(routes)) {
+      if (path.endsWith(route)) {
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+    }
+    throw new Error(`unexpected fetch: ${path}`);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function fetchedPaths(fetchMock: FetchMock): string[] {
+  return fetchMock.mock.calls.map(([input]) => String(input));
+}
 
 describe("routeDataKeys", () => {
   it("builds per-view prefix keys scoped to the tenant", () => {
@@ -90,23 +102,33 @@ describe("route query functions", () => {
     vi.clearAllMocks();
   });
 
-  it("composes devices data from printers, agents, and jobs", async () => {
-    apiClientMock.printers.list.mockResolvedValue({ printers: ["p1"] });
-    apiClientMock.agents.list.mockResolvedValue({ agents: ["a1"] });
-    apiClientMock.jobs.list.mockResolvedValue({ jobs: ["j1"] });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("composes devices data through the hub proxy", async () => {
+    const fetchMock = stubRouteFetch({
+      "/printers": { printers: ["p1"] },
+      "/agents": { agents: ["a1"] },
+      "/jobs": { jobs: ["j1"] },
+    });
 
     const data = await devicesRouteQuery("t1").queryFn!({} as never);
 
-    expect(apiClientMock.printers.list).toHaveBeenCalledWith("t1");
-    expect(apiClientMock.agents.list).toHaveBeenCalledWith("t1");
-    expect(apiClientMock.jobs.list).toHaveBeenCalledWith("t1");
+    expect(fetchedPaths(fetchMock).sort()).toEqual([
+      "/api/tenants/t1/agents",
+      "/api/tenants/t1/jobs",
+      "/api/tenants/t1/printers",
+    ]);
     expect(data).toEqual({ printers: ["p1"], agents: ["a1"], jobs: ["j1"] });
   });
 
   it("composes jobs data from jobs, printers, and agents", async () => {
-    apiClientMock.jobs.list.mockResolvedValue({ jobs: ["j1"] });
-    apiClientMock.printers.list.mockResolvedValue({ printers: ["p1"] });
-    apiClientMock.agents.list.mockResolvedValue({ agents: ["a1"] });
+    stubRouteFetch({
+      "/jobs": { jobs: ["j1"] },
+      "/printers": { printers: ["p1"] },
+      "/agents": { agents: ["a1"] },
+    });
 
     const data = await jobsRouteQuery("t1").queryFn!({} as never);
 
@@ -114,12 +136,16 @@ describe("route query functions", () => {
   });
 
   it("omits the command fetch for the agents view without a commandId", async () => {
-    apiClientMock.agents.list.mockResolvedValue({ agents: ["a1"] });
-    apiClientMock.printers.list.mockResolvedValue({ printers: ["p1"] });
+    const fetchMock = stubRouteFetch({
+      "/agents": { agents: ["a1"] },
+      "/printers": { printers: ["p1"] },
+    });
 
     const data = await agentsRouteQuery("t1", null).queryFn!({} as never);
 
-    expect(apiClientMock.commands.get).not.toHaveBeenCalled();
+    expect(
+      fetchedPaths(fetchMock).some((path) => path.includes("/commands/")),
+    ).toBe(false);
     expect(data).toEqual({
       agents: ["a1"],
       printers: ["p1"],
@@ -130,29 +156,32 @@ describe("route query functions", () => {
 
   it("fetches and parses the selected command for the agents view", async () => {
     const command = { id: "cmd-1" } as Command;
-    apiClientMock.agents.list.mockResolvedValue({ agents: [] });
-    apiClientMock.printers.list.mockResolvedValue({ printers: [] });
-    apiClientMock.commands.get.mockResolvedValue(command);
+    const fetchMock = stubRouteFetch({
+      "/agents": { agents: [] },
+      "/printers": { printers: [] },
+      "/commands/cmd-1": command,
+    });
 
     const data = await agentsRouteQuery("t1", "cmd-1").queryFn!({} as never);
 
-    expect(apiClientMock.commands.get).toHaveBeenCalledWith("t1", "cmd-1");
+    expect(fetchedPaths(fetchMock)).toContain("/api/tenants/t1/commands/cmd-1");
     expect(parseCommandResultMock).toHaveBeenCalledWith(command);
-    expect(data.command).toBe(command);
+    expect(data.command).toEqual(command);
     expect(data.commandData).toEqual({ parsed: true });
   });
 
   it("composes users data from users and join links", async () => {
-    apiClientMock.users.list.mockResolvedValue({
-      users: ["u1"],
-      identities: ["i1"],
+    const fetchMock = stubRouteFetch({
+      "/users": { users: ["u1"], identities: ["i1"] },
+      "/join-links": { join_links: ["l1"] },
     });
-    apiClientMock.users.joinLinks.mockResolvedValue({ join_links: ["l1"] });
 
     const data = await usersRouteQuery("t1").queryFn!({} as never);
 
-    expect(apiClientMock.users.list).toHaveBeenCalledWith("t1");
-    expect(apiClientMock.users.joinLinks).toHaveBeenCalledWith("t1");
+    expect(fetchedPaths(fetchMock).sort()).toEqual([
+      "/api/tenants/t1/join-links",
+      "/api/tenants/t1/users",
+    ]);
     expect(data).toEqual({
       users: ["u1"],
       identities: ["i1"],
@@ -161,17 +190,16 @@ describe("route query functions", () => {
   });
 
   it("composes settings data from tokens, agents, printers, and audit events", async () => {
-    apiClientMock.settings.tenantTokens.mockResolvedValue({
-      tenant_tokens: ["tt1"],
-    });
-    apiClientMock.agents.list.mockResolvedValue({ agents: ["a1"] });
-    apiClientMock.printers.list.mockResolvedValue({ printers: ["p1"] });
-    apiClientMock.settings.auditEvents.mockResolvedValue({
-      audit_events: ["e1"],
+    const fetchMock = stubRouteFetch({
+      "/tenant-tokens": { tenant_tokens: ["tt1"] },
+      "/agents": { agents: ["a1"] },
+      "/printers": { printers: ["p1"] },
+      "/audit-events": { audit_events: ["e1"] },
     });
 
     const data = await settingsRouteQuery("t1").queryFn!({} as never);
 
+    expect(fetchedPaths(fetchMock)).toContain("/api/tenants/t1/audit-events");
     expect(data).toEqual({
       tenantTokens: ["tt1"],
       agents: ["a1"],
@@ -181,32 +209,47 @@ describe("route query functions", () => {
   });
 
   it("selects the agent and its printers for the agent settings view", async () => {
-    const agent = { id: "a1" } as Agent;
-    const own = { agent_id: "a1" } as Printer;
-    const other = { agent_id: "a2" } as Printer;
-    apiClientMock.agents.list.mockResolvedValue({
-      agents: [agent, { id: "a2" }],
+    stubRouteFetch({
+      "/agents": { agents: [{ id: "a1" }, { id: "a2" }] },
+      "/printers": {
+        printers: [
+          { agent_id: "a1", id: "p1" },
+          { agent_id: "a2", id: "p2" },
+        ],
+      },
     });
-    apiClientMock.printers.list.mockResolvedValue({ printers: [own, other] });
 
     const data = await agentSettingsRouteQuery("t1", "a1", null).queryFn!(
       {} as never,
     );
 
-    expect(data.agent).toBe(agent);
-    expect(data.printers).toEqual([own]);
+    expect(data.agent).toEqual({ id: "a1" });
+    expect(data.printers).toEqual([{ agent_id: "a1", id: "p1" }]);
     expect(data.command).toBeNull();
     expect(data.commandData).toBeNull();
   });
 
   it("returns a null agent when the agent is missing", async () => {
-    apiClientMock.agents.list.mockResolvedValue({ agents: [] });
-    apiClientMock.printers.list.mockResolvedValue({ printers: [] });
+    stubRouteFetch({
+      "/agents": { agents: [] },
+      "/printers": { printers: [] },
+    });
 
     const data = await agentSettingsRouteQuery("t1", "a1", null).queryFn!(
       {} as never,
     );
 
     expect(data.agent).toBeNull();
+  });
+
+  it("rejects the query when the proxy responds with an error status", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 500 })),
+    );
+
+    await expect(devicesRouteQuery("t1").queryFn!({} as never)).rejects.toThrow(
+      "Route data error: 500",
+    );
   });
 });

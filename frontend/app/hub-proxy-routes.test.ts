@@ -13,7 +13,7 @@ const hubBase = "https://hub.internal.example/base";
 async function loadRoutes() {
   vi.resetModules();
   vi.stubEnv("APP_API_URL", hubBase);
-  const [jobs, job, reprint, printers, printerJobs, metadata, camera] =
+  const [jobs, job, reprint, printers, printerJobs, metadata, camera, agents, users, joinLinks, tenantTokens, auditEvents, command] =
     await Promise.all([
       import("./api/tenants/[tenantId]/jobs/route"),
       import("./api/tenants/[tenantId]/jobs/[jobId]/route"),
@@ -22,8 +22,14 @@ async function loadRoutes() {
       import("./api/tenants/[tenantId]/printers/[printerId]/jobs/route"),
       import("./api/tenants/[tenantId]/artifact-metadata-preview/route"),
       import("./api/tenants/[tenantId]/printers/[printerId]/camera.mp4/route"),
+      import("./api/tenants/[tenantId]/agents/route"),
+      import("./api/tenants/[tenantId]/users/route"),
+      import("./api/tenants/[tenantId]/join-links/route"),
+      import("./api/tenants/[tenantId]/tenant-tokens/route"),
+      import("./api/tenants/[tenantId]/audit-events/route"),
+      import("./api/tenants/[tenantId]/commands/[commandId]/route"),
     ]);
-  return { jobs, job, reprint, printers, printerJobs, metadata, camera };
+  return { jobs, job, reprint, printers, printerJobs, metadata, camera, agents, users, joinLinks, tenantTokens, auditEvents, command };
 }
 
 type FetchMock = ReturnType<
@@ -184,6 +190,114 @@ describe("hub proxy route wiring", () => {
       fetchMock,
       `${hubBase}/api/v1/tenants/tenant-1/artifact-metadata-preview`,
       "POST",
+    );
+  });
+
+  it("proxies the tenant jobs list", async () => {
+    const routes = await loadRoutes();
+    const fetchMock = stubUpstream();
+
+    await routes.jobs.GET(
+      new Request("https://web.example/api/tenants/tenant-1/jobs"),
+      { params: Promise.resolve({ tenantId: "tenant-1" }) },
+    );
+
+    expectUpstreamCall(fetchMock, `${hubBase}/api/v1/tenants/tenant-1/jobs`, "GET");
+  });
+
+  it("proxies the agents list", async () => {
+    const routes = await loadRoutes();
+    const fetchMock = stubUpstream();
+
+    await routes.agents.GET(
+      new Request("https://web.example/api/tenants/tenant-1/agents"),
+      { params: Promise.resolve({ tenantId: "tenant-1" }) },
+    );
+
+    expectUpstreamCall(
+      fetchMock,
+      `${hubBase}/api/v1/tenants/tenant-1/agents`,
+      "GET",
+    );
+  });
+
+  it("proxies the users list", async () => {
+    const routes = await loadRoutes();
+    const fetchMock = stubUpstream();
+
+    await routes.users.GET(
+      new Request("https://web.example/api/tenants/tenant-1/users"),
+      { params: Promise.resolve({ tenantId: "tenant-1" }) },
+    );
+
+    expectUpstreamCall(
+      fetchMock,
+      `${hubBase}/api/v1/tenants/tenant-1/users`,
+      "GET",
+    );
+  });
+
+  it("proxies the join links list", async () => {
+    const routes = await loadRoutes();
+    const fetchMock = stubUpstream();
+
+    await routes.joinLinks.GET(
+      new Request("https://web.example/api/tenants/tenant-1/join-links"),
+      { params: Promise.resolve({ tenantId: "tenant-1" }) },
+    );
+
+    expectUpstreamCall(
+      fetchMock,
+      `${hubBase}/api/v1/tenants/tenant-1/join-links`,
+      "GET",
+    );
+  });
+
+  it("proxies the tenant tokens list", async () => {
+    const routes = await loadRoutes();
+    const fetchMock = stubUpstream();
+
+    await routes.tenantTokens.GET(
+      new Request("https://web.example/api/tenants/tenant-1/tenant-tokens"),
+      { params: Promise.resolve({ tenantId: "tenant-1" }) },
+    );
+
+    expectUpstreamCall(
+      fetchMock,
+      `${hubBase}/api/v1/tenants/tenant-1/tenant-tokens`,
+      "GET",
+    );
+  });
+
+  it("proxies the audit events list with the declared limit", async () => {
+    const routes = await loadRoutes();
+    const fetchMock = stubUpstream();
+
+    await routes.auditEvents.GET(
+      new Request("https://web.example/api/tenants/tenant-1/audit-events"),
+      { params: Promise.resolve({ tenantId: "tenant-1" }) },
+    );
+
+    expectUpstreamCall(
+      fetchMock,
+      `${hubBase}/api/v1/tenants/tenant-1/audit-events?limit=20`,
+      "GET",
+    );
+  });
+
+  it("proxies a command detail", async () => {
+    const routes = await loadRoutes();
+    const fetchMock = stubUpstream();
+
+    await routes.command.GET(
+      new Request("https://web.example/api/tenants/tenant-1/commands/cmd-1"),
+      { params: Promise.resolve({ tenantId: "tenant-1", commandId: "cmd-1" }) },
+    );
+
+    expectUpstreamCall(
+      fetchMock,
+      `${hubBase}/api/v1/tenants/tenant-1/commands/cmd-1`,
+      "GET",
     );
   });
 

@@ -141,6 +141,26 @@ describe("hubProxy", () => {
     expect(response.status).toBe(200);
   });
 
+  it("appends the declared query string to the upstream URL", async () => {
+    const { hubProxy } = await loadHubProxy();
+    const fetchMock = jsonUpstream();
+    const handler = hubProxy({
+      method: "GET",
+      path: "/audit-events",
+      query: "limit=20",
+    });
+
+    await handler(
+      new Request("https://web.example/api/tenants/tenant-1/audit-events"),
+      { params: Promise.resolve({ tenantId: "tenant-1" }) },
+    );
+
+    const [url] = firstCall(fetchMock);
+    expect(url).toBe(
+      `${hubBase}/api/v1/tenants/tenant-1/audit-events?limit=20`,
+    );
+  });
+
   it("streams request bodies with forced JSON content-type", async () => {
     const { hubProxy } = await loadHubProxy();
     const fetchMock = jsonUpstream();

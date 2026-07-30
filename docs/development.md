@@ -107,7 +107,7 @@ The Hub stores and forwards typed printer operations. Bambu-specific MQTT constr
 
 Run `npm --prefix frontend run lint`, `npm run test:web`, and `npm run typecheck:web` before submitting frontend changes. The workspace production-module guard (`cargo test -p pandar-core --test module_size`) enforces the 400-line limit across Rust, C/C++ headers and sources, and frontend TypeScript/TSX while excluding tests and generated output.
 
-The frontend reads the hub through `APP_API_URL`, defaulting to `http://localhost:8080` when unset. `APP_BASE_URL` remains the frontend's public URL for deployment wiring.
+Server-side frontend code reads the hub through `APP_API_URL`, defaulting to `http://localhost:8080` when unset. Browser code never calls the hub directly; reads and mutations cross the Hub proxy (`frontend/app/hub-proxy.ts` and the `frontend/app/api/tenants/[tenantId]/` routes). `APP_BASE_URL` remains the frontend's public URL for deployment wiring.
 
 `APP_AUTH_PROVIDER` selects the browser-facing provider metadata for `pandar-web`. Supported values are `clerk`, `logto`, `betterauth`, or unset/`none`; any other value fails Web startup. Provider-specific frontend metadata is configured with `APP_AUTH_CLERK_PUBLISHABLE_KEY`, `APP_AUTH_LOGTO_ENDPOINT`, `APP_AUTH_LOGTO_APP_ID`, or `APP_AUTH_BETTER_AUTH_BASE_URL`. The frontend still forwards only a bearer token from the configured cookie or static single-user bridge to `pandar-hub`; Pandar tenant membership is resolved by the hub.
 

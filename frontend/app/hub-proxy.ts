@@ -8,6 +8,8 @@ export type HubProxyConfig = {
   method: "GET" | "POST" | "DELETE";
   // Path suffix after /api/v1/tenants/{tenantId}, e.g. "/jobs/{jobId}/reprint".
   path: string;
+  // Declared query string appended to the upstream URL, e.g. "limit=20".
+  query?: string;
   body?: "stream";
   // With body: "stream": forward the request's content-type or force JSON.
   contentType?: "forward" | "json";
@@ -44,7 +46,7 @@ export function hubProxy<P extends Record<string, string>>(
       /\{(\w+)\}/g,
       (_, name: string) => encoded[name],
     );
-    const upstreamUrl = `${apiUrl}/api/v1/tenants/${apiIdSegment(params.tenantId, "tenant_id")}${path}`;
+    const upstreamUrl = `${apiUrl}/api/v1/tenants/${apiIdSegment(params.tenantId, "tenant_id")}${path}${config.query ? `?${config.query}` : ""}`;
 
     const headers = new Headers(await apiHeaders());
     const init: RequestInit & { duplex?: "half" } = {

@@ -1,19 +1,37 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { apiClient } from "./api-client";
+import { apiIdSegment } from "./api-path";
 import { parseCommandResult } from "./command-result-parser";
 import type {
   Agent,
+  AgentList,
   AuditEvent,
+  AuditEventList,
   Command,
   CommandResultData,
   Job,
+  JobList,
   JoinLink,
+  JoinLinkList,
   Printer,
+  PrinterList,
   TenantToken,
+  TenantTokenList,
   User,
   UserIdentity,
+  UserList,
 } from "./dashboard-types";
+
+// Browser reads cross the Hub proxy same-origin; never fetch the Hub directly.
+async function fetchRouteJson<T>(tenantId: string, path: string): Promise<T> {
+  const response = await fetch(
+    `/api/tenants/${apiIdSegment(tenantId, "tenant_id")}${path}`,
+  );
+  if (!response.ok) {
+    throw new Error(`Route data error: ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
 
 export const routeDataKeys = {
   devices: (tenantId: string) => ["route", "devices", tenantId] as const,
@@ -69,9 +87,9 @@ export function devicesRouteQuery(tenantId: string) {
     queryKey: routeDataKeys.devices(tenantId),
     queryFn: async (): Promise<DevicesRouteData> => {
       const [printers, agents, jobs] = await Promise.all([
-        apiClient.printers.list(tenantId),
-        apiClient.agents.list(tenantId),
-        apiClient.jobs.list(tenantId),
+        fetchRouteJson<PrinterList>(tenantId, "/printers"),
+        fetchRouteJson<AgentList>(tenantId, "/agents"),
+        fetchRouteJson<JobList>(tenantId, "/jobs"),
       ]);
       return {
         printers: printers.printers,
@@ -89,9 +107,9 @@ export function jobsRouteQuery(tenantId: string) {
     queryKey: routeDataKeys.jobs(tenantId),
     queryFn: async (): Promise<JobsRouteData> => {
       const [jobs, printers, agents] = await Promise.all([
-        apiClient.jobs.list(tenantId),
-        apiClient.printers.list(tenantId),
-        apiClient.agents.list(tenantId),
+        fetchRouteJson<JobList>(tenantId, "/jobs"),
+        fetchRouteJson<PrinterList>(tenantId, "/printers"),
+        fetchRouteJson<AgentList>(tenantId, "/agents"),
       ]);
       return {
         jobs: jobs.jobs,
@@ -109,10 +127,13 @@ export function agentsRouteQuery(tenantId: string, commandId: string | null) {
     queryKey: [...routeDataKeys.agents(tenantId), commandId] as const,
     queryFn: async (): Promise<AgentsRouteData> => {
       const [agents, printers, command] = await Promise.all([
-        apiClient.agents.list(tenantId),
-        apiClient.printers.list(tenantId),
+        fetchRouteJson<AgentList>(tenantId, "/agents"),
+        fetchRouteJson<PrinterList>(tenantId, "/printers"),
         commandId
-          ? apiClient.commands.get(tenantId, commandId)
+          ? fetchRouteJson<Command>(
+              tenantId,
+              `/commands/${apiIdSegment(commandId, "command_id")}`,
+            )
           : Promise.resolve(null),
       ]);
       return {
@@ -132,8 +153,8 @@ export function usersRouteQuery(tenantId: string) {
     queryKey: routeDataKeys.users(tenantId),
     queryFn: async (): Promise<UsersRouteData> => {
       const [users, joinLinks] = await Promise.all([
-        apiClient.users.list(tenantId),
-        apiClient.users.joinLinks(tenantId),
+        fetchRouteJson<UserList>(tenantId, "/users"),
+        fetchRouteJson<JoinLinkList>(tenantId, "/join-links"),
       ]);
       return {
         users: users.users,
@@ -150,10 +171,10 @@ export function settingsRouteQuery(tenantId: string) {
     queryKey: routeDataKeys.settings(tenantId),
     queryFn: async (): Promise<SettingsRouteData> => {
       const [tenantTokens, agents, printers, auditEvents] = await Promise.all([
-        apiClient.settings.tenantTokens(tenantId),
-        apiClient.agents.list(tenantId),
-        apiClient.printers.list(tenantId),
-        apiClient.settings.auditEvents(tenantId),
+        fetchRouteJson<TenantTokenList>(tenantId, "/tenant-tokens"),
+        fetchRouteJson<AgentList>(tenantId, "/agents"),
+        fetchRouteJson<PrinterList>(tenantId, "/printers"),
+        fetchRouteJson<AuditEventList>(tenantId, "/audit-events"),
       ]);
       return {
         tenantTokens: tenantTokens.tenant_tokens,
@@ -178,10 +199,13 @@ export function agentSettingsRouteQuery(
     ] as const,
     queryFn: async (): Promise<AgentSettingsRouteData> => {
       const [agents, printers, command] = await Promise.all([
-        apiClient.agents.list(tenantId),
-        apiClient.printers.list(tenantId),
+        fetchRouteJson<AgentList>(tenantId, "/agents"),
+        fetchRouteJson<PrinterList>(tenantId, "/printers"),
         commandId
-          ? apiClient.commands.get(tenantId, commandId)
+          ? fetchRouteJson<Command>(
+              tenantId,
+              `/commands/${apiIdSegment(commandId, "command_id")}`,
+            )
           : Promise.resolve(null),
       ]);
       return {
