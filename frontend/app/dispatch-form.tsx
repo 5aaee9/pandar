@@ -26,9 +26,7 @@ import { DispatchPrintOptions } from './dispatch-print-options'
 import { DispatchEmptyState } from './dispatch-form-empty-state'
 import { HelpTip } from './dashboard-ui'
 
-type DispatchTenant = {
-  id: string
-}
+type DispatchTenant = { id: string }
 
 type DispatchPrinter = Pick<Printer, 'id' | 'name' | 'serial_number' | 'model' | 'materials'>
 

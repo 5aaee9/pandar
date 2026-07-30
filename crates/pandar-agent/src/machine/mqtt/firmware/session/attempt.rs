@@ -37,7 +37,7 @@ impl FirmwareMqttAttempt {
             self.wait_published().await?;
         }
         match tokio::time::timeout(report_timeout, self.events.recv()).await {
-            Ok(Some(AttemptEvent::Report(report))) => Ok(report),
+            Ok(Some(AttemptEvent::Report(report))) => Ok(*report),
             Ok(Some(AttemptEvent::Failed {
                 after_publish,
                 error,

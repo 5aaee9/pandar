@@ -45,7 +45,7 @@ pub(super) enum ShutdownCompletionMode {
 
 pub(super) enum AttemptEvent {
     Published,
-    Report(FirmwareMqttReport),
+    Report(Box<FirmwareMqttReport>),
     Failed { after_publish: bool, error: String },
 }
 
@@ -227,11 +227,13 @@ pub(super) async fn run_pump(
                             });
                         match report {
                             Ok((true, report)) => {
-                                let _ = active.events.send(AttemptEvent::Report(FirmwareMqttReport {
-                                    #[cfg(test)]
-                                    ordinal,
-                                    payload: report,
-                                }));
+                                let _ = active.events.send(AttemptEvent::Report(Box::new(
+                                    FirmwareMqttReport {
+                                        #[cfg(test)]
+                                        ordinal,
+                                        payload: report,
+                                    },
+                                )));
                             }
                             Ok((false, _)) => {}
                             Err(error) => {
