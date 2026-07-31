@@ -58,7 +58,7 @@ git push origin v0.1.0
 Pushing the tag starts:
 
 - `Checks`, which repeats the quality gates and validates tag/version consistency;
-- `Release`, which natively builds and smoke-tests the Linux amd64 and Windows amd64 three-file archives, and builds the Windows Studio hook bundle, before creating the GitHub Release;
+- `Release`, which builds and target-architecture smoke-tests the Linux amd64, macOS amd64/arm64, and Windows amd64 three-file archives, and builds the Windows Studio hook bundle, before creating the GitHub Release; both macOS rows use Apple Silicon, with the amd64 checks running under Rosetta 2;
 - `Docker`, which publishes `hub:v0.1.0`, `web:v0.1.0`, and Helm chart `0.1.0` after Checks succeeds.
 
 Do not create the GitHub Release manually while these workflows are running.
@@ -74,6 +74,9 @@ docker pull ghcr.io/5aaee9/pandar/hub:v0.1.0
 docker pull ghcr.io/5aaee9/pandar/web:v0.1.0
 ```
 
-Verify all six desktop files are present: two `.tar.gz` archives and their `.sha256` sidecars, plus the Windows Studio hook `.zip` and its `.sha256` sidecar. Run the checksum, CLI startup, and plugin checks from `docs/release-installation.md` on both target hosts.
+The immutable `v0.1.0` release has six desktop files. A tag produced by the current macOS-enabled
+workflow has ten: four `.tar.gz` archives and their `.sha256` sidecars, plus the Windows Studio hook
+`.zip` and its `.sha256` sidecar. Run the checksum, CLI startup, and plugin checks from
+`docs/release-installation.md` on every target host.
 
 Record tagged-artifact evidence in `docs/compatibility/release-artifacts.md`, record real Studio evidence separately in `docs/compatibility/bambu-studio-plugin.md`, and update `docs/roadmap.md`. A failed or partial workflow is not a completed release.

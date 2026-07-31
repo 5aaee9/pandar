@@ -29,6 +29,8 @@ Each candidate archive has exactly three top-level files:
 | Target | CLI | Network plugin | BambuSource companion |
 | --- | --- | --- | --- |
 | `linux-amd64` | `pandar` | `libpandar_network_plugin.so` | `libpandar_bambu_source.so` |
+| `macos-amd64` | `pandar` | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` |
+| `macos-arm64` | `pandar` | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` |
 | `windows-amd64` | `pandar.exe` | `pandar_network_plugin.dll` | `pandar_bambu_source.dll` |
 
 The network plugin must expose the complete pinned 130-name Studio contract set; this check does not
@@ -38,14 +40,17 @@ installation renames the two libraries to its exact platform filenames, includin
 `libbambu_networking.so` plus `libBambuSource.so` on Linux, and `bambu_networking.dll` plus
 `BambuSource.dll` on Windows.
 
-Current native release-smoke is intentionally scoped to `linux-amd64` and `windows-amd64`. There is no
-current macOS candidate, Windows real-Studio run, or hardware-print evidence. Those surfaces remain
-`untested`; older artifacts do not upgrade them.
+Current target-architecture release-smoke covers `linux-amd64`, `macos-amd64`, `macos-arm64`, and
+`windows-amd64`. The release workflow builds each archive on its target OS. Both macOS matrix rows use
+an Apple Silicon `macos-26` runner: arm64 executes natively, while amd64 is cross-compiled and executes
+its CLI, ABI probe, and release-smoke under Rosetta 2. Package evidence does not replace a real Studio
+run or hardware-print evidence; those surfaces remain `untested` until separately recorded.
 
-Candidates for this target must be built by same-OS native commands. The tag workflow now builds only
-Linux amd64 and Windows amd64 desktop archives, includes the BambuSource companion, and runs current
-native release-smoke with the pinned Studio and Boost inputs against the packaged plugin before
-publication. The Windows job uses MSVC and also packages the fixed
+Candidates for this target must be built by same-OS target toolchains. The tag workflow builds Linux
+amd64, macOS amd64/arm64, and Windows amd64 desktop archives, includes the BambuSource companion, and
+runs release-smoke for each target architecture with the pinned Studio and Boost inputs against the
+packaged plugin before publication. The macOS jobs suppress AppleDouble metadata so each archive
+retains the exact three-file layout. The Windows job uses MSVC and also packages the fixed
 `pandar-studio-hook-02.08.01-windows-amd64.zip` asset plus its checksum. That bundle has exactly
 `pandar_studio_hook.dll`, `pandar_network_plugin.dll`, and `pandar_bambu_source.dll`; the Rust
 installer rejects any other layout. The initial `v0.1.0` workflow run `30653076144` built and
@@ -53,6 +58,26 @@ smoke-tested the native Windows artifacts, but rejected the Linux artifact becau
 shim was ABI-incompatible with the host `libstdc++` probe. Linux plugin builds now use the native GNU
 toolchain. Replacement run `30654892795` passed both native build/smoke jobs and published the
 release; a real Windows Studio run still must verify the download replacement.
+
+## 2026-08-01 Local macOS arm64 Validation
+
+An untagged Apple Silicon validation run on macOS `26.4` built the current three-file layout and ran
+the complete native release-smoke against the pinned Studio commit and Boost archive. The local
+archive SHA-256 was `1e488678543f882a7a6007746725d7319de6fdb19496ee567a6bbc03212603a9`;
+the plugin and BambuSource SHA-256 values were
+`84ab2155b6632f5d172ace0e2930ac93fe0976656451917344920af7c0206004` and
+`3c45839eb1cbb656015bd79d5a66468d194b9511f90f61f1566ffe1da673bb63`. The archive contained
+exactly `pandar`, `libpandar_network_plugin.dylib`, and `libpandar_bambu_source.dylib`; AppleDouble
+members were disabled during packaging. CLI execution, all 109 network plus 21 File Transfer exports,
+the sentinel-only companion policy, and the native `version,bind,print,ams,ft` ABI modes passed.
+
+The official `02.08.01.55` macOS Public Beta DMG had SHA-256
+`17eca4d63b909c728bf6d0cf8753397820f15b372e1ce69d6ab71be796a3af0d` and passed Apple's deep
+code-signature verification. Computer Use launched that app from a read-only mount. The Studio process
+reached its normal home UI and mapped the exact Pandar plugin and companion from
+`BambuStudioBeta/plugins`; their hashes remained unchanged after startup. This is real target-version
+module-load evidence for macOS arm64 only. It is not a tagged artifact, macOS amd64 evidence,
+authenticated sign-in/session evidence, Hub/Agent/printer evidence, or a hardware-operation claim.
 
 ## v0.1.0 Tagged Release Evidence
 

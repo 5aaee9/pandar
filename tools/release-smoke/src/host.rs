@@ -1,6 +1,8 @@
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum NativeTarget {
     LinuxAmd64,
+    MacosAmd64,
+    MacosArm64,
     WindowsAmd64,
 }
 
@@ -8,6 +10,8 @@ impl NativeTarget {
     pub fn label(self) -> &'static str {
         match self {
             Self::LinuxAmd64 => "linux-amd64",
+            Self::MacosAmd64 => "macos-amd64",
+            Self::MacosArm64 => "macos-arm64",
             Self::WindowsAmd64 => "windows-amd64",
         }
     }
@@ -20,11 +24,15 @@ pub(crate) fn validate_current_host(label: &str) -> Result<NativeTarget, String>
 fn validate_host(label: &str, os: &str, arch: &str) -> Result<NativeTarget, String> {
     let target = match label {
         "linux-amd64" => NativeTarget::LinuxAmd64,
+        "macos-amd64" => NativeTarget::MacosAmd64,
+        "macos-arm64" => NativeTarget::MacosArm64,
         "windows-amd64" => NativeTarget::WindowsAmd64,
         _ => return Err(format!("unsupported native release label {label}")),
     };
     let expected = match target {
         NativeTarget::LinuxAmd64 => ("linux", "x86_64"),
+        NativeTarget::MacosAmd64 => ("macos", "x86_64"),
+        NativeTarget::MacosArm64 => ("macos", "aarch64"),
         NativeTarget::WindowsAmd64 => ("windows", "x86_64"),
     };
     if (os, arch) != expected {
@@ -57,6 +65,21 @@ mod tests {
         assert_eq!(
             validate_host("linux-amd64", "linux", "x86_64").unwrap(),
             NativeTarget::LinuxAmd64
+        );
+    }
+
+    #[test]
+    fn macos_targets_require_matching_native_architecture() {
+        assert!(validate_host("macos-amd64", "linux", "x86_64").is_err());
+        assert!(validate_host("macos-amd64", "macos", "aarch64").is_err());
+        assert_eq!(
+            validate_host("macos-amd64", "macos", "x86_64").unwrap(),
+            NativeTarget::MacosAmd64
+        );
+        assert!(validate_host("macos-arm64", "macos", "x86_64").is_err());
+        assert_eq!(
+            validate_host("macos-arm64", "macos", "aarch64").unwrap(),
+            NativeTarget::MacosArm64
         );
     }
 }

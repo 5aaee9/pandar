@@ -101,6 +101,11 @@ fn cxx_toolchain(target: NativeTarget) -> Result<String, String> {
                 candidates.push((PathBuf::from(program), "--version"));
             }
         }
+        NativeTarget::MacosAmd64 | NativeTarget::MacosArm64 => {
+            for program in ["c++", "clang++"] {
+                candidates.push((PathBuf::from(program), "--version"));
+            }
+        }
         NativeTarget::WindowsAmd64 => {
             candidates.push((PathBuf::from("cl.exe"), "/Bv"));
             candidates.push((PathBuf::from("clang-cl.exe"), "--version"));
@@ -131,7 +136,9 @@ fn cxx_toolchain(target: NativeTarget) -> Result<String, String> {
 
 fn cxx_version_arg(target: NativeTarget) -> &'static str {
     match target {
-        NativeTarget::LinuxAmd64 => "--version",
+        NativeTarget::LinuxAmd64 | NativeTarget::MacosAmd64 | NativeTarget::MacosArm64 => {
+            "--version"
+        }
         NativeTarget::WindowsAmd64 => "/Bv",
     }
 }
@@ -139,6 +146,7 @@ fn cxx_version_arg(target: NativeTarget) -> &'static str {
 fn runtime_abi(target: NativeTarget, plugin: &Path) -> Result<String, String> {
     match target {
         NativeTarget::WindowsAmd64 => windows_runtime_abi(plugin),
+        NativeTarget::MacosAmd64 | NativeTarget::MacosArm64 => macos_runtime_abi(plugin),
         NativeTarget::LinuxAmd64 => {
             let version = Command::new("ldd")
                 .arg("--version")
@@ -182,6 +190,47 @@ fn runtime_abi(target: NativeTarget, plugin: &Path) -> Result<String, String> {
             Ok(format!("{version}; imports={}", libraries.join(",")))
         }
     }
+}
+
+fn macos_runtime_abi(plugin: &Path) -> Result<String, String> {
+    let version = Command::new("sw_vers")
+        .arg("-productVersion")
+        .output()
+        .map_err(|error| format!("run sw_vers -productVersion: {error}"))?;
+    if !version.status.success() {
+        return Err(format!(
+            "sw_vers -productVersion exited with {}",
+            version.status
+        ));
+    }
+    let version = String::from_utf8_lossy(&version.stdout).trim().to_owned();
+    if version.is_empty() {
+        return Err("sw_vers -productVersion produced no runtime metadata".to_owned());
+    }
+
+    let dependencies = Command::new("otool")
+        .arg("-L")
+        .arg(plugin)
+        .output()
+        .map_err(|error| format!("inspect packaged plugin runtime dependencies: {error}"))?;
+    if !dependencies.status.success() {
+        return Err(format!(
+            "packaged plugin otool inspection exited with {}",
+            dependencies.status
+        ));
+    }
+    let mut libraries = String::from_utf8_lossy(&dependencies.stdout)
+        .lines()
+        .skip(2)
+        .filter_map(|line| line.split_whitespace().next())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    libraries.sort();
+    libraries.dedup();
+    if libraries.is_empty() {
+        return Err("packaged plugin otool inspection found no shared runtime libraries".to_owned());
+    }
+    Ok(format!("macOS {version}; imports={}", libraries.join(",")))
 }
 
 fn windows_runtime_abi(plugin: &Path) -> Result<String, String> {

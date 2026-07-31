@@ -71,7 +71,7 @@ pub(crate) fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, Str
 fn usage() -> String {
     concat!(
         "usage: pandar-release-smoke ",
-        "--label <linux-amd64|windows-amd64> ",
+        "--label <linux-amd64|macos-amd64|macos-arm64|windows-amd64> ",
         "--archive <path> --checksum <path> ",
         "--cli-name <filename> --plugin-name <filename> --source-name <filename> ",
         "--repo-root <path> --abi-probe <native-executable> ",

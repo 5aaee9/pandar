@@ -885,7 +885,8 @@ Goal: turn the Phase 21 network-plugin scaffold into a verified Bambu Studio int
   history: Studio selected the single synthetic printer but did not explicitly subscribe it, exposing
   the selected-target ownership gap before any model-task request. Final16 contains that correction
   and is the current completed Linux evidence chain for exact Studio `02.08.01.55`. Real Windows
-  Studio and macOS remain untested until separate native evidence exists.
+  Studio and macOS x86_64 remain untested; local macOS arm64 package/ABI and exact-version module-load
+  evidence passed, while authenticated macOS behavior remains pending.
 - Capture Studio initialization, both library loads, sign-in, token/profile retrieval, printer listing,
   Hub-backed job listing, Hub outage/recovery, logout, and explicit no-hardware unsupported behavior.
   Keep automated print/cancel/command contracts and optional hardware evidence separate.
@@ -1114,9 +1115,9 @@ refresh failed` before its exact and full reruns passed. After the callback-sent
   product diff from final12 changed only four Rust connection files, made no C++ ABI change, and kept
   `connection.rs` at 388 lines. The final evidence-document review is complete.
 - Full Studio compatibility remains unverified until every claimed platform has the exact session
-  evidence required by `docs/compatibility/bambu-studio-plugin.md`. Authenticated Linux session rows,
-  real Windows Studio, macOS, and hardware actions remain untested as recorded in the compatibility
-  manifests.
+  evidence required by `docs/compatibility/bambu-studio-plugin.md`. Authenticated Linux/macOS session
+  rows, real Windows Studio, macOS x86_64 load, and hardware actions remain untested as recorded in the
+  compatibility manifests.
 
 Exit criteria:
 
@@ -1387,6 +1388,14 @@ Exit criteria:
 
 ## Immediate Next
 
+- Added macOS desktop publishing for both amd64 and Apple Silicon: both tag-workflow rows use the
+  Apple Silicon `macos-26` runner; arm64 runs natively, while amd64 cross-compiles and runs its CLI,
+  ABI probe, and release-smoke under Rosetta 2. The jobs reject AppleDouble archive entries. Local
+  Apple Silicon release build and packaged smoke passed with 109 network and 21 File Transfer exports;
+  the official signed `02.08.01.55` Public Beta also loaded both exact dylibs and reached its normal UI.
+  A local x86_64 Mach-O cross-build and Rosetta packaged-smoke preflight also passed; the pinned amd64
+  ABI workflow run, real Intel Studio load, and authenticated Studio behavior remain separate next
+  steps.
 - Deploy the updated Web frontend and confirm a printer with a fresh RFC3339 report and a retained `FAILED` task state shows 1/1 online plus a fresh Online presence label in a UTC+8 browser, while the task status remains Failed.
 - Deploy the updated Web frontend and confirm Pause/Resume and the other printer server-form controls navigate to their status feedback without logging `NEXT_REDIRECT` or replacing the dashboard with the data-load fallback.
 - Deploy the camera-option fix to the local Agent, restart only `pandar-agent`, and rerun the authenticated Hub camera probe to confirm the production route changes from HTTP 200 with zero bytes to a non-empty fragmented MP4 stream before checking browser playback.
@@ -1398,8 +1407,9 @@ Exit criteria:
 - Run the same authenticated checklist with a newly frozen native archive in real Windows Bambu
   Studio. Historical native MSVC, PE, ABI, and release-smoke evidence does not itself prove Studio
   behavior; no Windows Studio process was launched for final16.
-- Produce same-target three-file macOS amd64/arm64 candidates, pass native ABI/release-smoke on each
-  host, and record real Studio load plus authenticated-session evidence. macOS remains untested.
+- Run the macOS amd64 job on the Apple Silicon GitHub Actions runner and record exact-version Studio
+  authenticated-session evidence on both macOS architectures; local Apple Silicon arm64 package
+  evidence alone does not prove those remaining boundaries.
 - Run live-printer validation only with an explicitly safe printer state and agent-local credentials:
   chamber target readout, pause/resume/stop/print-speed, home/move/hotend, print/cancel, and other
   hardware-dependent behavior remain unclaimed. Any live firmware-update validation remains a

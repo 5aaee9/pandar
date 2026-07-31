@@ -13,14 +13,18 @@ Select the archive that matches the operator host OS and CPU architecture:
 | Host                 | Target label    | Archive                                                      |
 | -------------------- | --------------- | ------------------------------------------------------------ |
 | Linux x86_64/amd64   | `linux-amd64`   | `pandar-release-<tag-or-sanitized-ref>-linux-amd64.tar.gz`   |
+| macOS x86_64/amd64   | `macos-amd64`   | `pandar-release-<tag-or-sanitized-ref>-macos-amd64.tar.gz`   |
+| macOS Apple Silicon  | `macos-arm64`   | `pandar-release-<tag-or-sanitized-ref>-macos-arm64.tar.gz`   |
 | Windows x86_64/amd64 | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-windows-amd64.tar.gz` |
 
-The `v0.1.0` release does not publish arm64 or macOS desktop archives because current native
-release-smoke supports only Linux amd64 and Windows amd64. Every published archive contains exactly
-three top-level files: the `pandar` CLI (or `pandar.exe`), the matching network plugin, and the matching
-sentinel-only BambuSource companion. The tag workflow builds each archive on its target OS, validates
-the pinned Studio contract through the packaged plugin, and verifies the checksum, exact layout,
-companion policy, and CLI startup before publication. The separate Windows Studio hook bundle is also
+The immutable `v0.1.0` release predates macOS desktop archives. The current tag workflow additionally
+publishes macOS amd64 and arm64 archives. Both use an Apple Silicon runner: arm64 executes natively,
+while amd64 is cross-compiled and executes its CLI, ABI probe, and release-smoke under Rosetta 2.
+Every published archive contains exactly three top-level files: the `pandar` CLI (or `pandar.exe`),
+the matching network plugin, and the matching sentinel-only BambuSource companion. The tag workflow
+builds each archive on its target OS, validates the pinned Studio contract through the packaged
+plugin, and verifies the checksum, exact layout, companion policy, and CLI startup before publication.
+The separate Windows Studio hook bundle is also
 built natively with MSVC.
 
 Historical two-file/129-export archives are not current Studio candidates. Final16 remains the latest
@@ -205,7 +209,7 @@ both libraries before agent creation. Use the archive's platform files:
 | ------- | -------------------------------- | ------------------------------ | -------------------------------------------- |
 | Linux   | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    | `pandar-final16-linux-amd64-019f7b10.tar.gz` |
 | Windows | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      | none; successor unbuilt                      |
-| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | none; untested                               |
+| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | local arm64 validated; untagged              |
 
 Install both from an unpacked release archive with the CLI:
 
@@ -219,7 +223,8 @@ or `pandar_network_plugin.dll` and `pandar_bambu_source.dll` on Windows). Use `-
 `--source-file` to override either path for development builds.
 
 The installer writes Studio's exact names, including `libbambu_networking.so` and
-`libBambuSource.so` on Linux and `bambu_networking.dll` plus `BambuSource.dll` on Windows. The
+`libBambuSource.so` on Linux, `libbambu_networking.dylib` plus `libBambuSource.dylib` on macOS, and
+`bambu_networking.dll` plus `BambuSource.dll` on Windows. The
 companion exports only `pandar_bambu_source_sentinel`, exports no
 `Bambu_*` media/camera API, and leaves Studio's fake-source fallback in control.
 
@@ -228,8 +233,10 @@ Keep both original Studio library files for rollback. Typical locations vary by 
 - Linux AppImage or extracted builds: install both exact library names in Studio's data-directory
   `plugins` folder.
 - Windows: install both exact DLL names in Studio's data-directory `plugins` folder.
-- macOS: a future native candidate must install both exact dylib names in Studio's data-directory
-  `plugins` folder; no current macOS evidence exists.
+- macOS: install both exact dylib names in
+  `~/Library/Application Support/BambuStudio/plugins`. Public Beta builds, including the pinned
+  `02.08.01.55` target, use `~/Library/Application Support/BambuStudioBeta/plugins`; pass
+  `--data-dir "$HOME/Library/Application Support/BambuStudioBeta"` explicitly.
 
 ### Plugin account-state recovery
 
@@ -405,8 +412,8 @@ cleanup checks passed.
 | `windows-amd64` | `in_progress`           | Historical final13 passed native MSVC layout, CLI, ABI, export, companion, and packaged-smoke gates, but predates the later fixes. No final16 Windows package or real Windows Studio evidence exists.       | Build and validate a native MSVC final16 successor, then keep operator status `in_progress` until a real exact-version Windows Studio session is recorded.                                                                                   |
 | `linux-arm64`   | `untested`              | No current three-file native candidate exists.                                                                                                                                                              | Do not publish a Studio compatibility claim.                                                                                                                                                                                                 |
 | `windows-arm64` | `untested`              | No current three-file native candidate exists.                                                                                                                                                              | Do not publish a Studio compatibility claim.                                                                                                                                                                                                 |
-| `macos-amd64`   | `untested`              | No current native candidate or real Studio evidence exists.                                                                                                                                                 | Do not publish a Studio compatibility claim.                                                                                                                                                                                                 |
-| `macos-arm64`   | `untested`              | No current native candidate or real Studio evidence exists.                                                                                                                                                 | Do not publish a Studio compatibility claim.                                                                                                                                                                                                 |
+| `macos-amd64`   | `untested`              | No current candidate or real Studio evidence exists; the configured Apple Silicon/Rosetta release job has not run.                                                                                          | Do not publish a Studio compatibility claim.                                                                                                                                                                                                 |
+| `macos-arm64`   | `in_progress`           | Local native package/ABI/release-smoke and exact-version module load passed, but no tagged artifact or authenticated Studio session exists.                                                                 | Run the tag workflow and authenticated checklist before claiming full compatibility; keep hardware operations separate.                                                                                                                     |
 
 ## Operations Runbook
 

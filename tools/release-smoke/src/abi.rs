@@ -26,6 +26,7 @@ pub(crate) struct ExportInspection {
 enum SymbolOutput {
     Nm,
     Readelf,
+    #[cfg(any(target_os = "windows", test))]
     PeDumpbin,
 }
 
@@ -144,6 +145,11 @@ pub(crate) fn inspect_exports(
             ],
             parse_exported_symbols,
         ),
+        NativeTarget::MacosAmd64 | NativeTarget::MacosArm64 => inspect_with_candidates(
+            plugin,
+            &[("nm", &["-gU"], SymbolOutput::Nm)],
+            parse_exported_symbols,
+        ),
         NativeTarget::WindowsAmd64 => inspect_windows_exports(plugin, parse_exported_symbols),
     }
 }
@@ -162,6 +168,11 @@ pub(crate) fn inspect_source_exports(
                 ("nm", &["-D", "--defined-only"], SymbolOutput::Nm),
                 ("readelf", &["-Ws"], SymbolOutput::Readelf),
             ],
+            parse_source_exports,
+        ),
+        NativeTarget::MacosAmd64 | NativeTarget::MacosArm64 => inspect_with_candidates(
+            source,
+            &[("nm", &["-gU"], SymbolOutput::Nm)],
             parse_source_exports,
         ),
         NativeTarget::WindowsAmd64 => inspect_windows_exports(source, parse_source_exports),
@@ -297,6 +308,7 @@ fn parse_matching_exports(
                     fields.last().and_then(|token| select(token))
                 }
             }
+            #[cfg(any(target_os = "windows", test))]
             SymbolOutput::PeDumpbin => line
                 .split_once('=')
                 .map_or(line, |(left, _)| left)

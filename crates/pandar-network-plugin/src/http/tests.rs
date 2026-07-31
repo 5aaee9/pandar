@@ -62,6 +62,7 @@ fn printer_operation_network_failure_logs_complete_redacted_chain() {
     assert!(
         lower.contains("connection refused")
             || lower.contains("actively refused")
+            || lower.contains("can't assign requested address")
             || lower.contains("os error 10061")
             || lower.contains("os error 10049"),
         "diagnostic lacked a refusal cause: {diagnostic}"
@@ -186,6 +187,7 @@ fn multipart_network_failure_logs_complete_redacted_chain() {
     assert!(
         lower.contains("connection refused")
             || lower.contains("actively refused")
+            || lower.contains("can't assign requested address")
             || lower.contains("os error 10061")
             || lower.contains("os error 10049"),
         "diagnostic lacked the multipart root cause: {diagnostic}"

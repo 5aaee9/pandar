@@ -23,8 +23,27 @@ current verified Linux compatibility baseline. Its native full matrix passed, an
 official-AppImage harness proved the automatic selected-only model-task request/callback boundary.
 Final14 remains historical module-load/development-no-auth evidence. Final15 is non-promotable
 pre-correction evidence. Authenticated Better Auth sign-in/session and UI rows, real Hub/Agent/database
-integration, real Windows Studio, macOS, hardware actions, print/control/cancel, and live firmware
-remain untested; downstream behavior in Studio's encrypted logs is not claimed.
+integration, real Windows Studio, macOS amd64, authenticated macOS behavior, hardware actions,
+print/control/cancel, and live firmware remain untested; downstream behavior in Studio's encrypted
+logs is not claimed.
+
+### 2026-08-01 macOS arm64 load evidence
+
+The official signed `02.08.01.55` Public Beta DMG was launched from a read-only mount through Computer
+Use. Its SHA-256 was
+`17eca4d63b909c728bf6d0cf8753397820f15b372e1ce69d6ab71be796a3af0d`. The matching local arm64
+three-file archive passed release-smoke and all native ABI modes before installation; its plugin and
+companion SHA-256 values were `84ab2155b6632f5d172ace0e2930ac93fe0976656451917344920af7c0206004`
+and `3c45839eb1cbb656015bd79d5a66468d194b9511f90f61f1566ffe1da673bb63`.
+
+The Public Beta uses `~/Library/Application Support/BambuStudioBeta`, not the stable channel's
+`BambuStudio` directory. After installation into that explicit data directory, Studio reached its
+normal home UI without a plugin replacement prompt, preserved both artifact hashes, wrote a Pandar
+trace, and mapped both dylibs in the running process. An initial launch of stable `02.07.01.62` was
+rejected as evidence because its version prefix does not match the pinned plugin; Studio restored its
+own networking module as designed. All original stable/Beta files and configs were restored after the
+test. No sign-in, token exchange, Hub, Agent, printer, print, control, firmware, or other hardware path
+was exercised.
 
 ## Build Or Select Plugin Artifacts
 
@@ -175,11 +194,14 @@ Expected artifact names:
 | OS      | CLI          | Network plugin                    | BambuSource companion          |
 | ------- | ------------ | --------------------------------- | ------------------------------ |
 | Linux   | `pandar`     | `libpandar_network_plugin.so`     | `libpandar_bambu_source.so`    |
+| macOS   | `pandar`     | `libpandar_network_plugin.dylib`  | `libpandar_bambu_source.dylib` |
 | Windows | `pandar.exe` | `pandar_network_plugin.dll`       | `pandar_bambu_source.dll`      |
 
-The current native release-smoke scope is only `linux-amd64` and `windows-amd64`. A future macOS
-candidate must use `libpandar_network_plugin.dylib` plus `libpandar_bambu_source.dylib`, but no current
-macOS artifact or real Studio evidence exists.
+The current target-architecture release-smoke scope covers `linux-amd64`, `macos-amd64`,
+`macos-arm64`, and `windows-amd64`. Both macOS targets build on Apple Silicon; amd64 runs its CLI,
+ABI probe, and smoke executable under Rosetta 2. macOS archives use
+`libpandar_network_plugin.dylib` plus `libpandar_bambu_source.dylib`; package evidence and real Studio
+evidence remain separate.
 
 Repo-local build option for Linux:
 
@@ -191,6 +213,21 @@ Repo-local build option for Windows from a Windows Rust environment:
 
 ```powershell
 cargo build -p pandar-network-plugin -p pandar-bambu-source --release
+```
+
+Repo-local build option for macOS:
+
+```bash
+cargo build -p pandar-network-plugin -p pandar-bambu-source --release
+```
+
+For the pinned Public Beta, pass its channel-specific data directory explicitly:
+
+```bash
+pandar install-network-plugin \
+  --plugin-file libpandar_network_plugin.dylib \
+  --source-file libpandar_bambu_source.dylib \
+  --data-dir "$HOME/Library/Application Support/BambuStudioBeta"
 ```
 
 For the current Phase 23 evidence, use the native packaged artifact and trace it to `HEAD` plus the

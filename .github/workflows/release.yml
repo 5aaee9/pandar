@@ -215,6 +215,117 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  macos:
+    name: Build ${{ matrix.label }} release archive on Apple Silicon
+    runs-on: macos-26
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macos-amd64
+            target: x86_64-apple-darwin
+          - label: macos-arm64
+            target: aarch64-apple-darwin
+    steps:
+      - name: Checkout Pandar
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Verify Apple Silicon runner
+        shell: bash
+        run: test "$(uname -m)" = arm64
+
+      - name: Ensure Rosetta for amd64 validation
+        if: matrix.target == 'x86_64-apple-darwin'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! arch -x86_64 /usr/bin/true; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
+          arch -x86_64 /usr/bin/true
+
+      - name: Checkout pinned Bambu Studio contract source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: bambulab/BambuStudio
+          ref: ${{ env.STUDIO_COMMIT }}
+          path: .release/BambuStudio
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Download pinned Boost source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .release
+          curl --fail --location --retry 3 --output .release/boost-1.84.0.tar.gz "$BOOST_URL"
+          printf '%s  %s\n' "$BOOST_SHA256" .release/boost-1.84.0.tar.gz | shasum -a 256 --check
+
+      - name: Build target release artifacts and ABI probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --release -p pandar-app --bin pandar --target "${{ matrix.target }}"
+          cargo build --release -p pandar-network-plugin -p pandar-bambu-source \
+            --target "${{ matrix.target }}"
+          cargo build --release --target "${{ matrix.target }}" \
+            --manifest-path tools/studio-abi-contract/Cargo.toml
+
+      - name: Package exact three-file archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref_name="${GITHUB_REF_NAME:-manual}"
+          safe_ref="${ref_name//\//-}"
+          archive="pandar-release-${safe_ref}-${{ matrix.label }}.tar.gz"
+          stage="$RUNNER_TEMP/pandar-release-${{ matrix.label }}"
+          mkdir -p "$stage" dist
+          cp "target/${{ matrix.target }}/release/pandar" "$stage/pandar"
+          cp "target/${{ matrix.target }}/release/libpandar_network_plugin.dylib" "$stage/libpandar_network_plugin.dylib"
+          cp "target/${{ matrix.target }}/release/libpandar_bambu_source.dylib" "$stage/libpandar_bambu_source.dylib"
+          COPYFILE_DISABLE=1 tar -C "$stage" -czf "dist/$archive" \
+            pandar libpandar_network_plugin.dylib libpandar_bambu_source.dylib
+          (cd dist && shasum -a 256 "$archive" > "$archive.sha256")
+
+      - name: Smoke packaged archive for target architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref_name="${GITHUB_REF_NAME:-manual}"
+          safe_ref="${ref_name//\//-}"
+          archive="dist/pandar-release-${safe_ref}-${{ matrix.label }}.tar.gz"
+          cargo run --target "${{ matrix.target }}" \
+            --manifest-path tools/release-smoke/Cargo.toml -- \
+            --label "${{ matrix.label }}" \
+            --archive "$archive" \
+            --checksum "$archive.sha256" \
+            --cli-name pandar \
+            --plugin-name libpandar_network_plugin.dylib \
+            --source-name libpandar_bambu_source.dylib \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --abi-probe tools/studio-abi-contract/target/${{ matrix.target }}/release/pandar-studio-abi-contract \
+            --abi-probe-arg --studio-source \
+            --abi-probe-arg "$GITHUB_WORKSPACE/.release/BambuStudio" \
+            --abi-probe-arg --boost-archive \
+            --abi-probe-arg "$GITHUB_WORKSPACE/.release/boost-1.84.0.tar.gz"
+
+      - name: Upload macOS release archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pandar-release-${{ matrix.label }}
+          path: dist/*
+          if-no-files-found: error
+
   quality-gate:
     name: Verify Checks for release SHA
     runs-on: ubuntu-latest
@@ -261,6 +372,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - linux-amd64
+      - macos
       - windows-amd64
       - quality-gate
     if: startsWith(github.ref, 'refs/tags/v')
