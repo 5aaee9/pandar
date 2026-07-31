@@ -231,8 +231,9 @@ launch Bambu Studio or provide real Studio compatibility evidence; every Studio 
 
 1. Quit Studio and back up any existing network-plugin and BambuSource files in its data-directory
    `plugins` folder.
-2. Install both artifacts with `pandar install-network-plugin --plugin-file <network-library>
-   --source-file <source-library> --data-dir <BambuStudio-data-dir>`.
+2. From an unpacked release directory, install both artifacts with
+   `pandar install-network-plugin --data-dir <BambuStudio-data-dir>`. For non-release artifacts, pass
+   `--plugin-file <network-library> --source-file <source-library>` explicitly.
 3. Confirm the installed source name is exactly `BambuSource.dll`, `libBambuSource.so`, or
    `libBambuSource.dylib` for the current platform. Keep `BambuStudio.conf.pandar-bak` for rollback.
 4. To roll back, quit Studio, restore the two backed-up plugin files (or remove Pandar's files when no

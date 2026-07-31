@@ -16,6 +16,8 @@
 
 ## Completed
 
+- Made `pandar install-network-plugin` default to the platform-specific network plugin and BambuSource companion shipped beside the CLI in the current unpacked release directory, while preserving `--plugin-file` and `--source-file` overrides for development builds. CLI parsing coverage locks the zero-file-flag path; the next tagged release should rerun native packaged smoke with the simplified install command.
+
 - Fixed the Print Jobs list rendering each `JobRow` list item inside another list item, which produced a React hydration error in production markup. The history list now owns exactly one `li` per job while preserving content-visibility styling, and a focused DOM regression rejects nested list items.
 
 - Published `v0.1.0` from `d50ef4223daf1fe5f45b6adc254ec91a9823bacc`. Release run `30654892795` natively built and smoke-tested the Linux amd64 and Windows amd64 three-file archives plus the Windows Studio hook bundle before publishing all six desktop assets; Checks run `30654892831` and Docker/Helm run `30654892588` passed. Downloaded sidecars, exact archive layouts, the Linux packaged CLI/plugin/full 130-name ABI contract, GHCR manifests, and Helm chart `0.1.0` were independently rechecked after publication. The first tag attempt had exposed that compiling the Linux C++ ABI shim with Zig while probing it with host `libstdc++` corrupted `std::string`; Linux plugins now use the runner's native GNU toolchain while Zig remains scoped to the standalone musl CLI. A real Windows Studio session remains unclaimed evidence.

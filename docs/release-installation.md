@@ -207,11 +207,16 @@ both libraries before agent creation. Use the archive's platform files:
 | Windows | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      | none; successor unbuilt                      |
 | macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | none; untested                               |
 
-Install both with the CLI:
+Install both from an unpacked release archive with the CLI:
 
 ```text
-pandar install-network-plugin --plugin-file <network-library> --source-file <source-library> --data-dir <BambuStudio-data-dir>
+pandar install-network-plugin --data-dir <BambuStudio-data-dir>
 ```
+
+When the file flags are omitted, the command reads the platform-specific release files from the
+current working directory (`libpandar_network_plugin.so` and `libpandar_bambu_source.so` on Linux,
+or `pandar_network_plugin.dll` and `pandar_bambu_source.dll` on Windows). Use `--plugin-file` and
+`--source-file` to override either path for development builds.
 
 The installer writes Studio's exact names, including `libbambu_networking.so` and
 `libBambuSource.so` on Linux and `bambu_networking.dll` plus `BambuSource.dll` on Windows. The

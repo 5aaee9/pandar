@@ -432,6 +432,9 @@ Install both libraries with the CLI so the companion receives Studio's exact pla
 pandar install-network-plugin --plugin-file <network-library> --source-file <source-library> --data-dir <BambuStudio-data-dir>
 ```
 
+Both file flags are optional. Without them, the CLI selects the platform-specific release artifacts
+from the current working directory; development builds can continue to pass explicit paths.
+
 On Windows `02.08.01.x`, the unified `pandar-studio-hook` can install the latest native hook/plugin
 bundle directly from GitHub Release:
 
