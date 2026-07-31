@@ -5,10 +5,10 @@ use pandar_hub::{
     db::{Database, DatabaseConfig},
 };
 use pandar_network_plugin::installer::{InstallNetworkPluginOptions, install_network_plugin};
-use pandar_studio_dev_hook::decrypt::decrypt_bambu_studio_local_key_log;
-use pandar_studio_dev_hook::installer::{
-    InstallStudioDevHookOptions, UninstallStudioDevHookOptions, install_studio_dev_hook,
-    uninstall_studio_dev_hook,
+use pandar_studio_hook::decrypt::decrypt_bambu_studio_local_key_log;
+use pandar_studio_hook::installer::{
+    InstallStudioHookOptions, UninstallStudioHookOptions, install_studio_hook,
+    uninstall_studio_hook,
 };
 use serde::Serialize;
 use std::path::PathBuf;
@@ -44,19 +44,21 @@ enum Command {
         #[arg(long)]
         data_dir: Option<PathBuf>,
     },
-    #[command(about = "Install the Bambu Studio development log-key hook")]
-    InstallStudioDevHook {
-        #[arg(long)]
-        hook_file: PathBuf,
+    #[command(about = "Install the Pandar Bambu Studio hook from the latest GitHub Release")]
+    InstallStudioHook {
         #[arg(long)]
         studio_dir: Option<PathBuf>,
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
     },
-    #[command(about = "Uninstall the Bambu Studio development log-key hook")]
-    UninstallStudioDevHook {
+    #[command(about = "Uninstall the Pandar Bambu Studio hook")]
+    UninstallStudioHook {
         #[arg(long)]
         studio_dir: Option<PathBuf>,
+        #[arg(long)]
+        data_dir: Option<PathBuf>,
     },
-    #[command(about = "Decrypt a Bambu Studio log written with the development local-key hook")]
+    #[command(about = "Decrypt a Bambu Studio log written with the local-key hook")]
     DecryptBambuStudioLog {
         #[arg(long)]
         log_file: PathBuf,
@@ -120,18 +122,25 @@ async fn main() -> anyhow::Result<()> {
                 })?
             );
         }
-        Command::InstallStudioDevHook {
-            hook_file,
+        Command::InstallStudioHook {
             studio_dir,
+            data_dir,
         } => {
-            let summary = install_studio_dev_hook(InstallStudioDevHookOptions {
-                hook_file,
+            let summary = install_studio_hook(InstallStudioHookOptions {
                 studio_dir,
-            })?;
+                data_dir,
+            })
+            .await?;
             println!("{}", serde_json::to_string(&studio_hook_json(summary))?);
         }
-        Command::UninstallStudioDevHook { studio_dir } => {
-            let summary = uninstall_studio_dev_hook(UninstallStudioDevHookOptions { studio_dir })?;
+        Command::UninstallStudioHook {
+            studio_dir,
+            data_dir,
+        } => {
+            let summary = uninstall_studio_hook(UninstallStudioHookOptions {
+                studio_dir,
+                data_dir,
+            })?;
             println!("{}", serde_json::to_string(&studio_hook_json(summary))?);
         }
         Command::DecryptBambuStudioLog {
@@ -170,15 +179,21 @@ struct StudioHookJson {
     studio_dir: PathBuf,
     proxy_path: PathBuf,
     original_path: PathBuf,
+    plugin_path: PathBuf,
+    source_path: PathBuf,
+    config_path: PathBuf,
+    plugin_package_path: PathBuf,
 }
 
-fn studio_hook_json(
-    summary: pandar_studio_dev_hook::installer::StudioDevHookSummary,
-) -> StudioHookJson {
+fn studio_hook_json(summary: pandar_studio_hook::installer::StudioHookSummary) -> StudioHookJson {
     StudioHookJson {
         studio_dir: summary.studio_dir,
         proxy_path: summary.proxy_path,
         original_path: summary.original_path,
+        plugin_path: summary.plugin_path,
+        source_path: summary.source_path,
+        config_path: summary.config_path,
+        plugin_package_path: summary.plugin_package_path,
     }
 }
 
@@ -292,49 +307,65 @@ mod tests {
     }
 
     #[test]
-    fn parses_install_studio_dev_hook_subcommand() {
+    fn parses_install_studio_hook_subcommand() {
         let cli = Cli::parse_from([
             "pandar",
-            "install-studio-dev-hook",
-            "--hook-file",
-            "target/debug/pandar_studio_dev_hook.dll",
+            "install-studio-hook",
             "--studio-dir",
             "C:/Program Files/Bambu Studio",
+            "--data-dir",
+            "C:/Users/test/AppData/Roaming/BambuStudio",
         ]);
 
-        let Command::InstallStudioDevHook {
-            hook_file,
+        let Command::InstallStudioHook {
             studio_dir,
+            data_dir,
         } = cli.command
         else {
-            panic!("expected install-studio-dev-hook subcommand");
+            panic!("expected install-studio-hook subcommand");
         };
-        assert_eq!(
-            hook_file,
-            PathBuf::from("target/debug/pandar_studio_dev_hook.dll")
-        );
         assert_eq!(
             studio_dir,
             Some(PathBuf::from("C:/Program Files/Bambu Studio"))
+        );
+        assert_eq!(
+            data_dir,
+            Some(PathBuf::from("C:/Users/test/AppData/Roaming/BambuStudio"))
         );
     }
 
     #[test]
-    fn parses_uninstall_studio_dev_hook_subcommand() {
+    fn parses_uninstall_studio_hook_subcommand() {
         let cli = Cli::parse_from([
             "pandar",
-            "uninstall-studio-dev-hook",
+            "uninstall-studio-hook",
             "--studio-dir",
             "C:/Program Files/Bambu Studio",
+            "--data-dir",
+            "C:/Users/test/AppData/Roaming/BambuStudio",
         ]);
 
-        let Command::UninstallStudioDevHook { studio_dir } = cli.command else {
-            panic!("expected uninstall-studio-dev-hook subcommand");
+        let Command::UninstallStudioHook {
+            studio_dir,
+            data_dir,
+        } = cli.command
+        else {
+            panic!("expected uninstall-studio-hook subcommand");
         };
         assert_eq!(
             studio_dir,
             Some(PathBuf::from("C:/Program Files/Bambu Studio"))
         );
+        assert_eq!(
+            data_dir,
+            Some(PathBuf::from("C:/Users/test/AppData/Roaming/BambuStudio"))
+        );
+    }
+
+    #[test]
+    fn rejects_removed_studio_dev_hook_commands() {
+        assert!(Cli::try_parse_from(["pandar", "install-studio-dev-hook"]).is_err());
+        assert!(Cli::try_parse_from(["pandar", "uninstall-studio-dev-hook"]).is_err());
     }
 
     #[test]

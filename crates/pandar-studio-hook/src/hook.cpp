@@ -5,6 +5,8 @@
 #include <cstring>
 #include <string>
 
+#include "plugin_download_hook.hpp"
+
 namespace {
 
 constexpr char kTargetPath[] = "v1/analysis-st/tag/";
@@ -16,9 +18,9 @@ std::wstring appdata_log_path()
     wchar_t appdata[MAX_PATH] = {};
     DWORD len = GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH);
     if (len == 0 || len >= MAX_PATH) {
-        return L"pandar-studio-dev-hook.log";
+        return L"pandar-studio-hook.log";
     }
-    return std::wstring(appdata) + L"\\BambuStudio\\pandar-studio-dev-hook.log";
+    return std::wstring(appdata) + L"\\BambuStudio\\pandar-studio-hook.log";
 }
 
 void append_log(const char* message)
@@ -41,10 +43,10 @@ void append_log(const char* message)
     CloseHandle(file);
 }
 
-bool dev_hook_enabled()
+bool log_hook_enabled()
 {
     wchar_t value[8] = {};
-    DWORD len = GetEnvironmentVariableW(L"PANDAR_STUDIO_DEV_LOG_LOCAL_KEY", value, 8);
+    DWORD len = GetEnvironmentVariableW(L"PANDAR_STUDIO_LOG_LOCAL_KEY", value, 8);
     return len == 1 && value[0] == L'1';
 }
 
@@ -93,26 +95,28 @@ int patch_bambu_studio(HMODULE module)
 
 DWORD WINAPI patch_thread(void*)
 {
-    if (!dev_hook_enabled()) {
-        return 0;
-    }
-
-    append_log("Pandar Studio dev hook enabled; waiting for BambuStudio.dll");
+    bool patch_logs = log_hook_enabled();
+    if (patch_logs)
+        append_log("Pandar Studio hook enabled; waiting for BambuStudio.dll");
     for (int attempt = 0; attempt < 200; ++attempt) {
         HMODULE module = GetModuleHandleW(L"BambuStudio.dll");
         if (module != nullptr) {
-            int patched = patch_bambu_studio(module);
-            if (patched > 0) {
-                append_log("Patched Bambu Studio log key endpoint; new logs should use the local fallback key");
-            } else {
-                append_log("BambuStudio.dll loaded but log key endpoint was not found");
+            if (patch_logs) {
+                int patched = patch_bambu_studio(module);
+                if (patched > 0) {
+                    append_log("Patched Bambu Studio log key endpoint; new logs should use the local fallback key");
+                } else {
+                    append_log("BambuStudio.dll loaded but log key endpoint was not found");
+                }
             }
+            install_plugin_download_hook(module);
             return 0;
         }
         Sleep(50);
     }
 
-    append_log("Timed out waiting for BambuStudio.dll");
+    if (patch_logs)
+        append_log("Timed out waiting for BambuStudio.dll");
     return 0;
 }
 
@@ -202,17 +206,6 @@ extern "C" BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID)
 {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(instance);
-        if (dev_hook_enabled()) {
-            HMODULE module = GetModuleHandleW(L"BambuStudio.dll");
-            if (module != nullptr) {
-                int patched = patch_bambu_studio(module);
-                if (patched > 0) {
-                    append_log("Patched Bambu Studio log key endpoint during DLL attach");
-                    return TRUE;
-                }
-            }
-        }
-
         HANDLE thread = CreateThread(nullptr, 0, patch_thread, nullptr, 0, nullptr);
         if (thread != nullptr) {
             CloseHandle(thread);

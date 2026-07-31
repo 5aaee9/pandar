@@ -2995,7 +2995,7 @@ dependencies = [
  "pandar-agent",
  "pandar-hub",
  "pandar-network-plugin",
- "pandar-studio-dev-hook",
+ "pandar-studio-hook",
  "serde",
  "serde_json",
  "tokio",
@@ -3089,14 +3089,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "pandar-studio-dev-hook"
+name = "pandar-studio-hook"
 version = "0.1.0"
 dependencies = [
  "aes",
  "anyhow",
  "cbc",
  "cc",
+ "futures-util",
+ "pandar-network-plugin",
+ "reqwest",
+ "serde",
+ "sha2 0.10.9",
  "tempfile",
+ "tokio",
+ "zip",
 ]
 
 [[package]]

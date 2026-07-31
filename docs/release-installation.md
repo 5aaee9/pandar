@@ -63,6 +63,43 @@ tar -xzf pandar-release-<tag-or-sanitized-ref>-<target-label>.tar.gz
 
 If startup fails, keep the archive, checksum, target label, OS version, and terminal output for the release evidence record.
 
+## Windows Bambu Studio Hook
+
+For Bambu Studio `02.08.01.x` on Windows x86-64, the tagged release also publishes
+`pandar-studio-hook-02.08.01-windows-amd64.zip` and its `.sha256` sidecar. The bundle is built natively with
+MSVC and contains the Studio hook, network plugin, and sentinel-only BambuSource companion.
+
+Close Studio, then install the hook with a Windows `pandar.exe`. Use an elevated terminal when the
+Studio program directory is under `Program Files`:
+
+```powershell
+.\pandar.exe install-studio-hook `
+  --studio-dir "C:\Program Files\Bambu Studio" `
+  --data-dir "$env:APPDATA\BambuStudio"
+```
+
+The command resolves the latest GitHub Release, downloads both fixed-name assets, verifies the
+SHA-256 sidecar, rejects unexpected ZIP members, installs the current Pandar plugin immediately, and
+caches a Studio-shaped `%LOCALAPPDATA%\Pandar\studio-hook\networking_plugins.zip`. The hook remains a `swscale-8.dll` proxy and keeps
+the original as `swscale8original.dll`. In supported Studio builds it intercepts only the final
+Windows rename of `networking_plugins.zip`, replacing Bambu's downloaded archive with the verified
+cached Pandar archive. If that cache is missing, the hook fails the plugin installation instead of
+falling back to Bambu's archive. Other Studio downloads are unchanged.
+
+Uninstall the hook while Studio is closed:
+
+```powershell
+.\pandar.exe uninstall-studio-hook `
+  --studio-dir "C:\Program Files\Bambu Studio" `
+  --data-dir "$env:APPDATA\BambuStudio"
+```
+
+Uninstall restores `swscale-8.dll` and removes the cached replacement package. It does not remove the
+currently installed Pandar network plugin. Set `PANDAR_STUDIO_LOG_LOCAL_KEY=1` before starting Studio
+when the existing local log-key patch is also required. The hook refuses plugin-download replacement
+outside Studio `02.08.01.x`; reinstall after a Studio application update because the application
+installer may replace `swscale-8.dll`.
+
 ## Hub, Web, And Agent Deployment
 
 The release archive provides the operator CLI and Bambu Studio plugin library. Deploy the running services with the existing container or NixOS paths:

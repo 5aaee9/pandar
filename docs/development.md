@@ -432,6 +432,21 @@ Install both libraries with the CLI so the companion receives Studio's exact pla
 pandar install-network-plugin --plugin-file <network-library> --source-file <source-library> --data-dir <BambuStudio-data-dir>
 ```
 
+On Windows `02.08.01.x`, the unified `pandar-studio-hook` can install the latest native hook/plugin
+bundle directly from GitHub Release:
+
+```text
+pandar install-studio-hook --studio-dir <Bambu-Studio-program-dir> --data-dir <BambuStudio-data-dir>
+```
+
+The installer verifies the release sidecar before extracting the exact three bundle members, installs
+the network plugin and BambuSource companion, and writes
+`%LOCALAPPDATA%/Pandar/studio-hook/networking_plugins.zip`. The injected `swscale-8.dll`
+proxy patches Windows `MoveFileExW`/`MoveFileW` imports and substitutes only Studio's final
+`networking_plugins.zip` rename. The replacement is file-version-gated to Studio `2.8.1.*`; a missing
+cache blocks that plugin install rather than allowing an official-plugin fallback. The existing log
+key patch is enabled independently with `PANDAR_STUDIO_LOG_LOCAL_KEY=1`.
+
 Typical Studio data/plugin locations:
 
 - Linux AppImage or extracted builds: use the installer to place both exact library names in Studio's
