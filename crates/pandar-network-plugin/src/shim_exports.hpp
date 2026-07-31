@@ -65,7 +65,7 @@ PANDAR_STUDIO_EXPORT(bambu_network_ping_bind, func_ping_bind, int, (void*, std::
 PANDAR_STUDIO_EXPORT(bambu_network_bind_detect, func_bind_detect, int, (void*, std::string, std::string, BBL::detectResult&))
 PANDAR_STUDIO_EXPORT(bambu_network_report_consent, func_report_consent, int, (void*, std::string))
 PANDAR_STUDIO_EXPORT(bambu_network_set_server_callback, func_set_server_callback, int, (void*, BBL::OnServerErrFn))
-PANDAR_STUDIO_EXPORT(bambu_network_bind, func_bind, int, (void*, std::string, std::string, std::string, std::string, std::string, bool, BBL::OnUpdateStatusFn))
+PANDAR_STUDIO_EXPORT(bambu_network_bind, func_bind, int, (void*, std::string, std::string, std::string, std::string, bool, BBL::OnUpdateStatusFn))
 PANDAR_STUDIO_EXPORT(bambu_network_unbind, func_unbind, int, (void*, std::string))
 PANDAR_STUDIO_EXPORT(bambu_network_get_bambulab_host, func_get_bambulab_host, std::string, (void*))
 PANDAR_STUDIO_EXPORT(bambu_network_get_user_selected_machine, func_get_user_selected_machine, std::string, (void*))
@@ -123,8 +123,6 @@ PANDAR_STUDIO_EXPORT(bambu_network_get_model_mall_rating, func_get_model_mall_ra
 PANDAR_STUDIO_EXPORT(bambu_network_get_mw_user_preference, func_get_mw_user_preference, int, (void*, std::function<void(std::string)>))
 PANDAR_STUDIO_EXPORT(bambu_network_get_mw_user_4ulist, func_get_mw_user_4ulist, int, (void*, int, int, std::function<void(std::string)>))
 PANDAR_STUDIO_EXPORT(bambu_network_get_hms_snapshot, func_get_hms_snapshot, int, (void*, std::string&, std::string&, std::function<void(std::string, int)>))
-PANDAR_STUDIO_EXPORT(bambu_network_sync_ams_filaments, func_sync_ams_filaments, int, (void*, BBL::AmsSyncParams, std::string*))
-
 PANDAR_STUDIO_EXPORT(ft_abi_version, fn_ft_abi_version, int, ())
 PANDAR_STUDIO_EXPORT(ft_free, fn_ft_free, void, (void*))
 PANDAR_STUDIO_EXPORT(ft_job_result_destroy, fn_ft_job_result_destroy, void, (Slic3r::ft_job_result*))

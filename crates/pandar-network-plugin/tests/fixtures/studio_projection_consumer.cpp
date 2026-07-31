@@ -52,25 +52,25 @@ public:
     {
         std::string cfg = print["cfg"].get<std::string>();
         if (!cfg.empty()) {
-#include "device_cfg_camera.4367-4368.cpp"
+#include "device_cfg_camera.4352-4353.cpp"
         }
         std::string fun = print["fun"].get<std::string>();
         if (!fun.empty()) {
-#include "device_fun_agora.4376-4377.cpp"
-#include "device_fun_camera.4388-4390.cpp"
+#include "device_fun_agora.4361-4362.cpp"
+#include "device_fun_camera.4373-4375.cpp"
         }
     }
 
     void parse_aux(json print)
     {
-#include "device_aux.4433-4441.cpp"
+#include "device_aux.4417-4425.cpp"
     }
 
     void parse_wtm(json print)
     {
         std::string fun = print["fun"].get<std::string>();
         if (!fun.empty()) {
-#include "device_fun_wtm.4396.cpp"
+#include "device_fun_wtm.4381.cpp"
         }
     }
 
@@ -78,7 +78,7 @@ public:
     {
         std::string fun = print["fun"].get<std::string>();
         if (!fun.empty()) {
-#include "device_fun_ext_change_assist.4393.cpp"
+#include "device_fun_ext_change_assist.4378.cpp"
         }
     }
 
@@ -106,8 +106,8 @@ private:
     NozzleSystemProbe* m_nozzle_system{&nozzle_system};
 };
 
-#include "device_check_enable.4280-4288.cpp"
-#include "device_flag_bits.4474-4485.cpp"
+#include "device_check_enable.4265-4273.cpp"
+#include "device_flag_bits.4458-4469.cpp"
 #include "dev_storage.7-16.cpp"
 
 class DevUtil {

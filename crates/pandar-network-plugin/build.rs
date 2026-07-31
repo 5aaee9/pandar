@@ -130,8 +130,8 @@ fn expected_abi_symbols(manifest_dir: &str) -> Vec<String> {
         symbols.len(),
         "duplicate Studio export symbol"
     );
-    assert_eq!(network_count, 109, "Studio network export count drifted");
+    assert_eq!(network_count, 108, "Studio network export count drifted");
     assert_eq!(file_transfer_count, 21, "Studio FT export count drifted");
-    assert_eq!(symbols.len(), 130, "Studio export map total drifted");
+    assert_eq!(symbols.len(), 129, "Studio export map total drifted");
     symbols
 }

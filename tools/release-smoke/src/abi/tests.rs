@@ -11,21 +11,21 @@ fn canonical_export_map_is_exact_target_contract() {
 
     let symbols = expected_symbols(repo_root).unwrap();
 
-    assert_eq!(symbols.network_count, 109);
+    assert_eq!(symbols.network_count, 108);
     assert_eq!(symbols.file_transfer_count, 21);
-    assert_eq!(symbols.all.len(), 130);
-    assert!(symbols.all.contains("bambu_network_sync_ams_filaments"));
+    assert_eq!(symbols.all.len(), 129);
+    assert!(!symbols.all.contains("bambu_network_sync_ams_filaments"));
 }
 
 #[test]
-fn exact_export_validation_rejects_129_and_131_target_symbols() {
+fn exact_export_validation_rejects_128_and_130_target_symbols() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
         .unwrap();
     let expected = expected_symbols(repo_root).unwrap().all;
     let mut missing_one = expected.clone();
-    missing_one.remove("bambu_network_sync_ams_filaments");
+    missing_one.remove("bambu_network_get_version");
     let mut extra_one = expected.clone();
     extra_one.insert("bambu_network_decoy".to_owned());
 

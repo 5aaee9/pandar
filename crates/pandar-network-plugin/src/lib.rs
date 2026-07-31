@@ -49,7 +49,7 @@ pub use plugin_session::{
 };
 pub use studio_abi::{
     NETWORK_AGENT_VERSION, pandar_plugin_camera_access_result, pandar_plugin_local_connect_json,
-    pandar_plugin_network_agent_version, pandar_plugin_sync_ams_filaments,
+    pandar_plugin_network_agent_version,
 };
 pub use studio_message::{
     PluginStudioMessageResult, pandar_plugin_classify_status_request,

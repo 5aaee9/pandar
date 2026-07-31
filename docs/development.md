@@ -141,9 +141,9 @@ Deploy in this exact order: database migration, dual-capability Agents, all Hubs
 ## Bambu Studio Network Plugin
 
 `crates/pandar-network-plugin` builds the Hub-backed adapter for exact Bambu Studio commit
-`ba049f6a2e08c3b6033660bb84da80c08722974b` (`02.08.01.55`, network agent
-`02.08.01.52`). The target-header caller uses upstream Boost `1.84.0` and freezes 109 network plus 21
-File Transfer declarations (130 unique exports).
+`42d319c6692fa8e64790fddf0cdaafd2a4254bcc` (`02.07.01.62`, network agent
+`02.07.01.51`). The target-header caller uses upstream Boost `1.84.0` and freezes 108 network plus 21
+File Transfer declarations (129 unique exports).
 
 Important boundaries:
 
@@ -246,7 +246,7 @@ Plugin credentials are revocable tenant-owned credentials. They do not carry `ag
 23 has automated ABI/status/command/print-task probes and a manual smoke runbook, but real exact-Studio
 compatibility claims follow the per-platform evidence in `docs/compatibility/bambu-studio-plugin.md`.
 
-The current final16 Linux candidate freezes source `HEAD`
+The historical Public Beta final16 Linux candidate froze source `HEAD`
 `2ba0d1f2755501ea9e7d4babcf176db40638f643` as `pandar-bambu-final16-019f7b10.tar.gz`: 2,793,904
 bytes, archive SHA-256 `24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039`,
 and canonical source-tree SHA-256
@@ -390,10 +390,10 @@ The historical final11 Ubuntu 22.04 archive SHA-256 is
 `7b7ac417e1c781fbb682552676822457cac6f57a1eb1dd288f2d851f1181a0c6`; it passed workspace
 Nextest 1,750/1,750, the full ABI/release-smoke path, and 21 File Transfer entrypoints x 256
 ASan/LSan ownership cycles. All three historical Linux files require at most `GLIBC_2.34`; none is the
-current candidate. Final16 is the current verified Linux native/ASan candidate and has the narrow
-exact-AppImage model-task request/response/callback evidence described above. Real authenticated
-Linux Studio through Hub and Agent, real Windows Studio, macOS, printer hardware, print actions, and
-live firmware remain untested.
+current candidate. Final16 remains historical Public Beta Linux native/ASan evidence with the narrow
+exact-AppImage model-task request/response/callback evidence described above. Stable `02.07.01.62`
+Linux and authenticated Studio through Hub and Agent, real Windows Studio, printer hardware, print
+actions, and live firmware remain untested.
 
 Studio's `dev_id` is resolved to an authorized Hub printer, but only the Hub printer id crosses the
 HTTP boundary. Hub owns stable Studio submission/task ids, durable job/command state, plate and
@@ -422,9 +422,10 @@ cargo build -p pandar-network-plugin -p pandar-bambu-source
 ```
 
 The output libraries are under `target/{debug,release}`. A current release candidate contains exactly
-the CLI, network plugin, and BambuSource companion at top level. Native release-smoke is currently
-scoped to `linux-amd64` and `windows-amd64`; it verifies 130 network-plugin exports plus the companion
-sentinel/no-`Bambu_*` rule. Historical two-file/129-export packages are not current candidates.
+the CLI, network plugin, and BambuSource companion at top level. Native release-smoke covers
+`linux-amd64`, `macos-amd64`, `macos-arm64`, and `windows-amd64`; it verifies the current 129-name
+network-plugin contract plus the companion sentinel/no-`Bambu_*` rule. Historical `02.08.01.55`
+130-name packages are not current candidates.
 
 Install both libraries with the CLI so the companion receives Studio's exact platform name:
 
@@ -435,7 +436,7 @@ pandar install-network-plugin --plugin-file <network-library> --source-file <sou
 Both file flags are optional. Without them, the CLI selects the platform-specific release artifacts
 from the current working directory; development builds can continue to pass explicit paths.
 
-On Windows `02.08.01.x`, the unified `pandar-studio-hook` can install the latest native hook/plugin
+On Windows `02.07.01.x`, the unified `pandar-studio-hook` can install the latest native hook/plugin
 bundle directly from GitHub Release:
 
 ```text
@@ -446,7 +447,7 @@ The installer verifies the release sidecar before extracting the exact three bun
 the network plugin and BambuSource companion, and writes
 `%LOCALAPPDATA%/Pandar/studio-hook/networking_plugins.zip`. The injected `swscale-8.dll`
 proxy patches Windows `MoveFileExW`/`MoveFileW` imports and substitutes only Studio's final
-`networking_plugins.zip` rename. The replacement is file-version-gated to Studio `2.8.1.*`; a missing
+`networking_plugins.zip` rename. The replacement is file-version-gated to Studio `2.7.1.*`; a missing
 cache blocks that plugin install rather than allowing an official-plugin fallback. The existing log
 key patch is enabled independently with `PANDAR_STUDIO_LOG_LOCAL_KEY=1`.
 
@@ -456,10 +457,11 @@ Typical Studio data/plugin locations:
   data-directory `plugins` folder, then start the same extracted Studio tree.
 - Windows: use the installer to place both exact DLL names in Studio's data-directory `plugins` folder
   and keep both originals for rollback.
-- macOS: future evidence must install both exact dylib names with a native candidate. Gatekeeper
-  signing/notarization and current real Studio evidence are not available.
+- macOS: install both exact dylib names from the matching archive. Local `02.07.01.62` arm64
+  module-load evidence exists; distribution signing/notarization and macOS x86_64 Studio loading
+  remain separate release gates.
 
-The current final16 official-AppImage gate used AppImage SHA-256
+The historical Public Beta final16 official-AppImage gate used AppImage SHA-256
 `e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995`, made exactly one
 model-task request, received exactly one HTTP 200, and completed one ordered four-event lifecycle
 through callback return. Its evidence-manifest SHA-256 is

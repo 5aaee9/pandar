@@ -8,7 +8,7 @@ use std::{
 
 use crate::{boost::prepare_archive, http_probe::PrintSink};
 
-pub const FULL_MODES: &[&str] = &["version", "bind", "print", "ams", "ft"];
+pub const FULL_MODES: &[&str] = &["version", "bind", "print", "ft"];
 const RUN_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub struct NativeReport {

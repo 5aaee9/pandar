@@ -6,7 +6,7 @@ use std::{io, path::PathBuf};
 use crate::host::NativeTarget;
 
 const EXPORT_MAP_PATH: &str = "crates/pandar-network-plugin/src/shim_exports.hpp";
-const NETWORK_COUNT: usize = 109;
+const NETWORK_COUNT: usize = 108;
 const FILE_TRANSFER_COUNT: usize = 21;
 const TOTAL_COUNT: usize = NETWORK_COUNT + FILE_TRANSFER_COUNT;
 pub(crate) const SOURCE_SENTINEL: &str = "pandar_bambu_source_sentinel";
@@ -78,12 +78,6 @@ fn parse_expected_symbols(content: &str) -> Result<AbiSymbols, String> {
             all.len()
         ));
     }
-    if !all.contains("bambu_network_sync_ams_filaments") {
-        return Err(
-            "canonical Studio export map is missing bambu_network_sync_ams_filaments".to_owned(),
-        );
-    }
-
     Ok(AbiSymbols {
         all,
         network_count,

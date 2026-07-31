@@ -74,7 +74,7 @@ fn target_studio_symbols() -> BTreeSet<String> {
             .iter()
             .filter(|symbol| symbol.starts_with("bambu_network_"))
             .count(),
-        109
+        108
     );
     assert_eq!(
         symbols

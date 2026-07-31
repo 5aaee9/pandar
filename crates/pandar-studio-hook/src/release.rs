@@ -9,8 +9,8 @@ use tempfile::TempDir;
 use zip::ZipArchive;
 
 const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/5aaee9/pandar/releases/latest";
-const BUNDLE_NAME: &str = "pandar-studio-hook-02.08.01-windows-amd64.zip";
-const CHECKSUM_NAME: &str = "pandar-studio-hook-02.08.01-windows-amd64.zip.sha256";
+const BUNDLE_NAME: &str = "pandar-studio-hook-02.07.01-windows-amd64.zip";
+const CHECKSUM_NAME: &str = "pandar-studio-hook-02.07.01-windows-amd64.zip.sha256";
 const MAX_BUNDLE_BYTES: usize = 128 * 1024 * 1024;
 const MAX_CHECKSUM_BYTES: usize = 4096;
 const MAX_EXTRACTED_BYTES: u64 = 256 * 1024 * 1024;

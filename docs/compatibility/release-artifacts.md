@@ -6,8 +6,8 @@ BambuSource sentinel policy. It does not prove that Bambu Studio loaded the libr
 printer accepted an action.
 
 The current Studio target is official commit
-`ba049f6a2e08c3b6033660bb84da80c08722974b`: Studio `02.08.01.55`, network agent
-`02.08.01.52`, upstream Boost `1.84.0`, and 109 network plus 21 File Transfer declarations (130
+`42d319c6692fa8e64790fddf0cdaafd2a4254bcc`: Studio `02.07.01.62`, network agent
+`02.07.01.51`, upstream Boost `1.84.0`, and 108 network plus 21 File Transfer declarations (129
 names in the Studio contract set). The contract count is not the dynamic library's total export count;
 the historical final12 Windows PE has 271 exports after Pandar flat-FFI and aws-lc exports are included.
 
@@ -22,7 +22,7 @@ the historical final12 Windows PE has 271 exports after Pandar flat-FFI and aws-
 | `untested` | No evidence has been recorded. |
 | `in_progress` | Implementation exists, but one or more named final gates remain pending. |
 
-## Required `02.08.01.55` Candidate Layout
+## Required `02.07.01.62` Candidate Layout
 
 Each candidate archive has exactly three top-level files:
 
@@ -33,8 +33,8 @@ Each candidate archive has exactly three top-level files:
 | `macos-arm64` | `pandar` | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` |
 | `windows-amd64` | `pandar.exe` | `pandar_network_plugin.dll` | `pandar_bambu_source.dll` |
 
-The network plugin must expose the complete pinned 130-name Studio contract set; this check does not
-require the binary to have only 130 total exports. The companion is a sentinel-only, non-media
+The network plugin must expose the complete pinned 129-name Studio contract set; this check does not
+require the binary to have only 129 total exports. The companion is a sentinel-only, non-media
 startup-gate library: it must export `pandar_bambu_source_sentinel` and no `Bambu_*` symbol. Studio
 installation renames the two libraries to its exact platform filenames, including
 `libbambu_networking.so` plus `libBambuSource.so` on Linux, and `bambu_networking.dll` plus
@@ -51,7 +51,7 @@ amd64, macOS amd64/arm64, and Windows amd64 desktop archives, includes the Bambu
 runs release-smoke for each target architecture with the pinned Studio and Boost inputs against the
 packaged plugin before publication. The macOS jobs suppress AppleDouble metadata so each archive
 retains the exact three-file layout. The Windows job uses MSVC and also packages the fixed
-`pandar-studio-hook-02.08.01-windows-amd64.zip` asset plus its checksum. That bundle has exactly
+`pandar-studio-hook-02.07.01-windows-amd64.zip` asset plus its checksum. That bundle has exactly
 `pandar_studio_hook.dll`, `pandar_network_plugin.dll`, and `pandar_bambu_source.dll`; the Rust
 installer rejects any other layout. The initial `v0.1.0` workflow run `30653076144` built and
 smoke-tested the native Windows artifacts, but rejected the Linux artifact because its Zig-built C++
@@ -59,10 +59,31 @@ shim was ABI-incompatible with the host `libstdc++` probe. Linux plugin builds n
 toolchain. Replacement run `30654892795` passed both native build/smoke jobs and published the
 release; a real Windows Studio run still must verify the download replacement.
 
-## 2026-08-01 Local macOS arm64 Validation
+## 2026-08-01 Stable 2.7.1 macOS arm64 Validation
 
 An untagged Apple Silicon validation run on macOS `26.4` built the current three-file layout and ran
-the complete native release-smoke against the pinned Studio commit and Boost archive. The local
+the complete native release-smoke against stable Studio commit
+`42d319c6692fa8e64790fddf0cdaafd2a4254bcc` and the pinned Boost archive. The archive SHA-256 was
+`89ac2037fceda43d21fbad113390356399977fdaf3e22931f068e58dfcafd451`; the plugin and BambuSource
+SHA-256 values were `efb070abae4db288e78098a096db64028acf7b978922fd162050afa8a98a6bd3` and
+`3c45839eb1cbb656015bd79d5a66468d194b9511f90f61f1566ffe1da673bb63`. CLI execution, the exact
+108-network-plus-21-File-Transfer export set, the sentinel-only companion policy, and all four native
+`version,bind,print,ft` ABI modes passed on `aarch64-apple-darwin`.
+
+Computer Use then launched the installed official `/Applications/BambuStudio.app`; its About dialog
+reported `2.7.1.62`. With module-certificate validation disabled only in the isolated test
+configuration, Studio PID `56281` reached its normal home UI and `lsof` plus `vmmap` showed both exact
+Pandar dylibs mapped from `BambuStudio/plugins`. Their on-disk hashes remained the packaged hashes
+above. No sign-in, ticket/token/profile, Hub/Agent, printer, print/control, firmware, or hardware path
+was exercised. The original plugin directory, `BambuStudio.conf`, `BambuNetworkEngine.conf`, and
+application preference plist were restored after the test; the official network/source hashes after
+restoration were `88f1f98b548690ce472177e10f92b9aa580cefec6904893f0c5b32a162860126` and
+`0b9e8f3508b9d4dbbc97ed9ccb312c2d8871464e940fc73567fb070e55a51f5a`.
+
+## Historical 2026-08-01 Public Beta macOS arm64 Validation
+
+An untagged Apple Silicon validation run on macOS `26.4` built the historical Public Beta three-file
+layout and ran the complete native release-smoke against its pinned Studio commit and Boost archive. The local
 archive SHA-256 was `1e488678543f882a7a6007746725d7319de6fdb19496ee567a6bbc03212603a9`;
 the plugin and BambuSource SHA-256 values were
 `84ab2155b6632f5d172ace0e2930ac93fe0976656451917344920af7c0206004` and
@@ -117,9 +138,9 @@ Helm chart `0.1.0` has OCI digest
 `sha256:c36ca756aec016d501d32c81054986a1b5cc1ee34f0e3c8773d2f995a618108b` and declares
 `appVersion: v0.1.0`.
 
-## Current Final16 Linux Candidate Evidence
+## Historical Final16 Linux Candidate Evidence
 
-Final16 is the current verified Linux candidate. Its immutable source input
+Final16 is the historical verified Linux candidate for exact Public Beta `02.08.01.55`. Its immutable source input
 `pandar-bambu-final16-019f7b10.tar.gz` is 2,793,904 bytes with SHA-256
 `24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039`; the canonical source-tree
 SHA-256 is `c62c92167f466a915400953ec2d0e126bc34b3c6509a747ddee17dce8d52bf30`. The earlier

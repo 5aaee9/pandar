@@ -23,8 +23,8 @@ Bambu Studio -(network plugin ABI)-> pandar-network-plugin -(HTTP / WebSocket)->
 `pandar-auth` is the optional self-hosted Better Auth issuer app. It owns email magic-link sign-in, optional post-login passkey binding, its own SQLite database, and JWT/JWKS issuance. The hub does not read Better Auth tables; it only verifies emitted JWTs through the existing external-auth contract.
 
 `pandar-network-plugin` is a Hub-backed Bambu Studio dynamic-library adapter. The active exact contract
-is Studio commit `ba049f6a2e08c3b6033660bb84da80c08722974b` (`02.08.01.55`) with Boost
-`1.84.0` and 109 network plus 21 File Transfer declarations. It connects only to `pandar-hub`; it must
+is Studio commit `42d319c6692fa8e64790fddf0cdaafd2a4254bcc` (`02.07.01.62`) with Boost
+`1.84.0` and 108 network plus 21 File Transfer declarations. It connects only to `pandar-hub`; it must
 not connect directly to `pandar-agent` or Bambu machines, and local machine access remains the agent's
 responsibility.
 
@@ -443,8 +443,8 @@ Agent phase status after Phase 15:
 
 ### pandar-network-plugin
 
-- Dynamic-library crate implementing the pinned Studio `02.08.01.55` network-plugin ABI: 109 network
-  plus 21 File Transfer declarations, 130 unique exports.
+- Dynamic-library crate implementing the pinned Studio `02.07.01.62` network-plugin ABI: 108 network
+  plus 21 File Transfer declarations, 129 unique exports.
 - File Transfer, direct discovery/bind/certificate handling, and direct printer sockets keep their
   exact ABI shape but remain explicit non-success paths.
 - Connects only to `pandar-hub` through HTTP/WebSocket APIs.

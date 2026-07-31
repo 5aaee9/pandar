@@ -27,10 +27,9 @@ plugin, and verifies the checksum, exact layout, companion policy, and CLI start
 The separate Windows Studio hook bundle is also
 built natively with MSVC.
 
-Historical two-file/129-export archives are not current Studio candidates. Final16 remains the latest
-recorded Linux evidence, while the tag workflow itself and the post-final13 native Windows package
-remain untested until the first successful tagged run is recorded in
-`docs/compatibility/release-artifacts.md`.
+The current Studio contract contains 108 network and 21 File Transfer names. Historical
+`02.08.01.55` 130-name archives are not current Studio candidates; their final13/final16 evidence is
+retained only as history in `docs/compatibility/release-artifacts.md`.
 
 ## Checksum Verification
 
@@ -68,8 +67,8 @@ If startup fails, keep the archive, checksum, target label, OS version, and term
 
 ## Windows Bambu Studio Hook
 
-For Bambu Studio `02.08.01.x` on Windows x86-64, the tagged release also publishes
-`pandar-studio-hook-02.08.01-windows-amd64.zip` and its `.sha256` sidecar. The bundle is built natively with
+For Bambu Studio `02.07.01.x` on Windows x86-64, the tagged release also publishes
+`pandar-studio-hook-02.07.01-windows-amd64.zip` and its `.sha256` sidecar. The bundle is built natively with
 MSVC and contains the Studio hook, network plugin, and sentinel-only BambuSource companion.
 
 Close Studio, then install the hook with a Windows `pandar.exe`. Use an elevated terminal when the
@@ -100,7 +99,7 @@ Uninstall the hook while Studio is closed:
 Uninstall restores `swscale-8.dll` and removes the cached replacement package. It does not remove the
 currently installed Pandar network plugin. Set `PANDAR_STUDIO_LOG_LOCAL_KEY=1` before starting Studio
 when the existing local log-key patch is also required. The hook refuses plugin-download replacement
-outside Studio `02.08.01.x`; reinstall after a Studio application update because the application
+outside Studio `02.07.01.x`; reinstall after a Studio application update because the application
 installer may replace `swscale-8.dll`.
 
 ## Hub, Web, And Agent Deployment
@@ -202,14 +201,14 @@ Use root-owned runtime `EnvironmentFile` paths outside `/nix/store` for every Ni
 
 ## Bambu Studio Plugin And BambuSource Replacement
 
-Pinned Studio commit `ba049f6a2e08c3b6033660bb84da80c08722974b` (`02.08.01.55`) requires
+Pinned Studio commit `42d319c6692fa8e64790fddf0cdaafd2a4254bcc` (`02.07.01.62`) requires
 both libraries before agent creation. Use the archive's platform files:
 
-| OS      | Network plugin                   | BambuSource companion          | Current native candidate                     |
-| ------- | -------------------------------- | ------------------------------ | -------------------------------------------- |
-| Linux   | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    | `pandar-final16-linux-amd64-019f7b10.tar.gz` |
-| Windows | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      | none; successor unbuilt                      |
-| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | local arm64 validated; untagged              |
+| OS      | Network plugin                   | BambuSource companion          | Current stable validation              |
+| ------- | -------------------------------- | ------------------------------ | -------------------------------------- |
+| Linux   | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    | next tagged archive remains untested   |
+| Windows | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      | next tagged archive remains untested   |
+| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | local arm64 validated; untagged        |
 
 Install both from an unpacked release archive with the CLI:
 
@@ -234,8 +233,8 @@ Keep both original Studio library files for rollback. Typical locations vary by 
   `plugins` folder.
 - Windows: install both exact DLL names in Studio's data-directory `plugins` folder.
 - macOS: install both exact dylib names in
-  `~/Library/Application Support/BambuStudio/plugins`. Public Beta builds, including the pinned
-  `02.08.01.55` target, use `~/Library/Application Support/BambuStudioBeta/plugins`; pass
+  `~/Library/Application Support/BambuStudio/plugins`. Historical Public Beta builds use
+  `~/Library/Application Support/BambuStudioBeta/plugins`; pass
   `--data-dir "$HOME/Library/Application Support/BambuStudioBeta"` explicitly.
 
 ### Plugin account-state recovery
@@ -270,17 +269,19 @@ Target status is tracked in `docs/compatibility/release-artifacts.md`. For check
 startup, plugin exports, and real host install columns, treat `in_progress`, `failed`, `blocked`,
 `unsupported`, or `untested` as not proven for operator installation.
 
-Native release-smoke and real Studio evidence are separate. The old workflow-run rows are preserved
-only in `docs/compatibility/release-artifacts.md` as historical two-file/129-export evidence; they are
-not current candidates and are not instructions to run an Action.
+Native release-smoke and real Studio evidence are separate. Public Beta package and workflow evidence
+is retained only as history; it is not a stable `02.07.01.62` candidate or an instruction to run an
+Action.
 
-The current final16 immutable input `pandar-bambu-final16-019f7b10.tar.gz` is 2,793,904 bytes with
+### Historical Public Beta final16 evidence
+
+The historical final16 immutable input `pandar-bambu-final16-019f7b10.tar.gz` is 2,793,904 bytes with
 SHA-256 `24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039`; its canonical
 source-tree SHA-256 is `c62c92167f466a915400953ec2d0e126bc34b3c6509a747ddee17dce8d52bf30`.
 The preceding pre-fix freeze whose SHA-256 begins `6318d190` and ends `ab473` was rejected by P1
 review and is not an install candidate.
 
-The current Linux archive `pandar-final16-linux-amd64-019f7b10.tar.gz` is 24,891,706 bytes with
+The historical Linux archive `pandar-final16-linux-amd64-019f7b10.tar.gz` is 24,891,706 bytes with
 SHA-256 `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3` and sidecar SHA-256
 `bde03e9633839432063d93768e10b0caf845755d216a653e20fa11d1461296f8`. Its exact top-level
 members are `pandar`, `libpandar_network_plugin.so`, and `libpandar_bambu_source.so`; their SHA-256
@@ -392,8 +393,8 @@ member-list SHA-256 is `87a6ad1dfaa404731ed30d7e265303cca64fc4278a478f9c12192c09
 source-tree/manifest SHA-256 is
 `5aa0038dbc3f0962cc172646876263b0db04e1e6df5fbe571553af1967f242a6`. Later Linux validation
 exposed a background-refresh/firmware-callback race, so frozen final5, final11, and final12 results
-remain only where explicitly labeled historical. Do not install any of those archives as the current
-`02.08.01.55` candidate.
+remain only where explicitly labeled historical. Do not install any of those archives as a stable
+`02.07.01.62` candidate.
 
 Frozen final12 PostgreSQL 16.14 harness run `3e00d36c-7fb9-47d3-b71b-d9735ebe0eae` and Nextest
 run `0b708279-6183-4477-9f78-31add8d7f423` passed 55/55 focused cases with zero skip markers; 831
@@ -406,14 +407,14 @@ Historical final13 PostgreSQL 16.14 harness `0c292295-f9ab-459b-89c2-ea74f2c9ff5
 `7e04ae355f7bca3fb409bbc700b5c8f160194c0d2f9ec82df823c859566a2db7`; source read-only and
 cleanup checks passed.
 
-| Target label    | Current operator status | Reason                                                                                                                                                                                                      | Next action                                                                                                                                                                                                                                  |
-| --------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `linux-amd64`   | `in_progress`           | Current final16 passed native package/ABI/release-smoke/runtime, ASan/LSan, and the narrow exact-AppImage model-task callback gate. Real authentication and the live Hub/Agent/printer path remain pending. | Use only the checksum-verified final16 Linux archive for this slice. Do not claim full compatibility until real sign-in/ticket/token/profile/printer/job/outage/logout rows pass; hardware and live firmware require separate authorization. |
-| `windows-amd64` | `in_progress`           | Historical final13 passed native MSVC layout, CLI, ABI, export, companion, and packaged-smoke gates, but predates the later fixes. No final16 Windows package or real Windows Studio evidence exists.       | Build and validate a native MSVC final16 successor, then keep operator status `in_progress` until a real exact-version Windows Studio session is recorded.                                                                                   |
-| `linux-arm64`   | `untested`              | No current three-file native candidate exists.                                                                                                                                                              | Do not publish a Studio compatibility claim.                                                                                                                                                                                                 |
-| `windows-arm64` | `untested`              | No current three-file native candidate exists.                                                                                                                                                              | Do not publish a Studio compatibility claim.                                                                                                                                                                                                 |
-| `macos-amd64`   | `untested`              | No current candidate or real Studio evidence exists; the configured Apple Silicon/Rosetta release job has not run.                                                                                          | Do not publish a Studio compatibility claim.                                                                                                                                                                                                 |
-| `macos-arm64`   | `in_progress`           | Local native package/ABI/release-smoke and exact-version module load passed, but no tagged artifact or authenticated Studio session exists.                                                                 | Run the tag workflow and authenticated checklist before claiming full compatibility; keep hardware operations separate.                                                                                                                     |
+| Target label    | Current operator status | Stable `02.07.01.62` evidence                                                                                                      | Next action                                                                                   |
+| --------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `linux-amd64`   | `untested`              | No stable package or real Studio run exists; final16 is historical Public Beta evidence only.                                    | Run the tag workflow and exact stable Studio checklist.                                       |
+| `windows-amd64` | `untested`              | The stable hook/package contract is configured, but no current native package or real Studio run exists.                          | Run the native MSVC release job and exact stable Studio checklist.                            |
+| `linux-arm64`   | `untested`              | No current three-file native candidate exists.                                                                                    | Do not publish a Studio compatibility claim.                                                  |
+| `windows-arm64` | `untested`              | No current three-file native candidate exists.                                                                                    | Do not publish a Studio compatibility claim.                                                  |
+| `macos-amd64`   | `untested`              | The Apple Silicon/Rosetta release job is configured but has not run; no matching real Studio evidence exists.                     | Run the tag workflow and exact stable Studio checklist under Rosetta.                         |
+| `macos-arm64`   | `in_progress`           | Local native package/ABI/release-smoke and exact-version module load passed; no tagged artifact or authenticated session exists. | Run the tag workflow and authenticated checklist before claiming full compatibility.          |
 
 ## Operations Runbook
 

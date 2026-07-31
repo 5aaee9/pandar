@@ -16,13 +16,25 @@
 
 ## Completed
 
+- Retargeted the exact Bambu Studio release ABI from the historical `02.08.01.55` Public Beta to the
+  installed stable `02.07.01.62` source commit `42d319c6692fa8e64790fddf0cdaafd2a4254bcc`
+  and network agent `02.07.01.51`. The shim now matches the stable 108-network-plus-21-FT contract:
+  the 2.8-only AMS sync export, `bind` model argument, and trailing `PrintParams::slicer_uid` were
+  removed from the Studio-facing ABI while the Rust upload model still sends an empty internal
+  slicer UID. CI, Windows hook asset/version gates, pinned source slices, native ABI modes, and release
+  smoke all target 2.7.1. Local Apple Silicon packaging passed all 129 exports and the
+  `version,bind,print,ft` caller modes; the running official macOS 2.7.1.62 process mapped both exact
+  arm64 dylibs and reached its normal UI. No sign-in, Hub/Agent, printer, print/control, firmware, or
+  hardware action was exercised, and the original Studio plugin directory and configuration were
+  restored byte-for-byte after the test.
+
 - Made `pandar install-network-plugin` default to the platform-specific network plugin and BambuSource companion shipped beside the CLI in the current unpacked release directory, while preserving `--plugin-file` and `--source-file` overrides for development builds. CLI parsing coverage locks the zero-file-flag path; the next tagged release should rerun native packaged smoke with the simplified install command.
 
 - Fixed the Print Jobs list rendering each `JobRow` list item inside another list item, which produced a React hydration error in production markup. The history list now owns exactly one `li` per job while preserving content-visibility styling, and a focused DOM regression rejects nested list items.
 
 - Published `v0.1.0` from `d50ef4223daf1fe5f45b6adc254ec91a9823bacc`. Release run `30654892795` natively built and smoke-tested the Linux amd64 and Windows amd64 three-file archives plus the Windows Studio hook bundle before publishing all six desktop assets; Checks run `30654892831` and Docker/Helm run `30654892588` passed. Downloaded sidecars, exact archive layouts, the Linux packaged CLI/plugin/full 130-name ABI contract, GHCR manifests, and Helm chart `0.1.0` were independently rechecked after publication. The first tag attempt had exposed that compiling the Linux C++ ABI shim with Zig while probing it with host `libstdc++` corrupted `std::string`; Linux plugins now use the runner's native GNU toolchain while Zig remains scoped to the standalone musl CLI. A real Windows Studio session remains unclaimed evidence.
 
-- Renamed the Windows injection crate and CLI surface from `pandar-studio-dev-hook` to `pandar-studio-hook`, retained the opt-in local log-key patch under `PANDAR_STUDIO_LOG_LOCAL_KEY`, and added a Studio `02.08.01.x` network-plugin download replacement. `pandar install-studio-hook` now fetches the fixed native Windows bundle and sidecar from the latest GitHub Release, verifies SHA-256 and exact ZIP layout, installs the Pandar network plugin plus BambuSource, and caches a Studio-shaped archive. The injected hook replaces only Studio's final `networking_plugins.zip` rename and fails closed when its verified cache is unavailable. Release CI now builds the dedicated bundle natively with MSVC. Local Rust tests and workspace checks cover release selection, checksum/layout rejection, package construction, and CLI parsing; native Windows Studio execution remains the next compatibility-evidence step.
+- Renamed the Windows injection crate and CLI surface from `pandar-studio-dev-hook` to `pandar-studio-hook`, retained the opt-in local log-key patch under `PANDAR_STUDIO_LOG_LOCAL_KEY`, and added a Studio `02.07.01.x` network-plugin download replacement. `pandar install-studio-hook` now fetches the fixed native Windows bundle and sidecar from the latest GitHub Release, verifies SHA-256 and exact ZIP layout, installs the Pandar network plugin plus BambuSource, and caches a Studio-shaped archive. The injected hook replaces only Studio's final `networking_plugins.zip` rename and fails closed when its verified cache is unavailable. Release CI now builds the dedicated bundle natively with MSVC. Local Rust tests and workspace checks cover release selection, checksum/layout rejection, package construction, and CLI parsing; native Windows Studio execution remains the next compatibility-evidence step.
 
 - Rebuilt the dashboard Settings page as a dedicated responsive workspace instead of routing it through the generic dashboard view prop bag: a status overview and anchored section navigation now organize appearance, workspace identity, connected infrastructure shortcuts, access/security administration, recent activity, and the current session. Language and theme controls use larger labeled groups, tenant tokens retain their focused create/rotate/revoke flows, Agent enrollment and audit history remain available to administrators, technical identifiers are progressively disclosed, and English/Chinese copy plus route-level loading states cover the new hierarchy. Workspace agent/printer data now loads separately from protected token/audit data, so non-admin roles can use personal and workspace settings without an admin-only request failing the entire page; protected request failures remain isolated and visible in the access section.
 
@@ -1135,10 +1147,11 @@ Goal: make release artifacts predictable enough for operators to install without
 
 - Validate tag-driven GitHub Release artifacts on real Linux, Windows, and macOS hosts, including CLI startup, dynamic-library loadability, checksums, and archive layout.
 - Completed the local native release-smoke implementation for exact three-file CLI/network-plugin/
-  BambuSource layout, exact 109-network-plus-21-FT target-prefix exports, and companion sentinel/no-
-  `Bambu_*` inspection. Historical final13 Windows amd64 passed native MSVC build, all five pinned ABI modes,
+  BambuSource layout, exact target-prefix exports, and companion sentinel/no-`Bambu_*` inspection.
+  The current stable contract is 108 network plus 21 FT exports. Historical final13 Windows amd64
+  passed native MSVC build, all five pinned Public Beta ABI modes,
   packaged CLI, exact layout/contract exports, and companion inspection with archive SHA-256
-  `6c50e77a0b4008ce46d86de51411117061c5118e18849ca1fb94f4a3f319db64`. Current final16 Linux
+  `6c50e77a0b4008ce46d86de51411117061c5118e18849ca1fb94f4a3f319db64`. Historical final16 Linux
   native/runtime/sanitizer gates passed with archive SHA-256
   `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3`; its official
   exact-AppImage model-task evidence manifest has SHA-256
@@ -1391,8 +1404,8 @@ Exit criteria:
 - Added macOS desktop publishing for both amd64 and Apple Silicon: both tag-workflow rows use the
   Apple Silicon `macos-26` runner; arm64 runs natively, while amd64 cross-compiles and runs its CLI,
   ABI probe, and release-smoke under Rosetta 2. The jobs reject AppleDouble archive entries. Local
-  Apple Silicon release build and packaged smoke passed with 109 network and 21 File Transfer exports;
-  the official signed `02.08.01.55` Public Beta also loaded both exact dylibs and reached its normal UI.
+  Apple Silicon release build and packaged smoke passed the current 108 network and 21 File Transfer
+  export contract; the official `02.07.01.62` stable app loaded both exact dylibs and reached its normal UI.
   A local x86_64 Mach-O cross-build and Rosetta packaged-smoke preflight also passed; the pinned amd64
   ABI workflow run, real Intel Studio load, and authenticated Studio behavior remain separate next
   steps.

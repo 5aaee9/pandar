@@ -67,7 +67,7 @@ bool is_target_studio_version(HMODULE module)
         return false;
 
     return HIWORD(fixed->dwFileVersionMS) == 2 &&
-        LOWORD(fixed->dwFileVersionMS) == 8 &&
+        LOWORD(fixed->dwFileVersionMS) == 7 &&
         HIWORD(fixed->dwFileVersionLS) == 1;
 }
 
@@ -230,5 +230,5 @@ void install_plugin_download_hook(HMODULE studio_module)
         append_log("Pandar plugin download hook could not find the Windows rename imports");
         return;
     }
-    append_log("Pandar plugin download hook enabled for Studio 02.08.01.x");
+    append_log("Pandar plugin download hook enabled for Studio 02.07.01.x");
 }

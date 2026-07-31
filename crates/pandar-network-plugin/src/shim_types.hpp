@@ -50,7 +50,6 @@ constexpr int BAMBU_NETWORK_ERR_CREATE_FILAMENT_FAILED = -28;
 constexpr int BAMBU_NETWORK_ERR_UPDATE_FILAMENT_FAILED = -29;
 constexpr int BAMBU_NETWORK_ERR_DELETE_FILAMENT_FAILED = -30;
 constexpr int BAMBU_NETWORK_ERR_GET_FILAMENT_CONFIG_FAILED = -31;
-constexpr int BAMBU_NETWORK_ERR_AMS_SYNC_FAILED = -32;
 constexpr int BAMBU_NETWORK_ERR_BIND_FAILED = -5;
 constexpr int BAMBU_NETWORK_ERR_UNBIND_FAILED = -6;
 constexpr int BAMBU_NETWORK_ERR_PUT_SETTING_FAILED = -8;
@@ -133,7 +132,6 @@ struct PrintParams {
     bool task_ext_change_assist = false;
     bool try_emmc_print = false;
     std::string svc_context;
-    std::string slicer_uid;
 };
 
 struct TaskQueryParams {
@@ -155,32 +153,6 @@ struct FilamentQueryParams {
 struct FilamentDeleteParams {
     std::vector<std::string> ids;
     std::vector<std::string> rfids;
-};
-
-struct AmsSyncItem {
-    std::string RFID;
-    std::string filamentVendor;
-    std::string filamentType;
-    std::string filamentName;
-    std::string filamentId;
-    bool isSupport = false;
-    std::string color;
-    int colorType = 0;
-    std::vector<std::string> colors;
-    int netWeight = 0;
-    int totalNetWeight = 0;
-    std::string trayIdName;
-    std::string note;
-    std::string amsSn;
-    std::string slotId;
-    int amsId = 0;
-    int amsType = 0;
-    bool createNew = false;
-};
-
-struct AmsSyncParams {
-    std::string devId;
-    std::vector<AmsSyncItem> items;
 };
 
 struct PublishParams {
@@ -220,7 +192,6 @@ struct PluginFirmwareCallbackResult {
 };
 
 const char* pandar_plugin_network_agent_version();
-PluginHttpResult pandar_plugin_sync_ams_filaments(bool);
 PluginHttpResult pandar_plugin_camera_access_result(bool);
 PluginHttpResult pandar_plugin_local_connect_json(
     const uint8_t*, std::size_t,

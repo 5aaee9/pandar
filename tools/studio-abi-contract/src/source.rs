@@ -10,7 +10,7 @@ use crate::{
     types::cpp_struct_fields,
 };
 
-pub const PINNED_STUDIO_COMMIT: &str = "ba049f6a2e08c3b6033660bb84da80c08722974b";
+pub const PINNED_STUDIO_COMMIT: &str = "42d319c6692fa8e64790fddf0cdaafd2a4254bcc";
 pub const PINNED_BOOST_VERSION: &str = "1.84.0";
 pub const PINNED_BOOST_VERSION_NUMBER: &str = "108400";
 pub const PINNED_BOOST_SHA256: &str =
@@ -38,8 +38,6 @@ pub struct StudioContract {
     pub network_exports: ExportMap,
     pub file_transfer_exports: ExportMap,
     pub print_params_fields: Vec<String>,
-    pub ams_sync_item_fields: Vec<String>,
-    pub ams_sync_params_fields: Vec<String>,
 }
 
 pub fn inspect_source(root: &Path, expected_commit: &str) -> Result<StudioContract, String> {
@@ -80,8 +78,6 @@ pub fn inspect_source(root: &Path, expected_commit: &str) -> Result<StudioContra
     let studio_version = quoted_value(&version, "set(SLIC3R_VERSION ")?;
     let network_agent_version = quoted_value(&networking, "#define BAMBU_NETWORK_AGENT_VERSION")?;
     let print_params_fields = cpp_struct_fields(&networking, "PrintParams")?;
-    let ams_sync_item_fields = cpp_struct_fields(&networking, "AmsSyncItem")?;
-    let ams_sync_params_fields = cpp_struct_fields(&networking, "AmsSyncParams")?;
     let network_exports = loaded_export_map(
         &network_agent,
         "get_network_function",
@@ -124,10 +120,10 @@ pub fn inspect_source(root: &Path, expected_commit: &str) -> Result<StudioContra
         );
     }
     if expected_commit == PINNED_STUDIO_COMMIT
-        && (network_symbols.len() != 109 || file_transfer_symbols.len() != 21)
+        && (network_symbols.len() != 108 || file_transfer_symbols.len() != 21)
     {
         return Err(format!(
-            "pinned Studio symbol extraction drifted: expected 109 network and 21 FT, got {} network and {} FT",
+            "pinned Studio symbol extraction drifted: expected 108 network and 21 FT, got {} network and {} FT",
             network_symbols.len(),
             file_transfer_symbols.len()
         ));
@@ -142,8 +138,6 @@ pub fn inspect_source(root: &Path, expected_commit: &str) -> Result<StudioContra
         network_exports,
         file_transfer_exports,
         print_params_fields,
-        ams_sync_item_fields,
-        ams_sync_params_fields,
     })
 }
 
@@ -245,12 +239,12 @@ mod tests {
             fs::create_dir_all(path.parent().expect("contract path has parent"))
                 .expect("create contract fixture parent");
             let contents = match path.strip_prefix(temp.path()).unwrap().to_str().unwrap() {
-                "version.inc" => "set(SLIC3R_VERSION \"02.08.01.55\")\n",
+                "version.inc" => "set(SLIC3R_VERSION \"02.07.01.62\")\n",
                 "deps/Boost/Boost.cmake" => {
                     "URL \"https://example.invalid/boost-1.84.0.tar.gz\"\nURL_HASH SHA256=4d27e9efed0f6f152dc28db6430b9d3dfb40c0345da7342eaa5a987dde57bd95\n"
                 }
                 "src/slic3r/Utils/bambu_networking.hpp" => {
-                    "#define BAMBU_NETWORK_AGENT_VERSION \"02.08.01.52\"\nstruct PrintParams { std::string dev_id; std::string slicer_uid; };\nstruct AmsSyncItem { std::string RFID; };\nstruct AmsSyncParams { std::string devId; std::vector<AmsSyncItem> items; };\n"
+                    "#define BAMBU_NETWORK_AGENT_VERSION \"02.07.01.51\"\nstruct PrintParams { std::string dev_id; };\n"
                 }
                 "src/slic3r/Utils/NetworkAgent.cpp" => {
                     "reinterpret_cast<func_get_version>(get_network_function(\"bambu_network_get_version\"));\nreinterpret_cast<func_start>(get_network_function(\"bambu_network_start\"));\n"
@@ -279,7 +273,7 @@ mod tests {
     fn pinned_commit_is_the_reviewed_upstream_object() {
         assert_eq!(
             PINNED_STUDIO_COMMIT,
-            "ba049f6a2e08c3b6033660bb84da80c08722974b"
+            "42d319c6692fa8e64790fddf0cdaafd2a4254bcc"
         );
         assert_eq!(PINNED_BOOST_VERSION, "1.84.0");
         assert_eq!(PINNED_BOOST_VERSION_NUMBER, "108400");
@@ -293,11 +287,9 @@ mod tests {
         let contract = inspect_source(temp.path(), &head).expect("inspect valid official checkout");
 
         assert_eq!(contract.commit, head);
-        assert_eq!(contract.studio_version, "02.08.01.55");
-        assert_eq!(contract.network_agent_version, "02.08.01.52");
-        assert_eq!(contract.print_params_fields, ["dev_id", "slicer_uid"]);
-        assert_eq!(contract.ams_sync_item_fields, ["RFID"]);
-        assert_eq!(contract.ams_sync_params_fields, ["devId", "items"]);
+        assert_eq!(contract.studio_version, "02.07.01.62");
+        assert_eq!(contract.network_agent_version, "02.07.01.51");
+        assert_eq!(contract.print_params_fields, ["dev_id"]);
         assert_eq!(
             contract.network_exports,
             [

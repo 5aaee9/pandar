@@ -34,7 +34,7 @@ fn projected(raw: &str) -> (serde_json::Value, serde_json::Value) {
 fn compiled_pinned_studio_consumers_reject_unavailable_projection_capabilities() {
     assert_eq!(
         pinned::STUDIO_COMMIT,
-        "ba049f6a2e08c3b6033660bb84da80c08722974b"
+        "42d319c6692fa8e64790fddf0cdaafd2a4254bcc"
     );
     let (telemetry, consumed) = projected(
         r#"{"fun":"FFFFFFFFFFFFFFFF","chamber_temperature_celsius":"32","materials":{"cfg":"FFFFFFFFFFFFFFFF","aux":"00002000","stat":"0","ams_units":[]}}"#,

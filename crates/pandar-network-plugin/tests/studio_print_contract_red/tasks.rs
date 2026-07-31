@@ -46,7 +46,7 @@ fn get_subtask_info_matches_pinned_device_manager_double_json_consumer() {
     let mut failures = Vec::new();
     if evidence.output["subtask_consumer_hash"] != serde_json::json!(SUBTASK_CONSUMER_HASH) {
         failures.push(
-            "compiled subtask consumer is not pinned to DeviceManager.cpp:3886-3985".to_owned(),
+            "compiled subtask consumer is not pinned to DeviceManager.cpp:3877-3976".to_owned(),
         );
     }
     if evidence.output["subtask_rc"] != serde_json::json!(0)

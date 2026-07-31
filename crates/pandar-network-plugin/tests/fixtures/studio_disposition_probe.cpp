@@ -46,7 +46,7 @@ struct PrintParams {
     int auto_bed_leveling = 0, auto_flow_cali = 0, auto_offset_cali = 0;
     int extruder_cali_manual_mode = -1;
     bool task_ext_change_assist = false, try_emmc_print = false;
-    std::string svc_context, slicer_uid;
+    std::string svc_context;
 };
 }
 

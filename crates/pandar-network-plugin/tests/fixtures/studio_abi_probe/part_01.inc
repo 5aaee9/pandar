@@ -85,7 +85,6 @@ struct PrintParams {
     bool task_ext_change_assist = false;
     bool try_emmc_print = false;
     std::string svc_context;
-    std::string slicer_uid;
 };
 
 struct TaskQueryParams {

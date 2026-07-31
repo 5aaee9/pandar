@@ -5,7 +5,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-pub(super) const STUDIO_COMMIT: &str = "ba049f6a2e08c3b6033660bb84da80c08722974b";
+pub(super) const STUDIO_COMMIT: &str = "42d319c6692fa8e64790fddf0cdaafd2a4254bcc";
 pub(super) const TASK_CONSUMER_HASH: &str = "e0a5f49f17863054eb6e782a6f707b20a5f6a28c";
 pub(super) const SUBTASK_CONSUMER_HASH: &str = "230e2916b16a7b87b89a8f5ee57b539fdbd6ab3b";
 pub(super) const MODEL_TASK_STATUS_HASH: &str = "a9156f1c3f9e2fd40ae7215aeb4d26b172021f4e";
@@ -14,17 +14,17 @@ pub(super) const MODEL_TASK_CALLBACK_HASH: &str = "15226032d4729ce90e5940d3cc41f
 pub(super) const MODEL_TASK_FORWARDING_HASH: &str = "7790222a37d042f2704cfb0fd78f01021aec52fe";
 
 const PRINT_HEADER: &str = "src/slic3r/Utils/bambu_networking.hpp";
-const PRINT_HEADER_BLOB: &str = "e917a1ddae3e4b8b3609b203d090b01915998b4a";
+const PRINT_HEADER_BLOB: &str = "7af47353e08d400d547dc7f7036b16caeb10de96";
 const TASK_MANAGER: &str = "src/slic3r/GUI/TaskManager.cpp";
 const TASK_MANAGER_BLOB: &str = "7a7bdcce2b747902db9dfa09aa68a2044d09dfdb";
 const DEVICE_MANAGER: &str = "src/slic3r/GUI/DeviceManager.cpp";
-const DEVICE_MANAGER_BLOB: &str = "832e77d8bf5507fb97a96baa27c6c2ae5edc3e86";
+const DEVICE_MANAGER_BLOB: &str = "559c64deda5d8cdb3bbdb6cf6ace352d716ae616";
 const STATUS_PANEL: &str = "src/slic3r/GUI/StatusPanel.cpp";
-const STATUS_PANEL_BLOB: &str = "86d2306f9c9462b241943325788a9056c6e3be8b";
+const STATUS_PANEL_BLOB: &str = "60c62ff654ceccec4d323125fe1dbcae89c119cd";
 const PROJECT_TASK_HEADER: &str = "src/libslic3r/ProjectTask.hpp";
-const PROJECT_TASK_HEADER_BLOB: &str = "6c9196c5e1278370f37d84fa98a2a1a7cfbabd14";
+const PROJECT_TASK_HEADER_BLOB: &str = "94605a43b9756353a91d0714057d32db470ac8cd";
 const NETWORK_AGENT: &str = "src/slic3r/Utils/NetworkAgent.cpp";
-const NETWORK_AGENT_BLOB: &str = "f4a19cdffdb6242d1e27cc92778c9238c1f67e3e";
+const NETWORK_AGENT_BLOB: &str = "564943799bd407c689c0048f3d95b9c1c11ea095";
 const NLOHMANN_TREE: &str = "src/nlohmann";
 const NLOHMANN_TREE_BLOB: &str = "adcc3cb63df154808be3958507cfce00ee1933a5";
 
@@ -55,27 +55,27 @@ pub(super) fn stage(workspace: &Path, destination: &Path) {
     .expect("stage pinned task-list consumer excerpt");
 
     let device_source = show(&studio, DEVICE_MANAGER);
-    let subtask_consumer = source_lines(&device_source, 3886, 3985);
+    let subtask_consumer = source_lines(&device_source, 3877, 3976);
     assert_eq!(hash_object(&subtask_consumer), SUBTASK_CONSUMER_HASH);
     fs::write(
-        destination.join("DeviceManager.3886-3985.pinned.cpp"),
+        destination.join("DeviceManager.3877-3976.pinned.cpp"),
         &subtask_consumer,
     )
     .expect("stage pinned subtask consumer excerpt");
 
     let status_source = show(&studio, STATUS_PANEL);
-    let model_task_status = source_lines(&status_source, 4145, 4162);
+    let model_task_status = source_lines(&status_source, 4143, 4160);
     assert_eq!(hash_object(&model_task_status), MODEL_TASK_STATUS_HASH);
     fs::write(
-        destination.join("StatusPanel.4145-4162.pinned.cpp"),
+        destination.join("StatusPanel.4143-4160.pinned.cpp"),
         &model_task_status,
     )
     .expect("stage pinned model-task caller excerpt");
 
     let project_task_source = show(&studio, PROJECT_TASK_HEADER);
-    let model_task_layout = source_lines(&project_task_source, 154, 167);
+    let model_task_layout = source_lines(&project_task_source, 153, 166);
     assert_eq!(hash_object(&model_task_layout), MODEL_TASK_LAYOUT_HASH);
-    let model_task_callback = source_lines(&project_task_source, 252, 252);
+    let model_task_callback = source_lines(&project_task_source, 251, 251);
     assert_eq!(hash_object(&model_task_callback), MODEL_TASK_CALLBACK_HASH);
     let mut model_task_header =
         b"#pragma once\n#include <functional>\n#include <string>\nnamespace Slic3r {\n".to_vec();
@@ -86,13 +86,13 @@ pub(super) fn stage(workspace: &Path, destination: &Path) {
         .expect("stage pinned model-task ABI header");
 
     let network_source = show(&studio, NETWORK_AGENT);
-    let model_task_forwarding = source_lines(&network_source, 1579, 1588);
+    let model_task_forwarding = source_lines(&network_source, 1564, 1573);
     assert_eq!(
         hash_object(&model_task_forwarding),
         MODEL_TASK_FORWARDING_HASH
     );
     fs::write(
-        destination.join("NetworkAgent.1579-1588.pinned.cpp"),
+        destination.join("NetworkAgent.1564-1573.pinned.cpp"),
         &model_task_forwarding,
     )
     .expect("stage pinned model-task forwarding excerpt");

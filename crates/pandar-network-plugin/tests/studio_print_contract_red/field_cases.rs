@@ -13,7 +13,7 @@ pub(super) enum Expectation {
 
 pub(super) type FieldCase = (&'static str, &'static str, Expectation);
 
-pub(super) const FIELD_CASES: [FieldCase; 45] = [
+pub(super) const FIELD_CASES: [FieldCase; 44] = [
     (
         "dev_id",
         "preserve",
@@ -207,10 +207,5 @@ pub(super) const FIELD_CASES: [FieldCase; 45] = [
         "svc_context",
         "preserve",
         Expectation::Wire("svc_context", "service-context-sentinel"),
-    ),
-    (
-        "slicer_uid",
-        "preserve",
-        Expectation::Wire("slicer_uid", "slicer-uid-sentinel"),
     ),
 ];

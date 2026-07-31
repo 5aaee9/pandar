@@ -5,10 +5,10 @@ use std::{
     process::{Command, Stdio},
 };
 
-pub(super) const STUDIO_COMMIT: &str = "ba049f6a2e08c3b6033660bb84da80c08722974b";
+pub(super) const STUDIO_COMMIT: &str = "42d319c6692fa8e64790fddf0cdaafd2a4254bcc";
 
 const DEVICE_MANAGER: &str = "src/slic3r/GUI/DeviceManager.cpp";
-const DEVICE_MANAGER_BLOB: &str = "832e77d8bf5507fb97a96baa27c6c2ae5edc3e86";
+const DEVICE_MANAGER_BLOB: &str = "559c64deda5d8cdb3bbdb6cf6ace352d716ae616";
 const DEV_CONFIG: &str = "src/slic3r/GUI/DeviceCore/DevConfig.cpp";
 const DEV_CONFIG_BLOB: &str = "9833731040aebe78a06259c834c0142deeda0660";
 const DEV_AXIS: &str = "src/slic3r/GUI/DeviceCore/DevAxis.cpp";
@@ -32,59 +32,59 @@ struct SourceSlice {
 
 const SLICES: &[SourceSlice] = &[
     SourceSlice {
-        output: "device_check_enable.4280-4288.cpp",
+        output: "device_check_enable.4265-4273.cpp",
         source: DEVICE_MANAGER,
-        first: 4280,
-        last: 4288,
+        first: 4265,
+        last: 4273,
         hash: "005b01e7c3ab50a55bae9ad36038fefd4306b91b",
     },
     SourceSlice {
-        output: "device_cfg_camera.4367-4368.cpp",
+        output: "device_cfg_camera.4352-4353.cpp",
         source: DEVICE_MANAGER,
-        first: 4367,
-        last: 4368,
+        first: 4352,
+        last: 4353,
         hash: "a98633d61e62439f431b293ba2185ce683758f93",
     },
     SourceSlice {
-        output: "device_fun_agora.4376-4377.cpp",
+        output: "device_fun_agora.4361-4362.cpp",
         source: DEVICE_MANAGER,
-        first: 4376,
-        last: 4377,
+        first: 4361,
+        last: 4362,
         hash: "a067aa27942e03e0203682b6450dceb652dc091e",
     },
     SourceSlice {
-        output: "device_fun_camera.4388-4390.cpp",
+        output: "device_fun_camera.4373-4375.cpp",
         source: DEVICE_MANAGER,
-        first: 4388,
-        last: 4390,
+        first: 4373,
+        last: 4375,
         hash: "8cdf6188237d156e2988428eb1e8fa1c8e788617",
     },
     SourceSlice {
-        output: "device_fun_ext_change_assist.4393.cpp",
+        output: "device_fun_ext_change_assist.4378.cpp",
         source: DEVICE_MANAGER,
-        first: 4393,
-        last: 4393,
+        first: 4378,
+        last: 4378,
         hash: "051dbccc25601b98fd17597025c5032b9736f781",
     },
     SourceSlice {
-        output: "device_aux.4433-4441.cpp",
+        output: "device_aux.4417-4425.cpp",
         source: DEVICE_MANAGER,
-        first: 4433,
-        last: 4441,
+        first: 4417,
+        last: 4425,
         hash: "69c4c849a6b0e2a23e7e7785fcae9660aa280447",
     },
     SourceSlice {
-        output: "device_fun_wtm.4396.cpp",
+        output: "device_fun_wtm.4381.cpp",
         source: DEVICE_MANAGER,
-        first: 4396,
-        last: 4396,
+        first: 4381,
+        last: 4381,
         hash: "92a490efaedd70e7d13cd158e9d62c4e4e187710",
     },
     SourceSlice {
-        output: "device_flag_bits.4474-4485.cpp",
+        output: "device_flag_bits.4458-4469.cpp",
         source: DEVICE_MANAGER,
-        first: 4474,
-        last: 4485,
+        first: 4458,
+        last: 4469,
         hash: "6a26fe6c3f3bb13d283842b0080c51b91cc5c3b3",
     },
     SourceSlice {

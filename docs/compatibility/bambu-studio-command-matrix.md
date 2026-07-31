@@ -1,9 +1,10 @@
-# Bambu Studio 02.08.01.55 Command Disposition Matrix
+# Historical Bambu Studio 02.08.01.55 Command Disposition Matrix
 
-This document is the command contract for Pandar's Hub-backed Bambu Studio network plugin. It is
-derived from Bambu Studio commit `ba049f6a2e08c3b6033660bb84da80c08722974b` (Studio
-`02.08.01.55`, network agent `02.08.01.52`). It does not claim that a packaged plugin has passed a
-real Studio run; those claims belong only in `bambu-studio-plugin.md`.
+This document retains the command-disposition audit derived from Bambu Studio commit
+`ba049f6a2e08c3b6033660bb84da80c08722974b` (Studio `02.08.01.55`, network agent
+`02.08.01.52`). The active release ABI is now exact Studio `02.07.01.62`; this historical matrix does
+not promote the Beta ABI or its source-line anchors. Current real-Studio claims belong only in
+`bambu-studio-plugin.md`.
 
 ## Contract Summary
 

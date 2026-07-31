@@ -2,10 +2,6 @@
 
 static_assert(sizeof(PandarBBL::PrintParams) == sizeof(BBL::PrintParams));
 static_assert(alignof(PandarBBL::PrintParams) == alignof(BBL::PrintParams));
-static_assert(sizeof(PandarBBL::AmsSyncItem) == sizeof(BBL::AmsSyncItem));
-static_assert(alignof(PandarBBL::AmsSyncItem) == alignof(BBL::AmsSyncItem));
-static_assert(sizeof(PandarBBL::AmsSyncParams) == sizeof(BBL::AmsSyncParams));
-static_assert(alignof(PandarBBL::AmsSyncParams) == alignof(BBL::AmsSyncParams));
 static_assert(sizeof(PandarSlic3r::ft_job_result) == sizeof(Slic3r::ft_job_result));
 static_assert(alignof(PandarSlic3r::ft_job_result) == alignof(Slic3r::ft_job_result));
 static_assert(sizeof(PandarSlic3r::ft_job_msg) == sizeof(Slic3r::ft_job_msg));
@@ -76,47 +72,6 @@ PANDAR_CHECK_MEMBER(PandarBBL::PrintParams, BBL::PrintParams, extruder_cali_manu
 PANDAR_CHECK_MEMBER(PandarBBL::PrintParams, BBL::PrintParams, task_ext_change_assist);
 PANDAR_CHECK_MEMBER(PandarBBL::PrintParams, BBL::PrintParams, try_emmc_print);
 PANDAR_CHECK_MEMBER(PandarBBL::PrintParams, BBL::PrintParams, svc_context);
-PANDAR_CHECK_MEMBER(PandarBBL::PrintParams, BBL::PrintParams, slicer_uid);
-
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, RFID);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, filamentVendor);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, filamentType);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, filamentName);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, filamentId);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, isSupport);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, color);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, colorType);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, colors);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, netWeight);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, totalNetWeight);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, trayIdName);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, note);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, amsSn);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, slotId);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, amsId);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, amsType);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncItem, BBL::AmsSyncItem, createNew);
-PANDAR_CHECK_MEMBER(PandarBBL::AmsSyncParams, BBL::AmsSyncParams, devId);
-static_assert(
-    sizeof(decltype(PandarBBL::AmsSyncParams::items)) ==
-    sizeof(decltype(BBL::AmsSyncParams::items))
-);
-static_assert(
-    alignof(decltype(PandarBBL::AmsSyncParams::items)) ==
-    alignof(decltype(BBL::AmsSyncParams::items))
-);
-static_assert(std::is_same_v<
-    typename decltype(PandarBBL::AmsSyncParams::items)::value_type,
-    PandarBBL::AmsSyncItem
->);
-static_assert(std::is_same_v<
-    typename decltype(BBL::AmsSyncParams::items)::value_type,
-    BBL::AmsSyncItem
->);
-static_assert(
-    offsetof(PandarBBL::AmsSyncParams, items) == offsetof(BBL::AmsSyncParams, items)
-);
-
 PANDAR_CHECK_MEMBER(PandarSlic3r::ft_job_result, Slic3r::ft_job_result, ec);
 PANDAR_CHECK_MEMBER(PandarSlic3r::ft_job_result, Slic3r::ft_job_result, resp_ec);
 PANDAR_CHECK_MEMBER(PandarSlic3r::ft_job_result, Slic3r::ft_job_result, json);

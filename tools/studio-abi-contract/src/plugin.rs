@@ -216,8 +216,8 @@ mod tests {
     fn contract(network: &[&str], file_transfer: &[&str]) -> StudioContract {
         StudioContract {
             commit: "fixture".to_owned(),
-            studio_version: "02.08.01.55".to_owned(),
-            network_agent_version: "02.08.01.52".to_owned(),
+            studio_version: "02.07.01.62".to_owned(),
+            network_agent_version: "02.07.01.51".to_owned(),
             network_symbols: network.iter().map(|value| (*value).to_owned()).collect(),
             file_transfer_symbols: file_transfer
                 .iter()
@@ -226,8 +226,6 @@ mod tests {
             network_exports: Vec::new(),
             file_transfer_exports: Vec::new(),
             print_params_fields: Vec::new(),
-            ams_sync_item_fields: Vec::new(),
-            ams_sync_params_fields: Vec::new(),
         }
     }
 
@@ -261,10 +259,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("create plugin fixture");
         let plugin = compile_plugin(temp.path(), &["bambu_network_get_version"]);
         let contract = contract(
-            &[
-                "bambu_network_get_version",
-                "bambu_network_sync_ams_filaments",
-            ],
+            &["bambu_network_get_version", "bambu_network_start"],
             &["ft_abi_version"],
         );
 
@@ -272,7 +267,7 @@ mod tests {
 
         assert_eq!(
             report.missing,
-            ["bambu_network_sync_ams_filaments", "ft_abi_version"]
+            ["bambu_network_start", "ft_abi_version"]
         );
     }
 

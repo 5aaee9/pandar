@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  STUDIO_COMMIT: ba049f6a2e08c3b6033660bb84da80c08722974b
+  STUDIO_COMMIT: 42d319c6692fa8e64790fddf0cdaafd2a4254bcc
   BOOST_URL: https://github.com/boostorg/boost/releases/download/boost-1.84.0/boost-1.84.0.tar.gz
   BOOST_SHA256: 4d27e9efed0f6f152dc28db6430b9d3dfb40c0345da7342eaa5a987dde57bd95
 
@@ -183,7 +183,7 @@ jobs:
           Copy-Item (Join-Path $target "pandar_studio_hook.dll") (Join-Path $hookStage "pandar_studio_hook.dll")
           Copy-Item (Join-Path $target "pandar_network_plugin.dll") (Join-Path $hookStage "pandar_network_plugin.dll")
           Copy-Item (Join-Path $target "pandar_bambu_source.dll") (Join-Path $hookStage "pandar_bambu_source.dll")
-          $hookArchive = Join-Path $dist "pandar-studio-hook-02.08.01-windows-amd64.zip"
+          $hookArchive = Join-Path $dist "pandar-studio-hook-02.07.01-windows-amd64.zip"
           Compress-Archive -Path (Join-Path $hookStage "*") -DestinationPath $hookArchive -CompressionLevel Optimal
           $hookHash = (Get-FileHash -Algorithm SHA256 $hookArchive).Hash.ToLowerInvariant()
           "$hookHash  $(Split-Path -Leaf $hookArchive)" | Set-Content -NoNewline "$hookArchive.sha256"

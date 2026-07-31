@@ -113,7 +113,7 @@ inline PluginStudioPrintParams studio_print_params(
         static_cast<std::uint8_t>(params.task_ext_change_assist),
         static_cast<std::uint8_t>(params.try_emmc_print),
         plugin_bytes(params.svc_context),
-        plugin_bytes(params.slicer_uid),
+        {},
     };
 }
 

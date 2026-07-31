@@ -1,27 +1,11 @@
 use std::ffi::CStr;
 
-use pandar_network_plugin::{
-    pandar_plugin_free_with_capacity, pandar_plugin_network_agent_version,
-    pandar_plugin_sync_ams_filaments,
-};
+use pandar_network_plugin::pandar_plugin_network_agent_version;
 
 #[path = "studio_target_abi/lifecycle_boundary.rs"]
 mod lifecycle_boundary;
 #[path = "studio_target_abi/source_hygiene.rs"]
 mod source_hygiene;
-
-fn body(result: pandar_network_plugin::PluginHttpResult) -> String {
-    let value = if result.body_ptr.is_null() {
-        String::new()
-    } else {
-        unsafe {
-            String::from_utf8_lossy(std::slice::from_raw_parts(result.body_ptr, result.body_len))
-                .into_owned()
-        }
-    };
-    pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap);
-    value
-}
 
 #[test]
 fn network_agent_version_matches_pinned_studio_target() {
@@ -29,21 +13,8 @@ fn network_agent_version_matches_pinned_studio_target() {
         .to_str()
         .unwrap();
 
-    assert_eq!(version, "02.08.01.52");
-    assert_eq!(&version[..8], "02.08.01");
-}
-
-#[test]
-fn ams_sync_disposition_is_stable_and_redacted() {
-    let unsupported = pandar_plugin_sync_ams_filaments(true);
-    assert_eq!(unsupported.status, -32);
-    assert_eq!(unsupported.http_code, 0);
-    assert_eq!(body(unsupported), r#"{"error":"unsupported_ams_sync"}"#);
-
-    let invalid = pandar_plugin_sync_ams_filaments(false);
-    assert_eq!(invalid.status, -1);
-    assert_eq!(invalid.http_code, 0);
-    assert_eq!(body(invalid), r#"{"error":"invalid_handle"}"#);
+    assert_eq!(version, "02.07.01.51");
+    assert_eq!(&version[..8], "02.07.01");
 }
 
 #[test]

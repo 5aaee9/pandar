@@ -78,7 +78,7 @@ fn error_contract(evidence: &ProbeEvidence, field: &str, error: &str) -> Result<
 }
 
 #[test]
-fn all_45_print_params_have_explicit_compiled_abi_dispositions() {
+fn all_44_print_params_have_explicit_compiled_abi_dispositions() {
     let mut failures = Vec::new();
     for (field, disposition, expected) in FIELD_CASES {
         let evidence = run_probe("print", field);

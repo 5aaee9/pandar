@@ -16,17 +16,6 @@ pub fn verify_pandar_abi_contract(contract: &StudioContract) -> Result<(), Strin
         &contract.print_params_fields,
         &cpp_struct_fields(&shim, "PrintParams")?,
     )?;
-    verify_fields(
-        "AmsSyncItem",
-        &contract.ams_sync_item_fields,
-        &cpp_struct_fields(&shim, "AmsSyncItem")?,
-    )?;
-    verify_fields(
-        "AmsSyncParams",
-        &contract.ams_sync_params_fields,
-        &cpp_struct_fields(&shim, "AmsSyncParams")?,
-    )?;
-
     let exports_path = repo_root.join("crates/pandar-network-plugin/src/shim_exports.hpp");
     let exports = fs::read_to_string(&exports_path).map_err(|error| {
         format!(
@@ -45,9 +34,9 @@ pub fn verify_pandar_abi_contract(contract: &StudioContract) -> Result<(), Strin
         .filter(|(symbol, _)| symbol.starts_with("ft_"))
         .cloned()
         .collect::<Vec<_>>();
-    if network.len() != 109 || file_transfer.len() != 21 || declarations.len() != 130 {
+    if network.len() != 108 || file_transfer.len() != 21 || declarations.len() != 129 {
         return Err(format!(
-            "Pandar Studio export map must contain exactly 109 network and 21 FT records, got {} network, {} FT, {} total",
+            "Pandar Studio export map must contain exactly 108 network and 21 FT records, got {} network, {} FT, {} total",
             network.len(),
             file_transfer.len(),
             declarations.len()
@@ -232,13 +221,13 @@ mod tests {
                 std::string dev_id;
                 int plate_index = 0; // comment
                 bool enabled{ false };
-                /* tail */ std::string slicer_uid;
+                /* tail */ std::string svc_context;
             };
         "#;
 
         assert_eq!(
             cpp_struct_fields(source, "PrintParams").unwrap(),
-            ["dev_id", "plate_index", "enabled", "slicer_uid"]
+            ["dev_id", "plate_index", "enabled", "svc_context"]
         );
     }
 

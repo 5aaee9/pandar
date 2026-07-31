@@ -2,20 +2,11 @@ use std::ffi::{CStr, c_char};
 
 use crate::{PluginHttpResult, read_utf8, result, stable_error_body, studio_status};
 
-pub const NETWORK_AGENT_VERSION: &CStr = c"02.08.01.52";
+pub const NETWORK_AGENT_VERSION: &CStr = c"02.07.01.51";
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_network_agent_version() -> *const c_char {
     NETWORK_AGENT_VERSION.as_ptr()
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_sync_ams_filaments(agent_valid: bool) -> PluginHttpResult {
-    if agent_valid {
-        result(-32, 0, stable_error_body("unsupported_ams_sync"))
-    } else {
-        result(-1, 0, stable_error_body("invalid_handle"))
-    }
 }
 
 #[unsafe(no_mangle)]
