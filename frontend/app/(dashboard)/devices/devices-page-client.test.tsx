@@ -69,6 +69,12 @@ describe("DevicesPageClient", () => {
 
     expect(await screen.findByText("1/1 online")).toBeVisible();
     expect(screen.queryByText("1 offline")).not.toBeInTheDocument();
+    const fleetStatus = screen.getByRole("region", { name: "Fleet status" });
+    const printerInventory = screen
+      .getByRole("heading", { name: "Printer inventory" })
+      .closest("section");
+    expect(fleetStatus.parentElement).toBe(printerInventory?.parentElement);
+    expect(fleetStatus.parentElement).toHaveClass("space-y-4");
     const card = screen.getByRole("article", { name: "Office X2D" });
     expect(within(card).getByText("Online")).toBeVisible();
     expect(within(card).getAllByText("Failed")[0]).toBeVisible();

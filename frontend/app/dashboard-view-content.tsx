@@ -98,34 +98,36 @@ function DevicesView({
 
   return (
     <>
-      <FleetStatusStrip
-        health={health}
-        attentionCount={attentionItems.length}
-        topSeverity={topSeverity}
-        liveState={liveState}
-        lastEventAt={lastEventAt}
-        fleetEmpty={fleetEmpty}
-        tenantId={selectedTenant?.id}
-      />
-      <NeedsAttention
-        items={attentionItems}
-        onOpenReprint={(jobId) => {
-          const job = jobs.find((candidate) => candidate.id === jobId);
-          if (job) setReprintJob(job);
-        }}
-        selectedTenant={selectedTenant}
-      />
-      <PrinterMismatchCoordinator
-        key={selectedTenant?.id ?? "no-tenant"}
-        printers={printers}
-      >
-        <PrinterInventory
-          selectedTenant={selectedTenant}
-          printers={printers}
-          agents={agents}
-          nowMs={nowMs}
+      <div className="space-y-4">
+        <FleetStatusStrip
+          health={health}
+          attentionCount={attentionItems.length}
+          topSeverity={topSeverity}
+          liveState={liveState}
+          lastEventAt={lastEventAt}
+          fleetEmpty={fleetEmpty}
+          tenantId={selectedTenant?.id}
         />
-      </PrinterMismatchCoordinator>
+        <NeedsAttention
+          items={attentionItems}
+          onOpenReprint={(jobId) => {
+            const job = jobs.find((candidate) => candidate.id === jobId);
+            if (job) setReprintJob(job);
+          }}
+          selectedTenant={selectedTenant}
+        />
+        <PrinterMismatchCoordinator
+          key={selectedTenant?.id ?? "no-tenant"}
+          printers={printers}
+        >
+          <PrinterInventory
+            selectedTenant={selectedTenant}
+            printers={printers}
+            agents={agents}
+            nowMs={nowMs}
+          />
+        </PrinterMismatchCoordinator>
+      </div>
       <DispatchDialog
         onOpenChange={(open) => {
           if (!open) setReprintJob(null);
