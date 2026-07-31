@@ -16,6 +16,7 @@ import {
   devicesRouteQuery,
   jobsRouteQuery,
   routeDataKeys,
+  settingsAdminRouteQuery,
   settingsRouteQuery,
   usersRouteQuery,
 } from "./route-data";
@@ -52,6 +53,11 @@ describe("routeDataKeys", () => {
     expect(routeDataKeys.agents("t1")).toEqual(["route", "agents", "t1"]);
     expect(routeDataKeys.users("t1")).toEqual(["route", "users", "t1"]);
     expect(routeDataKeys.settings("t1")).toEqual(["route", "settings", "t1"]);
+    expect(routeDataKeys.settingsAdmin("t1")).toEqual([
+      "route",
+      "settings-admin",
+      "t1",
+    ]);
     expect(routeDataKeys.agentSettings("t1", "a1")).toEqual([
       "route",
       "agent-settings",
@@ -87,6 +93,7 @@ describe("route query cache policies", () => {
     expect(agentsRouteQuery("t1", null).refetchInterval).toBe(60_000);
     expect(usersRouteQuery("t1").staleTime).toBe(60_000);
     expect(settingsRouteQuery("t1").staleTime).toBe(60_000);
+    expect(settingsAdminRouteQuery("t1").staleTime).toBe(60_000);
     expect(agentSettingsRouteQuery("t1", "a1", null).staleTime).toBe(30_000);
     expect(agentSettingsRouteQuery("t1", "a1", null).refetchInterval).toBe(
       false,
@@ -189,21 +196,38 @@ describe("route query functions", () => {
     });
   });
 
-  it("composes settings data from tokens, agents, printers, and audit events", async () => {
+  it("composes settings workspace data from agents and printers", async () => {
     const fetchMock = stubRouteFetch({
-      "/tenant-tokens": { tenant_tokens: ["tt1"] },
       "/agents": { agents: ["a1"] },
       "/printers": { printers: ["p1"] },
-      "/audit-events": { audit_events: ["e1"] },
     });
 
     const data = await settingsRouteQuery("t1").queryFn!({} as never);
 
-    expect(fetchedPaths(fetchMock)).toContain("/api/tenants/t1/audit-events");
+    expect(fetchedPaths(fetchMock).sort()).toEqual([
+      "/api/tenants/t1/agents",
+      "/api/tenants/t1/printers",
+    ]);
     expect(data).toEqual({
-      tenantTokens: ["tt1"],
       agents: ["a1"],
       printers: ["p1"],
+    });
+  });
+
+  it("keeps admin-only settings data in a separate query", async () => {
+    const fetchMock = stubRouteFetch({
+      "/tenant-tokens": { tenant_tokens: ["tt1"] },
+      "/audit-events": { audit_events: ["e1"] },
+    });
+
+    const data = await settingsAdminRouteQuery("t1").queryFn!({} as never);
+
+    expect(fetchedPaths(fetchMock).sort()).toEqual([
+      "/api/tenants/t1/audit-events",
+      "/api/tenants/t1/tenant-tokens",
+    ]);
+    expect(data).toEqual({
+      tenantTokens: ["tt1"],
       auditEvents: ["e1"],
     });
   });

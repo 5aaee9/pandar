@@ -15,14 +15,18 @@ export function ThemeSwitcher() {
   const active = useSettings((settings) => settings.theme);
 
   return (
-    <div className="inline-flex items-center gap-1 rounded-md border border-border bg-background p-0.5">
+    <div
+      aria-label={t("themeTitle")}
+      className="inline-flex items-center gap-1 rounded-lg border border-border bg-background p-1"
+      role="group"
+    >
       {themeModes.map((theme) => {
         const isActive = theme === active;
         return (
           <button
             key={theme}
             aria-pressed={isActive}
-            className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+            className={`h-7 rounded-md px-3 text-xs font-medium transition-colors ${
               isActive
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"

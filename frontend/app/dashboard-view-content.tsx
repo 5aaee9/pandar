@@ -3,7 +3,8 @@
 import { useState } from "react";
 
 import { AgentPairingGuidance } from "./agent-pairing-guidance";
-import { SettingsView } from "./dashboard-admin-views";
+
+
 import type { AttentionItem, Health, Severity } from "./dashboard-attention";
 import { JobHistory, PrinterInventory } from "./dashboard-inventory";
 import { FleetStatusStrip } from "./dashboard-overview";
@@ -43,7 +44,7 @@ import { NeedsAttention } from "./needs-attention";
 import { PrinterMismatchCoordinator } from "./printer-mismatch-dialog";
 
 export type DashboardViewContentProps = {
-  view: Exclude<DashboardView, "users">;
+  view: Exclude<DashboardView, "users" | "settings">;
   auth: AuthMetadata;
   selectedTenant: Tenant | null;
   health: Health;
@@ -64,8 +65,6 @@ export type DashboardViewContentProps = {
   adminUnavailable: boolean;
   adminLoadError: boolean;
   canManageJobs: boolean;
-  settingsStaticPanels?: React.ReactNode;
-  tenantSettingsStatic?: React.ReactNode;
 };
 
 export function DashboardViewContent(props: DashboardViewContentProps) {
@@ -75,10 +74,7 @@ export function DashboardViewContent(props: DashboardViewContentProps) {
   if (props.view === "jobs") {
     return <JobsView {...props} />;
   }
-  if (props.view === "agents") {
-    return <AgentsView {...props} />;
-  }
-  return <SettingsView {...props} />;
+  return <AgentsView {...props} />;
 }
 
 function DevicesView({

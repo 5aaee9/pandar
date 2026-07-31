@@ -6,11 +6,6 @@ import {
   resolveEffectiveTenants,
   resolveSelectedTenant,
 } from "../../dashboard-data";
-import { SettingsStaticPanels } from "../../settings-static-panels";
-import { TenantSettingsStatic } from "../../tenant-settings-static";
-import { TenantSettingsLivePrinters } from "../../tenant-settings-live-printers";
-import { LanguageSwitcher } from "../../../components/language-switcher";
-import { ThemeSwitcher } from "../../../components/theme-switcher";
 import { SettingsPageClient } from "./settings-page-client";
 
 const configuredTenantId = process.env.APP_TENANT_ID;
@@ -48,25 +43,6 @@ export default async function SettingsPage({
       auth={auth}
       selectedTenant={selectedTenant}
       membership={membership}
-      settingsStaticPanels={
-        <SettingsStaticPanels
-          languageSwitcher={<LanguageSwitcher />}
-          themeSwitcher={<ThemeSwitcher />}
-        />
-      }
-      tenantSettingsStatic={
-        <TenantSettingsStatic
-          tenant={selectedTenant}
-          agents={[]}
-          auth={auth}
-          livePrintersSlot={
-            <TenantSettingsLivePrinters
-              initialPrinters={[]}
-              selectedTenant={selectedTenant}
-            />
-          }
-        />
-      }
     />
   );
 }

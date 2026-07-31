@@ -133,7 +133,7 @@ function AgentsList({ agents }: { agents: Agent[] }) {
 function AuditList({ events }: { events: AuditEvent[] }) {
   const t = useTranslations("admin");
   return (
-    <div className="border-t border-border">
+    <div>
       <Subhead
         title={t("auditEvents")}
         meta={t("auditMeta", { count: events.length })}

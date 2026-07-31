@@ -36,7 +36,7 @@ export function LanguageSwitcher() {
   return (
     <div
       aria-label={t('languageTitle')}
-      className="inline-flex items-center gap-1 rounded-md border border-border bg-background p-0.5"
+      className="inline-flex items-center gap-1 rounded-lg border border-border bg-background p-1"
       role="group"
     >
       {locales.map((locale) => {
@@ -46,7 +46,7 @@ export function LanguageSwitcher() {
             key={locale}
             aria-label={locale === 'en' ? 'English' : '中文'}
             aria-pressed={isActive}
-            className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
+            className={`h-7 rounded-md px-3 text-xs font-medium transition-colors ${
               isActive
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-muted hover:text-foreground'

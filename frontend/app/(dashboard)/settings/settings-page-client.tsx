@@ -1,94 +1,104 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
-import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
-import { settingsRouteQuery } from "../../route-data";
+import {
+  settingsAdminRouteQuery,
+  settingsRouteQuery,
+} from "../../route-data";
+import { SettingsDashboard } from "../../settings-dashboard";
 import type { AuthMetadata, Tenant } from "../../dashboard-types";
 
 export function SettingsPageClient({
   auth,
   selectedTenant,
   membership,
-  settingsStaticPanels,
-  tenantSettingsStatic,
 }: {
   auth: AuthMetadata;
   selectedTenant: Tenant;
   membership: { role: string | null; error: string | null };
-  settingsStaticPanels: React.ReactNode;
-  tenantSettingsStatic: React.ReactNode;
 }) {
-  const { data, isLoading, error } = useQuery(
-    settingsRouteQuery(selectedTenant.id),
-  );
+  const t = useTranslations("settingsPage");
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
+  const canAdmin =
+    auth.provider === "none" ||
+    (membership.role === "tenant_admin" && membership.error === null);
+  const workspaceQuery = useQuery(settingsRouteQuery(selectedTenant.id));
+  const adminQuery = useQuery({
+    ...settingsAdminRouteQuery(selectedTenant.id),
+    enabled: canAdmin,
+  });
 
+  if (workspaceQuery.isLoading) {
+    return <SettingsLoading />;
+  }
+
+  if (workspaceQuery.error) {
+    return (
+      <div
+        className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive"
+        role="alert"
+      >
+        <div className="font-medium">{t("loadErrorTitle")}</div>
+        <p className="mt-1 text-destructive/90">{t("loadErrorDescription")}</p>
+        <details className="mt-2 text-xs">
+          <summary className="cursor-pointer font-medium">{t("errorDetails")}</summary>
+          <div className="mt-1 break-all">
+            {workspaceQuery.error instanceof Error
+              ? workspaceQuery.error.message
+              : String(workspaceQuery.error)}
+          </div>
+        </details>
+      </div>
+    );
+  }
+
+  const workspace = workspaceQuery.data ?? { agents: [], printers: [] };
   const adminUnavailable =
     auth.provider !== "none" &&
-    (membership.role !== "tenant_admin" || membership.error !== null || error !== null);
+    membership.error === null &&
+    membership.role !== "tenant_admin";
   const adminLoadError =
-    auth.provider !== "none" &&
-    membership.role === "tenant_admin" &&
-    (membership.error !== null || error !== null);
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center p-8">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-        Failed to load settings: {error instanceof Error ? error.message : "Unknown error"}
-      </div>
-    );
-  }
-
-  const { tenantTokens, agents, printers, auditEvents } = data ?? {
-    tenantTokens: [],
-    agents: [],
-    printers: [],
-    auditEvents: [],
-  };
+    (auth.provider !== "none" && membership.error !== null) ||
+    adminQuery.error !== null;
 
   return (
     <QueryErrorBoundary>
-      <DashboardViewContent
-      view="settings"
-      auth={auth}
-      selectedTenant={selectedTenant}
-      printers={printers}
-      agents={agents}
-      jobs={[]}
-      health={{
-        printersTotal: printers.length,
-        printersOnline: printers.filter((p) => p.status === "online").length,
-        agentsTotal: agents.length,
-        agentsConnected: agents.filter((a) => a.status === "online").length,
-        jobsActive: 0,
-        jobsFailed: 0,
-      }}
-      attentionItems={[]}
-      topSeverity={null}
-      liveState="idle"
-      lastEventAt={null}
-      fleetEmpty={printers.length === 0}
-      nowMs={0}
-      selectedCommand={null}
-      commandData={null}
-      notifications={[]}
-      tenantTokens={tenantTokens}
-      auditEvents={auditEvents}
-      adminUnavailable={adminUnavailable}
-      adminLoadError={adminLoadError}
-      canManageJobs={true}
-      settingsStaticPanels={settingsStaticPanels}
-      tenantSettingsStatic={tenantSettingsStatic}
-    />
+      <SettingsDashboard
+        adminLoadError={adminLoadError}
+        adminLoading={canAdmin && adminQuery.isLoading}
+        adminUnavailable={adminUnavailable}
+        agents={workspace.agents}
+        auditEvents={adminQuery.data?.auditEvents ?? []}
+        auth={auth}
+        membershipRole={membership.role}
+        nowMs={nowMs}
+        printers={workspace.printers}
+        selectedTenant={selectedTenant}
+        tenantTokens={adminQuery.data?.tenantTokens ?? []}
+      />
     </QueryErrorBoundary>
+  );
+}
+
+function SettingsLoading() {
+  return (
+    <div className="mx-auto max-w-6xl animate-pulse space-y-6">
+      <div className="h-40 rounded-2xl bg-muted" />
+      <div className="grid gap-6 lg:grid-cols-[12rem_minmax(0,1fr)]">
+        <div className="h-44 rounded-xl bg-muted/70" />
+        <div className="space-y-6">
+          <div className="h-48 rounded-xl bg-muted" />
+          <div className="h-64 rounded-xl bg-muted" />
+        </div>
+      </div>
+    </div>
   );
 }

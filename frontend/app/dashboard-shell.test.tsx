@@ -10,7 +10,7 @@ import { FleetStatusStrip } from "./dashboard-overview";
 import { DashboardShellHeader } from "./dashboard-shell-header";
 import { DashboardShellLayout } from "./dashboard-shell-layout";
 import { DashboardShellProvider } from "./dashboard-shell-provider";
-import { DashboardViewContent } from "./dashboard-view-content";
+import { SettingsDashboard } from "./settings-dashboard";
 import {
   DASHBOARD_VIEWS,
   agentSettingsHref,
@@ -447,80 +447,32 @@ describe("AppSidebar", () => {
 });
 
 describe("SettingsView", () => {
-  it("renders the language selector in settings", () => {
-    renderWithMessages(
-      <DashboardViewContent
-        view="settings"
-        auth={auth}
-        selectedTenant={null}
-        health={{
-          printersTotal: 0,
-          printersOnline: 0,
-          agentsTotal: 0,
-          agentsConnected: 0,
-          jobsActive: 0,
-          jobsFailed: 0,
-        }}
-        attentionItems={[]}
-        topSeverity={null}
-        liveState="idle"
-        lastEventAt={null}
-        fleetEmpty={true}
-        printers={[]}
-        agents={[]}
-        jobs={[]}
-        nowMs={0}
-        selectedCommand={null}
-        commandData={null}
-        notifications={[]}
-        tenantTokens={[]}
-        auditEvents={[]}
-        adminUnavailable={false}
-        adminLoadError={false}
-        canManageJobs={true}
-      />,
-    );
+  const settingsProps = {
+    auth,
+    selectedTenant: tenants[0],
+    membershipRole: "tenant_admin",
+    agents: [],
+    printers: [],
+    tenantTokens: [],
+    auditEvents: [],
+    adminUnavailable: false,
+    adminLoadError: false,
+    adminLoading: false,
+    nowMs: 0,
+  };
 
-    expect(screen.getByRole("heading", { name: "Language" })).toBeVisible();
+  it("renders the language selector in settings", () => {
+    renderWithMessages(<SettingsDashboard {...settingsProps} />);
+
+    expect(screen.getByText("Display language")).toBeVisible();
     expect(screen.getByRole("button", { name: "English" })).toBeVisible();
     expect(screen.getByRole("button", { name: "中文" })).toBeVisible();
   });
 
   it("renders the theme selector in settings", () => {
-    renderWithMessages(
-      <DashboardViewContent
-        view="settings"
-        auth={auth}
-        selectedTenant={null}
-        health={{
-          printersTotal: 0,
-          printersOnline: 0,
-          agentsTotal: 0,
-          agentsConnected: 0,
-          jobsActive: 0,
-          jobsFailed: 0,
-        }}
-        attentionItems={[]}
-        topSeverity={null}
-        liveState="idle"
-        lastEventAt={null}
-        fleetEmpty={true}
-        printers={[]}
-        agents={[]}
-        jobs={[]}
-        nowMs={0}
-        selectedCommand={null}
-        commandData={null}
-        notifications={[]}
-        tenantTokens={[]}
-        auditEvents={[]}
-        adminUnavailable={false}
-        adminLoadError={false}
-        canManageJobs={true}
-      />,
-    );
+    renderWithMessages(<SettingsDashboard {...settingsProps} />);
 
-    expect(screen.getByRole("heading", { name: "Theme" })).toBeVisible();
+    expect(screen.getByText("Color theme")).toBeVisible();
     expect(screen.getByRole("button", { name: "System" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Light" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Dark" })).toBeVisible();

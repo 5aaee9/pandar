@@ -39,6 +39,8 @@ export const routeDataKeys = {
   agents: (tenantId: string) => ["route", "agents", tenantId] as const,
   users: (tenantId: string) => ["route", "users", tenantId] as const,
   settings: (tenantId: string) => ["route", "settings", tenantId] as const,
+  settingsAdmin: (tenantId: string) =>
+    ["route", "settings-admin", tenantId] as const,
   agentSettings: (tenantId: string, agentId: string) =>
     ["route", "agent-settings", tenantId, agentId] as const,
 };
@@ -69,9 +71,12 @@ export type UsersRouteData = {
 };
 
 export type SettingsRouteData = {
-  tenantTokens: TenantToken[];
   agents: Agent[];
   printers: Printer[];
+};
+
+export type SettingsAdminRouteData = {
+  tenantTokens: TenantToken[];
   auditEvents: AuditEvent[];
 };
 
@@ -170,16 +175,29 @@ export function settingsRouteQuery(tenantId: string) {
   return queryOptions({
     queryKey: routeDataKeys.settings(tenantId),
     queryFn: async (): Promise<SettingsRouteData> => {
-      const [tenantTokens, agents, printers, auditEvents] = await Promise.all([
-        fetchRouteJson<TenantTokenList>(tenantId, "/tenant-tokens"),
+      const [agents, printers] = await Promise.all([
         fetchRouteJson<AgentList>(tenantId, "/agents"),
         fetchRouteJson<PrinterList>(tenantId, "/printers"),
+      ]);
+      return {
+        agents: agents.agents,
+        printers: printers.printers,
+      };
+    },
+    staleTime: 60 * 1000,
+  });
+}
+
+export function settingsAdminRouteQuery(tenantId: string) {
+  return queryOptions({
+    queryKey: routeDataKeys.settingsAdmin(tenantId),
+    queryFn: async (): Promise<SettingsAdminRouteData> => {
+      const [tenantTokens, auditEvents] = await Promise.all([
+        fetchRouteJson<TenantTokenList>(tenantId, "/tenant-tokens"),
         fetchRouteJson<AuditEventList>(tenantId, "/audit-events"),
       ]);
       return {
         tenantTokens: tenantTokens.tenant_tokens,
-        agents: agents.agents,
-        printers: printers.printers,
         auditEvents: auditEvents.audit_events,
       };
     },

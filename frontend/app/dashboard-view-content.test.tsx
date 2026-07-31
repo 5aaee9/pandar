@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import zh from "../messages/zh.json";
 import { DashboardViewContent } from "./dashboard-view-content";
+import { SettingsDashboard } from "./settings-dashboard";
 import type { AuthMetadata, Printer, Tenant, TenantToken } from "./dashboard-types";
 
 vi.mock("next/navigation", () => ({
@@ -142,6 +143,19 @@ describe("DashboardViewContent", () => {
     adminLoadError: false,
     canManageJobs: true,
   };
+  const settingsProps = {
+    auth,
+    selectedTenant: tenant,
+    membershipRole: "tenant_admin",
+    agents: [],
+    printers: [],
+    tenantTokens: [],
+    auditEvents: [],
+    adminUnavailable: false,
+    adminLoadError: false,
+    adminLoading: false,
+    nowMs: 0,
+  };
 
   it("keeps devices focused on overview and printer inventory", () => {
     renderWithMessages(<DashboardViewContent {...baseProps} view="devices" />);
@@ -213,9 +227,8 @@ describe("DashboardViewContent", () => {
   it("presents tenant tokens as a status-aware management list", async () => {
     const user = userEvent.setup();
     renderWithMessages(
-      <DashboardViewContent
-        {...baseProps}
-        view="settings"
+      <SettingsDashboard
+        {...settingsProps}
         nowMs={nowMs}
         tenantTokens={tenantTokens}
       />,
@@ -273,14 +286,8 @@ describe("DashboardViewContent", () => {
       "revoked-token",
     ]);
 
-    const heading = screen.getByRole("heading", {
-      name: "Tenant administration",
-    });
-    expect(heading.closest("section")).toHaveClass(
-      "border-border",
-      "bg-card",
-      "text-card-foreground",
-    );
+    expect(screen.getByRole("heading", { name: "Make Pandar yours" })).toBeVisible();
+    expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeVisible();
     expect(
       screen.queryByRole("dialog", { name: "Create tenant token" }),
     ).not.toBeInTheDocument();
@@ -304,9 +311,8 @@ describe("DashboardViewContent", () => {
   it("preserves the current expiration for an explicit token rotation", async () => {
     const user = userEvent.setup();
     renderWithMessages(
-      <DashboardViewContent
-        {...baseProps}
-        view="settings"
+      <SettingsDashboard
+        {...settingsProps}
         nowMs={nowMs}
         tenantTokens={[tenantTokens[0]]}
       />,
@@ -325,9 +331,8 @@ describe("DashboardViewContent", () => {
   it("clears an expired token expiration by default when rotating", async () => {
     const user = userEvent.setup();
     renderWithMessages(
-      <DashboardViewContent
-        {...baseProps}
-        view="settings"
+      <SettingsDashboard
+        {...settingsProps}
         nowMs={nowMs}
         tenantTokens={[tenantTokens[1]]}
       />,
@@ -360,9 +365,8 @@ describe("DashboardViewContent", () => {
     };
 
     renderWithMessages(
-      <DashboardViewContent
-        {...baseProps}
-        view="settings"
+      <SettingsDashboard
+        {...settingsProps}
         nowMs={nowMs}
         tenantTokens={[exactExpiration, expiredAndRevoked]}
       />,
@@ -385,9 +389,8 @@ describe("DashboardViewContent", () => {
 
   it("localizes tenant token relative expiration in Chinese", () => {
     renderWithMessages(
-      <DashboardViewContent
-        {...baseProps}
-        view="settings"
+      <SettingsDashboard
+        {...settingsProps}
         nowMs={nowMs}
         tenantTokens={tenantTokens}
       />,
@@ -412,9 +415,8 @@ describe("DashboardViewContent", () => {
 
   it("keeps the absolute token expiration fallback until the dashboard clock starts", () => {
     renderWithMessages(
-      <DashboardViewContent
-        {...baseProps}
-        view="settings"
+      <SettingsDashboard
+        {...settingsProps}
         tenantTokens={[tenantTokens[0]]}
       />,
     );
