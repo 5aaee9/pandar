@@ -13,83 +13,37 @@ concurrency:
   group: release-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  STUDIO_COMMIT: ba049f6a2e08c3b6033660bb84da80c08722974b
+  BOOST_URL: https://github.com/boostorg/boost/releases/download/boost-1.84.0/boost-1.84.0.tar.gz
+  BOOST_SHA256: 4d27e9efed0f6f152dc28db6430b9d3dfb40c0345da7342eaa5a987dde57bd95
+
 jobs:
-  build:
-    name: Build release artifacts (${{ matrix.label }})
-    runs-on: ${{ matrix.runner }}
+  linux-amd64:
+    name: Build native Linux amd64 release archive
+    runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: linux-amd64
-            runner: ubuntu-latest
-            cli-target: x86_64-unknown-linux-musl
-            plugin-target: x86_64-unknown-linux-gnu
-            zig-plugin-target: x86_64-linux-gnu
-            cli-name: pandar
-            plugin-name: libpandar_network_plugin.so
-            use-zig-cc: true
-            windows-crt-static: false
-          - label: linux-arm64
-            runner: ubuntu-latest
-            cli-target: aarch64-unknown-linux-musl
-            plugin-target: aarch64-unknown-linux-gnu
-            zig-plugin-target: aarch64-linux-gnu
-            cli-name: pandar
-            plugin-name: libpandar_network_plugin.so
-            use-zig-cc: true
-            windows-crt-static: false
-          - label: windows-amd64
-            runner: ubuntu-latest
-            cli-target: x86_64-pc-windows-gnu
-            plugin-target: x86_64-pc-windows-gnu
-            zig-plugin-target: x86_64-windows-gnu
-            cli-name: pandar.exe
-            plugin-name: pandar_network_plugin.dll
-            use-zig-cc: true
-            windows-crt-static: true
-          - label: windows-arm64
-            runner: ubuntu-latest
-            cli-target: aarch64-pc-windows-gnullvm
-            plugin-target: aarch64-pc-windows-gnullvm
-            zig-plugin-target: aarch64-windows-gnu
-            cli-name: pandar.exe
-            plugin-name: pandar_network_plugin.dll
-            use-zig-cc: true
-            windows-crt-static: true
-          - label: macos-amd64
-            runner: macos-26-intel
-            cli-target: x86_64-apple-darwin
-            plugin-target: x86_64-apple-darwin
-            zig-plugin-target: ""
-            cli-name: pandar
-            plugin-name: libpandar_network_plugin.dylib
-            use-zig-cc: false
-            windows-crt-static: false
-          - label: macos-arm64
-            runner: macos-26
-            cli-target: aarch64-apple-darwin
-            plugin-target: aarch64-apple-darwin
-            zig-plugin-target: ""
-            cli-name: pandar
-            plugin-name: libpandar_network_plugin.dylib
-            use-zig-cc: false
-            windows-crt-static: false
-
     steps:
-      - name: Checkout
+      - name: Checkout Pandar
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          persist-credentials: false
+
+      - name: Checkout pinned Bambu Studio contract source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: bambulab/BambuStudio
+          ref: ${{ env.STUDIO_COMMIT }}
+          path: .release/BambuStudio
           persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
           toolchain: stable
-          targets: ${{ matrix.cli-target }},${{ matrix.plugin-target }}
+          targets: x86_64-unknown-linux-musl,x86_64-unknown-linux-gnu
 
       - name: Install Zig
         uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
@@ -99,107 +53,92 @@ jobs:
       - name: Install cargo-zigbuild
         run: cargo install cargo-zigbuild --locked
 
-      - name: Build pandar CLI
+      - name: Download pinned Boost source
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ matrix.windows-crt-static }}" = "true" ]; then
-            export RUSTFLAGS="-C target-feature=+crt-static"
-          fi
-          if [ "${{ matrix.use-zig-cc }}" = "true" ]; then
-            cargo zigbuild --release -p pandar-app --bin pandar --target "${{ matrix.cli-target }}"
-          else
-            cargo build --release -p pandar-app --bin pandar --target "${{ matrix.cli-target }}"
-          fi
+          mkdir -p .release
+          curl --fail --location --retry 3 --output .release/boost-1.84.0.tar.gz "$BOOST_URL"
+          echo "$BOOST_SHA256  .release/boost-1.84.0.tar.gz" | sha256sum --check --strict
 
-      - name: Build pandar network plugin
+      - name: Build native release artifacts and ABI probe
         shell: bash
         run: |
           set -euo pipefail
-          if [ "${{ matrix.use-zig-cc }}" = "true" ]; then
-            mkdir -p "$RUNNER_TEMP/zig-cc"
-            printf '%s\n' '#!/usr/bin/env bash' "exec zig cc -target \"\$ZIG_PLUGIN_TARGET\" \"\$@\"" > "$RUNNER_TEMP/zig-cc/zig-cc-plugin"
-            printf '%s\n' '#!/usr/bin/env bash' "exec zig c++ -target \"\$ZIG_PLUGIN_TARGET\" \"\$@\"" > "$RUNNER_TEMP/zig-cc/zig-cxx-plugin"
-            chmod +x "$RUNNER_TEMP/zig-cc/zig-cc-plugin" "$RUNNER_TEMP/zig-cc/zig-cxx-plugin"
-            export ZIG_PLUGIN_TARGET="${{ matrix.zig-plugin-target }}"
-            export CC="$RUNNER_TEMP/zig-cc/zig-cc-plugin"
-            export CXX="$RUNNER_TEMP/zig-cc/zig-cxx-plugin"
-            export AR="zig ar"
-          fi
-          if [ "${{ matrix.use-zig-cc }}" = "true" ]; then
-            cargo zigbuild --release -p pandar-network-plugin --target "${{ matrix.plugin-target }}"
-          else
-            cargo build --release -p pandar-network-plugin --target "${{ matrix.plugin-target }}"
-          fi
+          cargo zigbuild --release -p pandar-app --bin pandar --target x86_64-unknown-linux-musl
+          mkdir -p "$RUNNER_TEMP/zig-cc"
+          printf '%s\n' '#!/usr/bin/env bash' 'exec zig cc -target x86_64-linux-gnu "$@"' > "$RUNNER_TEMP/zig-cc/zig-cc-plugin"
+          printf '%s\n' '#!/usr/bin/env bash' 'exec zig c++ -target x86_64-linux-gnu "$@"' > "$RUNNER_TEMP/zig-cc/zig-cxx-plugin"
+          chmod +x "$RUNNER_TEMP/zig-cc/zig-cc-plugin" "$RUNNER_TEMP/zig-cc/zig-cxx-plugin"
+          CC="$RUNNER_TEMP/zig-cc/zig-cc-plugin" \
+            CXX="$RUNNER_TEMP/zig-cc/zig-cxx-plugin" \
+            AR="zig ar" \
+            cargo zigbuild --release -p pandar-network-plugin -p pandar-bambu-source \
+              --target x86_64-unknown-linux-gnu
+          cargo build --release --manifest-path tools/studio-abi-contract/Cargo.toml
 
-      - name: Package artifacts
+      - name: Package exact three-file archive
         shell: bash
         run: |
           set -euo pipefail
           ref_name="${GITHUB_REF_NAME:-manual}"
           safe_ref="${ref_name//\//-}"
-          archive="pandar-release-${safe_ref}-${{ matrix.label }}.tar.gz"
-          stage="$RUNNER_TEMP/pandar-release-${{ matrix.label }}"
+          archive="pandar-release-${safe_ref}-linux-amd64.tar.gz"
+          stage="$RUNNER_TEMP/pandar-release-linux-amd64"
           mkdir -p "$stage" dist
-          cp "target/${{ matrix.cli-target }}/release/${{ matrix.cli-name }}" "$stage/${{ matrix.cli-name }}"
-          cp "target/${{ matrix.plugin-target }}/release/${{ matrix.plugin-name }}" "$stage/${{ matrix.plugin-name }}"
-          tar -C "$stage" -czf "dist/$archive" .
-          (
-            cd dist
-            shasum -a 256 "$archive" | awk '{print $1 "  " $2}' > "$archive.sha256"
-          )
+          cp target/x86_64-unknown-linux-musl/release/pandar "$stage/pandar"
+          cp target/x86_64-unknown-linux-gnu/release/libpandar_network_plugin.so "$stage/libpandar_network_plugin.so"
+          cp target/x86_64-unknown-linux-gnu/release/libpandar_bambu_source.so "$stage/libpandar_bambu_source.so"
+          tar -C "$stage" -czf "dist/$archive" \
+            pandar libpandar_network_plugin.so libpandar_bambu_source.so
+          (cd dist && sha256sum "$archive" > "$archive.sha256")
 
-      - name: Check Windows PE inspector
-        if: startsWith(matrix.label, 'windows-')
-        shell: bash
-        run: |
-          set -euo pipefail
-          if ! command -v llvm-objdump >/dev/null 2>&1 || ! command -v llvm-nm >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y llvm
-          fi
-          command -v objdump
-          command -v llvm-objdump
-          command -v llvm-nm
-
-      - name: Smoke release artifact
+      - name: Smoke packaged archive on its native host
         shell: bash
         run: |
           set -euo pipefail
           ref_name="${GITHUB_REF_NAME:-manual}"
           safe_ref="${ref_name//\//-}"
-          archive="dist/pandar-release-${safe_ref}-${{ matrix.label }}.tar.gz"
-          checksum="$archive.sha256"
-          (
-            cd dist
-            shasum -a 256 -c "$(basename "$checksum")"
-          )
+          archive="dist/pandar-release-${safe_ref}-linux-amd64.tar.gz"
           cargo run --manifest-path tools/release-smoke/Cargo.toml -- \
-            --label "${{ matrix.label }}" \
-            --runner-os "${{ runner.os == 'macOS' && 'macos' || 'linux' }}" \
+            --label linux-amd64 \
             --archive "$archive" \
-            --checksum "$checksum" \
-            --cli-name "${{ matrix.cli-name }}" \
-            --plugin-name "${{ matrix.plugin-name }}" \
-            --repo-root "$GITHUB_WORKSPACE"
+            --checksum "$archive.sha256" \
+            --cli-name pandar \
+            --plugin-name libpandar_network_plugin.so \
+            --source-name libpandar_bambu_source.so \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --abi-probe tools/studio-abi-contract/target/release/pandar-studio-abi-contract \
+            --abi-probe-arg --studio-source \
+            --abi-probe-arg "$GITHUB_WORKSPACE/.release/BambuStudio" \
+            --abi-probe-arg --boost-archive \
+            --abi-probe-arg "$GITHUB_WORKSPACE/.release/boost-1.84.0.tar.gz"
 
-      - name: Upload build artifact
+      - name: Upload Linux release archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: pandar-release-${{ matrix.label }}
+          name: pandar-release-linux-amd64
           path: dist/*
           if-no-files-found: error
 
-  studio-hook-windows:
-    name: Build native Windows Studio hook bundle
+  windows-amd64:
+    name: Build native Windows amd64 release archives
     runs-on: windows-latest
     timeout-minutes: 90
     permissions:
       contents: read
     steps:
-      - name: Checkout
+      - name: Checkout Pandar
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          persist-credentials: false
+
+      - name: Checkout pinned Bambu Studio contract source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: bambulab/BambuStudio
+          ref: ${{ env.STUDIO_COMMIT }}
+          path: .release/BambuStudio
           persist-credentials: false
 
       - name: Install Rust
@@ -208,32 +147,78 @@ jobs:
           toolchain: stable
           targets: x86_64-pc-windows-msvc
 
-      - name: Build native Studio libraries and hook
+      - name: Download pinned Boost source
         shell: pwsh
         run: |
-          cargo build --release -p pandar-network-plugin -p pandar-bambu-source -p pandar-studio-hook --target x86_64-pc-windows-msvc
+          New-Item -ItemType Directory -Force -Path .release | Out-Null
+          $archive = Join-Path $env:GITHUB_WORKSPACE ".release/boost-1.84.0.tar.gz"
+          Invoke-WebRequest -Uri $env:BOOST_URL -OutFile $archive
+          $actual = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          if ($actual -ne $env:BOOST_SHA256) {
+            throw "Boost checksum mismatch: expected $env:BOOST_SHA256, got $actual"
+          }
+
+      - name: Build native release artifacts and ABI probe
+        shell: pwsh
+        run: |
+          cargo build --release -p pandar-app -p pandar-network-plugin -p pandar-bambu-source -p pandar-studio-hook --target x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test -p pandar-studio-hook --target x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --release --manifest-path tools/studio-abi-contract/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Package Studio hook bundle
+      - name: Package release archive and Studio hook bundle
         shell: pwsh
         run: |
-          $stage = Join-Path $env:RUNNER_TEMP "pandar-studio-hook-windows-amd64"
+          $safeRef = ($env:GITHUB_REF_NAME ?? "manual").Replace("/", "-")
           $dist = Join-Path $env:GITHUB_WORKSPACE "dist"
-          New-Item -ItemType Directory -Force -Path $stage, $dist | Out-Null
-          Copy-Item "target/x86_64-pc-windows-msvc/release/pandar_studio_hook.dll" (Join-Path $stage "pandar_studio_hook.dll")
-          Copy-Item "target/x86_64-pc-windows-msvc/release/pandar_network_plugin.dll" (Join-Path $stage "pandar_network_plugin.dll")
-          Copy-Item "target/x86_64-pc-windows-msvc/release/pandar_bambu_source.dll" (Join-Path $stage "pandar_bambu_source.dll")
-          $archive = Join-Path $dist "pandar-studio-hook-02.08.01-windows-amd64.zip"
-          Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $archive -CompressionLevel Optimal
-          $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
-          "$hash  pandar-studio-hook-02.08.01-windows-amd64.zip" | Set-Content -NoNewline "$archive.sha256"
+          $releaseStage = Join-Path $env:RUNNER_TEMP "pandar-release-windows-amd64"
+          $hookStage = Join-Path $env:RUNNER_TEMP "pandar-studio-hook-windows-amd64"
+          New-Item -ItemType Directory -Force -Path $dist, $releaseStage, $hookStage | Out-Null
 
-      - name: Upload Studio hook bundle
+          $target = Join-Path $env:GITHUB_WORKSPACE "target/x86_64-pc-windows-msvc/release"
+          Copy-Item (Join-Path $target "pandar.exe") (Join-Path $releaseStage "pandar.exe")
+          Copy-Item (Join-Path $target "pandar_network_plugin.dll") (Join-Path $releaseStage "pandar_network_plugin.dll")
+          Copy-Item (Join-Path $target "pandar_bambu_source.dll") (Join-Path $releaseStage "pandar_bambu_source.dll")
+          $releaseArchive = Join-Path $dist "pandar-release-$safeRef-windows-amd64.tar.gz"
+          tar -C $releaseStage -czf $releaseArchive pandar.exe pandar_network_plugin.dll pandar_bambu_source.dll
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $releaseHash = (Get-FileHash -Algorithm SHA256 $releaseArchive).Hash.ToLowerInvariant()
+          "$releaseHash  $(Split-Path -Leaf $releaseArchive)" | Set-Content -NoNewline "$releaseArchive.sha256"
+
+          Copy-Item (Join-Path $target "pandar_studio_hook.dll") (Join-Path $hookStage "pandar_studio_hook.dll")
+          Copy-Item (Join-Path $target "pandar_network_plugin.dll") (Join-Path $hookStage "pandar_network_plugin.dll")
+          Copy-Item (Join-Path $target "pandar_bambu_source.dll") (Join-Path $hookStage "pandar_bambu_source.dll")
+          $hookArchive = Join-Path $dist "pandar-studio-hook-02.08.01-windows-amd64.zip"
+          Compress-Archive -Path (Join-Path $hookStage "*") -DestinationPath $hookArchive -CompressionLevel Optimal
+          $hookHash = (Get-FileHash -Algorithm SHA256 $hookArchive).Hash.ToLowerInvariant()
+          "$hookHash  $(Split-Path -Leaf $hookArchive)" | Set-Content -NoNewline "$hookArchive.sha256"
+
+      - name: Smoke packaged archive on its native host
+        shell: pwsh
+        run: |
+          $safeRef = ($env:GITHUB_REF_NAME ?? "manual").Replace("/", "-")
+          $archive = Join-Path $env:GITHUB_WORKSPACE "dist/pandar-release-$safeRef-windows-amd64.tar.gz"
+          cargo run --manifest-path tools/release-smoke/Cargo.toml -- `
+            --label windows-amd64 `
+            --archive $archive `
+            --checksum "$archive.sha256" `
+            --cli-name pandar.exe `
+            --plugin-name pandar_network_plugin.dll `
+            --source-name pandar_bambu_source.dll `
+            --repo-root $env:GITHUB_WORKSPACE `
+            --abi-probe tools/studio-abi-contract/target/release/pandar-studio-abi-contract.exe `
+            --abi-probe-arg --studio-source `
+            --abi-probe-arg "$env:GITHUB_WORKSPACE/.release/BambuStudio" `
+            --abi-probe-arg --boost-archive `
+            --abi-probe-arg "$env:GITHUB_WORKSPACE/.release/boost-1.84.0.tar.gz"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Windows release archives
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: pandar-studio-hook-windows-amd64
+          name: pandar-release-windows-amd64
           path: dist/*
           if-no-files-found: error
 
@@ -282,8 +267,8 @@ jobs:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
     needs:
-      - build
-      - studio-hook-windows
+      - linux-amd64
+      - windows-amd64
       - quality-gate
     if: startsWith(github.ref, 'refs/tags/v')
     timeout-minutes: 15
@@ -294,7 +279,7 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
-          pattern: pandar-*
+          pattern: pandar-release-*
           merge-multiple: true
 
       - name: Publish release

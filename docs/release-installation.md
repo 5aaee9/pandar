@@ -10,23 +10,22 @@ Release `v0.1.0` will be published at <https://github.com/5aaee9/pandar/releases
 
 Select the archive that matches the operator host OS and CPU architecture:
 
-| Host                  | Target label    | Archive                                                      |
-| --------------------- | --------------- | ------------------------------------------------------------ |
-| Linux x86_64/amd64    | `linux-amd64`   | `pandar-release-<tag-or-sanitized-ref>-linux-amd64.tar.gz`   |
-| Linux arm64/aarch64   | `linux-arm64`   | `pandar-release-<tag-or-sanitized-ref>-linux-arm64.tar.gz`   |
-| Windows x86_64/amd64  | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-windows-amd64.tar.gz` |
-| Windows arm64/aarch64 | `windows-arm64` | `pandar-release-<tag-or-sanitized-ref>-windows-arm64.tar.gz` |
-| macOS Intel           | `macos-amd64`   | `pandar-release-<tag-or-sanitized-ref>-macos-amd64.tar.gz`   |
-| macOS Apple Silicon   | `macos-arm64`   | `pandar-release-<tag-or-sanitized-ref>-macos-arm64.tar.gz`   |
+| Host                 | Target label    | Archive                                                      |
+| -------------------- | --------------- | ------------------------------------------------------------ |
+| Linux x86_64/amd64   | `linux-amd64`   | `pandar-release-<tag-or-sanitized-ref>-linux-amd64.tar.gz`   |
+| Windows x86_64/amd64 | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-windows-amd64.tar.gz` |
 
-The six labels above describe the broader release naming scheme. For the current exact Bambu Studio
-`02.08.01.55` alignment, final16 is verified only for `linux-amd64`; the most recent Windows artifact is
-historical final13 and predates the post-final13 fixes. Every candidate archive must contain exactly
+The `v0.1.0` release does not publish arm64 or macOS desktop archives because current native
+release-smoke supports only Linux amd64 and Windows amd64. Every published archive contains exactly
 three top-level files: the `pandar` CLI (or `pandar.exe`), the matching network plugin, and the matching
-sentinel-only BambuSource companion.
-Historical two-file/129-export archives are not current Studio candidates.
-The existing tag workflow still emits the historical GNU Windows/two-file shape; do not use it for
-this target. Build and verify the current candidates with the same-OS native procedure recorded in
+sentinel-only BambuSource companion. The tag workflow builds each archive on its target OS, validates
+the pinned Studio contract through the packaged plugin, and verifies the checksum, exact layout,
+companion policy, and CLI startup before publication. The separate Windows Studio hook bundle is also
+built natively with MSVC.
+
+Historical two-file/129-export archives are not current Studio candidates. Final16 remains the latest
+recorded Linux evidence, while the tag workflow itself and the post-final13 native Windows package
+remain untested until the first successful tagged run is recorded in
 `docs/compatibility/release-artifacts.md`.
 
 ## Checksum Verification

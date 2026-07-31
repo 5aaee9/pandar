@@ -42,14 +42,14 @@ Current native release-smoke is intentionally scoped to `linux-amd64` and `windo
 current macOS candidate, Windows real-Studio run, or hardware-print evidence. Those surfaces remain
 `untested`; older artifacts do not upgrade them.
 
-Candidates for this target must be built by same-OS native commands. The general tag-workflow Windows
-matrix still uses a GNU target and is not a `02.08.01.55` Studio candidate. A separate
-`studio-hook-windows` job now builds `pandar-network-plugin`, `pandar-bambu-source`, and
-`pandar-studio-hook` natively with MSVC and packages the fixed
+Candidates for this target must be built by same-OS native commands. The tag workflow now builds only
+Linux amd64 and Windows amd64 desktop archives, includes the BambuSource companion, and runs current
+native release-smoke with the pinned Studio and Boost inputs against the packaged plugin before
+publication. The Windows job uses MSVC and also packages the fixed
 `pandar-studio-hook-02.08.01-windows-amd64.zip` asset plus its checksum. That bundle has exactly
 `pandar_studio_hook.dll`, `pandar_network_plugin.dll`, and `pandar_bambu_source.dll`; the Rust
 installer rejects any other layout. The workflow implementation is present but remains `untested`
-until a tagged run captures the native build and a real Windows Studio run verifies the download
+until a tagged run captures both native builds and a real Windows Studio run verifies the download
 replacement.
 
 ## Current Final16 Linux Candidate Evidence

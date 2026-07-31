@@ -58,7 +58,7 @@ git push origin v0.1.0
 Pushing the tag starts:
 
 - `Checks`, which repeats the quality gates and validates tag/version consistency;
-- `Release`, which builds and smoke-tests six CLI/plugin archives before creating the GitHub Release;
+- `Release`, which natively builds and smoke-tests the Linux amd64 and Windows amd64 three-file archives, and builds the Windows Studio hook bundle, before creating the GitHub Release;
 - `Docker`, which publishes `hub:v0.1.0`, `web:v0.1.0`, and Helm chart `0.1.0` after Checks succeeds.
 
 Do not create the GitHub Release manually while these workflows are running.
@@ -74,6 +74,6 @@ docker pull ghcr.io/5aaee9/pandar/hub:v0.1.0
 docker pull ghcr.io/5aaee9/pandar/web:v0.1.0
 ```
 
-Verify all twelve desktop files are present: six `.tar.gz` archives and six `.sha256` sidecars. Run the checksum, CLI startup, and plugin checks from `docs/release-installation.md` on every available target host.
+Verify all six desktop files are present: two `.tar.gz` archives and their `.sha256` sidecars, plus the Windows Studio hook `.zip` and its `.sha256` sidecar. Run the checksum, CLI startup, and plugin checks from `docs/release-installation.md` on both target hosts.
 
 Record tagged-artifact evidence in `docs/compatibility/release-artifacts.md`, record real Studio evidence separately in `docs/compatibility/bambu-studio-plugin.md`, and update `docs/roadmap.md`. A failed or partial workflow is not a completed release.

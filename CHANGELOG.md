@@ -28,7 +28,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Planned distribution
 
-- The release workflow will publish desktop CLI and network-plugin archives for Linux, Windows, and macOS on amd64 and arm64, each with a SHA-256 sidecar.
+- The release workflow will publish native Linux amd64 and Windows amd64 archives containing the CLI, network plugin, and BambuSource companion, each with a SHA-256 sidecar. It also publishes the native Windows Studio hook bundle and checksum.
 - The tag will publish Hub and Web images at `ghcr.io/5aaee9/pandar/hub:v0.1.0` and `ghcr.io/5aaee9/pandar/web:v0.1.0`.
 - The tag will publish Helm chart `0.1.0` at `oci://ghcr.io/5aaee9/pandar/chart/pandar`.
 

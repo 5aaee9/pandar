@@ -16,6 +16,10 @@
 
 ## Completed
 
+- Fixed the Print Jobs list rendering each `JobRow` list item inside another list item, which produced a React hydration error in production markup. The history list now owns exactly one `li` per job while preserving content-visibility styling, and a focused DOM regression rejects nested list items.
+
+- Removed the tag-publication blocker caused by the historical release matrix invoking the current native release-smoke with obsolete arguments and two-file archives on unsupported/cross-compiled targets. Release CI now publishes only same-OS Linux amd64 and Windows amd64 candidates, packages the required BambuSource companion, verifies pinned Boost and Bambu Studio inputs, runs current checksum/layout/export/CLI/native-ABI smoke against the packaged plugin, and emits the native MSVC Windows Studio hook bundle. README, changelog, installation guidance, compatibility evidence, and the maintainer runbook now describe the actual six desktop assets; the first tagged run and real Windows Studio session remain unclaimed evidence.
+
 - Renamed the Windows injection crate and CLI surface from `pandar-studio-dev-hook` to `pandar-studio-hook`, retained the opt-in local log-key patch under `PANDAR_STUDIO_LOG_LOCAL_KEY`, and added a Studio `02.08.01.x` network-plugin download replacement. `pandar install-studio-hook` now fetches the fixed native Windows bundle and sidecar from the latest GitHub Release, verifies SHA-256 and exact ZIP layout, installs the Pandar network plugin plus BambuSource, and caches a Studio-shaped archive. The injected hook replaces only Studio's final `networking_plugins.zip` rename and fails closed when its verified cache is unavailable. Release CI now builds the dedicated bundle natively with MSVC. Local Rust tests and workspace checks cover release selection, checksum/layout rejection, package construction, and CLI parsing; native Windows Studio execution remains the next compatibility-evidence step.
 
 - Rebuilt the dashboard Settings page as a dedicated responsive workspace instead of routing it through the generic dashboard view prop bag: a status overview and anchored section navigation now organize appearance, workspace identity, connected infrastructure shortcuts, access/security administration, recent activity, and the current session. Language and theme controls use larger labeled groups, tenant tokens retain their focused create/rotate/revoke flows, Agent enrollment and audit history remain available to administrators, technical identifiers are progressively disclosed, and English/Chinese copy plus route-level loading states cover the new hierarchy. Workspace agent/printer data now loads separately from protected token/audit data, so non-admin roles can use personal and workspace settings without an admin-only request failing the entire page; protected request failures remain isolated and visible in the access section.
@@ -1141,9 +1145,10 @@ Goal: make release artifacts predictable enough for operators to install without
 - Refreshed local release-smoke unit evidence on 2026-06-24: `cargo test --manifest-path tools/release-smoke/Cargo.toml` passed 17 tests.
 - Historical evidence only: the 2026-06-24 `local-a79bcae` Linux archive used the old two-file layout
   and 129-export check. It remains in the manifest but is not a current Studio candidate.
-- Historical Phase 24 work wired the tag-driven workflow to the old release smoke. That workflow still
-  emits a GNU Windows/two-file package and is not compatible with or part of the current native
-  `02.08.01.55` three-file delivery path; it was not modified or run for this Goal.
+- Historical Phase 24 work wired the tag-driven workflow to the old release smoke. That obsolete
+  GNU Windows/two-file matrix has now been replaced by same-OS Linux amd64 and Windows amd64
+  three-file jobs using the current native release-smoke; the replacement remains untested until the
+  first tagged run.
 - Added operator release installation docs, a release artifact evidence manifest, and the explicit Phase 24 signing decision: `unsigned-accepted`.
 - The workflow-run bullets below are historical two-file/129-export Phase 24 evidence. They are not
   current `02.08.01.55` candidates and are not instructions to use GitHub Actions for this alignment.
