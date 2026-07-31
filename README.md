@@ -22,9 +22,9 @@ pandar-agent -(MQTT + machine file transfer)-> Bambu machines
 - [NixOS module options](docs/deployment/nixos/options.md): generated `services.pandar` deployment options for hub, web, and agent services.
 - [Roadmap](docs/roadmap.md): completed phases and planned next phases.
 
-## Planned release 0.1.0
+## Release 0.1.0
 
-The planned `v0.1.0` tag will publish native Linux amd64 and Windows amd64 CLI/plugin/BambuSource archives plus the Windows Studio hook bundle on [GitHub Releases](https://github.com/5aaee9/pandar/releases/tag/v0.1.0), Hub and Web images as `ghcr.io/5aaee9/pandar/hub:v0.1.0` and `ghcr.io/5aaee9/pandar/web:v0.1.0`, and Helm chart `0.1.0` at `oci://ghcr.io/5aaee9/pandar/chart/pandar`.
+The `v0.1.0` release provides native Linux amd64 and Windows amd64 CLI/plugin/BambuSource archives plus the Windows Studio hook bundle on [GitHub Releases](https://github.com/5aaee9/pandar/releases/tag/v0.1.0), Hub and Web images as `ghcr.io/5aaee9/pandar/hub:v0.1.0` and `ghcr.io/5aaee9/pandar/web:v0.1.0`, and Helm chart `0.1.0` at `oci://ghcr.io/5aaee9/pandar/chart/pandar`.
 
 Desktop archives will be unsigned and accompanied by SHA-256 sidecars. Read the [installation guide](docs/release-installation.md) and [current compatibility evidence](docs/compatibility/release-artifacts.md) before production use.
 

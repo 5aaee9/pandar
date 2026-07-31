@@ -51,8 +51,46 @@ publication. The Windows job uses MSVC and also packages the fixed
 installer rejects any other layout. The initial `v0.1.0` workflow run `30653076144` built and
 smoke-tested the native Windows artifacts, but rejected the Linux artifact because its Zig-built C++
 shim was ABI-incompatible with the host `libstdc++` probe. Linux plugin builds now use the native GNU
-toolchain; the replacement workflow remains `untested` until a successful tagged run captures both
-native builds, and a real Windows Studio run still must verify the download replacement.
+toolchain. Replacement run `30654892795` passed both native build/smoke jobs and published the
+release; a real Windows Studio run still must verify the download replacement.
+
+## v0.1.0 Tagged Release Evidence
+
+Annotated tag `v0.1.0` resolves to commit `d50ef4223daf1fe5f45b6adc254ec91a9823bacc`.
+Tagged Checks run `30654892831`, Release run `30654892795`, and Docker/Helm run `30654892588`
+all passed. The GitHub Release was published on 2026-07-31 with exactly six desktop assets. After
+publication, all three downloaded sidecars passed `sha256sum --check --strict`; both release archives
+had exactly their declared three top-level files, and the Studio hook ZIP had exactly
+`pandar_studio_hook.dll`, `pandar_network_plugin.dll`, and `pandar_bambu_source.dll`.
+
+| Target | Archive SHA-256 | CLI startup | Exact three-file layout | 130-name Studio contract set | Companion sentinel/no `Bambu_*` | Native ABI probe | Exact Studio load |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `linux-amd64` | `ec6d60492afb101cde66c270b9550447185d281dbac51a3868d98be4f43fbd10` | `passed` | `passed` | `passed` | `passed` | `passed` | `untested` for this tagged artifact; historical final16 AppImage evidence remains separate |
+| `windows-amd64` | `3e21f6c0a6c67ec47d9b826f45ebe40888acb8f8d8e3bcd5dad8496d082a15b8` | `passed` | `passed` | `passed` | `passed` | `passed` | `untested` |
+| macOS | `unsupported` | `unsupported` | `unsupported` | `unsupported` | `unsupported` | `unsupported` | `unsupported` |
+
+The Linux network plugin SHA-256 is
+`374d9e6a3213e64b1f3245e1b5744186fde4677e4a5d12b11491f6faa0c01387`; its BambuSource
+companion SHA-256 is `7199d3fa8347155ece25ec797f159b13b3171da2bf8ce710be0eb0cf99459b4c`.
+The native Ubuntu 24.04 runner used Rust `1.97.1`, GNU C++ `13.3.0`, glibc `2.39`, and dynamic
+`libstdc++.so.6`. The downloaded Linux archive was independently rerun through release-smoke after
+publication and again passed CLI execution, 109 network plus 21 File Transfer declarations, all 130
+contract exports, the sentinel-only companion policy, and the full packaged native ABI probe.
+
+The Windows network plugin SHA-256 is
+`3b800f6b7855efcef62490c6d159a279b97a859851940a793e455efe6e63e427`; its BambuSource
+companion SHA-256 is `785ab8c6fc4729fe02bdb0c864e881ea2980882ff38d0182f3b5babe0bb16f9c`.
+The native Windows runner used Rust `1.97.1`, target `x86_64-pc-windows-msvc`, and clang-cl
+`20.1.8` with the MSVC x64 runtime. The Studio hook ZIP SHA-256 is
+`fa80f37f72fbe705914139a75b3a04d3ad0c0cc63020d546f210dd6426f76089`; its hook DLL SHA-256
+is `dd87a83e76b2beae104eaebda9bb449e7e28ae46ffc58d7c653c77a406d97459`.
+
+The published Linux amd64 container manifests are Hub
+`sha256:0276f3e056e90e4cc590f5b597ee28121a469ba5f7629c33105aaba405103dc0` and Web
+`sha256:5f5a6cc74a04533db4bf790933bada9281b937133be5e684b2cc859444f76160`.
+Helm chart `0.1.0` has OCI digest
+`sha256:c36ca756aec016d501d32c81054986a1b5cc1ee34f0e3c8773d2f995a618108b` and declares
+`appVersion: v0.1.0`.
 
 ## Current Final16 Linux Candidate Evidence
 
@@ -527,10 +565,9 @@ historical provenance only and are not instructions to re-run or modify a workfl
 
 ## Release Availability Boundary
 
-The historical availability checks found no tagged GitHub Release and no remote release tag. Even if
-an old workflow artifact remains downloadable, it lacks the current three-file layout and cannot be
-promoted to a current Studio candidate. A future tagged release must be validated again from its own
-downloaded archive on the native target.
+Release `v0.1.0` is available from GitHub Releases with the tagged evidence recorded above. Historical
+workflow artifacts that lack the current three-file layout remain non-promotable. Future releases must
+be validated again from their own downloaded archives on each native target.
 
 ## Real Studio And Hardware Boundaries
 

@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-07-19
+## [0.1.0] - 2026-07-31
 
 ### Added
 
@@ -26,17 +26,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Updated Next.js and Better Auth to their release-preparation patch versions and pinned patched Lodash/PostCSS transitive resolutions; the production npm audit is clean.
 - Made release publication wait for the exact tagged commit's successful Checks workflow.
 
-### Planned distribution
+### Distribution
 
-- The release workflow will publish native Linux amd64 and Windows amd64 archives containing the CLI, network plugin, and BambuSource companion, each with a SHA-256 sidecar. It also publishes the native Windows Studio hook bundle and checksum.
-- The tag will publish Hub and Web images at `ghcr.io/5aaee9/pandar/hub:v0.1.0` and `ghcr.io/5aaee9/pandar/web:v0.1.0`.
-- The tag will publish Helm chart `0.1.0` at `oci://ghcr.io/5aaee9/pandar/chart/pandar`.
+- The release publishes native Linux amd64 and Windows amd64 archives containing the CLI, network plugin, and BambuSource companion, each with a SHA-256 sidecar. It also publishes the native Windows Studio hook bundle and checksum.
+- Hub and Web images are published at `ghcr.io/5aaee9/pandar/hub:v0.1.0` and `ghcr.io/5aaee9/pandar/web:v0.1.0`.
+- Helm chart `0.1.0` is published at `oci://ghcr.io/5aaee9/pandar/chart/pandar`.
 
 ### Known limitations
 
 - Desktop archives are unsigned. Verify the supplied SHA-256 sidecar; Windows SmartScreen and macOS Gatekeeper may warn.
 - Real-host installation and real Bambu Studio replacement evidence is not yet complete for every target. Consult `docs/compatibility/release-artifacts.md` and `docs/compatibility/bambu-studio-plugin.md` before production use.
-- The planned container images target Linux amd64 only.
+- The container images target Linux amd64 only.
 - Native firmware and recovery ownership still requires one active Hub; the firmware package catalog is intentionally empty.
 - The Android client is built separately and will not be attached to the GitHub Release.
 
