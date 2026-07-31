@@ -1,20 +1,23 @@
 use anyhow::Context;
 use pandar_core::{Tenant, TenantId, created_at_now};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseConnection,
-    DatabaseTransaction, DbBackend, EntityTrait, QueryFilter, SqliteTransactionMode, Statement,
-    TransactionOptions, TransactionTrait, Value,
+    ActiveModelTrait,
+    ActiveValue::Set,
+    ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction, EntityTrait,
+    QueryFilter,
+    sea_query::{Expr, ExprTrait},
 };
 use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
+use crate::db::TransactionDialectExt;
 use crate::{
+    db::{UniqueConstraint, is_foreign_key_violation, is_unique_violation},
     entities::{join_links, tenants, user_identities, users},
     repositories::{
         AuditActor, AuditEvent, RepositoryError, RepositoryResult, User, UserIdentity,
         audit::{audit_metadata, record_audit_event},
         auth::{UserRole, onboarding::JoinLink, user_from_model},
-        is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
     },
 };
 
@@ -40,17 +43,7 @@ struct JoinLinkAuditMetadata<'a> {
 pub(super) async fn begin_onboarding_write_transaction(
     connection: &DatabaseConnection,
 ) -> Result<DatabaseTransaction, sea_orm::DbErr> {
-    match connection.get_database_backend() {
-        DbBackend::Sqlite => {
-            connection
-                .begin_with_options(TransactionOptions {
-                    sqlite_transaction_mode: Some(SqliteTransactionMode::Immediate),
-                    ..Default::default()
-                })
-                .await
-        }
-        _ => connection.begin().await,
-    }
+    connection.begin_write_transaction().await
 }
 
 pub(super) async fn insert_tenant<C>(connection: &C, tenant: &Tenant) -> RepositoryResult<()>
@@ -66,7 +59,7 @@ where
     let result = model.insert(connection).await.map(|_| ());
     match result {
         Ok(()) => Ok(()),
-        Err(err) if is_sea_orm_unique_violation(&err, "tenants.slug", "tenants_slug_key") => {
+        Err(err) if is_unique_violation(&err, UniqueConstraint::TenantSlug) => {
             Err(RepositoryError::DuplicateTenantSlug)
         }
         Err(err) => Err(anyhow::Error::new(err)
@@ -89,16 +82,10 @@ where
         .map(|_| ());
     match result {
         Ok(()) => Ok(()),
-        Err(err)
-            if is_sea_orm_unique_violation(
-                &err,
-                "join_links.token_hash",
-                "join_links_token_hash_key",
-            ) =>
-        {
+        Err(err) if is_unique_violation(&err, UniqueConstraint::JoinLinkTokenHash) => {
             Err(RepositoryError::DuplicateJoinLinkHash)
         }
-        Err(err) if is_sea_orm_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
+        Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
         Err(err) => Err(anyhow::Error::new(err)
             .context("failed to insert join link")
             .into()),
@@ -165,22 +152,19 @@ pub(super) async fn consume_join_link_use_tx(
     join_link_id: &str,
     now: &str,
 ) -> RepositoryResult<bool> {
-    let (sql, values) = match tx.get_database_backend() {
-        DbBackend::Postgres => (
-            "UPDATE join_links SET used_count = used_count + 1 WHERE id = $1 AND used_count < max_uses AND revoked_at IS NULL AND expires_at > $2",
-            vec![Value::from(join_link_id), Value::from(now)],
-        ),
-        _ => (
-            "UPDATE join_links SET used_count = used_count + 1 WHERE id = ? AND used_count < max_uses AND revoked_at IS NULL AND expires_at > ?",
-            vec![Value::from(join_link_id), Value::from(now)],
-        ),
-    };
-    let statement = Statement::from_sql_and_values(tx.get_database_backend(), sql, values);
-    let result = tx
-        .execute_raw(statement)
+    let result = join_links::Entity::update_many()
+        .col_expr(
+            join_links::Column::UsedCount,
+            Expr::col(join_links::Column::UsedCount).add(1),
+        )
+        .filter(join_links::Column::Id.eq(join_link_id))
+        .filter(Expr::col(join_links::Column::UsedCount).lt(Expr::col(join_links::Column::MaxUses)))
+        .filter(join_links::Column::RevokedAt.is_null())
+        .filter(join_links::Column::ExpiresAt.gt(now))
+        .exec(tx)
         .await
         .context("failed to consume join link use")?;
-    Ok(result.rows_affected() == 1)
+    Ok(result.rows_affected == 1)
 }
 
 pub(super) async fn find_external_user_tx<C>(

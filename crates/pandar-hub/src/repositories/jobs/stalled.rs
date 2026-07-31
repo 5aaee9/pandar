@@ -1,19 +1,18 @@
 use anyhow::Context;
 use pandar_core::PrintStatus;
 use sea_orm::{
-    ActiveValue::Set, ColumnTrait, Condition, ConnectionTrait, EntityTrait, FromQueryResult,
-    JoinType, QueryFilter, QueryOrder, QuerySelect, RelationDef, SqliteTransactionMode,
-    TransactionOptions, TransactionTrait,
+    ActiveValue::Set, ColumnTrait, Condition, EntityTrait, FromQueryResult, JoinType, QueryFilter,
+    QueryOrder, QuerySelect, RelationDef,
 };
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
-    db::Database,
     entities::{commands, jobs},
     repositories::{JobRepository, JobWithArtifact, RepositoryResult},
 };
 
 use super::hydration::hydrate_jobs_with_artifacts;
+use crate::db::ConnectionDialectExt;
 
 pub(super) const STALLED_JOB_AGE: Duration = Duration::minutes(15);
 const STALL_SWEEP_BATCH_SIZE: u64 = 500;
@@ -34,13 +33,9 @@ impl JobRepository {
         let query_cutoff = (now - STALLED_JOB_AGE + Duration::seconds(1))
             .format(&Rfc3339)
             .context("failed to format pending print stall query cutoff")?;
-        let connection = self.database.sea_orm_connection();
-        let transaction = connection
-            .begin_with_options(TransactionOptions {
-                sqlite_transaction_mode: matches!(self.database, Database::Sqlite(_))
-                    .then_some(SqliteTransactionMode::Immediate),
-                ..Default::default()
-            })
+        let transaction = self
+            .database
+            .begin_write_transaction()
             .await
             .context("failed to begin pending print stall transaction")?;
         let command_relation: RelationDef = jobs::Entity::belongs_to(commands::Entity)
@@ -102,13 +97,11 @@ impl JobRepository {
                     .add(jobs::Column::CurrentLayer.eq(0)),
             )
             .filter(jobs::Column::CommandId.is_in(aged_command_ids));
-        let mut stalled = match transaction.get_database_backend() {
-            sea_orm::DatabaseBackend::Postgres => {
-                candidates.lock_exclusive().all(&transaction).await
-            }
-            _ => candidates.all(&transaction).await,
-        }
-        .context("failed to lock pending print stall candidates")?;
+        let mut stalled = transaction
+            .lock_for_update(candidates)
+            .all(&transaction)
+            .await
+            .context("failed to lock pending print stall candidates")?;
         if stalled.is_empty() {
             transaction
                 .commit()

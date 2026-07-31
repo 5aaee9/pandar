@@ -1,11 +1,8 @@
 use anyhow::Context;
 use pandar_core::{AgentId, TenantId};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
-    QueryOrder, QuerySelect,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, QueryOrder,
 };
-#[cfg(test)]
-use sea_orm::{SqliteTransactionMode, TransactionOptions, TransactionTrait};
 
 use crate::{
     db::Database,
@@ -18,6 +15,7 @@ mod patch;
 #[cfg(test)]
 mod test_json;
 
+use crate::db::ConnectionDialectExt;
 use merge::merge_snapshot;
 pub use patch::MaterialJsonValue;
 #[cfg(test)]
@@ -157,13 +155,9 @@ impl MaterialRepository {
         &self,
         input: MaterialPatchInput,
     ) -> RepositoryResult<MaterialPatchOutcome> {
-        let connection = self.database.sea_orm_connection();
-        let tx = connection
-            .begin_with_options(TransactionOptions {
-                sqlite_transaction_mode: matches!(self.database, Database::Sqlite(_))
-                    .then_some(SqliteTransactionMode::Immediate),
-                ..Default::default()
-            })
+        let tx = self
+            .database
+            .begin_write_transaction()
             .await
             .context("failed to begin test material snapshot transaction")?;
         let outcome = upsert_from_patch_outcome_in_connection(&tx, input).await?;
@@ -194,11 +188,11 @@ impl MaterialRepository {
                 .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
                 .filter(printers::Column::AgentId.eq(agent_id.to_string()))
         };
-        let printer = match tx.get_database_backend() {
-            sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(&tx).await,
-            _ => query.one(&tx).await,
-        }
-        .context("failed to lock material snapshot printer")?;
+        let printer = tx
+            .lock_for_update(query)
+            .one(&tx)
+            .await
+            .context("failed to lock material snapshot printer")?;
         let result = match printer {
             None => CurrentMaterialPatchOutcome::MissingPrinter,
             Some(printer) if printer.serial_number != serial_number => {
@@ -257,11 +251,8 @@ where
     let query = printers::Entity::find_by_id(&input.printer_id)
         .filter(printers::Column::TenantId.eq(input.tenant_id.to_string()))
         .filter(printers::Column::AgentId.eq(input.agent_id.to_string()));
-    let Some(printer) = (match connection.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(connection).await,
-        _ => query.one(connection).await,
-    })
-    .context("failed to verify material snapshot printer ownership")?
+    let Some(printer) = (connection.lock_for_update(query).one(connection).await)
+        .context("failed to verify material snapshot printer ownership")?
     else {
         return Err(RepositoryError::MissingPrinter);
     };

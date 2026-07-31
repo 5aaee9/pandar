@@ -1,13 +1,13 @@
 use anyhow::Context;
 use pandar_core::{AgentId, BambuDeviceFeatures, Printer, TenantId};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, IntoActiveModel,
-    QueryFilter, QuerySelect,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter,
 };
 
 use super::{
     PrinterRepository, PrinterSnapshotUpsert, SnapshotSessionState, upsert_snapshot_in_transaction,
 };
+use crate::db::ConnectionDialectExt;
 use crate::{
     entities::printers,
     repositories::{RepositoryError, RepositoryResult, begin_current_agent_transaction},
@@ -75,11 +75,11 @@ impl PrinterRepository {
             .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
             .filter(printers::Column::AgentId.eq(agent_id.to_string()))
             .filter(printers::Column::SerialNumber.eq(serial));
-        let printer = match transaction.get_database_backend() {
-            sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(&transaction).await,
-            _ => query.one(&transaction).await,
-        }
-        .context("failed to lock printer for Bambu device feature update")?;
+        let printer = transaction
+            .lock_for_update(query)
+            .one(&transaction)
+            .await
+            .context("failed to lock printer for Bambu device feature update")?;
         let Some(printer) = printer else {
             transaction
                 .commit()

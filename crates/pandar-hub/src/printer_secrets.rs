@@ -6,13 +6,13 @@ use aes_gcm::{
 };
 use anyhow::{Context, bail};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ConnectionTrait, EntityTrait, QuerySelect,
-    SqliteTransactionMode, TransactionOptions, TransactionTrait,
-};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait};
 use zeroize::Zeroizing;
 
-use crate::{db::Database, entities::printers};
+use crate::{
+    db::{ConnectionDialectExt, Database},
+    entities::printers,
+};
 
 const ACCESS_CODE_KEY_ENV: &str = "PANDAR_PRINTER_ACCESS_CODE_KEY";
 const ACCESS_CODE_ENVELOPE_PREFIX: &str = "v1:";
@@ -139,21 +139,16 @@ pub(crate) async fn migrate_printer_access_codes(
     database: &Database,
     cipher: &PrinterAccessCodeCipher,
 ) -> anyhow::Result<()> {
-    let connection = database.sea_orm_connection();
-    let transaction = connection
-        .begin_with_options(TransactionOptions {
-            sqlite_transaction_mode: matches!(database, Database::Sqlite(_))
-                .then_some(SqliteTransactionMode::Immediate),
-            ..Default::default()
-        })
+    let transaction = database
+        .begin_write_transaction()
         .await
         .context("begin printer access-code encryption migration")?;
     let query = printers::Entity::find();
-    let models = match transaction.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().all(&transaction).await,
-        _ => query.all(&transaction).await,
-    }
-    .context("load printer access codes for encryption migration")?;
+    let models = transaction
+        .lock_for_update(query)
+        .all(&transaction)
+        .await
+        .context("load printer access codes for encryption migration")?;
     let mut migrated = 0_u64;
 
     for model in models {

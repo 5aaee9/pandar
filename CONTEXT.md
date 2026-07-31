@@ -4,6 +4,10 @@
 
 The `pandar-hub` Rust API server (axum). The frontend reaches it at `APP_API_URL`. Browser code never calls it directly with cookie authentication — browser requests cross the Hub proxy.
 
+## Hub database dialect
+
+The SQLite/PostgreSQL differences owned by `crates/pandar-hub/src/db.rs`: write and snapshot transaction modes, row and table locking, and typed unique/foreign-key violation classification. Repositories cross this seam through `Database`, `ConnectionDialectExt`, and `TransactionDialectExt`; they do not branch on the backend for these shared behaviors. Runtime SQL that is genuinely backend-specific remains local to its owning module. Migration authors edit `migrations/shared/` plus paired full-file overrides under `migrations/overrides/{sqlite,postgres}/`, then regenerate the sqlx input directories with `scripts/sync-hub-migrations.sh`.
+
 ## Hub proxy
 
 The Next.js route surface under `frontend/app/api/tenants/[tenantId]/` and the module behind it, `frontend/app/hub-proxy.ts` (`hubProxy()`). Every browser request to the Hub crosses it — reads and mutations alike; browser code never fetches the Hub directly. The module owns cross-origin rejection on mutations, path-id validation and encoding, auth header attachment, request body streaming, response header hygiene, and declared query strings; route files are per-endpoint config only.

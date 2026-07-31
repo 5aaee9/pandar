@@ -4,13 +4,13 @@ use sea_orm::{ActiveModelTrait, ActiveValue::Set, ConnectionTrait, TransactionTr
 use serde::Serialize;
 
 use crate::{
+    db::{UniqueConstraint, is_unique_violation},
     entities::tenants,
     repositories::{
         AuditEvent, AuthRepository, RepositoryError, RepositoryResult, TenantToken,
         TenantTokenScope, User, UserRole,
         audit::{audit_metadata, build_audit_event, insert_audit_event_tx},
         auth::{insert_user, tenant_tokens::insert_tenant_token},
-        is_sea_orm_unique_violation,
     },
 };
 
@@ -120,7 +120,7 @@ where
 
     match result {
         Ok(()) => Ok(()),
-        Err(err) if is_sea_orm_unique_violation(&err, "tenants.slug", "tenants_slug_key") => {
+        Err(err) if is_unique_violation(&err, UniqueConstraint::TenantSlug) => {
             Err(RepositoryError::DuplicateTenantSlug)
         }
         Err(err) => Err(anyhow::Error::new(err)

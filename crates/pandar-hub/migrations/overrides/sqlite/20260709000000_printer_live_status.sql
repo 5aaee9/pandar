@@ -1,0 +1,10 @@
+ALTER TABLE printers ADD COLUMN print_gcode_state TEXT;
+ALTER TABLE printers ADD COLUMN print_task_id TEXT;
+ALTER TABLE printers ADD COLUMN print_subtask_id TEXT;
+ALTER TABLE printers ADD COLUMN print_progress_percent INTEGER;
+ALTER TABLE printers ADD COLUMN print_remaining_time_minutes INTEGER;
+ALTER TABLE printers ADD COLUMN print_current_layer INTEGER;
+ALTER TABLE printers ADD COLUMN print_total_layers INTEGER;
+ALTER TABLE printers ADD COLUMN print_gcode_file TEXT;
+ALTER TABLE printers ADD COLUMN print_subtask_name TEXT;
+ALTER TABLE printers ADD COLUMN hms_json TEXT NOT NULL DEFAULT '[]';

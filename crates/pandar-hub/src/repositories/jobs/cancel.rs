@@ -1,10 +1,8 @@
 use anyhow::Context;
 use pandar_core::{CommandStatus, JobStatus, PrintStatus, StudioSubmissionId, TenantId};
-use sea_orm::{
-    ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, QueryFilter,
-    QuerySelect,
-};
+use sea_orm::{ActiveValue::Set, ColumnTrait, DatabaseTransaction, EntityTrait, QueryFilter};
 
+use crate::db::ConnectionDialectExt;
 use crate::{
     db::Database,
     entities::{commands, jobs},
@@ -121,11 +119,11 @@ async fn load_job_for_update(
     let query = jobs::Entity::find()
         .filter(jobs::Column::TenantId.eq(tenant_id.to_string()))
         .filter(jobs::Column::StudioSubmissionId.eq(studio_submission_id.get()));
-    let job = match tx.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(tx).await,
-        _ => query.one(tx).await,
-    }
-    .context("failed to load Studio print for cancellation")?;
+    let job = tx
+        .lock_for_update(query)
+        .one(tx)
+        .await
+        .context("failed to load Studio print for cancellation")?;
     job.ok_or(RepositoryError::MissingJob)
 }
 
@@ -137,11 +135,11 @@ async fn load_command(
     let query = commands::Entity::find_by_id(command_id)
         .filter(commands::Column::TenantId.eq(tenant_id.to_string()))
         .filter(commands::Column::Kind.eq("print_project_file"));
-    let command = match tx.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(tx).await,
-        _ => query.one(tx).await,
-    }
-    .context("failed to load Studio print command for cancellation")?;
+    let command = tx
+        .lock_for_update(query)
+        .one(tx)
+        .await
+        .context("failed to load Studio print command for cancellation")?;
     command.ok_or(RepositoryError::MissingCommand)
 }
 

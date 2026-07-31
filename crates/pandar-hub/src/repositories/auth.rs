@@ -7,12 +7,9 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    db::Database,
+    db::{Database, UniqueConstraint, is_foreign_key_violation, is_unique_violation},
     entities::{api_tokens, users as user_entities},
-    repositories::{
-        RepositoryError, RepositoryResult, is_sea_orm_foreign_key_violation,
-        is_sea_orm_unique_violation,
-    },
+    repositories::{RepositoryError, RepositoryResult},
 };
 
 mod bootstrap;
@@ -252,16 +249,10 @@ where
     let result = user_model(user).insert(connection).await.map(|_| ());
     match result {
         Ok(()) => Ok(()),
-        Err(err)
-            if is_sea_orm_unique_violation(
-                &err,
-                "users.tenant_id, users.email",
-                "users_tenant_id_email_key",
-            ) =>
-        {
+        Err(err) if is_unique_violation(&err, UniqueConstraint::UserEmail) => {
             Err(RepositoryError::DuplicateUserEmail)
         }
-        Err(err) if is_sea_orm_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
+        Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
         Err(err) => Err(anyhow::Error::new(err).context(context).into()),
     }
 }
@@ -322,25 +313,13 @@ where
         .map(|_| ());
     match result {
         Ok(()) => Ok(()),
-        Err(err)
-            if is_sea_orm_unique_violation(
-                &err,
-                "api_tokens.tenant_id, api_tokens.name",
-                "api_tokens_tenant_id_name_key",
-            ) =>
-        {
+        Err(err) if is_unique_violation(&err, UniqueConstraint::ApiTokenName) => {
             Err(RepositoryError::DuplicateApiTokenName)
         }
-        Err(err)
-            if is_sea_orm_unique_violation(
-                &err,
-                "api_tokens.token_hash",
-                "api_tokens_token_hash_key",
-            ) =>
-        {
+        Err(err) if is_unique_violation(&err, UniqueConstraint::ApiTokenHash) => {
             Err(RepositoryError::DuplicateApiTokenHash)
         }
-        Err(err) if is_sea_orm_foreign_key_violation(&err) => Err(RepositoryError::MissingUser),
+        Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingUser),
         Err(err) => Err(anyhow::Error::new(err).context(context).into()),
     }
 }

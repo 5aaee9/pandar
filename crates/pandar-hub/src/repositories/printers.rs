@@ -3,12 +3,9 @@ use pandar_core::{AgentId, BambuDeviceFeatures, Printer, PrinterNozzleTemperatur
 use sea_orm::{
     ActiveValue::Set,
     ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect, TransactionTrait,
+    QueryOrder, TransactionTrait,
     sea_query::{Expr, ExprTrait},
 };
-
-#[cfg(test)]
-use sea_orm::{SqliteTransactionMode, TransactionOptions};
 
 #[cfg(test)]
 use crate::entities::agents;
@@ -30,6 +27,7 @@ mod live_status;
 mod queries;
 mod rows;
 
+use crate::db::ConnectionDialectExt;
 use audit_metadata::{PrinterDeleteAuditMetadata, PrinterUpdateAuditMetadata};
 pub use device_features::DeviceFeatureUpdateOutcome;
 pub use firmware::PrinterFirmwareUpdateOutcome;
@@ -158,11 +156,11 @@ impl PrinterRepository {
             .context("failed to begin printer delete audit transaction")?;
         let query = printers::Entity::find_by_id(printer_id)
             .filter(printers::Column::TenantId.eq(tenant_id.to_string()));
-        let model = match tx.get_database_backend() {
-            sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(&tx).await,
-            _ => query.one(&tx).await,
-        }
-        .context("failed to lock printer before delete")?;
+        let model = tx
+            .lock_for_update(query)
+            .one(&tx)
+            .await
+            .context("failed to lock printer before delete")?;
         let Some(model) = model else {
             return Err(RepositoryError::MissingPrinter);
         };
@@ -286,12 +284,9 @@ impl PrinterRepository {
         if !agent_belongs_to_tenant(&connection, tenant_id, agent_id).await? {
             return Err(RepositoryError::MissingAgent);
         }
-        let tx = connection
-            .begin_with_options(TransactionOptions {
-                sqlite_transaction_mode: matches!(self.database, Database::Sqlite(_))
-                    .then_some(SqliteTransactionMode::Immediate),
-                ..Default::default()
-            })
+        let tx = self
+            .database
+            .begin_write_transaction()
             .await
             .context("failed to begin printer snapshot transaction")?;
         let printer = upsert_snapshot_in_transaction(

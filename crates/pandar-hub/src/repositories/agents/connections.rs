@@ -2,13 +2,13 @@ use anyhow::Context;
 use pandar_core::{Agent, AgentId, AgentStatus, TenantId};
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ConnectionTrait, DatabaseTransaction, EntityTrait,
-    IntoActiveModel, QuerySelect, SqliteTransactionMode, TransactionOptions, TransactionTrait,
+    IntoActiveModel,
 };
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use super::{AgentRepository, agent_from_model};
 use crate::{
-    db::Database,
+    db::{ConnectionDialectExt, Database},
     entities::agents,
     repositories::{RepositoryError, RepositoryResult},
 };
@@ -222,12 +222,7 @@ pub(crate) async fn begin_stale_firmware_cleanup_transaction(
 
 async fn begin_agent_transaction(database: &Database) -> RepositoryResult<DatabaseTransaction> {
     database
-        .sea_orm_connection()
-        .begin_with_options(TransactionOptions {
-            sqlite_transaction_mode: matches!(database, Database::Sqlite(_))
-                .then_some(SqliteTransactionMode::Immediate),
-            ..Default::default()
-        })
+        .begin_write_transaction()
         .await
         .context("failed to begin agent transaction")
         .map_err(Into::into)
@@ -241,12 +236,12 @@ where
     C: ConnectionTrait,
 {
     let query = agents::Entity::find_by_id(agent_id.to_string());
-    match connection.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(connection).await,
-        _ => query.one(connection).await,
-    }
-    .context("failed to lock agent connection row")
-    .map_err(Into::into)
+    connection
+        .lock_for_update(query)
+        .one(connection)
+        .await
+        .context("failed to lock agent connection row")
+        .map_err(Into::into)
 }
 
 #[cfg(test)]

@@ -18,12 +18,12 @@ pub use types::{
 };
 
 use crate::{
+    db::{UniqueConstraint, is_foreign_key_violation, is_unique_violation},
     entities::plugin_login_tickets,
     repositories::{
         AuditActor, AuditEvent, AuthRepository, RepositoryError, RepositoryResult,
         audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
         auth::{hash_token, secrets::generate_secret, user_exists},
-        is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
     },
 };
 
@@ -279,16 +279,10 @@ where
         .map(|_| ());
     match result {
         Ok(()) => Ok(()),
-        Err(err)
-            if is_sea_orm_unique_violation(
-                &err,
-                "plugin_login_tickets.ticket_hash",
-                "plugin_login_tickets_ticket_hash_key",
-            ) =>
-        {
+        Err(err) if is_unique_violation(&err, UniqueConstraint::PluginLoginTicketHash) => {
             Err(RepositoryError::DuplicatePluginLoginTicketHash)
         }
-        Err(err) if is_sea_orm_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
+        Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
         Err(err) => Err(anyhow::Error::new(err)
             .context("failed to insert plugin login ticket")
             .into()),

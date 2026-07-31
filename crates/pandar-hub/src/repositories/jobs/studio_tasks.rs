@@ -1,12 +1,10 @@
 use anyhow::Context;
 use pandar_core::{JobId, JobStatus, PrintStatus, StudioSubmissionId, TenantId};
 use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, IsolationLevel, PaginatorTrait, QueryFilter, QueryOrder,
-    QuerySelect, TransactionOptions, TransactionTrait,
+    ColumnTrait, Condition, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
 };
 
 use crate::{
-    db::Database,
     entities::jobs,
     repositories::{JobRepository, JobWithArtifact, RepositoryResult},
 };
@@ -41,13 +39,9 @@ impl JobRepository {
         tenant_id: TenantId,
         query: StudioTaskQuery,
     ) -> RepositoryResult<StudioTaskPage> {
-        let connection = self.database.sea_orm_connection();
-        let tx = connection
-            .begin_with_options(TransactionOptions {
-                isolation_level: matches!(&self.database, Database::Postgres(_))
-                    .then_some(IsolationLevel::RepeatableRead),
-                ..Default::default()
-            })
+        let tx = self
+            .database
+            .begin_snapshot_transaction()
             .await
             .context("failed to begin Studio task snapshot")?;
         let mut select =

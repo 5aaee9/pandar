@@ -1,10 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::Context;
-use sea_orm::{
-    ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, QueryFilter, QuerySelect,
-    SqliteTransactionMode, TransactionOptions, TransactionTrait,
-};
+use sea_orm::{ColumnTrait, DatabaseTransaction, EntityTrait, QueryFilter, QuerySelect};
 use serde::Serialize;
 use time::OffsetDateTime;
 
@@ -17,6 +14,7 @@ use crate::{
 
 mod audit;
 
+use crate::db::ConnectionDialectExt;
 use audit::{DeleteJobAuditContext, insert_clear_audit};
 
 enum ClearScope {
@@ -184,12 +182,7 @@ impl JobRepository {
 
 async fn begin_clear_transaction(database: &Database) -> RepositoryResult<DatabaseTransaction> {
     database
-        .sea_orm_connection()
-        .begin_with_options(TransactionOptions {
-            sqlite_transaction_mode: matches!(database, Database::Sqlite(_))
-                .then_some(SqliteTransactionMode::Immediate),
-            ..Default::default()
-        })
+        .begin_write_transaction()
         .await
         .context("failed to begin job clear transaction")
         .map_err(Into::into)
@@ -200,11 +193,11 @@ async fn locked_tenant_jobs(
     tenant_id: pandar_core::TenantId,
 ) -> RepositoryResult<Vec<jobs::Model>> {
     let query = jobs::Entity::find().filter(jobs::Column::TenantId.eq(tenant_id.to_string()));
-    let rows = match tx.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().all(tx).await,
-        _ => query.all(tx).await,
-    }
-    .context("failed to lock tenant jobs for clearing")?;
+    let rows = tx
+        .lock_for_update(query)
+        .all(tx)
+        .await
+        .context("failed to lock tenant jobs for clearing")?;
     Ok(rows)
 }
 
@@ -216,11 +209,11 @@ async fn locked_commands(
         return Ok(Vec::new());
     }
     let query = commands::Entity::find().filter(commands::Column::Id.is_in(ids));
-    let rows = match tx.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().all(tx).await,
-        _ => query.all(tx).await,
-    }
-    .context("failed to lock print commands for clearing")?;
+    let rows = tx
+        .lock_for_update(query)
+        .all(tx)
+        .await
+        .context("failed to lock print commands for clearing")?;
     Ok(rows)
 }
 
@@ -232,11 +225,11 @@ async fn locked_artifact_references(
         return Ok(Vec::new());
     }
     let query = jobs::Entity::find().filter(jobs::Column::ArtifactId.is_in(artifact_ids.clone()));
-    let rows = match tx.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().all(tx).await,
-        _ => query.all(tx).await,
-    }
-    .context("failed to lock artifact job references for clearing")?;
+    let rows = tx
+        .lock_for_update(query)
+        .all(tx)
+        .await
+        .context("failed to lock artifact job references for clearing")?;
     Ok(rows)
 }
 
@@ -251,11 +244,11 @@ async fn locked_artifacts(
     let query = job_artifacts::Entity::find()
         .filter(job_artifacts::Column::TenantId.eq(tenant_id.to_string()))
         .filter(job_artifacts::Column::Id.is_in(ids.clone()));
-    let rows = match tx.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().all(tx).await,
-        _ => query.all(tx).await,
-    }
-    .context("failed to lock orphan job artifacts for clearing")?;
+    let rows = tx
+        .lock_for_update(query)
+        .all(tx)
+        .await
+        .context("failed to lock orphan job artifacts for clearing")?;
     Ok(rows)
 }
 

@@ -1,9 +1,13 @@
 use anyhow::Context;
 use pandar_core::TenantId;
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, sea_query::Expr,
+};
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     db::Database,
+    entities::printer_event_tickets,
     repositories::{RepositoryError, RepositoryResult},
 };
 
@@ -51,36 +55,17 @@ impl PrinterEventTicketRepository {
             used_at: None,
         };
 
-        match &self.database {
-            Database::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO printer_event_tickets (id, tenant_id, ticket_hash, created_at, expires_at, used_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, NULL)",
-                )
-                .bind(&ticket.id)
-                .bind(ticket.tenant_id.to_string())
-                .bind(&ticket.ticket_hash)
-                .bind(&ticket.created_at)
-                .bind(&ticket.expires_at)
-                .execute(pool)
-                .await
-                .context("failed to insert SQLite printer event ticket")?;
-            }
-            Database::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO printer_event_tickets (id, tenant_id, ticket_hash, created_at, expires_at, used_at)
-                     VALUES ($1, $2, $3, $4, $5, NULL)",
-                )
-                .bind(&ticket.id)
-                .bind(ticket.tenant_id.to_string())
-                .bind(&ticket.ticket_hash)
-                .bind(&ticket.created_at)
-                .bind(&ticket.expires_at)
-                .execute(pool)
-                .await
-                .context("failed to insert PostgreSQL printer event ticket")?;
-            }
+        printer_event_tickets::ActiveModel {
+            id: Set(ticket.id.clone()),
+            tenant_id: Set(ticket.tenant_id.to_string()),
+            ticket_hash: Set(ticket.ticket_hash.clone()),
+            created_at: Set(ticket.created_at.clone()),
+            expires_at: Set(ticket.expires_at.clone()),
+            used_at: Set(None),
         }
+        .insert(&self.database.sea_orm_connection())
+        .await
+        .context("failed to insert printer event ticket")?;
 
         Ok(ticket)
     }
@@ -91,37 +76,20 @@ impl PrinterEventTicketRepository {
         ticket_hash: &str,
     ) -> RepositoryResult<PrinterEventTicketConsumeResult> {
         let now = ticket_timestamp_now()?;
-        let tenant_id_text = tenant_id.to_string();
-        let updated = match &self.database {
-            Database::Sqlite(pool) => {
-                sqlx::query(
-                    "UPDATE printer_event_tickets
-                     SET used_at = ?1
-                     WHERE tenant_id = ?2 AND ticket_hash = ?3 AND used_at IS NULL AND expires_at > ?1",
-                )
-                .bind(&now)
-                .bind(&tenant_id_text)
-                .bind(ticket_hash)
-                .execute(pool)
-                .await
-                .context("failed to consume SQLite printer event ticket")?
-                .rows_affected()
-            }
-            Database::Postgres(pool) => {
-                sqlx::query(
-                    "UPDATE printer_event_tickets
-                     SET used_at = $1
-                     WHERE tenant_id = $2 AND ticket_hash = $3 AND used_at IS NULL AND expires_at > $1",
-                )
-                .bind(&now)
-                .bind(&tenant_id_text)
-                .bind(ticket_hash)
-                .execute(pool)
-                .await
-                .context("failed to consume PostgreSQL printer event ticket")?
-                .rows_affected()
-            }
-        };
+        let connection = self.database.sea_orm_connection();
+        let updated = printer_event_tickets::Entity::update_many()
+            .col_expr(
+                printer_event_tickets::Column::UsedAt,
+                Expr::value(now.clone()),
+            )
+            .filter(printer_event_tickets::Column::TenantId.eq(tenant_id.to_string()))
+            .filter(printer_event_tickets::Column::TicketHash.eq(ticket_hash))
+            .filter(printer_event_tickets::Column::UsedAt.is_null())
+            .filter(printer_event_tickets::Column::ExpiresAt.gt(now.clone()))
+            .exec(&connection)
+            .await
+            .context("failed to consume printer event ticket")?
+            .rows_affected;
 
         if updated == 1 {
             let ticket = self
@@ -135,10 +103,17 @@ impl PrinterEventTicketRepository {
             return Ok(PrinterEventTicketConsumeResult::Consumed(ticket));
         }
 
-        if self
-            .find_expired_unused_for_tenant_and_hash(&tenant_id_text, ticket_hash, &now)
-            .await?
-        {
+        let expired_unused = printer_event_tickets::Entity::find()
+            .filter(printer_event_tickets::Column::TenantId.eq(tenant_id.to_string()))
+            .filter(printer_event_tickets::Column::TicketHash.eq(ticket_hash))
+            .filter(printer_event_tickets::Column::UsedAt.is_null())
+            .filter(printer_event_tickets::Column::ExpiresAt.lte(now))
+            .one(&connection)
+            .await
+            .context("failed to check expired printer event ticket")?
+            .is_some();
+
+        if expired_unused {
             Ok(PrinterEventTicketConsumeResult::Expired)
         } else {
             Ok(PrinterEventTicketConsumeResult::Invalid)
@@ -150,77 +125,14 @@ impl PrinterEventTicketRepository {
         tenant_id: TenantId,
         ticket_hash: &str,
     ) -> RepositoryResult<Option<IssuedPrinterEventTicket>> {
-        let tenant_id_text = tenant_id.to_string();
-        match &self.database {
-            Database::Sqlite(pool) => {
-                let row =
-                    sqlx::query_as::<_, (String, String, String, String, String, Option<String>)>(
-                        "SELECT id, tenant_id, ticket_hash, created_at, expires_at, used_at
-                     FROM printer_event_tickets
-                     WHERE tenant_id = ?1 AND ticket_hash = ?2",
-                    )
-                    .bind(&tenant_id_text)
-                    .bind(ticket_hash)
-                    .fetch_optional(pool)
-                    .await
-                    .context("failed to load SQLite printer event ticket")?;
-                row.map(ticket_from_values_tuple).transpose()
-            }
-            Database::Postgres(pool) => {
-                let row =
-                    sqlx::query_as::<_, (String, String, String, String, String, Option<String>)>(
-                        "SELECT id, tenant_id, ticket_hash, created_at, expires_at, used_at
-                     FROM printer_event_tickets
-                     WHERE tenant_id = $1 AND ticket_hash = $2",
-                    )
-                    .bind(&tenant_id_text)
-                    .bind(ticket_hash)
-                    .fetch_optional(pool)
-                    .await
-                    .context("failed to load PostgreSQL printer event ticket")?;
-                row.map(ticket_from_values_tuple).transpose()
-            }
-        }
-    }
-
-    async fn find_expired_unused_for_tenant_and_hash(
-        &self,
-        tenant_id: &str,
-        ticket_hash: &str,
-        now: &str,
-    ) -> RepositoryResult<bool> {
-        let exists = match &self.database {
-            Database::Sqlite(pool) => {
-                sqlx::query_scalar(
-                    "SELECT EXISTS(
-                        SELECT 1 FROM printer_event_tickets
-                        WHERE tenant_id = ?1 AND ticket_hash = ?2 AND used_at IS NULL AND expires_at <= ?3
-                    )",
-                )
-                .bind(tenant_id)
-                .bind(ticket_hash)
-                .bind(now)
-                .fetch_one(pool)
-                .await
-                .context("failed to check expired SQLite printer event ticket")?
-            }
-            Database::Postgres(pool) => {
-                sqlx::query_scalar(
-                    "SELECT EXISTS(
-                        SELECT 1 FROM printer_event_tickets
-                        WHERE tenant_id = $1 AND ticket_hash = $2 AND used_at IS NULL AND expires_at <= $3
-                    )",
-                )
-                .bind(tenant_id)
-                .bind(ticket_hash)
-                .bind(now)
-                .fetch_one(pool)
-                .await
-                .context("failed to check expired PostgreSQL printer event ticket")?
-            }
-        };
-
-        Ok(exists)
+        printer_event_tickets::Entity::find()
+            .filter(printer_event_tickets::Column::TenantId.eq(tenant_id.to_string()))
+            .filter(printer_event_tickets::Column::TicketHash.eq(ticket_hash))
+            .one(&self.database.sea_orm_connection())
+            .await
+            .context("failed to load printer event ticket")?
+            .map(ticket_from_model)
+            .transpose()
     }
 }
 
@@ -235,26 +147,15 @@ pub(super) fn ticket_timestamp_now() -> RepositoryResult<String> {
     format_ticket_timestamp(OffsetDateTime::now_utc())
 }
 
-fn ticket_from_values_tuple(
-    row: (String, String, String, String, String, Option<String>),
-) -> RepositoryResult<IssuedPrinterEventTicket> {
-    ticket_from_values(row.0, row.1, row.2, row.3, row.4, row.5)
-}
-
-fn ticket_from_values(
-    id: String,
-    tenant_id: String,
-    ticket_hash: String,
-    created_at: String,
-    expires_at: String,
-    used_at: Option<String>,
+fn ticket_from_model(
+    model: printer_event_tickets::Model,
 ) -> RepositoryResult<IssuedPrinterEventTicket> {
     Ok(IssuedPrinterEventTicket {
-        id,
-        tenant_id: TenantId::parse(&tenant_id).map_err(anyhow::Error::from)?,
-        ticket_hash,
-        created_at,
-        expires_at,
-        used_at,
+        id: model.id,
+        tenant_id: TenantId::parse(&model.tenant_id).map_err(anyhow::Error::from)?,
+        ticket_hash: model.ticket_hash,
+        created_at: model.created_at,
+        expires_at: model.expires_at,
+        used_at: model.used_at,
     })
 }

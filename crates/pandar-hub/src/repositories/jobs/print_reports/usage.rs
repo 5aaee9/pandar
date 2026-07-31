@@ -5,8 +5,9 @@ use sea_orm::{
 use serde::Deserialize;
 
 use crate::{
+    db::{UniqueConstraint, is_unique_violation},
     entities::{job_filament_usages, jobs, printer_material_snapshots},
-    repositories::{RepositoryError, RepositoryResult, is_sea_orm_unique_violation},
+    repositories::{RepositoryError, RepositoryResult},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,11 +120,7 @@ where
         };
 
         if let Err(err) = model.insert(connection).await {
-            if is_sea_orm_unique_violation(
-                &err,
-                "job_filament_usages.tenant_id, job_filament_usages.job_id, job_filament_usages.slot_index, job_filament_usages.source",
-                "job_filament_usages_tenant_id_job_id_slot_index_source_key",
-            ) {
+            if is_unique_violation(&err, UniqueConstraint::JobFilamentUsageSlot) {
                 continue;
             }
             return Err(RepositoryError::Database(

@@ -1,7 +1,8 @@
 use anyhow::Context;
 use pandar_core::{AgentId, TenantId};
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 
+use crate::db::ConnectionDialectExt;
 use crate::{
     db::Database,
     entities::{agents, printers},
@@ -46,12 +47,12 @@ where
     C: ConnectionTrait,
 {
     let query = agents::Entity::find_by_id(agent_id.to_string());
-    let agent = match connection.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(connection).await,
-        _ => query.one(connection).await,
-    }
-    .context("failed to lock command agent ownership")?
-    .ok_or(RepositoryError::MissingAgent)?;
+    let agent = connection
+        .lock_for_update(query)
+        .one(connection)
+        .await
+        .context("failed to lock command agent ownership")?
+        .ok_or(RepositoryError::MissingAgent)?;
     if agent.tenant_id != tenant_id.to_string() {
         return Err(RepositoryError::CommandOwnershipMismatch);
     }
@@ -111,12 +112,12 @@ where
     let query = printers::Entity::find_by_id(printer_id)
         .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
         .filter(printers::Column::AgentId.eq(expected_agent_id.to_string()));
-    let printer = match connection.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(connection).await,
-        _ => query.one(connection).await,
-    }
-    .context("failed to lock command printer ownership")?
-    .ok_or(RepositoryError::PrinterControlUnavailable)?;
+    let printer = connection
+        .lock_for_update(query)
+        .one(connection)
+        .await
+        .context("failed to lock command printer ownership")?
+        .ok_or(RepositoryError::PrinterControlUnavailable)?;
 
     Ok(CommandPrinter {
         id: printer.id,

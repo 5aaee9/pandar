@@ -3,11 +3,13 @@ use pandar_core::{Agent, TenantId};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, TransactionTrait};
 use serde::Serialize;
 
-use crate::repositories::{
-    AgentRepository, AuditActor, RepositoryError, RepositoryResult,
-    audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
-    auth::{hash_token, secrets::generate_secret},
-    is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
+use crate::{
+    db::{UniqueConstraint, is_foreign_key_violation, is_unique_violation},
+    repositories::{
+        AgentRepository, AuditActor, RepositoryError, RepositoryResult,
+        audit::{audit_metadata, insert_audit_event_tx, record_audit_event},
+        auth::{hash_token, secrets::generate_secret},
+    },
 };
 
 pub const AGENT_CREDENTIAL_PREFIX: &str = "pandar_ac_";
@@ -55,16 +57,10 @@ impl AgentRepository {
         .map(|_| ());
         match insert_result {
             Ok(()) => {}
-            Err(err)
-                if is_sea_orm_unique_violation(
-                    &err,
-                    "agents.tenant_id, agents.name",
-                    "agents_tenant_id_name_key",
-                ) =>
-            {
+            Err(err) if is_unique_violation(&err, UniqueConstraint::AgentName) => {
                 return Err(RepositoryError::DuplicateAgentName);
             }
-            Err(err) if is_sea_orm_foreign_key_violation(&err) => {
+            Err(err) if is_foreign_key_violation(&err) => {
                 return Err(RepositoryError::MissingTenant);
             }
             Err(err) => {

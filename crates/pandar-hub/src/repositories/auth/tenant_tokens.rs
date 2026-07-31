@@ -19,12 +19,12 @@ pub(crate) use no_auth_session::test_pause as no_auth_session_test_pause;
 pub use no_auth_session::{NoAuthPluginSession, NoAuthPluginSessionOutcome};
 
 use crate::{
+    db::{UniqueConstraint, is_foreign_key_violation, is_unique_violation},
     entities::{tenant_tokens, users},
     repositories::{
         AuditActor, AuthRepository, RepositoryError, RepositoryResult,
         audit::insert_audit_event_tx,
         auth::{hash_token, secrets::generate_secret, user_exists},
-        is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
     },
 };
 use helpers::{is_expired, tenant_token_audit_event, tenant_token_model};
@@ -280,16 +280,10 @@ where
         .map(|_| ());
     match result {
         Ok(()) => Ok(()),
-        Err(err)
-            if is_sea_orm_unique_violation(
-                &err,
-                "tenant_tokens.token_hash",
-                "tenant_tokens_token_hash_key",
-            ) =>
-        {
+        Err(err) if is_unique_violation(&err, UniqueConstraint::TenantTokenHash) => {
             Err(RepositoryError::DuplicateTenantTokenHash)
         }
-        Err(err) if is_sea_orm_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
+        Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
         Err(err) => Err(anyhow::Error::new(err).context(context).into()),
     }
 }

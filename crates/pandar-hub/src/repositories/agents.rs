@@ -19,13 +19,12 @@ pub(crate) use connections::current_transaction_pause;
 pub use pairing::AGENT_CREDENTIAL_PREFIX;
 
 use crate::{
-    db::Database,
+    db::{Database, UniqueConstraint, is_foreign_key_violation, is_unique_violation},
     entities::{agents, tenants},
     repositories::{
         AuditActor, RepositoryError, RepositoryResult,
         audit::{EmptyAuditMetadata, audit_metadata, insert_audit_event_tx, record_audit_event},
         auth::hash_token,
-        is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
     },
 };
 
@@ -337,16 +336,10 @@ where
 
     match result {
         Ok(()) => Ok(()),
-        Err(err)
-            if is_sea_orm_unique_violation(
-                &err,
-                "agents.tenant_id, agents.name",
-                "agents_tenant_id_name_key",
-            ) =>
-        {
+        Err(err) if is_unique_violation(&err, UniqueConstraint::AgentName) => {
             Err(RepositoryError::DuplicateAgentName)
         }
-        Err(err) if is_sea_orm_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
+        Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingTenant),
         Err(err) => Err(anyhow::Error::new(err)
             .context("failed to insert agent")
             .into()),

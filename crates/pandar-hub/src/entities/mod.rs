@@ -8,6 +8,7 @@ pub mod jobs;
 pub mod join_links;
 pub mod machine_events;
 pub mod plugin_login_tickets;
+pub mod printer_event_tickets;
 pub mod printer_material_snapshots;
 pub mod printers;
 pub mod tenant_tokens;

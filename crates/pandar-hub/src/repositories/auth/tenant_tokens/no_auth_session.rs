@@ -1,16 +1,13 @@
 use anyhow::Context;
 use pandar_core::{Tenant, TenantId, created_at_now};
-use sea_orm::{
-    ConnectionTrait, EntityTrait, QueryOrder, QuerySelect, SqliteTransactionMode,
-    TransactionOptions, TransactionTrait,
-};
+use sea_orm::{EntityTrait, QueryOrder, QuerySelect};
 
 use super::{
     TENANT_TOKEN_PREFIX, TenantToken, TenantTokenScope, TenantTokenWithPlaintext,
     insert_tenant_token,
 };
+use crate::db::ConnectionDialectExt;
 use crate::{
-    db::Database,
     entities::tenants,
     repositories::{
         AuditActor, AuthRepository, RepositoryResult,
@@ -44,20 +41,14 @@ impl AuthRepository {
         expires_at: String,
     ) -> RepositoryResult<NoAuthPluginSessionOutcome> {
         let name = name.into();
-        let connection = self.database.sea_orm_connection();
-        let tx = connection
-            .begin_with_options(TransactionOptions {
-                sqlite_transaction_mode: matches!(&self.database, Database::Sqlite(_))
-                    .then_some(SqliteTransactionMode::Immediate),
-                ..Default::default()
-            })
+        let tx = self
+            .database
+            .begin_write_transaction()
             .await
             .context("failed to begin no-auth plugin session transaction")?;
-        if matches!(&self.database, Database::Postgres(_)) {
-            tx.execute_unprepared("LOCK TABLE tenants IN SHARE MODE")
-                .await
-                .context("failed to lock tenants for no-auth plugin session")?;
-        }
+        tx.lock_tables_in_share_mode(&["tenants"])
+            .await
+            .context("failed to lock tenants for no-auth plugin session")?;
 
         let tenants = tenants::Entity::find()
             .order_by_asc(tenants::Column::CreatedAt)

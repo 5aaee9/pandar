@@ -3,11 +3,12 @@ use pandar_core::{
     AgentId, PrinterFirmwareModule, PrinterFirmwareState, PrinterUpgradeState, TenantId,
 };
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, DatabaseTransaction,
-    EntityTrait, IntoActiveModel, QueryFilter, QuerySelect,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseTransaction, EntityTrait,
+    IntoActiveModel, QueryFilter,
 };
 
 use super::PrinterRepository;
+use crate::db::ConnectionDialectExt;
 use crate::{
     entities::printers,
     repositories::{RepositoryError, RepositoryResult, begin_current_agent_transaction},
@@ -285,12 +286,12 @@ async fn lock_printer(
         .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
         .filter(printers::Column::AgentId.eq(agent_id.to_string()))
         .filter(printers::Column::SerialNumber.eq(serial));
-    match transaction.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(transaction).await,
-        _ => query.one(transaction).await,
-    }
-    .context("failed to lock printer firmware row")
-    .map_err(Into::into)
+    transaction
+        .lock_for_update(query)
+        .one(transaction)
+        .await
+        .context("failed to lock printer firmware row")
+        .map_err(Into::into)
 }
 
 async fn lock_printer_by_id(
@@ -300,12 +301,12 @@ async fn lock_printer_by_id(
 ) -> RepositoryResult<Option<printers::Model>> {
     let query = printers::Entity::find_by_id(printer_id)
         .filter(printers::Column::TenantId.eq(tenant_id.to_string()));
-    match transaction.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(transaction).await,
-        _ => query.one(transaction).await,
-    }
-    .context("failed to lock firmware dispatch printer row")
-    .map_err(Into::into)
+    transaction
+        .lock_for_update(query)
+        .one(transaction)
+        .await
+        .context("failed to lock firmware dispatch printer row")
+        .map_err(Into::into)
 }
 
 fn signed_value(value: u64, name: &'static str) -> RepositoryResult<i64> {

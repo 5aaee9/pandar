@@ -6,11 +6,11 @@ use sea_orm::{
 };
 
 use crate::{
+    db::{UniqueConstraint, is_foreign_key_violation, is_unique_violation},
     entities::{user_identities, users},
     repositories::{
         AuthRepository, AuthenticatedUser, RepositoryError, RepositoryResult,
         auth::{authenticated_from_models, ensure_user_exists},
-        is_sea_orm_foreign_key_violation, is_sea_orm_unique_violation,
     },
 };
 
@@ -146,15 +146,8 @@ where
     match result {
         Ok(()) => Ok(()),
         Err(err)
-            if is_sea_orm_unique_violation(
-                &err,
-                USER_IDENTITIES_EXTERNAL_UNIQUE_SQLITE,
-                USER_IDENTITIES_EXTERNAL_UNIQUE_POSTGRES,
-            ) || is_sea_orm_unique_violation(
-                &err,
-                USER_IDENTITIES_USER_PROVIDER_UNIQUE_SQLITE,
-                USER_IDENTITIES_USER_PROVIDER_UNIQUE_POSTGRES,
-            ) =>
+            if is_unique_violation(&err, UniqueConstraint::UserIdentityExternal)
+                || is_unique_violation(&err, UniqueConstraint::UserIdentityUserProvider) =>
         {
             if external_identity_exists(connection, identity).await? {
                 Err(RepositoryError::DuplicateExternalIdentity)
@@ -162,7 +155,7 @@ where
                 Err(RepositoryError::DuplicateUserExternalIdentity)
             }
         }
-        Err(err) if is_sea_orm_foreign_key_violation(&err) => Err(RepositoryError::MissingUser),
+        Err(err) if is_foreign_key_violation(&err) => Err(RepositoryError::MissingUser),
         Err(err) => Err(anyhow::Error::new(err).context(context).into()),
     }
 }
@@ -219,12 +212,3 @@ fn identity_token(identity: user_identities::Model) -> crate::entities::api_toke
         revoked_at: None,
     }
 }
-
-pub(super) const USER_IDENTITIES_EXTERNAL_UNIQUE_SQLITE: &str =
-    "user_identities.tenant_id, user_identities.provider, user_identities.subject";
-pub(super) const USER_IDENTITIES_EXTERNAL_UNIQUE_POSTGRES: &str =
-    "user_identities_tenant_id_provider_subject_key";
-pub(super) const USER_IDENTITIES_USER_PROVIDER_UNIQUE_SQLITE: &str =
-    "user_identities.tenant_id, user_identities.user_id, user_identities.provider";
-pub(super) const USER_IDENTITIES_USER_PROVIDER_UNIQUE_POSTGRES: &str =
-    "user_identities_tenant_id_user_id_provider_key";

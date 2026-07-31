@@ -1,18 +1,8 @@
-use sea_orm::{DatabaseTransaction, SqliteTransactionMode, TransactionOptions, TransactionTrait};
+use sea_orm::DatabaseTransaction;
 
-use crate::db::Database;
+use crate::db::{Database, TransactionDialectExt};
 
 pub(super) async fn begin(database: &Database) -> Result<DatabaseTransaction, sea_orm::DbErr> {
     let connection = database.sea_orm_connection();
-    match connection.get_database_backend() {
-        sea_orm::DatabaseBackend::Sqlite => {
-            connection
-                .begin_with_options(TransactionOptions {
-                    sqlite_transaction_mode: Some(SqliteTransactionMode::Immediate),
-                    ..Default::default()
-                })
-                .await
-        }
-        _ => connection.begin().await,
-    }
+    connection.begin_write_transaction().await
 }

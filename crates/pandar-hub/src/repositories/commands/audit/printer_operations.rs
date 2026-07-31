@@ -1,9 +1,6 @@
 use anyhow::Context;
 use pandar_core::{AgentId, CommandId, CommandRecord, CommandStatus, TenantId};
-use sea_orm::{
-    DatabaseConnection, DatabaseTransaction, SqliteTransactionMode, TransactionOptions,
-    TransactionTrait,
-};
+use sea_orm::{DatabaseConnection, DatabaseTransaction, TransactionTrait};
 
 use super::get_command;
 use crate::{
@@ -21,6 +18,7 @@ use crate::{
 
 mod recovery;
 
+use crate::db::TransactionDialectExt;
 pub use recovery::{PersistedLivePrinterOperation, WebPrintErrorRecovery};
 
 impl CommandRepository {
@@ -185,17 +183,7 @@ async fn persist_printer_operation_tx(
 async fn begin_live_printer_operation_transaction(
     connection: &DatabaseConnection,
 ) -> Result<DatabaseTransaction, sea_orm::DbErr> {
-    match connection.get_database_backend() {
-        sea_orm::DatabaseBackend::Sqlite => {
-            connection
-                .begin_with_options(TransactionOptions {
-                    sqlite_transaction_mode: Some(SqliteTransactionMode::Immediate),
-                    ..Default::default()
-                })
-                .await
-        }
-        _ => connection.begin().await,
-    }
+    connection.begin_write_transaction().await
 }
 
 fn printer_operation_audit_event(

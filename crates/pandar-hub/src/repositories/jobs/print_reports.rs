@@ -1,8 +1,8 @@
 use anyhow::Context;
 use pandar_core::{AgentId, JobId, TenantId};
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 #[cfg(test)]
-use sea_orm::{DatabaseTransaction, SqliteTransactionMode, TransactionOptions, TransactionTrait};
+use sea_orm::DatabaseTransaction;
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
@@ -118,13 +118,8 @@ pub async fn apply_current_print_report(
 async fn begin_print_report_transaction(
     database: &Database,
 ) -> RepositoryResult<DatabaseTransaction> {
-    let connection = database.sea_orm_connection();
-    connection
-        .begin_with_options(TransactionOptions {
-            sqlite_transaction_mode: matches!(database, Database::Sqlite(_))
-                .then_some(SqliteTransactionMode::Immediate),
-            ..Default::default()
-        })
+    database
+        .begin_write_transaction()
         .await
         .context("failed to begin print report transaction")
         .map_err(Into::into)

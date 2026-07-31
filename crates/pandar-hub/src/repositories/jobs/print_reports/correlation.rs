@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use anyhow::Context;
 use pandar_core::{CommandStatus, JobId, JobStatus, PrintStatus, TenantId};
-use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
 use time::{Duration, OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -16,6 +16,7 @@ use crate::{
 };
 
 use super::ApplyPrintReport;
+use crate::db::ConnectionDialectExt;
 
 #[derive(Debug, Clone)]
 pub(super) struct PrinterMatch {
@@ -58,19 +59,19 @@ where
         .filter(printers::Column::TenantId.eq(input.tenant_id.to_string()))
         .filter(printers::Column::AgentId.eq(input.agent_id.to_string()))
         .filter(printers::Column::SerialNumber.eq(&input.serial));
-    match connection.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(connection).await,
-        _ => query.one(connection).await,
-    }
-    .context("failed to resolve print report printer")?
-    .map(|model| live_status_from_model(model, access_code_cipher))
-    .transpose()
-    .map(|printer| {
-        printer.map(|printer| PrinterMatch {
-            id: printer.printer.id,
-            live_status: printer.live_status,
+    connection
+        .lock_for_update(query)
+        .one(connection)
+        .await
+        .context("failed to resolve print report printer")?
+        .map(|model| live_status_from_model(model, access_code_cipher))
+        .transpose()
+        .map(|printer| {
+            printer.map(|printer| PrinterMatch {
+                id: printer.printer.id,
+                live_status: printer.live_status,
+            })
         })
-    })
 }
 
 pub(super) async fn correlate_job<C>(

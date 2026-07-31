@@ -122,6 +122,9 @@ jobs:
           upstream-cache-filter: true
           no-closure: true
 
+      - name: Verify generated Hub migrations
+        run: scripts/sync-hub-migrations.sh --check
+
       - name: Run checks
         run: |
           nix build --show-trace \

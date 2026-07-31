@@ -1,10 +1,9 @@
 use anyhow::Context;
 use pandar_core::{AgentId, AgentStatus, CommandRecord, CommandStatus, TenantId};
-use sea_orm::{
-    ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, QueryFilter, QuerySelect,
-};
+use sea_orm::{ColumnTrait, DatabaseTransaction, EntityTrait, QueryFilter};
 
 use super::persist_printer_operation_tx;
+use crate::db::ConnectionDialectExt;
 use crate::{
     db::Database,
     entities::{agents, commands, printers},
@@ -136,12 +135,11 @@ async fn locked_printer(
     let query = printers::Entity::find_by_id(printer_id)
         .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
         .filter(printers::Column::AgentId.eq(expected_agent_id.to_string()));
-    match tx.get_database_backend() {
-        sea_orm::DatabaseBackend::Postgres => query.lock_exclusive().one(tx).await,
-        _ => query.one(tx).await,
-    }
-    .context("failed to lock Web recovery printer")?
-    .ok_or(RepositoryError::PrinterControlUnavailable)
+    tx.lock_for_update(query)
+        .one(tx)
+        .await
+        .context("failed to lock Web recovery printer")?
+        .ok_or(RepositoryError::PrinterControlUnavailable)
 }
 
 fn validate_printer(

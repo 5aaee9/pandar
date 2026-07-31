@@ -167,39 +167,16 @@ pub(crate) fn hash_token_for_test(token: &str) -> String {
 #[cfg(test)]
 mod tests;
 
-pub fn is_sea_orm_unique_violation(
-    err: &sea_orm::DbErr,
-    sqlite_name: &str,
-    postgres_name: &str,
-) -> bool {
-    if let Some(sea_orm::SqlErr::UniqueConstraintViolation(message)) = err.sql_err()
-        && (message.contains(sqlite_name) || message.contains(postgres_name))
-    {
-        return true;
-    }
-
-    let message = err.to_string();
-    message.contains(sqlite_name) || message.contains(postgres_name)
-}
-
-pub fn is_sea_orm_foreign_key_violation(err: &sea_orm::DbErr) -> bool {
-    if matches!(
-        err.sql_err(),
-        Some(sea_orm::SqlErr::ForeignKeyConstraintViolation(_))
-    ) {
-        return true;
-    }
-
-    let message = err.to_string();
-    message.contains("23503") || message.contains("FOREIGN KEY constraint failed")
-}
-
 #[cfg(test)]
 pub(crate) mod test_helpers {
     use anyhow::Context;
     use pandar_core::{AgentId, TenantId};
+    use sea_orm::{ActiveValue::Set, EntityTrait};
 
-    use crate::db::Database;
+    use crate::{
+        db::Database,
+        entities::{commands, printers},
+    };
 
     pub(crate) async fn insert_printer_fixture(
         database: &Database,
@@ -216,42 +193,22 @@ pub(crate) mod test_helpers {
         model: Option<&str>,
     ) -> anyhow::Result<String> {
         let id = uuid::Uuid::new_v4().to_string();
-        match database {
-            Database::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO printers (id, tenant_id, agent_id, serial_number, name, model, status, last_seen_at, created_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
-                )
-                .bind(&id)
-                .bind(tenant_id.to_string())
-                .bind(agent_id.to_string())
-                .bind(format!("serial-{id}"))
-                .bind("Fixture Printer")
-                .bind(model)
-                .bind("offline")
-                .bind("2026-06-20T00:00:00Z")
-                .execute(pool)
-                .await
-                .context("failed to insert SQLite printer fixture")?;
-            }
-            Database::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO printers (id, tenant_id, agent_id, serial_number, name, model, status, last_seen_at, created_at)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)",
-                )
-                .bind(&id)
-                .bind(tenant_id.to_string())
-                .bind(agent_id.to_string())
-                .bind(format!("serial-{id}"))
-                .bind("Fixture Printer")
-                .bind(model)
-                .bind("offline")
-                .bind("2026-06-20T00:00:00Z")
-                .execute(pool)
-                .await
-                .context("failed to insert PostgreSQL printer fixture")?;
-            }
-        }
+        let insert = printers::Entity::insert(printers::ActiveModel {
+            id: Set(id.clone()),
+            tenant_id: Set(tenant_id.to_string()),
+            agent_id: Set(agent_id.to_string()),
+            serial_number: Set(format!("serial-{id}")),
+            name: Set("Fixture Printer".to_owned()),
+            model: Set(model.map(str::to_owned)),
+            status: Set("offline".to_owned()),
+            last_seen_at: Set(Some("2026-06-20T00:00:00Z".to_owned())),
+            created_at: Set("2026-06-20T00:00:00Z".to_owned()),
+            ..Default::default()
+        });
+        insert
+            .exec_without_returning(&database.sea_orm_connection())
+            .await
+            .context("failed to insert printer fixture")?;
 
         Ok(id)
     }
@@ -264,44 +221,23 @@ pub(crate) mod test_helpers {
     ) -> anyhow::Result<()> {
         let id = format!("command-{agent_id}");
         let now = "2026-06-20T00:00:00Z";
-        match database {
-            Database::Sqlite(pool) => {
-                sqlx::query(
-                    "INSERT INTO commands (id, tenant_id, agent_id, printer_id, kind, status, payload_json, error, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9)",
-                )
-                .bind(id)
-                .bind(tenant_id.to_string())
-                .bind(agent_id.to_string())
-                .bind(printer_id)
-                .bind("sync")
-                .bind("queued")
-                .bind("{}")
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .context("failed to insert SQLite command fixture")?;
-            }
-            Database::Postgres(pool) => {
-                sqlx::query(
-                    "INSERT INTO commands (id, tenant_id, agent_id, printer_id, kind, status, payload_json, error, created_at, updated_at)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9)",
-                )
-                .bind(id)
-                .bind(tenant_id.to_string())
-                .bind(agent_id.to_string())
-                .bind(printer_id)
-                .bind("sync")
-                .bind("queued")
-                .bind("{}")
-                .bind(now)
-                .bind(now)
-                .execute(pool)
-                .await
-                .context("failed to insert PostgreSQL command fixture")?;
-            }
-        }
+        let insert = commands::Entity::insert(commands::ActiveModel {
+            id: Set(id),
+            tenant_id: Set(tenant_id.to_string()),
+            agent_id: Set(agent_id.to_string()),
+            printer_id: Set(printer_id.map(str::to_owned)),
+            kind: Set("sync".to_owned()),
+            status: Set("queued".to_owned()),
+            payload_json: Set("{}".to_owned()),
+            error: Set(None),
+            created_at: Set(now.to_owned()),
+            updated_at: Set(now.to_owned()),
+            ..Default::default()
+        });
+        insert
+            .exec_without_returning(&database.sea_orm_connection())
+            .await
+            .context("failed to insert command fixture")?;
 
         Ok(())
     }
