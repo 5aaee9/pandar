@@ -66,15 +66,8 @@ jobs:
         run: |
           set -euo pipefail
           cargo zigbuild --release -p pandar-app --bin pandar --target x86_64-unknown-linux-musl
-          mkdir -p "$RUNNER_TEMP/zig-cc"
-          printf '%s\n' '#!/usr/bin/env bash' 'exec zig cc -target x86_64-linux-gnu "$@"' > "$RUNNER_TEMP/zig-cc/zig-cc-plugin"
-          printf '%s\n' '#!/usr/bin/env bash' 'exec zig c++ -target x86_64-linux-gnu "$@"' > "$RUNNER_TEMP/zig-cc/zig-cxx-plugin"
-          chmod +x "$RUNNER_TEMP/zig-cc/zig-cc-plugin" "$RUNNER_TEMP/zig-cc/zig-cxx-plugin"
-          CC="$RUNNER_TEMP/zig-cc/zig-cc-plugin" \
-            CXX="$RUNNER_TEMP/zig-cc/zig-cxx-plugin" \
-            AR="zig ar" \
-            cargo zigbuild --release -p pandar-network-plugin -p pandar-bambu-source \
-              --target x86_64-unknown-linux-gnu
+          cargo build --release -p pandar-network-plugin -p pandar-bambu-source \
+            --target x86_64-unknown-linux-gnu
           cargo build --release --manifest-path tools/studio-abi-contract/Cargo.toml
 
       - name: Package exact three-file archive
