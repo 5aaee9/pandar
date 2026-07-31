@@ -116,6 +116,14 @@ describe('JobHistory actions', () => {
     vi.restoreAllMocks()
   })
 
+  it('renders one list item per job without nested list items', () => {
+    const { container } = renderHistory()
+    const list = container.querySelector('ul[aria-label="Print jobs"]')
+
+    expect(list?.querySelectorAll(':scope > li')).toHaveLength(1)
+    expect(list?.querySelector('li li')).toBeNull()
+  })
+
   it('confirms clear, deletes through the tenant proxy, and redirects on success', async () => {
     const user = userEvent.setup()
     const fetchMock = vi.fn(async () => new Response(null, { status: 204 }))

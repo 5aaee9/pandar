@@ -59,7 +59,7 @@ export function JobRow({
   const hasRemaining = job.print.remaining_time_minutes !== null
 
   return (
-    <li className="px-4 py-4 transition-colors hover:bg-muted/30">
+    <li className="content-visibility-auto px-4 py-4 transition-colors hover:bg-muted/30">
       <article aria-labelledby={titleId}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
