@@ -226,6 +226,8 @@ mod tests {
             network_exports: Vec::new(),
             file_transfer_exports: Vec::new(),
             print_params_fields: Vec::new(),
+            ams_sync_item_fields: Vec::new(),
+            ams_sync_params_fields: Vec::new(),
         }
     }
 
@@ -265,10 +267,7 @@ mod tests {
 
         let report = verify_exports(&plugin, &contract).unwrap();
 
-        assert_eq!(
-            report.missing,
-            ["bambu_network_start", "ft_abi_version"]
-        );
+        assert_eq!(report.missing, ["bambu_network_start", "ft_abi_version"]);
     }
 
     #[cfg(target_os = "linux")]

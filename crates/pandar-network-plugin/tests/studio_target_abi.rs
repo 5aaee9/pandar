@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 
-use pandar_network_plugin::pandar_plugin_network_agent_version;
+use pandar_network_plugin::{STUDIO_PROFILE, pandar_plugin_network_agent_version};
 
 #[path = "studio_target_abi/lifecycle_boundary.rs"]
 mod lifecycle_boundary;
@@ -13,8 +13,9 @@ fn network_agent_version_matches_pinned_studio_target() {
         .to_str()
         .unwrap();
 
-    assert_eq!(version, "02.07.01.51");
-    assert_eq!(&version[..8], "02.07.01");
+    let profile = pandar_studio_profile::profile(STUDIO_PROFILE).unwrap();
+    assert_eq!(version, profile.network_agent_version);
+    assert_eq!(&version[..8], &profile.id[..8]);
 }
 
 #[test]

@@ -7,8 +7,8 @@ use std::{
 };
 
 use crate::{boost::prepare_archive, http_probe::PrintSink};
+use pandar_studio_profile::StudioProfile;
 
-pub const FULL_MODES: &[&str] = &["version", "bind", "print", "ft"];
 const RUN_TIMEOUT: Duration = Duration::from_secs(20);
 
 pub struct NativeReport {
@@ -25,6 +25,7 @@ struct CompileInput<'a> {
     executable: &'a Path,
     check_types: bool,
     address_sanitizer: bool,
+    profile: &'a StudioProfile,
 }
 
 pub fn verify_native_contract(
@@ -34,6 +35,7 @@ pub fn verify_native_contract(
     modes: &[&str],
     check_types: bool,
     address_sanitizer: bool,
+    profile: &StudioProfile,
 ) -> Result<NativeReport, String> {
     if address_sanitizer && !cfg!(target_os = "linux") {
         return Err(
@@ -58,6 +60,7 @@ pub fn verify_native_contract(
                 executable: &temp.path().join(executable_name("studio_contract_types")),
                 check_types: true,
                 address_sanitizer,
+                profile,
             },
         )?;
         if !type_output.status.success() {
@@ -81,6 +84,7 @@ pub fn verify_native_contract(
             executable: &runtime,
             check_types: false,
             address_sanitizer,
+            profile,
         },
     )?;
     if !runtime_output.status.success() {
@@ -224,6 +228,20 @@ fn compile(
         .ok_or_else(|| "resolve plugin source include path".to_owned())?
         .join("src");
     let studio_headers = input.studio_source.join("src");
+    let profile_defines = [
+        (
+            input.profile.capabilities.bind_model_argument,
+            "PANDAR_STUDIO_BIND_MODEL_ARGUMENT",
+        ),
+        (
+            input.profile.capabilities.print_slicer_uid,
+            "PANDAR_STUDIO_PRINT_SLICER_UID",
+        ),
+        (
+            input.profile.capabilities.ams_sync,
+            "PANDAR_STUDIO_AMS_SYNC",
+        ),
+    ];
     if cfg!(all(windows, target_env = "msvc")) {
         compiler
             .arg("/nologo")
@@ -236,6 +254,9 @@ fn compile(
             .arg(format!("/I{}", plugin_headers.display()));
         for include in input.boost_includes {
             compiler.arg(format!("/I{}", include.display()));
+        }
+        for (_, define) in profile_defines.iter().filter(|(enabled, _)| *enabled) {
+            compiler.arg(format!("/D{define}"));
         }
         if input.check_types {
             compiler.arg("/DPANDAR_CONTRACT_CHECK_TYPES");
@@ -255,6 +276,9 @@ fn compile(
             .arg(format!("-I{}", plugin_headers.display()));
         for include in input.boost_includes {
             compiler.arg(format!("-I{}", include.display()));
+        }
+        for (_, define) in profile_defines.iter().filter(|(enabled, _)| *enabled) {
+            compiler.arg(format!("-D{define}"));
         }
         if input.address_sanitizer {
             compiler.args(["-fsanitize=address", "-fno-omit-frame-pointer", "-g"]);

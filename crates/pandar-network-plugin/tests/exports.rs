@@ -51,6 +51,7 @@ fn historical_floor_symbols() -> BTreeSet<String> {
 }
 
 fn target_studio_symbols() -> BTreeSet<String> {
+    let profile = pandar_studio_profile::profile(pandar_network_plugin::STUDIO_PROFILE).unwrap();
     let symbols = include_str!("../src/shim_exports.hpp")
         .lines()
         .filter_map(|line| line.trim().strip_prefix("PANDAR_STUDIO_EXPORT("))
@@ -61,6 +62,9 @@ fn target_studio_symbols() -> BTreeSet<String> {
                 .filter(|symbol| symbol.starts_with("bambu_network_") || symbol.starts_with("ft_"))
                 .unwrap_or_else(|| panic!("invalid target Studio export record: {record}"))
                 .to_owned()
+        })
+        .filter(|symbol| {
+            profile.capabilities.ams_sync || symbol != "bambu_network_sync_ams_filaments"
         })
         .collect::<Vec<_>>();
     let expected = symbols.iter().cloned().collect::<BTreeSet<_>>();
@@ -74,14 +78,14 @@ fn target_studio_symbols() -> BTreeSet<String> {
             .iter()
             .filter(|symbol| symbol.starts_with("bambu_network_"))
             .count(),
-        108
+        profile.network_exports
     );
     assert_eq!(
         symbols
             .iter()
             .filter(|symbol| symbol.starts_with("ft_"))
             .count(),
-        21
+        profile.file_transfer_exports
     );
     expected
 }

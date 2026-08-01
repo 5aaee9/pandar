@@ -14,17 +14,45 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  STUDIO_COMMIT: 42d319c6692fa8e64790fddf0cdaafd2a4254bcc
   BOOST_URL: https://github.com/boostorg/boost/releases/download/boost-1.84.0/boost-1.84.0.tar.gz
   BOOST_SHA256: 4d27e9efed0f6f152dc28db6430b9d3dfb40c0345da7342eaa5a987dde57bd95
 
 jobs:
+  studio-profiles:
+    name: Load Bambu Studio ABI profiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      profiles: ${{ steps.matrix.outputs.profiles }}
+      macos: ${{ steps.matrix.outputs.macos }}
+    steps:
+      - name: Checkout Pandar
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Generate exact-version matrices
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          profiles=$(jq -c '{include: [.profiles[] | {studio_profile: .id, studio_commit: .studio_commit}]}' studio-abi-profiles.json)
+          macos=$(jq -c '{include: [.profiles[] as $profile | [{studio_profile: $profile.id, studio_commit: $profile.studio_commit, label: "macos-amd64", target: "x86_64-apple-darwin"}, {studio_profile: $profile.id, studio_commit: $profile.studio_commit, label: "macos-arm64", target: "aarch64-apple-darwin"}][]]}' studio-abi-profiles.json)
+          echo "profiles=$profiles" >> "$GITHUB_OUTPUT"
+          echo "macos=$macos" >> "$GITHUB_OUTPUT"
+
   linux-amd64:
-    name: Build native Linux amd64 release archive
+    name: Build Linux amd64 for Studio ${{ matrix.studio_profile }}
+    needs: studio-profiles
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.studio-profiles.outputs.profiles) }}
+    env:
+      PANDAR_STUDIO_PROFILE: ${{ matrix.studio_profile }}
     steps:
       - name: Checkout Pandar
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -35,7 +63,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: bambulab/BambuStudio
-          ref: ${{ env.STUDIO_COMMIT }}
+          ref: ${{ matrix.studio_commit }}
           path: .release/BambuStudio
           persist-credentials: false
 
@@ -76,8 +104,8 @@ jobs:
           set -euo pipefail
           ref_name="${GITHUB_REF_NAME:-manual}"
           safe_ref="${ref_name//\//-}"
-          archive="pandar-release-${safe_ref}-linux-amd64.tar.gz"
-          stage="$RUNNER_TEMP/pandar-release-linux-amd64"
+          archive="pandar-release-${safe_ref}-studio-${{ matrix.studio_profile }}-linux-amd64.tar.gz"
+          stage="$RUNNER_TEMP/pandar-release-${{ matrix.studio_profile }}-linux-amd64"
           mkdir -p "$stage" dist
           cp target/x86_64-unknown-linux-musl/release/pandar "$stage/pandar"
           cp target/x86_64-unknown-linux-gnu/release/libpandar_network_plugin.so "$stage/libpandar_network_plugin.so"
@@ -92,8 +120,9 @@ jobs:
           set -euo pipefail
           ref_name="${GITHUB_REF_NAME:-manual}"
           safe_ref="${ref_name//\//-}"
-          archive="dist/pandar-release-${safe_ref}-linux-amd64.tar.gz"
+          archive="dist/pandar-release-${safe_ref}-studio-${{ matrix.studio_profile }}-linux-amd64.tar.gz"
           cargo run --manifest-path tools/release-smoke/Cargo.toml -- \
+            --studio-profile "${{ matrix.studio_profile }}" \
             --label linux-amd64 \
             --archive "$archive" \
             --checksum "$archive.sha256" \
@@ -110,16 +139,22 @@ jobs:
       - name: Upload Linux release archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: pandar-release-linux-amd64
+          name: pandar-release-studio-${{ matrix.studio_profile }}-linux-amd64
           path: dist/*
           if-no-files-found: error
 
   windows-amd64:
-    name: Build native Windows amd64 release archives
+    name: Build Windows amd64 for Studio ${{ matrix.studio_profile }}
+    needs: studio-profiles
     runs-on: windows-latest
     timeout-minutes: 90
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.studio-profiles.outputs.profiles) }}
+    env:
+      PANDAR_STUDIO_PROFILE: ${{ matrix.studio_profile }}
     steps:
       - name: Checkout Pandar
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -130,7 +165,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: bambulab/BambuStudio
-          ref: ${{ env.STUDIO_COMMIT }}
+          ref: ${{ matrix.studio_commit }}
           path: .release/BambuStudio
           persist-credentials: false
 
@@ -166,15 +201,15 @@ jobs:
         run: |
           $safeRef = ($env:GITHUB_REF_NAME ?? "manual").Replace("/", "-")
           $dist = Join-Path $env:GITHUB_WORKSPACE "dist"
-          $releaseStage = Join-Path $env:RUNNER_TEMP "pandar-release-windows-amd64"
-          $hookStage = Join-Path $env:RUNNER_TEMP "pandar-studio-hook-windows-amd64"
+          $releaseStage = Join-Path $env:RUNNER_TEMP "pandar-release-$env:PANDAR_STUDIO_PROFILE-windows-amd64"
+          $hookStage = Join-Path $env:RUNNER_TEMP "pandar-studio-hook-$env:PANDAR_STUDIO_PROFILE-windows-amd64"
           New-Item -ItemType Directory -Force -Path $dist, $releaseStage, $hookStage | Out-Null
 
           $target = Join-Path $env:GITHUB_WORKSPACE "target/x86_64-pc-windows-msvc/release"
           Copy-Item (Join-Path $target "pandar.exe") (Join-Path $releaseStage "pandar.exe")
           Copy-Item (Join-Path $target "pandar_network_plugin.dll") (Join-Path $releaseStage "pandar_network_plugin.dll")
           Copy-Item (Join-Path $target "pandar_bambu_source.dll") (Join-Path $releaseStage "pandar_bambu_source.dll")
-          $releaseArchive = Join-Path $dist "pandar-release-$safeRef-windows-amd64.tar.gz"
+          $releaseArchive = Join-Path $dist "pandar-release-$safeRef-studio-$env:PANDAR_STUDIO_PROFILE-windows-amd64.tar.gz"
           tar -C $releaseStage -czf $releaseArchive pandar.exe pandar_network_plugin.dll pandar_bambu_source.dll
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $releaseHash = (Get-FileHash -Algorithm SHA256 $releaseArchive).Hash.ToLowerInvariant()
@@ -183,7 +218,7 @@ jobs:
           Copy-Item (Join-Path $target "pandar_studio_hook.dll") (Join-Path $hookStage "pandar_studio_hook.dll")
           Copy-Item (Join-Path $target "pandar_network_plugin.dll") (Join-Path $hookStage "pandar_network_plugin.dll")
           Copy-Item (Join-Path $target "pandar_bambu_source.dll") (Join-Path $hookStage "pandar_bambu_source.dll")
-          $hookArchive = Join-Path $dist "pandar-studio-hook-02.07.01-windows-amd64.zip"
+          $hookArchive = Join-Path $dist "pandar-studio-hook-$env:PANDAR_STUDIO_PROFILE-windows-amd64.zip"
           Compress-Archive -Path (Join-Path $hookStage "*") -DestinationPath $hookArchive -CompressionLevel Optimal
           $hookHash = (Get-FileHash -Algorithm SHA256 $hookArchive).Hash.ToLowerInvariant()
           "$hookHash  $(Split-Path -Leaf $hookArchive)" | Set-Content -NoNewline "$hookArchive.sha256"
@@ -192,8 +227,9 @@ jobs:
         shell: pwsh
         run: |
           $safeRef = ($env:GITHUB_REF_NAME ?? "manual").Replace("/", "-")
-          $archive = Join-Path $env:GITHUB_WORKSPACE "dist/pandar-release-$safeRef-windows-amd64.tar.gz"
+          $archive = Join-Path $env:GITHUB_WORKSPACE "dist/pandar-release-$safeRef-studio-$env:PANDAR_STUDIO_PROFILE-windows-amd64.tar.gz"
           cargo run --manifest-path tools/release-smoke/Cargo.toml -- `
+            --studio-profile $env:PANDAR_STUDIO_PROFILE `
             --label windows-amd64 `
             --archive $archive `
             --checksum "$archive.sha256" `
@@ -211,24 +247,22 @@ jobs:
       - name: Upload Windows release archives
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: pandar-release-windows-amd64
+          name: pandar-release-studio-${{ matrix.studio_profile }}-windows-amd64
           path: dist/*
           if-no-files-found: error
 
   macos:
-    name: Build ${{ matrix.label }} release archive on Apple Silicon
+    name: Build ${{ matrix.label }} for Studio ${{ matrix.studio_profile }} on Apple Silicon
+    needs: studio-profiles
     runs-on: macos-26
     timeout-minutes: 90
     permissions:
       contents: read
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - label: macos-amd64
-            target: x86_64-apple-darwin
-          - label: macos-arm64
-            target: aarch64-apple-darwin
+      matrix: ${{ fromJSON(needs.studio-profiles.outputs.macos) }}
+    env:
+      PANDAR_STUDIO_PROFILE: ${{ matrix.studio_profile }}
     steps:
       - name: Checkout Pandar
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -253,7 +287,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: bambulab/BambuStudio
-          ref: ${{ env.STUDIO_COMMIT }}
+          ref: ${{ matrix.studio_commit }}
           path: .release/BambuStudio
           persist-credentials: false
 
@@ -287,8 +321,8 @@ jobs:
           set -euo pipefail
           ref_name="${GITHUB_REF_NAME:-manual}"
           safe_ref="${ref_name//\//-}"
-          archive="pandar-release-${safe_ref}-${{ matrix.label }}.tar.gz"
-          stage="$RUNNER_TEMP/pandar-release-${{ matrix.label }}"
+          archive="pandar-release-${safe_ref}-studio-${{ matrix.studio_profile }}-${{ matrix.label }}.tar.gz"
+          stage="$RUNNER_TEMP/pandar-release-${{ matrix.studio_profile }}-${{ matrix.label }}"
           mkdir -p "$stage" dist
           cp "target/${{ matrix.target }}/release/pandar" "$stage/pandar"
           cp "target/${{ matrix.target }}/release/libpandar_network_plugin.dylib" "$stage/libpandar_network_plugin.dylib"
@@ -303,9 +337,10 @@ jobs:
           set -euo pipefail
           ref_name="${GITHUB_REF_NAME:-manual}"
           safe_ref="${ref_name//\//-}"
-          archive="dist/pandar-release-${safe_ref}-${{ matrix.label }}.tar.gz"
+          archive="dist/pandar-release-${safe_ref}-studio-${{ matrix.studio_profile }}-${{ matrix.label }}.tar.gz"
           cargo run --target "${{ matrix.target }}" \
             --manifest-path tools/release-smoke/Cargo.toml -- \
+            --studio-profile "${{ matrix.studio_profile }}" \
             --label "${{ matrix.label }}" \
             --archive "$archive" \
             --checksum "$archive.sha256" \
@@ -322,7 +357,7 @@ jobs:
       - name: Upload macOS release archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: pandar-release-${{ matrix.label }}
+          name: pandar-release-studio-${{ matrix.studio_profile }}-${{ matrix.label }}
           path: dist/*
           if-no-files-found: error
 

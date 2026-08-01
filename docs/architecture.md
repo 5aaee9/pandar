@@ -22,11 +22,12 @@ Bambu Studio -(network plugin ABI)-> pandar-network-plugin -(HTTP / WebSocket)->
 
 `pandar-auth` is the optional self-hosted Better Auth issuer app. It owns email magic-link sign-in, optional post-login passkey binding, its own SQLite database, and JWT/JWKS issuance. The hub does not read Better Auth tables; it only verifies emitted JWTs through the existing external-auth contract.
 
-`pandar-network-plugin` is a Hub-backed Bambu Studio dynamic-library adapter. The active exact contract
-is Studio commit `42d319c6692fa8e64790fddf0cdaafd2a4254bcc` (`02.07.01.62`) with Boost
-`1.84.0` and 108 network plus 21 File Transfer declarations. It connects only to `pandar-hub`; it must
-not connect directly to `pandar-agent` or Bambu machines, and local machine access remains the agent's
-responsibility.
+`pandar-network-plugin` is a Hub-backed Bambu Studio dynamic-library adapter. It builds one exact ABI
+profile at a time from `studio-abi-profiles.json`: Studio `02.07.01.62` has 108 network plus 21 File
+Transfer declarations, while `02.08.01.55` has 109 plus 21. Both contracts use Boost `1.84.0` and are
+released as separate archives because their C++ signatures and layouts are incompatible. The plugin
+connects only to `pandar-hub`; it must not connect directly to `pandar-agent` or Bambu machines, and
+local machine access remains the agent's responsibility.
 
 End-user authentication can be delegated to Clerk, Logto, or Better Auth, but tenant authorization remains inside Pandar. The hub verifies identity-provider JWTs, maps provider subjects to local tenant users, and checks Rust-managed user-to-tenant membership plus tenant roles for every tenant-scoped operation. Pandar user rows are tenant-local projections of external accounts; the primary product path does not make Pandar an account manager.
 
@@ -443,8 +444,10 @@ Agent phase status after Phase 15:
 
 ### pandar-network-plugin
 
-- Dynamic-library crate implementing the pinned Studio `02.07.01.62` network-plugin ABI: 108 network
-  plus 21 File Transfer declarations, 129 unique exports.
+- Dynamic-library crate implementing separately built exact profiles for Studio `02.07.01.62`
+  (108 network plus 21 File Transfer declarations, 129 unique exports) and `02.08.01.55` (109 plus
+  21, 130 unique exports). The shared profile catalog drives build selection, release matrices,
+  installer matching, Windows hook version gates, and ABI/release-smoke expectations.
 - File Transfer, direct discovery/bind/certificate handling, and direct printer sockets keep their
   exact ABI shape but remain explicit non-success paths.
 - Connects only to `pandar-hub` through HTTP/WebSocket APIs.

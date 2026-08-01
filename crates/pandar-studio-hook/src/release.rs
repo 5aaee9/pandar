@@ -9,8 +9,6 @@ use tempfile::TempDir;
 use zip::ZipArchive;
 
 const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/5aaee9/pandar/releases/latest";
-const BUNDLE_NAME: &str = "pandar-studio-hook-02.07.01-windows-amd64.zip";
-const CHECKSUM_NAME: &str = "pandar-studio-hook-02.07.01-windows-amd64.zip.sha256";
 const MAX_BUNDLE_BYTES: usize = 128 * 1024 * 1024;
 const MAX_CHECKSUM_BYTES: usize = 4096;
 const MAX_EXTRACTED_BYTES: u64 = 256 * 1024 * 1024;
@@ -38,20 +36,25 @@ struct GitHubAsset {
     browser_download_url: String,
 }
 
-pub(crate) async fn download_latest_studio_hook_release() -> anyhow::Result<StudioHookRelease> {
+pub(crate) async fn download_latest_studio_hook_release(
+    profile: &pandar_studio_profile::StudioProfile,
+) -> anyhow::Result<StudioHookRelease> {
     let client = Client::builder()
         .user_agent("pandar-studio-hook")
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(120))
         .build()
         .context("build GitHub Release HTTP client")?;
-    download_studio_hook_release(&client, LATEST_RELEASE_URL).await
+    download_studio_hook_release(&client, LATEST_RELEASE_URL, profile).await
 }
 
 async fn download_studio_hook_release(
     client: &Client,
     release_url: &str,
+    profile: &pandar_studio_profile::StudioProfile,
 ) -> anyhow::Result<StudioHookRelease> {
+    let bundle_name = profile.hook_bundle_name();
+    let checksum_name = format!("{bundle_name}.sha256");
     let release = client
         .get(release_url)
         .header("Accept", "application/vnd.github+json")
@@ -70,16 +73,16 @@ async fn download_studio_hook_release(
         .map(|asset| (asset.name, asset.browser_download_url))
         .collect::<BTreeMap<_, _>>();
     let bundle_url = assets
-        .get(BUNDLE_NAME)
-        .with_context(|| format!("latest Pandar GitHub Release has no {BUNDLE_NAME}"))?;
+        .get(&bundle_name)
+        .with_context(|| format!("latest Pandar GitHub Release has no {bundle_name}"))?;
     let checksum_url = assets
-        .get(CHECKSUM_NAME)
-        .with_context(|| format!("latest Pandar GitHub Release has no {CHECKSUM_NAME}"))?;
+        .get(&checksum_name)
+        .with_context(|| format!("latest Pandar GitHub Release has no {checksum_name}"))?;
 
     let checksum = download_bounded(client, checksum_url, MAX_CHECKSUM_BYTES)
         .await
         .context("download Studio hook bundle checksum")?;
-    let expected = parse_checksum(&checksum)?;
+    let expected = parse_checksum(&checksum, &bundle_name)?;
     let bundle = download_bounded(client, bundle_url, MAX_BUNDLE_BYTES)
         .await
         .context("download Studio hook bundle")?;
@@ -117,13 +120,13 @@ async fn download_bounded(client: &Client, url: &str, limit: usize) -> anyhow::R
     Ok(body)
 }
 
-fn parse_checksum(body: &[u8]) -> anyhow::Result<String> {
+fn parse_checksum(body: &[u8], bundle_name: &str) -> anyhow::Result<String> {
     let text = std::str::from_utf8(body).context("checksum asset is not UTF-8")?;
     let mut fields = text.split_whitespace();
     let checksum = fields.next().context("checksum asset is empty")?;
     let filename = fields.next().context("checksum asset has no filename")?;
-    if fields.next().is_some() || filename.trim_start_matches('*') != BUNDLE_NAME {
-        bail!("checksum asset must contain only the checksum for {BUNDLE_NAME}");
+    if fields.next().is_some() || filename.trim_start_matches('*') != bundle_name {
+        bail!("checksum asset must contain only the checksum for {bundle_name}");
     }
     if checksum.len() != 64 || !checksum.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         bail!("checksum asset does not contain a SHA-256 digest");
@@ -217,12 +220,19 @@ mod tests {
 
     #[test]
     fn checksum_requires_exact_bundle_name() {
+        let bundle_name = pandar_studio_profile::catalog()
+            .default()
+            .hook_bundle_name();
         let digest = "a".repeat(64);
         assert_eq!(
-            parse_checksum(format!("{digest}  {BUNDLE_NAME}\n").as_bytes()).unwrap(),
+            parse_checksum(
+                format!("{digest}  {bundle_name}\n").as_bytes(),
+                &bundle_name,
+            )
+            .unwrap(),
             digest
         );
-        assert!(parse_checksum(format!("{digest}  other.zip\n").as_bytes()).is_err());
+        assert!(parse_checksum(format!("{digest}  other.zip\n").as_bytes(), &bundle_name).is_err());
     }
 
     #[test]
@@ -256,16 +266,19 @@ mod tests {
 
     #[tokio::test]
     async fn downloads_and_verifies_github_release_assets() {
+        let profile = pandar_studio_profile::catalog().default();
+        let bundle_name = profile.hook_bundle_name();
+        let checksum_name = format!("{bundle_name}.sha256");
         let bundle = bundle(&[
             (HOOK_DLL, b"hook"),
             (PLUGIN_DLL, b"plugin"),
             (SOURCE_DLL, b"source"),
         ]);
-        let checksum = format!("{}  {BUNDLE_NAME}\n", hex_sha256(&bundle));
+        let checksum = format!("{}  {bundle_name}\n", hex_sha256(&bundle));
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let base_url = format!("http://{}", listener.local_addr().unwrap());
         let release_body = format!(
-            r#"{{"assets":[{{"name":"{BUNDLE_NAME}","browser_download_url":"{base_url}/bundle"}},{{"name":"{CHECKSUM_NAME}","browser_download_url":"{base_url}/checksum"}}]}}"#
+            r#"{{"assets":[{{"name":"{bundle_name}","browser_download_url":"{base_url}/bundle"}},{{"name":"{checksum_name}","browser_download_url":"{base_url}/checksum"}}]}}"#
         );
         let server = thread::spawn(move || {
             for stream in listener.incoming().take(3) {
@@ -291,9 +304,10 @@ mod tests {
         });
 
         let client = Client::builder().build().unwrap();
-        let release = download_studio_hook_release(&client, &format!("{base_url}/release"))
-            .await
-            .unwrap();
+        let release =
+            download_studio_hook_release(&client, &format!("{base_url}/release"), profile)
+                .await
+                .unwrap();
         assert_eq!(fs::read(release.hook_file).unwrap(), b"hook");
         assert_eq!(fs::read(release.plugin_file).unwrap(), b"plugin");
         assert_eq!(fs::read(release.source_file).unwrap(), b"source");

@@ -7,6 +7,7 @@ repository.workspace = true
 
 [build-dependencies]
 cc = "1.2.47"
+pandar-studio-profile.workspace = true
 
 [dependencies]
 aes.workspace = true
@@ -14,6 +15,7 @@ anyhow.workspace = true
 cbc.workspace = true
 futures-util.workspace = true
 pandar-network-plugin = { path = "../pandar-network-plugin" }
+pandar-studio-profile.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 sha2.workspace = true

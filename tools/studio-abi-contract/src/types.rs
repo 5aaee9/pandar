@@ -1,8 +1,13 @@
 use std::{collections::BTreeSet, fs, path::Path};
 
+use pandar_studio_profile::StudioProfile;
+
 use crate::source::StudioContract;
 
-pub fn verify_pandar_abi_contract(contract: &StudioContract) -> Result<(), String> {
+pub fn verify_pandar_abi_contract(
+    contract: &StudioContract,
+    profile: &StudioProfile,
+) -> Result<(), String> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let repo_root = manifest_dir
         .parent()
@@ -11,11 +16,23 @@ pub fn verify_pandar_abi_contract(contract: &StudioContract) -> Result<(), Strin
     let shim_path = repo_root.join("crates/pandar-network-plugin/src/shim_types.hpp");
     let shim = fs::read_to_string(&shim_path)
         .map_err(|error| format!("read Pandar ABI types {}: {error}", shim_path.display()))?;
-    verify_fields(
-        "PrintParams",
-        &contract.print_params_fields,
-        &cpp_struct_fields(&shim, "PrintParams")?,
-    )?;
+    let mut print_params = cpp_struct_fields(&shim, "PrintParams")?;
+    if !profile.capabilities.print_slicer_uid {
+        print_params.retain(|field| field != "slicer_uid");
+    }
+    verify_fields("PrintParams", &contract.print_params_fields, &print_params)?;
+    if profile.capabilities.ams_sync {
+        verify_fields(
+            "AmsSyncItem",
+            &contract.ams_sync_item_fields,
+            &cpp_struct_fields(&shim, "AmsSyncItem")?,
+        )?;
+        verify_fields(
+            "AmsSyncParams",
+            &contract.ams_sync_params_fields,
+            &cpp_struct_fields(&shim, "AmsSyncParams")?,
+        )?;
+    }
     let exports_path = repo_root.join("crates/pandar-network-plugin/src/shim_exports.hpp");
     let exports = fs::read_to_string(&exports_path).map_err(|error| {
         format!(
@@ -23,7 +40,12 @@ pub fn verify_pandar_abi_contract(contract: &StudioContract) -> Result<(), Strin
             exports_path.display()
         )
     })?;
-    let declarations = studio_export_map(&exports)?;
+    let declarations = studio_export_map(&exports)?
+        .into_iter()
+        .filter(|(symbol, _)| {
+            profile.capabilities.ams_sync || symbol != "bambu_network_sync_ams_filaments"
+        })
+        .collect::<Vec<_>>();
     let network = declarations
         .iter()
         .filter(|(symbol, _)| symbol.starts_with("bambu_network_"))
@@ -34,9 +56,15 @@ pub fn verify_pandar_abi_contract(contract: &StudioContract) -> Result<(), Strin
         .filter(|(symbol, _)| symbol.starts_with("ft_"))
         .cloned()
         .collect::<Vec<_>>();
-    if network.len() != 108 || file_transfer.len() != 21 || declarations.len() != 129 {
+    if network.len() != profile.network_exports
+        || file_transfer.len() != profile.file_transfer_exports
+        || declarations.len() != profile.total_exports()
+    {
         return Err(format!(
-            "Pandar Studio export map must contain exactly 108 network and 21 FT records, got {} network, {} FT, {} total",
+            "Pandar Studio profile {} export map must contain exactly {} network and {} FT records, got {} network, {} FT, {} total",
+            profile.id,
+            profile.network_exports,
+            profile.file_transfer_exports,
             network.len(),
             file_transfer.len(),
             declarations.len()
@@ -90,7 +118,11 @@ fn verify_export_map(
 }
 
 pub fn cpp_struct_fields(contents: &str, name: &str) -> Result<Vec<String>, String> {
-    let contents = strip_comments(contents);
+    let contents = strip_comments(contents)
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n");
     let marker = format!("struct {name}");
     let declaration = contents
         .find(&marker)

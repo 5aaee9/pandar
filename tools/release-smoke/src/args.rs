@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 #[derive(Debug)]
 pub(crate) struct Args {
+    pub studio_profile: String,
     pub label: String,
     pub archive: PathBuf,
     pub checksum: PathBuf,
@@ -15,6 +16,7 @@ pub(crate) struct Args {
 
 pub(crate) fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut label = None;
+    let mut studio_profile = None;
     let mut archive = None;
     let mut checksum = None;
     let mut cli_name = None;
@@ -30,6 +32,7 @@ pub(crate) fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, Str
             .next()
             .ok_or_else(|| format!("{flag} requires a value\n{}", usage()))?;
         match flag.as_str() {
+            "--studio-profile" if studio_profile.is_none() => studio_profile = Some(value),
             "--label" if label.is_none() => label = Some(value),
             "--archive" if archive.is_none() => archive = Some(PathBuf::from(value)),
             "--checksum" if checksum.is_none() => checksum = Some(PathBuf::from(value)),
@@ -39,16 +42,20 @@ pub(crate) fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, Str
             "--repo-root" if repo_root.is_none() => repo_root = Some(PathBuf::from(value)),
             "--abi-probe" if abi_probe.is_none() => abi_probe = Some(PathBuf::from(value)),
             "--abi-probe-arg" => {
-                if value == "--plugin" || value.starts_with("--plugin=") {
+                if value == "--plugin"
+                    || value.starts_with("--plugin=")
+                    || value == "--studio-profile"
+                    || value.starts_with("--studio-profile=")
+                {
                     return Err(
-                        "--plugin is reserved; release-smoke always supplies the staged plugin"
+                        "--plugin and --studio-profile are reserved; release-smoke supplies both"
                             .to_owned(),
                     );
                 }
                 abi_probe_args.push(value);
             }
-            "--label" | "--archive" | "--checksum" | "--cli-name" | "--plugin-name"
-            | "--source-name" | "--repo-root" | "--abi-probe" => {
+            "--studio-profile" | "--label" | "--archive" | "--checksum" | "--cli-name"
+            | "--plugin-name" | "--source-name" | "--repo-root" | "--abi-probe" => {
                 return Err(format!("{flag} was provided twice"));
             }
             _ => return Err(format!("unknown argument {flag}\n{}", usage())),
@@ -56,6 +63,7 @@ pub(crate) fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, Str
     }
 
     Ok(Args {
+        studio_profile: studio_profile.ok_or_else(usage)?,
         label: label.ok_or_else(usage)?,
         archive: archive.ok_or_else(usage)?,
         checksum: checksum.ok_or_else(usage)?,
@@ -71,6 +79,7 @@ pub(crate) fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, Str
 fn usage() -> String {
     concat!(
         "usage: pandar-release-smoke ",
+        "--studio-profile <exact-version> ",
         "--label <linux-amd64|macos-amd64|macos-arm64|windows-amd64> ",
         "--archive <path> --checksum <path> ",
         "--cli-name <filename> --plugin-name <filename> --source-name <filename> ",
@@ -86,6 +95,8 @@ mod tests {
 
     fn required_args_without_source() -> Vec<String> {
         [
+            "--studio-profile",
+            "02.07.01.62",
             "--label",
             "windows-amd64",
             "--archive",

@@ -3075,6 +3075,7 @@ dependencies = [
  "http-body 1.0.1",
  "http-body-util",
  "pandar-core",
+ "pandar-studio-profile",
  "quick-xml",
  "reqwest",
  "rust-embed",
@@ -3098,12 +3099,21 @@ dependencies = [
  "cc",
  "futures-util",
  "pandar-network-plugin",
+ "pandar-studio-profile",
  "reqwest",
  "serde",
  "sha2 0.10.9",
  "tempfile",
  "tokio",
  "zip",
+]
+
+[[package]]
+name = "pandar-studio-profile"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

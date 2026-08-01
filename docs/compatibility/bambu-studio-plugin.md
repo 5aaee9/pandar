@@ -2,14 +2,20 @@
 
 Phase 23 tracks Pandar's Bambu Studio network plugin compatibility evidence. A platform is compatible only after a real Bambu Studio run is recorded here.
 
-## Active `02.07.01.x` Alignment
+## Active Exact-Version Alignments
 
-The current compatibility target is official Bambu Studio commit
-`42d319c6692fa8e64790fddf0cdaafd2a4254bcc` (`02.07.01.62`, network agent `02.07.01.51`) with
-upstream Boost `1.84.0`. The working tree models the pinned 108 network plus 21 File Transfer
-declarations (129 unique exports). The historical `02.08.01.55` Public Beta contract is ABI-incompatible:
-it adds `bambu_network_sync_ams_filaments`, a `bind` model argument, and a trailing
-`PrintParams::slicer_uid`, so it is retained only as historical evidence rather than a runtime fallback.
+Pandar supports two separately built exact Bambu Studio profiles with upstream Boost `1.84.0`:
+
+| Studio | Studio commit | Network agent | Export contract |
+| ------ | ------------- | ------------- | --------------- |
+| `02.07.01.62` | `42d319c6692fa8e64790fddf0cdaafd2a4254bcc` | `02.07.01.51` | 108 network + 21 File Transfer = 129 |
+| `02.08.01.55` | `ba049f6a2e08c3b6033660bb84da80c08722974b` | `02.08.01.52` | 109 network + 21 File Transfer = 130 |
+
+The 2.8 ABI adds `bambu_network_sync_ams_filaments`, a `bind` model argument, and a trailing
+`PrintParams::slicer_uid`. One binary cannot safely serve both C++ ABIs, so releases contain an exact-
+version archive for each profile. `studio-abi-profiles.json` drives build selection, pinned source,
+export counts, installer matching, Windows hook gates, and release validation. Unknown exact versions
+fail closed instead of selecting a nearby family build.
 
 Final12 is retained as historical evidence, not as the current candidate. Its immutable input passed
 the complete Windows clean, PostgreSQL 16.14, and Windows native three-file package/ABI/release-smoke
@@ -32,14 +38,15 @@ Final13 exact-AppImage attempt 8 then passed the official Ubuntu 22.04 `02.08.01
 same-process development no-auth recovery gate. Authenticated Linux WebView/ticket/session and UI
 rows, real Windows Studio, macOS, hardware actions, and live firmware were untested at that checkpoint.
 
-Final16 is the historical verified Linux compatibility baseline for Public Beta `02.08.01.55`. It includes the pinned Studio `fun` bit
+Final16 remains the verified Linux compatibility baseline for Public Beta `02.08.01.55`. It includes the pinned Studio `fun` bit
 48 mask, Better Auth plugin return-intent repair, caller-owned model-task overload, and selected-target
 Cloud ownership correction. Its immutable source archive has SHA-256
 `24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039`; the final16 Linux release
 archive has SHA-256 `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3`.
 The complete Linux matrix and controlled official-AppImage model-task boundary passed as recorded
 below. Final14 is retained as historical module-load/development-no-auth evidence. Final15 is retained
-as non-promotable pre-correction evidence; none of these Beta packages is a current candidate.
+as non-promotable pre-correction evidence. Those frozen packages are not current candidates; current
+2.8 artifacts must be rebuilt from the active profile and pass the same exact-version gates.
 
 Authenticated Better Auth sign-in/ticket exchange, real Hub/Agent/database integration through
 Studio, current Windows Studio, macOS x86_64 load, authenticated macOS behavior, hardware actions,
@@ -48,16 +55,16 @@ persisted authenticated-shaped session and a loopback fail-closed mock; it prove
 selected-only model-task request/callback boundary, not those excluded surfaces or downstream behavior
 hidden in Studio's encrypted logs.
 
-`02.07.01.x` is only the version-handshake family. Compatibility is recorded per exact Studio build,
-OS, architecture, and native C++ ABI; evidence for `02.07.01.62` does not automatically cover a later
-patch build with the same prefix.
+Version prefixes are only network-agent handshake families. Compatibility is recorded per exact Studio
+build, OS, architecture, and native C++ ABI; evidence for either supported profile does not cover a
+later patch build with the same prefix.
 
 The historical Public Beta remediation contract and execution order are retained at:
 
 - [Bambu Studio 02.08.01 alignment design](../superpowers/specs/2026-07-19-bambu-studio-02-08-01-alignment-design.md)
 - [Bambu Studio 02.08.01 implementation plan](../superpowers/plans/2026-07-19-bambu-studio-02-08-01-alignment.md)
 
-Do not reuse their `02.08.01.55` ABI conclusions for the active stable target.
+Do not reuse ABI conclusions across exact profiles.
 
 ### Target Native ABI Matrix
 

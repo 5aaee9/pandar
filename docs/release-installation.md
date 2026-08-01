@@ -10,12 +10,12 @@ Release `v0.1.0` is published at <https://github.com/5aaee9/pandar/releases/tag/
 
 Select the archive that matches the operator host OS and CPU architecture:
 
-| Host                 | Target label    | Archive                                                      |
-| -------------------- | --------------- | ------------------------------------------------------------ |
-| Linux x86_64/amd64   | `linux-amd64`   | `pandar-release-<tag-or-sanitized-ref>-linux-amd64.tar.gz`   |
-| macOS x86_64/amd64   | `macos-amd64`   | `pandar-release-<tag-or-sanitized-ref>-macos-amd64.tar.gz`   |
-| macOS Apple Silicon  | `macos-arm64`   | `pandar-release-<tag-or-sanitized-ref>-macos-arm64.tar.gz`   |
-| Windows x86_64/amd64 | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-windows-amd64.tar.gz` |
+| Host                 | Target label    | Archive                                                                               |
+| -------------------- | --------------- | ------------------------------------------------------------------------------------- |
+| Linux x86_64/amd64   | `linux-amd64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-linux-amd64.tar.gz`     |
+| macOS x86_64/amd64   | `macos-amd64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-macos-amd64.tar.gz`     |
+| macOS Apple Silicon  | `macos-arm64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-macos-arm64.tar.gz`     |
+| Windows x86_64/amd64 | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-windows-amd64.tar.gz`   |
 
 The immutable `v0.1.0` release predates macOS desktop archives. The current tag workflow additionally
 publishes macOS amd64 and arm64 archives. Both use an Apple Silicon runner: arm64 executes natively,
@@ -27,22 +27,23 @@ plugin, and verifies the checksum, exact layout, companion policy, and CLI start
 The separate Windows Studio hook bundle is also
 built natively with MSVC.
 
-The current Studio contract contains 108 network and 21 File Transfer names. Historical
-`02.08.01.55` 130-name archives are not current Studio candidates; their final13/final16 evidence is
-retained only as history in `docs/compatibility/release-artifacts.md`.
+Choose the archive whose exact version matches `app.version` in `BambuStudio.conf`. Supported profiles
+are `02.07.01.62` (108 network plus 21 File Transfer names) and `02.08.01.55` (109 plus 21). Their C++
+ABIs are incompatible, so neither archive is a fallback for the other. The installer verifies the
+exact version before changing the Studio plugin directory.
 
 ## Checksum Verification
 
 Download the archive and its `.sha256` sidecar from the same release. Verify the sidecar before unpacking:
 
 ```bash
-sha256sum -c pandar-release-<tag-or-sanitized-ref>-<target-label>.tar.gz.sha256
+sha256sum -c pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-<target-label>.tar.gz.sha256
 ```
 
 On macOS, use:
 
 ```bash
-shasum -a 256 -c pandar-release-<tag-or-sanitized-ref>-<target-label>.tar.gz.sha256
+shasum -a 256 -c pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-<target-label>.tar.gz.sha256
 ```
 
 The sidecar must name only the archive file, not a local path. Do not install an archive whose checksum fails or whose sidecar does not match the downloaded filename.
@@ -52,14 +53,14 @@ The sidecar must name only the archive file, not a local path. Do not install an
 Unpack the archive and run the CLI help command before installing it into a shared path:
 
 ```bash
-tar -xzf pandar-release-<tag-or-sanitized-ref>-<target-label>.tar.gz
+tar -xzf pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-<target-label>.tar.gz
 ./pandar --help
 ```
 
 On Windows, run:
 
 ```powershell
-tar -xzf pandar-release-<tag-or-sanitized-ref>-<target-label>.tar.gz
+tar -xzf pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-<target-label>.tar.gz
 .\pandar.exe --help
 ```
 
@@ -67,9 +68,11 @@ If startup fails, keep the archive, checksum, target label, OS version, and term
 
 ## Windows Bambu Studio Hook
 
-For Bambu Studio `02.07.01.x` on Windows x86-64, the tagged release also publishes
-`pandar-studio-hook-02.07.01-windows-amd64.zip` and its `.sha256` sidecar. The bundle is built natively with
-MSVC and contains the Studio hook, network plugin, and sentinel-only BambuSource companion.
+For each supported exact Bambu Studio version on Windows x86-64, the tagged release also publishes
+`pandar-studio-hook-<exact-version>-windows-amd64.zip` and its `.sha256` sidecar. The bundle is built
+natively with MSVC and contains the Studio hook, matching network plugin, and sentinel-only
+BambuSource companion. The hook accepts only versions present in `studio-abi-profiles.json` and keeps
+its verified package cache separate for every exact version.
 
 Close Studio, then install the hook with a Windows `pandar.exe`. Use an elevated terminal when the
 Studio program directory is under `Program Files`:
@@ -201,8 +204,8 @@ Use root-owned runtime `EnvironmentFile` paths outside `/nix/store` for every Ni
 
 ## Bambu Studio Plugin And BambuSource Replacement
 
-Pinned Studio commit `42d319c6692fa8e64790fddf0cdaafd2a4254bcc` (`02.07.01.62`) requires
-both libraries before agent creation. Use the archive's platform files:
+Both supported Studio profiles require the network plugin and BambuSource companion before agent
+creation. Use the platform files from the archive matching the installed exact version:
 
 | OS      | Network plugin                   | BambuSource companion          | Current stable validation              |
 | ------- | -------------------------------- | ------------------------------ | -------------------------------------- |
@@ -219,7 +222,9 @@ pandar install-network-plugin --data-dir <BambuStudio-data-dir>
 When the file flags are omitted, the command reads the platform-specific release files from the
 current working directory (`libpandar_network_plugin.so` and `libpandar_bambu_source.so` on Linux,
 or `pandar_network_plugin.dll` and `pandar_bambu_source.dll` on Windows). Use `--plugin-file` and
-`--source-file` to override either path for development builds.
+`--source-file` to override either path for development builds. The CLI is compiled for the same
+profile as its bundled plugin, reads the exact `BambuStudio.conf` version, and fails before copying
+when the installed Studio profile differs or is unsupported.
 
 The installer writes Studio's exact names, including `libbambu_networking.so` and
 `libBambuSource.so` on Linux, `libbambu_networking.dylib` plus `libBambuSource.dylib` on macOS, and

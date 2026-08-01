@@ -8,9 +8,9 @@ mod types;
 
 use std::{env, path::PathBuf, process::ExitCode};
 
-use native::{FULL_MODES, NativeReport, verify_native_contract};
+use native::{NativeReport, verify_native_contract};
 use plugin::{verify_exports, verify_required_exports};
-use source::{PINNED_BOOST_VERSION, PINNED_STUDIO_COMMIT, inspect_source};
+use source::{PINNED_BOOST_VERSION, inspect_source};
 use types::verify_pandar_abi_contract;
 
 fn main() -> ExitCode {
@@ -28,10 +28,11 @@ fn main() -> ExitCode {
 
 fn run(args: impl Iterator<Item = String>) -> Result<String, String> {
     let args = parse_args(args)?;
-    let contract = inspect_source(&args.source, PINNED_STUDIO_COMMIT)?;
+    let profile = pandar_studio_profile::profile(&args.studio_profile)?;
+    let contract = inspect_source(&args.source, profile)?;
     let mut failures = Vec::new();
     if args.scope == Scope::Full
-        && let Err(error) = verify_pandar_abi_contract(&contract)
+        && let Err(error) = verify_pandar_abi_contract(&contract, profile)
     {
         failures.push(error);
     }
@@ -55,7 +56,7 @@ fn run(args: impl Iterator<Item = String>) -> Result<String, String> {
         }
     };
     let modes = match args.scope {
-        Scope::Full => FULL_MODES,
+        Scope::Full => profile.native_modes(),
         Scope::FtSafety => &["ft"],
     };
     let native = verify_native_contract(
@@ -65,6 +66,7 @@ fn run(args: impl Iterator<Item = String>) -> Result<String, String> {
         modes,
         args.scope == Scope::Full,
         args.address_sanitizer,
+        profile,
     )?;
     let metadata = metadata(&contract, export_count, &native, args.scope);
     failures.extend(native.failures);
@@ -115,6 +117,7 @@ impl Scope {
 
 #[derive(Debug, Eq, PartialEq)]
 struct Args {
+    studio_profile: String,
     source: PathBuf,
     plugin: PathBuf,
     boost_archive: PathBuf,
@@ -124,6 +127,7 @@ struct Args {
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut source = None;
+    let mut studio_profile = None;
     let mut plugin = None;
     let mut boost_archive = None;
     let mut scope = Scope::Full;
@@ -149,18 +153,20 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
             .next()
             .ok_or_else(|| format!("{flag} requires a value"))?;
         match flag.as_str() {
+            "--studio-profile" if studio_profile.is_none() => studio_profile = Some(value),
             "--studio-source" if source.is_none() => source = Some(PathBuf::from(value)),
             "--plugin" if plugin.is_none() => plugin = Some(PathBuf::from(value)),
             "--boost-archive" if boost_archive.is_none() => {
                 boost_archive = Some(PathBuf::from(value));
             }
-            "--studio-source" | "--plugin" | "--boost-archive" => {
+            "--studio-profile" | "--studio-source" | "--plugin" | "--boost-archive" => {
                 return Err(format!("{flag} was provided twice"));
             }
             _ => return Err(format!("unknown argument {flag}")),
         }
     }
     let args = Args {
+        studio_profile: studio_profile.ok_or("missing --studio-profile <exact-version>")?,
         source: source.ok_or("missing --studio-source <official-checkout>")?,
         plugin: plugin.ok_or("missing --plugin <native-library>")?,
         boost_archive: boost_archive.ok_or("missing --boost-archive <boost-1.84.0.tar.gz>")?,
@@ -182,6 +188,8 @@ mod tests {
     fn parses_explicit_dependency_and_ft_safety_scope() {
         let args = parse_args(
             [
+                "--studio-profile",
+                "02.07.01.62",
                 "--studio-source",
                 "studio",
                 "--plugin",
@@ -199,6 +207,7 @@ mod tests {
         assert_eq!(
             args,
             Args {
+                studio_profile: "02.07.01.62".to_owned(),
                 source: PathBuf::from("studio"),
                 plugin: PathBuf::from("plugin.so"),
                 boost_archive: PathBuf::from("boost-1.84.0.tar.gz"),
@@ -212,6 +221,8 @@ mod tests {
     fn rejects_address_sanitizer_outside_ft_safety_scope() {
         let error = parse_args(
             [
+                "--studio-profile",
+                "02.07.01.62",
                 "--studio-source",
                 "studio",
                 "--plugin",
@@ -231,9 +242,16 @@ mod tests {
     #[test]
     fn requires_boost_archive_and_rejects_duplicates() {
         let missing = parse_args(
-            ["--studio-source", "studio", "--plugin", "plugin.so"]
-                .into_iter()
-                .map(str::to_owned),
+            [
+                "--studio-profile",
+                "02.07.01.62",
+                "--studio-source",
+                "studio",
+                "--plugin",
+                "plugin.so",
+            ]
+            .into_iter()
+            .map(str::to_owned),
         )
         .unwrap_err();
         assert!(
@@ -243,6 +261,8 @@ mod tests {
 
         let duplicate = parse_args(
             [
+                "--studio-profile",
+                "02.07.01.62",
                 "--studio-source",
                 "studio",
                 "--plugin",

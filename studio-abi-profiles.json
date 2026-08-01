@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "default_profile": "02.07.01.62",
+  "profiles": [
+    {
+      "id": "02.07.01.62",
+      "studio_commit": "42d319c6692fa8e64790fddf0cdaafd2a4254bcc",
+      "network_agent_version": "02.07.01.51",
+      "network_exports": 108,
+      "file_transfer_exports": 21,
+      "capabilities": {
+        "bind_model_argument": false,
+        "print_slicer_uid": false,
+        "ams_sync": false
+      }
+    },
+    {
+      "id": "02.08.01.55",
+      "studio_commit": "ba049f6a2e08c3b6033660bb84da80c08722974b",
+      "network_agent_version": "02.08.01.52",
+      "network_exports": 109,
+      "file_transfer_exports": 21,
+      "capabilities": {
+        "bind_model_argument": true,
+        "print_slicer_uid": true,
+        "ams_sync": true
+      }
+    }
+  ]
+}

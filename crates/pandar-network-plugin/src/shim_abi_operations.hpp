@@ -131,7 +131,10 @@ PANDAR_ABI int bambu_network_bind_detect(void* agent, std::string, std::string, 
     return studio_disposition(as_agent(agent), StudioDisposition::BindDetect);
 }
 
-PANDAR_ABI int bambu_network_bind(void* agent, std::string, std::string, std::string, std::string, bool, BBL::OnUpdateStatusFn) {
+PANDAR_ABI int bambu_network_bind(
+    void* agent, std::string, std::string, std::string, std::string,
+    PANDAR_STUDIO_BIND_MODEL_PARAMETER bool, BBL::OnUpdateStatusFn
+) {
     return studio_disposition(as_agent(agent), StudioDisposition::Bind);
 }
 

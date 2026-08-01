@@ -5,7 +5,10 @@ use std::{
 };
 
 use anyhow::{Context, bail};
-use pandar_network_plugin::installer::{InstallNetworkPluginOptions, install_network_plugin};
+use pandar_network_plugin::installer::{
+    InstallNetworkPluginOptions, install_network_plugin, installed_studio_profile,
+    installed_studio_version,
+};
 use zip::{ZipWriter, write::SimpleFileOptions};
 
 use crate::release::{StudioHookRelease, download_latest_studio_hook_release};
@@ -29,6 +32,7 @@ pub struct UninstallStudioHookOptions {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct StudioHookSummary {
+    pub studio_profile: String,
     pub studio_dir: PathBuf,
     pub proxy_path: PathBuf,
     pub original_path: PathBuf,
@@ -44,17 +48,20 @@ pub async fn install_studio_hook(
     if !cfg!(all(windows, target_arch = "x86_64")) {
         bail!("Bambu Studio hook installation is only supported on Windows x86-64");
     }
-    let release = download_latest_studio_hook_release().await?;
-    install_studio_hook_release(options, &release)
+    let data_dir = resolve_data_dir(options.data_dir.clone())?;
+    let profile = installed_studio_profile(&data_dir)?;
+    let release = download_latest_studio_hook_release(profile).await?;
+    install_studio_hook_release(options, &release, profile)
 }
 
 fn install_studio_hook_release(
     options: InstallStudioHookOptions,
     release: &StudioHookRelease,
+    profile: &pandar_studio_profile::StudioProfile,
 ) -> anyhow::Result<StudioHookSummary> {
     let studio_dir = resolve_studio_dir(options.studio_dir)?;
     let data_dir = resolve_data_dir(options.data_dir)?;
-    let hook_data_dir = resolve_hook_data_dir()?;
+    let hook_data_dir = resolve_hook_data_dir()?.join(&profile.id);
     let plugin_package_path =
         write_plugin_package(&hook_data_dir, &release.plugin_file, &release.source_file)?;
     let network = install_network_plugin(InstallNetworkPluginOptions {
@@ -65,6 +72,7 @@ fn install_studio_hook_release(
     let (proxy_path, original_path) = install_proxy(&studio_dir, &release.hook_file)?;
 
     Ok(StudioHookSummary {
+        studio_profile: profile.id.clone(),
         studio_dir,
         proxy_path,
         original_path,
@@ -84,19 +92,36 @@ pub fn uninstall_studio_hook(
 
     let studio_dir = resolve_studio_dir(options.studio_dir)?;
     let data_dir = data_dir_path(options.data_dir)?;
-    let plugin_package_path = resolve_hook_data_dir()?.join(PLUGIN_PACKAGE);
-    let (proxy_path, original_path) = restore_proxy(&studio_dir)?;
+    uninstall_studio_hook_files(studio_dir, data_dir, resolve_hook_data_dir()?)
+}
 
-    if plugin_package_path.exists() {
-        fs::remove_file(&plugin_package_path).with_context(|| {
-            format!(
-                "remove cached Pandar Studio plugin package {}",
-                plugin_package_path.display()
-            )
-        })?;
+fn uninstall_studio_hook_files(
+    studio_dir: PathBuf,
+    data_dir: PathBuf,
+    hook_data_dir: PathBuf,
+) -> anyhow::Result<StudioHookSummary> {
+    let (proxy_path, original_path) = restore_proxy(&studio_dir)?;
+    let studio_version = installed_studio_version(&data_dir)?;
+    let plugin_package_path = hook_data_dir.join(&studio_version).join(PLUGIN_PACKAGE);
+
+    for package_path in pandar_studio_profile::catalog()
+        .profiles
+        .iter()
+        .map(|profile| hook_data_dir.join(&profile.id).join(PLUGIN_PACKAGE))
+        .chain(std::iter::once(plugin_package_path.clone()))
+    {
+        if package_path.exists() {
+            fs::remove_file(&package_path).with_context(|| {
+                format!(
+                    "remove cached Pandar Studio plugin package {}",
+                    package_path.display()
+                )
+            })?;
+        }
     }
 
     Ok(StudioHookSummary {
+        studio_profile: studio_version,
         studio_dir,
         proxy_path,
         original_path,
@@ -307,5 +332,53 @@ mod tests {
         restore_proxy(&studio_dir).unwrap();
         assert_eq!(fs::read(proxy_path).unwrap(), b"original");
         assert!(!original_path.exists());
+    }
+
+    #[test]
+    fn unsupported_studio_version_does_not_block_hook_uninstall() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let studio_dir = temp.path().join("Bambu Studio");
+        fs::create_dir_all(&studio_dir).expect("create studio dir");
+        fs::write(studio_dir.join(PROXY_DLL), b"hook").expect("write hook proxy");
+        fs::write(studio_dir.join(ORIGINAL_DLL), b"original").expect("write original backup");
+
+        let data_dir = temp.path().join("BambuStudio");
+        fs::create_dir_all(&data_dir).expect("create data dir");
+        let unsupported_version = "02.09.00.00";
+        fs::write(
+            data_dir.join("BambuStudio.conf"),
+            format!(r#"{{"app":{{"version":"{unsupported_version}"}}}}"#),
+        )
+        .expect("write config");
+
+        let hook_data_dir = temp.path().join("hook-data");
+        for version in pandar_studio_profile::catalog()
+            .profiles
+            .iter()
+            .map(|profile| profile.id.as_str())
+            .chain(std::iter::once(unsupported_version))
+        {
+            let profile_dir = hook_data_dir.join(version);
+            fs::create_dir_all(&profile_dir).expect("create profile cache dir");
+            fs::write(profile_dir.join(PLUGIN_PACKAGE), b"package").expect("write package");
+        }
+
+        let summary =
+            uninstall_studio_hook_files(studio_dir.clone(), data_dir, hook_data_dir.clone())
+                .expect("uninstall hook for unsupported Studio version");
+
+        assert_eq!(summary.studio_profile, unsupported_version);
+        assert_eq!(fs::read(studio_dir.join(PROXY_DLL)).unwrap(), b"original");
+        assert!(!studio_dir.join(ORIGINAL_DLL).exists());
+        assert!(
+            pandar_studio_profile::catalog()
+                .profiles
+                .iter()
+                .all(|profile| !hook_data_dir
+                    .join(&profile.id)
+                    .join(PLUGIN_PACKAGE)
+                    .exists())
+        );
+        assert!(!summary.plugin_package_path.exists());
     }
 }

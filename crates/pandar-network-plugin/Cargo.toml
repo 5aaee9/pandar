@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [build-dependencies]
 cc = "1.2.47"
+pandar-studio-profile.workspace = true
 
 [dependencies]
 anyhow.workspace = true
@@ -17,6 +18,7 @@ futures-util.workspace = true
 http-body.workspace = true
 http-body-util.workspace = true
 pandar-core.workspace = true
+pandar-studio-profile.workspace = true
 quick-xml.workspace = true
 reqwest.workspace = true
 rust-embed.workspace = true

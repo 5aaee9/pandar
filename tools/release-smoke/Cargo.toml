@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 flate2 = "1.1"
+pandar-studio-profile = { path = "../../crates/pandar-studio-profile" }
 sha2 = "0.10"
 tar = "0.4"
 tempfile = "3.24"

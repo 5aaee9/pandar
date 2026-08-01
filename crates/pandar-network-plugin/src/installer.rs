@@ -8,6 +8,8 @@ use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 
+use crate::STUDIO_PROFILE;
+
 #[derive(Debug, Clone)]
 pub struct InstallNetworkPluginOptions {
     pub plugin_file: PathBuf,
@@ -17,6 +19,7 @@ pub struct InstallNetworkPluginOptions {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallNetworkPluginSummary {
+    pub studio_profile: String,
     pub plugin_path: PathBuf,
     pub source_path: PathBuf,
     pub config_path: PathBuf,
@@ -45,6 +48,14 @@ pub fn install_network_plugin(
     if !config_path.is_file() {
         bail!("BambuStudio.conf not found at {}", config_path.display());
     }
+    let studio_profile = installed_studio_profile(&data_dir)?;
+    if studio_profile.id != STUDIO_PROFILE {
+        bail!(
+            "network plugin ABI profile {} does not match installed Bambu Studio {}",
+            STUDIO_PROFILE,
+            studio_profile.id
+        );
+    }
 
     let plugins_dir = data_dir.join("plugins");
     fs::create_dir_all(&plugins_dir)
@@ -69,10 +80,34 @@ pub fn install_network_plugin(
     patch_bambu_studio_config(&config_path)?;
 
     Ok(InstallNetworkPluginSummary {
+        studio_profile: studio_profile.id.clone(),
         plugin_path,
         source_path,
         config_path,
     })
+}
+
+pub fn installed_studio_profile(
+    data_dir: &Path,
+) -> anyhow::Result<&'static pandar_studio_profile::StudioProfile> {
+    let version = installed_studio_version(data_dir)?;
+    pandar_studio_profile::profile(&version).map_err(anyhow::Error::msg)
+}
+
+pub fn installed_studio_version(data_dir: &Path) -> anyhow::Result<String> {
+    let config_path = data_dir.join("BambuStudio.conf");
+    if !config_path.is_file() {
+        bail!("BambuStudio.conf not found at {}", config_path.display());
+    }
+    studio_version_from_config(&config_path)
+}
+
+fn studio_version_from_config(config_path: &Path) -> anyhow::Result<String> {
+    let raw = fs::read_to_string(config_path)
+        .with_context(|| format!("read config {}", config_path.display()))?;
+    let config: BambuStudioConfig = serde_json::from_str(strip_md5_checksum(&raw))
+        .with_context(|| format!("parse config JSON {}", config_path.display()))?;
+    Ok(config.app.version)
 }
 
 fn bambu_network_plugin_filename() -> &'static str {
@@ -149,6 +184,7 @@ struct BambuStudioConfig {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct BambuStudioAppConfig {
+    version: String,
     #[serde(default)]
     installed_networking: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -198,8 +234,9 @@ mod tests {
         let temp = tempfile::tempdir().expect("create temp dir");
         let data_dir = temp.path().join("BambuStudio");
         fs::create_dir_all(&data_dir).expect("create data dir");
-        let original_config = r#"{"app":{"version":"02.06.00.51","installed_networking":"0"}}"#;
-        fs::write(data_dir.join("BambuStudio.conf"), original_config).expect("write config");
+        let original_config =
+            format!(r#"{{"app":{{"version":"{STUDIO_PROFILE}","installed_networking":"0"}}}}"#);
+        fs::write(data_dir.join("BambuStudio.conf"), &original_config).expect("write config");
         let plugin_file = temp.path().join("pandar_network_plugin.dll");
         fs::write(&plugin_file, b"plugin bytes").expect("write plugin");
         let source_file = temp.path().join("pandar_bambu_source.dll");
@@ -219,6 +256,7 @@ mod tests {
         let expected_source_path = data_dir.join("plugins").join(bambu_source_filename());
         assert_eq!(summary.source_path, expected_source_path);
         assert_eq!(summary.config_path, data_dir.join("BambuStudio.conf"));
+        assert_eq!(summary.studio_profile, STUDIO_PROFILE);
         assert_eq!(
             fs::read(expected_plugin_path).expect("read installed plugin"),
             b"plugin bytes"
@@ -232,6 +270,41 @@ mod tests {
                 .expect("read config backup"),
             original_config
         );
+    }
+
+    #[test]
+    fn mismatched_studio_profile_is_rejected_before_installation_changes() {
+        let temp = tempfile::tempdir().expect("create temp dir");
+        let data_dir = temp.path().join("BambuStudio");
+        fs::create_dir_all(&data_dir).expect("create data dir");
+        let installed_profile = pandar_studio_profile::catalog()
+            .profiles
+            .iter()
+            .find(|profile| profile.id != STUDIO_PROFILE)
+            .expect("catalog contains another supported profile");
+        let config_path = data_dir.join("BambuStudio.conf");
+        let original_config = format!(
+            r#"{{"app":{{"version":"{}","installed_networking":"0"}}}}"#,
+            installed_profile.id
+        );
+        fs::write(&config_path, &original_config).expect("write config");
+        let plugin_file = temp.path().join("pandar_network_plugin.dll");
+        fs::write(&plugin_file, b"plugin bytes").expect("write plugin");
+        let source_file = temp.path().join("pandar_bambu_source.dll");
+        fs::write(&source_file, b"source bytes").expect("write source companion");
+
+        let error = install_network_plugin(InstallNetworkPluginOptions {
+            plugin_file,
+            source_file,
+            data_dir: Some(data_dir.clone()),
+        })
+        .unwrap_err();
+
+        let error = format!("{error:#}");
+        assert!(error.contains(STUDIO_PROFILE));
+        assert!(error.contains(&installed_profile.id));
+        assert!(!data_dir.join("plugins").exists());
+        assert_eq!(fs::read_to_string(config_path).unwrap(), original_config);
     }
 
     #[test]
@@ -292,7 +365,7 @@ mod tests {
         let config_path = temp.path().join("BambuStudio.conf");
         fs::write(
             &config_path,
-            r#"{"app":{"installed_networking":"0","update_network_plugin":false,"ignore_module_cert":"1"}}"#,
+            r#"{"app":{"version":"02.07.01.62","installed_networking":"0","update_network_plugin":false,"ignore_module_cert":"1"}}"#,
         )
         .expect("write config");
 

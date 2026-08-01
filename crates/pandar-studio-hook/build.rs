@@ -1,4 +1,5 @@
 fn main() {
+    println!("cargo:rerun-if-changed=../../studio-abi-profiles.json");
     println!("cargo:rerun-if-changed=src/hook.cpp");
     println!("cargo:rerun-if-changed=src/plugin_download_hook.cpp");
     println!("cargo:rerun-if-changed=src/plugin_download_hook.hpp");
@@ -10,6 +11,25 @@ fn main() {
     }
 
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR is set by Cargo");
+    let profile_header = std::path::Path::new(&out_dir).join("pandar_studio_profiles.hpp");
+    let profiles = pandar_studio_profile::catalog()
+        .profiles
+        .iter()
+        .map(|profile| {
+            let [major, minor, patch, build] = profile.version_components();
+            format!(
+                "    {{{major}, {minor}, {patch}, {build}, L\"{}\"}},\n",
+                profile.id
+            )
+        })
+        .collect::<String>();
+    std::fs::write(
+        &profile_header,
+        format!(
+            "#pragma once\n\nstruct PandarStudioProfile {{ unsigned short major; unsigned short minor; unsigned short patch; unsigned short build; const wchar_t* id; }};\nconstexpr PandarStudioProfile kPandarStudioProfiles[] = {{\n{profiles}}};\n"
+        ),
+    )
+    .expect("write generated Studio profile header");
     let target = std::env::var("TARGET").expect("TARGET is set by Cargo");
     let cl = cc::windows_registry::find_tool(&target, "cl.exe")
         .expect("MSVC cl.exe is available for Windows hook builds");
@@ -21,6 +41,7 @@ fn main() {
             .arg("/nologo")
             .arg("/std:c++17")
             .arg("/EHsc")
+            .arg(format!("/I{out_dir}"))
             .arg("/c")
             .arg(format!("src/{source}"))
             .arg(format!("/Fo{}", object.display()))

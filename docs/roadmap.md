@@ -16,17 +16,22 @@
 
 ## Completed
 
-- Retargeted the exact Bambu Studio release ABI from the historical `02.08.01.55` Public Beta to the
-  installed stable `02.07.01.62` source commit `42d319c6692fa8e64790fddf0cdaafd2a4254bcc`
-  and network agent `02.07.01.51`. The shim now matches the stable 108-network-plus-21-FT contract:
-  the 2.8-only AMS sync export, `bind` model argument, and trailing `PrintParams::slicer_uid` were
-  removed from the Studio-facing ABI while the Rust upload model still sends an empty internal
-  slicer UID. CI, Windows hook asset/version gates, pinned source slices, native ABI modes, and release
-  smoke all target 2.7.1. Local Apple Silicon packaging passed all 129 exports and the
-  `version,bind,print,ft` caller modes; the running official macOS 2.7.1.62 process mapped both exact
-  arm64 dylibs and reached its normal UI. No sign-in, Hub/Agent, printer, print/control, firmware, or
-  hardware action was exercised, and the original Studio plugin directory and configuration were
-  restored byte-for-byte after the test.
+- Added exact, simultaneous Bambu Studio ABI profiles for stable `02.07.01.62` and Public Beta
+  `02.08.01.55`. `studio-abi-profiles.json` is the shared source of truth for the pinned Studio commit,
+  network-agent version, export counts, and ABI capabilities; `PANDAR_STUDIO_PROFILE` selects one
+  separately built plugin and defaults to 2.7. The shim conditionally models the incompatible 2.8 AMS
+  export, `bind` model argument, and trailing `PrintParams::slicer_uid`, while release CI derives every
+  Linux, Windows, and macOS archive matrix from the profile catalog. Both macOS arm64 three-file
+  archives passed native release-smoke against their exact upstream source: 2.7 passed 129 exports and
+  `version,bind,print,ft`; 2.8 passed 130 exports and `version,bind,print,ams,ft`. All macOS CI jobs run
+  on Apple Silicon, with amd64 execution under Rosetta. Installers read the exact Studio version before
+  copying and reject an archive built for another ABI; the Windows hook embeds the full profile list,
+  uses exact-version caches, and fails closed for unknown builds. Adding a future Studio version now
+  starts with one catalog entry plus only the capability-specific ABI code and contract fixtures it
+  actually requires, rather than another copied release pipeline. The running official macOS 2.7.1.62
+  process mapped both exact arm64 dylibs and reached its normal UI; no sign-in, Hub/Agent, printer,
+  print/control, firmware, or hardware action was exercised, and the original Studio plugin directory
+  and configuration were restored byte-for-byte after the test.
 
 - Made `pandar install-network-plugin` default to the platform-specific network plugin and BambuSource companion shipped beside the CLI in the current unpacked release directory, while preserving `--plugin-file` and `--source-file` overrides for development builds. CLI parsing coverage locks the zero-file-flag path; the next tagged release should rerun native packaged smoke with the simplified install command.
 

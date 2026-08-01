@@ -9,12 +9,12 @@
 #include <vector>
 
 #include "plugin_download_hook.hpp"
+#include "pandar_studio_profiles.hpp"
 
 namespace {
 
 constexpr wchar_t kPluginPackage[] = L"networking_plugins.zip";
-constexpr wchar_t kHookPackageSubpath[] =
-    L"\\Pandar\\studio-hook\\networking_plugins.zip";
+constexpr wchar_t kHookPackageRoot[] = L"\\Pandar\\studio-hook\\";
 
 using MoveFileExWFn = BOOL(WINAPI*)(LPCWSTR, LPCWSTR, DWORD);
 using MoveFileWFn = BOOL(WINAPI*)(LPCWSTR, LPCWSTR);
@@ -45,39 +45,47 @@ void append_log(const char* message)
     CloseHandle(file);
 }
 
-bool is_target_studio_version(HMODULE module)
+const wchar_t* target_studio_profile(HMODULE module)
 {
     wchar_t module_path[MAX_PATH] = {};
     if (GetModuleFileNameW(module, module_path, MAX_PATH) == 0)
-        return false;
+        return nullptr;
 
     DWORD ignored = 0;
     DWORD size = GetFileVersionInfoSizeW(module_path, &ignored);
     if (size == 0)
-        return false;
+        return nullptr;
     std::vector<std::uint8_t> version_info(size);
     if (!GetFileVersionInfoW(module_path, 0, size, version_info.data()))
-        return false;
+        return nullptr;
 
     VS_FIXEDFILEINFO* fixed = nullptr;
     UINT fixed_size = 0;
     if (!VerQueryValueW(
             version_info.data(), L"\\", reinterpret_cast<void**>(&fixed), &fixed_size) ||
         fixed == nullptr || fixed_size < sizeof(VS_FIXEDFILEINFO))
-        return false;
+        return nullptr;
 
-    return HIWORD(fixed->dwFileVersionMS) == 2 &&
-        LOWORD(fixed->dwFileVersionMS) == 7 &&
-        HIWORD(fixed->dwFileVersionLS) == 1;
+    const auto major = HIWORD(fixed->dwFileVersionMS);
+    const auto minor = LOWORD(fixed->dwFileVersionMS);
+    const auto patch = HIWORD(fixed->dwFileVersionLS);
+    const auto build = LOWORD(fixed->dwFileVersionLS);
+    for (const auto& profile : kPandarStudioProfiles) {
+        if (profile.major == major && profile.minor == minor &&
+            profile.patch == patch && profile.build == build)
+            return profile.id;
+    }
+    return nullptr;
 }
 
-std::wstring plugin_package_path()
+std::wstring plugin_package_path(const wchar_t* profile)
 {
     wchar_t local_appdata[MAX_PATH] = {};
     DWORD len = GetEnvironmentVariableW(L"LOCALAPPDATA", local_appdata, MAX_PATH);
     if (len == 0 || len >= MAX_PATH)
         return {};
-    return std::wstring(local_appdata) + kHookPackageSubpath;
+    return std::wstring(local_appdata) + kHookPackageRoot + profile +
+        L"\\networking_plugins.zip";
 }
 
 bool is_plugin_package_destination(LPCWSTR destination)
@@ -219,16 +227,17 @@ int patch_loaded_modules()
 
 void install_plugin_download_hook(HMODULE studio_module)
 {
-    cached_plugin_package = plugin_package_path();
-    if (!is_target_studio_version(studio_module)) {
+    const wchar_t* profile = target_studio_profile(studio_module);
+    if (profile == nullptr) {
         append_log("Pandar plugin download hook disabled for an unsupported Studio version");
         return;
     }
+    cached_plugin_package = plugin_package_path(profile);
 
     int patched = patch_loaded_modules();
     if (patched == 0) {
         append_log("Pandar plugin download hook could not find the Windows rename imports");
         return;
     }
-    append_log("Pandar plugin download hook enabled for Studio 02.07.01.x");
+    append_log("Pandar plugin download hook enabled for an exact supported Studio profile");
 }

@@ -4,11 +4,9 @@ use std::{collections::BTreeSet, fs, path::Path, process::Command};
 use std::{io, path::PathBuf};
 
 use crate::host::NativeTarget;
+use pandar_studio_profile::StudioProfile;
 
 const EXPORT_MAP_PATH: &str = "crates/pandar-network-plugin/src/shim_exports.hpp";
-const NETWORK_COUNT: usize = 108;
-const FILE_TRANSFER_COUNT: usize = 21;
-const TOTAL_COUNT: usize = NETWORK_COUNT + FILE_TRANSFER_COUNT;
 pub(crate) const SOURCE_SENTINEL: &str = "pandar_bambu_source_sentinel";
 
 pub(crate) struct AbiSymbols {
@@ -30,7 +28,10 @@ enum SymbolOutput {
     PeDumpbin,
 }
 
-pub(crate) fn expected_symbols(repo_root: &Path) -> Result<AbiSymbols, String> {
+pub(crate) fn expected_symbols(
+    repo_root: &Path,
+    profile: &StudioProfile,
+) -> Result<AbiSymbols, String> {
     let path = repo_root.join(EXPORT_MAP_PATH);
     let content = fs::read_to_string(&path).map_err(|error| {
         format!(
@@ -38,10 +39,10 @@ pub(crate) fn expected_symbols(repo_root: &Path) -> Result<AbiSymbols, String> {
             path.display()
         )
     })?;
-    parse_expected_symbols(&content)
+    parse_expected_symbols(&content, profile)
 }
 
-fn parse_expected_symbols(content: &str) -> Result<AbiSymbols, String> {
+fn parse_expected_symbols(content: &str, profile: &StudioProfile) -> Result<AbiSymbols, String> {
     let mut all = BTreeSet::new();
     let mut network_count = 0;
     let mut file_transfer_count = 0;
@@ -54,6 +55,9 @@ fn parse_expected_symbols(content: &str) -> Result<AbiSymbols, String> {
             .split_once(',')
             .map(|(symbol, _)| symbol.trim())
             .ok_or_else(|| format!("invalid Studio export record at line {}", index + 1))?;
+        if symbol == "bambu_network_sync_ams_filaments" && !profile.capabilities.ams_sync {
+            continue;
+        }
         match symbol {
             symbol if symbol.starts_with("bambu_network_") => network_count += 1,
             symbol if symbol.starts_with("ft_") => file_transfer_count += 1,
@@ -69,12 +73,15 @@ fn parse_expected_symbols(content: &str) -> Result<AbiSymbols, String> {
         }
     }
 
-    if network_count != NETWORK_COUNT
-        || file_transfer_count != FILE_TRANSFER_COUNT
-        || all.len() != TOTAL_COUNT
+    if network_count != profile.network_exports
+        || file_transfer_count != profile.file_transfer_exports
+        || all.len() != profile.total_exports()
     {
         return Err(format!(
-            "canonical Studio export map must contain exactly {NETWORK_COUNT} network and {FILE_TRANSFER_COUNT} FT symbols, got {network_count} network, {file_transfer_count} FT, {} total",
+            "canonical Studio profile {} export map must contain exactly {} network and {} FT symbols, got {network_count} network, {file_transfer_count} FT, {} total",
+            profile.id,
+            profile.network_exports,
+            profile.file_transfer_exports,
             all.len()
         ));
     }
