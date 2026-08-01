@@ -28,11 +28,11 @@ fn main() -> ExitCode {
 
 fn run(args: impl Iterator<Item = String>) -> Result<String, String> {
     let args = parse_args(args)?;
-    let profile = pandar_studio_profile::profile(&args.studio_profile)?;
-    let contract = inspect_source(&args.source, profile)?;
+    let abi_series = pandar_studio_profile::abi_series(&args.studio_abi_series)?;
+    let contract = inspect_source(&args.source, abi_series)?;
     let mut failures = Vec::new();
     if args.scope == Scope::Full
-        && let Err(error) = verify_pandar_abi_contract(&contract, profile)
+        && let Err(error) = verify_pandar_abi_contract(&contract, abi_series)
     {
         failures.push(error);
     }
@@ -56,7 +56,7 @@ fn run(args: impl Iterator<Item = String>) -> Result<String, String> {
         }
     };
     let modes = match args.scope {
-        Scope::Full => profile.native_modes(),
+        Scope::Full => abi_series.native_modes(),
         Scope::FtSafety => &["ft"],
     };
     let native = verify_native_contract(
@@ -66,9 +66,9 @@ fn run(args: impl Iterator<Item = String>) -> Result<String, String> {
         modes,
         args.scope == Scope::Full,
         args.address_sanitizer,
-        profile,
+        abi_series,
     )?;
-    let metadata = metadata(&contract, export_count, &native, args.scope);
+    let metadata = metadata(&contract, abi_series, export_count, &native, args.scope);
     failures.extend(native.failures);
     if !failures.is_empty() {
         return Err(format!(
@@ -81,16 +81,19 @@ fn run(args: impl Iterator<Item = String>) -> Result<String, String> {
 
 fn metadata(
     contract: &source::StudioContract,
+    abi_series: &pandar_studio_profile::StudioAbiSeries,
     export_count: usize,
     native: &NativeReport,
     scope: Scope,
 ) -> String {
     format!(
-        "contract_scope={}\nstudio_commit={}\nstudio_version={}\nnetwork_agent_version={}\nboost_version={}\nboost_sha256={}\nnetwork_symbols={}\nfile_transfer_symbols={}\nplugin_exports={export_count}\ncompiler={}\nnative_modes={}",
+        "contract_scope={}\nabi_series={}\nstudio_commit={}\nstudio_version={}\nreference_network_agent_version={}\nreported_network_agent_version={}\nboost_version={}\nboost_sha256={}\nnetwork_symbols={}\nfile_transfer_symbols={}\nplugin_exports={export_count}\ncompiler={}\nnative_modes={}",
         scope.as_str(),
+        abi_series.id,
         contract.commit,
         contract.studio_version,
-        contract.network_agent_version,
+        contract.reference_network_agent_version,
+        abi_series.reported_network_agent_version,
         PINNED_BOOST_VERSION,
         native.boost_sha256,
         contract.network_symbols.len(),
@@ -117,7 +120,7 @@ impl Scope {
 
 #[derive(Debug, Eq, PartialEq)]
 struct Args {
-    studio_profile: String,
+    studio_abi_series: String,
     source: PathBuf,
     plugin: PathBuf,
     boost_archive: PathBuf,
@@ -127,7 +130,7 @@ struct Args {
 
 fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
     let mut source = None;
-    let mut studio_profile = None;
+    let mut studio_abi_series = None;
     let mut plugin = None;
     let mut boost_archive = None;
     let mut scope = Scope::Full;
@@ -153,20 +156,20 @@ fn parse_args(args: impl Iterator<Item = String>) -> Result<Args, String> {
             .next()
             .ok_or_else(|| format!("{flag} requires a value"))?;
         match flag.as_str() {
-            "--studio-profile" if studio_profile.is_none() => studio_profile = Some(value),
+            "--studio-abi-series" if studio_abi_series.is_none() => studio_abi_series = Some(value),
             "--studio-source" if source.is_none() => source = Some(PathBuf::from(value)),
             "--plugin" if plugin.is_none() => plugin = Some(PathBuf::from(value)),
             "--boost-archive" if boost_archive.is_none() => {
                 boost_archive = Some(PathBuf::from(value));
             }
-            "--studio-profile" | "--studio-source" | "--plugin" | "--boost-archive" => {
+            "--studio-abi-series" | "--studio-source" | "--plugin" | "--boost-archive" => {
                 return Err(format!("{flag} was provided twice"));
             }
             _ => return Err(format!("unknown argument {flag}")),
         }
     }
     let args = Args {
-        studio_profile: studio_profile.ok_or("missing --studio-profile <exact-version>")?,
+        studio_abi_series: studio_abi_series.ok_or("missing --studio-abi-series <MM.mm.pp>")?,
         source: source.ok_or("missing --studio-source <official-checkout>")?,
         plugin: plugin.ok_or("missing --plugin <native-library>")?,
         boost_archive: boost_archive.ok_or("missing --boost-archive <boost-1.84.0.tar.gz>")?,
@@ -188,8 +191,8 @@ mod tests {
     fn parses_explicit_dependency_and_ft_safety_scope() {
         let args = parse_args(
             [
-                "--studio-profile",
-                "02.07.01.62",
+                "--studio-abi-series",
+                "02.07.01",
                 "--studio-source",
                 "studio",
                 "--plugin",
@@ -207,7 +210,7 @@ mod tests {
         assert_eq!(
             args,
             Args {
-                studio_profile: "02.07.01.62".to_owned(),
+                studio_abi_series: "02.07.01".to_owned(),
                 source: PathBuf::from("studio"),
                 plugin: PathBuf::from("plugin.so"),
                 boost_archive: PathBuf::from("boost-1.84.0.tar.gz"),
@@ -221,8 +224,8 @@ mod tests {
     fn rejects_address_sanitizer_outside_ft_safety_scope() {
         let error = parse_args(
             [
-                "--studio-profile",
-                "02.07.01.62",
+                "--studio-abi-series",
+                "02.07.01",
                 "--studio-source",
                 "studio",
                 "--plugin",
@@ -243,8 +246,8 @@ mod tests {
     fn requires_boost_archive_and_rejects_duplicates() {
         let missing = parse_args(
             [
-                "--studio-profile",
-                "02.07.01.62",
+                "--studio-abi-series",
+                "02.07.01",
                 "--studio-source",
                 "studio",
                 "--plugin",
@@ -261,8 +264,8 @@ mod tests {
 
         let duplicate = parse_args(
             [
-                "--studio-profile",
-                "02.07.01.62",
+                "--studio-abi-series",
+                "02.07.01",
                 "--studio-source",
                 "studio",
                 "--plugin",

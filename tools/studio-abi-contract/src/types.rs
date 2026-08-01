@@ -1,12 +1,12 @@
 use std::{collections::BTreeSet, fs, path::Path};
 
-use pandar_studio_profile::StudioProfile;
+use pandar_studio_profile::StudioAbiSeries;
 
 use crate::source::StudioContract;
 
 pub fn verify_pandar_abi_contract(
     contract: &StudioContract,
-    profile: &StudioProfile,
+    abi_series: &StudioAbiSeries,
 ) -> Result<(), String> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let repo_root = manifest_dir
@@ -17,22 +17,10 @@ pub fn verify_pandar_abi_contract(
     let shim = fs::read_to_string(&shim_path)
         .map_err(|error| format!("read Pandar ABI types {}: {error}", shim_path.display()))?;
     let mut print_params = cpp_struct_fields(&shim, "PrintParams")?;
-    if !profile.capabilities.print_slicer_uid {
-        print_params.retain(|field| field != "slicer_uid");
+    if !abi_series.capabilities.print_svc_context {
+        print_params.retain(|field| field != "svc_context");
     }
     verify_fields("PrintParams", &contract.print_params_fields, &print_params)?;
-    if profile.capabilities.ams_sync {
-        verify_fields(
-            "AmsSyncItem",
-            &contract.ams_sync_item_fields,
-            &cpp_struct_fields(&shim, "AmsSyncItem")?,
-        )?;
-        verify_fields(
-            "AmsSyncParams",
-            &contract.ams_sync_params_fields,
-            &cpp_struct_fields(&shim, "AmsSyncParams")?,
-        )?;
-    }
     let exports_path = repo_root.join("crates/pandar-network-plugin/src/shim_exports.hpp");
     let exports = fs::read_to_string(&exports_path).map_err(|error| {
         format!(
@@ -43,7 +31,7 @@ pub fn verify_pandar_abi_contract(
     let declarations = studio_export_map(&exports)?
         .into_iter()
         .filter(|(symbol, _)| {
-            profile.capabilities.ams_sync || symbol != "bambu_network_sync_ams_filaments"
+            abi_series.capabilities.filament_cloud || !is_filament_cloud_symbol(symbol)
         })
         .collect::<Vec<_>>();
     let network = declarations
@@ -56,15 +44,15 @@ pub fn verify_pandar_abi_contract(
         .filter(|(symbol, _)| symbol.starts_with("ft_"))
         .cloned()
         .collect::<Vec<_>>();
-    if network.len() != profile.network_exports
-        || file_transfer.len() != profile.file_transfer_exports
-        || declarations.len() != profile.total_exports()
+    if network.len() != abi_series.network_exports
+        || file_transfer.len() != abi_series.file_transfer_exports
+        || declarations.len() != abi_series.total_exports()
     {
         return Err(format!(
-            "Pandar Studio profile {} export map must contain exactly {} network and {} FT records, got {} network, {} FT, {} total",
-            profile.id,
-            profile.network_exports,
-            profile.file_transfer_exports,
+            "Pandar Studio ABI series {} export map must contain exactly {} network and {} FT records, got {} network, {} FT, {} total",
+            abi_series.id,
+            abi_series.network_exports,
+            abi_series.file_transfer_exports,
             network.len(),
             file_transfer.len(),
             declarations.len()
@@ -79,6 +67,17 @@ pub fn verify_pandar_abi_contract(
         .cloned()
         .collect::<Vec<_>>();
     verify_export_map("combined", &upstream, &declarations)
+}
+
+fn is_filament_cloud_symbol(symbol: &str) -> bool {
+    matches!(
+        symbol,
+        "bambu_network_get_filament_spools"
+            | "bambu_network_create_filament_spool"
+            | "bambu_network_update_filament_spool"
+            | "bambu_network_delete_filament_spools"
+            | "bambu_network_get_filament_config"
+    )
 }
 
 fn verify_fields(name: &str, upstream: &[String], pandar: &[String]) -> Result<(), String> {

@@ -22,7 +22,7 @@ const ABI_PROBE_TIMEOUT: Duration = Duration::from_secs(180);
 
 pub fn run(args: impl Iterator<Item = String>) -> Result<String, String> {
     let args = parse_args(args)?;
-    let profile = pandar_studio_profile::profile(&args.studio_profile)?;
+    let abi_series = pandar_studio_profile::abi_series(&args.studio_abi_series)?;
     let target = validate_current_host(&args.label)?;
     let archive_sha256 = validate_checksum(&args.archive, &args.checksum)?;
     let stage = stage_archive(
@@ -31,14 +31,14 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<String, String> {
         &args.plugin_name,
         &args.source_name,
     )?;
-    let expected = expected_symbols(&args.repo_root, profile)?;
+    let expected = expected_symbols(&args.repo_root, abi_series)?;
     let inspection = inspect_exports(target, &stage.plugin)?;
     validate_exact_exports(&expected.all, &inspection.symbols)?;
     let source_inspection = inspect_source_exports(target, &stage.source)?;
     validate_source_exports(&source_inspection.symbols)?;
     let source_sha256 = sha256_hex(&stage.source)?;
     run_packaged_cli(&stage.cli, CLI_TIMEOUT)?;
-    let mut abi_probe_args = vec!["--studio-profile".to_owned(), profile.id.clone()];
+    let mut abi_probe_args = vec!["--studio-abi-series".to_owned(), abi_series.id.clone()];
     abi_probe_args.extend(args.abi_probe_args);
     let probe = run_abi_probe(
         &args.abi_probe,
@@ -48,7 +48,7 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<String, String> {
     )?;
     collect_evidence(EvidenceInput {
         target,
-        studio_profile: &profile.id,
+        abi_series: &abi_series.id,
         archive_sha256: &archive_sha256,
         plugin_sha256: &probe.plugin_sha256,
         source_sha256: &source_sha256,

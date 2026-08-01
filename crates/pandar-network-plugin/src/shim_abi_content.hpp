@@ -164,6 +164,7 @@ PANDAR_ABI int bambu_network_get_mw_user_4ulist(void* agent, int, int, std::func
     return studio_disposition(as_agent(agent), StudioDisposition::MakerWorldForYou);
 }
 
+#if defined(PANDAR_STUDIO_FILAMENT_CLOUD)
 PANDAR_ABI int bambu_network_get_filament_spools(void* agent, BBL::FilamentQueryParams, std::string* http_body) {
     std::string body;
     const auto status = studio_disposition(as_agent(agent), StudioDisposition::GetFilaments, &body);
@@ -195,15 +196,6 @@ PANDAR_ABI int bambu_network_delete_filament_spools(void* agent, BBL::FilamentDe
 PANDAR_ABI int bambu_network_get_filament_config(void* agent, std::string* http_body) {
     std::string body;
     const auto status = studio_disposition(as_agent(agent), StudioDisposition::GetFilamentConfig, &body);
-    if (http_body) *http_body = std::move(body);
-    return status;
-}
-
-#if defined(PANDAR_STUDIO_AMS_SYNC)
-PANDAR_ABI int bambu_network_sync_ams_filaments(void* agent, BBL::AmsSyncParams, std::string* http_body) {
-    auto result = pandar_plugin_sync_ams_filaments(agent != nullptr);
-    const int status = result.status;
-    auto body = body_from_result(result);
     if (http_body) *http_body = std::move(body);
     return status;
 }

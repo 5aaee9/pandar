@@ -1,29 +1,75 @@
 {
-  "schema_version": 1,
-  "default_profile": "02.07.01.62",
-  "profiles": [
+  "schema_version": 2,
+  "default_abi_series": "02.07.01",
+  "abi_series": [
     {
-      "id": "02.07.01.62",
-      "studio_commit": "42d319c6692fa8e64790fddf0cdaafd2a4254bcc",
-      "network_agent_version": "02.07.01.51",
-      "network_exports": 108,
+      "id": "02.06.00",
+      "reference_studio_version": "02.06.00.51",
+      "studio_commit": "b506005bc4ee62124e24bf00e0f58656db3646a6",
+      "reference_network_agent_version": "02.06.00.50",
+      "reported_network_agent_version": "02.06.00.99",
+      "network_exports": 103,
       "file_transfer_exports": 21,
       "capabilities": {
-        "bind_model_argument": false,
-        "print_slicer_uid": false,
-        "ams_sync": false
+        "filament_cloud": false,
+        "print_svc_context": false,
+        "bind_model_argument": false
       }
     },
     {
-      "id": "02.08.01.55",
-      "studio_commit": "ba049f6a2e08c3b6033660bb84da80c08722974b",
-      "network_agent_version": "02.08.01.52",
-      "network_exports": 109,
+      "id": "02.06.01",
+      "reference_studio_version": "02.06.01.55",
+      "studio_commit": "6eb52d6ac75e32ba2116239c1d756d913053f364",
+      "reference_network_agent_version": "02.06.01.50",
+      "reported_network_agent_version": "02.06.01.99",
+      "network_exports": 108,
       "file_transfer_exports": 21,
       "capabilities": {
-        "bind_model_argument": true,
-        "print_slicer_uid": true,
-        "ams_sync": true
+        "filament_cloud": true,
+        "print_svc_context": false,
+        "bind_model_argument": false
+      }
+    },
+    {
+      "id": "02.07.00",
+      "reference_studio_version": "02.07.00.55",
+      "studio_commit": "4410c27fb15d57b29fbb1dbebc6edea11a091137",
+      "reference_network_agent_version": "02.06.01.50",
+      "reported_network_agent_version": "02.07.00.99",
+      "network_exports": 108,
+      "file_transfer_exports": 21,
+      "capabilities": {
+        "filament_cloud": true,
+        "print_svc_context": false,
+        "bind_model_argument": false
+      }
+    },
+    {
+      "id": "02.07.01",
+      "reference_studio_version": "02.07.01.57",
+      "studio_commit": "3f126b717ed1f10fee0f32f05ed9731808d0c8bb",
+      "reference_network_agent_version": "02.07.01.51",
+      "reported_network_agent_version": "02.07.01.99",
+      "network_exports": 108,
+      "file_transfer_exports": 21,
+      "capabilities": {
+        "filament_cloud": true,
+        "print_svc_context": true,
+        "bind_model_argument": false
+      }
+    },
+    {
+      "id": "02.08.00",
+      "reference_studio_version": "02.08.00.50",
+      "studio_commit": "a78684a11de4abddad9a6d19eeb75a6a1d2e82a5",
+      "reference_network_agent_version": "02.08.00.53",
+      "reported_network_agent_version": "02.08.00.99",
+      "network_exports": 108,
+      "file_transfer_exports": 21,
+      "capabilities": {
+        "filament_cloud": true,
+        "print_svc_context": true,
+        "bind_model_argument": true
       }
     }
   ]

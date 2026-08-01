@@ -4,7 +4,7 @@ use std::{collections::BTreeSet, fs, path::Path, process::Command};
 use std::{io, path::PathBuf};
 
 use crate::host::NativeTarget;
-use pandar_studio_profile::StudioProfile;
+use pandar_studio_profile::StudioAbiSeries;
 
 const EXPORT_MAP_PATH: &str = "crates/pandar-network-plugin/src/shim_exports.hpp";
 pub(crate) const SOURCE_SENTINEL: &str = "pandar_bambu_source_sentinel";
@@ -30,7 +30,7 @@ enum SymbolOutput {
 
 pub(crate) fn expected_symbols(
     repo_root: &Path,
-    profile: &StudioProfile,
+    abi_series: &StudioAbiSeries,
 ) -> Result<AbiSymbols, String> {
     let path = repo_root.join(EXPORT_MAP_PATH);
     let content = fs::read_to_string(&path).map_err(|error| {
@@ -39,10 +39,13 @@ pub(crate) fn expected_symbols(
             path.display()
         )
     })?;
-    parse_expected_symbols(&content, profile)
+    parse_expected_symbols(&content, abi_series)
 }
 
-fn parse_expected_symbols(content: &str, profile: &StudioProfile) -> Result<AbiSymbols, String> {
+fn parse_expected_symbols(
+    content: &str,
+    abi_series: &StudioAbiSeries,
+) -> Result<AbiSymbols, String> {
     let mut all = BTreeSet::new();
     let mut network_count = 0;
     let mut file_transfer_count = 0;
@@ -55,7 +58,7 @@ fn parse_expected_symbols(content: &str, profile: &StudioProfile) -> Result<AbiS
             .split_once(',')
             .map(|(symbol, _)| symbol.trim())
             .ok_or_else(|| format!("invalid Studio export record at line {}", index + 1))?;
-        if symbol == "bambu_network_sync_ams_filaments" && !profile.capabilities.ams_sync {
+        if !abi_series.capabilities.filament_cloud && is_filament_cloud_symbol(symbol) {
             continue;
         }
         match symbol {
@@ -73,15 +76,15 @@ fn parse_expected_symbols(content: &str, profile: &StudioProfile) -> Result<AbiS
         }
     }
 
-    if network_count != profile.network_exports
-        || file_transfer_count != profile.file_transfer_exports
-        || all.len() != profile.total_exports()
+    if network_count != abi_series.network_exports
+        || file_transfer_count != abi_series.file_transfer_exports
+        || all.len() != abi_series.total_exports()
     {
         return Err(format!(
-            "canonical Studio profile {} export map must contain exactly {} network and {} FT symbols, got {network_count} network, {file_transfer_count} FT, {} total",
-            profile.id,
-            profile.network_exports,
-            profile.file_transfer_exports,
+            "canonical Studio ABI series {} export map must contain exactly {} network and {} FT symbols, got {network_count} network, {file_transfer_count} FT, {} total",
+            abi_series.id,
+            abi_series.network_exports,
+            abi_series.file_transfer_exports,
             all.len()
         ));
     }
@@ -90,6 +93,17 @@ fn parse_expected_symbols(content: &str, profile: &StudioProfile) -> Result<AbiS
         network_count,
         file_transfer_count,
     })
+}
+
+fn is_filament_cloud_symbol(symbol: &str) -> bool {
+    matches!(
+        symbol,
+        "bambu_network_get_filament_spools"
+            | "bambu_network_create_filament_spool"
+            | "bambu_network_update_filament_spool"
+            | "bambu_network_delete_filament_spools"
+            | "bambu_network_get_filament_config"
+    )
 }
 
 pub(crate) fn validate_exact_exports(

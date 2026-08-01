@@ -10,12 +10,12 @@ Release `v0.1.0` is published at <https://github.com/5aaee9/pandar/releases/tag/
 
 Select the archive that matches the operator host OS and CPU architecture:
 
-| Host                 | Target label    | Archive                                                                               |
-| -------------------- | --------------- | ------------------------------------------------------------------------------------- |
-| Linux x86_64/amd64   | `linux-amd64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-linux-amd64.tar.gz`     |
-| macOS x86_64/amd64   | `macos-amd64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-macos-amd64.tar.gz`     |
-| macOS Apple Silicon  | `macos-arm64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-macos-arm64.tar.gz`     |
-| Windows x86_64/amd64 | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-windows-amd64.tar.gz`   |
+| Host                 | Target label    | Archive                                                                            |
+| -------------------- | --------------- | ---------------------------------------------------------------------------------- |
+| Linux x86_64/amd64   | `linux-amd64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-linux-amd64.tar.gz`     |
+| macOS x86_64/amd64   | `macos-amd64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-macos-amd64.tar.gz`     |
+| macOS Apple Silicon  | `macos-arm64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-macos-arm64.tar.gz`     |
+| Windows x86_64/amd64 | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-windows-amd64.tar.gz`   |
 
 The immutable `v0.1.0` release predates macOS desktop archives. The current tag workflow additionally
 publishes macOS amd64 and arm64 archives. Both use an Apple Silicon runner: arm64 executes natively,
@@ -24,26 +24,27 @@ Every published archive contains exactly three top-level files: the `pandar` CLI
 the matching network plugin, and the matching sentinel-only BambuSource companion. The tag workflow
 builds each archive on its target OS, validates the pinned Studio contract through the packaged
 plugin, and verifies the checksum, exact layout, companion policy, and CLI startup before publication.
-The separate Windows Studio hook bundle is also
-built natively with MSVC.
+The separate Windows Studio hook bundles are also built natively with MSVC.
 
-Choose the archive whose exact version matches `app.version` in `BambuStudio.conf`. Supported profiles
-are `02.07.01.62` (108 network plus 21 File Transfer names) and `02.08.01.55` (109 plus 21). Their C++
-ABIs are incompatible, so neither archive is a fallback for the other. The installer verifies the
-exact version before changing the Studio plugin directory.
+Choose the archive whose ABI series matches the first three components of `app.version` in
+`BambuStudio.conf`. Supported ABI series are `02.06.00`, `02.06.01`, `02.07.00`, `02.07.01`, and
+`02.08.00`. The `02.06.00` series requires 103 network plus 21 File Transfer names; the other four
+series require 108 network plus 21 File Transfer names. Their C++ ABIs differ, so no archive is a
+fallback for another series. The installer verifies the installed Studio version resolves to the
+archive's ABI series before changing the Studio plugin directory.
 
 ## Checksum Verification
 
 Download the archive and its `.sha256` sidecar from the same release. Verify the sidecar before unpacking:
 
 ```bash
-sha256sum -c pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-<target-label>.tar.gz.sha256
+sha256sum -c pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-<target-label>.tar.gz.sha256
 ```
 
 On macOS, use:
 
 ```bash
-shasum -a 256 -c pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-<target-label>.tar.gz.sha256
+shasum -a 256 -c pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-<target-label>.tar.gz.sha256
 ```
 
 The sidecar must name only the archive file, not a local path. Do not install an archive whose checksum fails or whose sidecar does not match the downloaded filename.
@@ -53,14 +54,14 @@ The sidecar must name only the archive file, not a local path. Do not install an
 Unpack the archive and run the CLI help command before installing it into a shared path:
 
 ```bash
-tar -xzf pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-<target-label>.tar.gz
+tar -xzf pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-<target-label>.tar.gz
 ./pandar --help
 ```
 
 On Windows, run:
 
 ```powershell
-tar -xzf pandar-release-<tag-or-sanitized-ref>-studio-<exact-version>-<target-label>.tar.gz
+tar -xzf pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-<target-label>.tar.gz
 .\pandar.exe --help
 ```
 
@@ -68,11 +69,11 @@ If startup fails, keep the archive, checksum, target label, OS version, and term
 
 ## Windows Bambu Studio Hook
 
-For each supported exact Bambu Studio version on Windows x86-64, the tagged release also publishes
-`pandar-studio-hook-<exact-version>-windows-amd64.zip` and its `.sha256` sidecar. The bundle is built
+For each supported Bambu Studio ABI series on Windows x86-64, the tagged release also publishes
+`pandar-studio-hook-<abi-series>-windows-amd64.zip` and its `.sha256` sidecar. The bundle is built
 natively with MSVC and contains the Studio hook, matching network plugin, and sentinel-only
 BambuSource companion. The hook accepts only versions present in `studio-abi-profiles.json` and keeps
-its verified package cache separate for every exact version.
+its verified package cache separate for every ABI series.
 
 Close Studio, then install the hook with a Windows `pandar.exe`. Use an elevated terminal when the
 Studio program directory is under `Program Files`:
@@ -102,7 +103,7 @@ Uninstall the hook while Studio is closed:
 Uninstall restores `swscale-8.dll` and removes the cached replacement package. It does not remove the
 currently installed Pandar network plugin. Set `PANDAR_STUDIO_LOG_LOCAL_KEY=1` before starting Studio
 when the existing local log-key patch is also required. The hook refuses plugin-download replacement
-outside Studio `02.07.01.x`; reinstall after a Studio application update because the application
+outside catalog-supported Studio ABI series; reinstall after a Studio application update because the application
 installer may replace `swscale-8.dll`.
 
 ## Hub, Web, And Agent Deployment
@@ -204,14 +205,14 @@ Use root-owned runtime `EnvironmentFile` paths outside `/nix/store` for every Ni
 
 ## Bambu Studio Plugin And BambuSource Replacement
 
-Both supported Studio profiles require the network plugin and BambuSource companion before agent
-creation. Use the platform files from the archive matching the installed exact version:
+Every supported Studio ABI series requires the network plugin and BambuSource companion before agent
+creation. Use the platform files from the archive matching the installed ABI series:
 
-| OS      | Network plugin                   | BambuSource companion          | Current stable validation              |
-| ------- | -------------------------------- | ------------------------------ | -------------------------------------- |
-| Linux   | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    | next tagged archive remains untested   |
-| Windows | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      | next tagged archive remains untested   |
-| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | local arm64 validated; untagged        |
+| OS      | Network plugin                   | BambuSource companion          | Current validation                    |
+| ------- | -------------------------------- | ------------------------------ | ------------------------------------- |
+| Linux   | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    | next tagged archive remains untested |
+| Windows | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      | next tagged archive remains untested |
+| macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | local arm64 validated; untagged      |
 
 Install both from an unpacked release archive with the CLI:
 
@@ -223,8 +224,8 @@ When the file flags are omitted, the command reads the platform-specific release
 current working directory (`libpandar_network_plugin.so` and `libpandar_bambu_source.so` on Linux,
 or `pandar_network_plugin.dll` and `pandar_bambu_source.dll` on Windows). Use `--plugin-file` and
 `--source-file` to override either path for development builds. The CLI is compiled for the same
-profile as its bundled plugin, reads the exact `BambuStudio.conf` version, and fails before copying
-when the installed Studio profile differs or is unsupported.
+ABI series as its bundled plugin, reads the exact `BambuStudio.conf` version, and fails before
+copying when the installed Studio version resolves to a different or unsupported series.
 
 The installer writes Studio's exact names, including `libbambu_networking.so` and
 `libBambuSource.so` on Linux, `libbambu_networking.dylib` plus `libBambuSource.dylib` on macOS, and
@@ -412,13 +413,13 @@ Historical final13 PostgreSQL 16.14 harness `0c292295-f9ab-459b-89c2-ea74f2c9ff5
 `7e04ae355f7bca3fb409bbc700b5c8f160194c0d2f9ec82df823c859566a2db7`; source read-only and
 cleanup checks passed.
 
-| Target label    | Current operator status | Stable `02.07.01.62` evidence                                                                                                      | Next action                                                                                   |
-| --------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `linux-amd64`   | `untested`              | No stable package or real Studio run exists; final16 is historical Public Beta evidence only.                                    | Run the tag workflow and exact stable Studio checklist.                                       |
-| `windows-amd64` | `untested`              | The stable hook/package contract is configured, but no current native package or real Studio run exists.                          | Run the native MSVC release job and exact stable Studio checklist.                            |
-| `linux-arm64`   | `untested`              | No current three-file native candidate exists.                                                                                    | Do not publish a Studio compatibility claim.                                                  |
-| `windows-arm64` | `untested`              | No current three-file native candidate exists.                                                                                    | Do not publish a Studio compatibility claim.                                                  |
-| `macos-amd64`   | `untested`              | The Apple Silicon/Rosetta release job is configured but has not run; no matching real Studio evidence exists.                     | Run the tag workflow and exact stable Studio checklist under Rosetta.                         |
+| Target label    | Current operator status | Current ABI-series evidence                                                                                              | Next action                                                                                   |
+| --------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `linux-amd64`   | `untested`              | No current five-series tagged package or real Studio run exists; final16 is historical Public Beta evidence only.       | Run the tag workflow and exact Studio checklist for each supported ABI series.                 |
+| `windows-amd64` | `untested`              | The ABI-series hook/package contract is configured, but no current native package or real Studio run exists.            | Run the native MSVC release job and exact Studio checklist for each supported ABI series.      |
+| `linux-arm64`   | `untested`              | No current three-file native candidate exists.                                                                          | Do not publish a Studio compatibility claim.                                                  |
+| `windows-arm64` | `untested`              | No current three-file native candidate exists.                                                                          | Do not publish a Studio compatibility claim.                                                  |
+| `macos-amd64`   | `untested`              | The Apple Silicon/Rosetta release job is configured but has not run; no matching real Studio evidence exists.           | Run the tag workflow and exact Studio checklist under Rosetta.                                |
 | `macos-arm64`   | `in_progress`           | Local native package/ABI/release-smoke and exact-version module load passed; no tagged artifact or authenticated session exists. | Run the tag workflow and authenticated checklist before claiming full compatibility.          |
 
 ## Operations Runbook

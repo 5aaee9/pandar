@@ -9,7 +9,7 @@ use crate::{
     source_mapping::{ExportMap, loaded_export_map},
     types::cpp_struct_fields,
 };
-use pandar_studio_profile::StudioProfile;
+use pandar_studio_profile::StudioAbiSeries;
 
 pub const PINNED_BOOST_VERSION: &str = "1.84.0";
 pub const PINNED_BOOST_VERSION_NUMBER: &str = "108400";
@@ -32,17 +32,15 @@ const CONTRACT_PATHS: &[&str] = &[
 pub struct StudioContract {
     pub commit: String,
     pub studio_version: String,
-    pub network_agent_version: String,
+    pub reference_network_agent_version: String,
     pub network_symbols: BTreeSet<String>,
     pub file_transfer_symbols: BTreeSet<String>,
     pub network_exports: ExportMap,
     pub file_transfer_exports: ExportMap,
     pub print_params_fields: Vec<String>,
-    pub ams_sync_item_fields: Vec<String>,
-    pub ams_sync_params_fields: Vec<String>,
 }
 
-pub fn inspect_source(root: &Path, profile: &StudioProfile) -> Result<StudioContract, String> {
+pub fn inspect_source(root: &Path, abi_series: &StudioAbiSeries) -> Result<StudioContract, String> {
     let root = root
         .canonicalize()
         .map_err(|error| format!("resolve Studio source {}: {error}", root.display()))?;
@@ -54,10 +52,10 @@ pub fn inspect_source(root: &Path, profile: &StudioProfile) -> Result<StudioCont
     }
 
     let commit = git(&root, &["rev-parse", "HEAD"])?;
-    if commit != profile.studio_commit {
+    if commit != abi_series.studio_commit {
         return Err(format!(
-            "Studio HEAD for profile {} must be pinned commit {}, got {commit}",
-            profile.id, profile.studio_commit
+            "Studio HEAD for ABI series {} must be pinned commit {}, got {commit}",
+            abi_series.id, abi_series.studio_commit
         ));
     }
 
@@ -81,16 +79,6 @@ pub fn inspect_source(root: &Path, profile: &StudioProfile) -> Result<StudioCont
     let studio_version = quoted_value(&version, "set(SLIC3R_VERSION ")?;
     let network_agent_version = quoted_value(&networking, "#define BAMBU_NETWORK_AGENT_VERSION")?;
     let print_params_fields = cpp_struct_fields(&networking, "PrintParams")?;
-    let ams_sync_item_fields = if profile.capabilities.ams_sync {
-        cpp_struct_fields(&networking, "AmsSyncItem")?
-    } else {
-        Vec::new()
-    };
-    let ams_sync_params_fields = if profile.capabilities.ams_sync {
-        cpp_struct_fields(&networking, "AmsSyncParams")?
-    } else {
-        Vec::new()
-    };
     let network_exports = loaded_export_map(
         &network_agent,
         "get_network_function",
@@ -132,26 +120,26 @@ pub fn inspect_source(root: &Path, profile: &StudioProfile) -> Result<StudioCont
                 .to_owned(),
         );
     }
-    if studio_version != profile.id {
+    if studio_version != abi_series.reference_studio_version {
         return Err(format!(
-            "Studio version mismatch for profile {}: source reports {studio_version}",
-            profile.id
+            "Studio version mismatch for ABI series {}: expected reference {}, source reports {studio_version}",
+            abi_series.id, abi_series.reference_studio_version
         ));
     }
-    if network_agent_version != profile.network_agent_version {
+    if network_agent_version != abi_series.reference_network_agent_version {
         return Err(format!(
-            "network agent version mismatch for profile {}: expected {}, got {network_agent_version}",
-            profile.id, profile.network_agent_version
+            "reference network agent version mismatch for ABI series {}: expected {}, got {network_agent_version}",
+            abi_series.id, abi_series.reference_network_agent_version
         ));
     }
-    if network_symbols.len() != profile.network_exports
-        || file_transfer_symbols.len() != profile.file_transfer_exports
+    if network_symbols.len() != abi_series.network_exports
+        || file_transfer_symbols.len() != abi_series.file_transfer_exports
     {
         return Err(format!(
-            "Studio profile {} symbol extraction drifted: expected {} network and {} FT, got {} network and {} FT",
-            profile.id,
-            profile.network_exports,
-            profile.file_transfer_exports,
+            "Studio ABI series {} symbol extraction drifted: expected {} network and {} FT, got {} network and {} FT",
+            abi_series.id,
+            abi_series.network_exports,
+            abi_series.file_transfer_exports,
             network_symbols.len(),
             file_transfer_symbols.len()
         ));
@@ -160,14 +148,12 @@ pub fn inspect_source(root: &Path, profile: &StudioProfile) -> Result<StudioCont
     Ok(StudioContract {
         commit,
         studio_version,
-        network_agent_version,
+        reference_network_agent_version: network_agent_version,
         network_symbols,
         file_transfer_symbols,
         network_exports,
         file_transfer_exports,
         print_params_fields,
-        ams_sync_item_fields,
-        ams_sync_params_fields,
     })
 }
 
@@ -268,7 +254,7 @@ mod tests {
             fs::create_dir_all(path.parent().expect("contract path has parent"))
                 .expect("create contract fixture parent");
             let contents = match path.strip_prefix(temp.path()).unwrap().to_str().unwrap() {
-                "version.inc" => "set(SLIC3R_VERSION \"02.07.01.62\")\n",
+                "version.inc" => "set(SLIC3R_VERSION \"02.07.01.57\")\n",
                 "deps/Boost/Boost.cmake" => {
                     "URL \"https://example.invalid/boost-1.84.0.tar.gz\"\nURL_HASH SHA256=4d27e9efed0f6f152dc28db6430b9d3dfb40c0345da7342eaa5a987dde57bd95\n"
                 }
@@ -298,19 +284,19 @@ mod tests {
         temp
     }
 
-    fn fixture_profile(root: &Path) -> pandar_studio_profile::StudioProfile {
-        let mut profile = pandar_studio_profile::catalog().default().clone();
-        profile.studio_commit = git(root, &["rev-parse", "HEAD"]);
-        profile.network_exports = 2;
-        profile.file_transfer_exports = 2;
-        profile
+    fn fixture_abi_series(root: &Path) -> pandar_studio_profile::StudioAbiSeries {
+        let mut abi_series = pandar_studio_profile::catalog().default().clone();
+        abi_series.studio_commit = git(root, &["rev-parse", "HEAD"]);
+        abi_series.network_exports = 2;
+        abi_series.file_transfer_exports = 2;
+        abi_series
     }
 
     #[test]
     fn pinned_commit_is_the_reviewed_upstream_object() {
         assert_eq!(
             pandar_studio_profile::catalog().default().studio_commit,
-            "42d319c6692fa8e64790fddf0cdaafd2a4254bcc"
+            "3f126b717ed1f10fee0f32f05ed9731808d0c8bb"
         );
         assert_eq!(PINNED_BOOST_VERSION, "1.84.0");
         assert_eq!(PINNED_BOOST_VERSION_NUMBER, "108400");
@@ -319,14 +305,14 @@ mod tests {
     #[test]
     fn extracts_versions_and_loaded_symbols_from_official_clean_checkout() {
         let temp = fixture();
-        let profile = fixture_profile(temp.path());
+        let abi_series = fixture_abi_series(temp.path());
 
         let contract =
-            inspect_source(temp.path(), &profile).expect("inspect valid official checkout");
+            inspect_source(temp.path(), &abi_series).expect("inspect valid official checkout");
 
-        assert_eq!(contract.commit, profile.studio_commit);
-        assert_eq!(contract.studio_version, "02.07.01.62");
-        assert_eq!(contract.network_agent_version, "02.07.01.51");
+        assert_eq!(contract.commit, abi_series.studio_commit);
+        assert_eq!(contract.studio_version, "02.07.01.57");
+        assert_eq!(contract.reference_network_agent_version, "02.07.01.51");
         assert_eq!(contract.print_params_fields, ["dev_id"]);
         assert_eq!(
             contract.network_exports,
@@ -354,12 +340,12 @@ mod tests {
     #[test]
     fn rejects_wrong_commit() {
         let temp = fixture();
-        let profile = pandar_studio_profile::catalog().default();
-        let error = inspect_source(temp.path(), profile).unwrap_err();
+        let abi_series = pandar_studio_profile::catalog().default();
+        let error = inspect_source(temp.path(), abi_series).unwrap_err();
 
         assert!(error.contains("HEAD"), "unexpected error: {error}");
         assert!(
-            error.contains(&profile.studio_commit),
+            error.contains(&abi_series.studio_commit),
             "unexpected error: {error}"
         );
     }
@@ -367,7 +353,7 @@ mod tests {
     #[test]
     fn rejects_non_official_origin() {
         let temp = fixture();
-        let profile = fixture_profile(temp.path());
+        let abi_series = fixture_abi_series(temp.path());
         git(
             temp.path(),
             &[
@@ -378,7 +364,7 @@ mod tests {
             ],
         );
 
-        let error = inspect_source(temp.path(), &profile).unwrap_err();
+        let error = inspect_source(temp.path(), &abi_series).unwrap_err();
 
         assert!(error.contains("origin"), "unexpected error: {error}");
         assert!(
@@ -390,16 +376,16 @@ mod tests {
     #[test]
     fn rejects_tracked_contract_drift_but_ignores_untracked_output() {
         let temp = fixture();
-        let profile = fixture_profile(temp.path());
+        let abi_series = fixture_abi_series(temp.path());
         fs::write(temp.path().join("untracked-build.log"), "ignored\n").unwrap();
-        inspect_source(temp.path(), &profile).expect("ignore unrelated untracked output");
+        inspect_source(temp.path(), &abi_series).expect("ignore unrelated untracked output");
 
         fs::write(
             temp.path().join("src/slic3r/Utils/NetworkAgent.cpp"),
             "get_network_function(\"bambu_network_tampered\");\n",
         )
         .unwrap();
-        let error = inspect_source(temp.path(), &profile).unwrap_err();
+        let error = inspect_source(temp.path(), &abi_series).unwrap_err();
 
         assert!(
             error.contains("tracked contract files"),

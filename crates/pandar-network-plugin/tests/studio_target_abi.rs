@@ -1,6 +1,6 @@
 use std::ffi::CStr;
 
-use pandar_network_plugin::{STUDIO_PROFILE, pandar_plugin_network_agent_version};
+use pandar_network_plugin::{STUDIO_ABI_SERIES, pandar_plugin_network_agent_version};
 
 #[path = "studio_target_abi/lifecycle_boundary.rs"]
 mod lifecycle_boundary;
@@ -8,14 +8,13 @@ mod lifecycle_boundary;
 mod source_hygiene;
 
 #[test]
-fn network_agent_version_matches_pinned_studio_target() {
+fn network_agent_version_matches_selected_studio_abi_series() {
     let version = unsafe { CStr::from_ptr(pandar_plugin_network_agent_version()) }
         .to_str()
         .unwrap();
 
-    let profile = pandar_studio_profile::profile(STUDIO_PROFILE).unwrap();
-    assert_eq!(version, profile.network_agent_version);
-    assert_eq!(&version[..8], &profile.id[..8]);
+    let abi_series = pandar_studio_profile::abi_series(STUDIO_ABI_SERIES).unwrap();
+    assert_eq!(version, abi_series.reported_network_agent_version);
 }
 
 #[test]

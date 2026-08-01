@@ -47,10 +47,8 @@ pub use plugin_session::{
     pandar_plugin_create_no_auth_session, pandar_plugin_delete_session,
     pandar_plugin_exchange_ticket, pandar_plugin_no_auth_retryable_connect_failure,
 };
-#[cfg(pandar_studio_ams_sync)]
-pub use studio_abi::pandar_plugin_sync_ams_filaments;
 pub use studio_abi::{
-    NETWORK_AGENT_VERSION, STUDIO_PROFILE, pandar_plugin_camera_access_result,
+    NETWORK_AGENT_VERSION, STUDIO_ABI_SERIES, pandar_plugin_camera_access_result,
     pandar_plugin_local_connect_json, pandar_plugin_network_agent_version,
 };
 pub use studio_message::{

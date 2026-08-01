@@ -136,7 +136,7 @@ async fn main() -> anyhow::Result<()> {
             println!(
                 "{}",
                 serde_json::to_string(&NetworkPluginJson {
-                    studio_profile: summary.studio_profile,
+                    studio_abi_series: summary.studio_abi_series,
                     plugin_path: summary.plugin_path,
                     source_path: summary.source_path,
                     config_path: summary.config_path,
@@ -184,7 +184,7 @@ async fn main() -> anyhow::Result<()> {
 
 #[derive(Serialize)]
 struct NetworkPluginJson {
-    studio_profile: String,
+    studio_abi_series: String,
     plugin_path: PathBuf,
     source_path: PathBuf,
     config_path: PathBuf,
@@ -198,7 +198,7 @@ struct DecryptBambuStudioLogJson {
 
 #[derive(Serialize)]
 struct StudioHookJson {
-    studio_profile: String,
+    studio_abi_series: String,
     studio_dir: PathBuf,
     proxy_path: PathBuf,
     original_path: PathBuf,
@@ -210,7 +210,7 @@ struct StudioHookJson {
 
 fn studio_hook_json(summary: pandar_studio_hook::installer::StudioHookSummary) -> StudioHookJson {
     StudioHookJson {
-        studio_profile: summary.studio_profile,
+        studio_abi_series: summary.studio_abi_series,
         studio_dir: summary.studio_dir,
         proxy_path: summary.proxy_path,
         original_path: summary.original_path,

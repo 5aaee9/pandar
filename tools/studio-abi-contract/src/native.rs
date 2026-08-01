@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{boost::prepare_archive, http_probe::PrintSink};
-use pandar_studio_profile::StudioProfile;
+use pandar_studio_profile::StudioAbiSeries;
 
 const RUN_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -25,7 +25,7 @@ struct CompileInput<'a> {
     executable: &'a Path,
     check_types: bool,
     address_sanitizer: bool,
-    profile: &'a StudioProfile,
+    abi_series: &'a StudioAbiSeries,
 }
 
 pub fn verify_native_contract(
@@ -35,7 +35,7 @@ pub fn verify_native_contract(
     modes: &[&str],
     check_types: bool,
     address_sanitizer: bool,
-    profile: &StudioProfile,
+    abi_series: &StudioAbiSeries,
 ) -> Result<NativeReport, String> {
     if address_sanitizer && !cfg!(target_os = "linux") {
         return Err(
@@ -60,7 +60,7 @@ pub fn verify_native_contract(
                 executable: &temp.path().join(executable_name("studio_contract_types")),
                 check_types: true,
                 address_sanitizer,
-                profile,
+                abi_series,
             },
         )?;
         if !type_output.status.success() {
@@ -84,7 +84,7 @@ pub fn verify_native_contract(
             executable: &runtime,
             check_types: false,
             address_sanitizer,
-            profile,
+            abi_series,
         },
     )?;
     if !runtime_output.status.success() {
@@ -230,16 +230,16 @@ fn compile(
     let studio_headers = input.studio_source.join("src");
     let profile_defines = [
         (
-            input.profile.capabilities.bind_model_argument,
+            input.abi_series.capabilities.filament_cloud,
+            "PANDAR_STUDIO_FILAMENT_CLOUD",
+        ),
+        (
+            input.abi_series.capabilities.print_svc_context,
+            "PANDAR_STUDIO_PRINT_SVC_CONTEXT",
+        ),
+        (
+            input.abi_series.capabilities.bind_model_argument,
             "PANDAR_STUDIO_BIND_MODEL_ARGUMENT",
-        ),
-        (
-            input.profile.capabilities.print_slicer_uid,
-            "PANDAR_STUDIO_PRINT_SLICER_UID",
-        ),
-        (
-            input.profile.capabilities.ams_sync,
-            "PANDAR_STUDIO_AMS_SYNC",
         ),
     ];
     if cfg!(all(windows, target_env = "msvc")) {
@@ -250,6 +250,10 @@ fn compile(
             .arg("/MD")
             .arg("/D_ITERATOR_DEBUG_LEVEL=0")
             .arg("/DBOOST_ALL_NO_LIB")
+            .arg(format!(
+                "/DPANDAR_STUDIO_REPORTED_NETWORK_AGENT_VERSION=\"{}\"",
+                input.abi_series.reported_network_agent_version
+            ))
             .arg(format!("/I{}", studio_headers.display()))
             .arg(format!("/I{}", plugin_headers.display()));
         for include in input.boost_includes {
@@ -272,6 +276,10 @@ fn compile(
         compiler
             .arg("-std=c++17")
             .arg("-DBOOST_ALL_NO_LIB")
+            .arg(format!(
+                "-DPANDAR_STUDIO_REPORTED_NETWORK_AGENT_VERSION=\"{}\"",
+                input.abi_series.reported_network_agent_version
+            ))
             .arg(format!("-I{}", studio_headers.display()))
             .arg(format!("-I{}", plugin_headers.display()));
         for include in input.boost_includes {

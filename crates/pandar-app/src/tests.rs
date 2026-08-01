@@ -167,6 +167,33 @@ fn rejects_removed_studio_dev_hook_commands() {
 }
 
 #[test]
+fn installer_json_reports_studio_abi_series() {
+    let network = serde_json::to_value(NetworkPluginJson {
+        studio_abi_series: "02.07.01".to_owned(),
+        plugin_path: PathBuf::from("bambu_networking.dll"),
+        source_path: PathBuf::from("BambuSource.dll"),
+        config_path: PathBuf::from("BambuStudio.conf"),
+    })
+    .unwrap();
+    assert_eq!(network["studio_abi_series"], "02.07.01");
+    assert!(network.get("studio_profile").is_none());
+
+    let hook = serde_json::to_value(StudioHookJson {
+        studio_abi_series: "02.08.00".to_owned(),
+        studio_dir: PathBuf::from("Bambu Studio"),
+        proxy_path: PathBuf::from("swscale-8.dll"),
+        original_path: PathBuf::from("swscale8original.dll"),
+        plugin_path: PathBuf::from("bambu_networking.dll"),
+        source_path: PathBuf::from("BambuSource.dll"),
+        config_path: PathBuf::from("BambuStudio.conf"),
+        plugin_package_path: PathBuf::from("networking_plugins.zip"),
+    })
+    .unwrap();
+    assert_eq!(hook["studio_abi_series"], "02.08.00");
+    assert!(hook.get("studio_profile").is_none());
+}
+
+#[test]
 fn parses_decrypt_bambu_studio_log_subcommand() {
     let cli = Cli::parse_from([
         "pandar",

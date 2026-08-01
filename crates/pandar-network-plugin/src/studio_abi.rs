@@ -2,22 +2,12 @@ use std::ffi::c_char;
 
 use crate::{PluginHttpResult, read_utf8, result, stable_error_body, studio_status};
 
-pub const STUDIO_PROFILE: &str = env!("PANDAR_STUDIO_PROFILE_ID");
+pub const STUDIO_ABI_SERIES: &str = env!("PANDAR_STUDIO_ABI_SERIES_ID");
 pub const NETWORK_AGENT_VERSION: &str = concat!(env!("PANDAR_NETWORK_AGENT_VERSION"), "\0");
 
 #[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_network_agent_version() -> *const c_char {
     NETWORK_AGENT_VERSION.as_ptr().cast()
-}
-
-#[cfg(pandar_studio_ams_sync)]
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_sync_ams_filaments(agent_valid: bool) -> PluginHttpResult {
-    if agent_valid {
-        result(-32, 0, stable_error_body("unsupported_ams_sync"))
-    } else {
-        result(-1, 0, stable_error_body("invalid_handle"))
-    }
 }
 
 #[unsafe(no_mangle)]

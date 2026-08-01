@@ -39,6 +39,7 @@ fn dynamic_library_path() -> PathBuf {
 }
 
 fn historical_floor_symbols() -> BTreeSet<String> {
+    let abi_series = selected_abi_series();
     let symbols = include_str!(
         "../../../docs/superpowers/specs/2026-06-23-phase-21-network-plugin-abi-symbols.txt"
     );
@@ -46,12 +47,15 @@ fn historical_floor_symbols() -> BTreeSet<String> {
         .lines()
         .map(str::trim)
         .filter(|line| line.starts_with("bambu_network_") || line.starts_with("ft_"))
+        .filter(|symbol| {
+            abi_series.capabilities.filament_cloud || !is_filament_cloud_symbol(symbol)
+        })
         .map(ToOwned::to_owned)
         .collect()
 }
 
 fn target_studio_symbols() -> BTreeSet<String> {
-    let profile = pandar_studio_profile::profile(pandar_network_plugin::STUDIO_PROFILE).unwrap();
+    let abi_series = selected_abi_series();
     let symbols = include_str!("../src/shim_exports.hpp")
         .lines()
         .filter_map(|line| line.trim().strip_prefix("PANDAR_STUDIO_EXPORT("))
@@ -64,7 +68,7 @@ fn target_studio_symbols() -> BTreeSet<String> {
                 .to_owned()
         })
         .filter(|symbol| {
-            profile.capabilities.ams_sync || symbol != "bambu_network_sync_ams_filaments"
+            abi_series.capabilities.filament_cloud || !is_filament_cloud_symbol(symbol)
         })
         .collect::<Vec<_>>();
     let expected = symbols.iter().cloned().collect::<BTreeSet<_>>();
@@ -78,16 +82,31 @@ fn target_studio_symbols() -> BTreeSet<String> {
             .iter()
             .filter(|symbol| symbol.starts_with("bambu_network_"))
             .count(),
-        profile.network_exports
+        abi_series.network_exports
     );
     assert_eq!(
         symbols
             .iter()
             .filter(|symbol| symbol.starts_with("ft_"))
             .count(),
-        profile.file_transfer_exports
+        abi_series.file_transfer_exports
     );
     expected
+}
+
+fn selected_abi_series() -> &'static pandar_studio_profile::StudioAbiSeries {
+    pandar_studio_profile::abi_series(pandar_network_plugin::STUDIO_ABI_SERIES).unwrap()
+}
+
+fn is_filament_cloud_symbol(symbol: &str) -> bool {
+    matches!(
+        symbol,
+        "bambu_network_get_filament_spools"
+            | "bambu_network_create_filament_spool"
+            | "bambu_network_update_filament_spool"
+            | "bambu_network_delete_filament_spools"
+            | "bambu_network_get_filament_config"
+    )
 }
 
 #[cfg(target_os = "windows")]

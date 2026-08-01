@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "plugin_download_hook.hpp"
-#include "pandar_studio_profiles.hpp"
+#include "pandar_studio_abi_series.hpp"
 
 namespace {
 
@@ -45,7 +45,7 @@ void append_log(const char* message)
     CloseHandle(file);
 }
 
-const wchar_t* target_studio_profile(HMODULE module)
+const wchar_t* target_studio_abi_series(HMODULE module)
 {
     wchar_t module_path[MAX_PATH] = {};
     if (GetModuleFileNameW(module, module_path, MAX_PATH) == 0)
@@ -69,22 +69,20 @@ const wchar_t* target_studio_profile(HMODULE module)
     const auto major = HIWORD(fixed->dwFileVersionMS);
     const auto minor = LOWORD(fixed->dwFileVersionMS);
     const auto patch = HIWORD(fixed->dwFileVersionLS);
-    const auto build = LOWORD(fixed->dwFileVersionLS);
-    for (const auto& profile : kPandarStudioProfiles) {
-        if (profile.major == major && profile.minor == minor &&
-            profile.patch == patch && profile.build == build)
-            return profile.id;
+    for (const auto& series : kPandarStudioAbiSeries) {
+        if (series.major == major && series.minor == minor && series.patch == patch)
+            return series.id;
     }
     return nullptr;
 }
 
-std::wstring plugin_package_path(const wchar_t* profile)
+std::wstring plugin_package_path(const wchar_t* abi_series)
 {
     wchar_t local_appdata[MAX_PATH] = {};
     DWORD len = GetEnvironmentVariableW(L"LOCALAPPDATA", local_appdata, MAX_PATH);
     if (len == 0 || len >= MAX_PATH)
         return {};
-    return std::wstring(local_appdata) + kHookPackageRoot + profile +
+    return std::wstring(local_appdata) + kHookPackageRoot + abi_series +
         L"\\networking_plugins.zip";
 }
 
@@ -227,17 +225,17 @@ int patch_loaded_modules()
 
 void install_plugin_download_hook(HMODULE studio_module)
 {
-    const wchar_t* profile = target_studio_profile(studio_module);
-    if (profile == nullptr) {
+    const wchar_t* abi_series = target_studio_abi_series(studio_module);
+    if (abi_series == nullptr) {
         append_log("Pandar plugin download hook disabled for an unsupported Studio version");
         return;
     }
-    cached_plugin_package = plugin_package_path(profile);
+    cached_plugin_package = plugin_package_path(abi_series);
 
     int patched = patch_loaded_modules();
     if (patched == 0) {
         append_log("Pandar plugin download hook could not find the Windows rename imports");
         return;
     }
-    append_log("Pandar plugin download hook enabled for an exact supported Studio profile");
+    append_log("Pandar plugin download hook enabled for a supported Studio ABI series");
 }

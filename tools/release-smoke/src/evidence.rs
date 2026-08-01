@@ -9,7 +9,7 @@ use crate::host::NativeTarget;
 
 pub(crate) struct EvidenceInput<'a> {
     pub target: NativeTarget,
-    pub studio_profile: &'a str,
+    pub abi_series: &'a str,
     pub archive_sha256: &'a str,
     pub plugin_sha256: &'a str,
     pub source_sha256: &'a str,
@@ -29,7 +29,7 @@ pub(crate) fn collect_evidence(input: EvidenceInput<'_>) -> Result<String, Strin
     for (name, value) in [
         ("release_smoke_status", "passed".to_owned()),
         ("target_label", input.target.label().to_owned()),
-        ("studio_profile", input.studio_profile.to_owned()),
+        ("abi_series", input.abi_series.to_owned()),
         ("host_os", env::consts::OS.to_owned()),
         ("host_arch", env::consts::ARCH.to_owned()),
         ("archive_sha256", input.archive_sha256.to_owned()),

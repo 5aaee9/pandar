@@ -11,25 +11,22 @@ fn main() {
     }
 
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR is set by Cargo");
-    let profile_header = std::path::Path::new(&out_dir).join("pandar_studio_profiles.hpp");
-    let profiles = pandar_studio_profile::catalog()
-        .profiles
+    let abi_series_header = std::path::Path::new(&out_dir).join("pandar_studio_abi_series.hpp");
+    let abi_series = pandar_studio_profile::catalog()
+        .abi_series
         .iter()
-        .map(|profile| {
-            let [major, minor, patch, build] = profile.version_components();
-            format!(
-                "    {{{major}, {minor}, {patch}, {build}, L\"{}\"}},\n",
-                profile.id
-            )
+        .map(|series| {
+            let [major, minor, patch] = series.series_components();
+            format!("    {{{major}, {minor}, {patch}, L\"{}\"}},\n", series.id)
         })
         .collect::<String>();
     std::fs::write(
-        &profile_header,
+        &abi_series_header,
         format!(
-            "#pragma once\n\nstruct PandarStudioProfile {{ unsigned short major; unsigned short minor; unsigned short patch; unsigned short build; const wchar_t* id; }};\nconstexpr PandarStudioProfile kPandarStudioProfiles[] = {{\n{profiles}}};\n"
+            "#pragma once\n\nstruct PandarStudioAbiSeries {{ unsigned short major; unsigned short minor; unsigned short patch; const wchar_t* id; }};\nconstexpr PandarStudioAbiSeries kPandarStudioAbiSeries[] = {{\n{abi_series}}};\n"
         ),
     )
-    .expect("write generated Studio profile header");
+    .expect("write generated Studio ABI series header");
     let target = std::env::var("TARGET").expect("TARGET is set by Cargo");
     let cl = cc::windows_registry::find_tool(&target, "cl.exe")
         .expect("MSVC cl.exe is available for Windows hook builds");

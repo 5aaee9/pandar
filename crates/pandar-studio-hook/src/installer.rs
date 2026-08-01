@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Context, bail};
 use pandar_network_plugin::installer::{
-    InstallNetworkPluginOptions, install_network_plugin, installed_studio_profile,
+    InstallNetworkPluginOptions, install_network_plugin, installed_studio_abi_series,
     installed_studio_version,
 };
 use zip::{ZipWriter, write::SimpleFileOptions};
@@ -32,7 +32,7 @@ pub struct UninstallStudioHookOptions {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct StudioHookSummary {
-    pub studio_profile: String,
+    pub studio_abi_series: String,
     pub studio_dir: PathBuf,
     pub proxy_path: PathBuf,
     pub original_path: PathBuf,
@@ -49,19 +49,19 @@ pub async fn install_studio_hook(
         bail!("Bambu Studio hook installation is only supported on Windows x86-64");
     }
     let data_dir = resolve_data_dir(options.data_dir.clone())?;
-    let profile = installed_studio_profile(&data_dir)?;
-    let release = download_latest_studio_hook_release(profile).await?;
-    install_studio_hook_release(options, &release, profile)
+    let abi_series = installed_studio_abi_series(&data_dir)?;
+    let release = download_latest_studio_hook_release(abi_series).await?;
+    install_studio_hook_release(options, &release, abi_series)
 }
 
 fn install_studio_hook_release(
     options: InstallStudioHookOptions,
     release: &StudioHookRelease,
-    profile: &pandar_studio_profile::StudioProfile,
+    abi_series: &pandar_studio_profile::StudioAbiSeries,
 ) -> anyhow::Result<StudioHookSummary> {
     let studio_dir = resolve_studio_dir(options.studio_dir)?;
     let data_dir = resolve_data_dir(options.data_dir)?;
-    let hook_data_dir = resolve_hook_data_dir()?.join(&profile.id);
+    let hook_data_dir = resolve_hook_data_dir()?.join(&abi_series.id);
     let plugin_package_path =
         write_plugin_package(&hook_data_dir, &release.plugin_file, &release.source_file)?;
     let network = install_network_plugin(InstallNetworkPluginOptions {
@@ -72,7 +72,7 @@ fn install_studio_hook_release(
     let (proxy_path, original_path) = install_proxy(&studio_dir, &release.hook_file)?;
 
     Ok(StudioHookSummary {
-        studio_profile: profile.id.clone(),
+        studio_abi_series: abi_series.id.clone(),
         studio_dir,
         proxy_path,
         original_path,
@@ -102,12 +102,15 @@ fn uninstall_studio_hook_files(
 ) -> anyhow::Result<StudioHookSummary> {
     let (proxy_path, original_path) = restore_proxy(&studio_dir)?;
     let studio_version = installed_studio_version(&data_dir)?;
-    let plugin_package_path = hook_data_dir.join(&studio_version).join(PLUGIN_PACKAGE);
+    let studio_abi_series =
+        pandar_studio_profile::abi_series_id_for_studio_version(&studio_version)
+            .map_err(anyhow::Error::msg)?;
+    let plugin_package_path = hook_data_dir.join(&studio_abi_series).join(PLUGIN_PACKAGE);
 
     for package_path in pandar_studio_profile::catalog()
-        .profiles
+        .abi_series
         .iter()
-        .map(|profile| hook_data_dir.join(&profile.id).join(PLUGIN_PACKAGE))
+        .map(|series| hook_data_dir.join(&series.id).join(PLUGIN_PACKAGE))
         .chain(std::iter::once(plugin_package_path.clone()))
     {
         if package_path.exists() {
@@ -121,7 +124,7 @@ fn uninstall_studio_hook_files(
     }
 
     Ok(StudioHookSummary {
-        studio_profile: studio_version,
+        studio_abi_series,
         studio_dir,
         proxy_path,
         original_path,
@@ -352,32 +355,29 @@ mod tests {
         .expect("write config");
 
         let hook_data_dir = temp.path().join("hook-data");
-        for version in pandar_studio_profile::catalog()
-            .profiles
+        for series in pandar_studio_profile::catalog()
+            .abi_series
             .iter()
-            .map(|profile| profile.id.as_str())
-            .chain(std::iter::once(unsupported_version))
+            .map(|series| series.id.as_str())
+            .chain(std::iter::once("02.09.00"))
         {
-            let profile_dir = hook_data_dir.join(version);
-            fs::create_dir_all(&profile_dir).expect("create profile cache dir");
-            fs::write(profile_dir.join(PLUGIN_PACKAGE), b"package").expect("write package");
+            let series_dir = hook_data_dir.join(series);
+            fs::create_dir_all(&series_dir).expect("create ABI series cache dir");
+            fs::write(series_dir.join(PLUGIN_PACKAGE), b"package").expect("write package");
         }
 
         let summary =
             uninstall_studio_hook_files(studio_dir.clone(), data_dir, hook_data_dir.clone())
                 .expect("uninstall hook for unsupported Studio version");
 
-        assert_eq!(summary.studio_profile, unsupported_version);
+        assert_eq!(summary.studio_abi_series, "02.09.00");
         assert_eq!(fs::read(studio_dir.join(PROXY_DLL)).unwrap(), b"original");
         assert!(!studio_dir.join(ORIGINAL_DLL).exists());
         assert!(
             pandar_studio_profile::catalog()
-                .profiles
+                .abi_series
                 .iter()
-                .all(|profile| !hook_data_dir
-                    .join(&profile.id)
-                    .join(PLUGIN_PACKAGE)
-                    .exists())
+                .all(|series| !hook_data_dir.join(&series.id).join(PLUGIN_PACKAGE).exists())
         );
         assert!(!summary.plugin_package_path.exists());
     }

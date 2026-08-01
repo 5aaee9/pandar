@@ -1,41 +1,39 @@
 const STUDIO_EXPORTS_PATH: &str = "src/shim_exports.hpp";
 
 fn main() {
-    let studio_profile = pandar_studio_profile::profile_from_env()
-        .unwrap_or_else(|error| panic!("select Studio ABI profile: {error}"));
+    let studio_abi_series = pandar_studio_profile::abi_series_from_env()
+        .unwrap_or_else(|error| panic!("select Studio ABI series: {error}"));
     let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR is set by Cargo");
     let manifest_dir =
         std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is set by Cargo");
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").expect("target OS is set by Cargo");
     let target_env = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
-    let studio_symbols = expected_abi_symbols(&manifest_dir, studio_profile);
+    let studio_symbols = expected_abi_symbols(&manifest_dir, studio_abi_series);
 
     println!(
         "cargo:rerun-if-env-changed={}",
-        pandar_studio_profile::PROFILE_ENV
+        pandar_studio_profile::ABI_SERIES_ENV
     );
     println!("cargo:rerun-if-changed=../../studio-abi-profiles.json");
     println!(
-        "cargo:rustc-env=PANDAR_STUDIO_PROFILE_ID={}",
-        studio_profile.id
+        "cargo:rustc-env=PANDAR_STUDIO_ABI_SERIES_ID={}",
+        studio_abi_series.id
     );
     println!(
         "cargo:rustc-env=PANDAR_NETWORK_AGENT_VERSION={}",
-        studio_profile.network_agent_version
+        studio_abi_series.reported_network_agent_version
     );
-    println!("cargo:rustc-check-cfg=cfg(pandar_studio_ams_sync)");
 
     let mut shim_build = cc::Build::new();
     shim_build.cpp(true).cargo_metadata(false);
-    if studio_profile.capabilities.bind_model_argument {
+    if studio_abi_series.capabilities.filament_cloud {
+        shim_build.define("PANDAR_STUDIO_FILAMENT_CLOUD", None);
+    }
+    if studio_abi_series.capabilities.print_svc_context {
+        shim_build.define("PANDAR_STUDIO_PRINT_SVC_CONTEXT", None);
+    }
+    if studio_abi_series.capabilities.bind_model_argument {
         shim_build.define("PANDAR_STUDIO_BIND_MODEL_ARGUMENT", None);
-    }
-    if studio_profile.capabilities.print_slicer_uid {
-        shim_build.define("PANDAR_STUDIO_PRINT_SLICER_UID", None);
-    }
-    if studio_profile.capabilities.ams_sync {
-        shim_build.define("PANDAR_STUDIO_AMS_SYNC", None);
-        println!("cargo:rustc-cfg=pandar_studio_ams_sync");
     }
     if target_env == "msvc" {
         shim_build
@@ -66,16 +64,21 @@ fn main() {
         .expect("cc produced shim object");
     if target_os == "linux" && target_env == "gnu" {
         let export_map = format!("{out_dir}/pandar-network-plugin.exports");
+        let exports = studio_symbols
+            .iter()
+            .map(|symbol| format!("    {symbol};\n"))
+            .collect::<String>();
         std::fs::write(
             &export_map,
-            "{
+            format!(
+                "{{
   global:
-    bambu_network_*;
-    ft_*;
+{exports}
   local:
     *;
-};
-",
+}};
+"
+            ),
         )
         .expect("write plugin export map");
         println!("cargo:rustc-link-arg-cdylib=-Wl,--version-script={export_map}");
@@ -128,7 +131,7 @@ fn main() {
 
 fn expected_abi_symbols(
     manifest_dir: &str,
-    profile: &pandar_studio_profile::StudioProfile,
+    abi_series: &pandar_studio_profile::StudioAbiSeries,
 ) -> Vec<String> {
     let path = std::path::Path::new(manifest_dir).join(STUDIO_EXPORTS_PATH);
     println!("cargo:rerun-if-changed={}", path.display());
@@ -145,7 +148,7 @@ fn expected_abi_symbols(
                 .to_owned()
         })
         .filter(|symbol| {
-            profile.capabilities.ams_sync || symbol != "bambu_network_sync_ams_filaments"
+            abi_series.capabilities.filament_cloud || !is_filament_cloud_symbol(symbol)
         })
         .collect::<Vec<_>>();
 
@@ -164,17 +167,28 @@ fn expected_abi_symbols(
         "duplicate Studio export symbol"
     );
     assert_eq!(
-        network_count, profile.network_exports,
+        network_count, abi_series.network_exports,
         "Studio network export count drifted"
     );
     assert_eq!(
-        file_transfer_count, profile.file_transfer_exports,
+        file_transfer_count, abi_series.file_transfer_exports,
         "Studio FT export count drifted"
     );
     assert_eq!(
         symbols.len(),
-        profile.total_exports(),
+        abi_series.total_exports(),
         "Studio export map total drifted"
     );
     symbols
+}
+
+fn is_filament_cloud_symbol(symbol: &str) -> bool {
+    matches!(
+        symbol,
+        "bambu_network_get_filament_spools"
+            | "bambu_network_create_filament_spool"
+            | "bambu_network_update_filament_spool"
+            | "bambu_network_delete_filament_spools"
+            | "bambu_network_get_filament_config"
+    )
 }

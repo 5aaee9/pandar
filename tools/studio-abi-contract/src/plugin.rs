@@ -217,7 +217,7 @@ mod tests {
         StudioContract {
             commit: "fixture".to_owned(),
             studio_version: "02.07.01.62".to_owned(),
-            network_agent_version: "02.07.01.51".to_owned(),
+            reference_network_agent_version: "02.07.01.51".to_owned(),
             network_symbols: network.iter().map(|value| (*value).to_owned()).collect(),
             file_transfer_symbols: file_transfer
                 .iter()
@@ -226,8 +226,6 @@ mod tests {
             network_exports: Vec::new(),
             file_transfer_exports: Vec::new(),
             print_params_fields: Vec::new(),
-            ams_sync_item_fields: Vec::new(),
-            ams_sync_params_fields: Vec::new(),
         }
     }
 

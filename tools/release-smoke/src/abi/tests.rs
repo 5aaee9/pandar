@@ -3,36 +3,35 @@ use std::{collections::BTreeSet, path::Path};
 use super::expected_symbols;
 
 #[test]
-fn canonical_export_map_is_exact_for_each_profile() {
+fn canonical_export_map_is_exact_for_each_abi_series() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
         .unwrap();
 
-    let stable = pandar_studio_profile::profile("02.07.01.62").unwrap();
+    let stable = pandar_studio_profile::abi_series("02.07.01").unwrap();
     let symbols = expected_symbols(repo_root, stable).unwrap();
 
     assert_eq!(symbols.network_count, 108);
     assert_eq!(symbols.file_transfer_count, 21);
     assert_eq!(symbols.all.len(), 129);
-    assert!(!symbols.all.contains("bambu_network_sync_ams_filaments"));
 
-    let beta = pandar_studio_profile::profile("02.08.01.55").unwrap();
-    let symbols = expected_symbols(repo_root, beta).unwrap();
-    assert_eq!(symbols.network_count, 109);
+    let older = pandar_studio_profile::abi_series("02.06.00").unwrap();
+    let symbols = expected_symbols(repo_root, older).unwrap();
+    assert_eq!(symbols.network_count, 103);
     assert_eq!(symbols.file_transfer_count, 21);
-    assert_eq!(symbols.all.len(), 130);
-    assert!(symbols.all.contains("bambu_network_sync_ams_filaments"));
+    assert_eq!(symbols.all.len(), 124);
+    assert!(!symbols.all.contains("bambu_network_get_filament_spools"));
 }
 
 #[test]
-fn exact_export_validation_rejects_128_and_130_target_symbols() {
+fn exact_export_validation_rejects_missing_and_extra_target_symbols() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
         .unwrap();
-    let profile = pandar_studio_profile::profile("02.07.01.62").unwrap();
-    let expected = expected_symbols(repo_root, profile).unwrap().all;
+    let abi_series = pandar_studio_profile::abi_series("02.07.01").unwrap();
+    let expected = expected_symbols(repo_root, abi_series).unwrap().all;
     let mut missing_one = expected.clone();
     missing_one.remove("bambu_network_get_version");
     let mut extra_one = expected.clone();

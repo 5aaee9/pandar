@@ -93,11 +93,13 @@ PANDAR_STUDIO_EXPORT(bambu_network_get_my_message, func_get_my_message, int, (vo
 PANDAR_STUDIO_EXPORT(bambu_network_check_user_task_report, func_check_user_task_report, int, (void*, int*, bool*))
 PANDAR_STUDIO_EXPORT(bambu_network_get_user_print_info, func_get_user_print_info, int, (void*, unsigned int*, std::string*))
 PANDAR_STUDIO_EXPORT(bambu_network_get_user_tasks, func_get_user_tasks, int, (void*, BBL::TaskQueryParams, std::string*))
+#if defined(PANDAR_STUDIO_FILAMENT_CLOUD)
 PANDAR_STUDIO_EXPORT(bambu_network_get_filament_spools, func_get_filament_spools, int, (void*, BBL::FilamentQueryParams, std::string*))
 PANDAR_STUDIO_EXPORT(bambu_network_create_filament_spool, func_create_filament_spool, int, (void*, std::string, std::string*))
 PANDAR_STUDIO_EXPORT(bambu_network_update_filament_spool, func_update_filament_spool, int, (void*, std::string, std::string, std::string*))
 PANDAR_STUDIO_EXPORT(bambu_network_delete_filament_spools, func_delete_filament_spools, int, (void*, BBL::FilamentDeleteParams, std::string*))
 PANDAR_STUDIO_EXPORT(bambu_network_get_filament_config, func_get_filament_config, int, (void*, std::string*))
+#endif
 PANDAR_STUDIO_EXPORT(bambu_network_get_printer_firmware, func_get_printer_firmware, int, (void*, std::string, unsigned*, std::string*))
 PANDAR_STUDIO_EXPORT(bambu_network_get_task_plate_index, func_get_task_plate_index, int, (void*, std::string, int*))
 PANDAR_STUDIO_EXPORT(bambu_network_get_user_info, func_get_user_info, int, (void*, int*))
@@ -129,9 +131,6 @@ PANDAR_STUDIO_EXPORT(bambu_network_get_model_mall_rating, func_get_model_mall_ra
 PANDAR_STUDIO_EXPORT(bambu_network_get_mw_user_preference, func_get_mw_user_preference, int, (void*, std::function<void(std::string)>))
 PANDAR_STUDIO_EXPORT(bambu_network_get_mw_user_4ulist, func_get_mw_user_4ulist, int, (void*, int, int, std::function<void(std::string)>))
 PANDAR_STUDIO_EXPORT(bambu_network_get_hms_snapshot, func_get_hms_snapshot, int, (void*, std::string&, std::string&, std::function<void(std::string, int)>))
-#if defined(PANDAR_STUDIO_AMS_SYNC)
-PANDAR_STUDIO_EXPORT(bambu_network_sync_ams_filaments, func_sync_ams_filaments, int, (void*, BBL::AmsSyncParams, std::string*))
-#endif
 PANDAR_STUDIO_EXPORT(ft_abi_version, fn_ft_abi_version, int, ())
 PANDAR_STUDIO_EXPORT(ft_free, fn_ft_free, void, (void*))
 PANDAR_STUDIO_EXPORT(ft_job_result_destroy, fn_ft_job_result_destroy, void, (Slic3r::ft_job_result*))

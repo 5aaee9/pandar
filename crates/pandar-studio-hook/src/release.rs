@@ -37,7 +37,7 @@ struct GitHubAsset {
 }
 
 pub(crate) async fn download_latest_studio_hook_release(
-    profile: &pandar_studio_profile::StudioProfile,
+    abi_series: &pandar_studio_profile::StudioAbiSeries,
 ) -> anyhow::Result<StudioHookRelease> {
     let client = Client::builder()
         .user_agent("pandar-studio-hook")
@@ -45,15 +45,15 @@ pub(crate) async fn download_latest_studio_hook_release(
         .timeout(Duration::from_secs(120))
         .build()
         .context("build GitHub Release HTTP client")?;
-    download_studio_hook_release(&client, LATEST_RELEASE_URL, profile).await
+    download_studio_hook_release(&client, LATEST_RELEASE_URL, abi_series).await
 }
 
 async fn download_studio_hook_release(
     client: &Client,
     release_url: &str,
-    profile: &pandar_studio_profile::StudioProfile,
+    abi_series: &pandar_studio_profile::StudioAbiSeries,
 ) -> anyhow::Result<StudioHookRelease> {
-    let bundle_name = profile.hook_bundle_name();
+    let bundle_name = abi_series.hook_bundle_name();
     let checksum_name = format!("{bundle_name}.sha256");
     let release = client
         .get(release_url)
@@ -236,6 +236,17 @@ mod tests {
     }
 
     #[test]
+    fn release_bundle_name_uses_abi_series() {
+        let abi_series = pandar_studio_profile::abi_series("02.07.01").unwrap();
+
+        assert_eq!(abi_series.reference_studio_version, "02.07.01.57");
+        assert_eq!(
+            abi_series.hook_bundle_name(),
+            "pandar-studio-hook-02.07.01-windows-amd64.zip"
+        );
+    }
+
+    #[test]
     fn bundle_checksum_mismatch_is_rejected() {
         assert!(verify_checksum(&"0".repeat(64), b"bundle").is_err());
     }
@@ -266,8 +277,8 @@ mod tests {
 
     #[tokio::test]
     async fn downloads_and_verifies_github_release_assets() {
-        let profile = pandar_studio_profile::catalog().default();
-        let bundle_name = profile.hook_bundle_name();
+        let abi_series = pandar_studio_profile::catalog().default();
+        let bundle_name = abi_series.hook_bundle_name();
         let checksum_name = format!("{bundle_name}.sha256");
         let bundle = bundle(&[
             (HOOK_DLL, b"hook"),
@@ -305,7 +316,7 @@ mod tests {
 
         let client = Client::builder().build().unwrap();
         let release =
-            download_studio_hook_release(&client, &format!("{base_url}/release"), profile)
+            download_studio_hook_release(&client, &format!("{base_url}/release"), abi_series)
                 .await
                 .unwrap();
         assert_eq!(fs::read(release.hook_file).unwrap(), b"hook");

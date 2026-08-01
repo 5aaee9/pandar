@@ -112,12 +112,12 @@ inline PluginStudioPrintParams studio_print_params(
         params.extruder_cali_manual_mode,
         static_cast<std::uint8_t>(params.task_ext_change_assist),
         static_cast<std::uint8_t>(params.try_emmc_print),
+#if defined(PANDAR_STUDIO_PRINT_SVC_CONTEXT)
         plugin_bytes(params.svc_context),
-#if defined(PANDAR_STUDIO_PRINT_SLICER_UID)
-        plugin_bytes(params.slicer_uid),
 #else
         {},
 #endif
+        {},
     };
 }
 

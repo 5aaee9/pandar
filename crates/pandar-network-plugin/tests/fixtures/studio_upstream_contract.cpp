@@ -131,19 +131,11 @@ void check_version(const Library& library)
     const auto get_version =
         library.require<Slic3r::func_get_version>("bambu_network_get_version");
     const std::string version = get_version();
-    if (version != BAMBU_NETWORK_AGENT_VERSION) {
+    if (version != PANDAR_STUDIO_REPORTED_NETWORK_AGENT_VERSION) {
         fail(
             "network-agent version mismatch: expected "
-            BAMBU_NETWORK_AGENT_VERSION ", got " + version
+            PANDAR_STUDIO_REPORTED_NETWORK_AGENT_VERSION ", got " + version
         );
-    }
-#if defined(PANDAR_STUDIO_AMS_SYNC)
-    const std::string studio_version = "02.08.01.55";
-#else
-    const std::string studio_version = "02.07.01.62";
-#endif
-    if (version.size() < 8 || version.substr(0, 8) != studio_version.substr(0, 8)) {
-        fail("network-agent version fails Studio first-eight-character gate");
     }
 }
 
@@ -210,9 +202,8 @@ void check_print(const Library& library, const char* artifact)
     params.ams_mapping = "[17,23]";
     params.ams_mapping2 = R"([{"ams_id":17,"slot_id":23}])";
     params.ams_mapping_info = R"([{"ams":17,"targetColor":"contract-tail","filamentId":"contract-filament","filamentType":"PLA","nozzleId":29}])";
+#if defined(PANDAR_STUDIO_PRINT_SVC_CONTEXT)
     params.svc_context = "contract-service-context";
-#if defined(PANDAR_STUDIO_PRINT_SLICER_UID)
-    params.slicer_uid = "contract-slicer-uid-observable-sentinel";
 #endif
     bool finished = false;
     BBL::OnUpdateStatusFn update = [&finished](int stage, int code, std::string) {
@@ -224,51 +215,6 @@ void check_print(const Library& library, const char* artifact)
     }
 }
 
-#if defined(PANDAR_STUDIO_AMS_SYNC)
-void check_ams(const Library& library)
-{
-    Agent agent(library);
-    const auto sync = library.require<Slic3r::func_sync_ams_filaments>(
-        "bambu_network_sync_ams_filaments"
-    );
-    std::string invalid_body = "sentinel";
-    if (sync(nullptr, {}, &invalid_body) != BAMBU_NETWORK_ERR_INVALID_HANDLE ||
-        invalid_body != R"({"error":"invalid_handle"})") {
-        fail("AMS sync invalid-handle contract changed");
-    }
-    BBL::AmsSyncParams params{};
-    params.devId = "contract-device";
-    BBL::AmsSyncItem item{};
-    item.RFID = "contract-rfid";
-    item.filamentVendor = "contract-vendor";
-    item.filamentType = "contract-type";
-    item.filamentName = "contract-name";
-    item.filamentId = "contract-filament";
-    item.isSupport = true;
-    item.color = "#123456";
-    item.colorType = 7;
-    item.colors = {"#123456", "#abcdef"};
-    item.netWeight = 411;
-    item.totalNetWeight = 1000;
-    item.trayIdName = "contract-tray";
-    item.note = "contract-note";
-    item.amsSn = "contract-ams";
-    item.slotId = "contract-slot";
-    item.amsId = 13;
-    item.amsType = 17;
-    item.createNew = true;
-    params.items.push_back(std::move(item));
-    std::string body = "sentinel";
-    const int result = sync(agent.get(), std::move(params), &body);
-    if (result != BAMBU_NETWORK_ERR_AMS_SYNC_FAILED) {
-        fail("AMS sync must return explicit unsupported failure");
-    }
-    if (body != R"({"error":"unsupported_ams_sync"})") {
-        fail("AMS sync must return the exact redacted unsupported body");
-    }
-}
-#endif
-
 #include "studio_upstream_ft_contract.hpp"
 
 } // namespace
@@ -276,7 +222,7 @@ void check_ams(const Library& library)
 int main(int argc, char** argv)
 {
     if (argc < 3 || argc > 4) {
-        std::cerr << "usage: studio_upstream_contract <plugin> <version|bind|print|ams|ft> [artifact]\n";
+        std::cerr << "usage: studio_upstream_contract <plugin> <version|bind|print|ft> [artifact]\n";
         return 2;
     }
     const std::string mode = argv[2];
@@ -287,9 +233,6 @@ int main(int argc, char** argv)
         if (argc != 4) fail("print contract requires an artifact path");
         check_print(library, argv[3]);
     }
-#if defined(PANDAR_STUDIO_AMS_SYNC)
-    else if (mode == "ams") check_ams(library);
-#endif
     else if (mode == "ft") check_ft(library);
     else fail("unknown contract mode: " + mode);
     std::cout << "contract_mode=" << mode << " ok\n";
