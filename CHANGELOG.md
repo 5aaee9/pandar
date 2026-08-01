@@ -29,8 +29,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Distribution
 
 - The release publishes native Linux amd64 and Windows amd64 archives containing the CLI, network plugin, and BambuSource companion, each with a SHA-256 sidecar. It also publishes the native Windows Studio hook bundle and checksum.
-- Hub and Web images are published at `ghcr.io/5aaee9/pandar/hub:v0.1.0` and `ghcr.io/5aaee9/pandar/web:v0.1.0`.
-- Helm chart `0.1.0` is published at `oci://ghcr.io/5aaee9/pandar/chart/pandar`.
+- Hub and Web images are published at `ghcr.io/projectpandar/pandar/hub:v0.1.0` and `ghcr.io/projectpandar/pandar/web:v0.1.0`.
+- Helm chart `0.1.0` is published at `oci://ghcr.io/projectpandar/pandar/chart/pandar`.
 
 ### Known limitations
 
@@ -40,5 +40,5 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Native firmware and recovery ownership still requires one active Hub; the firmware package catalog is intentionally empty.
 - The Android client is built separately and will not be attached to the GitHub Release.
 
-[Unreleased]: https://github.com/5aaee9/pandar/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/5aaee9/pandar/releases/tag/v0.1.0
+[Unreleased]: https://github.com/ProjectPandar/pandar/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/ProjectPandar/pandar/releases/tag/v0.1.0

@@ -69,9 +69,9 @@ Do not create the GitHub Release manually while these workflows are running.
 gh run list --commit "$(git rev-list -n 1 v0.1.0)" --limit 20
 gh release view v0.1.0
 gh release download v0.1.0 --dir /tmp/pandar-v0.1.0
-helm show chart oci://ghcr.io/5aaee9/pandar/chart/pandar --version 0.1.0
-docker pull ghcr.io/5aaee9/pandar/hub:v0.1.0
-docker pull ghcr.io/5aaee9/pandar/web:v0.1.0
+helm show chart oci://ghcr.io/projectpandar/pandar/chart/pandar --version 0.1.0
+docker pull ghcr.io/projectpandar/pandar/hub:v0.1.0
+docker pull ghcr.io/projectpandar/pandar/web:v0.1.0
 ```
 
 The immutable `v0.1.0` release has six desktop files. A tag produced by the current macOS-enabled

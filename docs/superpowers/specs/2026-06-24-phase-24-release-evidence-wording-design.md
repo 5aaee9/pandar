@@ -18,7 +18,7 @@ No release workflow, packaging code, smoke helper, or product behavior changes a
 
 - `gh release list --limit 20` returned no GitHub Releases on 2026-06-24.
 - `git tag --sort=-creatordate | head -20` returned no tags on 2026-06-24.
-- `gh api repos/5aaee9/pandar/actions/runs/28102001464/artifacts --jq '.artifacts[] | [.name, .expired, .size_in_bytes] | @tsv'` showed unexpired uploaded artifacts for `linux-amd64`, `linux-arm64`, `windows-amd64`, `macos-amd64`, and `macos-arm64`.
+- `gh api repos/ProjectPandar/pandar/actions/runs/28102001464/artifacts --jq '.artifacts[] | [.name, .expired, .size_in_bytes] | @tsv'` showed unexpired uploaded artifacts for `linux-amd64`, `linux-arm64`, `windows-amd64`, `macos-amd64`, and `macos-arm64`.
 - The same run built, packaged, and checksum-verified Windows arm64 before failing release-smoke plugin export inspection. Because `.github/workflows/release.yml` uploads artifacts only after release-smoke, no Windows arm64 artifact was uploaded for run `28102001464`.
 - `release.yml` run `28103772270` did not start build steps because GitHub Actions billing or spending-limit state blocked the run.
 - Real host installation status remains `untested` for all target families.
