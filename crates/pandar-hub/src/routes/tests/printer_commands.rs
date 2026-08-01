@@ -9,6 +9,7 @@ use requests::{
 use serde::Deserialize;
 use tokio::sync::mpsc;
 
+mod models;
 mod print_error;
 mod requests;
 

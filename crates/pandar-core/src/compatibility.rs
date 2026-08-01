@@ -71,7 +71,18 @@ pub fn compatibility_for_model(model: Option<&str>) -> DiagnosticCompatibility {
                 live_controls: Capability::Supported,
             },
         },
-        "X1" | "X1C" | "X1E" | "A2L" => DiagnosticCompatibility {
+        "X1C" | "A2L" => DiagnosticCompatibility {
+            normalized_model,
+            external_storage: Capability::Unknown,
+            ftps_tls_1_2_cap: false,
+            ftps_clear_data_fallback: false,
+            features: CompatibilityFeatures {
+                flow_calibration: Capability::Supported,
+                live_controls: Capability::Supported,
+                ..CompatibilityFeatures::unknown()
+            },
+        },
+        "X1" | "X1E" => DiagnosticCompatibility {
             normalized_model,
             external_storage: Capability::Unknown,
             ftps_tls_1_2_cap: false,
@@ -81,7 +92,18 @@ pub fn compatibility_for_model(model: Option<&str>) -> DiagnosticCompatibility {
                 ..CompatibilityFeatures::unknown()
             },
         },
-        "P1P" | "P1S" => DiagnosticCompatibility {
+        "P1S" => DiagnosticCompatibility {
+            normalized_model,
+            external_storage: Capability::Unknown,
+            ftps_tls_1_2_cap: false,
+            ftps_clear_data_fallback: false,
+            features: CompatibilityFeatures {
+                flow_calibration: Capability::Unsupported,
+                live_controls: Capability::Supported,
+                ..CompatibilityFeatures::unknown()
+            },
+        },
+        "P1P" => DiagnosticCompatibility {
             normalized_model,
             external_storage: Capability::Unknown,
             ftps_tls_1_2_cap: false,
@@ -350,11 +372,16 @@ mod tests {
     }
 
     #[test]
-    fn live_controls_are_supported_only_for_known_phase_27_models() {
-        assert!(live_controls_supported(Some("A1")));
-        assert!(live_controls_supported(Some("A1 Mini")));
-        assert!(live_controls_supported(Some("N7")));
-        assert!(live_controls_supported(Some("N6")));
+    fn live_controls_are_supported_only_for_verified_models() {
+        for model in [
+            "A1", "A1 Mini", "X1C", "BL-P001", "P1S", "C12", "N7", "N6", "A2L", "N9", "O1C2",
+            "O1D", "O1E", "O1S",
+        ] {
+            assert!(live_controls_supported(Some(model)), "{model}");
+        }
+        assert!(!live_controls_supported(Some("BL-P002")));
+        assert!(!live_controls_supported(Some("C11")));
+        assert!(!live_controls_supported(Some("C13")));
         assert!(!live_controls_supported(None));
         assert!(!live_controls_supported(Some("Mystery Model")));
     }

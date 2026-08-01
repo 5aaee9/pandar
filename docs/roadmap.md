@@ -16,6 +16,13 @@
 
 ## Completed
 
+- Enabled the existing authenticated Web/Android printer-control pipeline for X1C, P1S, and A2L by
+  marking only those three additional normalized models as live-control capable. The change preserves
+  the prior flow-calibration matrix, keeps X1, X1E, P1P, missing, and unknown models fail-closed, and
+  does not bypass per-operation validation or required-device-feature checks. A route-level regression
+  proves friendly X1C, P1S, and A2L names can each enqueue a typed Pause command through the shared
+  tenant `/controls` endpoint.
+
 - Completed Hub-to-Studio model-resource projection for every printer profile in the pinned Bambu
   Studio `02.08.01.55` snapshot. Friendly names and aliases now emit the exact `N1`, `N2S`,
   `BL-P001`, `BL-P002`, `C11`, `C12`, `C13`, `N6`, `N7`, `N9`, `O1C2`, `O1D`, `O1E`, or `O1S`
