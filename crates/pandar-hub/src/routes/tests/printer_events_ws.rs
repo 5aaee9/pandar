@@ -326,6 +326,7 @@ fn snapshot_event(tenant_id: TenantId, agent_id: AgentId) -> AgentEvent {
             device_features: None,
             connection_authoritative: false,
             telemetry_authoritative: false,
+            nozzle_system: None,
         })),
     }
 }

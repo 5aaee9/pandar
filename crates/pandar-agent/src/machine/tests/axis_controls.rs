@@ -91,7 +91,7 @@ impl AxisRuntimeFixture {
         assert_eq!(snapshot.serial, "SERIAL1");
         snapshot
             .device_features
-            .map(|features| features.bambu_fun_bits)
+            .and_then(|features| features.bambu_fun_bits)
     }
 }
 

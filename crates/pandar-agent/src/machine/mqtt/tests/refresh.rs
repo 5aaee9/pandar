@@ -30,6 +30,8 @@ async fn refresh_subscribes_publishes_and_maps_report() {
             chamber_target_temperature_celsius: None,
             chamber_light_on: None,
             device_features: None,
+            device_features2: None,
+            nozzle_system: None,
             telemetry_authoritative: true,
         }
     );

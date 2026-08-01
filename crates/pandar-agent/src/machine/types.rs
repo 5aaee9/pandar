@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use pandar_core::BambuDeviceFeatures;
+use pandar_core::{BambuDeviceFeatures, BambuNozzleSystem};
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
 
@@ -29,6 +29,8 @@ pub struct MachineSnapshot {
     pub chamber_target_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
     pub device_features: Option<BambuDeviceFeatures>,
+    pub device_features2: Option<BambuDeviceFeatures>,
+    pub nozzle_system: Option<BambuNozzleSystem>,
     pub telemetry_authoritative: bool,
 }
 
@@ -39,6 +41,8 @@ pub struct MachineNozzleTemperature {
     pub target_celsius: Option<String>,
     pub diameter_mm: Option<String>,
     pub nozzle_type: Option<String>,
+    pub snow: Option<u32>,
+    pub hnow: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

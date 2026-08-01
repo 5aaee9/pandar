@@ -175,6 +175,9 @@ impl From<RepositoryError> for ApiError {
                 Self::new(StatusCode::BAD_REQUEST, "invalid_redirect_url")
             }
             RepositoryError::RetryNotSafe => Self::new(StatusCode::CONFLICT, "retry_not_safe"),
+            RepositoryError::H2cNozzleMappingRequired => {
+                Self::new(StatusCode::BAD_REQUEST, "h2c_nozzle_mapping_required")
+            }
             RepositoryError::ReprintNotAllowed => {
                 Self::new(StatusCode::CONFLICT, "reprint_not_allowed")
             }

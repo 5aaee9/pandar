@@ -39,6 +39,11 @@ int dispatch_studio_message(
         body_from_result(delivery);
         return delivery.status;
     }
+    if (kind == kStudioMessageH2cAutoNozzleMapping) {
+        return submit_h2c_auto_nozzle_mapping(
+            agent, dev_id, body, tunnel, local_generation
+        ) ? BBL::BAMBU_NETWORK_SUCCESS : BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
+    }
     if (kind == kStudioMessageOperation) {
         return submit_printer_operation_json(agent, dev_id, body);
     }

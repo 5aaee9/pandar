@@ -16,6 +16,8 @@
 
 ## Completed
 
+- Added source-backed, fail-closed H2C FDM nozzle-rack support across Bambu Studio, the network plugin, Hub, Agent, and printer MQTT. Current-session rack telemetry now carries physical nozzle/holder state plus `snow`/`hnow`, while raw `fun2` evidence is retained without being advertised; Studio's bit-60 rack capability is gated on both fresh telemetry and Agent support; typed V0/V1 auto-mapping requires command/sequence correlation and strict successful physical mappings while preserving detailed printer failures; and H2C Studio prints/reprints require the slicer's validated mapping while Web dispatch is rejected instead of guessing. SQLite/PostgreSQL persistence and focused cross-boundary tests cover session fencing and delta-safe state. Signing, rack controls, laser/cut, eMMC/`fun2`, and live-hardware claims remain disabled; see `docs/compatibility/h2c.md`.
+
 - Moved Pandar's canonical repository to the organization-owned `ProjectPandar/pandar` namespace: Cargo metadata, release discovery, GitHub links, deployment defaults, release documentation, and historical repository commands use the canonical repository path, while GHCR image/chart publishing uses the registry-required lowercase `projectpandar/pandar` path.
 
 - Fixed GitHub Actions after the Studio ABI catalog became a Rust compile-time input: the Nix Rust source filter now carries `studio-abi-profiles.json`, restoring package, Clippy, format, and test derivations. Upgraded Checks and scheduled cache GC to Hestia v3, whose larger manifest bound and fresh cache namespace avoid v2's oversized-manifest failure while old packs expire.
@@ -1411,6 +1413,7 @@ Exit criteria:
 
 ## Immediate Next
 
+- Complete [GitHub issue #2](https://github.com/ProjectPandar/pandar/issues/2) and run the hardware acceptance checklist in `docs/compatibility/h2c.md` on an H2C in a safe idle state: capture full and split rack telemetry, verify both auto-mapping versions and correlated failure delivery, inspect the exact physical mapping in `project_file`, and confirm a replacement Agent session keeps bit 60 hidden until fresh rack telemetry. Do not enable signing, rack maintenance/control, laser/cut, eMMC/`fun2`, or new physical IDs from this protocol-only evidence.
 - After the next `main` push, verify GitHub Actions can publish Hub/Web images and the Helm chart under the `ghcr.io/projectpandar/pandar` package namespace.
 - Added macOS desktop publishing for both amd64 and Apple Silicon: both tag-workflow rows use the
   Apple Silicon `macos-26` runner; arm64 runs natively, while amd64 cross-compiles and runs its CLI,

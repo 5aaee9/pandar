@@ -359,9 +359,10 @@ subscribed, failed refresh, or a superseded delivery claim return
 
 Rust typed serde code owns the complete `push_status` envelope and local-connect payload. It masks
 only Studio operations the Pandar bridge cannot execute, preserving handled axis bits 32/38 and
-unrelated future `fun` bits. It clears unsupported `cfg` camera bits, omits synthetic Wi-Fi strength,
-does not advertise `fun2` or `device.airduct`, and derives `sdcard` only from authoritative `aux`
-state 1. Chamber controls are advertised only when both current and target temperatures are present;
+unrelated future `fun` bits. H2C rack bit 60 is preserved only when a current capable Agent session
+has current-session physical rack telemetry; see `h2c.md`. It clears unsupported `cfg` camera bits,
+omits synthetic Wi-Fi strength, does not advertise `fun2` or `device.airduct`, and derives `sdcard`
+only from authoritative `aux` state 1. Chamber controls are advertised only when both current and target temperatures are present;
 the target is emitted in both legacy `ctt` and packed V2 `device.ctc.info.temp` form. A fresh online
 full status alone emits `support_mqtt_alive:true`.
 

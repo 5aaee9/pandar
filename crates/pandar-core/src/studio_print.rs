@@ -67,6 +67,14 @@ pub enum StudioPrintMetadata {
     V1(StudioPrintMetadataV1),
 }
 
+impl StudioPrintMetadata {
+    pub fn nozzle_mapping(&self) -> &[i32] {
+        match self {
+            Self::V1(metadata) => &metadata.nozzle_mapping,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StudioPrintMetadataV1 {

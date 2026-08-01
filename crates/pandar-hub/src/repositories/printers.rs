@@ -1,5 +1,7 @@
 use anyhow::Context;
-use pandar_core::{AgentId, BambuDeviceFeatures, Printer, PrinterNozzleTemperature, TenantId};
+use pandar_core::{
+    AgentId, BambuDeviceFeatures, BambuNozzleSystem, Printer, PrinterNozzleTemperature, TenantId,
+};
 use sea_orm::{
     ActiveValue::Set,
     ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, PaginatorTrait, QueryFilter,
@@ -54,6 +56,7 @@ pub struct PrinterSnapshotUpsert {
     pub chamber_temperature_celsius: Option<String>,
     pub chamber_target_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
+    pub nozzle_system: Option<BambuNozzleSystem>,
     pub connection_authoritative: bool,
     pub telemetry_authoritative: bool,
 }
@@ -62,12 +65,14 @@ pub struct PrinterSnapshotUpsert {
 pub(crate) struct SnapshotSessionState<'a> {
     pub(crate) device_features: Option<BambuDeviceFeatures>,
     pub(crate) device_features_session_id: Option<&'a str>,
+    pub(crate) nozzle_system_session_id: Option<&'a str>,
     pub(crate) mqtt_presence_session_id: Option<&'a str>,
 }
 
 const EMPTY_SNAPSHOT_SESSION_STATE: SnapshotSessionState<'static> = SnapshotSessionState {
     device_features: None,
     device_features_session_id: None,
+    nozzle_system_session_id: None,
     mqtt_presence_session_id: None,
 };
 

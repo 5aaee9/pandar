@@ -166,6 +166,10 @@ pub fn router(state: AppState) -> Router {
             post(plugin::create_printer_operation),
         )
         .route(
+            "/api/v1/plugin/printers/{printer_id}/auto-nozzle-mapping",
+            post(plugin::get_auto_nozzle_mapping),
+        )
+        .route(
             "/api/v1/agents/{agent_id}/artifacts/{artifact_id}",
             get(artifacts::download_agent_artifact),
         )

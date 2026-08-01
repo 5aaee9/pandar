@@ -271,6 +271,12 @@ PluginHttpResult pandar_plugin_submit_printer_operation(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t
 );
+PluginHttpResult pandar_plugin_submit_h2c_auto_nozzle_mapping(
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t,
+    const uint8_t*, std::size_t
+);
 PluginHttpResult pandar_plugin_operation_json_from_gcode(const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_classify_status_request(const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_printer_telemetry_json(const uint8_t*, std::size_t);

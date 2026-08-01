@@ -265,7 +265,10 @@ async fn device_features_fun_only_report_emits_only_feature_snapshot() {
         panic!("expected feature-only snapshot, got {event:?}");
     };
     assert_eq!(snapshot.serial, "01S00EXAMPLE");
-    assert_eq!(snapshot.device_features.unwrap().bambu_fun_bits, HIGH_BITS);
+    assert_eq!(
+        snapshot.device_features.unwrap().bambu_fun_bits,
+        Some(HIGH_BITS)
+    );
     assert_eq!(cache.get("01S00EXAMPLE").await.unwrap().bits(), HIGH_BITS);
 
     let offline = timeout(Duration::from_millis(50), receiver.recv())
@@ -314,7 +317,7 @@ async fn device_features_temperature_report_precedes_separate_offline_transition
         .device_features
         .as_ref()
         .expect("full snapshot carries observed features");
-    assert_eq!(features.bambu_fun_bits, HIGH_BITS);
+    assert_eq!(features.bambu_fun_bits, Some(HIGH_BITS));
     assert_eq!(snapshot.state, "RUNNING");
     assert_eq!(snapshot.bed_temperature_celsius, "60");
 

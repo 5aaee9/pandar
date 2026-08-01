@@ -137,6 +137,22 @@ PluginHttpResult rust_submit_printer_operation(
     );
 }
 
+PluginHttpResult rust_submit_h2c_auto_nozzle_mapping(
+    const PrinterRequestSnapshot& snapshot,
+    const std::string& request_json
+) {
+    return pandar_plugin_submit_h2c_auto_nozzle_mapping(
+        reinterpret_cast<const uint8_t*>(snapshot.hub_url.data()),
+        snapshot.hub_url.size(),
+        reinterpret_cast<const uint8_t*>(snapshot.token.data()),
+        snapshot.token.size(),
+        reinterpret_cast<const uint8_t*>(snapshot.printer_id.data()),
+        snapshot.printer_id.size(),
+        reinterpret_cast<const uint8_t*>(request_json.data()),
+        request_json.size()
+    );
+}
+
 int submit_printer_operation_json(Agent* agent, std::string dev_id, const std::string& operation_json) {
     refresh_local_webserver_config(agent);
     const auto snapshot = printer_request_snapshot(agent, dev_id);
@@ -161,6 +177,49 @@ int submit_printer_operation_json(Agent* agent, std::string dev_id, const std::s
     );
     body_from_result(result);
     return result.status;
+}
+
+bool submit_h2c_auto_nozzle_mapping(
+    Agent* agent,
+    const std::string& dev_id,
+    const std::string& request_json,
+    MessageTunnel tunnel,
+    std::uint64_t local_generation
+) {
+    refresh_local_webserver_config(agent);
+    const auto snapshot = printer_request_snapshot(agent, dev_id);
+    auto admission = pandar_plugin_studio_request_admitted(
+        snapshot.printer_authorized, snapshot.account_transition_pending
+    );
+    if (admission.status != 0) {
+        body_from_result(admission);
+        return false;
+    }
+    body_from_result(admission);
+    auto upstream = rust_submit_h2c_auto_nozzle_mapping(snapshot, request_json);
+    const auto upstream_status = upstream.status;
+    const auto upstream_http_code = upstream.http_code;
+    std::string body = body_from_result(upstream);
+    auto result = pandar_plugin_studio_printer_operation_result(
+        upstream_status,
+        upstream_http_code,
+        reinterpret_cast<const uint8_t*>(body.data()), body.size(),
+        printer_request_snapshot_current(agent, snapshot)
+    );
+    const auto result_status = result.status;
+    body = body_from_result(result);
+    if (result_status != 0) return false;
+    return deliver_printer_message(
+        agent,
+        tunnel,
+        dev_id,
+        body,
+        snapshot.account_epoch,
+        local_generation,
+        false,
+        snapshot.cache_generation,
+        snapshot.firmware_generation
+    );
 }
 
 struct FirmwareSendAttempt {

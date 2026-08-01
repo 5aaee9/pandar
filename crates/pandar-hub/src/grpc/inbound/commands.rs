@@ -209,6 +209,7 @@ async fn durable_fallback_allowed(
             Ok(!matches!(
                 payload.operation,
                 PrinterOperationKind::HandlePrintError { .. }
+                    | PrinterOperationKind::GetAutoNozzleMapping { .. }
             ))
         }
         _ => Ok(true),

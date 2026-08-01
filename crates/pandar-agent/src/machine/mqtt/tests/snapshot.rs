@@ -29,6 +29,8 @@ fn report_maps_to_snapshot_uses_configured_model() {
             chamber_target_temperature_celsius: None,
             chamber_light_on: None,
             device_features: None,
+            device_features2: None,
+            nozzle_system: None,
             telemetry_authoritative: false,
         }
     );
@@ -47,6 +49,22 @@ fn report_maps_device_features_to_full_snapshot() {
             .expect("valid print.fun maps to the full snapshot")
             .bits(),
         0x8000_0041_0000_0020
+    );
+}
+
+#[test]
+fn report_preserves_secondary_device_features_without_interpreting_them() {
+    let report = report_with_print(SnapshotPrintFixture {
+        fun2: Some("8000000000000021"),
+        ..Default::default()
+    });
+
+    assert_eq!(
+        snapshot_from_report(&endpoint(), &MachineReport::decode(report))
+            .device_features2
+            .unwrap()
+            .bits(),
+        0x8000_0000_0000_0021
     );
 }
 
@@ -151,16 +169,23 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
                         id: 0,
                         info: Some(8),
                         temp: (220 << 16) | 27,
+                        snow: None,
+                        hnow: None,
                     },
                     ExtruderInfoFixture {
                         id: 1,
                         info: Some(8),
                         temp: (215 << 16) | 22,
+                        snow: None,
+                        hnow: None,
                     },
                 ],
             }),
             nozzle: Some(NozzleFixture {
                 exist: 3,
+                state: None,
+                src_id: None,
+                tar_id: None,
                 info: vec![
                     NozzleInfoFixture {
                         id: 0,
@@ -176,6 +201,7 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
                     },
                 ],
             }),
+            holder: None,
         }),
         ..Default::default()
     });
@@ -260,6 +286,53 @@ fn report_ignores_bambu_studio_v2_target_nozzle_for_active_snapshot() {
     let snapshot = snapshot_from_report(&endpoint(), &MachineReport::decode(report));
 
     assert_eq!(snapshot.active_nozzle.as_deref(), Some("R"));
+}
+
+#[test]
+fn report_maps_h2c_rack_holder_and_extruder_routing() {
+    let report = report_with_print(SnapshotPrintFixture {
+        device: Some(DeviceFixture {
+            extruder: Some(ExtruderFixture {
+                state: 1,
+                info: vec![ExtruderInfoFixture {
+                    id: 0,
+                    info: Some(8),
+                    temp: (220 << 16) | 27,
+                    snow: Some(16),
+                    hnow: Some(16),
+                }],
+            }),
+            nozzle: Some(NozzleFixture {
+                exist: 1 << 16,
+                state: Some(0),
+                src_id: Some(16),
+                tar_id: Some(17),
+                info: vec![NozzleInfoFixture {
+                    id: 16,
+                    diameter: 0.4,
+                    kind: "XS01",
+                    stat: 0,
+                }],
+            }),
+            holder: Some(HolderFixture {
+                stat: 0,
+                pos: 2,
+                info: 0,
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    });
+
+    let snapshot = snapshot_from_report(&endpoint(), &MachineReport::decode(report));
+    let system = snapshot.nozzle_system.unwrap();
+    assert_eq!(system.nozzle.exist, Some(1 << 16));
+    assert_eq!(system.nozzle.src_id, Some(16));
+    assert_eq!(system.nozzle.tar_id, Some(17));
+    assert_eq!(system.nozzle.info[0].id, 16);
+    assert_eq!(system.holder.unwrap().pos, Some(2));
+    assert_eq!(snapshot.nozzle_temperatures[0].snow, Some(16));
+    assert_eq!(snapshot.nozzle_temperatures[0].hnow, Some(16));
 }
 
 #[test]

@@ -2,8 +2,7 @@ use crate::{
     AgentConfig,
     machine::{MachineSnapshot, MaterialRefreshResult},
     protocol::agent::v1::{
-        AgentEvent, CommandAck, CommandResult, FirmwareCommandResult, PrinterDeviceFeatures,
-        PrinterSnapshot, agent_event,
+        AgentEvent, CommandAck, CommandResult, FirmwareCommandResult, PrinterSnapshot, agent_event,
     },
 };
 
@@ -140,6 +139,8 @@ fn printer_snapshot_event_with_connection_authority(
                         target_celsius: temperature.target_celsius.unwrap_or_default(),
                         diameter_mm: temperature.diameter_mm.unwrap_or_default(),
                         nozzle_type: temperature.nozzle_type.unwrap_or_default(),
+                        snow: temperature.snow,
+                        hnow: temperature.hnow,
                     },
                 )
                 .collect(),
@@ -153,13 +154,15 @@ fn printer_snapshot_event_with_connection_authority(
                 .unwrap_or_default(),
             active_nozzle: snapshot.active_nozzle.unwrap_or_default(),
             chamber_light_on: snapshot.chamber_light_on,
-            device_features: snapshot
-                .device_features
-                .map(|features| PrinterDeviceFeatures {
-                    bambu_fun_bits: features.bits(),
-                }),
+            device_features: crate::protocol::proto_device_features(
+                snapshot.device_features,
+                snapshot.device_features2,
+            ),
             connection_authoritative,
             telemetry_authoritative: snapshot.telemetry_authoritative,
+            nozzle_system: snapshot
+                .nozzle_system
+                .map(crate::protocol::proto_nozzle_system),
         }),
     )
 }

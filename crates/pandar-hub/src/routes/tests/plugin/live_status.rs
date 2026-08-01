@@ -39,6 +39,7 @@ async fn plugin_printer_online_requires_full_mqtt_presence_from_the_current_sess
         chamber_temperature_celsius: None,
         chamber_target_temperature_celsius: None,
         chamber_light_on: None,
+        nozzle_system: None,
         connection_authoritative: false,
         telemetry_authoritative: true,
     };
@@ -158,6 +159,7 @@ async fn plugin_printer_list_returns_current_external_print_and_hms_snapshot() {
                 chamber_temperature_celsius: None,
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
+                nozzle_system: None,
                 connection_authoritative: false,
                 telemetry_authoritative: true,
             },

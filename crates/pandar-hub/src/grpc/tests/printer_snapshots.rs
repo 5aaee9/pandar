@@ -34,6 +34,7 @@ pub(super) fn snapshot(serial: &str, name: &str, model: &str, state: &str) -> Pr
         device_features: None,
         connection_authoritative: false,
         telemetry_authoritative: false,
+        nozzle_system: None,
     }
 }
 

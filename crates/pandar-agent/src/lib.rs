@@ -229,6 +229,7 @@ pub fn hello_event(config: &AgentConfig) -> AgentEvent {
                 AgentCapability::RequiredDeviceFeatures as i32,
                 AgentCapability::GcodeLine as i32,
                 AgentCapability::FirmwareControl as i32,
+                AgentCapability::H2cAutoNozzleMapping as i32,
             ],
         }),
     )

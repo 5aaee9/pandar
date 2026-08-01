@@ -24,6 +24,7 @@ pub(super) fn printer_operation_action(operation: &MachinePrinterOperation) -> &
         MachinePrinterOperation::AmsLoadFilament { .. } => "ams_load_filament",
         MachinePrinterOperation::AmsUnloadFilament { .. } => "ams_unload_filament",
         MachinePrinterOperation::GcodeLine { .. } => "gcode_line",
+        MachinePrinterOperation::GetAutoNozzleMapping(_) => "get_auto_nozzle_mapping",
     }
 }
 
@@ -191,7 +192,8 @@ impl OperationResultFields {
             | MachinePrinterOperation::Stop
             | MachinePrinterOperation::HandlePrintError { .. }
             | MachinePrinterOperation::ToggleLight
-            | MachinePrinterOperation::GcodeLine { .. } => Self::default(),
+            | MachinePrinterOperation::GcodeLine { .. }
+            | MachinePrinterOperation::GetAutoNozzleMapping(_) => Self::default(),
         }
     }
 }

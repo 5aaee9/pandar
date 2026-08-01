@@ -1,4 +1,6 @@
-use pandar_core::{AgentId, CommandId, CommandRecord, CommandStatus, TenantId};
+use pandar_core::{
+    AgentId, CommandId, CommandRecord, CommandStatus, H2cAutoNozzleMappingRequest, TenantId,
+};
 use serde::{Deserialize, Serialize};
 
 mod audit;
@@ -130,6 +132,9 @@ pub enum PrinterOperationKind {
         external_id: Option<String>,
         extruder_id: Option<u32>,
     },
+    GetAutoNozzleMapping {
+        request: H2cAutoNozzleMappingRequest,
+    },
 }
 
 impl PrinterOperationKind {
@@ -152,6 +157,7 @@ impl PrinterOperationKind {
             Self::AmsRereadRfid { .. } => "ams_reread_rfid",
             Self::AmsLoadFilament { .. } => "ams_load_filament",
             Self::AmsUnloadFilament { .. } => "ams_unload_filament",
+            Self::GetAutoNozzleMapping { .. } => "get_auto_nozzle_mapping",
         }
     }
 
@@ -195,6 +201,10 @@ impl PrinterOperationKind {
 
 pub fn validate_printer_operation(operation: &PrinterOperationKind) -> RepositoryResult<()> {
     match operation {
+        PrinterOperationKind::GetAutoNozzleMapping { request } if request.is_valid() => Ok(()),
+        PrinterOperationKind::GetAutoNozzleMapping { .. } => {
+            Err(RepositoryError::InvalidPrinterControl)
+        }
         PrinterOperationKind::Pause {}
         | PrinterOperationKind::Resume {}
         | PrinterOperationKind::Stop {}

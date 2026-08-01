@@ -16,13 +16,20 @@ const UNSUPPORTED_FUN_BITS: u64 = (1_u64 << 1)
     | (1_u64 << 46)
     | (1_u64 << 48)
     | (1_u64 << 49)
-    | (1_u64 << 60)
     | (1_u64 << 62);
+
+const NOZZLE_RACK_FUN_BIT: u64 = 1_u64 << 60;
 
 const UNSUPPORTED_CFG_BITS: u64 = (1_u64 << 38) | (1_u64 << 39) | (1_u64 << 42);
 
-pub(super) fn studio_fun(value: Option<&str>) -> String {
-    masked_hex(value.unwrap_or_default(), UNSUPPORTED_FUN_BITS, false)
+pub(super) fn studio_fun(value: Option<&str>, nozzle_rack_ready: bool) -> String {
+    let mask = UNSUPPORTED_FUN_BITS
+        | if nozzle_rack_ready {
+            0
+        } else {
+            NOZZLE_RACK_FUN_BIT
+        };
+    masked_hex(value.unwrap_or_default(), mask, false)
 }
 
 pub(super) fn studio_cfg(value: Option<&str>) -> Option<String> {

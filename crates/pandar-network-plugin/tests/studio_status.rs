@@ -60,6 +60,29 @@ fn studio_status_masks_unsupported_fun_bits_and_preserves_supported_and_unknown_
 }
 
 #[test]
+fn studio_status_exposes_nozzle_rack_only_with_projected_rack_telemetry() {
+    let without_rack = telemetry_json(r#"{"fun":"1000000000000000"}"#);
+    assert_eq!(without_rack["fun"], serde_json::json!("0"));
+
+    let with_rack = telemetry_json(
+        r#"{"fun":"1000000000000000","nozzle_temperatures":[{"label":"R","current_celsius":"27","target_celsius":"220","snow":16,"hnow":16}],"nozzle_system":{"nozzle":{"exist":65536,"state":0,"src_id":16,"tar_id":17,"info":[{"id":16,"diameter":0.4,"type":"XS01","stat":0}]},"holder":{"stat":0,"pos":2,"info":0}}}"#,
+    );
+    assert_eq!(with_rack["fun"], serde_json::json!("1000000000000000"));
+    assert_eq!(with_rack["device"]["nozzle"]["info"][0]["id"], 16);
+    assert_eq!(with_rack["device"]["holder"]["pos"], 2);
+    assert_eq!(with_rack["device"]["extruder"]["info"][0]["snow"], 16);
+    assert_eq!(with_rack["device"]["extruder"]["info"][0]["hnow"], 16);
+
+    let without_routing = telemetry_json(
+        r#"{"fun":"1000000000000000","nozzle_system":{"nozzle":{"exist":65536,"state":0,"info":[{"id":16,"diameter":0.4,"type":"XS01","stat":0}]}}}"#,
+    );
+    assert_eq!(
+        without_routing["device"]["extruder"]["info"][0]["hnow"],
+        65535
+    );
+}
+
+#[test]
 fn studio_status_hides_external_change_assist_while_print_field_is_unsupported() {
     let telemetry = telemetry_json(r#"{"fun":"1000000000000"}"#);
 

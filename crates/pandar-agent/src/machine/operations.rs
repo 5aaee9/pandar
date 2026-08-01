@@ -1,5 +1,5 @@
 use anyhow::Context;
-use pandar_core::{BambuDeviceFeature, BambuDeviceFeatures};
+use pandar_core::{BambuDeviceFeature, BambuDeviceFeatures, H2cAutoNozzleMappingRequest};
 
 mod axis;
 mod light;
@@ -78,6 +78,7 @@ pub enum PrinterOperation {
     GcodeLine {
         param: String,
     },
+    GetAutoNozzleMapping(H2cAutoNozzleMappingRequest),
 }
 
 impl PrinterOperation {
@@ -110,6 +111,10 @@ pub(super) async fn dispatch_printer_operation<T>(
 where
     T: BambuMqttTransport + Send + Sync,
 {
+    let expected_auto_mapping = match &operation {
+        PrinterOperation::GetAutoNozzleMapping(request) => Some(request.clone()),
+        _ => None,
+    };
     let topics = BambuMqttTopics::for_serial(&endpoint.serial);
     mqtt.subscribe(&topics.report)
         .await
@@ -150,8 +155,24 @@ where
         return Ok(PrinterOperationDispatchResult::dispatched());
     }
 
-    match matching_sequence_report(mqtt, &sequence_ids).await {
+    match matching_sequence_report(
+        mqtt,
+        &sequence_ids,
+        expected_auto_mapping
+            .as_ref()
+            .map(|_| "get_auto_nozzle_mapping"),
+    )
+    .await
+    {
         Ok((sequence_id, report)) => {
+            if let Some(request) = &expected_auto_mapping {
+                let response = report
+                    .auto_nozzle_mapping_response()
+                    .context("decode H2C auto nozzle mapping response")?;
+                if !response.is_valid_for(request) {
+                    anyhow::bail!("printer returned an invalid H2C auto nozzle mapping response");
+                }
+            }
             let error = report.error();
             let mqtt_summary = report.summary();
             Ok(PrinterOperationDispatchResult {
@@ -160,6 +181,9 @@ where
                 mqtt_report: Some(report.into_payload()),
                 mqtt_summary,
             })
+        }
+        Err(err) if expected_auto_mapping.is_some() => {
+            Err(err).context("H2C auto nozzle mapping response unavailable")
         }
         Err(err) => {
             let sequence_id = sequence_ids
@@ -220,6 +244,9 @@ fn mqtt_command_for_printer_operation_with_features(
         }
         PrinterOperation::GcodeLine { param } => {
             Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand { param }))
+        }
+        PrinterOperation::GetAutoNozzleMapping(request) => {
+            Ok(BambuMqttCommand::GetAutoNozzleMapping(request))
         }
         PrinterOperation::SelectExtruder(extruder_id) => {
             Ok(BambuMqttCommand::SelectExtruder(extruder_id))
@@ -334,6 +361,7 @@ fn ams_command_slot_id(slot_id: u32, external_id: Option<&str>) -> u32 {
 async fn matching_sequence_report<T>(
     mqtt: &T,
     sequence_ids: &[String],
+    expected_command: Option<&str>,
 ) -> anyhow::Result<(String, report::OperationReport)>
 where
     T: BambuMqttTransport + Send + Sync,
@@ -351,7 +379,9 @@ where
             let Some(sequence_id) = report.sequence_id() else {
                 continue;
             };
-            if !sequence_ids.contains(&sequence_id) {
+            if !sequence_ids.contains(&sequence_id)
+                || expected_command.is_some_and(|command| report.command() != Some(command))
+            {
                 continue;
             }
             if report.error().is_none() {

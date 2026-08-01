@@ -171,7 +171,19 @@ where
     validate_mapping_json(&input.ams_mapping_json, "ams_mapping_json")?;
     validate_mapping_json(&input.ams_mapping2_json, "ams_mapping2_json")?;
     validate_mapping_json(&input.ams_mapping_info_json, "ams_mapping_info_json")?;
-    let (serial_number, agent_id) = printer_for_existing_artifact(connection, &input).await?;
+    let (serial_number, agent_id, model) =
+        printer_for_existing_artifact(connection, &input).await?;
+    if model
+        .as_deref()
+        .and_then(pandar_core::compatibility::normalize_model)
+        .as_deref()
+        == Some("H2C")
+        && !input.studio_metadata.as_ref().is_some_and(|metadata| {
+            pandar_core::valid_h2c_nozzle_mapping(metadata.nozzle_mapping())
+        })
+    {
+        return Err(RepositoryError::H2cNozzleMappingRequired);
+    }
     input.agent_id = agent_id;
     let now = pandar_core::created_at_now();
     let job_id = JobId::new();
@@ -242,7 +254,7 @@ where
 async fn printer_for_existing_artifact<C>(
     connection: &C,
     input: &NewPrintJobFromArtifact,
-) -> RepositoryResult<(String, AgentId)>
+) -> RepositoryResult<(String, AgentId, Option<String>)>
 where
     C: ConnectionTrait,
 {
@@ -253,7 +265,7 @@ where
         .context("failed to verify recovered print job printer ownership")?
         .map(|printer| {
             let agent_id = AgentId::parse(&printer.agent_id).map_err(anyhow::Error::from)?;
-            Ok::<_, anyhow::Error>((printer.serial_number, agent_id))
+            Ok::<_, anyhow::Error>((printer.serial_number, agent_id, printer.model))
         })
         .transpose()?
         .ok_or(RepositoryError::MissingPrinter)

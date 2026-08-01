@@ -126,6 +126,7 @@ pub fn hub_command_from_record_with_options(
             if matches!(
                 &payload.operation,
                 PrinterOperationKind::HandlePrintError { .. }
+                    | PrinterOperationKind::GetAutoNozzleMapping { .. }
             ) {
                 tracing::error!(
                     command_id = %command.id,

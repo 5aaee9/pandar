@@ -2,6 +2,8 @@ use anyhow::Context;
 use pandar_core::BambuDeviceFeature;
 use tokio::sync::mpsc;
 
+mod h2c;
+
 use super::{
     BambuMachineGateway, ack_event, failure_event, failure_event_with_result,
     printer_materials_snapshot_event, rejected_ack_event, success_event_with_result,
@@ -309,6 +311,9 @@ fn parse_printer_operation(
             Ok(MachinePrinterOperation::GcodeLine {
                 param: operation.param.clone(),
             })
+        }
+        Some(printer_operation::Operation::GetAutoNozzleMapping(operation)) => {
+            h2c::parse_auto_nozzle_mapping(operation)
         }
         None => anyhow::bail!("missing printer operation"),
     }

@@ -135,6 +135,8 @@ pub enum RepositoryError {
     InvalidPluginRedirectUrl,
     #[error("print job cannot be retried safely")]
     RetryNotSafe,
+    #[error("H2C print requires a Studio-provided physical nozzle mapping")]
+    H2cNozzleMappingRequired,
     #[error("print job cannot be reprinted")]
     ReprintNotAllowed,
     #[error("Studio submission id range is exhausted for tenant")]

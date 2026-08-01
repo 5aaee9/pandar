@@ -1,4 +1,7 @@
-use pandar_core::{BambuDeviceFeatures, PrinterNozzleTemperature, TenantId};
+use pandar_core::{
+    BambuDeviceFeatures, BambuNozzleDevice, BambuNozzleInfo, BambuNozzleSystem,
+    PrinterNozzleTemperature, StudioFiniteF64, TenantId,
+};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use sqlx::migrate::Migrator;
 
@@ -68,23 +71,23 @@ pub(super) async fn exercise_legacy_device_features_migration(database: Database
         Database::Postgres(pool) => POSTGRES_MIGRATOR.run(pool).await.unwrap(),
     }
 
-    let columns: (Option<String>, Option<String>) = match &database {
+    let columns: (Option<String>, Option<String>, Option<String>, Option<String>) = match &database {
         Database::Sqlite(pool) => sqlx::query_as(
-            "SELECT bambu_fun_bits, bambu_fun_session_id FROM printers WHERE id = ?1",
+            "SELECT bambu_fun_bits, bambu_fun_session_id, bambu_fun2_bits, bambu_fun2_session_id FROM printers WHERE id = ?1",
         )
         .bind(&printer_id)
         .fetch_one(pool)
         .await
         .unwrap(),
         Database::Postgres(pool) => sqlx::query_as(
-            "SELECT bambu_fun_bits, bambu_fun_session_id FROM printers WHERE id = $1",
+            "SELECT bambu_fun_bits, bambu_fun_session_id, bambu_fun2_bits, bambu_fun2_session_id FROM printers WHERE id = $1",
         )
         .bind(&printer_id)
         .fetch_one(pool)
         .await
         .unwrap(),
     };
-    assert_eq!(columns, (None, None));
+    assert_eq!(columns, (None, None, None, None));
 }
 
 pub(super) async fn exercise_printer_device_features(database: Database) {
@@ -121,12 +124,14 @@ pub(super) async fn exercise_printer_device_features(database: Database) {
 
     let session_one = "device-feature-session-one";
     claim_session(&agents, tenant.id, agent.id, session_one).await;
+    let mut initial_snapshot = rich_snapshot("FEATURE-SERIAL", "printing");
+    initial_snapshot.nozzle_system = Some(nozzle_system(16));
     let created = printers
         .upsert_snapshot_with_device_features_if_current(
             tenant.id,
             agent.id,
             session_one,
-            rich_snapshot("FEATURE-SERIAL", "printing"),
+            initial_snapshot,
             Some(BambuDeviceFeatures::from_bits(FULL_BITS)),
         )
         .await
@@ -139,9 +144,44 @@ pub(super) async fn exercise_printer_device_features(database: Database) {
         created.bambu_device_features_session_id.as_deref(),
         Some(session_one)
     );
+    assert_eq!(created.bambu_nozzle_system, Some(nozzle_system(16)));
+    assert_eq!(
+        created.bambu_nozzle_system_session_id.as_deref(),
+        Some(session_one)
+    );
     let stored = stored_printer(&database, tenant.id, "FEATURE-SERIAL").await;
     assert_eq!(stored.bambu_fun_bits.as_deref(), Some("8000004100000020"));
     assert_eq!(stored.bambu_fun_session_id.as_deref(), Some(session_one));
+    assert_eq!(
+        stored.bambu_nozzle_system_session_id.as_deref(),
+        Some(session_one)
+    );
+    assert_eq!(
+        printers
+            .update_secondary_device_features_if_current(
+                tenant.id,
+                agent.id,
+                session_one,
+                "FEATURE-SERIAL",
+                Some(BambuDeviceFeatures::from_bits(0x8000_0000_0000_0021)),
+            )
+            .await
+            .unwrap(),
+        DeviceFeatureUpdateOutcome::Updated
+    );
+    let secondary = printers
+        .get_for_tenant(tenant.id, &created.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        secondary.bambu_device_features2,
+        Some(BambuDeviceFeatures::from_bits(0x8000_0000_0000_0021))
+    );
+    assert_eq!(
+        secondary.bambu_device_features2_session_id.as_deref(),
+        Some(session_one)
+    );
 
     let session_two = "device-feature-session-two";
     claim_session(&agents, tenant.id, agent.id, session_two).await;
@@ -163,9 +203,18 @@ pub(super) async fn exercise_printer_device_features(database: Database) {
         absent.bambu_device_features_session_id.as_deref(),
         Some(session_one)
     );
+    assert_eq!(absent.bambu_nozzle_system, Some(nozzle_system(16)));
+    assert_eq!(
+        absent.bambu_nozzle_system_session_id.as_deref(),
+        Some(session_one)
+    );
     let stored = stored_printer(&database, tenant.id, "FEATURE-SERIAL").await;
     assert_eq!(stored.bambu_fun_bits.as_deref(), Some("8000004100000020"));
     assert_eq!(stored.bambu_fun_session_id.as_deref(), Some(session_one));
+    assert_eq!(
+        stored.bambu_nozzle_system_session_id.as_deref(),
+        Some(session_one)
+    );
 
     let zero = printers
         .upsert_snapshot_with_device_features_if_current(
@@ -188,6 +237,24 @@ pub(super) async fn exercise_printer_device_features(database: Database) {
     let stored = stored_printer(&database, tenant.id, "FEATURE-SERIAL").await;
     assert_eq!(stored.bambu_fun_bits.as_deref(), Some("0"));
     assert_eq!(stored.bambu_fun_session_id.as_deref(), Some(session_two));
+
+    let mut nozzle_update = rich_snapshot("FEATURE-SERIAL", "idle");
+    nozzle_update.nozzle_system = Some(nozzle_system(17));
+    let nozzle_updated = printers
+        .upsert_snapshot_with_device_features_if_current(
+            tenant.id,
+            agent.id,
+            session_two,
+            nozzle_update,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(nozzle_updated.bambu_nozzle_system, Some(nozzle_system(17)));
+    assert_eq!(
+        nozzle_updated.bambu_nozzle_system_session_id.as_deref(),
+        Some(session_two)
+    );
 
     let high_bit = printers
         .upsert_snapshot_with_device_features_if_current(
@@ -254,6 +321,16 @@ pub(super) async fn exercise_printer_device_features(database: Database) {
     claim_session(&agents, tenant.id, other_agent.id, other_session).await;
 
     let no_ops = [
+        printers
+            .update_secondary_device_features_if_current(
+                tenant.id,
+                agent.id,
+                session_one,
+                "FEATURE-SERIAL",
+                Some(BambuDeviceFeatures::default()),
+            )
+            .await
+            .unwrap(),
         printers
             .update_device_features_if_current(
                 tenant.id,
@@ -339,6 +416,8 @@ fn rich_snapshot(serial_number: &str, status: &str) -> PrinterSnapshotUpsert {
             target_celsius: Some("220".to_owned()),
             diameter_mm: Some("0.4".to_owned()),
             nozzle_type: Some("Hardened steel".to_owned()),
+            snow: None,
+            hnow: None,
         }],
         active_nozzle: Some("L".to_owned()),
         bed_temperature_celsius: Some("60".to_owned()),
@@ -346,8 +425,31 @@ fn rich_snapshot(serial_number: &str, status: &str) -> PrinterSnapshotUpsert {
         chamber_temperature_celsius: Some("32".to_owned()),
         chamber_target_temperature_celsius: None,
         chamber_light_on: Some(true),
+        nozzle_system: None,
         connection_authoritative: false,
         telemetry_authoritative: true,
+    }
+}
+
+fn nozzle_system(id: i32) -> BambuNozzleSystem {
+    BambuNozzleSystem {
+        nozzle: BambuNozzleDevice {
+            exist: Some(1 << id),
+            state: Some(0),
+            src_id: Some(id),
+            tar_id: None,
+            info: vec![BambuNozzleInfo {
+                id,
+                diameter: StudioFiniteF64::try_from(0.4).unwrap(),
+                nozzle_type: "XS01".to_owned(),
+                stat: Some(0),
+                fila_id: None,
+                wear: None,
+                p_t: None,
+                color_m: None,
+            }],
+        },
+        holder: None,
     }
 }
 

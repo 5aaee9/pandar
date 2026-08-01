@@ -1,6 +1,6 @@
 mod device_features;
 mod gcode_line;
-mod live;
+pub(crate) mod live;
 pub(crate) mod plate_mismatch;
 mod request_field;
 mod web_recovery;

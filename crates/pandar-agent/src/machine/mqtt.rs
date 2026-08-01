@@ -56,9 +56,9 @@ pub(crate) use reports::{
 };
 #[cfg(test)]
 pub(crate) use rumqttc::TlsConfiguration;
-pub(crate) use snapshot::snapshot_from_parsed_report;
 #[cfg(test)]
 pub(crate) use snapshot::snapshot_from_report;
+pub(crate) use snapshot::{nozzle_system_patch_from_report, snapshot_from_parsed_report};
 pub(crate) use transport::BambuLanCertificateVerifier;
 #[cfg(test)]
 pub(crate) use transport::mqtt_report_idle_timeout;

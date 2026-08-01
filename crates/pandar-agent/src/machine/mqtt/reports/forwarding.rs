@@ -1,5 +1,8 @@
+mod nozzle_system;
 #[cfg(test)]
 mod tests;
+
+use nozzle_system::NozzleSystemReducer;
 
 use std::time::Duration;
 
@@ -25,7 +28,8 @@ use super::{
 };
 use crate::machine::mqtt::{
     BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, MachineReports,
-    PublishedMqttCommand, feature_event, is_mqtt_report_idle_timeout, snapshot_from_parsed_report,
+    PublishedMqttCommand, feature_event, is_mqtt_report_idle_timeout,
+    nozzle_system_patch_from_report, snapshot_from_parsed_report,
 };
 const PRINTER_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 
@@ -50,6 +54,8 @@ fn snapshot_has_telemetry(snapshot: &MachineSnapshot) -> bool {
         || snapshot.chamber_temperature_celsius.is_some()
         || snapshot.chamber_target_temperature_celsius.is_some()
         || snapshot.chamber_light_on.is_some()
+        || snapshot.device_features2.is_some()
+        || snapshot.nozzle_system.is_some()
 }
 
 #[cfg(test)]
@@ -172,6 +178,7 @@ where
         .await
         .with_context(|| format!("publish pushall to request topic {}", topics.request))?;
     let mut outstanding_pushall = Some(sequence_id);
+    let mut nozzle_system = NozzleSystemReducer::default();
 
     let mut refresh_interval = interval_at(
         Instant::now() + PRINTER_REFRESH_INTERVAL,
@@ -229,7 +236,21 @@ where
                 if let Some(value) = device_features {
                     context.device_features.update(&endpoint.serial, value).await;
                 }
+                let device_features2 = match report.device_feature2_observation(&endpoint.serial) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        tracing::warn!(
+                            serial = %endpoint.serial,
+                            error = %format!("{error:#}"),
+                            "invalid printer secondary device feature observation"
+                        );
+                        None
+                    }
+                };
                 let mut snapshot = snapshot_from_parsed_report(endpoint, report.snapshot());
+                if let Some(patch) = nozzle_system_patch_from_report(report.snapshot()) {
+                    snapshot.nozzle_system = nozzle_system.update(patch);
+                }
                 snapshot.telemetry_authoritative = outstanding_pushall.as_deref().is_some_and(
                     |sequence_id| {
                         report
@@ -242,6 +263,7 @@ where
                 }
                 snapshot.model = None;
                 snapshot.device_features = device_features;
+                snapshot.device_features2 = device_features2;
                 if context.presence.offline && !snapshot.telemetry_authoritative {
                     snapshot.state = None;
                 }
@@ -359,6 +381,8 @@ async fn mark_mqtt_offline(
         chamber_target_temperature_celsius: None,
         chamber_light_on: None,
         device_features: None,
+        device_features2: None,
+        nozzle_system: None,
         telemetry_authoritative: false,
     };
     if sender

@@ -94,12 +94,12 @@ branch, `FW` firmware UI, and `DORMANT` no caller found beyond the bounded build
 | 28 | `print.flowrate_get_result` | `DeviceManager.cpp:2094` | CAL/FUN bit 6 | `explicitly_unsupported` | Pandar clears the calibration capability from the Studio projection. |
 | 29 | `print.gcode_file` | `DeviceManager.cpp:1878` | MODEL, old-X1 calibration branch | `explicitly_unsupported` | This is not the typed `gcode_line` path; no fallback. |
 | 30 | `print.gcode_line` | `DeviceManager.cpp:3729` | CORE/legacy protocol | `handled` | A string `param` is dispatched once as typed G-code; known Home/axis/temperature forms first become semantic operations. Unwrapped raw G-code is unsupported. |
-| 31 | `print.get_auto_nozzle_mapping` | `DeviceCore/DevMappingNozzle.cpp:68,195` | NOZZLE | `explicitly_unsupported` | Auto-mapping capability is not advertised. |
-| 32 | `print.holder_nozzle_refresh` | `DeviceCore/DevNozzleRackCtrl.cpp:101,190` | NOZZLE/FUN bit 60 | `explicitly_unsupported` | Pandar clears bit 60 from the Studio projection. |
+| 31 | `print.get_auto_nozzle_mapping` | `DeviceCore/DevMappingNozzle.cpp:68,195` | NOZZLE | `handled` | Typed H2C V0/V1 request/reply path with exact command/sequence correlation, strict successful physical mappings, and detailed correlated printer failures. |
+| 32 | `print.holder_nozzle_refresh` | `DeviceCore/DevNozzleRackCtrl.cpp:101,190` | NOZZLE/FUN bit 60 | `explicitly_unsupported` | Bit 60 is exposed only for a current capable H2C rack session, but this distinct maintenance command remains rejected. |
 | 33 | `print.idle_ignore` | `DeviceManager.cpp:1433` | ACTION | `explicitly_unsupported` | No independent hide gate; no Hub operation is created. |
 | 34 | `print.ignore` | `DeviceManager.cpp:1459` | ACTION | `handled` | Only the exact native print-error shape with `param:"reserve"`, valid error/job/sequence fields is handled; ordinary or malformed shapes are unsupported. |
-| 35 | `print.nozzle_holder_ctrl` | `DeviceCore/DevNozzleRackCtrl.cpp:35,51` | NOZZLE/FUN bit 60 | `explicitly_unsupported` | Pandar clears bit 60 from the Studio projection. |
-| 36 | `print.nozzle_info_confirm` | `DeviceCore/DevNozzleRackCtrl.cpp:83,92` | NOZZLE/FUN bit 60 | `explicitly_unsupported` | Pandar clears bit 60 from the Studio projection. |
+| 35 | `print.nozzle_holder_ctrl` | `DeviceCore/DevNozzleRackCtrl.cpp:35,51` | NOZZLE/FUN bit 60 | `explicitly_unsupported` | Current-session H2C rack visibility does not authorize holder movement or control; the command remains rejected. |
+| 36 | `print.nozzle_info_confirm` | `DeviceCore/DevNozzleRackCtrl.cpp:83,92` | NOZZLE/FUN bit 60 | `explicitly_unsupported` | Current-session H2C rack visibility does not authorize nozzle confirmation or maintenance; the command remains rejected. |
 | 37 | `print.pause` | `DeviceManager.cpp:1409` | CORE print state | `handled` | Typed semantic Pause operation. |
 | 38 | `print.print_option` | `DevPrintOptions.cpp:438,482,494,504,521,552`; `DeviceManager.cpp:1816,1828,1842` | FUN/cfg/AMS options | `explicitly_unsupported` | Live option mutation is unsupported; Task 6 separately classifies print-submission fields. |
 | 39 | `print.print_speed` | `DeviceManager.cpp:1805` | CORE print state | `handled` | Valid speed mode becomes a typed semantic operation. |
@@ -135,7 +135,7 @@ branch, `FW` firmware UI, and `DORMANT` no caller found beyond the bounded build
 | 62 | `upgrade.mc_for_ams_firmware_upgrade` | `DeviceCore/DevFilaAmsSettingCtrl.cpp:16` | FW/AMS | `handled` | Typed AMS firmware-switch control with the same delivery rules. |
 | 63 | `upgrade.start` | `DeviceCore/DevUpgradeCtrl.cpp:33,46` | FW | `handled` | Exact nonempty URL/module/version shape uses typed prepare/execute; no retry or replay after an ambiguous publish. |
 | 64 | `upgrade.upgrade_confirm` | `DeviceCore/DevUpgradeCtrl.cpp:11` | FW | `handled` | Typed prepare/execute firmware confirmation. |
-| 65 | `upgrade.wtm_upgrade` | `DeviceCore/DevNozzleRackCtrl.cpp:276` | FW/NOZZLE/FUN bit 60 | `explicitly_unsupported` | Pandar clears bit 60, so pinned Studio does not expose the nozzle-rack upgrade entrypoint. An injected exact envelope is rejected before Hub publish; no firmware token, live fallback, replay, or synthetic package is created. Task 7 pinned review approved this boundary. |
+| 65 | `upgrade.wtm_upgrade` | `DeviceCore/DevNozzleRackCtrl.cpp:276` | FW/NOZZLE/FUN bit 60 | `explicitly_unsupported` | H2C mapping support does not extend to rack firmware upgrades. An exact envelope is rejected before Hub publish; no firmware token, live fallback, replay, or synthetic package is created. |
 
 ## XCam Envelope
 
@@ -147,8 +147,9 @@ branch, `FW` firmware UI, and `DORMANT` no caller found beyond the bounded build
 
 Pandar must preserve the authoritative device bitmap in Hub storage but apply a plugin-transport mask
 when projecting it to Studio. The required mask clears bits 6, 7, 8, 9, 10, 12, 13, 28, 40, 42-46,
-49, 60, and 62 because this matrix leaves their commands unsupported. Implemented axis bits 32 and
-38 and unrelated unknown bits must be preserved. Snapshot `cfg` bits 38-39 must also be cleared. This
+49, and 62 because this matrix leaves their commands unsupported. Bit 60 remains masked unless a
+current Agent session both supports H2C auto-mapping and has current-session physical rack telemetry.
+Implemented axis bits 32 and 38 and unrelated unknown bits must be preserved. Snapshot `cfg` bits 38-39 must also be cleared. This
 mask is about what the Pandar Studio bridge can execute, not a rewrite of the printer's observed
 hardware state.
 

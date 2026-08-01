@@ -17,8 +17,7 @@ use crate::{
     AgentConfig,
     machine::{BambuPrinterEndpoint, MachineSnapshot, MaterialRefreshResult},
     protocol::agent::v1::{
-        AgentEvent, NozzleTemperature, PrinterDeviceFeatures, PrinterMaterialsSnapshot,
-        PrinterSnapshot, agent_event,
+        AgentEvent, NozzleTemperature, PrinterMaterialsSnapshot, PrinterSnapshot, agent_event,
     },
 };
 
@@ -147,6 +146,8 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
                     target_celsius: temperature.target_celsius.unwrap_or_default(),
                     diameter_mm: temperature.diameter_mm.unwrap_or_default(),
                     nozzle_type: temperature.nozzle_type.unwrap_or_default(),
+                    snow: temperature.snow,
+                    hnow: temperature.hnow,
                 })
                 .collect(),
             bed_temperature_celsius: snapshot.bed_temperature_celsius.unwrap_or_default(),
@@ -159,13 +160,15 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
                 .unwrap_or_default(),
             active_nozzle: snapshot.active_nozzle.unwrap_or_default(),
             chamber_light_on: snapshot.chamber_light_on,
-            device_features: snapshot
-                .device_features
-                .map(|features| PrinterDeviceFeatures {
-                    bambu_fun_bits: features.bits(),
-                }),
+            device_features: crate::protocol::proto_device_features(
+                snapshot.device_features,
+                snapshot.device_features2,
+            ),
             connection_authoritative: false,
             telemetry_authoritative: snapshot.telemetry_authoritative,
+            nozzle_system: snapshot
+                .nozzle_system
+                .map(crate::protocol::proto_nozzle_system),
         })),
     }
 }

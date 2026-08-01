@@ -1,11 +1,13 @@
 use crate::{
     protocol::agent::v1::{
-        AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation, Axis,
-        AxisMovement, GcodeLineOperation, HandlePrintErrorOperation, HomeOperation,
-        MoveAxesOperation, PauseOperation, PrintErrorAction as ProtoPrintErrorAction,
-        ResumeOperation, SelectExtruderOperation, SetBedTemperatureOperation,
-        SetChamberLightOperation, SetChamberTemperatureOperation, SetHotendTemperatureOperation,
-        SetPrintSpeedOperation, StopOperation, ToggleLightOperation, printer_operation,
+        AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation,
+        AutoNozzleMappingFilamentInfo, AutoNozzleMappingGroupInfo, AutoNozzleMappingNozzleInfo,
+        Axis, AxisMovement, GcodeLineOperation, GetAutoNozzleMappingOperation,
+        HandlePrintErrorOperation, HomeOperation, MoveAxesOperation, PauseOperation,
+        PrintErrorAction as ProtoPrintErrorAction, ResumeOperation, SelectExtruderOperation,
+        SetBedTemperatureOperation, SetChamberLightOperation, SetChamberTemperatureOperation,
+        SetHotendTemperatureOperation, SetPrintSpeedOperation, StopOperation, ToggleLightOperation,
+        printer_operation,
     },
     repositories::{PrintErrorAction, PrinterAxis, PrinterAxisMovement, PrinterOperationKind},
 };
@@ -110,6 +112,54 @@ pub(super) fn proto_printer_operation(
             external_id: external_id.unwrap_or_default(),
             extruder_id,
         }),
+        PrinterOperationKind::GetAutoNozzleMapping { request } => {
+            printer_operation::Operation::GetAutoNozzleMapping(GetAutoNozzleMappingOperation {
+                sequence_id: request.sequence_id,
+                version: request.version.map(u32::from),
+                calibration: request.calibration,
+                extrude_cali_manual_mode: request.extrude_cali_manual_mode,
+                filament_seq: request.filament_seq.unwrap_or_default(),
+                ams_mapping: request.ams_mapping.unwrap_or_default(),
+                fila_info: request
+                    .fila_info
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|value| AutoNozzleMappingFilamentInfo {
+                        id: value.id,
+                        direction: value.direction.into(),
+                        group: value.group,
+                        nozzle_d: value.nozzle_d,
+                        nozzle_v: value.nozzle_v,
+                        cate: value.cate,
+                        color: value.color,
+                    })
+                    .collect(),
+                nozzle_info: request
+                    .nozzle_info
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|value| AutoNozzleMappingNozzleInfo {
+                        pos: value.pos,
+                        nozzle_d: value.nozzle_d,
+                        nozzle_v: value.nozzle_v,
+                        wear: value.wear,
+                        cate: value.cate,
+                        color: value.color,
+                    })
+                    .collect(),
+                group_info: request
+                    .group_info
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|value| AutoNozzleMappingGroupInfo {
+                        id: value.id,
+                        ext: value.ext.into(),
+                        dia: value.dia,
+                        vol: value.vol,
+                    })
+                    .collect(),
+            })
+        }
     }
 }
 

@@ -70,7 +70,7 @@ fn printer_snapshot_event_maps_device_features_exactly() {
     };
     assert_eq!(
         snapshot.device_features.unwrap().bambu_fun_bits,
-        0x8000_0041_0000_0020
+        Some(0x8000_0041_0000_0020)
     );
     assert!(
         snapshot.telemetry_authoritative,

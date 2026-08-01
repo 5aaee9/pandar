@@ -34,13 +34,36 @@ pub(crate) fn device_feature_observation(
     serial: &str,
     report: &SnapshotReport,
 ) -> anyhow::Result<Option<BambuDeviceFeatures>> {
-    match &report.print.as_ref().map(|print| &print.fun) {
+    feature_observation(
+        serial,
+        "print.fun",
+        report.print.as_ref().map(|print| &print.fun),
+    )
+}
+
+pub(crate) fn device_feature2_observation(
+    serial: &str,
+    report: &SnapshotReport,
+) -> anyhow::Result<Option<BambuDeviceFeatures>> {
+    feature_observation(
+        serial,
+        "print.fun2",
+        report.print.as_ref().map(|print| &print.fun2),
+    )
+}
+
+fn feature_observation(
+    serial: &str,
+    field: &str,
+    observation: Option<&FunField>,
+) -> anyhow::Result<Option<BambuDeviceFeatures>> {
+    match observation {
         None | Some(FunField::Missing) => Ok(None),
         Some(FunField::String(value)) => BambuDeviceFeatures::from_hex(value)
-            .with_context(|| format!("parse printer {serial} print.fun"))
+            .with_context(|| format!("parse printer {serial} {field}"))
             .map(Some),
         Some(FunField::Invalid) => Err(anyhow!(
-            "printer {serial} print.fun expected a hexadecimal string"
+            "printer {serial} {field} expected a hexadecimal string"
         )),
     }
 }
@@ -73,6 +96,8 @@ pub(in crate::machine::mqtt) struct SnapshotPrint {
     sequence_id: Option<String>,
     #[serde(default, deserialize_with = "deserialize_fun_field")]
     pub(in crate::machine::mqtt) fun: FunField,
+    #[serde(default, deserialize_with = "deserialize_fun_field")]
+    pub(in crate::machine::mqtt) fun2: FunField,
     pub(in crate::machine::mqtt) gcode_state: Option<ScalarValue>,
     #[serde(default)]
     pub(in crate::machine::mqtt) state: Option<ScalarValue>,
@@ -115,7 +140,9 @@ pub(in crate::machine::mqtt) struct SnapshotDevice {
     #[serde(default)]
     pub(in crate::machine::mqtt) extruder: ExtruderDevice,
     #[serde(default)]
-    pub(in crate::machine::mqtt) nozzle: NozzleDevice,
+    pub(in crate::machine::mqtt) nozzle: Option<NozzleDevice>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) holder: Option<NozzleHolder>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -144,12 +171,34 @@ pub(in crate::machine::mqtt) struct ExtruderInfo {
     pub(in crate::machine::mqtt) id: Option<u64>,
     #[serde(default)]
     pub(in crate::machine::mqtt) temp: Option<TemperatureValue>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) snow: Option<u32>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) hnow: Option<u32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
 pub(in crate::machine::mqtt) struct NozzleDevice {
     #[serde(default)]
+    pub(in crate::machine::mqtt) exist: Option<u32>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) state: Option<u32>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) src_id: Option<i32>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) tar_id: Option<i32>,
+    #[serde(default)]
     pub(in crate::machine::mqtt) info: Vec<NozzleInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(in crate::machine::mqtt) struct NozzleHolder {
+    #[serde(default)]
+    pub(in crate::machine::mqtt) stat: Option<i32>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) pos: Option<i32>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) info: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -162,6 +211,16 @@ pub(in crate::machine::mqtt) struct NozzleInfo {
     pub(in crate::machine::mqtt) nozzle_type: Option<String>,
     #[serde(default, rename = "type")]
     pub(in crate::machine::mqtt) kind: Option<String>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) stat: Option<u32>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) fila_id: Option<String>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) wear: Option<f32>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) p_t: Option<i32>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) color_m: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

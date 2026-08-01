@@ -35,7 +35,8 @@ async fn grpc_printer_device_features_preserve_presence_and_invalidate_session()
     let token = register_test_session(&state, tenant_id, agent_id).await;
     let mut full = snapshot("FEATURE-SERIAL", "Feature Printer", "X2D", "idle");
     full.device_features = Some(PrinterDeviceFeatures {
-        bambu_fun_bits: 0x8000_0041_0000_0020,
+        bambu_fun_bits: Some(0x8000_0041_0000_0020),
+        bambu_fun2_bits: Some(0x8000_0000_0000_0021),
     });
 
     handle_event(
@@ -62,6 +63,16 @@ async fn grpc_printer_device_features_preserve_presence_and_invalidate_session()
     );
     assert_eq!(
         printer.bambu_device_features_session_id,
+        Some(token.persisted_id())
+    );
+    assert_eq!(
+        printer.bambu_device_features2,
+        Some(pandar_core::BambuDeviceFeatures::from_bits(
+            0x8000_0000_0000_0021
+        ))
+    );
+    assert_eq!(
+        printer.bambu_device_features2_session_id,
         Some(token.persisted_id())
     );
 
@@ -95,6 +106,16 @@ async fn grpc_printer_device_features_preserve_presence_and_invalidate_session()
         preserved.bambu_device_features_session_id,
         Some(token.persisted_id())
     );
+    assert_eq!(
+        preserved.bambu_device_features2,
+        Some(pandar_core::BambuDeviceFeatures::from_bits(
+            0x8000_0000_0000_0021
+        ))
+    );
+    assert_eq!(
+        preserved.bambu_device_features2_session_id,
+        Some(token.persisted_id())
+    );
 
     handle_event(
         &state,
@@ -105,7 +126,10 @@ async fn grpc_printer_device_features_preserve_presence_and_invalidate_session()
             tenant_id,
             agent_id,
             "FEATURE-SERIAL",
-            Some(PrinterDeviceFeatures { bambu_fun_bits: 0 }),
+            Some(PrinterDeviceFeatures {
+                bambu_fun_bits: Some(0),
+                bambu_fun2_bits: None,
+            }),
         ),
     )
     .await

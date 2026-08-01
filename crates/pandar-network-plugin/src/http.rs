@@ -183,6 +183,7 @@ fn post_request_context(kind: RequestKind) -> &'static str {
         RequestKind::JobLookup => "POST plugin job lookup request",
         RequestKind::PrintSubmission => "POST plugin print submission request",
         RequestKind::PrinterOperation => "POST plugin printer operation request",
+        RequestKind::H2cAutoNozzleMapping => "POST H2C auto nozzle mapping request",
         RequestKind::PluginSession => "DELETE plugin session request",
     }
 }
@@ -203,6 +204,22 @@ pub(super) fn plugin_printer_operation_url(
         "printers",
         printer_id,
         "operations",
+    ]);
+    Some(url)
+}
+
+pub(super) fn plugin_auto_nozzle_mapping_url(
+    hub_url: &str,
+    printer_id: &str,
+) -> Option<reqwest::Url> {
+    let mut url = reqwest::Url::parse(hub_url).ok()?;
+    url.path_segments_mut().ok()?.extend([
+        "api",
+        "v1",
+        "plugin",
+        "printers",
+        printer_id,
+        "auto-nozzle-mapping",
     ]);
     Some(url)
 }
@@ -352,6 +369,7 @@ pub(super) fn redact_hub_error(kind: RequestKind, http_code: u32, body: &str) ->
                     | RequestKind::JobLookup
                     | RequestKind::PrintSubmission
                     | RequestKind::PrinterOperation
+                    | RequestKind::H2cAutoNozzleMapping
             ) =>
         {
             "printer_not_found"
@@ -370,6 +388,8 @@ fn is_stable_hub_error(error: &str) -> bool {
             | "printer_not_found"
             | "printer_operation_unavailable"
             | "unsupported_printer_operation"
+            | "h2c_auto_nozzle_mapping_unavailable"
+            | "h2c_nozzle_mapping_required"
             | "invalid_plugin_ticket"
             | "invalid_auth_token"
             | "invalid_printer_id"

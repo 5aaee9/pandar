@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
+use pandar_core::H2cAutoNozzleMappingResponseEnvelope;
+use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
 
 use crate::machine::{MachineJsonPayload, PrinterOperationMqttSummary, types::decode_json_payload};
@@ -9,7 +10,7 @@ pub(super) struct OperationReport {
     envelope: OperationEnvelope,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct OperationEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     print: Option<OperationSection>,
@@ -25,7 +26,7 @@ struct OperationEnvelope {
     extra: BTreeMap<String, MachineJsonPayload>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct OperationSection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sequence_id: Option<SequenceId>,
@@ -47,7 +48,7 @@ struct OperationSection {
     extra: BTreeMap<String, MachineJsonPayload>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 enum SequenceId {
     String(String),
@@ -73,13 +74,33 @@ impl OperationReport {
         .find_map(OperationSection::sequence_id_string)
     }
 
+    pub(super) fn command(&self) -> Option<&str> {
+        self.envelope
+            .print
+            .as_ref()
+            .or(self.envelope.system.as_ref())
+            .and_then(|section| section.extra.get("command"))
+            .and_then(payload_str)
+    }
+
+    pub(super) fn auto_nozzle_mapping_response(
+        &self,
+    ) -> Option<H2cAutoNozzleMappingResponseEnvelope> {
+        serde_json::to_value(&self.envelope)
+            .ok()
+            .and_then(|value| serde_json::from_value(value).ok())
+    }
+
     pub(super) fn error(&self) -> Option<String> {
         let section = self
             .envelope
             .print
             .as_ref()
             .or(self.envelope.system.as_ref())?;
-        if section.result.as_ref().and_then(payload_string).as_deref() == Some("fail") {
+        if matches!(
+            section.result.as_ref().and_then(payload_string).as_deref(),
+            Some("fail" | "failed")
+        ) {
             return Some(
                 report_error_message(section)
                     .unwrap_or_else(|| "printer reported failure".to_owned()),
@@ -200,6 +221,13 @@ fn insert_payload(
 ) {
     if let Some(payload) = payload {
         object.insert(key.to_owned(), payload);
+    }
+}
+
+fn payload_str(payload: &MachineJsonPayload) -> Option<&str> {
+    match payload {
+        MachineJsonPayload::String(value) => Some(value),
+        _ => None,
     }
 }
 

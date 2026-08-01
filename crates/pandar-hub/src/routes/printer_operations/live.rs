@@ -19,12 +19,30 @@ pub(super) async fn dispatch(
     operation: PrinterOperationKind,
     actor: AuditActor,
 ) -> Result<CommandRecord, ApiError> {
+    dispatch_with_capability(
+        state,
+        tenant_id,
+        printer_id,
+        operation,
+        actor,
+        AgentCapability::HandlePrintError,
+    )
+    .await
+}
+
+pub(crate) async fn dispatch_with_capability(
+    state: &AppState,
+    tenant_id: TenantId,
+    printer_id: &str,
+    operation: PrinterOperationKind,
+    actor: AuditActor,
+    capability: AgentCapability,
+) -> Result<CommandRecord, ApiError> {
     let printer = state
         .printers()
         .get_for_tenant(tenant_id, printer_id)
         .await?
         .ok_or(RepositoryError::MissingPrinter)?;
-    let capability = AgentCapability::HandlePrintError;
     let Some(token) = state
         .sessions()
         .current_token_for_capability(tenant_id, printer.agent_id, capability)
@@ -32,11 +50,26 @@ pub(super) async fn dispatch(
     else {
         return Err(printer_operation_unavailable());
     };
+    dispatch_for_printer_with_token(
+        state, tenant_id, printer, operation, actor, token, capability,
+    )
+    .await
+}
+
+pub(crate) async fn dispatch_for_printer_with_token(
+    state: &AppState,
+    tenant_id: TenantId,
+    printer: pandar_core::Printer,
+    operation: PrinterOperationKind,
+    actor: AuditActor,
+    token: crate::sessions::SessionToken,
+    capability: AgentCapability,
+) -> Result<CommandRecord, ApiError> {
     let command = state
         .commands()
         .create_printer_operation_sent_with_audit(
             tenant_id,
-            printer_id,
+            &printer.id,
             printer.agent_id,
             operation.clone(),
             actor,

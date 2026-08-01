@@ -29,7 +29,8 @@ pub(crate) fn feature_event(
             PrinterDeviceFeaturesSnapshot {
                 serial,
                 device_features: value.map(|features| PrinterDeviceFeatures {
-                    bambu_fun_bits: features.bits(),
+                    bambu_fun_bits: Some(features.bits()),
+                    bambu_fun2_bits: None,
                 }),
             },
         )),

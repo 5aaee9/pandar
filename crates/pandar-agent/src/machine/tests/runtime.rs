@@ -14,7 +14,7 @@ fn feature_event_bits(event: crate::protocol::agent::v1::AgentEvent) -> Option<u
     };
     snapshot
         .device_features
-        .map(|features| features.bambu_fun_bits)
+        .and_then(|features| features.bambu_fun_bits)
 }
 
 fn assert_offline_event(event: crate::protocol::agent::v1::AgentEvent) {

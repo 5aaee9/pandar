@@ -10,6 +10,7 @@ mod audit;
 mod authorization;
 mod firmware;
 mod firmware_batch;
+mod h2c;
 mod live_status;
 mod login_tickets;
 mod operations;
@@ -263,6 +264,16 @@ async fn feature_advertisement_printer(
     agent_name: &str,
     serial: &str,
 ) -> pandar_core::AgentId {
+    feature_advertisement_printer_with_model(state, tenant_id, agent_name, serial, "X2D").await
+}
+
+async fn feature_advertisement_printer_with_model(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_name: &str,
+    serial: &str,
+    model: &str,
+) -> pandar_core::AgentId {
     let agent = state.agents().create(tenant_id, agent_name).await.unwrap();
     state
         .printers()
@@ -274,7 +285,7 @@ async fn feature_advertisement_printer(
                 host: Some("192.0.2.10".to_owned()),
                 access_code: Some("feature-access".to_owned()),
                 name: serial.to_owned(),
-                model: Some("X2D".to_owned()),
+                model: Some(model.to_owned()),
                 status: Some("idle".to_owned()),
                 observed_at: "2026-07-11T00:00:00Z".to_owned(),
                 nozzle_temperatures: Vec::new(),
@@ -284,6 +295,7 @@ async fn feature_advertisement_printer(
                 chamber_temperature_celsius: Some("32".to_owned()),
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: Some(true),
+                nozzle_system: None,
                 connection_authoritative: false,
                 telemetry_authoritative: true,
             },
@@ -299,12 +311,23 @@ async fn register_feature_session(
     agent_id: pandar_core::AgentId,
     capable: bool,
 ) -> crate::sessions::SessionToken {
+    register_capability_session(
+        state,
+        tenant_id,
+        agent_id,
+        capable.then_some(crate::protocol::agent::v1::AgentCapability::RequiredDeviceFeatures),
+    )
+    .await
+}
+
+async fn register_capability_session(
+    state: &AppState,
+    tenant_id: TenantId,
+    agent_id: pandar_core::AgentId,
+    capabilities: impl IntoIterator<Item = crate::protocol::agent::v1::AgentCapability>,
+) -> crate::sessions::SessionToken {
     let token = crate::sessions::SessionToken::new();
     claim_feature_session(state, tenant_id, agent_id, token).await;
-    let capabilities = capable
-        .then_some(crate::protocol::agent::v1::AgentCapability::RequiredDeviceFeatures)
-        .into_iter()
-        .collect();
     state
         .sessions()
         .register(crate::sessions::AgentSession {
@@ -318,7 +341,7 @@ async fn register_feature_session(
             wake_sender: tokio::sync::mpsc::channel(1).0,
             close_sender: tokio::sync::mpsc::channel(1).0,
             command_sender: tokio::sync::mpsc::channel(1).0,
-            capabilities,
+            capabilities: capabilities.into_iter().collect(),
             pending_live_commands: crate::sessions::empty_pending_live_commands(),
             live_command_transition: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         })

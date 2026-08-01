@@ -19,7 +19,6 @@ mod quota;
 mod staging;
 mod studio;
 mod types;
-
 pub(in crate::routes::jobs) use types::{MultipartPrintFields, StagedUpload};
 
 #[derive(Clone, Copy)]
@@ -27,7 +26,6 @@ pub(in crate::routes) enum MultipartPrintKind {
     Web,
     Studio,
 }
-
 pub(in crate::routes) async fn create_print_job_from_multipart(
     state: &AppState,
     tenant_id: TenantId,
@@ -48,7 +46,15 @@ pub(in crate::routes) async fn create_print_job_from_multipart(
             }
         },
     };
-    let prepared = prepare_print_job(state, tenant_id, path_printer_id, &parsed).await;
+    let prepared = prepare_print_job(
+        state,
+        tenant_id,
+        path_printer_id,
+        &parsed,
+        kind,
+        studio_metadata.as_ref(),
+    )
+    .await;
     let PreparedPrintJob {
         printer,
         plate_id,
@@ -322,6 +328,8 @@ async fn prepare_print_job(
     tenant_id: TenantId,
     path_printer_id: Option<String>,
     parsed: &MultipartPrintFields,
+    kind: MultipartPrintKind,
+    studio_metadata: Option<&pandar_core::StudioPrintMetadata>,
 ) -> Result<PreparedPrintJob, ApiError> {
     let printer_id = path_printer_id
         .or_else(|| parsed.printer_id.clone())
@@ -361,6 +369,7 @@ async fn prepare_print_job(
         .get_for_tenant(tenant_id, &printer_id)
         .await?
         .ok_or_else(|| ApiError::not_found("printer_not_found"))?;
+    studio::validate_h2c_admission(printer.model.as_deref(), kind, studio_metadata)?;
     let upload_file = fs::File::open(&file.path).await.map_err(|err| {
         tracing::error!(
             error = %super::redact_artifact_error(&format!("{err:#}")),

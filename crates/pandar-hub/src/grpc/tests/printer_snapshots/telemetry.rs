@@ -12,6 +12,8 @@ async fn grpc_partial_snapshot_preserves_absent_telemetry_and_updates_present_fi
         target_celsius: "220".to_owned(),
         diameter_mm: "0.4".to_owned(),
         nozzle_type: "Hardened steel".to_owned(),
+        snow: None,
+        hnow: None,
     }];
     full.active_nozzle = "L".to_owned();
     full.bed_temperature_celsius = "60".to_owned();
@@ -61,6 +63,8 @@ async fn grpc_authoritative_telemetry_snapshot_can_clear_stale_fields_independen
         target_celsius: "220".to_owned(),
         diameter_mm: "0.4".to_owned(),
         nozzle_type: "Hardened steel".to_owned(),
+        snow: None,
+        hnow: None,
     }];
     full.active_nozzle = "L".to_owned();
     full.bed_temperature_celsius = "60".to_owned();

@@ -100,6 +100,7 @@ constexpr int32_t kStudioMessageFirmware = 1;
 constexpr int32_t kStudioMessageGetVersion = 2;
 constexpr int32_t kStudioMessagePushAll = 3;
 constexpr int32_t kStudioMessageOperation = 4;
+constexpr int32_t kStudioMessageH2cAutoNozzleMapping = 5;
 
 struct StudioPayloadCopy {
     std::string dev_id;

@@ -32,6 +32,7 @@ mod fixtures;
 mod gateway;
 mod link_report_ownership;
 mod operations_ams;
+mod operations_h2c;
 mod operations_lights;
 mod operations_motion;
 mod print_error;

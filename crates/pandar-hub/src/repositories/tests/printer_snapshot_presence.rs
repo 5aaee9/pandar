@@ -295,6 +295,7 @@ fn full_snapshot(serial_number: String, observed_at: &str) -> PrinterSnapshotUps
         chamber_temperature_celsius: telemetry.chamber_temperature_celsius,
         chamber_target_temperature_celsius: telemetry.chamber_target_temperature_celsius,
         chamber_light_on: telemetry.chamber_light_on,
+        nozzle_system: None,
         connection_authoritative: false,
         telemetry_authoritative: true,
     }
@@ -320,6 +321,7 @@ fn partial_snapshot(
         chamber_temperature_celsius: None,
         chamber_target_temperature_celsius: None,
         chamber_light_on: None,
+        nozzle_system: None,
         connection_authoritative: false,
         telemetry_authoritative: false,
     };
@@ -364,5 +366,7 @@ fn nozzle(label: &str, current: &str, target: &str) -> PrinterNozzleTemperature 
         target_celsius: Some(target.to_owned()),
         diameter_mm: Some("0.4".to_owned()),
         nozzle_type: Some("hardened_steel".to_owned()),
+        snow: None,
+        hnow: None,
     }
 }

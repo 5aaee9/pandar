@@ -1,8 +1,16 @@
+use pandar_core::BambuNozzleDevice;
 use serde::Serialize;
+
+mod nozzle;
+
+use nozzle::{
+    ExtruderDevice, fallback_nozzle_device, studio_nozzle_by_id, studio_nozzle_diameter,
+    studio_nozzle_type,
+};
 
 use super::{
     capabilities::{sdcard_available, studio_cfg, studio_fun},
-    input::{NozzleTemperature, PrinterStatus},
+    input::PrinterStatus,
     materials::{AmsPayload, virtual_slots},
     scalar::{JsonNumber, json_number_or_zero, packed_temperature, text, text_if_present},
 };
@@ -95,7 +103,13 @@ impl From<&PrinterStatus> for StudioTelemetry {
                     .as_ref()
                     .and_then(|materials| materials.cfg.as_deref()),
             ),
-            fun: studio_fun(printer.fun.as_deref()),
+            fun: studio_fun(
+                printer.fun.as_deref(),
+                printer
+                    .nozzle_system
+                    .as_ref()
+                    .is_some_and(|system| system.nozzle.info.iter().any(|nozzle| nozzle.id >= 16)),
+            ),
             aux: printer
                 .materials
                 .as_ref()
@@ -173,7 +187,9 @@ struct DeviceBlock {
     connection_type: &'static str,
     bed_temp: u32,
     ctc: ChamberBlock,
-    nozzle: NozzleDevice,
+    nozzle: BambuNozzleDevice,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    holder: Option<pandar_core::BambuNozzleHolder>,
     extruder: ExtruderDevice,
 }
 
@@ -195,10 +211,22 @@ impl DeviceBlock {
                     temp: packed_temperature(chamber_current, chamber_target),
                 },
             },
-            nozzle: NozzleDevice::new(&printer.nozzle_temperatures),
+            nozzle: printer
+                .nozzle_system
+                .as_ref()
+                .map(|system| system.nozzle.clone())
+                .unwrap_or_else(|| fallback_nozzle_device(&printer.nozzle_temperatures)),
+            holder: printer
+                .nozzle_system
+                .as_ref()
+                .and_then(|system| system.holder.clone()),
             extruder: ExtruderDevice::new(
                 &printer.nozzle_temperatures,
                 &text(&printer.active_nozzle),
+                printer
+                    .nozzle_system
+                    .as_ref()
+                    .is_some_and(|system| system.nozzle.info.iter().any(|nozzle| nozzle.id >= 16)),
             ),
         }
     }
@@ -213,188 +241,4 @@ struct ChamberBlock {
 #[derive(Serialize)]
 struct ChamberInfo {
     temp: u32,
-}
-
-#[derive(Serialize)]
-struct NozzleDevice {
-    exist: u32,
-    state: u8,
-    info: Vec<NozzleInfo>,
-}
-
-impl NozzleDevice {
-    fn new(nozzles: &[NozzleTemperature]) -> Self {
-        let total = nozzles.len().max(1);
-        let mut exist = 0;
-        let mut keyed_info = Vec::with_capacity(total);
-        for index in 0..total {
-            let label = nozzles
-                .get(index)
-                .map_or(String::new(), |nozzle| text(&nozzle.label));
-            let id = studio_extruder_id(&label, index, total);
-            exist |= 1_u32 << id;
-            keyed_info.push((
-                id,
-                NozzleInfo {
-                    id,
-                    diameter: studio_nozzle_diameter(nozzles.get(index)),
-                    nozzle_type: studio_nozzle_type(nozzles.get(index)),
-                    stat: 0,
-                },
-            ));
-        }
-        keyed_info.sort_by_key(|(id, _)| *id);
-        Self {
-            exist,
-            state: 0,
-            info: keyed_info.into_iter().map(|(_, info)| info).collect(),
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct NozzleInfo {
-    id: u32,
-    diameter: f32,
-    #[serde(rename = "type")]
-    nozzle_type: String,
-    stat: u8,
-}
-
-#[derive(Serialize)]
-struct ExtruderDevice {
-    state: usize,
-    info: Vec<ExtruderInfo>,
-}
-
-impl ExtruderDevice {
-    fn new(nozzles: &[NozzleTemperature], active_nozzle: &str) -> Self {
-        let total = nozzles.len().max(1);
-        let active_id = studio_active_extruder_id(nozzles, active_nozzle);
-        let mut keyed_info = Vec::with_capacity(total);
-        for index in 0..total {
-            let nozzle = nozzles.get(index);
-            let label = nozzle.map_or(String::new(), |nozzle| text(&nozzle.label));
-            let id = studio_extruder_id(&label, index, total);
-            let temp = packed_temperature(
-                &nozzle.map_or(String::new(), |nozzle| text(&nozzle.current_celsius)),
-                &nozzle.map_or(String::new(), |nozzle| text(&nozzle.target_celsius)),
-            );
-            keyed_info.push((
-                id,
-                ExtruderInfo {
-                    id,
-                    filam_bak: Vec::new(),
-                    info: 8,
-                    temp,
-                    spre: 65535,
-                    snow: 65535,
-                    star: 65535,
-                    stat: 0,
-                    hnow: id,
-                },
-            ));
-        }
-        keyed_info.sort_by_key(|(id, _)| *id);
-        Self {
-            state: total | ((active_id as usize) << 4),
-            info: keyed_info.into_iter().map(|(_, info)| info).collect(),
-        }
-    }
-}
-
-#[derive(Serialize)]
-struct ExtruderInfo {
-    id: u32,
-    filam_bak: Vec<u32>,
-    info: u8,
-    temp: u32,
-    spre: u16,
-    snow: u16,
-    star: u16,
-    stat: u8,
-    hnow: u32,
-}
-
-fn studio_extruder_id(label: &str, index: usize, total: usize) -> u32 {
-    if total <= 1 {
-        return 0;
-    }
-    match label {
-        label if label.eq_ignore_ascii_case("R") => 0,
-        label if label.eq_ignore_ascii_case("L") => 1,
-        _ => {
-            if index == 0 {
-                1
-            } else {
-                0
-            }
-        }
-    }
-}
-
-fn studio_active_extruder_id(nozzles: &[NozzleTemperature], active_nozzle: &str) -> u32 {
-    if nozzles.len() <= 1 {
-        return 0;
-    }
-    if let Some(index) = nozzles
-        .iter()
-        .position(|nozzle| text(&nozzle.label).eq_ignore_ascii_case(active_nozzle))
-    {
-        return studio_extruder_id(&text(&nozzles[index].label), index, nozzles.len());
-    }
-    0
-}
-
-fn studio_nozzle_by_id(nozzles: &[NozzleTemperature], id: u32) -> Option<&NozzleTemperature> {
-    nozzles
-        .iter()
-        .enumerate()
-        .find(|(index, nozzle)| {
-            studio_extruder_id(&text(&nozzle.label), *index, nozzles.len()) == id
-        })
-        .map(|(_, nozzle)| nozzle)
-}
-
-fn studio_nozzle_type(nozzle: Option<&NozzleTemperature>) -> String {
-    let value = nozzle
-        .map_or(String::new(), |nozzle| text(&nozzle.nozzle_type))
-        .trim()
-        .to_owned();
-    if let Some(value) = studio_nozzle_code(&value) {
-        return value;
-    }
-    match value.as_str() {
-        "" => "XS01".to_owned(),
-        "Hardened steel" | "Hardened Steel" => "hardened_steel".to_owned(),
-        "Stainless steel" | "Stainless Steel" => "stainless_steel".to_owned(),
-        "Tungsten carbide" | "Tungsten Carbide" => "tungsten_carbide".to_owned(),
-        _ => value,
-    }
-}
-
-fn studio_nozzle_code(value: &str) -> Option<String> {
-    let mut chars = value.chars();
-    let _prefix = chars.next()?;
-    let flow = chars.next()?;
-    let material: String = chars.collect();
-    if material.len() != 2 {
-        return None;
-    }
-    if !matches!(flow, 'S' | 'H' | 'U' | 'E' | 'A' | 'X') {
-        return None;
-    }
-    if !matches!(material.as_str(), "00" | "01" | "05") {
-        return None;
-    }
-    Some(format!("X{flow}{material}"))
-}
-
-fn studio_nozzle_diameter(nozzle: Option<&NozzleTemperature>) -> f32 {
-    let value = nozzle
-        .map_or(String::new(), |nozzle| text(&nozzle.diameter_mm))
-        .trim()
-        .parse::<f32>()
-        .unwrap_or(0.4);
-    (value * 10.0).round() / 10.0
 }

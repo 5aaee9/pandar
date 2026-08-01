@@ -1,3 +1,4 @@
+use pandar_core::BambuNozzleSystem;
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Deserialize)]
@@ -37,6 +38,8 @@ pub(super) struct PrinterStatus {
     #[serde(default)]
     pub(super) nozzle_temperatures: Vec<NozzleTemperature>,
     #[serde(default)]
+    pub(super) nozzle_system: Option<BambuNozzleSystem>,
+    #[serde(default)]
     pub(super) active_nozzle: Option<Scalar>,
     #[serde(default)]
     pub(super) bed_temperature_celsius: Option<Scalar>,
@@ -70,6 +73,10 @@ pub(super) struct NozzleTemperature {
     pub(super) diameter_mm: Option<Scalar>,
     #[serde(default)]
     pub(super) nozzle_type: Option<Scalar>,
+    #[serde(default)]
+    pub(super) snow: Option<u32>,
+    #[serde(default)]
+    pub(super) hnow: Option<u32>,
 }
 
 #[derive(Default, Deserialize)]

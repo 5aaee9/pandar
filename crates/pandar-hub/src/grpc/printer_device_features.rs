@@ -20,7 +20,8 @@ pub(super) async fn handle_device_features_snapshot(
     let serial = serial.to_owned();
     let features = snapshot
         .device_features
-        .map(|features| BambuDeviceFeatures::from_bits(features.bambu_fun_bits));
+        .and_then(|features| features.bambu_fun_bits)
+        .map(BambuDeviceFeatures::from_bits);
 
     let _lease = state
         .sessions()

@@ -78,7 +78,7 @@ async fn device_features_session_startup_precedes_queued_command_and_refreshes_z
     };
     assert_eq!(
         full_snapshot.device_features.unwrap().bambu_fun_bits,
-        0,
+        Some(0),
         "valid zero must overwrite the prior nonzero value"
     );
     assert!(matches!(

@@ -13,7 +13,9 @@ pub(in crate::machine::mqtt) mod snapshot;
 pub(crate) use firmware::FirmwareReportReducer;
 pub(crate) use materials::MaterialsReport;
 pub(crate) use print::PrintReportEnvelope;
-pub(crate) use snapshot::{SnapshotReport, device_feature_observation};
+pub(crate) use snapshot::{
+    SnapshotReport, device_feature_observation, device_feature2_observation,
+};
 
 /// One Bambu MQTT report decoded once into typed sections. The raw payload is
 /// retained privately for open-ended diagnostics pass-through only.
@@ -57,13 +59,25 @@ impl MachineReport {
         }
     }
 
+    pub(crate) fn device_feature2_observation(
+        &self,
+        serial: &str,
+    ) -> anyhow::Result<Option<pandar_core::BambuDeviceFeatures>> {
+        match self.snapshot() {
+            Some(report) => snapshot::device_feature2_observation(serial, report),
+            None => Ok(None),
+        }
+    }
+
     pub(crate) fn is_feature_only_report(&self) -> bool {
         self.raw.as_object().is_some_and(|fields| fields.len() == 1)
             && self
                 .raw
                 .get("print")
                 .and_then(Value::as_object)
-                .is_some_and(|fields| fields.len() == 1 && fields.contains_key("fun"))
+                .is_some_and(|fields| {
+                    fields.len() == 1 && (fields.contains_key("fun") || fields.contains_key("fun2"))
+                })
     }
 
     pub(crate) fn raw_print_payload(&self) -> Option<MachineReportDiagnosticPayload> {

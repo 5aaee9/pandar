@@ -93,6 +93,8 @@ async fn printer_snapshot_event_includes_temperatures() {
             target_celsius: "220".to_owned(),
             diameter_mm: "0.4".to_owned(),
             nozzle_type: "Hardened steel".to_owned(),
+            snow: None,
+            hnow: None,
         },
         crate::protocol::agent::v1::NozzleTemperature {
             label: "R".to_owned(),
@@ -100,6 +102,8 @@ async fn printer_snapshot_event_includes_temperatures() {
             target_celsius: "230".to_owned(),
             diameter_mm: "0.6".to_owned(),
             nozzle_type: "Stainless steel".to_owned(),
+            snow: None,
+            hnow: None,
         },
     ];
     snapshot.bed_temperature_celsius = "60".to_owned();

@@ -116,6 +116,7 @@ fn hello_event_has_agent_identity_version_and_exact_capability() {
                 AgentCapability::RequiredDeviceFeatures as i32,
                 AgentCapability::GcodeLine as i32,
                 AgentCapability::FirmwareControl as i32,
+                AgentCapability::H2cAutoNozzleMapping as i32,
             ],
         }))
     );

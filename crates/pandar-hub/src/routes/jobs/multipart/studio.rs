@@ -3,6 +3,7 @@ use pandar_core::{StudioPrintMetadata, StudioPrintMetadataV1};
 use crate::routes::ApiError;
 
 use super::{
+    MultipartPrintKind,
     parsing::{parse_bool, parse_i64, parse_optional_json_field},
     types::MultipartPrintFields,
 };
@@ -45,6 +46,25 @@ pub(super) fn parse_field(
         "svc_context" => fields.svc_context = Some(text.to_owned()),
         "slicer_uid" => fields.slicer_uid = Some(text.to_owned()),
         _ => fields.unknown_field = true,
+    }
+    Ok(())
+}
+
+pub(super) fn validate_h2c_admission(
+    model: Option<&str>,
+    kind: MultipartPrintKind,
+    metadata: Option<&StudioPrintMetadata>,
+) -> Result<(), ApiError> {
+    if model
+        .and_then(pandar_core::compatibility::normalize_model)
+        .as_deref()
+        == Some("H2C")
+        && (matches!(kind, MultipartPrintKind::Web)
+            || !metadata.is_some_and(|metadata| {
+                pandar_core::valid_h2c_nozzle_mapping(metadata.nozzle_mapping())
+            }))
+    {
+        return Err(ApiError::bad_request("h2c_nozzle_mapping_required"));
     }
     Ok(())
 }

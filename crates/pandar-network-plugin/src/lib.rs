@@ -5,6 +5,7 @@ mod cancellation;
 mod connection;
 pub mod firmware;
 mod gcode;
+mod h2c;
 mod http;
 pub mod installer;
 mod local_webserver;
@@ -39,6 +40,7 @@ pub use connection::{
     pandar_plugin_studio_set_listener, pandar_plugin_studio_set_selected,
     pandar_plugin_studio_status_target_available, pandar_plugin_studio_take_work,
 };
+pub use h2c::pandar_plugin_submit_h2c_auto_nozzle_mapping;
 pub use local_webserver::ffi::{
     pandar_plugin_local_webserver_base_url, pandar_plugin_local_webserver_config,
     pandar_plugin_start_local_webserver,
@@ -85,6 +87,7 @@ enum RequestKind {
     JobLookup,
     PrintSubmission,
     PrinterOperation,
+    H2cAutoNozzleMapping,
     PluginSession,
 }
 

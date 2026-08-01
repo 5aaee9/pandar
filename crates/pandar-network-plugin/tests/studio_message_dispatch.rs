@@ -8,6 +8,7 @@ const FIRMWARE: i32 = 1;
 const STATUS_GET_VERSION: i32 = 2;
 const STATUS_PUSH_ALL: i32 = 3;
 const OPERATION: i32 = 4;
+const H2C_AUTO_NOZZLE_MAPPING: i32 = 5;
 
 fn dispatch(message: &str) -> (i32, i32, i32, String) {
     let result = pandar_plugin_dispatch_studio_message(message.as_ptr(), message.len());
@@ -64,6 +65,40 @@ fn invalid_or_ambiguous_firmware_never_falls_through() {
     assert_eq!(invalid.0, FIRMWARE);
     assert_ne!(invalid.1, 0);
     assert_eq!(invalid.2, -19);
+}
+
+#[test]
+fn h2c_auto_mapping_is_classified_and_forwarded_as_a_typed_request() {
+    let (kind, outcome, abi_status, body) = dispatch(
+        r#"{"print":{"command":"get_auto_nozzle_mapping","sequence_id":"42","version":1,"group_info":[{"id":0,"ext":1,"dia":0.4,"vol":"E3D High Flow"}]}}"#,
+    );
+
+    assert_eq!((kind, outcome, abi_status), (H2C_AUTO_NOZZLE_MAPPING, 0, 0));
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&body).unwrap(),
+        serde_json::json!({
+            "command": "get_auto_nozzle_mapping",
+            "sequence_id": "42",
+            "version": 1,
+            "group_info": [{
+                "id": 0,
+                "ext": 1,
+                "dia": 0.4,
+                "vol": "E3D High Flow"
+            }]
+        })
+    );
+}
+
+#[test]
+fn malformed_h2c_auto_mapping_never_falls_through_to_an_ordinary_operation() {
+    let result = dispatch(
+        r#"{"print":{"command":"get_auto_nozzle_mapping","sequence_id":"42","version":1,"group_info":[{"id":0,"ext":1,"dia":0.4,"vol":"unknown"}]}}"#,
+    );
+
+    assert_eq!(result.0, H2C_AUTO_NOZZLE_MAPPING);
+    assert_ne!(result.1, 0);
+    assert_eq!(result.2, -19);
 }
 
 #[test]

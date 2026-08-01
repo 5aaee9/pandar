@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{AgentId, BambuDeviceFeatures, CoreError, TenantId, required};
+use crate::{AgentId, BambuDeviceFeatures, BambuNozzleSystem, CoreError, TenantId, required};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Printer {
@@ -28,6 +28,14 @@ pub struct Printer {
     #[serde(skip_serializing, skip_deserializing)]
     pub bambu_device_features_session_id: Option<String>,
     #[serde(skip_serializing, skip_deserializing)]
+    pub bambu_device_features2: Option<BambuDeviceFeatures>,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub bambu_device_features2_session_id: Option<String>,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub bambu_nozzle_system: Option<BambuNozzleSystem>,
+    #[serde(skip_serializing, skip_deserializing)]
+    pub bambu_nozzle_system_session_id: Option<String>,
+    #[serde(skip_serializing, skip_deserializing)]
     pub mqtt_presence_session_id: Option<String>,
 }
 
@@ -53,6 +61,10 @@ pub struct PrinterParts {
     pub chamber_light_on: Option<bool>,
     pub bambu_device_features: Option<BambuDeviceFeatures>,
     pub bambu_device_features_session_id: Option<String>,
+    pub bambu_device_features2: Option<BambuDeviceFeatures>,
+    pub bambu_device_features2_session_id: Option<String>,
+    pub bambu_nozzle_system: Option<BambuNozzleSystem>,
+    pub bambu_nozzle_system_session_id: Option<String>,
     pub mqtt_presence_session_id: Option<String>,
 }
 
@@ -63,6 +75,10 @@ pub struct PrinterNozzleTemperature {
     pub target_celsius: Option<String>,
     pub diameter_mm: Option<String>,
     pub nozzle_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snow: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hnow: Option<u32>,
 }
 
 impl Printer {
@@ -93,6 +109,10 @@ impl Printer {
             chamber_light_on: parts.chamber_light_on,
             bambu_device_features: parts.bambu_device_features,
             bambu_device_features_session_id: parts.bambu_device_features_session_id,
+            bambu_device_features2: parts.bambu_device_features2,
+            bambu_device_features2_session_id: parts.bambu_device_features2_session_id,
+            bambu_nozzle_system: parts.bambu_nozzle_system,
+            bambu_nozzle_system_session_id: parts.bambu_nozzle_system_session_id,
             mqtt_presence_session_id: parts.mqtt_presence_session_id,
         })
     }

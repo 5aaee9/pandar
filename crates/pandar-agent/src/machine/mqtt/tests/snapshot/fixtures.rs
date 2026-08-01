@@ -14,6 +14,8 @@ pub(super) struct SnapshotPrintFixture {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) fun: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) fun2: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) gcode_state: Option<ScalarFixture>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) state: Option<ScalarFixture>,
@@ -49,6 +51,8 @@ pub(super) struct DeviceFixture {
     pub(super) extruder: Option<ExtruderFixture>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) nozzle: Option<NozzleFixture>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) holder: Option<HolderFixture>,
 }
 
 #[derive(Serialize)]
@@ -74,12 +78,29 @@ pub(super) struct ExtruderInfoFixture {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) info: Option<u64>,
     pub(super) temp: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) snow: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) hnow: Option<u32>,
 }
 
 #[derive(Serialize)]
 pub(super) struct NozzleFixture {
     pub(super) exist: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) state: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) src_id: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) tar_id: Option<i32>,
     pub(super) info: Vec<NozzleInfoFixture>,
+}
+
+#[derive(Serialize)]
+pub(super) struct HolderFixture {
+    pub(super) stat: i32,
+    pub(super) pos: i32,
+    pub(super) info: i32,
 }
 
 #[derive(Serialize)]
@@ -117,11 +138,15 @@ pub(super) fn extruder_temperatures(left: i64, right: i64) -> Vec<ExtruderInfoFi
             id: 0,
             info: None,
             temp: left,
+            snow: None,
+            hnow: None,
         },
         ExtruderInfoFixture {
             id: 1,
             info: None,
             temp: right,
+            snow: None,
+            hnow: None,
         },
     ]
 }

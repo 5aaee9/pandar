@@ -17,9 +17,11 @@ use crate::{
 };
 
 pub(super) mod firmware;
+mod h2c;
 mod responses;
 mod studio_devices;
 mod studio_jobs;
+pub(super) use h2c::get_auto_nozzle_mapping;
 pub(crate) use responses::redact_artifact_error;
 use studio_devices::{PluginPrinterListResponse, plugin_printer_devices};
 pub(super) use studio_jobs::{

@@ -6,6 +6,7 @@ pub mod command;
 pub mod compatibility;
 pub mod device_features;
 pub mod firmware;
+pub mod h2c;
 pub mod ids;
 pub mod job;
 pub mod printer;
@@ -20,6 +21,12 @@ pub use firmware::{
     FirmwareCatalogTarget, FirmwareCommand, FirmwareControlMetadata, FirmwareTerminalOutcome,
     PrinterFirmwareModule, PrinterFirmwareState, PrinterFirmwareStatus, PrinterFirmwareVersion,
     PrinterUpgradeState,
+};
+pub use h2c::{
+    BambuNozzleDevice, BambuNozzleHolder, BambuNozzleInfo, BambuNozzleSystem,
+    H2cAutoMappingFilamentInfo, H2cAutoMappingGroupInfo, H2cAutoMappingNozzleInfo,
+    H2cAutoNozzleMappingEnvelope, H2cAutoNozzleMappingRequest, H2cAutoNozzleMappingResponse,
+    H2cAutoNozzleMappingResponseEnvelope, valid_h2c_nozzle_mapping, valid_physical_nozzle_id,
 };
 pub use ids::{AgentId, CommandId, JobId, TenantId};
 pub use job::{

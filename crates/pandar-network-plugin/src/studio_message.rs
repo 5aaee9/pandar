@@ -11,6 +11,7 @@ const FIRMWARE: i32 = 1;
 const STATUS_GET_VERSION: i32 = 2;
 const STATUS_PUSH_ALL: i32 = 3;
 const OPERATION: i32 = 4;
+const H2C_AUTO_NOZZLE_MAPPING: i32 = 5;
 const VALID: i32 = 0;
 const INVALID: i32 = 1;
 const ABI_SUCCESS: i32 = 0;
@@ -96,6 +97,22 @@ pub extern "C" fn pandar_plugin_dispatch_studio_message(
             return PluginStudioMessageResult::invalid(FIRMWARE);
         }
         StudioFirmwareParse::NotFirmware => {}
+    }
+
+    if message.contains("get_auto_nozzle_mapping") {
+        let request = serde_json::from_str::<pandar_core::H2cAutoNozzleMappingEnvelope>(&message)
+            .ok()
+            .filter(|envelope| envelope.print.is_valid());
+        return match request {
+            Some(request) => PluginStudioMessageResult::new(
+                H2C_AUTO_NOZZLE_MAPPING,
+                VALID,
+                ABI_SUCCESS,
+                serde_json::to_string(&request.print)
+                    .expect("H2C auto nozzle mapping request is serializable"),
+            ),
+            None => PluginStudioMessageResult::invalid(H2C_AUTO_NOZZLE_MAPPING),
+        };
     }
 
     if let Some(request) = parse_status_request(&message) {

@@ -95,6 +95,10 @@ fn printer_from_parts_builds_valid_record() {
         chamber_light_on: None,
         bambu_device_features: Some(BambuDeviceFeatures::from_bits(0x8000_0041_0000_0020)),
         bambu_device_features_session_id: Some("feature-session".to_owned()),
+        bambu_device_features2: None,
+        bambu_device_features2_session_id: None,
+        bambu_nozzle_system: None,
+        bambu_nozzle_system_session_id: None,
         mqtt_presence_session_id: Some("presence-session".to_owned()),
     })
     .unwrap();
@@ -144,6 +148,10 @@ fn printer_from_parts_validates_required_fields() {
             chamber_light_on: None,
             bambu_device_features: None,
             bambu_device_features_session_id: None,
+            bambu_device_features2: None,
+            bambu_device_features2_session_id: None,
+            bambu_nozzle_system: None,
+            bambu_nozzle_system_session_id: None,
             mqtt_presence_session_id: None,
         })
     };
@@ -189,6 +197,10 @@ fn printer_from_parts_normalizes_blank_model() {
         chamber_light_on: None,
         bambu_device_features: None,
         bambu_device_features_session_id: None,
+        bambu_device_features2: None,
+        bambu_device_features2_session_id: None,
+        bambu_nozzle_system: None,
+        bambu_nozzle_system_session_id: None,
         mqtt_presence_session_id: None,
     })
     .unwrap();

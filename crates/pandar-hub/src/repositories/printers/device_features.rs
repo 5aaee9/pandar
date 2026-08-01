@@ -32,6 +32,7 @@ impl PrinterRepository {
             begin_current_agent_transaction(&self.database, tenant_id, agent_id, session_id)
                 .await?;
         let feature_session_id = features.map(|_| session_id);
+        let nozzle_system_session_id = snapshot.nozzle_system.as_ref().map(|_| session_id);
         let presence_session_id = snapshot.telemetry_authoritative.then_some(session_id);
         let printer = upsert_snapshot_in_transaction(
             &transaction,
@@ -41,6 +42,7 @@ impl PrinterRepository {
             SnapshotSessionState {
                 device_features: features,
                 device_features_session_id: feature_session_id,
+                nozzle_system_session_id,
                 mqtt_presence_session_id: presence_session_id,
             },
             &self.access_code_cipher,
@@ -51,6 +53,60 @@ impl PrinterRepository {
             .await
             .context("failed to commit current-session printer snapshot with device features")?;
         Ok(printer)
+    }
+
+    pub async fn update_secondary_device_features_if_current(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        session_id: &str,
+        serial: &str,
+        features: Option<BambuDeviceFeatures>,
+    ) -> RepositoryResult<DeviceFeatureUpdateOutcome> {
+        let transaction =
+            match begin_current_agent_transaction(&self.database, tenant_id, agent_id, session_id)
+                .await
+            {
+                Ok(transaction) => transaction,
+                Err(RepositoryError::AgentSessionNotCurrent | RepositoryError::MissingAgent) => {
+                    return Ok(DeviceFeatureUpdateOutcome::StaleOrMissing);
+                }
+                Err(error) => return Err(error),
+            };
+        let query = printers::Entity::find()
+            .filter(printers::Column::TenantId.eq(tenant_id.to_string()))
+            .filter(printers::Column::AgentId.eq(agent_id.to_string()))
+            .filter(printers::Column::SerialNumber.eq(serial));
+        let printer = transaction
+            .lock_for_update(query)
+            .one(&transaction)
+            .await
+            .context("failed to lock printer for secondary Bambu device feature update")?;
+        let Some(printer) = printer else {
+            transaction
+                .commit()
+                .await
+                .context("failed to commit missing secondary Bambu device feature update")?;
+            return Ok(DeviceFeatureUpdateOutcome::StaleOrMissing);
+        };
+
+        let mut active = printer.into_active_model();
+        match features {
+            Some(features) => {
+                active.bambu_fun2_bits = Set(Some(features.to_hex()));
+                active.bambu_fun2_session_id = Set(Some(session_id.to_owned()));
+            }
+            None => active.bambu_fun2_session_id = Set(None),
+        }
+        active
+            .update(&transaction)
+            .await
+            .context("failed to update secondary Bambu device features")?;
+        transaction
+            .commit()
+            .await
+            .context("failed to commit secondary Bambu device feature update")?;
+        Ok(DeviceFeatureUpdateOutcome::Updated)
     }
 
     pub async fn update_device_features_if_current(

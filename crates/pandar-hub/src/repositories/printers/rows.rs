@@ -1,5 +1,7 @@
 use anyhow::{Context, bail};
-use pandar_core::{AgentId, BambuDeviceFeatures, Printer, PrinterParts, TenantId};
+use pandar_core::{
+    AgentId, BambuDeviceFeatures, BambuNozzleSystem, Printer, PrinterParts, TenantId,
+};
 
 use crate::{
     entities::printers,
@@ -58,6 +60,18 @@ pub(super) fn printer_from_model(
                 .transpose()
                 .context("failed to rehydrate printer Bambu device features")?,
             bambu_device_features_session_id: model.bambu_fun_session_id,
+            bambu_device_features2: model
+                .bambu_fun2_bits
+                .map(|value| BambuDeviceFeatures::from_hex(&value))
+                .transpose()
+                .context("failed to rehydrate printer secondary Bambu device features")?,
+            bambu_device_features2_session_id: model.bambu_fun2_session_id,
+            bambu_nozzle_system: model
+                .bambu_nozzle_system_json
+                .map(|value| serde_json::from_str::<BambuNozzleSystem>(&value))
+                .transpose()
+                .context("failed to rehydrate printer Bambu nozzle system")?,
+            bambu_nozzle_system_session_id: model.bambu_nozzle_system_session_id,
             mqtt_presence_session_id: model.mqtt_presence_session_id,
         })
         .map_err(anyhow::Error::from)

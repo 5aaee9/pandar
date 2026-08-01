@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use pandar_core::{PrinterFirmwareState, PrinterNozzleTemperature, TenantId};
+use pandar_core::compatibility::normalize_model;
+use pandar_core::{BambuNozzleSystem, PrinterFirmwareState, PrinterNozzleTemperature, TenantId};
 use serde::Serialize;
 
 use crate::{
@@ -43,6 +44,8 @@ pub(super) struct PluginPrinterResponse {
     hms: Vec<PrinterHms>,
     pandar_printer_id: String,
     nozzle_temperatures: Vec<PrinterNozzleTemperature>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nozzle_system: Option<BambuNozzleSystem>,
     active_nozzle: Option<String>,
     bed_temperature_celsius: Option<String>,
     bed_target_temperature_celsius: Option<String>,
@@ -110,6 +113,29 @@ pub(super) async fn plugin_printer_devices(
             }
             None => "0".to_owned(),
         };
+        let nozzle_system = if printer
+            .model
+            .as_deref()
+            .and_then(normalize_model)
+            .as_deref()
+            == Some("H2C")
+        {
+            state
+                .sessions()
+                .current_token_for_capability(
+                    tenant_id,
+                    printer.agent_id,
+                    AgentCapability::H2cAutoNozzleMapping,
+                )
+                .await
+                .filter(|token| {
+                    printer.bambu_nozzle_system_session_id.as_deref()
+                        == Some(token.persisted_id().as_str())
+                })
+                .and(printer.bambu_nozzle_system.clone())
+        } else {
+            None
+        };
         let firmware =
             current_firmware_projection(state, tenant_id, printer.agent_id, firmware).await?;
         devices.push(PluginPrinterResponse {
@@ -136,6 +162,7 @@ pub(super) async fn plugin_printer_devices(
             job_id: live_status.printer_job_id,
             hms: live_status.hms,
             nozzle_temperatures: printer.nozzle_temperatures,
+            nozzle_system,
             active_nozzle: printer.active_nozzle,
             bed_temperature_celsius: printer.bed_temperature_celsius,
             bed_target_temperature_celsius: printer.bed_target_temperature_celsius,

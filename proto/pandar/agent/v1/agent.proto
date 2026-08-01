@@ -38,6 +38,7 @@ enum AgentCapability {
   AGENT_CAPABILITY_REQUIRED_DEVICE_FEATURES = 3;
   AGENT_CAPABILITY_GCODE_LINE = 4;
   AGENT_CAPABILITY_FIRMWARE_CONTROL = 5;
+  AGENT_CAPABILITY_H2C_AUTO_NOZZLE_MAPPING = 6;
 }
 
 message AgentHello {
@@ -68,10 +69,42 @@ message PrinterSnapshot {
   bool connection_authoritative = 14;
   string chamber_target_temperature_celsius = 15;
   bool telemetry_authoritative = 16;
+  PrinterNozzleSystem nozzle_system = 17;
+}
+
+message PrinterNozzleSystem {
+  PrinterNozzleDevice nozzle = 1;
+  PrinterNozzleHolder holder = 2;
+}
+
+message PrinterNozzleDevice {
+  optional uint32 exist = 1;
+  optional uint32 state = 2;
+  optional sint32 src_id = 3;
+  optional sint32 tar_id = 4;
+  repeated PrinterNozzleInfo info = 5;
+}
+
+message PrinterNozzleInfo {
+  sint32 id = 1;
+  float diameter = 2;
+  string nozzle_type = 3;
+  optional uint32 stat = 4;
+  optional string fila_id = 5;
+  optional float wear = 6;
+  optional sint32 print_time = 7;
+  optional string color = 8;
+}
+
+message PrinterNozzleHolder {
+  optional sint32 stat = 1;
+  optional sint32 pos = 2;
+  optional sint32 info = 3;
 }
 
 message PrinterDeviceFeatures {
-  fixed64 bambu_fun_bits = 1;
+  optional fixed64 bambu_fun_bits = 1;
+  optional fixed64 bambu_fun2_bits = 2;
 }
 
 message PrinterDeviceFeaturesSnapshot {
@@ -91,6 +124,8 @@ message NozzleTemperature {
   string target_celsius = 3;
   string diameter_mm = 4;
   string nozzle_type = 5;
+  optional uint32 snow = 6;
+  optional uint32 hnow = 7;
 }
 
 message PrinterMaterialsSnapshot {
@@ -225,7 +260,46 @@ message PrinterOperation {
     SetChamberLightOperation set_chamber_light = 24;
     HandlePrintErrorOperation handle_print_error = 25;
     GcodeLineOperation gcode_line = 26;
+    GetAutoNozzleMappingOperation get_auto_nozzle_mapping = 27;
   }
+}
+
+message GetAutoNozzleMappingOperation {
+  string sequence_id = 1;
+  optional uint32 version = 2;
+  optional sint32 calibration = 3;
+  optional sint32 extrude_cali_manual_mode = 4;
+  repeated sint32 filament_seq = 5;
+  repeated sint32 ams_mapping = 6;
+  repeated AutoNozzleMappingFilamentInfo fila_info = 7;
+  repeated AutoNozzleMappingNozzleInfo nozzle_info = 8;
+  repeated AutoNozzleMappingGroupInfo group_info = 9;
+}
+
+message AutoNozzleMappingGroupInfo {
+  sint32 id = 1;
+  uint32 ext = 2;
+  float dia = 3;
+  string vol = 4;
+}
+
+message AutoNozzleMappingFilamentInfo {
+  sint32 id = 1;
+  uint32 direction = 2;
+  sint32 group = 3;
+  string nozzle_d = 4;
+  string nozzle_v = 5;
+  string cate = 6;
+  string color = 7;
+}
+
+message AutoNozzleMappingNozzleInfo {
+  sint32 pos = 1;
+  string nozzle_d = 2;
+  string nozzle_v = 3;
+  float wear = 4;
+  string cate = 5;
+  string color = 6;
 }
 
 message GcodeLineOperation {

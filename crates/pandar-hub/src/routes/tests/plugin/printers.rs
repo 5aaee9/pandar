@@ -33,6 +33,8 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
                         target_celsius: Some("220".to_string()),
                         diameter_mm: None,
                         nozzle_type: None,
+                        snow: None,
+                        hnow: None,
                     },
                     pandar_core::PrinterNozzleTemperature {
                         label: Some("R".to_string()),
@@ -40,6 +42,8 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
                         target_celsius: Some("215".to_string()),
                         diameter_mm: None,
                         nozzle_type: None,
+                        snow: None,
+                        hnow: None,
                     },
                 ],
                 active_nozzle: Some("L".to_string()),
@@ -48,6 +52,7 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
                 chamber_temperature_celsius: Some("32".to_string()),
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: Some(true),
+                nozzle_system: None,
                 connection_authoritative: false,
                 telemetry_authoritative: true,
             },
@@ -160,6 +165,108 @@ async fn plugin_printer_list_returns_studio_devices_shape() {
     assert_eq!(materials.ams_units[0].info, "00000E00");
     assert_eq!(materials.external_spools[0].external_id, "254");
     assert_eq!(materials.active_tray.global_tray_id, 0);
+}
+
+#[tokio::test]
+async fn h2c_rack_projection_requires_current_capable_session_telemetry() {
+    let state = state().await;
+    let app = router(state.clone());
+    let tenant = state
+        .tenants()
+        .create("plugin-h2c-rack", "Plugin H2C Rack")
+        .await
+        .unwrap();
+    let token = plugin_studio_tenant_token(&state, &tenant.id.to_string(), "h2c-rack").await;
+    let agent_id = feature_advertisement_printer_with_model(
+        &state,
+        tenant.id,
+        "h2c-agent",
+        "H2C-RACK",
+        "O1C2",
+    )
+    .await;
+    let session = register_capability_session(
+        &state,
+        tenant.id,
+        agent_id,
+        [
+            crate::protocol::agent::v1::AgentCapability::RequiredDeviceFeatures,
+            crate::protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping,
+        ],
+    )
+    .await;
+    let nozzle_system = serde_json::from_value(serde_json::json!({
+        "nozzle": {
+            "exist": 65536,
+            "state": 0,
+            "src_id": 16,
+            "tar_id": 17,
+            "info": [{"id": 16, "diameter": 0.4, "type": "XS01", "stat": 0}]
+        },
+        "holder": {"stat": 0, "pos": 2, "info": 0}
+    }))
+    .unwrap();
+    state
+        .printers()
+        .upsert_snapshot_with_device_features_if_current(
+            tenant.id,
+            agent_id,
+            &session.persisted_id(),
+            crate::repositories::PrinterSnapshotUpsert {
+                serial_number: "H2C-RACK".to_owned(),
+                host: None,
+                access_code: None,
+                name: "H2C Rack".to_owned(),
+                model: Some("O1C2".to_owned()),
+                status: Some("idle".to_owned()),
+                observed_at: "2026-08-01T00:00:00Z".to_owned(),
+                nozzle_temperatures: Vec::new(),
+                active_nozzle: None,
+                bed_temperature_celsius: None,
+                bed_target_temperature_celsius: None,
+                chamber_temperature_celsius: None,
+                chamber_target_temperature_celsius: None,
+                chamber_light_on: None,
+                nozzle_system: Some(nozzle_system),
+                connection_authoritative: false,
+                telemetry_authoritative: false,
+            },
+            Some(pandar_core::BambuDeviceFeatures::from_bits(1_u64 << 60)),
+        )
+        .await
+        .unwrap();
+
+    let (status, body) = request_as(
+        app.clone(),
+        Method::GET,
+        "/api/v1/plugin/printers",
+        None,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["devices"][0]["fun"], "1000000000000000");
+    assert!(body["devices"][0].get("fun2").is_none());
+    assert_eq!(
+        body["devices"][0]["nozzle_system"]["nozzle"]["info"][0]["id"],
+        16
+    );
+
+    register_capability_session(
+        &state,
+        tenant.id,
+        agent_id,
+        [
+            crate::protocol::agent::v1::AgentCapability::RequiredDeviceFeatures,
+            crate::protocol::agent::v1::AgentCapability::H2cAutoNozzleMapping,
+        ],
+    )
+    .await;
+    let (status, body) =
+        request_as(app, Method::GET, "/api/v1/plugin/printers", None, &token).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["devices"][0]["fun"], "0");
+    assert!(body["devices"][0].get("nozzle_system").is_none());
 }
 
 #[tokio::test]

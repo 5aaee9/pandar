@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::bail;
+use pandar_core::{H2cAutoNozzleMappingEnvelope, H2cAutoNozzleMappingRequest};
 use serde::Serialize;
 use serde_json::{Number, Value};
 
@@ -147,6 +148,7 @@ pub enum BambuMqttCommand {
     AmsLoadFilament(AmsFilamentCommand),
     AmsUnloadFilament(AmsFilamentCommand),
     HandlePrintError(HandlePrintErrorCommand),
+    GetAutoNozzleMapping(H2cAutoNozzleMappingRequest),
     RawJson(Value),
     ProjectFile(Box<ProjectFileCommand>),
 }
@@ -183,6 +185,12 @@ impl BambuMqttCommand {
             Self::AmsLoadFilament(command) => ams_load_filament_payload(command),
             Self::AmsUnloadFilament(command) => ams_unload_filament_payload(command),
             Self::HandlePrintError(command) => print_error::print_error_payload(command),
+            Self::GetAutoNozzleMapping(request) => BambuMqttCommandPayload::with_sequence(
+                payload::json_payload(H2cAutoNozzleMappingEnvelope {
+                    print: request.clone(),
+                }),
+                request.sequence_id.clone(),
+            ),
             Self::RawJson(payload) => BambuMqttCommandPayload::without_sequence(payload.clone()),
             Self::ProjectFile(command) => project_file_payload(command),
         }

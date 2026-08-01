@@ -293,6 +293,7 @@ fn snapshot_event(
             device_features: None,
             connection_authoritative: false,
             telemetry_authoritative: false,
+            nozzle_system: None,
         }),
     )
 }
