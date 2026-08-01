@@ -16,6 +16,13 @@
 
 ## Completed
 
+- Completed Hub-to-Studio model-resource projection for every printer profile in the pinned Bambu
+  Studio `02.08.01.55` snapshot. Friendly names and aliases now emit the exact `N1`, `N2S`,
+  `BL-P001`, `BL-P002`, `C11`, `C12`, `C13`, `N6`, `N7`, `N9`, `O1C2`, `O1D`, `O1E`, or `O1S`
+  `dev_model_name`; legacy H2C `O1C` canonicalizes to `O1C2`, while unknown future models remain
+  unchanged instead of being guessed. A full plugin-printer-list route regression covers every known
+  resource family and the unknown-model boundary.
+
 - Added Bambu Studio `02.08.01` as a first-class ABI series pinned to Studio `02.08.01.55` at
   `ba049f6a2e08c3b6033660bb84da80c08722974b`. Its separate plugin carries the exact trailing
   `PrintParams::slicer_uid`, 109-network-plus-21-File-Transfer export surface, and by-value

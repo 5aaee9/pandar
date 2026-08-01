@@ -29,6 +29,32 @@ The plugin reports `<abi-series>.99`, matching `open-bamboo-networking` and Stud
 gate; the separate source-agent value freezes upstream header drift such as `02.07.00` retaining the
 older `02.06.01.50` macro.
 
+## Studio Model Resource IDs
+
+The Hub projects each recognized printer model to the exact `resources/printers/<id>.json` identifier
+that Studio consumes in `dev_model_name`:
+
+| Model | Studio resource ID |
+| ----- | ------------------ |
+| A1 Mini | `N1` |
+| A1 | `N2S` |
+| X1C | `BL-P001` |
+| X1 | `BL-P002` |
+| P1P | `C11` |
+| P1S | `C12` |
+| X1E | `C13` |
+| X2D | `N6` |
+| P2S | `N7` |
+| A2L | `N9` |
+| H2C | `O1C2` |
+| H2D | `O1D` |
+| H2D Pro | `O1E` |
+| H2S | `O1S` |
+
+Friendly names and existing resource-ID aliases pass through the shared model normalizer before this
+projection. The historical H2C `O1C` alias is canonicalized to `O1C2`; an unknown future model remains
+unchanged rather than being guessed.
+
 Final12 is retained as historical evidence, not as the current candidate. Its immutable input passed
 the complete Windows clean, PostgreSQL 16.14, and Windows native three-file package/ABI/release-smoke
 gates, but the subsequent Linux full run exposed a status/firmware race: the compiled C++ fixture

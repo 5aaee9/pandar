@@ -13,6 +13,7 @@ mod firmware_batch;
 mod h2c;
 mod live_status;
 mod login_tickets;
+mod models;
 mod operations;
 mod printers;
 mod printing;

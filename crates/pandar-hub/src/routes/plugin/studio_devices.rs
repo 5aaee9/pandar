@@ -184,14 +184,22 @@ fn studio_online_from_status(status: &str) -> bool {
 }
 
 fn studio_model_id(model: &str) -> String {
-    let compact = model
-        .chars()
-        .filter(|value| value.is_ascii_alphanumeric())
-        .flat_map(char::to_uppercase)
-        .collect::<String>();
-    match compact.as_str() {
-        "N6" | "X2D" | "BAMBULABX2D" => "N6".to_string(),
-        "N7" | "P2S" | "BAMBULABP2S" => "N7".to_string(),
-        _ => model.to_string(),
-    }
+    let studio_id = match normalize_model(model).as_deref() {
+        Some("A1_MINI") => "N1",
+        Some("A1") => "N2S",
+        Some("X1C") => "BL-P001",
+        Some("X1") => "BL-P002",
+        Some("P1P") => "C11",
+        Some("P1S") => "C12",
+        Some("X1E") => "C13",
+        Some("X2D") => "N6",
+        Some("P2S") => "N7",
+        Some("A2L") => "N9",
+        Some("H2C") => "O1C2",
+        Some("H2D") => "O1D",
+        Some("H2D_PRO") => "O1E",
+        Some("H2S") => "O1S",
+        _ => model,
+    };
+    studio_id.to_owned()
 }
