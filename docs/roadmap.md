@@ -16,6 +16,8 @@
 
 ## Completed
 
+- Fixed GitHub Actions after the Studio ABI catalog became a Rust compile-time input: the Nix Rust source filter now carries `studio-abi-profiles.json`, restoring package, Clippy, format, and test derivations. Upgraded Checks and scheduled cache GC to Hestia v3, whose larger manifest bound and fresh cache namespace avoid v2's oversized-manifest failure while old packs expire.
+
 - Reworked Bambu Studio compatibility around ABI series, following the reviewed
   `open-bamboo-networking` build/install model. `studio-abi-profiles.json` now pins separate binaries for
   `02.06.00`, `02.06.01`, `02.07.00`, `02.07.01`, and `02.08.00`; each entry keeps an exact upstream

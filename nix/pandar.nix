@@ -58,6 +58,7 @@
           in
           rel == "Cargo.lock"
           || rel == "Cargo.toml"
+          || rel == "studio-abi-profiles.json"
           || rel == "crates"
           || lib.hasPrefix "crates/" rel
           || rel == "docs"
