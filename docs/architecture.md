@@ -24,8 +24,8 @@ Bambu Studio -(network plugin ABI)-> pandar-network-plugin -(HTTP / WebSocket)->
 
 `pandar-network-plugin` is a Hub-backed Bambu Studio dynamic-library adapter. It builds one reviewed
 ABI series at a time from `studio-abi-profiles.json`. The catalog currently covers `02.06.00`,
-`02.06.01`, `02.07.00`, `02.07.01`, and `02.08.00`; a four-component Studio version selects its
-artifact by the first three components. Each series is released as a separate archive because the C++
+`02.06.01`, `02.07.00`, `02.07.01`, `02.08.00`, and `02.08.01`; a four-component Studio version
+selects its artifact by the first three components. Each series is released as a separate archive because the C++
 signatures and layouts change between series. The plugin connects only to `pandar-hub`; it must not
 connect directly to `pandar-agent` or Bambu machines, and local machine access remains the agent's
 responsibility.
@@ -445,8 +445,8 @@ Agent phase status after Phase 15:
 
 ### pandar-network-plugin
 
-- Dynamic-library crate implementing separately built binaries for the five reviewed ABI series from
-  `02.06.00` through `02.08.00`. The shared ABI-series catalog drives build selection, release
+- Dynamic-library crate implementing separately built binaries for the six reviewed ABI series from
+  `02.06.00` through `02.08.01`. The shared ABI-series catalog drives build selection, release
   matrices, installer matching, Windows hook version gates, and ABI/release-smoke expectations.
 - File Transfer, direct discovery/bind/certificate handling, and direct printer sockets keep their
   exact ABI shape but remain explicit non-success paths.

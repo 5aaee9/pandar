@@ -131,15 +131,19 @@ pub fn verify_native_contract(
         if output.status.success() {
             if let Some(request) = print_observation {
                 let request = String::from_utf8_lossy(&request);
-                let observed = [
+                let mut sentinels = vec![
                     "contract-printer",
                     "contract-task",
                     "713",
                     "[17,23]",
                     "contract-tail",
-                ]
-                .into_iter()
-                .all(|sentinel| request.contains(sentinel));
+                ];
+                if abi_series.capabilities.print_slicer_uid {
+                    sentinels.push("contract-slicer-uid");
+                }
+                let observed = sentinels
+                    .into_iter()
+                    .all(|sentinel| request.contains(sentinel));
                 if observed {
                     passed_modes.push((*mode).to_owned());
                 } else {
@@ -238,8 +242,16 @@ fn compile(
             "PANDAR_STUDIO_PRINT_SVC_CONTEXT",
         ),
         (
+            input.abi_series.capabilities.print_slicer_uid,
+            "PANDAR_STUDIO_PRINT_SLICER_UID",
+        ),
+        (
             input.abi_series.capabilities.bind_model_argument,
             "PANDAR_STUDIO_BIND_MODEL_ARGUMENT",
+        ),
+        (
+            input.abi_series.capabilities.ams_sync,
+            "PANDAR_STUDIO_AMS_SYNC",
         ),
     ];
     if cfg!(all(windows, target_env = "msvc")) {

@@ -70,6 +70,9 @@ fn target_studio_symbols() -> BTreeSet<String> {
         .filter(|symbol| {
             abi_series.capabilities.filament_cloud || !is_filament_cloud_symbol(symbol)
         })
+        .filter(|symbol| {
+            abi_series.capabilities.ams_sync || symbol != "bambu_network_sync_ams_filaments"
+        })
         .collect::<Vec<_>>();
     let expected = symbols.iter().cloned().collect::<BTreeSet<_>>();
     assert_eq!(

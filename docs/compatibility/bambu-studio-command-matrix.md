@@ -1,10 +1,9 @@
-# Historical Bambu Studio 02.08.01.55 Command Disposition Matrix
+# Bambu Studio 02.08.01.55 Command Disposition Matrix
 
-This document retains the command-disposition audit derived from Bambu Studio commit
+This document records the command-disposition audit derived from Bambu Studio commit
 `ba049f6a2e08c3b6033660bb84da80c08722974b` (Studio `02.08.01.55`, network agent
-`02.08.01.52`). The active release ABI is now exact Studio `02.07.01.62`; this historical matrix does
-not promote the Beta ABI or its source-line anchors. Current real-Studio claims belong only in
-`bambu-studio-plugin.md`.
+`02.08.01.52`). `02.08.01` is an active cataloged ABI series; real-Studio compatibility claims still
+require the platform-specific evidence recorded in `bambu-studio-plugin.md`.
 
 ## Contract Summary
 

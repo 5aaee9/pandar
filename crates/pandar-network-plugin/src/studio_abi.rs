@@ -11,6 +11,15 @@ pub extern "C" fn pandar_plugin_network_agent_version() -> *const c_char {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn pandar_plugin_sync_ams_filaments(agent_valid: bool) -> PluginHttpResult {
+    if agent_valid {
+        result(-32, 0, stable_error_body("unsupported_ams_sync"))
+    } else {
+        result(-1, 0, stable_error_body("invalid_handle"))
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_camera_access_result(agent_valid: bool) -> PluginHttpResult {
     if agent_valid {
         result(-19, 0, stable_error_body("camera_unavailable"))

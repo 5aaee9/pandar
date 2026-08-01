@@ -117,7 +117,11 @@ inline PluginStudioPrintParams studio_print_params(
 #else
         {},
 #endif
+#if defined(PANDAR_STUDIO_PRINT_SLICER_UID)
+        plugin_bytes(params.slicer_uid),
+#else
         {},
+#endif
     };
 }
 

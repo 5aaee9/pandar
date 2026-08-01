@@ -131,6 +131,9 @@ PANDAR_STUDIO_EXPORT(bambu_network_get_model_mall_rating, func_get_model_mall_ra
 PANDAR_STUDIO_EXPORT(bambu_network_get_mw_user_preference, func_get_mw_user_preference, int, (void*, std::function<void(std::string)>))
 PANDAR_STUDIO_EXPORT(bambu_network_get_mw_user_4ulist, func_get_mw_user_4ulist, int, (void*, int, int, std::function<void(std::string)>))
 PANDAR_STUDIO_EXPORT(bambu_network_get_hms_snapshot, func_get_hms_snapshot, int, (void*, std::string&, std::string&, std::function<void(std::string, int)>))
+#if defined(PANDAR_STUDIO_AMS_SYNC)
+PANDAR_STUDIO_EXPORT(bambu_network_sync_ams_filaments, func_sync_ams_filaments, int, (void*, BBL::AmsSyncParams, std::string*))
+#endif
 PANDAR_STUDIO_EXPORT(ft_abi_version, fn_ft_abi_version, int, ())
 PANDAR_STUDIO_EXPORT(ft_free, fn_ft_free, void, (void*))
 PANDAR_STUDIO_EXPORT(ft_job_result_destroy, fn_ft_job_result_destroy, void, (Slic3r::ft_job_result*))

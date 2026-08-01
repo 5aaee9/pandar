@@ -13,7 +13,9 @@
       "capabilities": {
         "filament_cloud": false,
         "print_svc_context": false,
-        "bind_model_argument": false
+        "print_slicer_uid": false,
+        "bind_model_argument": false,
+        "ams_sync": false
       }
     },
     {
@@ -27,7 +29,9 @@
       "capabilities": {
         "filament_cloud": true,
         "print_svc_context": false,
-        "bind_model_argument": false
+        "print_slicer_uid": false,
+        "bind_model_argument": false,
+        "ams_sync": false
       }
     },
     {
@@ -41,7 +45,9 @@
       "capabilities": {
         "filament_cloud": true,
         "print_svc_context": false,
-        "bind_model_argument": false
+        "print_slicer_uid": false,
+        "bind_model_argument": false,
+        "ams_sync": false
       }
     },
     {
@@ -55,7 +61,9 @@
       "capabilities": {
         "filament_cloud": true,
         "print_svc_context": true,
-        "bind_model_argument": false
+        "print_slicer_uid": false,
+        "bind_model_argument": false,
+        "ams_sync": false
       }
     },
     {
@@ -69,7 +77,25 @@
       "capabilities": {
         "filament_cloud": true,
         "print_svc_context": true,
-        "bind_model_argument": true
+        "print_slicer_uid": false,
+        "bind_model_argument": true,
+        "ams_sync": false
+      }
+    },
+    {
+      "id": "02.08.01",
+      "reference_studio_version": "02.08.01.55",
+      "studio_commit": "ba049f6a2e08c3b6033660bb84da80c08722974b",
+      "reference_network_agent_version": "02.08.01.52",
+      "reported_network_agent_version": "02.08.01.99",
+      "network_exports": 109,
+      "file_transfer_exports": 21,
+      "capabilities": {
+        "filament_cloud": true,
+        "print_svc_context": true,
+        "print_slicer_uid": true,
+        "bind_model_argument": true,
+        "ams_sync": true
       }
     }
   ]

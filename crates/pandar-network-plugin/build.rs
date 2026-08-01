@@ -32,8 +32,14 @@ fn main() {
     if studio_abi_series.capabilities.print_svc_context {
         shim_build.define("PANDAR_STUDIO_PRINT_SVC_CONTEXT", None);
     }
+    if studio_abi_series.capabilities.print_slicer_uid {
+        shim_build.define("PANDAR_STUDIO_PRINT_SLICER_UID", None);
+    }
     if studio_abi_series.capabilities.bind_model_argument {
         shim_build.define("PANDAR_STUDIO_BIND_MODEL_ARGUMENT", None);
+    }
+    if studio_abi_series.capabilities.ams_sync {
+        shim_build.define("PANDAR_STUDIO_AMS_SYNC", None);
     }
     if target_env == "msvc" {
         shim_build
@@ -101,6 +107,7 @@ fn main() {
         "shim_abi_operations.hpp",
         "shim_abi_user.hpp",
         "shim_account_ffi.hpp",
+        "shim_ams_types.hpp",
         "shim_connection.hpp",
         "shim_exports.hpp",
         "shim_file_transfer.hpp",
@@ -149,6 +156,9 @@ fn expected_abi_symbols(
         })
         .filter(|symbol| {
             abi_series.capabilities.filament_cloud || !is_filament_cloud_symbol(symbol)
+        })
+        .filter(|symbol| {
+            abi_series.capabilities.ams_sync || symbol != "bambu_network_sync_ams_filaments"
         })
         .collect::<Vec<_>>();
 

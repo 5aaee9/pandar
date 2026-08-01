@@ -61,6 +61,9 @@ fn parse_expected_symbols(
         if !abi_series.capabilities.filament_cloud && is_filament_cloud_symbol(symbol) {
             continue;
         }
+        if !abi_series.capabilities.ams_sync && symbol == "bambu_network_sync_ams_filaments" {
+            continue;
+        }
         match symbol {
             symbol if symbol.starts_with("bambu_network_") => network_count += 1,
             symbol if symbol.starts_with("ft_") => file_transfer_count += 1,

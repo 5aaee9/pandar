@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "shim_ams_types.hpp"
 #include "shim_model_task_types.hpp"
 
 #if defined(_WIN32)
@@ -50,6 +51,7 @@ constexpr int BAMBU_NETWORK_ERR_CREATE_FILAMENT_FAILED = -28;
 constexpr int BAMBU_NETWORK_ERR_UPDATE_FILAMENT_FAILED = -29;
 constexpr int BAMBU_NETWORK_ERR_DELETE_FILAMENT_FAILED = -30;
 constexpr int BAMBU_NETWORK_ERR_GET_FILAMENT_CONFIG_FAILED = -31;
+constexpr int BAMBU_NETWORK_ERR_AMS_SYNC_FAILED = -32;
 constexpr int BAMBU_NETWORK_ERR_BIND_FAILED = -5;
 constexpr int BAMBU_NETWORK_ERR_UNBIND_FAILED = -6;
 constexpr int BAMBU_NETWORK_ERR_PUT_SETTING_FAILED = -8;
@@ -134,6 +136,9 @@ struct PrintParams {
 #if defined(PANDAR_STUDIO_PRINT_SVC_CONTEXT)
     std::string svc_context;
 #endif
+#if defined(PANDAR_STUDIO_PRINT_SLICER_UID)
+    std::string slicer_uid;
+#endif
 };
 
 struct TaskQueryParams {
@@ -156,6 +161,7 @@ struct FilamentDeleteParams {
     std::vector<std::string> ids;
     std::vector<std::string> rfids;
 };
+
 struct PublishParams {
     std::string project_name;
     std::string project_3mf_file;
@@ -193,6 +199,9 @@ struct PluginFirmwareCallbackResult {
 };
 
 const char* pandar_plugin_network_agent_version();
+#if defined(PANDAR_STUDIO_AMS_SYNC)
+PluginHttpResult pandar_plugin_sync_ams_filaments(bool);
+#endif
 PluginHttpResult pandar_plugin_camera_access_result(bool);
 PluginHttpResult pandar_plugin_local_connect_json(
     const uint8_t*, std::size_t,

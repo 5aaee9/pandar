@@ -20,6 +20,9 @@ pub fn verify_pandar_abi_contract(
     if !abi_series.capabilities.print_svc_context {
         print_params.retain(|field| field != "svc_context");
     }
+    if !abi_series.capabilities.print_slicer_uid {
+        print_params.retain(|field| field != "slicer_uid");
+    }
     verify_fields("PrintParams", &contract.print_params_fields, &print_params)?;
     let exports_path = repo_root.join("crates/pandar-network-plugin/src/shim_exports.hpp");
     let exports = fs::read_to_string(&exports_path).map_err(|error| {
@@ -32,6 +35,9 @@ pub fn verify_pandar_abi_contract(
         .into_iter()
         .filter(|(symbol, _)| {
             abi_series.capabilities.filament_cloud || !is_filament_cloud_symbol(symbol)
+        })
+        .filter(|(symbol, _)| {
+            abi_series.capabilities.ams_sync || symbol != "bambu_network_sync_ams_filaments"
         })
         .collect::<Vec<_>>();
     let network = declarations

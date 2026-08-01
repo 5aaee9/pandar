@@ -6,12 +6,12 @@ BambuSource sentinel policy. It does not prove that Bambu Studio loaded the libr
 printer accepted an action.
 
 Current releases build separate artifacts for ABI series `02.06.00`, `02.06.01`, `02.07.00`,
-`02.07.01`, and `02.08.00`. `studio-abi-profiles.json` pins the exact reference Studio commit,
-source network-agent version, reported `<abi-series>.99` version, and export contract for each series.
-`02.06.00` requires 103 network plus 21
-File Transfer names; the other four series require 108 network plus 21 File Transfer names. Contract
-counts are not the dynamic library's total export count; the historical final12 Windows PE has 271
-exports after Pandar flat-FFI and aws-lc exports are included.
+`02.07.01`, `02.08.00`, and `02.08.01`. `studio-abi-profiles.json` pins the exact reference Studio
+commit, source network-agent version, reported `<abi-series>.99` version, and export contract for each
+series. `02.06.00` requires 103 network plus 21 File Transfer names, `02.06.01` through `02.08.00`
+require 108 plus 21, and `02.08.01` requires 109 plus 21. Contract counts are not the dynamic
+library's total export count; the historical final12 Windows PE has 271 exports after Pandar flat-FFI
+and aws-lc exports are included.
 
 ## Status Values
 

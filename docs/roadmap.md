@@ -16,6 +16,15 @@
 
 ## Completed
 
+- Added Bambu Studio `02.08.01` as a first-class ABI series pinned to Studio `02.08.01.55` at
+  `ba049f6a2e08c3b6033660bb84da80c08722974b`. Its separate plugin carries the exact trailing
+  `PrintParams::slicer_uid`, 109-network-plus-21-File-Transfer export surface, and by-value
+  `bambu_network_sync_ams_filaments` ABI; AMS cloud sync remains explicitly unsupported with a stable
+  redacted failure. The installer and Windows hook resolve `02.08.01.x` to its own artifact, release
+  CI derives all platform builds from the catalog, and the pinned upstream native contract passes
+  version, bind, print, AMS, and File Transfer modes against Boost `1.84.0`. Current tagged packages
+  and platform-specific real-Studio runs still require fresh release evidence.
+
 - Added source-backed, fail-closed H2C FDM nozzle-rack support across Bambu Studio, the network plugin, Hub, Agent, and printer MQTT. Current-session rack telemetry now carries physical nozzle/holder state plus `snow`/`hnow`, while raw `fun2` evidence is retained without being advertised; Studio's bit-60 rack capability is gated on both fresh telemetry and Agent support; typed V0/V1 auto-mapping requires command/sequence correlation and strict successful physical mappings while preserving detailed printer failures; and H2C Studio prints/reprints require the slicer's validated mapping while Web dispatch is rejected instead of guessing. SQLite/PostgreSQL persistence and focused cross-boundary tests cover session fencing and delta-safe state. Signing, rack controls, laser/cut, eMMC/`fun2`, and live-hardware claims remain disabled; see `docs/compatibility/h2c.md`.
 
 - Moved Pandar's canonical repository to the organization-owned `ProjectPandar/pandar` namespace: Cargo metadata, release discovery, GitHub links, deployment defaults, release documentation, and historical repository commands use the canonical repository path, while GHCR image/chart publishing uses the registry-required lowercase `projectpandar/pandar` path.
@@ -24,18 +33,19 @@
 
 - Reworked Bambu Studio compatibility around ABI series, following the reviewed
   `open-bamboo-networking` build/install model. `studio-abi-profiles.json` now pins separate binaries for
-  `02.06.00`, `02.06.01`, `02.07.00`, `02.07.01`, and `02.08.00`; each entry keeps an exact upstream
+  `02.06.00`, `02.06.01`, `02.07.00`, `02.07.01`, `02.08.00`, and `02.08.01`; each entry keeps an exact upstream
   reference version and commit for contract verification while installed Studio builds match by their
   first three components. `PANDAR_STUDIO_ABI_SERIES` selects a build and defaults to `02.07.01`, so the
   locally installed `02.07.01.62` resolves to that series without treating its fourth component as a new
   ABI. Capability gates cover the five filament exports introduced in `02.06.01`,
   `PrintParams::svc_context` introduced in `02.07.01`, and the `bambu_network_bind` model argument
-  introduced in `02.08.00`. Release CI derives all platform/series artifacts from the catalog, with
+  introduced in `02.08.00`, plus `PrintParams::slicer_uid` and AMS sync introduced in `02.08.01`.
+  Release CI derives all platform/series artifacts from the catalog, with
   macOS jobs running on Apple Silicon and amd64 execution under Rosetta. Adding another supported
   Studio ABI now requires one reviewed catalog entry and only its actual capability differences. The
   catalog stores upstream's source network-agent macro separately from the plugin's reported
   `<abi-series>.99`, covering `02.07.00` where upstream retained the older `02.06.01.50` macro even
-  though Studio validates the running plugin against product series `02.07.00`. All five official
+  though Studio validates the running plugin against product series `02.07.00`. The first five official
   source commits pass the full native contract on macOS arm64. A current `02.07.01` three-file archive
   also passes release-smoke and loads both dylibs into the installed ARM64 Bambu Studio `02.07.01.62`
   process, which reaches its normal home UI before the original local plugin/config state is restored.

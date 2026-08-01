@@ -141,12 +141,12 @@ Deploy in this exact order: database migration, dual-capability Agents, all Hubs
 ## Bambu Studio Network Plugin
 
 `crates/pandar-network-plugin` builds the Hub-backed adapter separately for the `02.06.00`,
-`02.06.01`, `02.07.00`, `02.07.01`, and `02.08.00` Bambu Studio ABI series. The shared catalog pins
-one exact upstream reference version and commit for each series; `PANDAR_STUDIO_ABI_SERIES` selects
-the build and defaults to `02.07.01`. Installed four-part Studio versions resolve by their first three
-components, so `02.07.01.62` uses the reviewed `02.07.01` ABI artifact. The target-header caller uses
-upstream Boost `1.84.0` and freezes each series' 103-or-108 network plus 21 File Transfer exports
-across the C++/Rust ABI boundary.
+`02.06.01`, `02.07.00`, `02.07.01`, `02.08.00`, and `02.08.01` Bambu Studio ABI series. The shared
+catalog pins one exact upstream reference version and commit for each series;
+`PANDAR_STUDIO_ABI_SERIES` selects the build and defaults to `02.07.01`. Installed four-part Studio
+versions resolve by their first three components, so `02.08.01.55` uses the reviewed `02.08.01` ABI
+artifact. The target-header caller uses upstream Boost `1.84.0` and freezes each series' 103, 108, or
+109 network exports plus 21 File Transfer exports across the C++/Rust ABI boundary.
 
 Important boundaries:
 
