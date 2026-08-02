@@ -4,6 +4,7 @@ mod patch;
 
 use external::{has_dual_external_slots, normalize_external_spools};
 use identifiers::*;
+use pandar_core::AmsUnitKind;
 use patch::*;
 use serde_json::Number;
 
@@ -45,7 +46,7 @@ pub(crate) fn normalize_material_patch<'a>(
             }
         }
 
-        if let Some(active_tray) = normalize_active_tray(ams.tray_now.as_ref()) {
+        if let Some(active_tray) = normalize_active_tray(ams.tray_now.as_ref(), &patch.ams_units) {
             patch.active_tray = Some(active_tray);
         }
     }
@@ -81,7 +82,7 @@ fn normalize_ams_units(
         .iter()
         .filter_map(|unit| {
             let unit_id = unit_id(unit)?;
-            let unit_kind = unit_kind(&unit_id);
+            let unit_kind = unit_kind(&unit_id, unit.info.as_ref());
             let info = unit.info.as_ref().and_then(normalize_ams_info);
             let toolhead = match unit.info.as_ref() {
                 Some(info) => normalize_toolhead(info, filament_switch_installed),
@@ -97,13 +98,13 @@ fn normalize_ams_units(
                     .iter()
                     .filter_map(|tray| normalize_tray(tray, &unit_id, unit_kind))
                     .collect();
-                if unit_kind == "ams"
+                if unit_kind.uses_four_slot_exist_bits()
                     && !skip_zero_poweroff_cleanup
                     && let Some(bits) = tray_exist_bits
                 {
-                    apply_empty_tray_clears(&mut normalized_trays, &unit_id, bits);
+                    apply_empty_tray_clears(&mut normalized_trays, &unit_id, unit_kind, bits);
                 }
-                replace_trays = unit_kind != "ams"
+                replace_trays = !unit_kind.uses_four_slot_exist_bits()
                     || (0..4).all(|slot| {
                         let tray_id = slot.to_string();
                         normalized_trays.iter().any(|tray| tray.tray_id == tray_id)
@@ -124,7 +125,7 @@ fn normalize_ams_units(
                 || replace_trays)
                 .then_some(AmsUnitPatch {
                     unit_id,
-                    unit_kind: unit_kind.to_owned(),
+                    unit_kind,
                     info,
                     humidity: unit.humidity_raw.as_ref().and_then(normalized_number),
                     humidity_level: unit.humidity.as_ref().and_then(normalized_number),
@@ -144,16 +145,16 @@ fn normalize_ams_units(
 fn normalize_tray(
     tray: &MaterialSlotReport,
     unit_id: &str,
-    unit_kind: &str,
+    unit_kind: AmsUnitKind,
 ) -> Option<NormalizedTrayPatch> {
     let tray_id = tray_id(tray)?;
-    let global_tray_id = global_tray_id(unit_id, &tray_id);
+    let global_tray_id = global_tray_id(unit_id, &tray_id, unit_kind);
     Some(NormalizedTrayPatch {
         tray_id: tray_id.clone(),
         value: MaterialTrayPatch::Present(MaterialTrayEntryPatch {
             tray_id,
             exists: true,
-            unit_kind: unit_kind.to_owned(),
+            unit_kind,
             global_tray_id,
             fields: material_fields(tray),
         }),
@@ -206,17 +207,24 @@ pub(in crate::machine::materials) fn normalized_string(
     value?.string()
 }
 
-fn apply_empty_tray_clears(trays: &mut Vec<NormalizedTrayPatch>, unit_id: &str, bits: u64) {
-    let Some(unit_offset) = unit_id.parse::<u64>().ok().map(|unit| unit * 4) else {
+fn apply_empty_tray_clears(
+    trays: &mut Vec<NormalizedTrayPatch>,
+    unit_id: &str,
+    unit_kind: AmsUnitKind,
+    bits: u64,
+) {
+    let Some(unit_id_number) = unit_id.parse::<u64>().ok() else {
         return;
     };
     for slot in 0..4 {
-        let bit_index = unit_offset + slot;
+        let Some(bit_index) = unit_kind.global_tray_id(unit_id_number, slot) else {
+            continue;
+        };
         if bit_index < u64::BITS as u64 && bits & (1_u64 << bit_index) != 0 {
             continue;
         }
         let tray_id = slot.to_string();
-        let clear = empty_tray_clear(unit_id, slot);
+        let clear = empty_tray_clear(unit_id, unit_kind, slot);
         if let Some(existing) = trays.iter().position(|tray| tray.tray_id == tray_id) {
             trays[existing] = clear;
             continue;
@@ -226,9 +234,13 @@ fn apply_empty_tray_clears(trays: &mut Vec<NormalizedTrayPatch>, unit_id: &str, 
     }
 }
 
-fn empty_tray_clear(unit_id: &str, slot: u64) -> NormalizedTrayPatch {
+fn empty_tray_clear(unit_id: &str, unit_kind: AmsUnitKind, slot: u64) -> NormalizedTrayPatch {
     let tray_id = slot.to_string();
-    let value = empty_tray_clear_patch(tray_id, global_tray_id(unit_id, &slot.to_string()));
+    let value = empty_tray_clear_patch(
+        tray_id,
+        unit_kind,
+        global_tray_id(unit_id, &slot.to_string(), unit_kind),
+    );
     NormalizedTrayPatch {
         tray_id: slot.to_string(),
         value,
@@ -260,15 +272,41 @@ fn default_dual_ams_toolhead(
     }
 }
 
-fn normalize_active_tray(value: Option<&ScalarValue>) -> Option<ActiveTrayPatch> {
+fn normalize_active_tray(
+    value: Option<&ScalarValue>,
+    units: &[AmsUnitPatch],
+) -> Option<ActiveTrayPatch> {
     let tray_now = parse_i64(value?)?;
     match tray_now {
-        255 => Some(ActiveTrayPatch::None),
-        254 => Some(external_active_tray_patch()),
-        0..=15 => Some(ams_active_tray_patch(tray_now)),
+        255 => return Some(ActiveTrayPatch::None),
+        254 => return Some(external_active_tray_patch()),
+        _ => {}
+    }
+    if let Some((ams_id, tray_id)) = active_ams_route(units, tray_now) {
+        return Some(ams_active_tray_patch(tray_now, ams_id, tray_id));
+    }
+    match tray_now {
+        0..=15 => Some(ams_active_tray_patch(
+            tray_now,
+            (tray_now / 4).to_string(),
+            (tray_now % 4).to_string(),
+        )),
+        24..=27 => Some(mixed_ams_lite_global_active_tray_patch(tray_now)),
         128..=135 => Some(ams_ht_active_tray_patch(tray_now)),
         _ => None,
     }
+}
+
+fn active_ams_route(units: &[AmsUnitPatch], tray_now: i64) -> Option<(String, String)> {
+    let tray_now = u64::try_from(tray_now).ok()?;
+    units.iter().find_map(|unit| {
+        unit.trays.iter().find_map(|tray| match tray {
+            MaterialTrayPatch::Present(tray) if tray.global_tray_id == Some(tray_now) => {
+                Some((unit.unit_id.clone(), tray.tray_id.clone()))
+            }
+            MaterialTrayPatch::Present(_) | MaterialTrayPatch::EmptyClear(_) => None,
+        })
+    })
 }
 
 fn normalize_color(value: &ScalarValue) -> Option<String> {

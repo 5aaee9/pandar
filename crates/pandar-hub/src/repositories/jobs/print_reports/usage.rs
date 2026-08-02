@@ -1,4 +1,7 @@
+mod mapping;
+
 use anyhow::Context;
+use mapping::mapping_identities;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter,
 };
@@ -66,13 +69,6 @@ enum ScalarField {
     F64(f64),
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct Mapping2Entry {
-    pub(crate) ams_id: i32,
-    pub(crate) slot_id: i32,
-}
-
 pub(super) async fn derive_terminal_usage<C>(
     connection: &C,
     job: &jobs::Model,
@@ -80,17 +76,24 @@ pub(super) async fn derive_terminal_usage<C>(
 where
     C: ConnectionTrait,
 {
-    let identities = mapping_identities(job)?;
-    if identities.is_empty() {
-        return Ok(());
-    }
-
     let snapshot = printer_material_snapshots::Entity::find()
         .filter(printer_material_snapshots::Column::TenantId.eq(&job.tenant_id))
         .filter(printer_material_snapshots::Column::PrinterId.eq(&job.printer_id))
         .one(connection)
         .await
         .context("failed to load material snapshot for job usage derivation")?;
+    let ams_units: Vec<MaterialUnit> = snapshot
+        .as_ref()
+        .map(|snapshot| {
+            serde_json::from_str(&snapshot.ams_json)
+                .context("failed to parse material AMS snapshot for job usage routing")
+        })
+        .transpose()?
+        .unwrap_or_default();
+    let identities = mapping_identities(job, &ams_units)?;
+    if identities.is_empty() {
+        return Ok(());
+    }
     let now = pandar_core::created_at_now();
 
     for identity in identities {
@@ -130,116 +133,6 @@ where
     }
 
     Ok(())
-}
-
-fn mapping_identities(job: &jobs::Model) -> RepositoryResult<Vec<SlotIdentity>> {
-    let mapping = job
-        .ams_mapping_json
-        .as_deref()
-        .map(parse_mapping)
-        .transpose()?
-        .unwrap_or_default();
-    let mapping2 = job
-        .ams_mapping2_json
-        .as_deref()
-        .map(parse_mapping2)
-        .transpose()?
-        .unwrap_or_default();
-    let slots = mapping.len().max(mapping2.len());
-    let mut identities = Vec::new();
-
-    for slot_index in 0..slots {
-        let identity = if let Some(entry) = mapping2.get(slot_index) {
-            identity_from_mapping2(slot_index, entry)
-        } else {
-            mapping
-                .get(slot_index)
-                .and_then(|value| identity_from_mapping(slot_index, *value))
-        };
-        if let Some(identity) = identity {
-            identities.push(identity);
-        }
-    }
-
-    Ok(identities)
-}
-
-fn parse_mapping(json: &str) -> RepositoryResult<Vec<i32>> {
-    serde_json::from_str(json)
-        .with_context(|| "failed to parse persisted ams_mapping_json")
-        .map_err(Into::into)
-}
-
-fn parse_mapping2(json: &str) -> RepositoryResult<Vec<Mapping2Entry>> {
-    serde_json::from_str(json)
-        .with_context(|| "failed to parse persisted ams_mapping2_json")
-        .map_err(Into::into)
-}
-
-fn identity_from_mapping(slot_index: usize, value: i32) -> Option<SlotIdentity> {
-    match value {
-        -1 | 255 => None,
-        0..=15 => Some(SlotIdentity {
-            slot_index,
-            source: "ams_mapping",
-            ams_id: Some((value / 4).to_string()),
-            tray_id: Some((value % 4).to_string()),
-            global_tray_id: Some(value),
-            external_id: None,
-        }),
-        128..=135 => Some(SlotIdentity {
-            slot_index,
-            source: "ams_mapping",
-            ams_id: Some(value.to_string()),
-            tray_id: Some("0".to_string()),
-            global_tray_id: None,
-            external_id: None,
-        }),
-        254 => Some(SlotIdentity {
-            slot_index,
-            source: "ams_mapping",
-            ams_id: None,
-            tray_id: Some("0".to_string()),
-            global_tray_id: None,
-            external_id: Some("254".to_string()),
-        }),
-        _ => None,
-    }
-}
-
-fn identity_from_mapping2(slot_index: usize, entry: &Mapping2Entry) -> Option<SlotIdentity> {
-    match (entry.ams_id, entry.slot_id) {
-        (_, 255) => None,
-        (254 | 255, slot_id) => Some(SlotIdentity {
-            slot_index,
-            source: "ams_mapping2",
-            ams_id: None,
-            tray_id: Some(slot_id.to_string()),
-            global_tray_id: None,
-            external_id: Some("254".to_string()),
-        }),
-        (_, slot_id) if !(0..=3).contains(&slot_id) => None,
-        (0..=63, slot_id) => Some(SlotIdentity {
-            slot_index,
-            source: "ams_mapping2",
-            ams_id: Some(entry.ams_id.to_string()),
-            tray_id: Some(slot_id.to_string()),
-            global_tray_id: entry
-                .ams_id
-                .checked_mul(4)
-                .and_then(|global| global.checked_add(slot_id)),
-            external_id: None,
-        }),
-        (128..=135, slot_id) => Some(SlotIdentity {
-            slot_index,
-            source: "ams_mapping2",
-            ams_id: Some(entry.ams_id.to_string()),
-            tray_id: Some(slot_id.to_string()),
-            global_tray_id: None,
-            external_id: None,
-        }),
-        _ => None,
-    }
 }
 
 fn filament_for_identity(

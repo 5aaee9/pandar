@@ -66,8 +66,8 @@ pub(crate) struct TestExternalSpool {
 pub(crate) enum TestActiveTray {
     Ams {
         global_tray_id: i64,
-        ams_id: String,
-        tray_id: String,
+        ams_id: Option<String>,
+        tray_id: Option<String>,
     },
     AmsHt {
         global_tray_id: Option<u64>,

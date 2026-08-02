@@ -227,6 +227,36 @@ fn material_patch_json(observed_at: &str) -> String {
     .unwrap()
 }
 
+fn a2l_material_patch_json(observed_at: &str) -> String {
+    serde_json::to_string(&TestMaterialPatch {
+        kind: "printer_material_patch",
+        observed_at,
+        ams_units: vec![TestAmsUnit {
+            unit_id: "0",
+            trays: vec![
+                TestMaterialTray {
+                    tray_id: "0",
+                    global_tray_id: Some(24),
+                    filament_id: "GFA00",
+                    setting_id: "GFSA00",
+                    material_type: "PLA",
+                    color: "FF0000",
+                },
+                TestMaterialTray {
+                    tray_id: "1",
+                    global_tray_id: Some(25),
+                    filament_id: "GFG00",
+                    setting_id: "GFSG00",
+                    material_type: "PETG",
+                    color: "00FF00",
+                },
+            ],
+        }],
+        external_spools: Vec::new(),
+    })
+    .unwrap()
+}
+
 pub(super) fn artifact_metadata_json(display_name: &str, default_plate_id: u32) -> String {
     serde_json::to_string(&TestArtifactMetadata {
         source: "bambu_3mf",

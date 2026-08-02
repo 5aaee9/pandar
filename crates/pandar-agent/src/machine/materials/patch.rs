@@ -1,3 +1,4 @@
+use pandar_core::AmsUnitKind;
 use serde::{Serialize, Serializer};
 use serde_json::Number;
 
@@ -27,7 +28,7 @@ pub(crate) struct MaterialPatchDocument<'a> {
 #[derive(Serialize)]
 pub(super) struct AmsUnitPatch {
     pub(super) unit_id: String,
-    pub(super) unit_kind: String,
+    pub(super) unit_kind: AmsUnitKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) info: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -55,7 +56,7 @@ pub(super) enum MaterialTrayPatch {
 pub(super) struct MaterialTrayEntryPatch {
     pub(super) tray_id: String,
     pub(super) exists: bool,
-    pub(super) unit_kind: String,
+    pub(super) unit_kind: AmsUnitKind,
     pub(super) global_tray_id: Option<u64>,
     #[serde(flatten)]
     pub(super) fields: MaterialFieldsPatch,
@@ -103,7 +104,7 @@ pub(super) struct MaterialFieldsPatch {
 pub(super) struct EmptyTrayClear {
     tray_id: String,
     exists: bool,
-    unit_kind: &'static str,
+    unit_kind: AmsUnitKind,
     global_tray_id: Option<u64>,
     state: &'static str,
     filament_id: Option<&'static str>,
@@ -137,8 +138,10 @@ pub(super) struct ExternalActiveTray {
 pub(super) struct AmsActiveTray {
     kind: &'static str,
     global_tray_id: i64,
-    ams_id: String,
-    tray_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ams_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tray_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -151,12 +154,13 @@ pub(super) struct AmsHtActiveTray {
 
 pub(super) fn empty_tray_clear_patch(
     tray_id: String,
+    unit_kind: AmsUnitKind,
     global_tray_id: Option<u64>,
 ) -> MaterialTrayPatch {
     MaterialTrayPatch::EmptyClear(EmptyTrayClear {
         tray_id,
         exists: false,
-        unit_kind: "ams",
+        unit_kind,
         global_tray_id,
         state: "9",
         filament_id: None,
@@ -180,12 +184,25 @@ pub(super) fn external_active_tray_patch() -> ActiveTrayPatch {
     })
 }
 
-pub(super) fn ams_active_tray_patch(tray_now: i64) -> ActiveTrayPatch {
+pub(super) fn ams_active_tray_patch(
+    tray_now: i64,
+    ams_id: String,
+    tray_id: String,
+) -> ActiveTrayPatch {
     ActiveTrayPatch::Ams(AmsActiveTray {
         kind: "ams",
         global_tray_id: tray_now,
-        ams_id: (tray_now / 4).to_string(),
-        tray_id: (tray_now % 4).to_string(),
+        ams_id: Some(ams_id),
+        tray_id: Some(tray_id),
+    })
+}
+
+pub(super) fn mixed_ams_lite_global_active_tray_patch(tray_now: i64) -> ActiveTrayPatch {
+    ActiveTrayPatch::Ams(AmsActiveTray {
+        kind: "ams",
+        global_tray_id: tray_now,
+        ams_id: None,
+        tray_id: None,
     })
 }
 

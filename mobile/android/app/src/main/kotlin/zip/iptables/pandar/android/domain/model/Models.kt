@@ -34,6 +34,7 @@ data class Materials(
 
 data class AmsUnit(
     val unitId: String?,
+    val unitKind: String?,
     val humidity: String?,
     val trays: List<AmsTray>,
 )

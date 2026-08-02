@@ -1,4 +1,4 @@
-use pandar_core::BambuNozzleSystem;
+use pandar_core::{AmsUnitKind, BambuNozzleSystem};
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Deserialize)]
@@ -101,6 +101,8 @@ pub(super) struct Materials {
 pub(super) struct AmsUnit {
     #[serde(default)]
     pub(super) unit_id: Option<Scalar>,
+    #[serde(default)]
+    pub(super) unit_kind: AmsUnitKind,
     #[serde(default)]
     pub(super) info: Option<Scalar>,
     #[serde(default)]

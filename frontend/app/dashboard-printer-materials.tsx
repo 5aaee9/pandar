@@ -6,6 +6,7 @@ import { CheckCircle2Icon, DownloadIcon, DropletsIcon, RotateCwIcon, Thermometer
 
 import { controlPrinter } from './actions'
 import type { Printer } from './dashboard-types'
+import { mixedAmsLiteGlobalTrayId } from './material-tray-routing'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
 export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
   const t = useTranslations('inventory')
@@ -39,7 +40,7 @@ export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
               .map((tray) => ({
                 amsId: parseOptionalInt(unit.unit_id),
                 externalId: null,
-                globalTrayId: tray.global_tray_id ?? globalTrayId(unit.unit_id, tray.tray_id),
+                globalTrayId: tray.global_tray_id ?? globalTrayId(unit.unit_id, unit.unit_kind, tray.tray_id),
                 slotId: parseOptionalInt(tray.tray_id),
                 label: materialLabel(tray, t('unknownMaterial')),
                 color: tray.color,
@@ -339,10 +340,12 @@ function parseOptionalInt(value?: string | null) {
   return Number.isInteger(parsed) ? parsed : null
 }
 
-function globalTrayId(unitId?: string, trayId?: string) {
+function globalTrayId(unitId?: string, unitKind?: string | null, trayId?: string) {
   const unit = parseOptionalInt(unitId)
   const tray = parseOptionalInt(trayId)
-  return unit !== null && tray !== null ? unit * 4 + tray : null
+  if (tray === null) return null
+  return mixedAmsLiteGlobalTrayId(unitKind, tray) ??
+    (unit !== null ? unit * 4 + tray : null)
 }
 
 function formatTemperature(value: string | number) {
@@ -373,7 +376,10 @@ function isActiveSlot(slot: MaterialSlot, active: ActiveMaterialTray) {
     return slot.externalId !== null && slot.slotId?.toString() === active.tray_id
   }
   return (
-    slot.amsId?.toString() === active.ams_id &&
-    slot.slotId?.toString() === active.tray_id
+    (active.global_tray_id !== null &&
+      active.global_tray_id !== undefined &&
+      slot.globalTrayId === active.global_tray_id) ||
+    (slot.amsId?.toString() === active.ams_id &&
+      slot.slotId?.toString() === active.tray_id)
   )
 }

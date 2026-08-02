@@ -281,6 +281,47 @@ async fn mapping2_takes_precedence_and_external_slots_match_materials() {
 }
 
 #[tokio::test]
+async fn terminal_usage_preserves_a2l_mixed_ams_lite_global_routes() {
+    let (database, tenants, agents, _, _, jobs) = repositories().await;
+    let tenant = tenants.create("acme", "Acme Labs").await.unwrap();
+    let agent = agents.create(tenant.id, "agent").await.unwrap();
+    let printer_id =
+        crate::repositories::test_helpers::insert_printer_fixture(&database, tenant.id, agent.id)
+            .await
+            .unwrap();
+    let mut input = create_input(tenant.id, agent.id, &printer_id, "artifact-1");
+    input.ams_mapping_json = Some("[24,25]".to_owned());
+    input.ams_mapping2_json = Some(r#"[{"ams_id":0,"slot_id":0}]"#.to_owned());
+    let created = jobs.create_print_job(input).await.unwrap();
+
+    let applied = jobs
+        .apply_print_report(ApplyPrintReport {
+            printer_materials_json: a2l_material_patch_json("2026-06-22T00:00:00Z"),
+            ..report_input(
+                tenant.id,
+                agent.id,
+                &printer_id,
+                Some(created.job.id),
+                None,
+                "FINISH",
+            )
+        })
+        .await
+        .unwrap();
+
+    let usage = applied.job.unwrap().job.filament_usage;
+    assert_eq!(usage.len(), 2);
+    assert_eq!(usage[0].source, "ams_mapping2");
+    assert_eq!(usage[0].ams_id.as_deref(), Some("0"));
+    assert_eq!(usage[0].tray_id.as_deref(), Some("0"));
+    assert_eq!(usage[0].global_tray_id, Some(24));
+    assert_eq!(usage[0].filament_type.as_deref(), Some("PLA"));
+    assert_eq!(usage[1].source, "ams_mapping");
+    assert_eq!(usage[1].global_tray_id, Some(25));
+    assert_eq!(usage[1].filament_type.as_deref(), Some("PETG"));
+}
+
+#[tokio::test]
 async fn running_report_updates_material_snapshot_without_deriving_usage() {
     let (database, tenants, agents, _, _, jobs) = repositories().await;
     let tenant = tenants.create("acme", "Acme Labs").await.unwrap();

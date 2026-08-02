@@ -1,3 +1,4 @@
+use pandar_core::AmsUnitKind;
 use serde::Serialize;
 
 use super::{
@@ -73,15 +74,19 @@ impl AmsUnitPayload {
         let info = studio_ams_info(unit, filament_switch_installed)?;
         let unit_id = text_if_present(&unit.unit_id)?;
         let unit_number = parse_u64_or_zero(&unit_id);
-        if unit_number < 64 {
-            *ams_exist_bits |= 1_u64 << unit_number;
+        let unit_kind = ams_unit_kind(unit);
+        if let Some(bit) = unit_kind.studio_exist_bit(unit_number)
+            && bit < 64
+        {
+            *ams_exist_bits |= 1_u64 << bit;
         }
         let tray = unit
             .trays
             .iter()
             .filter_map(|tray| {
-                let global_number = global_tray_number(unit_number, tray);
-                if global_number < 64 {
+                if let Some(global_number) = global_tray_number(unit, unit_number, tray)
+                    && global_number < 64
+                {
                     *tray_exist_bits |= 1_u64 << global_number;
                 }
                 StudioTray::from_material_tray(tray)
@@ -108,7 +113,23 @@ fn studio_ams_info(unit: &AmsUnit, filament_switch_installed: Option<bool>) -> O
     } else {
         0
     };
-    Some(hex_string(1 | (extruder_id << 8)))
+    let type_id = unit
+        .unit_kind
+        .studio_type_id()
+        .map(u64::from)
+        .or_else(|| ams_unit_kind(unit).studio_type_id().map(u64::from))
+        .unwrap_or(1);
+    Some(hex_string(type_id | (extruder_id << 8)))
+}
+
+fn ams_unit_kind(unit: &AmsUnit) -> AmsUnitKind {
+    if unit.unit_kind != AmsUnitKind::Unknown {
+        return unit.unit_kind;
+    }
+    text_if_present(&unit.info)
+        .as_deref()
+        .and_then(AmsUnitKind::from_studio_info)
+        .unwrap_or_else(|| AmsUnitKind::from_unit_id(&text(&unit.unit_id)))
 }
 
 fn filament_switch_info(unit: &AmsUnit) -> Option<String> {
@@ -190,17 +211,24 @@ fn tray_now(materials: &Materials) -> Option<String> {
         if text(&active.kind) == "external" {
             Some(text_if_present(&active.external_id).unwrap_or_else(|| "255".to_string()))
         } else {
-            Some(
-                (parse_u64_or_zero(&text(&active.ams_id)) * 4
-                    + parse_u64_or_zero(&text(&active.tray_id)))
-                .to_string(),
-            )
+            let ams_id = parse_u64_or_zero(&text(&active.ams_id));
+            let tray_id = parse_u64_or_zero(&text(&active.tray_id));
+            let global_tray_id = materials
+                .ams_units
+                .iter()
+                .find(|unit| text(&unit.unit_id) == text(&active.ams_id))
+                .and_then(|unit| ams_unit_kind(unit).studio_global_tray_id(ams_id, tray_id))
+                .unwrap_or(ams_id * 4 + tray_id);
+            Some(global_tray_id.to_string())
         }
     })
 }
 
-fn global_tray_number(unit_number: u64, tray: &MaterialTray) -> u64 {
+fn global_tray_number(unit: &AmsUnit, unit_number: u64, tray: &MaterialTray) -> Option<u64> {
     text_if_present(&tray.global_tray_id)
         .map(|global| parse_u64_or_zero(&global))
-        .unwrap_or_else(|| unit_number * 4 + parse_u64_or_zero(&text(&tray.tray_id)))
+        .or_else(|| {
+            ams_unit_kind(unit)
+                .studio_global_tray_id(unit_number, parse_u64_or_zero(&text(&tray.tray_id)))
+        })
 }

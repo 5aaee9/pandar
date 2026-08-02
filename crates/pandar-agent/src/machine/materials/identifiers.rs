@@ -1,5 +1,6 @@
 use super::normalized_string;
 use crate::machine::mqtt::report::materials::*;
+use pandar_core::AmsUnitKind;
 
 pub(super) fn derive_setting_id(filament_id: &str) -> String {
     let base = strip_version_suffix(filament_id);
@@ -36,18 +37,17 @@ pub(super) fn tray_id(tray: &MaterialSlotReport) -> Option<String> {
     normalized_string(tray.id.as_ref()).or_else(|| normalized_string(tray.tray_id.as_ref()))
 }
 
-pub(super) fn unit_kind(unit_id: &str) -> &'static str {
-    match unit_id.parse::<u32>() {
-        Ok(0..=63) => "ams",
-        Ok(128..=135) => "ams_ht",
-        _ => "unknown",
-    }
+pub(super) fn unit_kind(unit_id: &str, info: Option<&ScalarValue>) -> AmsUnitKind {
+    info.and_then(|value| normalized_string(Some(value)))
+        .as_deref()
+        .and_then(AmsUnitKind::from_studio_info)
+        .unwrap_or_else(|| AmsUnitKind::from_unit_id(unit_id))
 }
 
-pub(super) fn global_tray_id(unit_id: &str, tray_id: &str) -> Option<u64> {
+pub(super) fn global_tray_id(unit_id: &str, tray_id: &str, unit_kind: AmsUnitKind) -> Option<u64> {
     let unit_id = unit_id.parse::<u64>().ok()?;
     let tray_id = tray_id.parse::<u64>().ok()?;
-    (unit_id < 64).then_some(unit_id * 4 + tray_id)
+    unit_kind.global_tray_id(unit_id, tray_id)
 }
 
 pub(super) fn parse_tray_exist_bits(value: Option<&ScalarValue>) -> Option<u64> {

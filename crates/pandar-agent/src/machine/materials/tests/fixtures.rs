@@ -53,6 +53,27 @@ pub(super) fn full_ams_snapshot_report() -> Value {
     })
 }
 
+pub(super) fn a2l_mixed_ams_lite_report() -> Value {
+    value(MaterialReport {
+        print: MaterialPrint {
+            ams: MaterialAms {
+                tray_now: Some(Scalar::U32(24)),
+                tray_exist_bits: Some(Scalar::Str("1000000")),
+                ams: vec![MaterialAmsUnit {
+                    id: Scalar::U32(0),
+                    info: Some("00000005"),
+                    humidity: None,
+                    humidity_raw: None,
+                    temp: None,
+                    tray: vec![tray_with_id(Scalar::U32(0))],
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    })
+}
+
 pub(super) fn humidity_raw_report() -> Value {
     value(single_unit_report(MaterialAmsUnit {
         id: Scalar::Str("0"),

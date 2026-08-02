@@ -1,5 +1,6 @@
 import type { ArtifactMetadata, Printer } from "./dashboard-types";
 import { isDualNozzleModel } from "./dispatch-print-options-model";
+import { mixedAmsLiteGlobalTrayId } from "./material-tray-routing";
 
 export type ProjectFilament = {
   mappingIndex: number;
@@ -9,7 +10,6 @@ export type ProjectFilament = {
   color: string | null;
   nozzleId: 0 | 1 | null;
 };
-
 export type MaterialToolhead = "L" | "R" | "LR" | null;
 export type MaterialSlotKind = "ams" | "external";
 
@@ -108,9 +108,10 @@ export function printerAmsSlots(printer: Pick<Printer, "materials" | "model">): 
       const trayId = tray.tray_id ?? "";
       const slotId = Number.parseInt(trayId, 10);
       if (!Number.isInteger(slotId)) return [];
-      const globalTrayId = tray.global_tray_id ?? (
-        amsId < 64 ? amsId * 4 + slotId : amsId >= 128 && amsId <= 135 ? amsId : UNMAPPED
-      );
+      const globalTrayId = tray.global_tray_id ??
+        mixedAmsLiteGlobalTrayId(unit.unit_kind, slotId) ?? (
+          amsId < 64 ? amsId * 4 + slotId : amsId >= 128 && amsId <= 135 ? amsId : UNMAPPED
+        );
       return [{
         key: "ams:" + unitId + ":" + trayId,
         kind: "ams" as const,

@@ -251,6 +251,24 @@ fn printer_telemetry_maps_ams_and_external_materials() {
 }
 
 #[test]
+fn printer_telemetry_projects_a2l_mixed_ams_lite_routing() {
+    let telemetry = telemetry_json(
+        r#"{"materials":{"ams_units":[{"unit_id":"0","unit_kind":"ams_lite_mixed","toolhead":"R","trays":[{"tray_id":"0","type":"PLA"}]}],"external_spools":[],"active_tray":{"kind":"ams","global_tray_id":24}}}"#,
+    );
+
+    assert_eq!(
+        telemetry["ams"]["ams_exist_bits"],
+        serde_json::json!("1000")
+    );
+    assert_eq!(
+        telemetry["ams"]["tray_exist_bits"],
+        serde_json::json!("1000000")
+    );
+    assert_eq!(telemetry["ams"]["tray_now"], serde_json::json!("24"));
+    assert_eq!(telemetry["ams"]["ams"][0]["info"], serde_json::json!("5"));
+}
+
+#[test]
 fn printer_telemetry_preserves_filament_switch_aux_and_routes() {
     let telemetry = telemetry_json(
         r#"{"materials":{"cfg":"8000000000000001","aux":"A4003001","stat":"1000000001","filament_switch_installed":true,"ams_units":[{"unit_id":"0","info":"00000E00","toolhead":"LR","trays":[]},{"unit_id":"1","info":"01000E00","toolhead":"LR","trays":[]}]}}"#,

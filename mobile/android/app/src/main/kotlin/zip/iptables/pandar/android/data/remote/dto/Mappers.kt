@@ -90,6 +90,7 @@ fun PrinterMaterialsDto.toDomain(): Materials {
             val obj = unit as? JsonObject
             AmsUnit(
                 unitId = obj?.stringField("unit_id"),
+                unitKind = obj?.stringField("unit_kind"),
                 humidity = obj?.flexibleString("humidity") ?: obj?.flexibleString("humidity_level"),
                 trays = (obj?.get("trays") as? JsonArray ?: JsonArray(emptyList()))
                     .mapNotNull { it as? JsonObject }

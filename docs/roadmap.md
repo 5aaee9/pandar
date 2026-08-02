@@ -16,6 +16,17 @@
 
 ## Completed
 
+- Completed source-backed AMS Lite routing for A2L (`N9`). Agent material normalization now decodes
+  Studio's AMS type nibble into typed AMS, AMS Lite, AMS 2 Pro, AMS HT, and mixed AMS Lite kinds;
+  mixed AMS Lite slots use Studio's reserved global tray IDs `24..=27` regardless of the reported
+  unit ID, and active routing follows that normalized evidence. Hub terminal usage correlates both
+  `ams_mapping` and `ams_mapping2` through the persisted global route, Web dispatch and material
+  controls preserve the same IDs even when a tray omits its precomputed global ID, Android preserves
+  `unit_kind`, and the network plugin reconstructs type `5`, existence bit `12`, tray bits, and
+  `tray_now` for Studio. Cross-layer regressions cover Agent MQTT normalization, Hub usage, Web
+  dispatch/control payloads, Android mapping, and Studio status projection. This is pinned-source and
+  automated compatibility evidence, not a real A2L hardware claim.
+
 - Enabled the existing authenticated Web/Android printer-control pipeline for X1C, P1S, and A2L by
   marking only those three additional normalized models as live-control capable. The change preserves
   the prior flow-calibration matrix, keeps X1, X1E, P1P, missing, and unknown models fail-closed, and

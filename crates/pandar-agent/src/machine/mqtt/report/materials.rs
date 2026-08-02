@@ -174,11 +174,9 @@ impl ScalarValue {
                 let trimmed = raw.trim();
                 let hex = trimmed
                     .strip_prefix("0x")
-                    .or_else(|| trimmed.strip_prefix("0X"));
-                match hex {
-                    Some(hex) => u64::from_str_radix(hex, 16).ok(),
-                    None => trimmed.parse::<u64>().ok(),
-                }
+                    .or_else(|| trimmed.strip_prefix("0X"))
+                    .unwrap_or(trimmed);
+                u64::from_str_radix(hex, 16).ok()
             }
             Self::Bool(_) => None,
         }

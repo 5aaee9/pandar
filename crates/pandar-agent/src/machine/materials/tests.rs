@@ -3,6 +3,7 @@ use serde_json::Value;
 use super::*;
 use crate::machine::mqtt::MachineReport;
 
+mod a2l;
 mod fixtures;
 
 use fixtures::*;
@@ -31,7 +32,7 @@ fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
     assert_eq!(patch.document_type, "printer_material_patch");
     let unit = &patch.ams_units[0];
     assert_eq!(unit.replace_trays, Some(true));
-    assert_eq!(unit.unit_kind, "ams");
+    assert_eq!(unit.unit_kind, "ams_2_pro");
     assert_eq!(unit.humidity, Some(30.0));
     assert_eq!(unit.humidity_level, Some(4.0));
     assert_eq!(unit.temperature_celsius, Some(28.0));
@@ -60,8 +61,8 @@ fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
         patch.active_tray,
         Some(TestActiveTray::Ams {
             global_tray_id: 5,
-            ams_id: "1".to_owned(),
-            tray_id: "1".to_owned(),
+            ams_id: Some("1".to_owned()),
+            tray_id: Some("1".to_owned()),
         })
     );
 }
@@ -341,8 +342,8 @@ fn active_tray_ranges_are_normalized() {
         normalize(active_tray_report(15)).unwrap().active_tray,
         Some(TestActiveTray::Ams {
             global_tray_id: 15,
-            ams_id: "3".to_owned(),
-            tray_id: "3".to_owned(),
+            ams_id: Some("3".to_owned()),
+            tray_id: Some("3".to_owned()),
         })
     );
     assert_eq!(

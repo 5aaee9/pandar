@@ -2,6 +2,7 @@ use thiserror::Error;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub mod agent;
+pub mod ams;
 pub mod command;
 pub mod compatibility;
 pub mod device_features;
@@ -14,6 +15,7 @@ pub mod studio_print;
 pub mod tenant;
 
 pub use agent::{Agent, AgentStatus};
+pub use ams::AmsUnitKind;
 pub use command::{CommandRecord, CommandRecordParts, CommandStatus};
 pub use device_features::{BambuDeviceFeature, BambuDeviceFeatures, BambuDeviceFeaturesParseError};
 pub use firmware::{
