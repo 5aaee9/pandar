@@ -19,6 +19,7 @@ pub(crate) struct EvidenceInput<'a> {
     pub source_inspector: &'a str,
     pub plugin: &'a Path,
     pub source_sentinel: &'a str,
+    pub source_bambu_exports: usize,
 }
 
 pub(crate) fn collect_evidence(input: EvidenceInput<'_>) -> Result<String, String> {
@@ -47,7 +48,10 @@ pub(crate) fn collect_evidence(input: EvidenceInput<'_>) -> Result<String, Strin
         ("export_inspector", input.plugin_inspector.to_owned()),
         ("source_export_inspector", input.source_inspector.to_owned()),
         ("source_sentinel_export", input.source_sentinel.to_owned()),
-        ("source_bambu_exports", "0".to_owned()),
+        (
+            "source_bambu_exports",
+            input.source_bambu_exports.to_string(),
+        ),
         ("host_rust_toolchain", rust.version),
         ("host_rust_target", rust.host),
         ("host_cxx_toolchain", cxx),

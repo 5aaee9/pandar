@@ -75,6 +75,24 @@ impl CameraSessionRegistry {
         serial_number: String,
         command_sender: mpsc::Sender<Result<HubCommand, Status>>,
     ) -> Result<CameraHttpStream, CameraOpenError> {
+        self.open_stream_with_mode(
+            tenant_id,
+            agent_id,
+            serial_number,
+            CameraStreamMode::FragmentedMp4,
+            command_sender,
+        )
+        .await
+    }
+
+    pub async fn open_stream_with_mode(
+        &self,
+        tenant_id: TenantId,
+        agent_id: AgentId,
+        serial_number: String,
+        mode: CameraStreamMode,
+        command_sender: mpsc::Sender<Result<HubCommand, Status>>,
+    ) -> Result<CameraHttpStream, CameraOpenError> {
         let capacity_permit = self.capacity.acquire(tenant_id)?;
         let stream_id = Uuid::new_v4().to_string();
         let (sender, receiver) = mpsc::channel(16);
@@ -113,7 +131,7 @@ impl CameraSessionRegistry {
             stream_id: stream_id.clone(),
             command: Some(hub_camera_command::Command::Open(OpenCameraStream {
                 serial_number,
-                mode: CameraStreamMode::FragmentedMp4 as i32,
+                mode: mode as i32,
             })),
         };
 

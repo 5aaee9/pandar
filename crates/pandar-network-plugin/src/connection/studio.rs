@@ -97,10 +97,10 @@ pub(super) struct StudioPayload {
     pub(super) model: String,
 }
 
-pub(super) struct StudioRequestSnapshot {
-    pub(super) hub_url: String,
-    pub(super) token: String,
-    pub(super) printer_id: String,
+pub(crate) struct StudioRequestSnapshot {
+    pub(crate) hub_url: String,
+    pub(crate) token: String,
+    pub(crate) printer_id: String,
 }
 
 pub(super) struct HeartbeatTarget {

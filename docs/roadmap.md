@@ -16,6 +16,19 @@
 
 ## Completed
 
+- Implemented a fail-closed Bambu Studio local-camera path for normalized A1, A1 Mini, P1S, and A2L
+  models. Agent speaks the native TLS port-6000 `bblp` camera protocol with the existing Bambu
+  certificate verifier and keeps the printer host/access code local; Hub gates listing and stream
+  open on the exact model whitelist plus an online current Agent session advertising
+  `StudioLocalCamera`; the network plugin gives Studio only a random one-use loopback relay URL; and
+  `pandar-bambu-source` implements the pinned 21-entry local-media ABI for bounded JPEG samples while
+  rejecting arbitrary hosts and direct credentials. Targeted cross-crate tests, the positive compiled
+  four-model Studio ABI probe, 26/26 release-smoke, strict workspace Clippy, 1,923/1,923 workspace
+  Nextest with one configured skip, six x86_64 Linux Nix package/quality checks, and Linux release
+  export inspection pass; the `02.08.01` build exposes 130 network-plugin exports and the companion
+  sentinel plus exactly 21 `Bambu_*` exports. Packaged cross-platform evidence, real Studio playback,
+  and real camera hardware remain separate acceptance work.
+
 - Completed source-backed AMS Lite routing for A2L (`N9`). Agent material normalization now decodes
   Studio's AMS type nibble into typed AMS, AMS Lite, AMS 2 Pro, AMS HT, and mixed AMS Lite kinds;
   mixed AMS Lite slots use Studio's reserved global tray IDs `24..=27` regardless of the reported
@@ -1452,6 +1465,11 @@ Exit criteria:
 
 ## Immediate Next
 
+- Build a new `02.08.01` three-file candidate and validate the exact camera callback and one-use
+  loopback URL behavior on a real Studio host. With operator approval, test each model's live camera
+  while confirming no printer
+  host, access code, or Hub bearer appears in the Studio URL, logs, or evidence bundle. Do not broaden
+  the whitelist or claim hardware compatibility from source-backed tests alone.
 - Complete [GitHub issue #2](https://github.com/ProjectPandar/pandar/issues/2) and run the hardware acceptance checklist in `docs/compatibility/h2c.md` on an H2C in a safe idle state: capture full and split rack telemetry, verify both auto-mapping versions and correlated failure delivery, inspect the exact physical mapping in `project_file`, and confirm a replacement Agent session keeps bit 60 hidden until fresh rack telemetry. Do not enable signing, rack maintenance/control, laser/cut, eMMC/`fun2`, or new physical IDs from this protocol-only evidence.
 - After the next `main` push, verify GitHub Actions can publish Hub/Web images and the Helm chart under the `ghcr.io/projectpandar/pandar` package namespace.
 - Added macOS desktop publishing for both amd64 and Apple Silicon: both tag-workflow rows use the

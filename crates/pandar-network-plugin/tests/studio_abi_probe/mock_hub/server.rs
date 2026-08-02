@@ -21,7 +21,8 @@ use super::{
     operations::{TestOperation, assert_operation_body_eq},
     presence::{serve_axis_features, serve_callback_order, serve_printer_presence},
     responses::{
-        PRINTERS_RESPONSE, filament_switch_printers_response, printers_response_with_progress,
+        PRINTERS_RESPONSE, camera_printers_response, filament_switch_printers_response,
+        printers_response_with_progress,
     },
     synchronization::start_gate,
     transport::{assert_request, assert_request_with_token, write_response},
@@ -87,6 +88,22 @@ pub(super) fn spawn(mode: MockMode, artifact: Vec<u8>, race_directory: &Path) ->
             }
             MockMode::RequestAdmission => {
                 serve_request_admission(&listener, &thread_stop, deadline);
+            }
+            MockMode::CameraAvailable => {
+                let (mut stream, request) = next_request_allow_ready(
+                    &listener,
+                    &thread_stop,
+                    deadline,
+                    "GET",
+                    "/api/v1/plugin/printers",
+                );
+                assert_request_with_token(
+                    &request,
+                    "GET",
+                    "/api/v1/plugin/printers",
+                    Some("probe-token"),
+                );
+                write_response(&mut stream, "HTTP/1.1 200 OK", &camera_printers_response());
             }
             MockMode::CameraUnavailable => {
                 let (mut stream, request) = next_request_allow_ready(

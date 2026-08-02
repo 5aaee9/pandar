@@ -97,7 +97,7 @@ fn studio_status_masks_unsupported_cfg_bits_without_rewriting_observed_storage()
 }
 
 #[test]
-fn studio_status_hides_camera_capabilities_while_camera_abi_is_unavailable() {
+fn studio_status_keeps_raw_camera_bits_masked_for_hub_mediated_camera() {
     let telemetry =
         telemetry_json(r#"{"fun":"4100000002","materials":{"cfg":"4C000000001","ams_units":[]}}"#);
 

@@ -83,14 +83,21 @@ fn dumpbin_symbol_parser_keeps_icf_alias_export_names() {
 }
 
 #[test]
-fn source_companion_requires_sentinel_and_forbids_bambu_exports() {
-    let sentinel = BTreeSet::from(["pandar_bambu_source_sentinel".to_owned()]);
-    super::validate_source_exports(&sentinel).unwrap();
-    assert!(super::validate_source_exports(&BTreeSet::new()).is_err());
+fn source_companion_requires_the_exact_local_camera_contract() {
+    let expected = super::SOURCE_MEDIA_EXPORTS
+        .into_iter()
+        .chain([super::SOURCE_SENTINEL])
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    super::validate_source_exports(&expected).unwrap();
 
-    let mut unsafe_exports = sentinel;
-    unsafe_exports.insert("Bambu_Create".to_owned());
-    assert!(super::validate_source_exports(&unsafe_exports).is_err());
+    let mut missing = expected.clone();
+    missing.remove("Bambu_ReadSample");
+    assert!(super::validate_source_exports(&missing).is_err());
+
+    let mut extra = expected;
+    extra.insert("Bambu_RemoteCloudTunnel".to_owned());
+    assert!(super::validate_source_exports(&extra).is_err());
 }
 
 #[test]

@@ -21,6 +21,7 @@ int main(int argc, char** argv) {
     const bool firmware_claim_race_mode = mode == "firmware-claim-race";
     const bool callback_order_mode = mode == "callback-order";
     const bool request_admission_mode = mode == "request-admission";
+    const bool camera_available_mode = mode == "camera-available";
     const bool camera_unavailable_mode = mode == "camera-unavailable";
     const bool no_auth_recovery_mode = mode == "no-auth-recovery";
     const bool official_no_auth_recovery_mode = mode == "official-no-auth-recovery";
@@ -33,7 +34,7 @@ int main(int argc, char** argv) {
         !printer_presence_mode && !account_transition_mode && !account_exchange_race_mode &&
         !token_refresh_mode &&
         !freshness_claim_mode && !firmware_claim_race_mode && !callback_order_mode &&
-        !request_admission_mode &&
+        !request_admission_mode && !camera_available_mode &&
         !camera_unavailable_mode && !no_auth_recovery_mode &&
         !official_no_auth_lifecycle_mode &&
         mode != "success") {
@@ -132,6 +133,83 @@ int main(int argc, char** argv) {
     const std::string config_dir = argv[4];
     if (stale_token_mode || token_refresh_mode) write_stale_login_state(config_dir);
     if (set_config_dir(agent, config_dir) != 0) fail(agent, destroy_agent, "set config dir failed");
+
+    if (camera_available_mode) {
+        const std::string profile = R"({"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"})";
+        if (change_user(agent, profile) != 0) {
+            fail(agent, destroy_agent, "camera available profile setup failed");
+        }
+        std::string printers_body;
+        unsigned int printers_code = 0;
+        if (get_print_info(agent, &printers_code, &printers_body) != 0 || printers_code != 200) {
+            fail(agent, destroy_agent, "camera available printer seed failed");
+        }
+        const std::vector<std::string> camera_devices = {
+            "studio-camera-a1",
+            "studio-camera-a1-mini",
+            "studio-camera-p1s",
+            "studio-camera-a2l",
+        };
+        std::atomic<int> camera_callbacks{0};
+        std::atomic<int> golive_callbacks{0};
+        std::vector<std::string> camera_urls;
+        for (const auto& dev_id : camera_devices) {
+            std::string camera_url;
+            std::string golive_camera_url;
+            const auto request_dev_id = dev_id + "|devver|\"tutk\"";
+            const int camera_rc = get_camera_url(
+                agent,
+                request_dev_id,
+                [&camera_url, &camera_callbacks](std::string url) {
+                    ++camera_callbacks;
+                    camera_url = std::move(url);
+                }
+            );
+            const int golive_camera_rc = get_camera_url_for_golive(
+                agent,
+                request_dev_id,
+                "probe-liveview",
+                [&golive_camera_url, &golive_callbacks](std::string url) {
+                    ++golive_callbacks;
+                    golive_camera_url = std::move(url);
+                }
+            );
+            if (camera_rc != 0 || golive_camera_rc != 0 ||
+                !exact_camera_relay_url(camera_url) ||
+                !exact_camera_relay_url(golive_camera_url)) {
+                fail(agent, destroy_agent, "available camera ABI did not return exact loopback URLs");
+            }
+            camera_urls.push_back(std::move(camera_url));
+            camera_urls.push_back(std::move(golive_camera_url));
+        }
+        out.camera_url = camera_urls.front();
+        out.camera_callback_count = camera_callbacks.load();
+        out.camera_golive_callback_count = golive_callbacks.load();
+        out.camera_urls_unique = all_unique(camera_urls);
+        out.camera_credentials_redacted = true;
+        const std::vector<std::string> forbidden = {
+            "probe-token",
+            "studio-camera-",
+            "printer-camera-",
+            "probe-user",
+        };
+        for (const auto& url : camera_urls) {
+            for (const auto& value : forbidden) {
+                if (contains(url, value)) out.camera_credentials_redacted = false;
+            }
+        }
+        out.camera_available_exact =
+            out.camera_callback_count == 4 &&
+            out.camera_golive_callback_count == 4 &&
+            out.camera_urls_unique &&
+            out.camera_credentials_redacted;
+        if (!out.camera_available_exact) {
+            fail(agent, destroy_agent, "available camera ABI callbacks or redaction were not exact");
+        }
+        destroy_agent(agent);
+        print_json(out);
+        return 0;
+    }
 
     if (camera_unavailable_mode) {
         const std::string profile = R"({"token":"probe-token","user_id":"probe-user","user_name":"Probe User","tenant_id":"tenant-1","tenant_name":"Tenant"})";

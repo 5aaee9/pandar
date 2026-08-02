@@ -1,3 +1,33 @@
+bool exact_camera_relay_url(const std::string& url) {
+    const std::string prefix = "bambu:///local/127.0.0.1?port=";
+    if (url.rfind(prefix, 0) != 0) return false;
+    const auto auth_separator = url.find("&auth=", prefix.size());
+    if (auth_separator == std::string::npos) return false;
+    const auto port = url.substr(prefix.size(), auth_separator - prefix.size());
+    if (port.empty() || port.size() > 5) return false;
+    unsigned int port_number = 0;
+    for (const char value : port) {
+        if (value < '0' || value > '9') return false;
+        port_number = port_number * 10 + static_cast<unsigned int>(value - '0');
+    }
+    if (port_number == 0 || port_number > 65535) return false;
+    const auto auth = url.substr(auth_separator + 6);
+    if (auth.size() != 32) return false;
+    for (const char value : auth) {
+        if (!((value >= '0' && value <= '9') || (value >= 'a' && value <= 'f'))) return false;
+    }
+    return true;
+}
+
+bool all_unique(const std::vector<std::string>& values) {
+    for (std::size_t left = 0; left < values.size(); ++left) {
+        for (std::size_t right = left + 1; right < values.size(); ++right) {
+            if (values[left] == values[right]) return false;
+        }
+    }
+    return true;
+}
+
 struct ProbeResult {
     bool ok = true;
     std::string host;
@@ -18,6 +48,11 @@ struct ProbeResult {
     int heartbeat_messages = 0;
     int connect_messages = 0;
     std::string camera_url;
+    bool camera_available_exact = false;
+    int camera_callback_count = 0;
+    int camera_golive_callback_count = 0;
+    bool camera_urls_unique = false;
+    bool camera_credentials_redacted = false;
     bool camera_unavailable_exact = false;
     bool local_connect_transport_redacted = false;
     int ft_abi_version = 0;
@@ -108,6 +143,11 @@ void print_json(const ProbeResult& result) {
         << ",\"heartbeat_messages\":" << result.heartbeat_messages
         << ",\"connect_messages\":" << result.connect_messages
         << ",\"camera_url\":" << escape_json(result.camera_url)
+        << ",\"camera_available_exact\":" << (result.camera_available_exact ? "true" : "false")
+        << ",\"camera_callback_count\":" << result.camera_callback_count
+        << ",\"camera_golive_callback_count\":" << result.camera_golive_callback_count
+        << ",\"camera_urls_unique\":" << (result.camera_urls_unique ? "true" : "false")
+        << ",\"camera_credentials_redacted\":" << (result.camera_credentials_redacted ? "true" : "false")
         << ",\"camera_unavailable_exact\":" << (result.camera_unavailable_exact ? "true" : "false")
         << ",\"local_connect_transport_redacted\":" << (result.local_connect_transport_redacted ? "true" : "false")
         << ",\"ft_abi_version\":" << result.ft_abi_version

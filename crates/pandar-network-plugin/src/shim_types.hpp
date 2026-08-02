@@ -202,7 +202,7 @@ const char* pandar_plugin_network_agent_version();
 #if defined(PANDAR_STUDIO_AMS_SYNC)
 PluginHttpResult pandar_plugin_sync_ams_filaments(bool);
 #endif
-PluginHttpResult pandar_plugin_camera_access_result(bool);
+PluginHttpResult pandar_plugin_camera_url(void*, const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_local_connect_json(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t

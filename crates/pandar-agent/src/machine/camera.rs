@@ -9,6 +9,8 @@ use tokio::{
 
 use crate::machine::BambuPrinterEndpoint;
 
+mod local;
+
 const BAMBU_RTSP_PORT: u16 = 322;
 const CAMERA_BOUNDARY: &[u8] = b"--frame\r\n";
 const FFMPEG_PATH_VAR: &str = "PANDAR_FFMPEG_PATH";
@@ -17,6 +19,9 @@ pub async fn stream_camera_mjpeg(
     endpoint: BambuPrinterEndpoint,
     sender: mpsc::Sender<Vec<u8>>,
 ) -> anyhow::Result<()> {
+    if pandar_core::compatibility::studio_local_camera_supported(endpoint.model.as_deref()) {
+        return local::stream_camera_mjpeg(endpoint, sender).await;
+    }
     if !supports_rtsp(endpoint.model.as_deref()) {
         bail!(
             "camera streaming is not supported for model {}",
@@ -270,7 +275,7 @@ fn take_jpeg_frame(buffer: &mut Vec<u8>) -> Option<Vec<u8>> {
         .windows(2)
         .skip(2)
         .position(|bytes| bytes == [0xff, 0xd9])?
-        + 2;
+        + 3;
     let frame = buffer[..=end].to_vec();
     buffer.drain(..=end);
     Some(frame)

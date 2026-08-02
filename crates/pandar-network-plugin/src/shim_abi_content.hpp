@@ -73,17 +73,23 @@ PANDAR_ABI int bambu_network_get_printer_firmware(void* agent, std::string dev_i
 
 PANDAR_ABI int bambu_network_get_camera_url(void* agent, std::string dev_id, std::function<void(std::string)> callback) {
     auto* a = as_agent(agent);
-    auto result = pandar_plugin_camera_access_result(a != nullptr);
-    body_from_result(result);
-    if (callback) callback({});
+    auto result = pandar_plugin_camera_url(
+        a ? a->printer_refresh_session : nullptr,
+        reinterpret_cast<const uint8_t*>(dev_id.data()), dev_id.size()
+    );
+    auto url = body_from_result(result);
+    if (callback) callback(result.status == 0 ? std::move(url) : std::string{});
     return result.status;
 }
 
 PANDAR_ABI int bambu_network_get_camera_url_for_golive(void* agent, std::string dev_id, std::string, std::function<void(std::string)> callback) {
     auto* a = as_agent(agent);
-    auto result = pandar_plugin_camera_access_result(a != nullptr);
-    body_from_result(result);
-    if (callback) callback({});
+    auto result = pandar_plugin_camera_url(
+        a ? a->printer_refresh_session : nullptr,
+        reinterpret_cast<const uint8_t*>(dev_id.data()), dev_id.size()
+    );
+    auto url = body_from_result(result);
+    if (callback) callback(result.status == 0 ? std::move(url) : std::string{});
     return result.status;
 }
 

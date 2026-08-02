@@ -408,9 +408,9 @@ failing nonterminal Studio jobs/commands, then rolling back Hub and Agent while 
 columns in place. Studio must be stopped before replacing or restoring both plugin libraries.
 
 Pinned Studio also requires a platform BambuSource library before it creates the network agent.
-`crates/pandar-bambu-source` supplies only the `pandar_bambu_source_sentinel` load gate and exports no
-`Bambu_*` camera/media entrypoint, leaving Studio's fake-source fallback in control. It is not media,
-camera, discovery, or machine-transport support.
+`crates/pandar-bambu-source` supplies `pandar_bambu_source_sentinel` plus the pinned 21-entry local-
+media ABI. It accepts only the network plugin's authenticated one-use loopback MJPEG relay and is not
+cloud/TUTK/Agora media, recording, discovery, or direct machine-transport support.
 
 Compatibility references:
 
@@ -426,9 +426,9 @@ cargo build -p pandar-network-plugin -p pandar-bambu-source
 
 The output libraries are under `target/{debug,release}`. A current release candidate contains exactly
 the CLI, network plugin, and BambuSource companion at top level. Native release-smoke covers
-`linux-amd64`, `macos-amd64`, `macos-arm64`, and `windows-amd64`; it verifies the current 129-name
-network-plugin contract plus the companion sentinel/no-`Bambu_*` rule. Historical `02.08.01.55`
-130-name packages are not current candidates.
+`linux-amd64`, `macos-amd64`, `macos-arm64`, and `windows-amd64`; it verifies the selected 124-, 129-,
+or 130-name network-plugin contract plus the companion sentinel and exact 21 `Bambu_*` exports.
+Historical packages with a sentinel-only companion are not current camera candidates.
 
 Install both libraries with the CLI so the companion receives Studio's exact platform name:
 

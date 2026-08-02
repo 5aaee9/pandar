@@ -91,6 +91,7 @@ pub(super) enum MockMode {
     FirmwareClaimRace,
     CallbackOrder,
     RequestAdmission,
+    CameraAvailable,
     CameraUnavailable,
     NoAuthRecovery,
     OfficialNoAuthRecovery,

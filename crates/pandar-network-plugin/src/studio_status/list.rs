@@ -35,6 +35,7 @@ pub(crate) struct PrinterObservation {
     pub(crate) model: Option<String>,
     pub(crate) status_report: String,
     pub(crate) online: bool,
+    pub(crate) studio_local_camera: bool,
 }
 
 #[derive(Deserialize)]
@@ -164,6 +165,7 @@ pub(crate) fn printer_observations(body: &str) -> anyhow::Result<Vec<PrinterObse
                     .map(|model| model.text()),
                 status_report: push_status_json(&printer.status, online),
                 online,
+                studio_local_camera: printer.status.studio_local_camera,
             }
         })
         .collect())

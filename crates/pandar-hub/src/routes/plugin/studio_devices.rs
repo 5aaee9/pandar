@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use pandar_core::compatibility::normalize_model;
+use pandar_core::compatibility::{normalize_model, studio_local_camera_supported};
 use pandar_core::{BambuNozzleSystem, PrinterFirmwareState, PrinterNozzleTemperature, TenantId};
 use serde::Serialize;
 
@@ -52,6 +52,7 @@ pub(super) struct PluginPrinterResponse {
     chamber_temperature_celsius: Option<String>,
     chamber_target_temperature_celsius: Option<String>,
     chamber_light_on: Option<bool>,
+    studio_local_camera: bool,
     materials: Option<PrinterEventMaterials>,
     #[serde(skip_serializing_if = "Option::is_none")]
     firmware: Option<PrinterFirmwareState>,
@@ -91,6 +92,17 @@ pub(super) async fn plugin_printer_devices(
         let online = current_session_id.as_deref() == printer.mqtt_presence_session_id.as_deref()
             && studio_online_from_status(&printer.status);
         let studio_model_name = printer.model.as_deref().map(studio_model_id);
+        let studio_local_camera = online
+            && studio_local_camera_supported(printer.model.as_deref())
+            && state
+                .sessions()
+                .current_token_for_capability(
+                    tenant_id,
+                    printer.agent_id,
+                    AgentCapability::StudioLocalCamera,
+                )
+                .await
+                .is_some();
         let fun = match state
             .sessions()
             .current_token_for_capability(
@@ -169,6 +181,7 @@ pub(super) async fn plugin_printer_devices(
             chamber_temperature_celsius: printer.chamber_temperature_celsius,
             chamber_target_temperature_celsius: printer.chamber_target_temperature_celsius,
             chamber_light_on: printer.chamber_light_on,
+            studio_local_camera,
             materials: materials_by_printer_id.remove(&printer.id),
             firmware,
             pandar_printer_id: printer.id,

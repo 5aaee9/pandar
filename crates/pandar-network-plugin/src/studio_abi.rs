@@ -20,15 +20,6 @@ pub extern "C" fn pandar_plugin_sync_ams_filaments(agent_valid: bool) -> PluginH
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_camera_access_result(agent_valid: bool) -> PluginHttpResult {
-    if agent_valid {
-        result(-19, 0, stable_error_body("camera_unavailable"))
-    } else {
-        result(-1, 0, stable_error_body("invalid_handle"))
-    }
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn pandar_plugin_local_connect_json(
     dev_id_ptr: *const u8,
     dev_id_len: usize,

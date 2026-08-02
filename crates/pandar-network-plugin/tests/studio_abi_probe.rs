@@ -142,6 +142,40 @@ fn probe_camera_abis_fail_closed_even_when_agent_has_printer_credentials() {
 }
 
 #[test]
+fn probe_camera_abis_return_one_use_loopback_urls_for_verified_models() {
+    let ProbeOutput { stdout, stderr, .. } =
+        run_probe(MockMode::CameraAvailable, "camera-available");
+
+    assert!(
+        stderr.is_empty(),
+        "camera available probe stderr was not empty: {stderr}"
+    );
+    assert_json_field(&stdout, "ok", "true");
+    assert_json_field(&stdout, "camera_available_exact", "true");
+    assert_json_field(&stdout, "camera_callback_count", "4");
+    assert_json_field(&stdout, "camera_golive_callback_count", "4");
+    assert_json_field(&stdout, "camera_urls_unique", "true");
+    assert_json_field(&stdout, "camera_credentials_redacted", "true");
+    assert!(
+        stdout.contains(r#""camera_url":"bambu:///local/127.0.0.1?port="#),
+        "camera probe did not return the exact loopback scheme: {stdout}"
+    );
+    for forbidden in [
+        "probe-token",
+        "studio-camera-a1",
+        "studio-camera-a1-mini",
+        "studio-camera-p1s",
+        "studio-camera-a2l",
+        "printer-camera-",
+    ] {
+        assert!(
+            !stdout.contains(forbidden),
+            "camera probe output leaked {forbidden}: {stdout}"
+        );
+    }
+}
+
+#[test]
 fn probe_server_connectivity_follows_readyz_transitions() {
     let ProbeOutput { stdout, stderr, .. } =
         run_probe(MockMode::ConnectionReadiness, "connection-readiness");

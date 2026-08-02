@@ -35,3 +35,28 @@ pub(super) fn axis_printers_response() -> String {
     devices.push(second);
     response.to_string()
 }
+
+pub(super) fn camera_printers_response() -> String {
+    let mut response: serde_json::Value = serde_json::from_str(PRINTERS_RESPONSE).unwrap();
+    let template = response["devices"][0].clone();
+    response["devices"] = serde_json::Value::Array(
+        [
+            ("studio-camera-a1", "printer-camera-a1", "N2S"),
+            ("studio-camera-a1-mini", "printer-camera-a1-mini", "N1"),
+            ("studio-camera-p1s", "printer-camera-p1s", "C12"),
+            ("studio-camera-a2l", "printer-camera-a2l", "N9"),
+        ]
+        .into_iter()
+        .map(|(dev_id, printer_id, model)| {
+            let mut device = template.clone();
+            device["dev_id"] = serde_json::json!(dev_id);
+            device["pandar_printer_id"] = serde_json::json!(printer_id);
+            device["dev_model_name"] = serde_json::json!(model);
+            device["model"] = serde_json::json!(model);
+            device["studio_local_camera"] = serde_json::json!(true);
+            device
+        })
+        .collect(),
+    );
+    response.to_string()
+}

@@ -130,7 +130,7 @@ pub fn bambu_lan_tls_config(expected_serial: &str) -> TlsConfiguration {
     TlsConfiguration::Rustls(bambu_lan_client_config(expected_serial))
 }
 
-fn bambu_lan_client_config(expected_serial: &str) -> Arc<ClientConfig> {
+pub(crate) fn bambu_lan_client_config(expected_serial: &str) -> Arc<ClientConfig> {
     let mut config =
         ClientConfig::builder_with_provider(rustls::crypto::aws_lc_rs::default_provider().into())
             .with_safe_default_protocol_versions()

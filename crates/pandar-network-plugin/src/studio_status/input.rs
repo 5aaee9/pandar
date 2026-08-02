@@ -52,6 +52,8 @@ pub(super) struct PrinterStatus {
     #[serde(default)]
     pub(super) chamber_light_on: Option<bool>,
     #[serde(default)]
+    pub(super) studio_local_camera: bool,
+    #[serde(default)]
     pub(super) materials: Option<Materials>,
 }
 

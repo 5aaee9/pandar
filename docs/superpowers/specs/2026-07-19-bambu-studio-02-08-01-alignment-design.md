@@ -2,6 +2,16 @@
 
 ## Status And Baseline
 
+- Status addendum: the working tree now implements a constrained Studio local-camera path for
+  normalized A1, A1 Mini, P1S, and A2L printers. Eligibility requires an online current Agent session
+  advertising `StudioLocalCamera`; the Hub repeats that gate when opening MJPEG. Agent alone knows
+  the printer host/access code and connects to the native TLS port-6000 camera protocol. Studio
+  receives only a random one-use `bambu:///local/127.0.0.1?...` relay URL, and the replacement
+  BambuSource implements exactly the pinned 21-entry local-media ABI for bounded JPEG samples. Every
+  other model and all cloud/TUTK/Agora, recording, and direct-printer media paths remain fail-closed.
+  Automated protocol/route/relay/export evidence and the positive four-model compiled Studio ABI
+  probe pass; packaged cross-platform evidence, real Studio playback, and real camera hardware remain
+  pending.
 - Status: the core ABI, command, print/task, firmware/AMS, account, and no-auth implementation remains
   in place. Final12 passed its Windows clean, PostgreSQL
   16.14, and Windows MSVC native package/ABI gates, then failed promotion when Linux full validation
@@ -218,6 +228,8 @@ Intentionally unsupported unless a separate architecture decision reopens them:
 - direct LAN discovery, bind/unbind, certificate ownership, and direct printer sockets inside the
   plugin;
 - plugin-owned MQTT, FTPS, SFTP, or Agent connections;
+- direct printer camera credentials, cloud/TUTK/Agora media, and camera recording (the sole camera
+  exception is the authenticated Hub/Agent-mediated loopback MJPEG path described above);
 - direct `ft_*` media browsing/upload, Send to SD card, local print, and SD-card print;
 - MakerWorld publishing, ratings, recommendations, and a complete Bambu cloud settings clone;
 - firmware package staging or hosting.

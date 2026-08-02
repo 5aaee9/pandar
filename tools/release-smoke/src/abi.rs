@@ -8,6 +8,29 @@ use pandar_studio_profile::StudioAbiSeries;
 
 const EXPORT_MAP_PATH: &str = "crates/pandar-network-plugin/src/shim_exports.hpp";
 pub(crate) const SOURCE_SENTINEL: &str = "pandar_bambu_source_sentinel";
+pub(crate) const SOURCE_MEDIA_EXPORTS: [&str; 21] = [
+    "Bambu_Create",
+    "Bambu_SetLogger",
+    "Bambu_SetStreamInfoCallback",
+    "Bambu_SetTrackReporter",
+    "Bambu_Open",
+    "Bambu_StartStream",
+    "Bambu_StartStreamEx",
+    "Bambu_GetStreamCount",
+    "Bambu_GetStreamInfo",
+    "Bambu_GetDuration",
+    "Bambu_Seek",
+    "Bambu_ReadSample",
+    "Bambu_SendMessage",
+    "Bambu_RecvMessage",
+    "Bambu_Close",
+    "Bambu_Destroy",
+    "Bambu_Init",
+    "Bambu_GetSessionStat",
+    "Bambu_Deinit",
+    "Bambu_GetLastErrorMsg",
+    "Bambu_FreeLogMsg",
+];
 
 pub(crate) struct AbiSymbols {
     pub all: BTreeSet<String>,
@@ -128,23 +151,22 @@ pub(crate) fn validate_exact_exports(
 }
 
 pub(crate) fn validate_source_exports(actual: &BTreeSet<String>) -> Result<(), String> {
-    if !actual.contains(SOURCE_SENTINEL) {
-        return Err(format!(
-            "BambuSource companion is missing sentinel export {SOURCE_SENTINEL}"
-        ));
+    let expected = SOURCE_MEDIA_EXPORTS
+        .into_iter()
+        .chain([SOURCE_SENTINEL])
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    let missing = expected.difference(actual).cloned().collect::<Vec<_>>();
+    let extra = actual.difference(&expected).cloned().collect::<Vec<_>>();
+    if missing.is_empty() && extra.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "BambuSource local-camera exports differ: missing [{}], unexpected [{}]",
+            missing.join(", "),
+            extra.join(", ")
+        ))
     }
-    let bambu = actual
-        .iter()
-        .filter(|symbol| symbol.starts_with("Bambu_"))
-        .cloned()
-        .collect::<Vec<_>>();
-    if !bambu.is_empty() {
-        return Err(format!(
-            "BambuSource companion must not export camera/media entrypoints: {}",
-            bambu.join(", ")
-        ));
-    }
-    Ok(())
 }
 
 pub(crate) fn inspect_exports(

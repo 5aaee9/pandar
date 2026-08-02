@@ -50,8 +50,9 @@ was exercised.
 Use one native three-file candidate archive built for the same OS and architecture as
 the Bambu Studio installation. Pinned Studio `02.08.01.55` will not create its network agent unless it
 can load a BambuSource library from the data-directory plugin folder, and the official archives do not
-bundle one. Pandar's companion crosses only that load gate: it has a Pandar sentinel and no `Bambu_*`
-camera/media exports, so Studio retains its fake-source fallback. It is not camera or media support.
+bundle one. Pandar's companion has a Pandar sentinel plus the exact 21 `Bambu_*` entrypoints required
+for the constrained local-camera path. It accepts only Pandar's authenticated loopback MJPEG URL and
+does not provide cloud/TUTK/Agora, recording, discovery, or direct printer transport.
 
 The archive must contain exactly the CLI, network plugin, and BambuSource companion at top level. The
 network plugin must expose 109 network plus 21 File Transfer exports (130 unique exports). Record all
@@ -260,9 +261,9 @@ cargo run --manifest-path tools/studio-plugin-smoke/Cargo.toml -- \
 
 A passing preflight only proves the prerequisite paths, network-plugin filename, URL shape, and evidence
 metadata are ready for a manual run. It does not inspect the BambuSource companion; use native
-`tools/release-smoke` evidence to require its sentinel and reject `Bambu_*` exports. Preflight does not
-launch Bambu Studio or provide real Studio compatibility evidence; every Studio checklist item remains
-`untested` until Studio is launched and exercised manually.
+`tools/release-smoke` evidence to require its sentinel and exact 21-entry local-camera `Bambu_*`
+contract. Preflight does not launch Bambu Studio or provide real Studio compatibility evidence; every
+Studio checklist item remains `untested` until Studio is launched and exercised manually.
 
 ## Replace And Roll Back
 
@@ -281,7 +282,9 @@ launch Bambu Studio or provide real Studio compatibility evidence; every Studio 
 | Step                                | Expected Result                                                           | Status     | Evidence |
 | ----------------------------------- | ------------------------------------------------------------------------- | ---------- | -------- |
 | Studio loads both libraries         | No missing-library, missing-symbol, or dynamic-loader error.               | `passed` | Final16 used the official AppImage and packaged plugin/companion in the controlled harness; the package had already passed its native loader and release-smoke gates. |
-| BambuSource remains non-media       | Companion sentinel is present, `Bambu_*` exports are absent, and no camera/media capability is claimed. | `passed` | The final16 package passed one-sentinel/zero-`Bambu_*` inspection. No media or camera operation was invoked. |
+| Historical Final16 BambuSource gate | Companion sentinel is present and `Bambu_*` exports are absent.       | `passed` | The final16 package passed one-sentinel/zero-`Bambu_*` inspection. This predates the local-camera implementation and remains historical package evidence only. |
+| Current BambuSource local ABI       | Companion sentinel and exactly 21 expected `Bambu_*` exports are present; arbitrary hosts and malformed relay credentials are rejected. | `untested` | Requires a new packaged candidate; source-level release-smoke and Linux export inspection pass. |
+| A1/A1 Mini/P1S/A2L live view        | Studio receives a one-use loopback URL and displays relayed camera frames without printer or Hub credentials in the URL or evidence. | `untested` | Requires a capable current Agent session, matching hardware, and a real Studio playback run. |
 | Login opens Pandar sign-in          | Studio WebView displays Pandar sign-in.                                   | `untested` |          |
 | Localhost ticket callback completes | Studio receives plugin ticket through its local callback.                 | `untested` |          |
 | Token exchange completes            | Studio exchanges the plugin ticket for a tenant-scoped plugin credential. | `untested` |          |

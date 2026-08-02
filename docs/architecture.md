@@ -498,9 +498,12 @@ Agent phase status after Phase 15:
   to development no-auth. Firmware catalog/version/send requests likewise carry one frozen request
   snapshot and claimed firmware generation through admission, HTTP, post-check, and callback delivery;
   the C++ shim never rereads live generation or owns a `last_error` side channel.
-- `pandar-bambu-source` is a separate sentinel-only non-media companion required by the pinned Studio
-  startup gate. A current candidate archive has exactly CLI + network plugin + companion; the
-  companion exports no `Bambu_*` media API.
+- `pandar-bambu-source` is a separate companion required by the pinned Studio startup gate. It
+  exports the sentinel plus the exact 21-entry local-media ABI and accepts only a random one-use
+  loopback MJPEG relay URL from the network plugin. The relay keeps the Hub bearer internal; printer
+  host/access-code credentials remain Agent-local. Only normalized A1, A1 Mini, P1S, and A2L printers
+  with an online current capable Agent are eligible. The companion has no cloud/TUTK/Agora,
+  recording, discovery, MQTT, FTPS, or direct printer transport behavior.
 - Phase 23 automated probes and native release-smoke remain separate from real Studio evidence. Exact
   Studio and hardware claims are gated by the compatibility manifest.
 

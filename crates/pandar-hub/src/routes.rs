@@ -131,6 +131,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/plugin/session", delete(plugin::revoke_session))
         .route("/api/v1/plugin/printers", get(plugin::list_printers))
         .route(
+            "/api/v1/plugin/printers/{printer_id}/camera.mjpeg",
+            get(plugin::stream_camera),
+        )
+        .route(
             "/api/v1/plugin/printers/{printer_id}/firmware",
             get(plugin::firmware::get_state),
         )

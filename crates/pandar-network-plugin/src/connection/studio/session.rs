@@ -2,6 +2,20 @@ use super::*;
 use crate::connection::{AuthDisposition, ConnectionSession};
 
 impl ConnectionSession {
+    pub(crate) fn studio_camera_snapshot(&self, dev_id: String) -> Option<StudioRequestSnapshot> {
+        let dev_id = normalize_studio_dev_id(dev_id);
+        let state = self.state.lock().expect("connection state");
+        let printer = state.printers.get(&dev_id)?;
+        (state.studio_eligible(&dev_id)
+            && printer.studio_local_camera
+            && pandar_core::compatibility::studio_local_camera_supported(printer.model.as_deref()))
+        .then(|| StudioRequestSnapshot {
+            hub_url: state.hub_url.clone(),
+            token: state.token.clone(),
+            printer_id: printer.pandar_printer_id.clone(),
+        })
+    }
+
     pub(super) fn studio_status_target_available(
         &self,
         tunnel: i32,

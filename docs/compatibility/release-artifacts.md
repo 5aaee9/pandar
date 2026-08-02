@@ -2,8 +2,8 @@
 
 Phase 24 release-artifact evidence is separate from real Bambu Studio compatibility evidence. Native
 release-smoke can prove an archive checksum, exact layout, CLI startup, network-plugin exports, and
-BambuSource sentinel policy. It does not prove that Bambu Studio loaded the libraries or that a real
-printer accepted an action.
+BambuSource local-media export contract. It does not prove that Bambu Studio loaded the libraries,
+played camera frames, or that a real printer accepted an action.
 
 Current releases build separate artifacts for ABI series `02.06.00`, `02.06.01`, `02.07.00`,
 `02.07.01`, `02.08.00`, and `02.08.01`. `studio-abi-profiles.json` pins the exact reference Studio
@@ -35,9 +35,11 @@ Each candidate archive has exactly three top-level files:
 | `macos-arm64` | `pandar` | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` |
 | `windows-amd64` | `pandar.exe` | `pandar_network_plugin.dll` | `pandar_bambu_source.dll` |
 
-The network plugin must expose the complete pinned 124-or-129-name Studio contract set for its named
-ABI series; this check does not require the binary to have only that many total exports. The companion is a sentinel-only, non-media
-startup-gate library: it must export `pandar_bambu_source_sentinel` and no `Bambu_*` symbol. Studio
+The network plugin must expose the complete pinned 124-, 129-, or 130-name Studio contract set for its
+named ABI series; this check does not require the binary to have only that many total exports. The
+companion must export `pandar_bambu_source_sentinel` plus exactly the 21 `Bambu_*` symbols used by the
+pinned local-media ABI. Those exports implement only Pandar's authenticated loopback MJPEG path; they
+do not imply cloud/TUTK/Agora, recording, discovery, or direct printer transport support. Studio
 installation renames the two libraries to its exact platform filenames, including
 `libbambu_networking.so` plus `libBambuSource.so` on Linux, and `bambu_networking.dll` plus
 `BambuSource.dll` on Windows.

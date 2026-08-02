@@ -65,7 +65,9 @@ pub(crate) use transport::mqtt_report_idle_timeout;
 #[cfg(test)]
 pub(crate) use transport::warn_mqtt_report_receive_failed;
 pub use transport::{RumqttcBambuMqttTransport, bambu_lan_mqtt_options, bambu_lan_tls_config};
-pub(crate) use transport::{is_mqtt_report_idle_timeout, resolve_bambu_mqtt_serial};
+pub(crate) use transport::{
+    bambu_lan_client_config, is_mqtt_report_idle_timeout, resolve_bambu_mqtt_serial,
+};
 
 use crate::machine::{
     BambuPrinterEndpoint, FirmwareVersionObservation, MaterialRefreshResult, PrinterRefreshResult,

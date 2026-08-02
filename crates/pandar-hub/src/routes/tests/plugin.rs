@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize, de::IgnoredAny};
 
 mod audit;
 mod authorization;
+mod camera;
 mod firmware;
 mod firmware_batch;
 mod h2c;
@@ -78,6 +79,7 @@ struct PluginPrinterResponse {
     bed_target_temperature_celsius: Option<String>,
     chamber_temperature_celsius: Option<String>,
     chamber_light_on: Option<bool>,
+    studio_local_camera: bool,
     materials: Option<PluginMaterialsResponse>,
     firmware: Option<pandar_core::PrinterFirmwareState>,
 }

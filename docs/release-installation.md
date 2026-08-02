@@ -21,9 +21,11 @@ The immutable `v0.1.0` release predates macOS desktop archives. The current tag 
 publishes macOS amd64 and arm64 archives. Both use an Apple Silicon runner: arm64 executes natively,
 while amd64 is cross-compiled and executes its CLI, ABI probe, and release-smoke under Rosetta 2.
 Every published archive contains exactly three top-level files: the `pandar` CLI (or `pandar.exe`),
-the matching network plugin, and the matching sentinel-only BambuSource companion. The tag workflow
-builds each archive on its target OS, validates the pinned Studio contract through the packaged
-plugin, and verifies the checksum, exact layout, companion policy, and CLI startup before publication.
+the matching network plugin, and the matching BambuSource companion. The current tag workflow builds
+each archive on its target OS, validates the pinned Studio contract through the packaged plugin, and
+verifies the checksum, exact layout, companion sentinel plus exact 21-entry local-media ABI, and CLI
+startup before publication. The immutable `v0.1.0` archives retain their historical sentinel-only
+companion and do not contain the later local-camera implementation.
 The separate Windows Studio hook bundles are also built natively with MSVC.
 
 Choose the archive whose ABI series matches the first three components of `app.version` in
@@ -71,9 +73,10 @@ If startup fails, keep the archive, checksum, target label, OS version, and term
 
 For each supported Bambu Studio ABI series on Windows x86-64, the tagged release also publishes
 `pandar-studio-hook-<abi-series>-windows-amd64.zip` and its `.sha256` sidecar. The bundle is built
-natively with MSVC and contains the Studio hook, matching network plugin, and sentinel-only
-BambuSource companion. The hook accepts only versions present in `studio-abi-profiles.json` and keeps
-its verified package cache separate for every ABI series.
+natively with MSVC and contains the Studio hook, matching network plugin, and BambuSource companion.
+The immutable `v0.1.0` bundle has the historical sentinel-only companion; newly built bundles contain
+the constrained local-camera companion instead. The hook accepts only versions present in
+`studio-abi-profiles.json` and keeps its verified package cache separate for every ABI series.
 
 Close Studio, then install the hook with a Windows `pandar.exe`. Use an elevated terminal when the
 Studio program directory is under `Program Files`:
@@ -229,9 +232,17 @@ copying when the installed Studio version resolves to a different or unsupported
 
 The installer writes Studio's exact names, including `libbambu_networking.so` and
 `libBambuSource.so` on Linux, `libbambu_networking.dylib` plus `libBambuSource.dylib` on macOS, and
-`bambu_networking.dll` plus `BambuSource.dll` on Windows. The
-companion exports only `pandar_bambu_source_sentinel`, exports no
-`Bambu_*` media/camera API, and leaves Studio's fake-source fallback in control.
+`bambu_networking.dll` plus `BambuSource.dll` on Windows. The current companion exports
+`pandar_bambu_source_sentinel` plus the exact 21 `Bambu_*` entrypoints required for Pandar's
+constrained local-camera path. It accepts only a random one-use
+`bambu:///local/127.0.0.1?...` relay URL and does not accept direct printer credentials or implement
+Bambu cloud/TUTK/Agora media.
+
+Studio live view is available only for A1, A1 Mini, P1S, and A2L when the printer is online through a
+current Agent that advertises the camera capability. Every other model fails closed. The printer host
+and access code stay in Agent configuration and must never be copied into Studio, its configuration,
+or a support bundle. Real-device playback has not yet been validated; use the Web monitor until your
+target model and platform have recorded compatibility evidence.
 
 Keep both original Studio library files for rollback. Typical locations vary by Studio installation:
 

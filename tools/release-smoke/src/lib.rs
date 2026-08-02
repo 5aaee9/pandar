@@ -8,7 +8,7 @@ mod process;
 use std::time::Duration;
 
 use abi::{
-    SOURCE_SENTINEL, expected_symbols, inspect_exports, inspect_source_exports,
+    SOURCE_MEDIA_EXPORTS, SOURCE_SENTINEL, expected_symbols, inspect_exports, inspect_source_exports,
     validate_exact_exports, validate_source_exports,
 };
 use archive::{sha256_hex, stage_archive, validate_checksum};
@@ -58,5 +58,6 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<String, String> {
         source_inspector: source_inspection.inspector,
         plugin: &stage.plugin,
         source_sentinel: SOURCE_SENTINEL,
+        source_bambu_exports: SOURCE_MEDIA_EXPORTS.len(),
     })
 }

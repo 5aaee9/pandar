@@ -50,6 +50,7 @@ fn event(event: agent_event::Event) -> AgentEvent {
 #[test]
 fn firmware_wire_round_trips_order_presence_and_exact_event_tags() {
     assert_eq!(AgentCapability::FirmwareControl as i32, 5);
+    assert_eq!(AgentCapability::StudioLocalCamera as i32, 7);
 
     let modules = event(agent_event::Event::PrinterFirmwareModulesSnapshot(
         PrinterFirmwareModulesSnapshot {

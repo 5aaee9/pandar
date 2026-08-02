@@ -1,6 +1,7 @@
 use std::{ffi::c_void, path::PathBuf, slice};
 
 mod account;
+mod camera;
 mod cancellation;
 mod connection;
 pub mod firmware;
@@ -17,6 +18,7 @@ mod studio_policy;
 mod studio_print;
 mod studio_status;
 
+pub use camera::pandar_plugin_camera_url;
 pub use connection::{
     ConnectionDeviceVisitor, ConnectionPrinterVisitor, PluginConnectionResult,
     PluginPrinterRefreshLifecycleResult, PluginStudioDeliveryResult, PluginStudioHeartbeatPlan,
@@ -50,9 +52,8 @@ pub use plugin_session::{
     pandar_plugin_exchange_ticket, pandar_plugin_no_auth_retryable_connect_failure,
 };
 pub use studio_abi::{
-    NETWORK_AGENT_VERSION, STUDIO_ABI_SERIES, pandar_plugin_camera_access_result,
-    pandar_plugin_local_connect_json, pandar_plugin_network_agent_version,
-    pandar_plugin_sync_ams_filaments,
+    NETWORK_AGENT_VERSION, STUDIO_ABI_SERIES, pandar_plugin_local_connect_json,
+    pandar_plugin_network_agent_version, pandar_plugin_sync_ams_filaments,
 };
 pub use studio_message::{
     PluginStudioMessageResult, pandar_plugin_classify_status_request,
