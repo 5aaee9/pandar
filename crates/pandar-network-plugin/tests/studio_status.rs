@@ -253,7 +253,7 @@ fn printer_telemetry_maps_ams_and_external_materials() {
 #[test]
 fn printer_telemetry_projects_a2l_mixed_ams_lite_routing() {
     let telemetry = telemetry_json(
-        r#"{"materials":{"ams_units":[{"unit_id":"0","unit_kind":"ams_lite_mixed","toolhead":"R","trays":[{"tray_id":"0","type":"PLA"}]}],"external_spools":[],"active_tray":{"kind":"ams","global_tray_id":24}}}"#,
+        r#"{"materials":{"ams_units":[{"unit_id":"0","unit_kind":"ams_lite_mixed","toolhead":"R","trays":[{"tray_id":"0","global_tray_id":24,"exists":true,"type":"PLA"},{"tray_id":"1","global_tray_id":25,"exists":false},{"tray_id":"2","global_tray_id":26,"exists":false},{"tray_id":"3","global_tray_id":27,"exists":false}]}],"external_spools":[],"active_tray":{"kind":"ams","global_tray_id":24}}}"#,
     );
 
     assert_eq!(

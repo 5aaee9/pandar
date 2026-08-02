@@ -28,7 +28,8 @@ pub(crate) struct MaterialPatchDocument<'a> {
 #[derive(Serialize)]
 pub(super) struct AmsUnitPatch {
     pub(super) unit_id: String,
-    pub(super) unit_kind: AmsUnitKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) unit_kind: Option<AmsUnitKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) info: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -56,7 +57,9 @@ pub(super) enum MaterialTrayPatch {
 pub(super) struct MaterialTrayEntryPatch {
     pub(super) tray_id: String,
     pub(super) exists: bool,
-    pub(super) unit_kind: AmsUnitKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) unit_kind: Option<AmsUnitKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) global_tray_id: Option<u64>,
     #[serde(flatten)]
     pub(super) fields: MaterialFieldsPatch,

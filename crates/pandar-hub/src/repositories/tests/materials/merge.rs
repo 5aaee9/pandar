@@ -63,6 +63,62 @@ async fn partial_replay_merges_absent_null_and_concrete_fields() {
 }
 
 #[tokio::test]
+async fn partial_unit_delta_preserves_mixed_ams_lite_routing_evidence() {
+    let (materials, tenant, agent, printer_id) = fixture().await;
+
+    materials
+        .upsert_from_patch(patch_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            serde_json::json!({
+                "type": "printer_material_patch",
+                "observed_at": "2026-06-23T00:00:00Z",
+                "ams_units": [{
+                    "unit_id": "0",
+                    "unit_kind": "ams_lite_mixed",
+                    "trays": [{
+                        "tray_id": "0",
+                        "unit_kind": "ams_lite_mixed",
+                        "global_tray_id": 24,
+                        "exists": true,
+                        "type": "PLA"
+                    }]
+                }]
+            }),
+        ))
+        .await
+        .unwrap();
+
+    let merged = materials
+        .upsert_from_patch(patch_input(
+            tenant.id,
+            agent.id,
+            &printer_id,
+            serde_json::json!({
+                "type": "printer_material_patch",
+                "observed_at": "2026-06-23T00:01:00Z",
+                "ams_units": [{
+                    "unit_id": "0",
+                    "trays": [{"tray_id": "0", "exists": true, "type": "PETG"}]
+                }]
+            }),
+        ))
+        .await
+        .unwrap()
+        .unwrap();
+
+    let units = ams_units(&merged);
+    assert_eq!(units[0].unit_kind.as_deref(), Some("ams_lite_mixed"));
+    assert_eq!(
+        units[0].trays[0].unit_kind.as_deref(),
+        Some("ams_lite_mixed")
+    );
+    assert_eq!(units[0].trays[0].global_tray_id, Some(24));
+    assert_eq!(units[0].trays[0].material_type.as_deref(), Some("PETG"));
+}
+
+#[tokio::test]
 async fn first_snapshot_and_new_entries_drop_null_fields() {
     let (materials, tenant, agent, printer_id) = fixture().await;
 

@@ -32,7 +32,7 @@ fn full_ams_snapshot_normalizes_units_trays_external_and_active_tray() {
     assert_eq!(patch.document_type, "printer_material_patch");
     let unit = &patch.ams_units[0];
     assert_eq!(unit.replace_trays, Some(true));
-    assert_eq!(unit.unit_kind, "ams_2_pro");
+    assert_eq!(unit.unit_kind.as_deref(), Some("ams_2_pro"));
     assert_eq!(unit.humidity, Some(30.0));
     assert_eq!(unit.humidity_level, Some(4.0));
     assert_eq!(unit.temperature_celsius, Some(28.0));
@@ -372,7 +372,7 @@ fn active_tray_ranges_are_normalized() {
 fn ams_ht_unit_has_no_global_tray_id() {
     let patch = normalize(ams_ht_unit_report()).unwrap();
 
-    assert_eq!(patch.ams_units[0].unit_kind, "ams_ht");
+    assert_eq!(patch.ams_units[0].unit_kind.as_deref(), Some("ams_ht"));
     assert_eq!(patch.ams_units[0].trays[0].global_tray_id, None);
 }
 

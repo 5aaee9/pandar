@@ -23,7 +23,9 @@
   `ams_mapping` and `ams_mapping2` through the persisted global route, Web dispatch and material
   controls preserve the same IDs even when a tray omits its precomputed global ID, Android preserves
   `unit_kind`, and the network plugin reconstructs type `5`, existence bit `12`, tray bits, and
-  `tray_now` for Studio. Cross-layer regressions cover Agent MQTT normalization, Hub usage, Web
+  `tray_now` for Studio. Empty normalized trays no longer reappear in Studio's tray-existence mask,
+  and type-less partial Agent deltas omit routing fields so Hub merge preserves prior mixed AMS Lite
+  evidence. Cross-layer regressions cover Agent MQTT normalization, Hub merge and usage, Web
   dispatch/control payloads, Android mapping, and Studio status projection. This is pinned-source and
   automated compatibility evidence, not a real A2L hardware claim.
 

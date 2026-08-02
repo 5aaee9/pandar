@@ -21,6 +21,7 @@ fn decode_material_json<T: DeserializeOwned>(value: &impl Serialize) -> T {
 #[derive(Debug, Deserialize, PartialEq)]
 pub(super) struct TestMaterialUnit {
     pub(super) unit_id: String,
+    pub(super) unit_kind: Option<String>,
     pub(super) humidity: Option<f64>,
     #[serde(default)]
     pub(super) trays: Vec<TestMaterialTray>,
@@ -29,6 +30,8 @@ pub(super) struct TestMaterialUnit {
 #[derive(Debug, Deserialize, PartialEq)]
 pub(super) struct TestMaterialTray {
     pub(super) tray_id: String,
+    pub(super) unit_kind: Option<String>,
+    pub(super) global_tray_id: Option<u64>,
     #[serde(rename = "type")]
     pub(super) material_type: Option<String>,
     pub(super) color: Option<String>,

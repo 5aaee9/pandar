@@ -260,7 +260,7 @@ pub(super) fn global_tray_bits_report() -> Value {
                             tray_with_id(Scalar::U32(2)),
                             tray_with_id(Scalar::U32(3)),
                         ],
-                        info: None,
+                        info: Some("00000001"),
                         humidity: None,
                         humidity_raw: None,
                         temp: None,
@@ -272,7 +272,7 @@ pub(super) fn global_tray_bits_report() -> Value {
                             tray_info_idx: Some("GFL99"),
                             ..Default::default()
                         }],
-                        info: None,
+                        info: Some("00000001"),
                         humidity: None,
                         humidity_raw: None,
                         temp: None,

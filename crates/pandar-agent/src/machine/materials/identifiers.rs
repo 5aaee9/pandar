@@ -37,17 +37,36 @@ pub(super) fn tray_id(tray: &MaterialSlotReport) -> Option<String> {
     normalized_string(tray.id.as_ref()).or_else(|| normalized_string(tray.tray_id.as_ref()))
 }
 
-pub(super) fn unit_kind(unit_id: &str, info: Option<&ScalarValue>) -> AmsUnitKind {
+pub(super) fn unit_kind(
+    unit_id: &str,
+    info: Option<&ScalarValue>,
+    tray_exist_bits: Option<u64>,
+) -> Option<AmsUnitKind> {
     info.and_then(|value| normalized_string(Some(value)))
         .as_deref()
         .and_then(AmsUnitKind::from_studio_info)
-        .unwrap_or_else(|| AmsUnitKind::from_unit_id(unit_id))
+        .or_else(|| {
+            let fallback = AmsUnitKind::from_unit_id(unit_id);
+            if fallback == AmsUnitKind::AmsHt {
+                return Some(fallback);
+            }
+            let unit_id = unit_id.parse::<u64>().ok()?;
+            let conventional_offset = u32::try_from(unit_id.checked_mul(4)?).ok()?;
+            let conventional_mask = 0xF_u64.checked_shl(conventional_offset)?;
+            tray_exist_bits
+                .is_some_and(|bits| bits & conventional_mask != 0)
+                .then_some(fallback)
+        })
 }
 
-pub(super) fn global_tray_id(unit_id: &str, tray_id: &str, unit_kind: AmsUnitKind) -> Option<u64> {
+pub(super) fn global_tray_id(
+    unit_id: &str,
+    tray_id: &str,
+    unit_kind: Option<AmsUnitKind>,
+) -> Option<u64> {
     let unit_id = unit_id.parse::<u64>().ok()?;
     let tray_id = tray_id.parse::<u64>().ok()?;
-    unit_kind.global_tray_id(unit_id, tray_id)
+    unit_kind?.global_tray_id(unit_id, tray_id)
 }
 
 pub(super) fn parse_tray_exist_bits(value: Option<&ScalarValue>) -> Option<u64> {

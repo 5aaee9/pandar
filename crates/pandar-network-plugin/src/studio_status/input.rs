@@ -122,6 +122,8 @@ pub(super) struct MaterialTray {
     #[serde(default)]
     pub(super) tray_id: Option<Scalar>,
     #[serde(default)]
+    pub(super) exists: Option<bool>,
+    #[serde(default)]
     pub(super) global_tray_id: Option<Scalar>,
     #[serde(default)]
     pub(super) external_id: Option<Scalar>,

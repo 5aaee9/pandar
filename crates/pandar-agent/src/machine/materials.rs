@@ -1,20 +1,17 @@
 mod external;
 mod identifiers;
 mod patch;
-
+use super::mqtt::report::materials::*;
 use external::{has_dual_external_slots, normalize_external_spools};
 use identifiers::*;
 use pandar_core::AmsUnitKind;
 use patch::*;
 use serde_json::Number;
 
-use super::mqtt::report::materials::*;
-
 struct NormalizedTrayPatch {
     tray_id: String,
     value: MaterialTrayPatch,
 }
-
 pub(crate) fn normalize_material_patch<'a>(
     report: &MaterialsReport,
     observed_at: &'a str,
@@ -66,7 +63,6 @@ pub(crate) fn normalize_material_patch<'a>(
         || patch.active_tray.is_some())
     .then_some(patch)
 }
-
 fn normalize_ams_units(
     units: &[AmsUnitReport],
     ams: &AmsReport,
@@ -82,7 +78,7 @@ fn normalize_ams_units(
         .iter()
         .filter_map(|unit| {
             let unit_id = unit_id(unit)?;
-            let unit_kind = unit_kind(&unit_id, unit.info.as_ref());
+            let unit_kind = unit_kind(&unit_id, unit.info.as_ref(), tray_exist_bits);
             let info = unit.info.as_ref().and_then(normalize_ams_info);
             let toolhead = match unit.info.as_ref() {
                 Some(info) => normalize_toolhead(info, filament_switch_installed),
@@ -98,17 +94,20 @@ fn normalize_ams_units(
                     .iter()
                     .filter_map(|tray| normalize_tray(tray, &unit_id, unit_kind))
                     .collect();
-                if unit_kind.uses_four_slot_exist_bits()
+                if let Some(kind) = unit_kind
+                    && kind.uses_four_slot_exist_bits()
                     && !skip_zero_poweroff_cleanup
                     && let Some(bits) = tray_exist_bits
                 {
-                    apply_empty_tray_clears(&mut normalized_trays, &unit_id, unit_kind, bits);
+                    apply_empty_tray_clears(&mut normalized_trays, &unit_id, kind, bits);
                 }
-                replace_trays = !unit_kind.uses_four_slot_exist_bits()
-                    || (0..4).all(|slot| {
-                        let tray_id = slot.to_string();
-                        normalized_trays.iter().any(|tray| tray.tray_id == tray_id)
-                    });
+                replace_trays = unit_kind.is_some_and(|kind| {
+                    !kind.uses_four_slot_exist_bits()
+                        || (0..4).all(|slot| {
+                            let tray_id = slot.to_string();
+                            normalized_trays.iter().any(|tray| tray.tray_id == tray_id)
+                        })
+                });
                 trays = normalized_trays
                     .into_iter()
                     .map(|tray| tray.value)
@@ -145,7 +144,7 @@ fn normalize_ams_units(
 fn normalize_tray(
     tray: &MaterialSlotReport,
     unit_id: &str,
-    unit_kind: AmsUnitKind,
+    unit_kind: Option<AmsUnitKind>,
 ) -> Option<NormalizedTrayPatch> {
     let tray_id = tray_id(tray)?;
     let global_tray_id = global_tray_id(unit_id, &tray_id, unit_kind);
@@ -239,7 +238,7 @@ fn empty_tray_clear(unit_id: &str, unit_kind: AmsUnitKind, slot: u64) -> Normali
     let value = empty_tray_clear_patch(
         tray_id,
         unit_kind,
-        global_tray_id(unit_id, &slot.to_string(), unit_kind),
+        global_tray_id(unit_id, &slot.to_string(), Some(unit_kind)),
     );
     NormalizedTrayPatch {
         tray_id: slot.to_string(),

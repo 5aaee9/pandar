@@ -18,7 +18,7 @@ pub(crate) struct TestMaterialPatch {
 #[derive(Debug, Deserialize, PartialEq)]
 pub(crate) struct TestAmsUnit {
     pub(crate) unit_id: String,
-    pub(crate) unit_kind: String,
+    pub(crate) unit_kind: Option<String>,
     pub(crate) info: Option<String>,
     #[serde(default)]
     pub(crate) trays: Vec<TestAmsTray>,

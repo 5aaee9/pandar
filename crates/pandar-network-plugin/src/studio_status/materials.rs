@@ -84,7 +84,8 @@ impl AmsUnitPayload {
             .trays
             .iter()
             .filter_map(|tray| {
-                if let Some(global_number) = global_tray_number(unit, unit_number, tray)
+                if tray.exists != Some(false)
+                    && let Some(global_number) = global_tray_number(unit, unit_number, tray)
                     && global_number < 64
                 {
                     *tray_exist_bits |= 1_u64 << global_number;

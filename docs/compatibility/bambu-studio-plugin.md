@@ -399,10 +399,12 @@ full status alone emits `support_mqtt_alive:true`.
 AMS telemetry preserves Studio's `DevAmsType` values `1..=5` as typed unit kinds. In particular,
 A2L (`N9`) mixed AMS Lite (`AMS_LITE_MIXED`, type `5`) uses global tray IDs `24..=27` independently
 of the reported AMS unit ID, sets Studio's reserved AMS-existence bit `12`, and projects the matching
-tray-existence and active-tray values. Agent normalization, Hub terminal filament attribution, Web
-print/control payloads, Android domain mapping, and plugin status reconstruction share that route;
-unknown or missing type evidence retains the existing topology fallback rather than guessing mixed
-AMS Lite. These checks are pinned-source automated evidence and do not claim a live A2L hardware run.
+tray-existence and active-tray values. Empty normalized trays remain absent from Studio's existence
+mask. Agent normalization, Hub terminal filament attribution, Web print/control payloads, Android
+domain mapping, and plugin status reconstruction share that route; type-less partial Agent deltas
+omit routing fields so Hub merge preserves prior evidence, while unknown first-observation type
+evidence retains the existing topology fallback rather than guessing mixed AMS Lite. These checks are
+pinned-source automated evidence and do not claim a live A2L hardware run.
 
 The Studio camera path is intentionally unavailable. Status reports no local or remote live-view
 protocol and an empty URL; both camera ABI functions return `BAMBU_NETWORK_ERR_INVALID_RESULT`
