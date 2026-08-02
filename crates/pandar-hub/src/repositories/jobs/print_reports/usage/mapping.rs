@@ -31,7 +31,12 @@ pub(super) fn mapping_identities(
 
     for slot_index in 0..slots {
         let identity = if let Some(entry) = mapping2.get(slot_index) {
-            identity_from_mapping2(slot_index, entry, ams_units)
+            identity_from_mapping2(
+                slot_index,
+                entry,
+                mapping.get(slot_index).copied(),
+                ams_units,
+            )
         } else {
             mapping
                 .get(slot_index)
@@ -96,6 +101,7 @@ fn identity_from_mapping(
 fn identity_from_mapping2(
     slot_index: usize,
     entry: &Mapping2Entry,
+    flat_mapping: Option<i32>,
     ams_units: &[MaterialUnit],
 ) -> Option<SlotIdentity> {
     match (entry.ams_id, entry.slot_id) {
@@ -114,12 +120,15 @@ fn identity_from_mapping2(
             source: "ams_mapping2",
             ams_id: Some(entry.ams_id.to_string()),
             tray_id: Some(slot_id.to_string()),
-            global_tray_id: global_tray_for_route(ams_units, entry.ams_id, slot_id).or_else(|| {
-                entry
-                    .ams_id
-                    .checked_mul(4)
-                    .and_then(|global| global.checked_add(slot_id))
-            }),
+            // Studio's structured route omits the mixed offset carried by the flat mapping.
+            global_tray_id: mixed_global_tray_from_flat_mapping(flat_mapping)
+                .or_else(|| global_tray_for_route(ams_units, entry.ams_id, slot_id))
+                .or_else(|| {
+                    entry
+                        .ams_id
+                        .checked_mul(4)
+                        .and_then(|global| global.checked_add(slot_id))
+                }),
             external_id: None,
         }),
         (128..=135, slot_id) => Some(SlotIdentity {
@@ -154,6 +163,10 @@ fn identity_for_global_tray(
             })
         })
     })
+}
+
+fn mixed_global_tray_from_flat_mapping(value: Option<i32>) -> Option<i32> {
+    value.filter(|value| matches!(value, 24..=27))
 }
 
 fn global_tray_for_route(ams_units: &[MaterialUnit], ams_id: i32, tray_id: i32) -> Option<i32> {

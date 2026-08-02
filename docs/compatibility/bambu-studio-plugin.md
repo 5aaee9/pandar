@@ -401,8 +401,10 @@ A2L (`N9`) mixed AMS Lite (`AMS_LITE_MIXED`, type `5`) uses global tray IDs `24.
 of the reported AMS unit ID, sets Studio's reserved AMS-existence bit `12`, and projects the matching
 tray-existence and active-tray values. Empty normalized trays remain absent from Studio's existence
 mask. Agent normalization, Hub terminal filament attribution, Web print/control payloads, Android
-domain mapping, and plugin status reconstruction share that route; type-less partial Agent deltas
-omit routing fields so Hub merge preserves prior evidence, while unknown first-observation type
+domain mapping, and plugin status reconstruction share that route. Terminal attribution keeps a
+slicer-provided flat `24..=27` route ahead of structured-mapping topology fallback when the current
+material snapshot is missing or stale; type-less partial Agent deltas omit routing fields so Hub merge
+preserves prior evidence, while unknown first-observation type
 evidence retains the existing topology fallback rather than guessing mixed AMS Lite. These checks are
 pinned-source automated evidence and do not claim a live A2L hardware run.
 

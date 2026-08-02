@@ -25,8 +25,10 @@
   `unit_kind`, and the network plugin reconstructs type `5`, existence bit `12`, tray bits, and
   `tray_now` for Studio. Empty normalized trays no longer reappear in Studio's tray-existence mask,
   and type-less partial Agent deltas omit routing fields so Hub merge preserves prior mixed AMS Lite
-  evidence. Cross-layer regressions cover Agent MQTT normalization, Hub merge and usage, Web
-  dispatch/control payloads, Android mapping, and Studio status projection. This is pinned-source and
+  evidence. Hub terminal attribution also preserves the slicer's flat `24..=27` physical route when
+  the corresponding structured mapping lacks a current material-snapshot route instead of reducing it
+  to an ordinary AMS ID. Cross-layer regressions cover Agent MQTT normalization, Hub merge and usage,
+  Web dispatch/control payloads, Android mapping, and Studio status projection. This is pinned-source and
   automated compatibility evidence, not a real A2L hardware claim.
 
 - Enabled the existing authenticated Web/Android printer-control pipeline for X1C, P1S, and A2L by
