@@ -42,14 +42,20 @@ The implementation is based on the tracked Bambu Studio source and resources:
 
 These sources establish the rack topology, bit-60 capability gate, mapping request versions, response correlation, and physical mapping handoff. They do not establish the unsupported behaviors listed above.
 
-## Hardware acceptance still required
+## Hardware evidence
 
-Tracked by [GitHub issue #2](https://github.com/ProjectPandar/pandar/issues/2). A safe H2C hardware session should verify, without enabling unsupported controls:
+The [2026-08-04 safe-idle probe](h2c-hardware-2026-08-04.md) verified real H2C product/firmware discovery, full rack inventory, protected FTPS listing, direct and Hub/Agent V0/V1 auto-mapping success, correlated printer failure with `errno: 4`, and replacement-session fencing. It also captured the firmware's fixed full-status `sequence_id: "2021"` behavior and verified the resulting Agent presence fix on the real printer.
 
-1. Capture a full `push_status` plus separate nozzle-only and holder-only deltas and compare the projected Studio device state.
-2. Run both mapping request versions from Studio and record correlated success and printer-declared failure replies.
-3. Confirm Studio receives the exact response and retains physical IDs in the subsequent FDM print submission.
-4. Inspect the final MQTT `project_file` payload before authorizing a small FDM print, confirming the slicer-provided mapping is unchanged.
-5. Reconnect the Agent and confirm bit 60 stays hidden until fresh rack telemetry arrives for the replacement session.
+No file was uploaded or deleted, no print was started, and no rack operation was issued. A 30-second passive capture observed full rack reports but no separate nozzle-only or holder-only delta.
 
-Until this checklist is completed on real H2C hardware, Pandar claims source-backed protocol compatibility and fail-closed dispatch behavior, not live-print validation.
+## Remaining hardware acceptance
+
+Tracked by [GitHub issue #2](https://github.com/ProjectPandar/pandar/issues/2). The current status is:
+
+1. Partial: a full `push_status` and projected rack state are captured; real nozzle-only and holder-only deltas still require a manufacturer-supported physical rack action.
+2. Completed at the direct MQTT and Hub plugin-HTTP boundaries: V0/V1 success and a correlated printer-declared failure were recorded. A real Studio callback remains part of the next item.
+3. Open: confirm a real Bambu Studio process receives the exact response and retains physical IDs in the subsequent FDM print submission.
+4. Open: inspect the final MQTT `project_file` payload before authorizing a small FDM print, confirming the slicer-provided mapping is unchanged.
+5. Completed: a replacement Agent session exposed neither bit 60 nor mapping until current-session rack telemetry arrived; the real-printer rerun recovered bit 60 and online presence after the fixed-sequence status correction.
+
+Until the open items are completed, Pandar claims live H2C status, rack inventory, protected FTPS listing, auto-mapping, correlated failure, and session-fencing evidence—not live Studio submission or print validation.

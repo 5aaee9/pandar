@@ -253,9 +253,12 @@ where
                 }
                 snapshot.telemetry_authoritative = outstanding_pushall.as_deref().is_some_and(
                     |sequence_id| {
-                        report
-                            .snapshot()
-                            .is_some_and(|report| report.is_full_push_status(sequence_id))
+                        report.snapshot().is_some_and(|report| {
+                            report.is_authoritative_full_push_status(
+                                sequence_id,
+                                endpoint.model.as_deref(),
+                            )
+                        })
                     },
                 );
                 if snapshot.telemetry_authoritative {

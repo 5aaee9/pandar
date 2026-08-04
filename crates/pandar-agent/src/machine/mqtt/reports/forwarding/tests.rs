@@ -294,13 +294,20 @@ fn endpoint() -> BambuPrinterEndpoint {
 fn spawn_forwarder(
     transport: ControlledTransport,
 ) -> (JoinHandle<anyhow::Result<()>>, mpsc::Receiver<AgentEvent>) {
+    spawn_forwarder_for_endpoint(transport, endpoint())
+}
+
+fn spawn_forwarder_for_endpoint(
+    transport: ControlledTransport,
+    endpoint: BambuPrinterEndpoint,
+) -> (JoinHandle<anyhow::Result<()>>, mpsc::Receiver<AgentEvent>) {
     let (sender, receiver) = mpsc::channel(128);
     let task_transport = transport.clone();
     let task = tokio::spawn(async move {
         forward_print_reports(
             &test_config(),
             &task_transport,
-            &endpoint(),
+            &endpoint,
             Duration::from_secs(10),
             &sender,
             &DeviceFeatureCache::default(),

@@ -194,6 +194,62 @@ async fn idle_timeout_emits_offline_once_and_only_a_matching_full_report_recover
 }
 
 #[tokio::test(start_paused = true)]
+async fn h2c_fixed_sequence_full_report_recovers_presence_after_timeout() {
+    let transport = ControlledTransport::new(None);
+    let mut h2c = endpoint();
+    h2c.model = Some("O1C2".to_owned());
+    let (task, mut receiver) = spawn_forwarder_for_endpoint(transport.clone(), h2c);
+    transport.wait_for_publish_attempts(1).await;
+    transport.wait_for_report_waits(1).await;
+
+    transport.push_idle_timeout();
+    assert_eq!(next_snapshot(&mut receiver).await.state, "offline");
+    transport.wait_for_report_waits(2).await;
+
+    transport.push_report(json!({
+        "print": {
+            "command": "push_status",
+            "msg": 0,
+            "sequence_id": "other",
+            "gcode_state": "RUNNING",
+            "ctt": 42
+        }
+    }));
+    let uncorrelated = next_snapshot(&mut receiver).await;
+    assert!(uncorrelated.state.is_empty());
+    assert_eq!(uncorrelated.chamber_target_temperature_celsius, "42");
+    assert!(!uncorrelated.telemetry_authoritative);
+    transport.wait_for_report_waits(3).await;
+
+    transport.push_report(json!({
+        "print": {
+            "command": "push_status",
+            "msg": 0,
+            "sequence_id": "2021",
+            "gcode_state": "IDLE"
+        }
+    }));
+    let recovered = next_snapshot(&mut receiver).await;
+    assert_eq!(recovered.state, "IDLE");
+    assert!(recovered.telemetry_authoritative);
+    transport.wait_for_report_waits(4).await;
+
+    transport.push_report(json!({
+        "print": {
+            "command": "push_status",
+            "msg": 0,
+            "sequence_id": "2021",
+            "gcode_state": "RUNNING"
+        }
+    }));
+    let consumed = next_snapshot(&mut receiver).await;
+    assert_eq!(consumed.state, "RUNNING");
+    assert!(!consumed.telemetry_authoritative);
+
+    abort_and_join(task).await;
+}
+
+#[tokio::test(start_paused = true)]
 async fn transport_failures_emit_offline_once_until_a_matching_full_report_recovers() {
     let transport = ControlledTransport::new(None);
     let config = test_config();
