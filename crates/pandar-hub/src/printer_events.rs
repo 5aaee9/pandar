@@ -3,15 +3,20 @@ use std::{
     sync::{Arc, Mutex as StdMutex, MutexGuard},
 };
 
-use pandar_core::{CommandRecord, PrinterNozzleTemperature, TenantId};
+use pandar_core::{
+    BambuNozzleSystem, CommandRecord, PrinterNozzleTemperature, TenantId,
+    compatibility::normalize_model,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Number;
 use tokio::sync::{Mutex, broadcast, watch};
 
 use crate::{
     metrics::{MetricsState, SubscriptionGuard},
+    protocol::agent::v1::AgentCapability,
     repositories::{MaterialJsonValue, MaterialSnapshot, PrinterHms, PrinterWithLiveStatus},
     routes::jobs::JobResponse,
+    sessions::SessionRegistry,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,6 +49,8 @@ pub struct PrinterEventPrinter {
     pub chamber_target_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
     pub materials: Option<PrinterEventMaterials>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nozzle_system: Option<BambuNozzleSystem>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state_revision: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -107,6 +114,39 @@ pub struct PrinterEventCommand {
     pub updated_at: String,
 }
 
+/// Drops the stored H2C nozzle system unless it was reported by the current
+/// H2C-capable Agent session, so a replaced session cannot advertise a prior
+/// session's rack state to dashboard clients.
+pub async fn fence_printer_nozzle_system(
+    sessions: &SessionRegistry,
+    tenant_id: TenantId,
+    mut printer: PrinterWithLiveStatus,
+) -> PrinterWithLiveStatus {
+    let current = printer
+        .printer
+        .model
+        .as_deref()
+        .and_then(normalize_model)
+        .as_deref()
+        == Some("H2C")
+        && matches!(
+            sessions
+                .current_token_for_capability(
+                    tenant_id,
+                    printer.printer.agent_id,
+                    AgentCapability::H2cAutoNozzleMapping,
+                )
+                .await,
+            Some(token)
+                if printer.printer.bambu_nozzle_system_session_id.as_deref()
+                    == Some(token.persisted_id().as_str())
+        );
+    if !current {
+        printer.printer.bambu_nozzle_system = None;
+    }
+    printer
+}
+
 pub fn printer_event_printer(
     printer: PrinterWithLiveStatus,
     materials: Option<MaterialSnapshot>,
@@ -132,6 +172,7 @@ pub fn printer_event_printer(
         chamber_target_temperature_celsius: printer.chamber_target_temperature_celsius,
         chamber_light_on: printer.chamber_light_on,
         materials: materials.map(PrinterEventMaterials::from),
+        nozzle_system: printer.bambu_nozzle_system,
         state_revision: Some(state_revision),
         print: Some(PrinterEventPrint {
             task_generation: live_status.task_generation,

@@ -76,6 +76,12 @@ enum OperationAuditFields {
         external_id: Option<String>,
         extruder_id: Option<u32>,
     },
+    HolderCtrl {
+        holder_action: u32,
+    },
+    RackNozzle {
+        nozzle_id: u32,
+    },
 }
 
 #[derive(Serialize)]
@@ -171,6 +177,13 @@ impl OperationAuditFields {
                 external_id: external_id.clone(),
                 extruder_id: *extruder_id,
             },
+            PrinterOperationKind::NozzleHolderCtrl { action } => Self::HolderCtrl {
+                holder_action: *action,
+            },
+            PrinterOperationKind::NozzleInfoConfirm { id }
+            | PrinterOperationKind::HolderNozzleRefresh { id } => {
+                Self::RackNozzle { nozzle_id: *id }
+            }
             PrinterOperationKind::Pause {}
             | PrinterOperationKind::Resume {}
             | PrinterOperationKind::Stop {}

@@ -10,6 +10,7 @@ mod operation_dispatch;
 mod operation_features;
 mod operation_lights;
 mod operation_missing;
+mod operation_rack;
 mod operation_support;
 mod operation_thermal;
 mod operation_validation;
@@ -47,7 +48,8 @@ use crate::{
     protocol::agent::v1::{
         AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation, Axis,
         AxisMovement, DeviceFeature, DiagnosePrinter, DiscoverPrinters, GcodeLineOperation,
-        HomeOperation, HubCommand, LinkPrinter, MoveAxesOperation, PauseOperation,
+        HolderNozzleRefreshOperation, HomeOperation, HubCommand, LinkPrinter, MoveAxesOperation,
+        NozzleHolderCtrlOperation, NozzleInfoConfirmOperation, PauseOperation,
         PrinterOperation as ProtoPrinterOperation, RefreshPrinterMaterials, RefreshPrinters,
         SelectExtruderOperation, SetBedTemperatureOperation, SetChamberLightOperation,
         SetChamberTemperatureOperation, SetHotendTemperatureOperation, SetPrintSpeedOperation,
@@ -160,6 +162,8 @@ struct TestPrinterOperationResult {
     light_on: Option<bool>,
     ams_id: Option<u32>,
     slot_id: Option<u32>,
+    holder_action: Option<u32>,
+    nozzle_id: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

@@ -3,7 +3,7 @@ use tonic::Status;
 
 use crate::{
     AppState,
-    printer_events::{PrinterEvent, printer_event_printer},
+    printer_events::{PrinterEvent, fence_printer_nozzle_system, printer_event_printer},
     protocol::agent::v1::PrinterMaterialsSnapshot,
     repositories::{CurrentMaterialPatchOutcome, MaterialPatchOutcome, RepositoryError},
     sessions::SessionToken,
@@ -169,6 +169,7 @@ pub async fn handle_materials_snapshot(
         .latest_for_printer(tenant_id, &printer_id)
         .await
         .map_err(super::commands::repository_status)?;
+    let printer = fence_printer_nozzle_system(state.sessions(), tenant_id, printer).await;
 
     state
         .publish_printer_event(

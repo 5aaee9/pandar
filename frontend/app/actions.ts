@@ -192,6 +192,8 @@ export async function controlPrinter(formData: FormData) {
   const slotId = nullableField(formData, "slot_id");
   const globalTrayId = nullableField(formData, "global_tray_id");
   const externalId = nullableField(formData, "external_id");
+  const holderAction = nullableField(formData, "holder_action");
+  const nozzleId = nullableField(formData, "nozzle_id");
   const extruderId = nullableField(formData, "extruder_id");
   const temperatureCelsius = nullableField(formData, "temperature_celsius");
   const wait = nullableField(formData, "wait");
@@ -221,6 +223,8 @@ export async function controlPrinter(formData: FormData) {
       slot_id: slotId ? Number(slotId) : undefined,
       global_tray_id: globalTrayId ? Number(globalTrayId) : undefined,
       external_id: externalId || undefined,
+      holder_action: holderAction ? Number(holderAction) : undefined,
+      nozzle_id: nozzleId ? Number(nozzleId) : undefined,
       extruder_id: extruderId ? Number(extruderId) : undefined,
       light_on: lightOn ? lightOn === "true" || lightOn === "on" : undefined,
     },

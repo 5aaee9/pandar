@@ -8,6 +8,34 @@ use crate::{
     protocol::agent::v1::GetAutoNozzleMappingOperation,
 };
 
+const MAX_HOLDER_CTRL_ACTION: u32 = 2;
+const RACK_NOZZLE_ID_ALL: u32 = 0xff;
+
+pub(super) fn parse_nozzle_holder_ctrl(action: u32) -> anyhow::Result<MachinePrinterOperation> {
+    if action > MAX_HOLDER_CTRL_ACTION {
+        anyhow::bail!("invalid H2C nozzle_holder_ctrl action; expected 0..=2");
+    }
+    Ok(MachinePrinterOperation::NozzleHolderCtrl { action })
+}
+
+pub(super) fn parse_nozzle_info_confirm(id: u32) -> anyhow::Result<MachinePrinterOperation> {
+    if !valid_rack_nozzle_id(id) {
+        anyhow::bail!("invalid H2C nozzle_info_confirm id; expected 16..=21 or 255");
+    }
+    Ok(MachinePrinterOperation::NozzleInfoConfirm { id })
+}
+
+pub(super) fn parse_holder_nozzle_refresh(id: u32) -> anyhow::Result<MachinePrinterOperation> {
+    if !valid_rack_nozzle_id(id) {
+        anyhow::bail!("invalid H2C holder_nozzle_refresh id; expected 16..=21 or 255");
+    }
+    Ok(MachinePrinterOperation::HolderNozzleRefresh { id })
+}
+
+fn valid_rack_nozzle_id(id: u32) -> bool {
+    (16..=21).contains(&id) || id == RACK_NOZZLE_ID_ALL
+}
+
 pub(super) fn parse_auto_nozzle_mapping(
     operation: &GetAutoNozzleMappingOperation,
 ) -> anyhow::Result<MachinePrinterOperation> {

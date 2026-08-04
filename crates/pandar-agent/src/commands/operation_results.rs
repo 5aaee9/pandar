@@ -25,6 +25,9 @@ pub(super) fn printer_operation_action(operation: &MachinePrinterOperation) -> &
         MachinePrinterOperation::AmsUnloadFilament { .. } => "ams_unload_filament",
         MachinePrinterOperation::GcodeLine { .. } => "gcode_line",
         MachinePrinterOperation::GetAutoNozzleMapping(_) => "get_auto_nozzle_mapping",
+        MachinePrinterOperation::NozzleHolderCtrl { .. } => "nozzle_holder_ctrl",
+        MachinePrinterOperation::NozzleInfoConfirm { .. } => "nozzle_info_confirm",
+        MachinePrinterOperation::HolderNozzleRefresh { .. } => "holder_nozzle_refresh",
     }
 }
 
@@ -105,6 +108,10 @@ struct OperationResultFields {
     global_tray_id: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     external_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    holder_action: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nozzle_id: Option<u32>,
 }
 
 impl OperationResultFields {
@@ -185,6 +192,15 @@ impl OperationResultFields {
                 global_tray_id: *global_tray_id,
                 external_id: external_id.clone(),
                 extruder_id: *extruder_id,
+                ..Self::default()
+            },
+            MachinePrinterOperation::NozzleHolderCtrl { action } => Self {
+                holder_action: Some(*action),
+                ..Self::default()
+            },
+            MachinePrinterOperation::NozzleInfoConfirm { id }
+            | MachinePrinterOperation::HolderNozzleRefresh { id } => Self {
+                nozzle_id: Some(*id),
                 ..Self::default()
             },
             MachinePrinterOperation::Pause

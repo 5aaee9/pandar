@@ -32,6 +32,7 @@ import { deletePrinter, refreshPrinterMaterials, updatePrinter } from './actions
 import type { Printer } from './dashboard-types'
 import { PrinterAxisControls } from './dashboard-printer-axis-controls'
 import { PrinterMaterialsPanel } from './dashboard-printer-materials'
+import { PrinterRackPanel } from './dashboard-printer-rack'
 import { StatusBadge } from './dashboard-ui'
 import { ConfirmDialog } from './confirm-dialog'
 import { PrinterMismatchWarning } from './printer-mismatch-dialog'
@@ -144,6 +145,8 @@ export function PrinterCard({
       <PrinterAxisControls printer={printer} />
 
       <PrinterMaterialsPanel printer={printer} />
+
+      <PrinterRackPanel printer={printer} />
     </article>
   )
 }

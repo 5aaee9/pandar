@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use crate::repositories::LinkPrinterPayload;
 use crate::{
     AppState,
-    printer_events::printer_event_printer,
+    printer_events::{fence_printer_nozzle_system, printer_event_printer},
     repositories::{DiagnosePrinterPayload, DiscoverPrintersPayload, UserRole},
     routes::{
         ApiError, auth,
@@ -84,16 +84,16 @@ pub(super) async fn list_printers(
         .into_iter()
         .map(|snapshot| (snapshot.printer_id.clone(), snapshot))
         .collect::<HashMap<_, _>>();
-    let printers = state
+    let mut printers = Vec::new();
+    for printer in state
         .printers()
         .list_with_live_status_for_tenant(tenant_id)
         .await?
-        .into_iter()
-        .map(|printer| {
-            let materials = materials.get(&printer.printer.id).cloned();
-            printer_event_printer(printer, materials)
-        })
-        .collect();
+    {
+        let materials = materials.get(&printer.printer.id).cloned();
+        let printer = fence_printer_nozzle_system(state.sessions(), tenant_id, printer).await;
+        printers.push(printer_event_printer(printer, materials));
+    }
 
     Ok(Json(PrinterListResponse { printers }))
 }
@@ -117,6 +117,7 @@ pub(super) async fn get_printer(
         .materials()
         .latest_for_printer(tenant_id, printer_id)
         .await?;
+    let printer = fence_printer_nozzle_system(state.sessions(), tenant_id, printer).await;
 
     Ok(Json(printer_event_printer(printer, materials)))
 }

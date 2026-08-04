@@ -328,3 +328,69 @@ async fn grpc_hub_command_from_record_maps_ams_slot_operation() {
         other => panic!("expected printer operation command, got {other:?}"),
     }
 }
+
+#[tokio::test]
+async fn grpc_hub_command_from_record_maps_h2c_rack_operations() {
+    for (operation, assert_operation) in [
+        (
+            PrinterOperationKind::NozzleHolderCtrl { action: 2 },
+            (|operation: &Option<printer_operation::Operation>| {
+                assert!(matches!(
+                    operation,
+                    Some(printer_operation::Operation::NozzleHolderCtrl(value))
+                        if value.action == 2
+                ));
+            }) as fn(&Option<printer_operation::Operation>),
+        ),
+        (
+            PrinterOperationKind::NozzleInfoConfirm { id: 0xff },
+            (|operation: &Option<printer_operation::Operation>| {
+                assert!(matches!(
+                    operation,
+                    Some(printer_operation::Operation::NozzleInfoConfirm(value))
+                        if value.id == 0xff
+                ));
+            }) as fn(&Option<printer_operation::Operation>),
+        ),
+        (
+            PrinterOperationKind::HolderNozzleRefresh { id: 17 },
+            (|operation: &Option<printer_operation::Operation>| {
+                assert!(matches!(
+                    operation,
+                    Some(printer_operation::Operation::HolderNozzleRefresh(value))
+                        if value.id == 17
+                ));
+            }) as fn(&Option<printer_operation::Operation>),
+        ),
+    ] {
+        let payload = PrinterOperationPayload {
+            printer_id: "printer-1".to_string(),
+            serial_number: "SERIAL123".to_string(),
+            operation,
+        };
+        let command = CommandRecord::from_parts(CommandRecordParts {
+            id: CommandId::new(),
+            tenant_id: TenantId::new(),
+            agent_id: AgentId::new(),
+            printer_id: Some("printer-1".to_string()),
+            kind: "printer_operation".to_string(),
+            status: "queued".to_string(),
+            payload_json: serde_json::to_string(&payload).unwrap(),
+            result_json: None,
+            error: None,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        })
+        .unwrap();
+
+        let hub_command = hub_command_from_record(command).unwrap();
+
+        match hub_command.command {
+            Some(hub_command::Command::PrinterOperation(command)) => {
+                assert_eq!(command.serial_number, "SERIAL123");
+                assert_operation(&command.operation);
+            }
+            other => panic!("expected printer operation command, got {other:?}"),
+        }
+    }
+}

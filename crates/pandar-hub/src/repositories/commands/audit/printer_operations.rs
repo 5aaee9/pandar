@@ -58,6 +58,20 @@ pub(in crate::repositories::commands) async fn enqueue_printer_operation_with_au
     if !pandar_core::compatibility::live_controls_supported(printer.model.as_deref()) {
         return Err(RepositoryError::PrinterControlUnavailable);
     }
+    if matches!(
+        &operation,
+        PrinterOperationKind::NozzleHolderCtrl { .. }
+            | PrinterOperationKind::NozzleInfoConfirm { .. }
+            | PrinterOperationKind::HolderNozzleRefresh { .. }
+    ) && printer
+        .model
+        .as_deref()
+        .and_then(pandar_core::compatibility::normalize_model)
+        .as_deref()
+        != Some("H2C")
+    {
+        return Err(RepositoryError::PrinterControlUnavailable);
+    }
 
     persist_printer_operation(
         database,

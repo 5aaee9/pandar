@@ -9,6 +9,7 @@ mod axis;
 pub(super) mod payload;
 mod print_error;
 mod project_file;
+mod rack;
 mod sequence;
 
 pub use axis::GcodeLineCommand;
@@ -149,6 +150,9 @@ pub enum BambuMqttCommand {
     AmsUnloadFilament(AmsFilamentCommand),
     HandlePrintError(HandlePrintErrorCommand),
     GetAutoNozzleMapping(H2cAutoNozzleMappingRequest),
+    NozzleHolderCtrl(u32),
+    NozzleInfoConfirm(u32),
+    HolderNozzleRefresh(u32),
     RawJson(Value),
     ProjectFile(Box<ProjectFileCommand>),
 }
@@ -191,6 +195,11 @@ impl BambuMqttCommand {
                 }),
                 request.sequence_id.clone(),
             ),
+            Self::NozzleHolderCtrl(action) => rack::nozzle_holder_ctrl_payload(*action),
+            Self::NozzleInfoConfirm(id) => rack::rack_nozzle_payload("nozzle_info_confirm", *id),
+            Self::HolderNozzleRefresh(id) => {
+                rack::rack_nozzle_payload("holder_nozzle_refresh", *id)
+            }
             Self::RawJson(payload) => BambuMqttCommandPayload::without_sequence(payload.clone()),
             Self::ProjectFile(command) => project_file_payload(command),
         }

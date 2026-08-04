@@ -262,7 +262,25 @@ message PrinterOperation {
     HandlePrintErrorOperation handle_print_error = 25;
     GcodeLineOperation gcode_line = 26;
     GetAutoNozzleMappingOperation get_auto_nozzle_mapping = 27;
+    NozzleHolderCtrlOperation nozzle_holder_ctrl = 28;
+    NozzleInfoConfirmOperation nozzle_info_confirm = 29;
+    HolderNozzleRefreshOperation holder_nozzle_refresh = 30;
   }
+}
+
+// H2C nozzle-rack movement: 0 = centre (home), 1 = A top, 2 = B top.
+message NozzleHolderCtrlOperation {
+  uint32 action = 1;
+}
+
+// H2C rack nozzle info confirm: 16..21 for one rack slot, 255 for all.
+message NozzleInfoConfirmOperation {
+  uint32 id = 1;
+}
+
+// H2C rack nozzle re-read: 16..21 for one rack slot, 255 for all.
+message HolderNozzleRefreshOperation {
+  uint32 id = 1;
 }
 
 message GetAutoNozzleMappingOperation {

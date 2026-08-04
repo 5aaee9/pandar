@@ -3,7 +3,8 @@ use crate::{
         AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation,
         AutoNozzleMappingFilamentInfo, AutoNozzleMappingGroupInfo, AutoNozzleMappingNozzleInfo,
         Axis, AxisMovement, GcodeLineOperation, GetAutoNozzleMappingOperation,
-        HandlePrintErrorOperation, HomeOperation, MoveAxesOperation, PauseOperation,
+        HandlePrintErrorOperation, HolderNozzleRefreshOperation, HomeOperation, MoveAxesOperation,
+        NozzleHolderCtrlOperation, NozzleInfoConfirmOperation, PauseOperation,
         PrintErrorAction as ProtoPrintErrorAction, ResumeOperation, SelectExtruderOperation,
         SetBedTemperatureOperation, SetChamberLightOperation, SetChamberTemperatureOperation,
         SetHotendTemperatureOperation, SetPrintSpeedOperation, StopOperation, ToggleLightOperation,
@@ -159,6 +160,15 @@ pub(super) fn proto_printer_operation(
                     })
                     .collect(),
             })
+        }
+        PrinterOperationKind::NozzleHolderCtrl { action } => {
+            printer_operation::Operation::NozzleHolderCtrl(NozzleHolderCtrlOperation { action })
+        }
+        PrinterOperationKind::NozzleInfoConfirm { id } => {
+            printer_operation::Operation::NozzleInfoConfirm(NozzleInfoConfirmOperation { id })
+        }
+        PrinterOperationKind::HolderNozzleRefresh { id } => {
+            printer_operation::Operation::HolderNozzleRefresh(HolderNozzleRefreshOperation { id })
         }
     }
 }

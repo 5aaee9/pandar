@@ -4,7 +4,7 @@ use axum::{
 
 use crate::{
     AppState,
-    printer_events::printer_event_printer,
+    printer_events::{fence_printer_nozzle_system, printer_event_printer},
     repositories::UserRole,
     routes::{ApiError, auth},
 };
@@ -60,6 +60,7 @@ pub(in crate::routes) async fn update_printer(
         .materials()
         .latest_for_printer(tenant_id, printer_id)
         .await?;
+    let updated = fence_printer_nozzle_system(state.sessions(), tenant_id, updated).await;
 
     Ok(Json(printer_event_printer(updated, materials)))
 }

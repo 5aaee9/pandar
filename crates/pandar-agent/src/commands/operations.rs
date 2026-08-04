@@ -315,6 +315,15 @@ fn parse_printer_operation(
         Some(printer_operation::Operation::GetAutoNozzleMapping(operation)) => {
             h2c::parse_auto_nozzle_mapping(operation)
         }
+        Some(printer_operation::Operation::NozzleHolderCtrl(operation)) => {
+            h2c::parse_nozzle_holder_ctrl(operation.action)
+        }
+        Some(printer_operation::Operation::NozzleInfoConfirm(operation)) => {
+            h2c::parse_nozzle_info_confirm(operation.id)
+        }
+        Some(printer_operation::Operation::HolderNozzleRefresh(operation)) => {
+            h2c::parse_holder_nozzle_refresh(operation.id)
+        }
         None => anyhow::bail!("missing printer operation"),
     }
 }

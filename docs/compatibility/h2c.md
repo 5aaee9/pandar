@@ -12,13 +12,15 @@ Pandar supports the H2C FDM workflow used by current Bambu Studio builds while k
 - Mapping replies must match both `print.command` and `sequence_id`. Successful replies additionally require the requested protocol version and a non-empty mapping containing only `-1` or physical nozzle IDs `0`, `1`, and `16` through `21`.
 - Correlated printer failure replies retain their `reason`, `errno`, detail, and unknown fields even when their version is absent, future, or malformed. Timeouts and missing, uncorrelated, or invalid success replies fail terminally.
 - Studio FDM submissions preserve the slicer's `nozzle_mapping`, `ams_mapping2`, `ams_mapping_info`, and nozzle metadata through dispatch. H2C Studio submissions and reprints require a validated physical nozzle mapping. Web uploads without Studio mapping metadata are rejected with `h2c_nozzle_mapping_required` instead of guessing a rack slot.
+- The Web dashboard projects the current-session nozzle system (mounted hotends, rack slots `16`–`21`, holder position/status/calibration) for H2C printers, fenced exactly like the Studio projection: a replacement Agent session shows no rack state until it reports fresh telemetry.
+- The Web dashboard exposes Bambu Studio's rack commands as queued printer operations: `nozzle_holder_ctrl` (0 = centre, 1 = A top, 2 = B top), `nozzle_info_confirm`, and `holder_nozzle_refresh` (slot `16`–`21` or `255` for all). Hub validates action/id ranges, rejects rack operations for non-H2C printers with `printer_control_unavailable`, and Agent publishes the Studio-shaped MQTT payloads with dynamic `sequence_id` correlation. These controls follow the Studio source contract below; they have not yet been exercised against physical hardware.
 
 ## Deliberately unsupported
 
 Pandar does not infer H2C behavior from H2D or resource-profile similarity. The following remain disabled until captured hardware behavior and an explicit implementation prove them safe:
 
 - H2C command signing or nozzle-ID rewriting.
-- Nozzle-rack movement, replacement, maintenance, or calibration controls outside Studio's mapping request.
+- Nozzle-rack replacement, maintenance, or calibration controls beyond the Studio `nozzle_holder_ctrl` / `nozzle_info_confirm` / `holder_nozzle_refresh` commands above (including rack firmware upgrades).
 - Laser and cutting workflows.
 - eMMC printing and other `fun2`-gated behavior.
 - Any physical nozzle ID outside `0`, `1`, and `16` through `21`.
@@ -35,6 +37,7 @@ The implementation is based on the tracked Bambu Studio source and resources:
 - `reference/BambuStudio/resources/profiles/BBL/machine/Bambu Lab H2C 0.4 nozzle.json`
 - `reference/BambuStudio/src/slic3r/GUI/DeviceCore/DevMappingNozzle.cpp`
 - `reference/BambuStudio/src/slic3r/GUI/DeviceCore/DevNozzleRack.cpp`
+- `reference/BambuStudio/src/slic3r/GUI/DeviceCore/DevNozzleRackCtrl.cpp`
 - `reference/BambuStudio/src/slic3r/GUI/DeviceCore/DevNozzleSystem.cpp`
 - `reference/BambuStudio/src/slic3r/GUI/DeviceManager.cpp`
 - `reference/BambuStudio/src/slic3r/GUI/SelectMachine.cpp`

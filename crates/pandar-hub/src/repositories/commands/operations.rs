@@ -23,6 +23,12 @@ const MAX_CHAMBER_TEMPERATURE_CELSIUS: u16 = 70;
 const MAX_AMS_ID: u32 = 255;
 const MAX_AMS_SLOT_ID: u32 = 255;
 const MAX_EXTRUDER_ID: u32 = 1;
+const MAX_HOLDER_CTRL_ACTION: u32 = 2;
+const RACK_NOZZLE_ID_ALL: u32 = 0xff;
+
+fn valid_rack_nozzle_id(id: u32) -> bool {
+    (16..=21).contains(&id) || id == RACK_NOZZLE_ID_ALL
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PrinterOperationPayload {
@@ -135,6 +141,15 @@ pub enum PrinterOperationKind {
     GetAutoNozzleMapping {
         request: H2cAutoNozzleMappingRequest,
     },
+    NozzleHolderCtrl {
+        action: u32,
+    },
+    NozzleInfoConfirm {
+        id: u32,
+    },
+    HolderNozzleRefresh {
+        id: u32,
+    },
 }
 
 impl PrinterOperationKind {
@@ -158,6 +173,9 @@ impl PrinterOperationKind {
             Self::AmsLoadFilament { .. } => "ams_load_filament",
             Self::AmsUnloadFilament { .. } => "ams_unload_filament",
             Self::GetAutoNozzleMapping { .. } => "get_auto_nozzle_mapping",
+            Self::NozzleHolderCtrl { .. } => "nozzle_holder_ctrl",
+            Self::NozzleInfoConfirm { .. } => "nozzle_info_confirm",
+            Self::HolderNozzleRefresh { .. } => "holder_nozzle_refresh",
         }
     }
 
@@ -203,6 +221,22 @@ pub fn validate_printer_operation(operation: &PrinterOperationKind) -> Repositor
     match operation {
         PrinterOperationKind::GetAutoNozzleMapping { request } if request.is_valid() => Ok(()),
         PrinterOperationKind::GetAutoNozzleMapping { .. } => {
+            Err(RepositoryError::InvalidPrinterControl)
+        }
+        PrinterOperationKind::NozzleHolderCtrl { action } if *action <= MAX_HOLDER_CTRL_ACTION => {
+            Ok(())
+        }
+        PrinterOperationKind::NozzleHolderCtrl { .. } => {
+            Err(RepositoryError::InvalidPrinterControl)
+        }
+        PrinterOperationKind::NozzleInfoConfirm { id }
+        | PrinterOperationKind::HolderNozzleRefresh { id }
+            if valid_rack_nozzle_id(*id) =>
+        {
+            Ok(())
+        }
+        PrinterOperationKind::NozzleInfoConfirm { .. }
+        | PrinterOperationKind::HolderNozzleRefresh { .. } => {
             Err(RepositoryError::InvalidPrinterControl)
         }
         PrinterOperationKind::Pause {}

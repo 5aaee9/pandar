@@ -60,6 +60,10 @@ pub(super) struct PrinterControlRequest<'a> {
     wait: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     light_on: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    holder_action: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nozzle_id: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -81,6 +85,8 @@ impl<'a> PrinterControlRequest<'a> {
             temperature_celsius: None,
             wait: None,
             light_on: None,
+            holder_action: None,
+            nozzle_id: None,
         }
     }
 
@@ -131,6 +137,23 @@ impl<'a> PrinterControlRequest<'a> {
         let mut request = Self::action("set_chamber_light");
         request.light_on = Some(light_on);
         request
+    }
+
+    pub(super) fn nozzle_holder_ctrl(holder_action: u32) -> Self {
+        let mut request = Self::action("nozzle_holder_ctrl");
+        request.holder_action = Some(holder_action);
+        request
+    }
+
+    pub(super) fn rack_nozzle_operation(action: &'a str, nozzle_id: u32) -> Self {
+        let mut request = Self::action(action);
+        request.nozzle_id = Some(nozzle_id);
+        request
+    }
+
+    pub(super) fn with_nozzle_id(mut self, nozzle_id: u32) -> Self {
+        self.nozzle_id = Some(nozzle_id);
+        self
     }
 
     pub(super) fn with_speed_mode(mut self, speed_mode: u8) -> Self {
