@@ -172,12 +172,11 @@ where
     } else {
         None
     };
-    let (pushall, sequence_id) = pushall_command(&topics.request);
+    let pushall = pushall_command(&topics.request);
     reports
         .publish(pushall)
         .await
         .with_context(|| format!("publish pushall to request topic {}", topics.request))?;
-    let mut outstanding_pushall = Some(sequence_id);
     let mut nozzle_system = NozzleSystemReducer::default();
 
     let mut refresh_interval = interval_at(
@@ -191,7 +190,7 @@ where
             biased;
             _ = sender.closed() => break,
             _ = refresh_interval.tick() => {
-                let (pushall, sequence_id) = pushall_command(&topics.request);
+                let pushall = pushall_command(&topics.request);
                 reports
                     .publish(pushall)
                     .await
@@ -201,7 +200,6 @@ where
                             topics.request
                         )
                     })?;
-                outstanding_pushall = Some(sequence_id);
             },
             report = reports.next_report(report_timeout) => {
                 match report {
@@ -251,19 +249,9 @@ where
                 if let Some(patch) = nozzle_system_patch_from_report(report.snapshot()) {
                     snapshot.nozzle_system = nozzle_system.update(patch);
                 }
-                snapshot.telemetry_authoritative = outstanding_pushall.as_deref().is_some_and(
-                    |sequence_id| {
-                        report.snapshot().is_some_and(|report| {
-                            report.is_authoritative_full_push_status(
-                                sequence_id,
-                                endpoint.model.as_deref(),
-                            )
-                        })
-                    },
-                );
-                if snapshot.telemetry_authoritative {
-                    outstanding_pushall = None;
-                }
+                snapshot.telemetry_authoritative = report
+                    .snapshot()
+                    .is_some_and(|report| report.is_full_push_status());
                 snapshot.model = None;
                 snapshot.device_features = device_features;
                 snapshot.device_features2 = device_features2;
@@ -342,19 +330,13 @@ where
     Ok(())
 }
 
-fn pushall_command(topic: &str) -> (PublishedMqttCommand, String) {
+fn pushall_command(topic: &str) -> PublishedMqttCommand {
     let command = BambuMqttCommand::RequestPushAll.command_payload();
-    let sequence_id = command
-        .sequence_id
-        .expect("pushall commands always carry a sequence id");
-    (
-        PublishedMqttCommand {
-            topic: topic.to_owned(),
-            payload: command.payload,
-            qos: BAMBU_MQTT_QOS,
-        },
-        sequence_id,
-    )
+    PublishedMqttCommand {
+        topic: topic.to_owned(),
+        payload: command.payload,
+        qos: BAMBU_MQTT_QOS,
+    }
 }
 
 async fn mark_mqtt_offline(

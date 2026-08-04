@@ -16,7 +16,7 @@ The operator declined an actual print and a physical nozzle-rack operation. The 
 
 ## Read-only transport evidence
 
-A 30-second authenticated MQTT capture received 26 reports, including 25 full `print.push_status` reports. Every observed full report used `msg: 0` and the firmware-fixed `sequence_id: "2021"` rather than echoing Pandar's `pushing.pushall` sequence.
+A 30-second authenticated MQTT capture received 26 reports, including 25 full `print.push_status` reports. Every observed full report used `msg: 0` and the firmware-assigned `sequence_id: "2021"` rather than echoing Pandar's `pushing.pushall` sequence.
 
 The full rack report contained:
 
@@ -47,7 +47,7 @@ After the presence fix described below, a new V1 request with sequence `830001` 
 
 This verifies the live printer boundary and the HTTP endpoint used by the network plugin. It is not evidence that a real Bambu Studio process received the callback or retained the mapping in a sliced FDM submission.
 
-## Session fence and fixed-sequence finding
+## Session fence and printer-owned status sequence
 
 The Agent was replaced with a capable session that could not reach the printer. Before any fresh rack telemetry from that replacement session:
 
@@ -56,19 +56,20 @@ The Agent was replaced with a capable session that could not reach the printer. 
 
 After reconnecting to the real printer, current-session rack telemetry restored the seven-nozzle system and bit 60. The probe also exposed a presence bug: rack state recovered, but Studio still reported the printer offline because H2C's full reports always used sequence `2021`; the Agent previously treated only a report echoing its current `pushall` sequence as authoritative.
 
-The Agent now accepts the exact H2C fixed-sequence shape as authoritative only while one of its own `pushall` requests is outstanding:
+A follow-up read-only probe separated command correlation from status publication:
 
-- normalized endpoint model is H2C;
-- `print.command == "push_status"`;
-- `msg == 0`;
-- `sequence_id == "2021"`.
+- five full reports arrived during a six-second subscription before the probe sent any command; all used `msg: 0` and sequence `2021`;
+- `info.get_version` correctly echoed the probe's arbitrary sequence `28761`;
+- Studio-shaped `pushing.pushall` requests with arbitrary sequences `28762` and `29873` were followed by full reports that still used `2021`.
 
-Other models and other H2C sequence IDs retain the strict request-sequence rule. A regression first reproduces offline presence plus a non-authoritative unrelated sequence, then proves the exact H2C report restores `IDLE` presence. With the fixed Agent, a real replacement session recovered in the first observed poll to `dev_online: true`, the original `fun` bitmap, seven nozzles, and holder state without an explicit refresh command.
+Bambu Studio `v02.08.01.55` likewise generates monotonic request sequences from `20000`, but its `push_status` parser classifies `msg == 0` as a full snapshot without comparing `sequence_id`. It retains exact sequence matching for command responses such as `get_auto_nozzle_mapping`. Pandar now follows that same separation: every current MQTT session's typed `print.command == "push_status"` plus `msg == 0` report is authoritative regardless of sequence or an outstanding `pushall`, while command-response correlation remains strict at each command boundary. Partial `msg == 1` reports and other commands remain non-authoritative. The current Agent session and Hub session fence, rather than a status-stream sequence value, prevent a replaced Agent from restoring stale telemetry.
+
+The real replacement-session rerun was performed against the earlier narrow correction and recovered in the first observed poll to `dev_online: true`, the original `fun` bitmap, seven nozzles, and holder state without an explicit refresh command. The broader Studio-aligned classification is covered deterministically; it has not required another hardware action.
 
 Focused regression command:
 
 ```sh
-cargo test -p pandar-agent h2c_fixed_sequence_full_report_recovers_presence_after_timeout -- --nocapture
+cargo test -p pandar-agent request_correlation -- --nocapture
 ```
 
 ## Remaining hardware acceptance

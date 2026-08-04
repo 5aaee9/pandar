@@ -105,6 +105,12 @@ async fn runtime_report_firmware_observations_emit_without_synthetic_job_reports
         status.upgrade_state.unwrap().status.as_deref(),
         Some("UPGRADING")
     );
+    let full_snapshot = receiver.recv().await.unwrap();
+    let agent_event::Event::PrinterSnapshot(full_snapshot) = full_snapshot.event.unwrap() else {
+        panic!("expected full MQTT status snapshot before offline transition");
+    };
+    assert!(full_snapshot.telemetry_authoritative);
+    assert!(full_snapshot.state.is_empty());
     assert_mqtt_offline(receiver.recv().await.unwrap());
     assert!(receiver.try_recv().is_err());
 

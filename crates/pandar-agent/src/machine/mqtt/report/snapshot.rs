@@ -1,9 +1,7 @@
 use anyhow::{Context, anyhow};
-use pandar_core::{BambuDeviceFeatures, compatibility::normalize_model};
+use pandar_core::BambuDeviceFeatures;
 use serde::Deserialize;
 use serde_json::Number;
-
-const H2C_FIXED_PUSH_STATUS_SEQUENCE_ID: &str = "2021";
 
 #[derive(Debug, Default)]
 pub(in crate::machine::mqtt) enum FunField {
@@ -79,32 +77,7 @@ pub(crate) struct SnapshotReport {
 }
 
 impl SnapshotReport {
-    pub(crate) fn is_authoritative_full_push_status(
-        &self,
-        expected_sequence_id: &str,
-        model: Option<&str>,
-    ) -> bool {
-        self.is_full_push_status(expected_sequence_id)
-            || (model.and_then(normalize_model).as_deref() == Some("H2C")
-                && self.is_h2c_fixed_sequence_full_push_status())
-    }
-
-    fn is_full_push_status(&self, expected_sequence_id: &str) -> bool {
-        self.is_full_push_status_message()
-            && self
-                .print
-                .as_ref()
-                .is_some_and(|print| print.sequence_id.as_deref() == Some(expected_sequence_id))
-    }
-
-    fn is_h2c_fixed_sequence_full_push_status(&self) -> bool {
-        self.is_full_push_status_message()
-            && self.print.as_ref().is_some_and(|print| {
-                print.sequence_id.as_deref() == Some(H2C_FIXED_PUSH_STATUS_SEQUENCE_ID)
-            })
-    }
-
-    fn is_full_push_status_message(&self) -> bool {
+    pub(crate) fn is_full_push_status(&self) -> bool {
         self.print.as_ref().is_some_and(|print| {
             print.command.as_deref() == Some("push_status") && print.msg == Some(0)
         })
@@ -117,8 +90,6 @@ pub(in crate::machine::mqtt) struct SnapshotPrint {
     command: Option<String>,
     #[serde(default)]
     msg: Option<u8>,
-    #[serde(default)]
-    sequence_id: Option<String>,
     #[serde(default, deserialize_with = "deserialize_fun_field")]
     pub(in crate::machine::mqtt) fun: FunField,
     #[serde(default, deserialize_with = "deserialize_fun_field")]

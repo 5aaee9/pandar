@@ -44,7 +44,7 @@ These sources establish the rack topology, bit-60 capability gate, mapping reque
 
 ## Hardware evidence
 
-The [2026-08-04 safe-idle probe](h2c-hardware-2026-08-04.md) verified real H2C product/firmware discovery, full rack inventory, protected FTPS listing, direct and Hub/Agent V0/V1 auto-mapping success, correlated printer failure with `errno: 4`, and replacement-session fencing. It also captured the firmware's fixed full-status `sequence_id: "2021"` behavior and verified the resulting Agent presence fix on the real printer.
+The [2026-08-04 safe-idle probe](h2c-hardware-2026-08-04.md) verified real H2C product/firmware discovery, full rack inventory, protected FTPS listing, direct and Hub/Agent V0/V1 auto-mapping success, correlated printer failure with `errno: 4`, and replacement-session fencing. It also captured the firmware-owned full-status `sequence_id: "2021"` behavior. A follow-up probe proved these full reports are periodic rather than correlated `pushall` acknowledgements, and Pandar now follows Bambu Studio by classifying typed `msg: 0` `push_status` reports as full snapshots independently of their sequence while retaining strict correlation for command responses.
 
 No file was uploaded or deleted, no print was started, and no rack operation was issued. A 30-second passive capture observed full rack reports but no separate nozzle-only or holder-only delta.
 
@@ -56,6 +56,6 @@ Tracked by [GitHub issue #2](https://github.com/ProjectPandar/pandar/issues/2). 
 2. Completed at the direct MQTT and Hub plugin-HTTP boundaries: V0/V1 success and a correlated printer-declared failure were recorded. A real Studio callback remains part of the next item.
 3. Open: confirm a real Bambu Studio process receives the exact response and retains physical IDs in the subsequent FDM print submission.
 4. Open: inspect the final MQTT `project_file` payload before authorizing a small FDM print, confirming the slicer-provided mapping is unchanged.
-5. Completed: a replacement Agent session exposed neither bit 60 nor mapping until current-session rack telemetry arrived; the real-printer rerun recovered bit 60 and online presence after the fixed-sequence status correction.
+5. Completed: a replacement Agent session exposed neither bit 60 nor mapping until current-session rack telemetry arrived; the real-printer rerun recovered bit 60 and online presence, and deterministic coverage now matches Studio's sequence-independent full-status classification.
 
 Until the open items are completed, Pandar claims live H2C status, rack inventory, protected FTPS listing, auto-mapping, correlated failure, and session-fencing evidence—not live Studio submission or print validation.
