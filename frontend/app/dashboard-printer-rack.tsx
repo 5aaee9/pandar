@@ -12,13 +12,18 @@ import {
 
 import { controlPrinter } from './actions'
 import { ConfirmForm } from './confirm-dialog'
+import {
+  type RackNozzle,
+  formatWear,
+  nozzleDiameterLabel,
+  nozzleFlowLabel,
+  nozzleLabel,
+  nozzleMaterialLabel,
+} from './dashboard-printer-rack-label'
 import type { Printer, PrinterNozzleSystem } from './dashboard-types'
 
 const RACK_SLOT_IDS = [16, 17, 18, 19, 20, 21] as const
 const RACK_NOZZLE_ID_ALL = 255
-
-type RackNozzle = PrinterNozzleSystem['nozzle']['info'][number]
-type Translate = ReturnType<typeof useTranslations>
 
 export function PrinterRackPanel({ printer }: { printer: Printer }) {
   const t = useTranslations('inventory')
@@ -28,6 +33,10 @@ export function PrinterRackPanel({ printer }: { printer: Printer }) {
   }
 
   const mounted = system.nozzle.info.filter((nozzle) => nozzle.id < 16)
+  // Bambu Studio DevDefs: extruder 1 (deputy/left) is fixed; extruder 0
+  // (main/right) is the hotend the rack can swap.
+  const fixed = mounted.filter((nozzle) => nozzle.id === 1)
+  const swappableMounted = mounted.filter((nozzle) => nozzle.id === 0)
   const rackNozzles = new Map(
     system.nozzle.info
       .filter((nozzle) => nozzle.id >= 16)
@@ -41,13 +50,13 @@ export function PrinterRackPanel({ printer }: { printer: Printer }) {
         <div className="text-xs font-medium text-muted-foreground">{t('rackLabel')}</div>
         <RackHolderStatus holder={system.holder} />
       </div>
-      {mounted.length > 0 ? (
+      {fixed.length > 0 ? (
         <div className="rounded-md bg-muted/40 p-2">
           <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
             {t('rackFixed')}
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {mounted.map((nozzle) => (
+            {fixed.map((nozzle) => (
               <span
                 className="inline-flex items-center rounded-md bg-background px-2 py-1 text-xs font-medium text-foreground"
                 key={nozzle.id}
@@ -58,10 +67,23 @@ export function PrinterRackPanel({ printer }: { printer: Printer }) {
           </div>
         </div>
       ) : null}
-      <div>
+      <div className="rounded-md bg-muted/40 p-2">
         <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
           {t('rackSwappable')}
         </div>
+        {swappableMounted.length > 0 ? (
+          <div className="mb-1.5 flex flex-wrap gap-1.5">
+            {swappableMounted.map((nozzle) => (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-md bg-background px-2 py-1 text-xs font-medium text-foreground"
+                key={nozzle.id}
+              >
+                {nozzleLabel(nozzle, t, t('rackHotendUnknown'))}
+                <span className="text-[10px] font-normal text-muted-foreground">{t('rackMounted')}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
         <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
           {RACK_SLOT_IDS.map((slotId, index) => (
             <RackSlotButton
@@ -305,75 +327,6 @@ function RackOperationForm({
       </button>
     </form>
   )
-}
-
-function nozzleLabel(nozzle: RackNozzle, t: Translate, fallback: string) {
-  return [nozzleDiameterLabel(nozzle), nozzleMaterialLabel(nozzle.type, t)]
-    .filter(Boolean)
-    .join(' ') || fallback
-}
-
-function nozzleDiameterLabel(nozzle: RackNozzle) {
-  return Number.isFinite(nozzle.diameter)
-    ? `${Number(nozzle.diameter.toFixed(2))} mm`
-    : null
-}
-
-// Maps hotend type codes to material display names. Codes are either full
-// text ("hardened_steel") or 4-character codes ("HS01", "XH05") whose last
-// two digits carry the material: 00 stainless, 01 hardened, 05 tungsten.
-function nozzleMaterialLabel(type: string | null | undefined, t: Translate): string | null {
-  const raw = type?.trim()
-  if (!raw) {
-    return null
-  }
-  const lower = raw.toLowerCase()
-  if (lower.includes('hardened')) return t('nozzleHardenedSteel')
-  if (lower.includes('stainless')) return t('nozzleStainlessSteel')
-  if (lower.includes('tungsten')) return t('nozzleTungstenCarbide')
-  if (lower.includes('brass')) return t('nozzleBrass')
-  if (raw.length >= 4) {
-    const material = raw.slice(2, 4)
-    if (material === '00') return t('nozzleStainlessSteel')
-    if (material === '01') return t('nozzleHardenedSteel')
-    if (material === '05') return t('nozzleTungstenCarbide')
-  }
-  if (raw === '00') return t('nozzleStainlessSteel')
-  if (raw === '01') return t('nozzleHardenedSteel')
-  if (raw === '05') return t('nozzleTungstenCarbide')
-  return raw
-}
-
-// Flow type from the hotend code: "HH" high flow, "HS" standard; otherwise
-// the second character follows Bambu Studio's map (A/X standard, E high,
-// U TPU high, B E3D high). Returns null when the code carries no flow data.
-function nozzleFlowLabel(type: string | null | undefined, t: Translate): string | null {
-  const raw = type?.trim()
-  if (!raw || raw.length < 2) {
-    return null
-  }
-  if (raw.startsWith('HH')) return t('nozzleHighFlow')
-  if (raw.startsWith('HS')) return t('nozzleStandardFlow')
-  switch (raw.charAt(1)) {
-    case 'A':
-    case 'X':
-      return t('nozzleStandardFlow')
-    case 'E':
-      return t('nozzleHighFlow')
-    case 'U':
-      return t('nozzleTpuHighFlow')
-    case 'B':
-      return t('nozzleE3dHighFlow')
-    default:
-      return null
-  }
-}
-
-function formatWear(wear: number) {
-  if (!Number.isFinite(wear)) {
-    return '-'
-  }
-  return wear <= 1 ? `${Math.round(wear * 100)}%` : wear.toFixed(2)
 }
 
 function rackOperationsDisabled(printer: Printer) {

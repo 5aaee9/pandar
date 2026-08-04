@@ -42,6 +42,7 @@ const rackPrinter: Printer = {
       tar_id: 18,
       info: [
         { id: 0, diameter: 0.4000000059604645, type: "HS01", wear: 0.12 },
+        { id: 1, diameter: 0.6, type: "XH05" },
         { id: 16, diameter: 0.4, type: "XS01", wear: 0.5 },
         { id: 17, diameter: 0.6, type: "HH05" },
         { id: 20, diameter: 0.2, type: "AB99" },
@@ -61,9 +62,11 @@ describe("PrinterRackPanel", () => {
     renderWithMessages(<PrinterRackPanel printer={rackPrinter} />);
 
     expect(screen.getByText("Hotend rack")).toBeVisible();
-    expect(screen.getByText("Fixed (toolhead)")).toBeVisible();
+    expect(screen.getByText("Fixed")).toBeVisible();
+    expect(screen.getByText("0.6 mm Tungsten Carbide")).toBeVisible();
+    expect(screen.getByText("Swappable")).toBeVisible();
     expect(screen.getByText("0.4 mm Hardened Steel")).toBeVisible();
-    expect(screen.getByText("Swappable (rack)")).toBeVisible();
+    expect(screen.getByText("Mounted")).toBeVisible();
     expect(screen.getByText("A top · Calibrated")).toBeVisible();
     expect(screen.getByRole("button", { name: "Rack slot 1, 0.4 mm Hardened Steel" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Rack slot 2, 0.6 mm Tungsten Carbide" })).toBeVisible();
