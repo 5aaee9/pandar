@@ -16,6 +16,18 @@
 
 ## Completed
 
+- Fixed the Checks workflow audit failures on main. The npm production audit failed because the
+  root security override pinned `postcss` to 8.5.20, inside the vulnerable `<=8.5.22` range of
+  GHSA-fxqj-rqcc-2cmp; the pin is now 8.5.25, which clears all six moderate findings (postcss,
+  next, better-auth, auth, next-intl, vite) with a clean `npm ci`. The Rust audit failed on
+  RUSTSEC-2026-0235 against `rkyv 0.7.46`, which enters Cargo.lock only as an unactivated optional
+  dependency via sea-orm → rust_decimal; `cargo tree --workspace --all-features --target all`
+  proves no workspace target compiles it, and rust_decimal 1.42.1 (latest) still requires
+  rkyv ^0.7.46, so there is no upgrade path. A documented `.cargo/audit.toml` ignore now covers
+  the advisory with the justification and a revisit note. `cargo audit` exits 0, npm audit reports
+  0 vulnerabilities, and the full frontend CI job (lint, 409 web tests, 11 auth tests, typechecks,
+  both production builds) passes locally.
+
 - Reworked the Agents page around the agent lifecycle and added discovered-machine adoption. Agents
   are now the primary section: each agent row shows status, linked-printer count, and created date
   with inline Discover (dialog with a 1–15s timeout, disabled while the agent is offline), Refresh,

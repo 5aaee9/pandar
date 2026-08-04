@@ -1,0 +1,10 @@
+[advisories]
+ignore = [
+    # rkyv 0.7.46 enters Cargo.lock only as an unactivated optional dependency
+    # (sea-orm -> rust_decimal -> rkyv ^0.7.46). No workspace target compiles it:
+    # `cargo tree --workspace --all-features --edges normal,dev,build --target all`
+    # contains no rkyv. rust_decimal 1.42.1 is the latest release and still
+    # requires rkyv ^0.7.46, so no upgrade path exists. Revisit when sea-orm or
+    # rust_decimal move to rkyv 0.8.
+    "RUSTSEC-2026-0235",
+]
