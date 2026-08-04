@@ -8,7 +8,6 @@ import type {
   Command,
   CommandResultData,
   DiagnosticResultData,
-  DiscoveryResultData,
   PrinterLinkResultData,
   Printer,
   Tenant,
@@ -77,8 +76,6 @@ export function DiagnosticsSection({
 
       {!selectedCommand ? (
         <EmptyState title={t('noCommandTitle')} message={t('noCommandMessage')} />
-      ) : commandData?.type === 'printer_discovery' ? (
-        <DiscoveryResult result={commandData} />
       ) : commandData?.type === 'printer_diagnostic' ? (
         <DiagnosticResult result={commandData} />
       ) : commandData?.type === 'printer_link' ? (
@@ -90,40 +87,6 @@ export function DiagnosticsSection({
         />
       )}
     </section>
-  )
-}
-
-function DiscoveryResult({ result }: { result: DiscoveryResultData }) {
-  const t = useTranslations('diagnostics')
-  return result.printers.length === 0 ? (
-    <EmptyState title={t('noPrintersDiscoveredTitle')} message={t('noPrintersDiscoveredMessage')} />
-  ) : (
-    <div className="overflow-x-auto">
-      <table className="min-w-full border-collapse text-left text-sm">
-        <thead className="bg-muted/60 text-xs font-semibold text-muted-foreground">
-          <tr>
-            <th className="px-4 py-2">{t('colName')}</th>
-            <th className="px-4 py-2">{t('colSerial')}</th>
-            <th className="px-4 py-2">{t('colHost')}</th>
-            <th className="px-4 py-2">{t('colModel')}</th>
-            <th className="px-4 py-2">{t('colSource')}</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {result.printers.map((printer) => (
-            <tr key={`${printer.serial_number ?? 'unknown'}-${printer.host}`}>
-              <td className="px-4 py-3 font-medium text-foreground">{printer.name ?? '-'}</td>
-              <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                {printer.serial_number ?? '-'}
-              </td>
-              <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{printer.host}</td>
-              <td className="px-4 py-3 text-muted-foreground">{printer.model ?? '-'}</td>
-              <td className="px-4 py-3 text-muted-foreground">{printer.source ?? '-'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   )
 }
 

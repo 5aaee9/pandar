@@ -2,6 +2,10 @@ import { queryOptions } from "@tanstack/react-query";
 
 import { apiIdSegment } from "./api-path";
 import { parseCommandResult } from "./command-result-parser";
+import {
+  DISCOVERY_COMMAND_KIND,
+  isTerminalCommandStatus,
+} from "./command-status";
 import type {
   Agent,
   AgentList,
@@ -9,6 +13,7 @@ import type {
   AuditEventList,
   Command,
   CommandResultData,
+  DiscoveryResultData,
   Job,
   JobList,
   JoinLink,
@@ -62,6 +67,8 @@ export type AgentsRouteData = {
   printers: Printer[];
   command: Command | null;
   commandData: CommandResultData | null;
+  discoveryCommand: Command | null;
+  discoveryData: DiscoveryResultData | null;
 };
 
 export type UsersRouteData = {
@@ -82,9 +89,6 @@ export type SettingsAdminRouteData = {
 
 export type AgentSettingsRouteData = {
   agent: Agent | null;
-  printers: Printer[];
-  command: Command | null;
-  commandData: CommandResultData | null;
 };
 
 export function devicesRouteQuery(tenantId: string) {
@@ -127,29 +131,60 @@ export function jobsRouteQuery(tenantId: string) {
   });
 }
 
-export function agentsRouteQuery(tenantId: string, commandId: string | null) {
+export function agentsRouteQuery(
+  tenantId: string,
+  commandId: string | null,
+  discoveryId: string | null = null,
+) {
   return queryOptions({
-    queryKey: [...routeDataKeys.agents(tenantId), commandId] as const,
+    queryKey: [...routeDataKeys.agents(tenantId), commandId, discoveryId] as const,
     queryFn: async (): Promise<AgentsRouteData> => {
-      const [agents, printers, command] = await Promise.all([
-        fetchRouteJson<AgentList>(tenantId, "/agents"),
-        fetchRouteJson<PrinterList>(tenantId, "/printers"),
-        commandId
-          ? fetchRouteJson<Command>(
-              tenantId,
-              `/commands/${apiIdSegment(commandId, "command_id")}`,
-            )
-          : Promise.resolve(null),
-      ]);
+      const [agents, printers, command, listedDiscoveryCommand] =
+        await Promise.all([
+          fetchRouteJson<AgentList>(tenantId, "/agents"),
+          fetchRouteJson<PrinterList>(tenantId, "/printers"),
+          commandId
+            ? fetchRouteJson<Command>(
+                tenantId,
+                `/commands/${apiIdSegment(commandId, "command_id")}`,
+              )
+            : Promise.resolve(null),
+          discoveryId && discoveryId !== commandId
+            ? fetchRouteJson<Command>(
+                tenantId,
+                `/commands/${apiIdSegment(discoveryId, "command_id")}`,
+              )
+            : Promise.resolve(null),
+        ]);
+      const commandData = command ? parseCommandResult(command) : null;
+      let discoveryCommand: Command | null = null;
+      let discoveryData: DiscoveryResultData | null = null;
+      if (command?.kind === DISCOVERY_COMMAND_KIND) {
+        discoveryCommand = command;
+        discoveryData =
+          commandData?.type === "printer_discovery" ? commandData : null;
+      } else if (listedDiscoveryCommand?.kind === DISCOVERY_COMMAND_KIND) {
+        discoveryCommand = listedDiscoveryCommand;
+        const parsed = parseCommandResult(listedDiscoveryCommand);
+        discoveryData = parsed?.type === "printer_discovery" ? parsed : null;
+      }
       return {
         agents: agents.agents,
         printers: printers.printers,
         command,
-        commandData: command ? parseCommandResult(command) : null,
+        commandData,
+        discoveryCommand,
+        discoveryData,
       };
     },
     staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const hasPendingCommand = [data?.command, data?.discoveryCommand].some(
+        (command) => command && !isTerminalCommandStatus(command.status),
+      );
+      return hasPendingCommand ? 2 * 1000 : 60 * 1000;
+    },
   });
 }
 
@@ -205,38 +240,16 @@ export function settingsAdminRouteQuery(tenantId: string) {
   });
 }
 
-export function agentSettingsRouteQuery(
-  tenantId: string,
-  agentId: string,
-  commandId: string | null,
-) {
+export function agentSettingsRouteQuery(tenantId: string, agentId: string) {
   return queryOptions({
-    queryKey: [
-      ...routeDataKeys.agentSettings(tenantId, agentId),
-      commandId,
-    ] as const,
+    queryKey: routeDataKeys.agentSettings(tenantId, agentId),
     queryFn: async (): Promise<AgentSettingsRouteData> => {
-      const [agents, printers, command] = await Promise.all([
-        fetchRouteJson<AgentList>(tenantId, "/agents"),
-        fetchRouteJson<PrinterList>(tenantId, "/printers"),
-        commandId
-          ? fetchRouteJson<Command>(
-              tenantId,
-              `/commands/${apiIdSegment(commandId, "command_id")}`,
-            )
-          : Promise.resolve(null),
-      ]);
+      const agents = await fetchRouteJson<AgentList>(tenantId, "/agents");
       return {
         agent:
           agents.agents.find((candidate) => candidate.id === agentId) ?? null,
-        printers: printers.printers.filter(
-          (printer) => printer.agent_id === agentId,
-        ),
-        command,
-        commandData: command ? parseCommandResult(command) : null,
       };
     },
-    staleTime: 30 * 1000,
-    refetchInterval: commandId ? 15 * 1000 : false,
+    staleTime: 60 * 1000,
   });
 }

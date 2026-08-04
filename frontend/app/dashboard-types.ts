@@ -240,6 +240,8 @@ export type DiscoveryResultData = {
   }>;
 };
 
+export type DiscoveredPrinter = DiscoveryResultData["printers"][number];
+
 export type DiagnosticResultData = {
   type: "printer_diagnostic";
   serial_number: string;

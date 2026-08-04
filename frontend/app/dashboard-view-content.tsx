@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-import { AgentPairingGuidance } from "./agent-pairing-guidance";
+import { AgentsSection } from "./agents-section";
+import { DISCOVERY_COMMAND_KIND } from "./command-status";
 
 
 import type { AttentionItem, Health, Severity } from "./dashboard-attention";
@@ -21,7 +22,7 @@ const DiagnosticsSection = dynamic(
     ),
   }
 );
-import { LinkedAgentsSection } from "./diagnostics-panel";
+import { DiscoverySection } from "./discovery-section";
 import { DispatchDialog } from "./dispatch-dialog";
 import type {
   Agent,
@@ -29,6 +30,7 @@ import type {
   AuditEvent,
   Command,
   CommandResultData,
+  DiscoveryResultData,
   Job,
   Printer,
   Tenant,
@@ -39,7 +41,6 @@ import type {
   RuntimeNotification,
 } from "./dashboard-runtime-helpers";
 import type { DashboardView } from "./dashboard-shell";
-import { LinkPrinterForm } from "./link-printer-form";
 import { NeedsAttention } from "./needs-attention";
 import { PrinterMismatchCoordinator } from "./printer-mismatch-dialog";
 
@@ -59,6 +60,8 @@ export type DashboardViewContentProps = {
   nowMs: number;
   selectedCommand: Command | null;
   commandData: CommandResultData | null;
+  discoveryCommand?: Command | null;
+  discoveryData?: DiscoveryResultData | null;
   notifications: RuntimeNotification[];
   tenantTokens: TenantToken[];
   auditEvents: AuditEvent[];
@@ -184,21 +187,34 @@ function AgentsView({
   printers,
   selectedCommand,
   commandData,
+  discoveryCommand = null,
+  discoveryData = null,
   adminUnavailable,
 }: DashboardViewContentProps) {
+  const selectedIsDiscovery =
+    selectedCommand?.kind === DISCOVERY_COMMAND_KIND;
   return (
     <div className="grid gap-4">
-      <AgentPairingGuidance
+      <AgentsSection
+        adminUnavailable={adminUnavailable}
+        agents={agents}
+        printers={printers}
         selectedTenant={selectedTenant}
-        restricted={adminUnavailable}
       />
-      <LinkPrinterForm selectedTenant={selectedTenant} agents={agents} />
-      <LinkedAgentsSection selectedTenant={selectedTenant} agents={agents} />
+      {selectedTenant && discoveryCommand ? (
+        <DiscoverySection
+          agents={agents}
+          command={discoveryCommand}
+          data={discoveryData}
+          printers={printers}
+          selectedTenant={selectedTenant}
+        />
+      ) : null}
       <DiagnosticsSection
         selectedTenant={selectedTenant}
         printers={printers}
-        selectedCommand={selectedCommand}
-        commandData={commandData}
+        selectedCommand={selectedIsDiscovery ? null : selectedCommand}
+        commandData={selectedIsDiscovery ? null : commandData}
       />
     </div>
   );

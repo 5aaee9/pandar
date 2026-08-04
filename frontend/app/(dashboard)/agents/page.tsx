@@ -13,7 +13,11 @@ const configuredTenantId = process.env.APP_TENANT_ID;
 export default async function AgentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tenant?: string | string[]; command?: string | string[] }>;
+  searchParams: Promise<{
+    tenant?: string | string[];
+    command?: string | string[];
+    discovery?: string | string[];
+  }>;
 }) {
   const [params, auth, identity, tenantsResult] = await Promise.all([
     searchParams,
@@ -38,6 +42,7 @@ export default async function AgentsPage({
     ? await getMembershipForRequest(selectedTenant.id)
     : { role: null, error: null };
   const commandId = Array.isArray(params.command) ? params.command[0] : params.command ?? null;
+  const discoveryId = Array.isArray(params.discovery) ? params.discovery[0] : params.discovery ?? null;
   const adminUnavailable = auth.provider !== "none" && (membership.role !== "tenant_admin" || membership.error !== null);
 
   return (
@@ -46,6 +51,7 @@ export default async function AgentsPage({
       selectedTenant={selectedTenant}
       adminUnavailable={adminUnavailable}
       commandId={commandId}
+      discoveryId={discoveryId}
     />
   );
 }

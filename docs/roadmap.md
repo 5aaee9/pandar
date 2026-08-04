@@ -16,6 +16,21 @@
 
 ## Completed
 
+- Reworked the Agents page around the agent lifecycle and added discovered-machine adoption. Agents
+  are now the primary section: each agent row shows status, linked-printer count, and created date
+  with inline Discover (dialog with a 1–15s timeout, disabled while the agent is offline), Refresh,
+  Settings, and Delete actions, while agent pairing moved from an always-visible hero into a
+  "Pair agent" dialog that keeps the setup steps and one-time environment block. Running discovery
+  opens a Discovered printers section that polls the command every 2s until it reaches a terminal
+  state, then lists each machine with a Linked badge (matched by serial against tenant printers) or
+  an Adopt button; Adopt opens a dialog pre-filled with the discovered host and name that only asks
+  for the access code, and the link redirect carries the discovery command so the list stays visible
+  for adopting multiple machines in one pass. The diagnostics section keeps per-printer diagnose and
+  link/diagnostic command results, manual printer linking now lives only in the Devices page dialog
+  (dropping the single-option Type select), and the agent settings page slimmed down to connection
+  details since discovery moved to the Agents page. Web lint, typecheck, 409 tests, React Doctor
+  100/100, and production build pass.
+
 - Added consistent spacing between the Cards on the Agents page so pairing, printer linking, linked Agents, and diagnostics no longer render flush against each other.
 
 - Raised both `pandar-web` and `pandar-auth` from 58 React Doctor findings to a clean 100/100 without rule suppression. Server actions now authenticate before issuing login tickets, runtime URL handling fails closed, browser timers and asynchronous work own their failures and cleanup, controls carry native accessible semantics, independent server reads run concurrently, and material mapping state lives with its dispatch owner instead of synchronizing upward through an effect. Large job/dispatch and admin modules were split along existing UI boundaries, render-only sidebar adapters and nozzle-temperature helpers moved behind focused modules, stable list identities and one-pass lookups replaced index keys and repeated scans, and dead files/exports were removed. React Doctor 0.9.4 reports zero findings across 276 files; Web lint, typecheck, 399 tests, and production build pass, as do Auth typecheck, 11 tests, and production build.

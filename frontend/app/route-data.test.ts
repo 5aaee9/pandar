@@ -72,13 +72,20 @@ describe("routeDataKeys", () => {
       "agents",
       "t1",
       "cmd-1",
+      null,
     ]);
-    expect(agentSettingsRouteQuery("t1", "a1", "cmd-1").queryKey).toEqual([
+    expect(agentsRouteQuery("t1", "cmd-1", "cmd-0").queryKey).toEqual([
+      "route",
+      "agents",
+      "t1",
+      "cmd-1",
+      "cmd-0",
+    ]);
+    expect(agentSettingsRouteQuery("t1", "a1").queryKey).toEqual([
       "route",
       "agent-settings",
       "t1",
       "a1",
-      "cmd-1",
     ]);
   });
 });
@@ -90,17 +97,49 @@ describe("route query cache policies", () => {
     expect(jobsRouteQuery("t1").staleTime).toBe(10_000);
     expect(jobsRouteQuery("t1").refetchInterval).toBe(30_000);
     expect(agentsRouteQuery("t1", null).staleTime).toBe(30_000);
-    expect(agentsRouteQuery("t1", null).refetchInterval).toBe(60_000);
     expect(usersRouteQuery("t1").staleTime).toBe(60_000);
     expect(settingsRouteQuery("t1").staleTime).toBe(60_000);
     expect(settingsAdminRouteQuery("t1").staleTime).toBe(60_000);
-    expect(agentSettingsRouteQuery("t1", "a1", null).staleTime).toBe(30_000);
-    expect(agentSettingsRouteQuery("t1", "a1", null).refetchInterval).toBe(
-      false,
-    );
-    expect(agentSettingsRouteQuery("t1", "a1", "cmd-1").refetchInterval).toBe(
-      15_000,
-    );
+    expect(agentSettingsRouteQuery("t1", "a1").staleTime).toBe(60_000);
+  });
+
+  it("polls the agents view quickly while a tracked command is pending", () => {
+    const refetchInterval = agentsRouteQuery("t1", "cmd-1")
+      .refetchInterval as (query: {
+      state: { data?: unknown };
+    }) => number;
+
+    expect(refetchInterval({ state: { data: undefined } })).toBe(60_000);
+    expect(
+      refetchInterval({
+        state: {
+          data: {
+            command: { status: "succeeded" },
+            discoveryCommand: null,
+          },
+        },
+      }),
+    ).toBe(60_000);
+    expect(
+      refetchInterval({
+        state: {
+          data: {
+            command: { status: "sent" },
+            discoveryCommand: null,
+          },
+        },
+      }),
+    ).toBe(2_000);
+    expect(
+      refetchInterval({
+        state: {
+          data: {
+            command: { status: "succeeded" },
+            discoveryCommand: { status: "queued" },
+          },
+        },
+      }),
+    ).toBe(2_000);
   });
 });
 
@@ -158,6 +197,8 @@ describe("route query functions", () => {
       printers: ["p1"],
       command: null,
       commandData: null,
+      discoveryCommand: null,
+      discoveryData: null,
     });
   });
 
@@ -175,6 +216,69 @@ describe("route query functions", () => {
     expect(parseCommandResultMock).toHaveBeenCalledWith(command);
     expect(data.command).toEqual(command);
     expect(data.commandData).toEqual({ parsed: true });
+    expect(data.discoveryCommand).toBeNull();
+    expect(data.discoveryData).toBeNull();
+  });
+
+  it("treats a selected discovery command as the discovery context", async () => {
+    const command = { id: "cmd-1", kind: "discover_printers" } as Command;
+    stubRouteFetch({
+      "/agents": { agents: [] },
+      "/printers": { printers: [] },
+      "/commands/cmd-1": command,
+    });
+
+    const data = await agentsRouteQuery("t1", "cmd-1").queryFn!({} as never);
+
+    expect(data.command).toEqual(command);
+    expect(data.discoveryCommand).toEqual(command);
+    expect(data.discoveryData).toBeNull();
+  });
+
+  it("fetches the listed discovery command alongside a link command", async () => {
+    const linkCommand = { id: "cmd-2", kind: "link_printer" } as Command;
+    const discoveryCommand = {
+      id: "cmd-1",
+      kind: "discover_printers",
+    } as Command;
+    const fetchMock = stubRouteFetch({
+      "/agents": { agents: [] },
+      "/printers": { printers: [] },
+      "/commands/cmd-2": linkCommand,
+      "/commands/cmd-1": discoveryCommand,
+    });
+
+    const data = await agentsRouteQuery("t1", "cmd-2", "cmd-1").queryFn!(
+      {} as never,
+    );
+
+    expect(fetchedPaths(fetchMock).sort()).toEqual([
+      "/api/tenants/t1/agents",
+      "/api/tenants/t1/commands/cmd-1",
+      "/api/tenants/t1/commands/cmd-2",
+      "/api/tenants/t1/printers",
+    ]);
+    expect(data.command).toEqual(linkCommand);
+    expect(data.discoveryCommand).toEqual(discoveryCommand);
+  });
+
+  it("ignores a listed discovery command that is not a discovery", async () => {
+    const linkCommand = { id: "cmd-2", kind: "link_printer" } as Command;
+    const otherCommand = { id: "cmd-3", kind: "refresh_printers" } as Command;
+    stubRouteFetch({
+      "/agents": { agents: [] },
+      "/printers": { printers: [] },
+      "/commands/cmd-2": linkCommand,
+      "/commands/cmd-3": otherCommand,
+    });
+
+    const data = await agentsRouteQuery("t1", "cmd-2", "cmd-3").queryFn!(
+      {} as never,
+    );
+
+    expect(data.command).toEqual(linkCommand);
+    expect(data.discoveryCommand).toBeNull();
+    expect(data.discoveryData).toBeNull();
   });
 
   it("composes users data from users and join links", async () => {
@@ -232,34 +336,24 @@ describe("route query functions", () => {
     });
   });
 
-  it("selects the agent and its printers for the agent settings view", async () => {
+  it("selects the agent for the agent settings view", async () => {
     stubRouteFetch({
       "/agents": { agents: [{ id: "a1" }, { id: "a2" }] },
-      "/printers": {
-        printers: [
-          { agent_id: "a1", id: "p1" },
-          { agent_id: "a2", id: "p2" },
-        ],
-      },
     });
 
-    const data = await agentSettingsRouteQuery("t1", "a1", null).queryFn!(
+    const data = await agentSettingsRouteQuery("t1", "a1").queryFn!(
       {} as never,
     );
 
     expect(data.agent).toEqual({ id: "a1" });
-    expect(data.printers).toEqual([{ agent_id: "a1", id: "p1" }]);
-    expect(data.command).toBeNull();
-    expect(data.commandData).toBeNull();
   });
 
   it("returns a null agent when the agent is missing", async () => {
     stubRouteFetch({
       "/agents": { agents: [] },
-      "/printers": { printers: [] },
     });
 
-    const data = await agentSettingsRouteQuery("t1", "a1", null).queryFn!(
+    const data = await agentSettingsRouteQuery("t1", "a1").queryFn!(
       {} as never,
     );
 

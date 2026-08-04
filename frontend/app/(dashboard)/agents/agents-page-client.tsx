@@ -12,14 +12,16 @@ export function AgentsPageClient({
   selectedTenant,
   adminUnavailable,
   commandId,
+  discoveryId,
 }: {
   auth: AuthMetadata;
   selectedTenant: Tenant;
   adminUnavailable: boolean;
   commandId: string | null;
+  discoveryId: string | null;
 }) {
   const { data, isLoading, error } = useQuery(
-    agentsRouteQuery(selectedTenant.id, commandId),
+    agentsRouteQuery(selectedTenant.id, commandId, discoveryId),
   );
 
   if (isLoading) {
@@ -38,12 +40,15 @@ export function AgentsPageClient({
     );
   }
 
-  const { agents, printers, command, commandData } = data ?? {
-    agents: [],
-    printers: [],
-    command: null,
-    commandData: null,
-  };
+  const { agents, printers, command, commandData, discoveryCommand, discoveryData } =
+    data ?? {
+      agents: [],
+      printers: [],
+      command: null,
+      commandData: null,
+      discoveryCommand: null,
+      discoveryData: null,
+    };
 
   return (
     <QueryErrorBoundary>
@@ -70,6 +75,8 @@ export function AgentsPageClient({
       nowMs={0}
       selectedCommand={command}
       commandData={commandData}
+      discoveryCommand={discoveryCommand}
+      discoveryData={discoveryData}
       notifications={[]}
       tenantTokens={[]}
       auditEvents={[]}

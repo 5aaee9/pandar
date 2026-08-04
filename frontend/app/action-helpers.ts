@@ -66,6 +66,13 @@ export function agentsStatusUrl(tenantId: string, status: string) {
   return `/agents?tenant=${encodeURIComponent(tenantId)}&status=${encodeURIComponent(status)}`;
 }
 
-export function commandUrl(tenantId: string, commandId: string) {
-  return `/agents?tenant=${encodeURIComponent(tenantId)}&command=${encodeURIComponent(commandId)}`;
+export function commandUrl(
+  tenantId: string,
+  commandId: string,
+  discoveryId?: string | null,
+) {
+  const base = `/agents?tenant=${encodeURIComponent(tenantId)}&command=${encodeURIComponent(commandId)}`;
+  return discoveryId
+    ? `${base}&discovery=${encodeURIComponent(discoveryId)}`
+    : base;
 }

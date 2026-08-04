@@ -57,15 +57,14 @@ describe("discoverPrinters", () => {
     );
   });
 
-  it("returns discovery commands to the agent settings page", async () => {
+  it("redirects discovery commands to the agents page command view", async () => {
     const formData = new FormData();
     formData.set("tenant_id", "tenant-1");
     formData.set("agent_id", "agent-1");
     formData.set("timeout_seconds", "9");
-    formData.set("return_to", "agent_settings");
 
     await expect(discoverPrinters(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/agents/agent-1/settings?tenant=tenant-1&command=command-1",
+      "NEXT_REDIRECT:/agents?tenant=tenant-1&command=command-1",
     );
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/tenants/tenant-1/agents/agent-1/discover-printers",
@@ -121,6 +120,20 @@ describe("linkPrinter", () => {
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     expect(body.serial_number).toBeUndefined();
     expect(body.model).toBeUndefined();
+  });
+
+  it("keeps the discovery context in the redirect when adopting", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("agent_id", "agent-1");
+    formData.set("type", "BambuLab");
+    formData.set("host", "192.0.2.10");
+    formData.set("access_code", "SECRET-LINK-CODE");
+    formData.set("discovery_command_id", "discovery-1");
+
+    await expect(linkPrinter(formData)).rejects.toThrow(
+      "NEXT_REDIRECT:/agents?tenant=tenant-1&command=command-1&discovery=discovery-1",
+    );
   });
 });
 

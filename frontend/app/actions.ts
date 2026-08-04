@@ -15,7 +15,6 @@ import {
 } from "./action-helpers";
 import { apiHeaders, requireAuth } from "./api-auth";
 import { apiIdSegment } from "./api-path";
-import { agentSettingsHref } from "./dashboard-shell";
 
 export async function discoverPrinters(formData: FormData) {
   await requireAuth();
@@ -38,11 +37,7 @@ export async function discoverPrinters(formData: FormData) {
   }
 
   const command = (await response.json()) as { id: string };
-  redirect(
-    stringField(formData, "return_to") === "agent_settings"
-      ? agentSettingsHref(tenantId, agentId, command.id)
-      : commandUrl(tenantId, command.id),
-  );
+  redirect(commandUrl(tenantId, command.id));
 }
 
 export async function refreshPrinters(formData: FormData) {
@@ -178,7 +173,13 @@ export async function linkPrinter(formData: FormData) {
     redirect(agentsStatusUrl(tenantId, await errorCode(response)));
   }
   const command = (await response.json()) as { id: string };
-  redirect(commandUrl(tenantId, command.id));
+  redirect(
+    commandUrl(
+      tenantId,
+      command.id,
+      nullableField(formData, "discovery_command_id"),
+    ),
+  );
 }
 
 export async function controlPrinter(formData: FormData) {

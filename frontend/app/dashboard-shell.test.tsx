@@ -123,8 +123,8 @@ describe("dashboard shell helpers", () => {
     expect(agentSettingsHref("tenant 1", "agent/1")).toBe(
       "/agents/agent%2F1/settings?tenant=tenant+1",
     );
-    expect(agentSettingsHref("t1", "a1", "cmd1")).toBe(
-      "/agents/a1/settings?tenant=t1&command=cmd1",
+    expect(agentSettingsHref("t1", "a1")).toBe(
+      "/agents/a1/settings?tenant=t1",
     );
 
     expect(

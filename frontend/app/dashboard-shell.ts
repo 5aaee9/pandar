@@ -41,13 +41,8 @@ export function dashboardTenantHref(
   });
 }
 
-export function agentSettingsHref(
-  tenantId: string,
-  agentId: string,
-  commandId?: string,
-) {
+export function agentSettingsHref(tenantId: string, agentId: string) {
   const params = new URLSearchParams({ tenant: tenantId });
-  if (commandId) params.set("command", commandId);
   return `/agents/${encodeURIComponent(agentId)}/settings?${params.toString()}`;
 }
 

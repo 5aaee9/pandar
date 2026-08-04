@@ -17,7 +17,7 @@ export default async function AgentSettingsPage({
   searchParams,
 }: {
   params: Promise<{ agentId: string }>
-  searchParams: Promise<{ tenant?: string | string[]; command?: string | string[] }>
+  searchParams: Promise<{ tenant?: string | string[] }>
 }) {
   const [{ agentId }, query, auth, identity, tenantsResult] = await Promise.all([
     params,
@@ -35,15 +35,13 @@ export default async function AgentSettingsPage({
   const selectedTenant = resolveSelectedTenant(query, effectiveTenants)
 
   if (!selectedTenant) {
-    const t = await getTranslations('diagnostics')
+    const t = await getTranslations('agents')
     return <EmptyState title={t('noTenantTitle')} message={t('noTenantMessage')} />
   }
 
-  const commandId = Array.isArray(query.command) ? query.command[0] : query.command ?? null
   return (
     <AgentSettingsPageClient
       agentId={agentId}
-      commandId={commandId}
       selectedTenant={selectedTenant}
     />
   )
