@@ -18,6 +18,7 @@ const RACK_SLOT_IDS = [16, 17, 18, 19, 20, 21] as const
 const RACK_NOZZLE_ID_ALL = 255
 
 type RackNozzle = PrinterNozzleSystem['nozzle']['info'][number]
+type Translate = ReturnType<typeof useTranslations>
 
 export function PrinterRackPanel({ printer }: { printer: Printer }) {
   const t = useTranslations('inventory')
@@ -41,29 +42,38 @@ export function PrinterRackPanel({ printer }: { printer: Printer }) {
         <RackHolderStatus holder={system.holder} />
       </div>
       {mounted.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {mounted.map((nozzle) => (
-            <span
-              className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs font-medium text-foreground"
-              key={nozzle.id}
-            >
-              {nozzleLabel(nozzle, t('rackHotendUnknown'))}
-              <span className="text-[10px] font-normal text-muted-foreground">{t('rackMounted')}</span>
-            </span>
-          ))}
+        <div className="rounded-md bg-muted/40 p-2">
+          <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            {t('rackFixed')}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {mounted.map((nozzle) => (
+              <span
+                className="inline-flex items-center rounded-md bg-background px-2 py-1 text-xs font-medium text-foreground"
+                key={nozzle.id}
+              >
+                {nozzleLabel(nozzle, t, t('rackHotendUnknown'))}
+              </span>
+            ))}
+          </div>
         </div>
       ) : null}
-      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
-        {RACK_SLOT_IDS.map((slotId, index) => (
-          <RackSlotButton
-            disabled={disabled}
-            key={slotId}
-            nozzle={rackNozzles.get(slotId) ?? null}
-            printer={printer}
-            slotId={slotId}
-            slotNumber={index + 1}
-          />
-        ))}
+      <div>
+        <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          {t('rackSwappable')}
+        </div>
+        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+          {RACK_SLOT_IDS.map((slotId, index) => (
+            <RackSlotButton
+              disabled={disabled}
+              key={slotId}
+              nozzle={rackNozzles.get(slotId) ?? null}
+              printer={printer}
+              slotId={slotId}
+              slotNumber={index + 1}
+            />
+          ))}
+        </div>
       </div>
       <div className="grid grid-cols-3 gap-1.5" role="group">
         <RackMoveButton action={0} disabled={disabled} label={t('rackMoveCentre')} printer={printer} />
@@ -138,7 +148,8 @@ function RackSlotButton({
   disabled: boolean
 }) {
   const t = useTranslations('inventory')
-  const label = nozzle ? nozzleLabel(nozzle, t('rackHotendUnknown')) : t('rackSlotEmpty')
+  const label = nozzle ? nozzleLabel(nozzle, t, t('rackHotendUnknown')) : t('rackSlotEmpty')
+  const flow = nozzle ? nozzleFlowLabel(nozzle.type, t) : null
   return (
     <Popover>
       <PopoverTrigger
@@ -147,18 +158,39 @@ function RackSlotButton({
         type="button"
       >
         <span className="text-[10px] font-medium text-muted-foreground">{slotNumber}</span>
-        <span className="text-xs font-semibold text-foreground">{label}</span>
+        <span className="w-full truncate text-xs font-semibold text-foreground" title={label}>
+          {nozzle ? nozzleDiameterLabel(nozzle) : label}
+        </span>
+        {nozzle ? (
+          <span className="w-full truncate text-[10px] text-muted-foreground" title={label}>
+            {nozzleMaterialLabel(nozzle.type, t)}
+          </span>
+        ) : null}
       </PopoverTrigger>
       <PopoverContent align="start" className="w-52 gap-0 p-2">
         <div className="rounded-sm bg-muted px-2 py-2 text-xs font-medium text-foreground">
           {t('rackSlotAria', { number: slotNumber, hotend: label })}
         </div>
-        {nozzle?.wear !== null && nozzle?.wear !== undefined ? (
-          <div className="flex justify-between gap-3 px-2 py-2 text-xs">
-            <span className="text-muted-foreground">{t('rackWear')}</span>
-            <span className="font-medium">{formatWear(nozzle.wear)}</span>
-          </div>
-        ) : null}
+        <div className="grid gap-1 px-2 py-2 text-xs">
+          {flow ? (
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">{t('rackFlowType')}</span>
+              <span className="font-medium">{flow}</span>
+            </div>
+          ) : null}
+          {nozzle?.type ? (
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">{t('rackHotendCode')}</span>
+              <span className="font-mono font-medium">{nozzle.type}</span>
+            </div>
+          ) : null}
+          {nozzle?.wear !== null && nozzle?.wear !== undefined ? (
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">{t('rackWear')}</span>
+              <span className="font-medium">{formatWear(nozzle.wear)}</span>
+            </div>
+          ) : null}
+        </div>
         {nozzle ? (
           <div className="grid gap-1">
             <RackOperationForm
@@ -275,12 +307,66 @@ function RackOperationForm({
   )
 }
 
-function nozzleLabel(nozzle: RackNozzle, fallback: string) {
-  const diameter = Number.isFinite(nozzle.diameter)
+function nozzleLabel(nozzle: RackNozzle, t: Translate, fallback: string) {
+  return [nozzleDiameterLabel(nozzle), nozzleMaterialLabel(nozzle.type, t)]
+    .filter(Boolean)
+    .join(' ') || fallback
+}
+
+function nozzleDiameterLabel(nozzle: RackNozzle) {
+  return Number.isFinite(nozzle.diameter)
     ? `${Number(nozzle.diameter.toFixed(2))} mm`
     : null
-  const type = nozzle.type?.trim() || null
-  return [diameter, type].filter(Boolean).join(' ') || fallback
+}
+
+// Maps hotend type codes to material display names. Codes are either full
+// text ("hardened_steel") or 4-character codes ("HS01", "XH05") whose last
+// two digits carry the material: 00 stainless, 01 hardened, 05 tungsten.
+function nozzleMaterialLabel(type: string | null | undefined, t: Translate): string | null {
+  const raw = type?.trim()
+  if (!raw) {
+    return null
+  }
+  const lower = raw.toLowerCase()
+  if (lower.includes('hardened')) return t('nozzleHardenedSteel')
+  if (lower.includes('stainless')) return t('nozzleStainlessSteel')
+  if (lower.includes('tungsten')) return t('nozzleTungstenCarbide')
+  if (lower.includes('brass')) return t('nozzleBrass')
+  if (raw.length >= 4) {
+    const material = raw.slice(2, 4)
+    if (material === '00') return t('nozzleStainlessSteel')
+    if (material === '01') return t('nozzleHardenedSteel')
+    if (material === '05') return t('nozzleTungstenCarbide')
+  }
+  if (raw === '00') return t('nozzleStainlessSteel')
+  if (raw === '01') return t('nozzleHardenedSteel')
+  if (raw === '05') return t('nozzleTungstenCarbide')
+  return raw
+}
+
+// Flow type from the hotend code: "HH" high flow, "HS" standard; otherwise
+// the second character follows Bambu Studio's map (A/X standard, E high,
+// U TPU high, B E3D high). Returns null when the code carries no flow data.
+function nozzleFlowLabel(type: string | null | undefined, t: Translate): string | null {
+  const raw = type?.trim()
+  if (!raw || raw.length < 2) {
+    return null
+  }
+  if (raw.startsWith('HH')) return t('nozzleHighFlow')
+  if (raw.startsWith('HS')) return t('nozzleStandardFlow')
+  switch (raw.charAt(1)) {
+    case 'A':
+    case 'X':
+      return t('nozzleStandardFlow')
+    case 'E':
+      return t('nozzleHighFlow')
+    case 'U':
+      return t('nozzleTpuHighFlow')
+    case 'B':
+      return t('nozzleE3dHighFlow')
+    default:
+      return null
+  }
 }
 
 function formatWear(wear: number) {

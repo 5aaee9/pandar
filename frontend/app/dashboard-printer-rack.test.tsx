@@ -42,9 +42,9 @@ const rackPrinter: Printer = {
       tar_id: 18,
       info: [
         { id: 0, diameter: 0.4000000059604645, type: "HS01", wear: 0.12 },
-        { id: 16, diameter: 0.4, type: "E3D High Flow", wear: 0.5 },
-        { id: 17, diameter: 0.6, type: "Standard" },
-        { id: 20, diameter: 0.2, type: "Standard" },
+        { id: 16, diameter: 0.4, type: "XS01", wear: 0.5 },
+        { id: 17, diameter: 0.6, type: "HH05" },
+        { id: 20, diameter: 0.2, type: "AB99" },
       ],
     },
     holder: { stat: 0, pos: 1, info: 1 },
@@ -61,13 +61,14 @@ describe("PrinterRackPanel", () => {
     renderWithMessages(<PrinterRackPanel printer={rackPrinter} />);
 
     expect(screen.getByText("Hotend rack")).toBeVisible();
-    expect(screen.getByText("0.4 mm HS01")).toBeVisible();
-    expect(screen.getByText("Mounted")).toBeVisible();
+    expect(screen.getByText("Fixed (toolhead)")).toBeVisible();
+    expect(screen.getByText("0.4 mm Hardened Steel")).toBeVisible();
+    expect(screen.getByText("Swappable (rack)")).toBeVisible();
     expect(screen.getByText("A top · Calibrated")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Rack slot 1, 0.4 mm E3D High Flow" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Rack slot 2, 0.6 mm Standard" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Rack slot 1, 0.4 mm Hardened Steel" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Rack slot 2, 0.6 mm Tungsten Carbide" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Rack slot 3, Empty" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Rack slot 5, 0.2 mm Standard" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Rack slot 5, 0.2 mm AB99" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Rack slot 6, Empty" })).toBeVisible();
   });
 
@@ -94,8 +95,9 @@ describe("PrinterRackPanel", () => {
     const user = userEvent.setup();
     renderWithMessages(<PrinterRackPanel printer={rackPrinter} />);
 
-    await user.click(screen.getByRole("button", { name: "Rack slot 2, 0.6 mm Standard" }));
+    await user.click(screen.getByRole("button", { name: "Rack slot 2, 0.6 mm Tungsten Carbide" }));
 
+    expect(await screen.findByText("High Flow")).toBeVisible();
     const rereadForm = (await screen.findByRole("button", { name: "Re-read hotend" })).closest("form");
     expect(rereadForm?.querySelector('input[name="action"]')).toHaveValue("holder_nozzle_refresh");
     expect(rereadForm?.querySelector('input[name="nozzle_id"]')).toHaveValue("17");
