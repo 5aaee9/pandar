@@ -85,8 +85,6 @@ fn matrix_covers_ftps_storage_and_unknown_defaults() {
     assert!(brtc_emmc_upload_supported(Some("X1 Carbon")));
     assert!(brtc_emmc_upload_supported(Some("X1E")));
     assert!(!brtc_emmc_upload_supported(Some("A1 Mini")));
-    assert!(ftps_clear_data_fallback(Some("A1")));
-    assert!(ftps_clear_data_fallback(Some("A1 Mini")));
     assert_eq!(
         compatibility_for_model(Some("A1 Mini")).external_storage,
         Capability::Unsupported
@@ -131,10 +129,16 @@ fn absent_model_serializes_null_and_unknown_features() {
             normalized_model: None,
             external_storage: Capability::Unknown,
             ftps_tls_1_2_cap: false,
-            ftps_clear_data_fallback: false,
             features: CompatibilityFeatures::unknown(),
         }
     );
+}
+
+#[test]
+fn compatibility_json_omits_clear_data_fallback_capability() {
+    let json = serde_json::to_string(&compatibility_for_model(Some("A1 Mini"))).unwrap();
+
+    assert!(!json.contains("ftps_clear_data_fallback"));
 }
 
 #[test]

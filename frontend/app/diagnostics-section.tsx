@@ -198,12 +198,6 @@ function DiagnosticResult({ result }: { result: DiagnosticResultData }) {
             available={compatibility?.ftps_tls_1_2_cap === true}
             help={t('ftpsCapHelp')}
           />
-          <CompatibilityRow
-            label={t('clearDataFallback')}
-            value={compatibility?.ftps_clear_data_fallback ? 'available' : 'unavailable'}
-            available={compatibility?.ftps_clear_data_fallback === true}
-            help={t('clearDataFallbackHelp')}
-          />
           {Object.entries(features).map(([name, value]) => (
             <CompatibilityRow
               key={name}

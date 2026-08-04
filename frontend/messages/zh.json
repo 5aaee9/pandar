@@ -562,8 +562,6 @@
     "externalStorageHelp": "打印机是否可从 SD 卡或外部存储读取打印文件。",
     "ftpsCap": "FTPS TLS 1.2 上限",
     "ftpsCapHelp": "打印机固件将 FTPS 限制在 TLS 1.2。Agent 会在可用时使用兼容的 TLS 配置。",
-    "clearDataFallback": "明文数据回退",
-    "clearDataFallbackHelp": "Agent 是否可针对该型号系列回退到明文 FTPS 传输。",
     "available": "可用",
     "unavailable": "不可用",
     "unknown": "未知"

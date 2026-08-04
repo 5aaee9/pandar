@@ -113,7 +113,6 @@ function parseCompatibility(
         : undefined,
     external_storage: optionalString(value.external_storage),
     ftps_tls_1_2_cap: optionalBoolean(value.ftps_tls_1_2_cap),
-    ftps_clear_data_fallback: optionalBoolean(value.ftps_clear_data_fallback),
     features: parseFeatureMap(value.features),
   };
 }

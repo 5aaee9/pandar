@@ -256,7 +256,6 @@ export type DiagnosticResultData = {
     normalized_model?: string | null;
     external_storage?: string;
     ftps_tls_1_2_cap?: boolean;
-    ftps_clear_data_fallback?: boolean;
     features?: Record<string, string>;
   };
 };

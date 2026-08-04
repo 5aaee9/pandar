@@ -136,20 +136,11 @@ async fn apply_transfer_mode(
         .await
         .context("send PBSZ 0")?;
 
-    match mode {
-        TransferProtectionMode::ProtectedData => {
-            stream
-                .custom_command("PROT P", &[Status::CommandOk])
-                .await
-                .context("send PROT P")?;
-        }
-        TransferProtectionMode::ClearData => {
-            stream
-                .custom_command("PROT C", &[Status::CommandOk])
-                .await
-                .context("send PROT C")?;
-        }
-    }
+    let TransferProtectionMode::ProtectedData = mode;
+    stream
+        .custom_command("PROT P", &[Status::CommandOk])
+        .await
+        .context("send PROT P")?;
 
     stream
         .transfer_type(FileType::Binary)
@@ -228,7 +219,6 @@ async fn suppaftp_api_compile_proof(
         .await?;
     ftp.custom_command("PBSZ 0", &[Status::CommandOk]).await?;
     ftp.custom_command("PROT P", &[Status::CommandOk]).await?;
-    ftp.custom_command("PROT C", &[Status::CommandOk]).await?;
     ftp.transfer_type(FileType::Binary).await?;
 
     let mut data = ftp.put_with_stream("pandar-api-proof.3mf").await?;

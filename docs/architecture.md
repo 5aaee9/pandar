@@ -59,7 +59,7 @@ Evidence from `reference/bambuddy/backend/app/services/bambu_ftp.py`:
 
 - The reference implementation uses implicit FTP over TLS on port `990`.
 - Login uses username `bblp` and the printer access code.
-- Some models need protected data mode (`PROT P`), while A1/A1 Mini paths may need fallback to clear data mode (`PROT C`) with the control channel still encrypted.
+- The reference can fall back to clear data mode (`PROT C`) for A1/A1 Mini. Pandar intentionally does not adopt that behavior: every FTPS data channel requires protected mode (`PROT P`) and fails closed if protection cannot be established.
 - Uploads use manual `STOR` transfer chunks instead of `storbinary()` for A1 compatibility.
 - Upload completion should wait for the printer's transfer response or verify server-side size before issuing the print command.
 - Downloads and uploads cache the working mode per printer IP.
@@ -415,7 +415,7 @@ Phase 3 adds the agent-side machine transport boundary:
 - `RefreshPrinters` sends an accepted command ack, publishes `{"info":{"command":"get_version","sequence_id":"90002"}}`, discovers the model from the `ota` module `product_name`, then publishes `{"pushing":{"command":"pushall"}}`, waits for one state report with a bounded timeout, emits normalized `PrinterSnapshot` events, then emits a success or failed command result.
 - MQTT report normalization uses serial/name from config and reads state from `print.gcode_state`, `print.state`, or root `state`, falling back to `unknown`. Refresh snapshot model values come from MQTT `get_version`; discovery failure fails the refresh instead of falling back to configured `model`.
 - The MQTT runtime adapter is isolated in `pandar-agent`; tests use fake transports and do not open live broker connections.
-- Machine file transfer is modeled as a protocol-neutral boundary derived from the reference FTPS behavior: implicit TLS port `990`, username `bblp`, 64 KiB upload chunks, list/download/upload/delete requests, protected data mode first, and A1/A1 Mini clear-data fallback with success-only mode caching.
+- Machine file transfer is modeled as a protocol-neutral boundary derived from the reference FTPS behavior: implicit TLS port `990`, username `bblp`, 64 KiB upload chunks, list/download/upload/delete requests, and protected data mode (`PROT P`) for every model. Failure never downgrades the data channel to `PROT C`.
 - Phase 3 does not change hub persistence. The hub still receives normalized agent events over the existing gRPC stream.
 
 Phase 4 carries refreshed printer snapshots into hub inventory. `RefreshPrinters` remains the explicit snapshot path: empty printer config stays no-network, configured printers discover model with `info.get_version`, publish `pushall`, normalize one state report, and the hub persists the latest state plus broadcasts a tenant event.
@@ -428,7 +428,7 @@ Phase 5 adds the `PrintProjectFile` command executor:
 - Artifact storage paths must be relative paths below `PANDAR_ARTIFACT_ROOT`; absolute paths, `..`, and prefix escapes are rejected.
 - The configured machine gateway composes machine file upload and MQTT `project_file` publish in order. It uploads the artifact filename through the file-transfer boundary, then publishes to `device/{serial}/request` with QoS `1`, `ftp://{filename}`, `Metadata/plate_{plate_id}.gcode`, job/subtask ids, and print flags.
 - Unit tests use fake file-transfer and MQTT transports to prove upload-before-publish behavior and no-publish-on-upload-failure behavior without opening real Bambu sockets.
-- Configured runtime agents use the Bambu FTPS adapter for machine file upload. The adapter uses implicit FTPS on port `990`, the Bambu LAN TLS policy for printer-local/self-signed certificates, protected/clear data mode selection, and server-side size verification before MQTT `project_file` publish. Tests use fake transfer transports and do not open live Bambu sockets.
+- Configured runtime agents use the Bambu FTPS adapter for machine file upload. The adapter uses implicit FTPS on port `990`, the Bambu LAN TLS policy for printer-local/self-signed certificates, protected data mode only, and server-side size verification before MQTT `project_file` publish. Tests use fake transfer transports and do not open live Bambu sockets.
 
 Agent phase status after Phase 7:
 
@@ -572,7 +572,7 @@ Agent-machine file transfer should be encapsulated behind a trait such as `Machi
 
 Bambu Studio plugin traffic should be encapsulated in `pandar-network-plugin` and terminate at `pandar-hub`. The plugin is an adapter for Studio's ABI and UI expectations, not a second agent runtime.
 
-Model-specific printer behavior should be encapsulated in the agent compatibility matrix. FTPS TLS/profile decisions, clear-data fallback, print option gates, diagnostics, and frontend availability should all consume the same conservative capability output. Unknown capability means unavailable in user-facing controls unless a future reference-backed phase upgrades it.
+Model-specific printer behavior should be encapsulated in the agent compatibility matrix. FTPS TLS/profile decisions, print option gates, diagnostics, and frontend availability should all consume the same conservative capability output; protected FTPS data channels remain a global security policy rather than a model capability. Unknown capability means unavailable in user-facing controls unless a future reference-backed phase upgrades it.
 
 Hub persistence should be encapsulated behind repositories that are tested against SQLite and PostgreSQL.
 

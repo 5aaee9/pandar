@@ -7,7 +7,7 @@ use std::{
 use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 
-use crate::machine::{BambuPrinterEndpoint, compatibility::ftps_clear_data_fallback};
+use crate::machine::BambuPrinterEndpoint;
 
 pub const BAMBU_FILE_TRANSFER_PORT: u16 = 990;
 pub const BAMBU_FILE_TRANSFER_USERNAME: &str = "bblp";
@@ -16,20 +16,12 @@ pub const BAMBU_FILE_TRANSFER_CHUNK_SIZE: usize = 64 * 1024;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransferProtectionMode {
     ProtectedData,
-    ClearData,
 }
 
 impl TransferProtectionMode {
     fn failure_context(self) -> &'static str {
-        match self {
-            Self::ProtectedData => "protected data transfer failed",
-            Self::ClearData => "clear data transfer failed",
-        }
+        "protected data transfer failed"
     }
-}
-
-pub fn is_a1_model(model: Option<&str>) -> bool {
-    ftps_clear_data_fallback(model)
 }
 
 #[derive(Debug, Clone, Default)]
@@ -161,7 +153,6 @@ pub trait MachineFileTransfer: Send + Sync {
 pub fn transfer_attempt_order(
     _endpoint: &BambuPrinterEndpoint,
     _cache: &TransferModeCache,
-    _force_clear: bool,
 ) -> Vec<TransferProtectionMode> {
     vec![TransferProtectionMode::ProtectedData]
 }
@@ -169,14 +160,13 @@ pub fn transfer_attempt_order(
 pub async fn run_with_transfer_mode<F, Fut, T>(
     endpoint: &BambuPrinterEndpoint,
     cache: &TransferModeCache,
-    force_clear: bool,
     mut operation: F,
 ) -> anyhow::Result<T>
 where
     F: FnMut(TransferProtectionMode) -> Fut,
     Fut: Future<Output = anyhow::Result<T>>,
 {
-    let modes = transfer_attempt_order(endpoint, cache, force_clear);
+    let modes = transfer_attempt_order(endpoint, cache);
     let mut failures = Vec::new();
 
     for mode in modes {
@@ -214,15 +204,13 @@ pub struct FakeMachineFileTransfer {
 struct FakeMachineFileTransferState {
     recorded: Vec<(TransferProtectionMode, FileTransferRequest)>,
     fail_protected: bool,
-    fail_clear: bool,
 }
 
 #[cfg(test)]
 impl FakeMachineFileTransfer {
-    pub fn with_failures(fail_protected: bool, fail_clear: bool) -> Self {
+    pub fn with_protected_failure() -> Self {
         let state = FakeMachineFileTransferState {
-            fail_protected,
-            fail_clear,
+            fail_protected: true,
             ..Default::default()
         };
         Self {
@@ -248,14 +236,10 @@ impl FakeMachineFileTransfer {
     ) -> anyhow::Result<()> {
         let mut state = self.state.lock().unwrap();
         state.recorded.push((mode, request));
-        match mode {
-            TransferProtectionMode::ProtectedData if state.fail_protected => {
-                Err(anyhow!("fake protected data failure"))
-            }
-            TransferProtectionMode::ClearData if state.fail_clear => {
-                Err(anyhow!("fake clear data failure"))
-            }
-            _ => Ok(()),
+        if state.fail_protected {
+            Err(anyhow!("fake protected data failure"))
+        } else {
+            Ok(())
         }
     }
 }

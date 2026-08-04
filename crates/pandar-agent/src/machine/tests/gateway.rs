@@ -168,7 +168,7 @@ fn print_project_remote_name_matches_studio_suffix_policy() {
 #[tokio::test]
 async fn configured_print_project_file_does_not_publish_when_upload_fails() {
     let mqtt = FakeMqttTransport::default();
-    let transfer = FakeMachineFileTransfer::with_failures(true, true);
+    let transfer = FakeMachineFileTransfer::with_protected_failure();
     let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
         vec![(endpoint("SERIAL1"), mqtt.clone(), transfer.clone())],
         Duration::from_secs(1),
@@ -184,7 +184,6 @@ async fn configured_print_project_file_does_not_publish_when_upload_fails() {
     assert!(message.contains("upload print artifact to SERIAL1"));
     assert!(message.contains("192.0.2.10"));
     assert!(message.contains("fake protected data failure"));
-    assert!(!message.contains("fake clear data failure"));
     let redacted = gateway.redact_error(&message);
     assert!(!redacted.contains("192.0.2.10"));
     assert!(redacted.contains("[REDACTED_PRINTER_HOST]"));

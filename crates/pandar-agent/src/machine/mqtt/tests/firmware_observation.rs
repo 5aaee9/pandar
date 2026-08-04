@@ -1,7 +1,9 @@
 use pandar_core::PrinterFirmwareModule;
 use serde_json::json;
 
-use super::super::{FakeMqttTransport, MachineReport, refresh_printer_with_firmware};
+use super::super::{
+    FakeMqttTransport, MachineReport, read_firmware_version, refresh_printer_with_firmware,
+};
 use super::{endpoint, print_report_from_json};
 
 #[test]
@@ -246,6 +248,32 @@ async fn firmware_observation_model_discovery_returns_modules_from_the_same_quer
     assert_eq!(published.len(), 2);
     assert_eq!(published[0].payload["info"]["command"], "get_version");
     assert_eq!(published[1].payload["pushing"]["command"], "pushall");
+}
+
+#[tokio::test]
+async fn firmware_version_read_publishes_only_the_read_only_query() {
+    let transport = FakeMqttTransport::with_reports([json!({
+        "info": {
+            "command": "get_version",
+            "module": [
+                { "name": "ota", "product_name": "A1 Mini", "sw_ver": "01.07.00.00" }
+            ]
+        }
+    })]);
+
+    let firmware =
+        read_firmware_version(&transport, &endpoint(), std::time::Duration::from_secs(1))
+            .await
+            .unwrap();
+
+    assert_eq!(firmware.model, "A1 Mini");
+    assert_eq!(
+        firmware.modules[0].software_version.as_deref(),
+        Some("01.07.00.00")
+    );
+    let published = transport.published_commands().await;
+    assert_eq!(published.len(), 1);
+    assert_eq!(published[0].payload["info"]["command"], "get_version");
 }
 
 fn module(

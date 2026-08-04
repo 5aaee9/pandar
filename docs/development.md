@@ -62,9 +62,31 @@ Runtime Bambu machine communication:
 - For printers whose MQTT certificate common name differs from their inventory serial, the certificate identity replaces `{serial}` only at the MQTT transport boundary.
 - Refresh sends `info.get_version` before `pushing.pushall` and fails closed when the model cannot be discovered.
 - Machine file transfer through implicit FTPS on port `990`.
-- Protected data mode first, with model-specific clear-data fallback where required.
+- Protected data mode only (`PROT P`). A protected-data failure stops the operation; the agent never downgrades the data channel with `PROT C`.
 
 Unit tests use fakes and must not open real Bambu MQTT or FTPS sockets.
+
+### A1 protected-FTPS firmware gate
+
+The opt-in `verify_a1_protected_ftps` example validates exactly one A1 and one A1 Mini against their
+current firmware. It reads `info.get_version`, confirms the firmware-reported model, then lists the
+FTPS root through `PROT P`. It does not upload, delete, print, or send a printer control. Supply both
+targets through an ephemeral secret environment variable; never commit the value or include it in
+captured evidence:
+
+```bash
+export PANDAR_A1_FTPS_VALIDATION_TARGETS='[
+  {"host":"<a1-ip>","serial":"<a1-serial>","access_code":"<a1-access-code>","model":"A1"},
+  {"host":"<a1-mini-ip>","serial":"<a1-mini-serial>","access_code":"<a1-mini-access-code>","model":"A1 Mini"}
+]'
+cargo run -p pandar-agent --example verify_a1_protected_ftps
+unset PANDAR_A1_FTPS_VALIDATION_TARGETS
+```
+
+A passing run prints only normalized models, firmware module versions, `PROT P`, and root entry
+counts; it omits hosts, serials, access codes, and directory names. Record both firmware versions and
+the successful protected-data result before claiming A1/A1 Mini firmware compatibility. This gate is
+not part of automated tests because it opens real printer sockets.
 
 ## Hub APIs
 

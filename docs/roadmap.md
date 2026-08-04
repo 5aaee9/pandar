@@ -16,6 +16,14 @@
 
 ## Completed
 
+- Aligned A1/A1 Mini FTPS compatibility reporting and operator documentation with the protected-only
+  runtime policy. Shared diagnostics and the Web UI no longer advertise a clear-data fallback;
+  authoritative docs state that `PROT P` failure is terminal and never downgrades to `PROT C`.
+  Automated regressions cover the removed compatibility field and the existing no-downgrade attempt
+  order. A read-only opt-in example records firmware module versions and a protected FTPS root
+  listing without exposing credentials or file names. Real A1 and A1 Mini execution remains an
+  explicit hardware gate because neither device is available in the current environment.
+
 - Implemented a fail-closed Bambu Studio local-camera path for normalized A1, A1 Mini, P1S, and A2L
   models. Agent speaks the native TLS port-6000 `bblp` camera protocol with the existing Bambu
   certificate verifier and keeps the printer host/access code local; Hub gates listing and stream
@@ -584,8 +592,8 @@ Exit criteria:
   - implicit TLS port 990.
   - username `bblp`, password access code.
   - upload, download, list, delete.
-  - protected data mode first, model-specific fallback where needed.
-- Completed targeted tests for command JSON construction, topic naming, fake MQTT refresh, printer config parsing, command event sequencing, and file-transfer mode selection/fallback.
+  - protected data mode only; a failure never downgrades to `PROT C`.
+- Completed targeted tests for command JSON construction, topic naming, fake MQTT refresh, printer config parsing, command event sequencing, and protected-only file-transfer mode selection.
 
 ## Phase 4: Printer Inventory And State
 
@@ -643,7 +651,7 @@ Goal: replace the Phase 5 unavailable runtime adapter with real agent-side Bambu
 
 - Completed implicit FTPS on port `990` behind the existing `MachineFileTransfer` trait.
 - Completed the Bambu LAN TLS policy for printer-local/self-signed certificates.
-- Completed protected/clear data mode selection with success-only mode caching.
+- Completed protected data mode selection. Later security hardening made `PROT P` mandatory and rejects any cached or requested clear mode.
 - Completed server-side upload size verification before publishing MQTT `project_file`.
 - Completed configured gateway wiring so runtime agents use the FTPS adapter for machine file upload.
 - Kept tests fake by default with adapter-level coverage for mode policy, verification decisions, and error mapping without requiring live printer sockets.
@@ -749,7 +757,7 @@ Goal: make real printer operation debuggable across Bambu printer families.
 - Completed structured diagnostics for configured-printer validation, MQTT reachability/report flow, FTPS reachability, storage write probe, and compatibility.
 - Completed command `result_json` persistence and tenant-scoped command detail reads for structured discovery/diagnostic output.
 - Completed hub APIs for discovery and diagnostics with operator authorization, tenant scoping, audit events, and wake-agent dispatch.
-- Completed a centralized conservative compatibility matrix for model aliases, FTPS TLS/profile policy, clear-data fallback, external storage, and feature availability.
+- Completed a centralized conservative compatibility matrix for model aliases, FTPS TLS/profile policy, external storage, and feature availability. Protected FTPS data channels are a global security policy, not a model capability.
 - Completed print-time rejection for unsupported or unknown flow calibration before artifact upload.
 - Completed frontend linked-agent controls and command result rendering for discovery rows, diagnostic checks, and compatibility availability without Bambu access-code inputs.
 
@@ -1465,6 +1473,10 @@ Exit criteria:
 
 ## Immediate Next
 
+- Run the `verify_a1_protected_ftps` read-only firmware gate against one real A1 and one real A1 Mini,
+  record each exact main-module firmware version, and prove a root directory listing succeeds after `PROT P`.
+  Do not upload, delete, print, or issue printer controls during this gate, and do not claim either
+  model as hardware-verified until both results are captured.
 - Build a new `02.08.01` three-file candidate and validate the exact camera callback and one-use
   loopback URL behavior on a real Studio host. With operator approval, test each model's live camera
   while confirming no printer

@@ -221,6 +221,23 @@ where
     }
 }
 
+pub async fn read_firmware_version<T>(
+    transport: &T,
+    endpoint: &BambuPrinterEndpoint,
+    report_timeout: Duration,
+) -> anyhow::Result<FirmwareVersionObservation>
+where
+    T: BambuMqttTransport + ?Sized,
+{
+    let reports = MachineReports::new(transport);
+    let topics = BambuMqttTopics::for_serial(&endpoint.serial);
+    reports
+        .subscribe(&topics.report)
+        .await
+        .with_context(|| format!("subscribe to report topic {}", topics.report))?;
+    discover_firmware_version(&reports, &topics, report_timeout).await
+}
+
 pub async fn refresh_printer_materials<T>(
     transport: &T,
     endpoint: &BambuPrinterEndpoint,

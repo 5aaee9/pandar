@@ -223,7 +223,7 @@ where
     let print_upload_policy = PrintUploadPolicy {
         try_emmc_print: options.try_emmc_print,
     };
-    let uploaded = run_with_transfer_mode(endpoint, cache, false, |mode| {
+    let uploaded = run_with_transfer_mode(endpoint, cache, |mode| {
         let remote_path = remote_path.clone();
         async move {
             transfer

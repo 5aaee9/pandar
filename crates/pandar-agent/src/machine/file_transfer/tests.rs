@@ -1,6 +1,6 @@
 use super::*;
 use crate::machine::BambuPrinterEndpoint;
-use TransferProtectionMode::{ClearData as C, ProtectedData as P};
+use TransferProtectionMode::ProtectedData as P;
 
 fn ep(model: Option<&str>) -> BambuPrinterEndpoint {
     BambuPrinterEndpoint {
@@ -13,16 +13,10 @@ fn ep(model: Option<&str>) -> BambuPrinterEndpoint {
 }
 
 #[test]
-fn constants_and_a1_detection_match_reference_policy() {
+fn constants_match_runtime_policy() {
     assert_eq!(BAMBU_FILE_TRANSFER_PORT, 990);
     assert_eq!(BAMBU_FILE_TRANSFER_USERNAME, "bblp");
     assert_eq!(BAMBU_FILE_TRANSFER_CHUNK_SIZE, 64 * 1024);
-    assert!(is_a1_model(Some("A1")));
-    assert!(is_a1_model(Some("A1 Mini")));
-    assert!(is_a1_model(Some("bambu lab a1 mini")));
-    assert!(!is_a1_model(Some("P1S")));
-    assert!(!is_a1_model(Some("X1 Carbon")));
-    assert!(!is_a1_model(None));
 }
 
 #[test]
@@ -63,19 +57,19 @@ async fn fake_records_trait_boundary_operations_and_modes() {
     let fake = FakeMachineFileTransfer::default();
 
     fake.list("/cache", P).await.unwrap();
-    fake.download("/cache/job.3mf", C).await.unwrap();
+    fake.download("/cache/job.3mf", P).await.unwrap();
     fake.upload("/cache/job.3mf", b"0123456789", P)
         .await
         .unwrap();
-    fake.delete("/cache/job.3mf", C).await.unwrap();
+    fake.delete("/cache/job.3mf", P).await.unwrap();
 
     assert_eq!(
         fake.recorded_requests(),
         vec![
             (P, FileTransferRequest::list("/cache")),
-            (C, FileTransferRequest::download("/cache/job.3mf")),
+            (P, FileTransferRequest::download("/cache/job.3mf")),
             (P, FileTransferRequest::upload("/cache/job.3mf", 10)),
-            (C, FileTransferRequest::delete("/cache/job.3mf")),
+            (P, FileTransferRequest::delete("/cache/job.3mf")),
         ]
     );
 }
@@ -117,22 +111,18 @@ async fn generic_and_print_uploads_keep_distinct_emmc_policy() {
 #[test]
 fn attempt_order_never_downgrades_to_clear_data() {
     let cache = TransferModeCache::default();
-    cache.store_success("192.0.2.10", C);
+    cache.store_success("192.0.2.10", P);
 
     assert_eq!(
-        transfer_attempt_order(&ep(Some("X1 Carbon")), &cache, false),
+        transfer_attempt_order(&ep(Some("X1 Carbon")), &cache),
         vec![P]
     );
     assert_eq!(
-        transfer_attempt_order(&ep(Some("X1 Carbon")), &TransferModeCache::default(), true),
+        transfer_attempt_order(&ep(Some("A1 Mini")), &TransferModeCache::default()),
         vec![P]
     );
     assert_eq!(
-        transfer_attempt_order(&ep(Some("A1 Mini")), &TransferModeCache::default(), false),
-        vec![P]
-    );
-    assert_eq!(
-        transfer_attempt_order(&ep(Some("X1")), &TransferModeCache::default(), false),
+        transfer_attempt_order(&ep(Some("X1")), &TransferModeCache::default()),
         vec![P]
     );
 }
@@ -142,7 +132,7 @@ async fn protected_first_success_caches_protected_mode() {
     let endpoint = ep(Some("A1 Mini"));
     let cache = TransferModeCache::default();
     let fake = FakeMachineFileTransfer::default();
-    let result = run_with_transfer_mode(&endpoint, &cache, false, |mode| {
+    let result = run_with_transfer_mode(&endpoint, &cache, |mode| {
         let fake = fake.clone();
         async move { fake.list("/cache", mode).await }
     })
@@ -158,9 +148,9 @@ async fn protected_first_success_caches_protected_mode() {
 async fn failed_protected_transfer_does_not_fallback_to_clear_data() {
     let a1 = ep(Some("A1"));
     let fallback_cache = TransferModeCache::default();
-    let fallback = FakeMachineFileTransfer::with_failures(true, false);
+    let fallback = FakeMachineFileTransfer::with_protected_failure();
 
-    run_with_transfer_mode(&a1, &fallback_cache, false, |mode| {
+    run_with_transfer_mode(&a1, &fallback_cache, |mode| {
         let fallback = fallback.clone();
         async move { fallback.delete("/cache/job.3mf", mode).await }
     })
@@ -171,10 +161,10 @@ async fn failed_protected_transfer_does_not_fallback_to_clear_data() {
     assert_eq!(fallback_cache.get("192.0.2.10"), None);
 
     let endpoint = ep(Some("A1 Mini"));
-    let fake = FakeMachineFileTransfer::with_failures(true, false);
+    let fake = FakeMachineFileTransfer::with_protected_failure();
     let cache = TransferModeCache::default();
 
-    run_with_transfer_mode(&endpoint, &cache, true, |mode| {
+    run_with_transfer_mode(&endpoint, &cache, |mode| {
         let fake = fake.clone();
         async move { fake.list("/cache", mode).await }
     })
@@ -183,26 +173,15 @@ async fn failed_protected_transfer_does_not_fallback_to_clear_data() {
 
     assert_eq!(fake.recorded_modes(), vec![P]);
     assert_eq!(cache.get("192.0.2.10"), None);
-
-    cache.store_success("192.0.2.10", C);
-    let cached = FakeMachineFileTransfer::with_failures(true, false);
-    run_with_transfer_mode(&endpoint, &cache, false, |mode| {
-        let cached = cached.clone();
-        async move { cached.download("/cache/job.3mf", mode).await }
-    })
-    .await
-    .unwrap_err();
-
-    assert_eq!(cached.recorded_modes(), vec![P]);
 }
 
 #[tokio::test]
 async fn failed_protected_mode_is_not_cached() {
     let endpoint = ep(Some("A1 Mini"));
     let cache = TransferModeCache::default();
-    let fake = FakeMachineFileTransfer::with_failures(true, true);
+    let fake = FakeMachineFileTransfer::with_protected_failure();
 
-    let err = run_with_transfer_mode(&endpoint, &cache, false, |mode| {
+    let err = run_with_transfer_mode(&endpoint, &cache, |mode| {
         let fake = fake.clone();
         async move { fake.upload("/cache/job.3mf", b"0123456789", mode).await }
     })
@@ -211,6 +190,5 @@ async fn failed_protected_mode_is_not_cached() {
     let message = format!("{err:#}");
 
     assert!(message.contains("protected data transfer failed"));
-    assert!(!message.contains("clear data transfer failed"));
     assert_eq!(cache.get("192.0.2.10"), None);
 }

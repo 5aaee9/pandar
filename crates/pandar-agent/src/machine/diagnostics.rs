@@ -284,7 +284,7 @@ where
     F: MachineFileTransfer + Send + Sync,
 {
     let bytes = b"pandar diagnostic\n";
-    let upload = run_with_transfer_mode(endpoint, transfer_cache, false, |mode| async move {
+    let upload = run_with_transfer_mode(endpoint, transfer_cache, |mode| async move {
         transfer.upload(DIAGNOSTIC_PROBE_PATH, bytes, mode).await
     })
     .await;
@@ -304,7 +304,7 @@ where
         );
     }
 
-    match run_with_transfer_mode(endpoint, transfer_cache, false, |mode| async move {
+    match run_with_transfer_mode(endpoint, transfer_cache, |mode| async move {
         transfer.delete(DIAGNOSTIC_PROBE_PATH, mode).await
     })
     .await

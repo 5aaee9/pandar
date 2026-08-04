@@ -38,7 +38,6 @@ pub struct DiagnosticCompatibility {
     pub normalized_model: Option<String>,
     pub external_storage: Capability,
     pub ftps_tls_1_2_cap: bool,
-    pub ftps_clear_data_fallback: bool,
     pub features: CompatibilityFeatures,
 }
 
@@ -49,7 +48,6 @@ pub fn compatibility_for_model(model: Option<&str>) -> DiagnosticCompatibility {
             normalized_model: None,
             external_storage: Capability::Unknown,
             ftps_tls_1_2_cap: false,
-            ftps_clear_data_fallback: false,
             features: CompatibilityFeatures::unknown(),
         };
     };
@@ -60,7 +58,6 @@ pub fn compatibility_for_model(model: Option<&str>) -> DiagnosticCompatibility {
             normalized_model,
             external_storage: Capability::Unsupported,
             ftps_tls_1_2_cap: false,
-            ftps_clear_data_fallback: true,
             features: CompatibilityFeatures {
                 chamber_temperature: Capability::Unknown,
                 drying: Capability::Unknown,
@@ -75,7 +72,6 @@ pub fn compatibility_for_model(model: Option<&str>) -> DiagnosticCompatibility {
             normalized_model,
             external_storage: Capability::Unknown,
             ftps_tls_1_2_cap: false,
-            ftps_clear_data_fallback: false,
             features: CompatibilityFeatures {
                 flow_calibration: Capability::Supported,
                 live_controls: Capability::Supported,
@@ -86,7 +82,6 @@ pub fn compatibility_for_model(model: Option<&str>) -> DiagnosticCompatibility {
             normalized_model,
             external_storage: Capability::Unknown,
             ftps_tls_1_2_cap: false,
-            ftps_clear_data_fallback: false,
             features: CompatibilityFeatures {
                 flow_calibration: Capability::Supported,
                 ..CompatibilityFeatures::unknown()
@@ -96,7 +91,6 @@ pub fn compatibility_for_model(model: Option<&str>) -> DiagnosticCompatibility {
             normalized_model,
             external_storage: Capability::Unknown,
             ftps_tls_1_2_cap: false,
-            ftps_clear_data_fallback: false,
             features: CompatibilityFeatures {
                 flow_calibration: Capability::Unsupported,
                 live_controls: Capability::Supported,
@@ -107,7 +101,6 @@ pub fn compatibility_for_model(model: Option<&str>) -> DiagnosticCompatibility {
             normalized_model,
             external_storage: Capability::Unknown,
             ftps_tls_1_2_cap: false,
-            ftps_clear_data_fallback: false,
             features: CompatibilityFeatures {
                 flow_calibration: Capability::Unsupported,
                 ..CompatibilityFeatures::unknown()
@@ -117,7 +110,6 @@ pub fn compatibility_for_model(model: Option<&str>) -> DiagnosticCompatibility {
             normalized_model,
             external_storage: Capability::Unknown,
             ftps_tls_1_2_cap: key == "P2S",
-            ftps_clear_data_fallback: false,
             features: CompatibilityFeatures {
                 flow_calibration: Capability::Supported,
                 nozzle_offset_calibration: Capability::Unsupported,
@@ -129,7 +121,6 @@ pub fn compatibility_for_model(model: Option<&str>) -> DiagnosticCompatibility {
             normalized_model,
             external_storage: Capability::Unknown,
             ftps_tls_1_2_cap: key == "X2D",
-            ftps_clear_data_fallback: false,
             features: CompatibilityFeatures {
                 flow_calibration: Capability::Supported,
                 nozzle_offset_calibration: Capability::Supported,
@@ -141,7 +132,6 @@ pub fn compatibility_for_model(model: Option<&str>) -> DiagnosticCompatibility {
             normalized_model,
             external_storage: Capability::Unknown,
             ftps_tls_1_2_cap: false,
-            ftps_clear_data_fallback: false,
             features: CompatibilityFeatures::unknown(),
         },
     }
@@ -218,10 +208,6 @@ pub fn live_controls_supported(model: Option<&str>) -> bool {
 
 pub fn ftps_tls_1_2_cap(model: Option<&str>) -> bool {
     compatibility_for_model(model).ftps_tls_1_2_cap
-}
-
-pub fn ftps_clear_data_fallback(model: Option<&str>) -> bool {
-    compatibility_for_model(model).ftps_clear_data_fallback
 }
 
 pub fn brtc_emmc_upload_supported(model: Option<&str>) -> bool {
