@@ -17,18 +17,22 @@ export {
 } from "./sidebar-layout"
 export {
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupContent,
-  SidebarGroupLabel,
 } from "./sidebar-group"
 export {
+  SidebarGroupAction,
+  SidebarGroupLabel,
+} from "./sidebar-group-render"
+export {
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSkeleton,
   SidebarMenuSub,
-  SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "./sidebar-menu"
+export {
+  SidebarMenuAction,
+  SidebarMenuSubButton,
+} from "./sidebar-menu-render"

@@ -32,14 +32,6 @@ export const monoIdClasses = "font-mono text-xs text-muted-foreground";
 export const rowHoverClasses =
   "transition-colors duration-150 ease-out hover:bg-muted/40";
 
-/** Card panel used in Settings, Users, and admin sections. */
-export const cardPanelClasses =
-  "rounded-md border border-border bg-card px-4 py-3 transition-colors duration-150 ease-out hover:border-border/80";
-
-/** Badge/pill styling for status indicators. */
-export const badgeClasses =
-  "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium";
-
 /** Scrollable table container. */
 export const tableScrollClasses = "overflow-x-auto";
 

@@ -3,7 +3,7 @@ import { useTranslations } from "next-intl";
 import type { Tenant } from "./dashboard-types";
 import { EmptyState, SectionHeader } from "./dashboard-ui";
 
-export function AdminSectionStates({
+function AdminSectionStates({
   title,
   subtitle,
   meta,

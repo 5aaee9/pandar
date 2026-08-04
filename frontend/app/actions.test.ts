@@ -20,6 +20,7 @@ import {
   retryDispatchJob,
   retryDispatchJobs,
 } from "./job-actions";
+import { requireAuth } from "./api-auth";
 
 const redirectMock = vi.hoisted(() =>
   vi.fn((url: string) => {
@@ -155,6 +156,7 @@ describe("createMobileTicket", () => {
       "NEXT_REDIRECT:zip.iptables.pandar.android://auth/callback?ticket=pandar_plugin_ticket_abc&redirect_url=zip.iptables.pandar.android%3A%2F%2Fauth%2Fcallback&state=state",
     );
 
+    expect(requireAuth).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/tenants/tenant-1/mobile/login-tickets",
       expect.objectContaining({

@@ -74,7 +74,7 @@ export function MemberDialog({
               <span className={monoIdClasses}>{user.id}</span>
             </div>
           </div>
-          <RoleForm tenant={tenant} user={user} />
+          <RoleForm key={user.id} tenant={tenant} user={user} />
           <IdentityList identities={identities} />
           <RemoveMemberSection
             tenant={tenant}
@@ -97,7 +97,7 @@ function RoleForm({ tenant, user }: { tenant: Tenant; user: User }) {
     updateTenantUserRole,
     null,
   );
-  const [role, setRole] = useState<User["role"]>(user.role);
+  const [roleChanged, setRoleChanged] = useState(false);
 
   useMutationFeedback(state, {
     successMessage: t("roleUpdated"),
@@ -119,8 +119,8 @@ function RoleForm({ tenant, user }: { tenant: Tenant; user: User }) {
           aria-label={t("roleLabel")}
           className={`${inputSmClasses} flex-1`}
           name="role"
-          onChange={(event) => setRole(event.target.value as User["role"])}
-          value={role}
+          defaultValue={user.role}
+          onChange={(event) => setRoleChanged(event.target.value !== user.role)}
         >
           {roles.map((candidate) => (
             <option key={candidate} value={candidate}>
@@ -130,7 +130,7 @@ function RoleForm({ tenant, user }: { tenant: Tenant; user: User }) {
         </select>
         <button
           className={actionButtonSm}
-          disabled={pending || role === user.role}
+          disabled={pending || !roleChanged}
           type="submit"
         >
           {pending ? t("saving") : t("saveRole")}

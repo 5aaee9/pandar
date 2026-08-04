@@ -24,8 +24,6 @@ describe("theme components", () => {
       id: "pandar-theme",
       strategy: "beforeInteractive",
     });
-    expect(element.props.dangerouslySetInnerHTML.__html).toContain(
-      "pandar.settings",
-    );
+    expect(element.props.children).toContain("pandar.settings");
   });
 });

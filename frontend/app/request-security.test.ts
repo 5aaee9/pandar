@@ -60,4 +60,17 @@ describe("mutation request origin validation", () => {
     expect(rejectCrossOriginMutation(crossSite)?.status).toBe(403);
     expect(rejectCrossOriginMutation(missingOrigin)?.status).toBe(403);
   });
+
+  it("fails closed when the configured Dashboard URL is malformed", () => {
+    vi.stubEnv("APP_BASE_URL", "not a valid URL");
+    const request = new Request("https://dashboard.example.test/api/jobs", {
+      method: "DELETE",
+      headers: {
+        origin: "https://dashboard.example.test",
+        "sec-fetch-site": "same-origin",
+      },
+    });
+
+    expect(rejectCrossOriginMutation(request)?.status).toBe(403);
+  });
 });

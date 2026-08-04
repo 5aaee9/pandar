@@ -23,7 +23,8 @@ export function ThemeScript({ nonce }: { nonce?: string } = {}) {
       id="pandar-theme"
       nonce={nonce}
       strategy="beforeInteractive"
-      dangerouslySetInnerHTML={{ __html: code }}
-    />
+    >
+      {code}
+    </Script>
   );
 }

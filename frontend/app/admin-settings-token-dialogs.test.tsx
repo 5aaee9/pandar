@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import type { SecretActionState } from "./action-state";
 import { SecretActionResult } from "./admin-panel-shared";
-import { TenantSecretsPanel } from "./admin-settings-panel";
+import { TenantSecretsPanel } from "./tenant-secrets-panel";
 import type { Tenant, TenantToken } from "./dashboard-types";
 
 const actionMocks = vi.hoisted(() => ({

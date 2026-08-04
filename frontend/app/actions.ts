@@ -234,6 +234,7 @@ export async function controlPrinter(formData: FormData) {
 }
 
 export async function createPluginTicket(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const redirectUrl = stringField(formData, "redirect_url");
   const response = await postJson(
@@ -256,6 +257,7 @@ export async function createPluginTicket(formData: FormData) {
 }
 
 export async function createMobileTicket(formData: FormData) {
+  await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const redirectUrl = stringField(formData, "redirect_url");
   const codeChallenge = stringField(formData, "code_challenge");

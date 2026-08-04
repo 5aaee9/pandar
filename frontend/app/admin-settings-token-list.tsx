@@ -33,6 +33,24 @@ function TokenExpiration({ value, nowMs }: { value: string; nowMs: number }) {
 
 type TokenStatus = "active" | "expired" | "revoked";
 
+const TOKEN_STATUS_STYLES = {
+  active: "border-success/40 bg-success/10 text-success",
+  expired: "border-warning/50 bg-warning/10 text-warning",
+  revoked: "border-border bg-muted text-muted-foreground",
+} satisfies Record<TokenStatus, string>;
+
+const TOKEN_STATUS_ICONS = {
+  active: ShieldCheckIcon,
+  expired: TriangleAlertIcon,
+  revoked: XCircleIcon,
+} satisfies Record<TokenStatus, typeof ShieldCheckIcon>;
+
+const TOKEN_STATUS_ORDER: Record<TokenStatus, number> = {
+  active: 0,
+  expired: 1,
+  revoked: 2,
+};
+
 function getTokenStatus(token: TenantToken, nowMs: number): TokenStatus {
   if (token.revoked_at) {
     return "revoked";
@@ -45,23 +63,13 @@ function getTokenStatus(token: TenantToken, nowMs: number): TokenStatus {
 
 function TokenStatusBadge({ status }: { status: TokenStatus }) {
   const t = useTranslations("admin");
-  const styles = {
-    active: "border-success/40 bg-success/10 text-success",
-    expired: "border-warning/50 bg-warning/10 text-warning",
-    revoked: "border-border bg-muted text-muted-foreground",
-  } satisfies Record<TokenStatus, string>;
-  const icons = {
-    active: ShieldCheckIcon,
-    expired: TriangleAlertIcon,
-    revoked: XCircleIcon,
-  } satisfies Record<TokenStatus, typeof ShieldCheckIcon>;
-  const Icon = icons[status];
+  const Icon = TOKEN_STATUS_ICONS[status];
 
   return (
     <span
       className={
         "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium " +
-        styles[status]
+        TOKEN_STATUS_STYLES[status]
       }
     >
       <Icon aria-hidden="true" className="size-3" />
@@ -133,15 +141,10 @@ export function TenantTokensTable({
   nowMs: number;
 }) {
   const t = useTranslations("admin");
-  const statusOrder: Record<TokenStatus, number> = {
-    active: 0,
-    expired: 1,
-    revoked: 2,
-  };
   const sortedTokens = [...tokens].sort((left, right) => {
     const statusDifference =
-      statusOrder[getTokenStatus(left, nowMs)] -
-      statusOrder[getTokenStatus(right, nowMs)];
+      TOKEN_STATUS_ORDER[getTokenStatus(left, nowMs)] -
+      TOKEN_STATUS_ORDER[getTokenStatus(right, nowMs)];
     return (
       statusDifference ||
       Date.parse(right.created_at) - Date.parse(left.created_at) ||

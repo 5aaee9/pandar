@@ -7,7 +7,6 @@ import {
   ArrowUpRightIcon,
   Building2Icon,
   KeyRoundIcon,
-  LogOutIcon,
   MonitorCogIcon,
   PaletteIcon,
   ServerCogIcon,
@@ -18,9 +17,9 @@ import {
 import { FormattedDate } from "../components/formatted-date";
 import { LanguageSwitcher } from "../components/language-switcher";
 import { ThemeSwitcher } from "../components/theme-switcher";
-import { Button } from "../components/ui/button";
 import { OFFLINE_PRINTER_STATUSES } from "./dashboard-attention";
-import { CreateAgentPairingForm, TenantAuditPanel } from "./admin-settings-panel";
+import { CreateAgentPairingForm } from "./create-agent-pairing-form";
+import { TenantAuditPanel } from "./tenant-audit-panel";
 import { TenantTokensTable } from "./admin-settings-token-list";
 import type {
   Agent,
@@ -30,8 +29,9 @@ import type {
   Tenant,
   TenantToken,
 } from "./dashboard-types";
-import { formatAuthSource } from "./dashboard-runtime-helpers";
-import { dashboardSidebarHref, logoutHref } from "./dashboard-shell";
+import { dashboardSidebarHref } from "./dashboard-shell";
+import { SettingsAccountSection } from "./settings-account-section";
+import { SettingsSection } from "./settings-section";
 
 type SettingsDashboardProps = {
   auth: AuthMetadata;
@@ -186,7 +186,7 @@ export function SettingsDashboard(props: SettingsDashboardProps) {
           </SettingsSection>
 
           <AccessSection {...props} />
-          <AccountSection auth={props.auth} />
+          <SettingsAccountSection auth={props.auth} />
         </div>
       </div>
     </div>
@@ -198,34 +198,6 @@ function Metric({ value, label }: { value: string; label: string }) {
       <dt className="order-2 text-[0.68rem] font-medium text-muted-foreground">{label}</dt>
       <dd className="order-1 text-lg font-semibold tabular-nums text-foreground">{value}</dd>
     </div>
-  );
-}
-function SettingsSection({
-  id,
-  icon: Icon,
-  title,
-  description,
-  children,
-}: {
-  id: string;
-  icon: typeof PaletteIcon;
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section id={id} className="scroll-mt-20 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <div className="flex items-start gap-3 border-b border-border px-4 py-4 sm:px-5">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
-          <Icon aria-hidden="true" className="size-4" />
-        </span>
-        <div>
-          <h3 className="font-semibold text-foreground">{title}</h3>
-          <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
-        </div>
-      </div>
-      {children}
-    </section>
   );
 }
 function PreferenceRow({
@@ -364,36 +336,9 @@ function AccessSection(props: SettingsDashboardProps) {
               <p className="mt-0.5 text-sm text-muted-foreground">{t("activityDescription")}</p>
             </div>
           </div>
-          <TenantAuditPanel selectedTenant={props.selectedTenant} auditEvents={props.auditEvents} />
+          <TenantAuditPanel auditEvents={props.auditEvents} />
         </section>
       </div>
     </div>
-  );
-}
-
-function AccountSection({ auth }: { auth: AuthMetadata }) {
-  const t = useTranslations("settingsPage");
-  const tAuth = useTranslations("runtime.authSource");
-  const signOutHref = logoutHref(auth);
-
-  return (
-    <SettingsSection description={t("accountDescription")} icon={UserRoundIcon} id="account" title={t("accountTitle")}>
-      <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="text-sm font-medium text-foreground">{t("currentSession")}</div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t("authenticatedWith", { source: formatAuthSource(auth.source, tAuth), provider: auth.provider })}
-          </p>
-        </div>
-        {signOutHref ? (
-          <Button nativeButton={false} render={<a href={signOutHref} />} size="lg" variant="outline">
-            <LogOutIcon aria-hidden="true" />
-            {t("signOut")}
-          </Button>
-        ) : (
-          <span className="text-xs text-muted-foreground">{t("signOutUnavailable")}</span>
-        )}
-      </div>
-    </SettingsSection>
   );
 }

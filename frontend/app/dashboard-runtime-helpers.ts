@@ -29,34 +29,6 @@ export type RuntimeNotification = {
   timestamp: string;
 };
 
-const enLiveState: Record<LiveState, string> = {
-  live: "Connected",
-  connecting: "Connecting",
-  disconnected: "Reconnecting",
-  idle: "Idle",
-  unavailable: "Unavailable",
-  error: "Unavailable",
-};
-
-export function formatLiveState(
-  state: LiveState,
-  t: Translator = () => enLiveState[state],
-): string {
-  switch (state) {
-    case "live":
-      return t("live");
-    case "connecting":
-      return t("connecting");
-    case "disconnected":
-      return t("disconnected");
-    case "idle":
-      return t("idle");
-    case "unavailable":
-    case "error":
-      return t("unavailable");
-  }
-}
-
 const enAuthSource: Record<AuthMetadata["source"], string> = {
   request_cookie: "Request cookie",
   app_auth_bearer_token: "App bearer token",

@@ -15,8 +15,8 @@ export default async function SettingsPage({
 }: {
   searchParams: Promise<{ tenant?: string | string[] }>;
 }) {
-  const params = await searchParams;
-  const [auth, identity, tenantsResult] = await Promise.all([
+  const [params, auth, identity, tenantsResult] = await Promise.all([
+    searchParams,
     getAuthForRequest(),
     getIdentityForRequest(),
     getTenantsForRequest(),

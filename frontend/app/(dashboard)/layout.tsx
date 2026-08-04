@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 
 import {
@@ -50,14 +51,16 @@ export default async function DashboardLayout({
   const sidebarDefaultOpen = await dashboardSidebarDefaultOpen();
 
   return (
-    <DashboardShellProvider initialTenants={effectiveTenants}>
-      <DashboardShellLayout
-        sidebarDefaultOpen={sidebarDefaultOpen}
-        tenants={effectiveTenants}
-        auth={auth}
-      >
-        {children}
-      </DashboardShellLayout>
-    </DashboardShellProvider>
+    <Suspense fallback={null}>
+      <DashboardShellProvider initialTenants={effectiveTenants}>
+        <DashboardShellLayout
+          sidebarDefaultOpen={sidebarDefaultOpen}
+          tenants={effectiveTenants}
+          auth={auth}
+        >
+          {children}
+        </DashboardShellLayout>
+      </DashboardShellProvider>
+    </Suspense>
   );
 }

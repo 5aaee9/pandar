@@ -2,10 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 
 export function proxy(request: NextRequest) {
   const nonce = crypto.randomUUID().replaceAll("-", "");
-  const dashboardOrigin = new URL(
+  const dashboardCallbackUrl =
     process.env.PANDAR_AUTH_DASHBOARD_CALLBACK_URL ??
-      "http://127.0.0.1:3000/auth/betterauth/callback",
-  ).origin;
+    "http://127.0.0.1:3000/auth/betterauth/callback";
+  if (!URL.canParse(dashboardCallbackUrl)) {
+    throw new Error("PANDAR_AUTH_DASHBOARD_CALLBACK_URL must be a valid URL");
+  }
+  const dashboardOrigin = new URL(dashboardCallbackUrl).origin;
   const contentSecurityPolicy = [
     "default-src 'self'",
     "base-uri 'self'",

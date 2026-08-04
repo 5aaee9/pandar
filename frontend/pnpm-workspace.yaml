@@ -4,5 +4,8 @@ allowBuilds:
   sharp: set this to true or false
   unrs-resolver: set this to true or false
 
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+
 overrides:
   postcss: 8.5.20

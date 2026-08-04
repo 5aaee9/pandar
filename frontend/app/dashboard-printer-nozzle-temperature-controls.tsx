@@ -14,6 +14,11 @@ import {
 
 import { controlPrinter } from './actions'
 import type { Printer } from './dashboard-types'
+import {
+  formatTemperatureValue,
+  hasActiveTargetTemperature,
+  presentNozzles,
+} from './dashboard-printer-nozzle-temperature'
 
 const NOZZLE_TEMPERATURE_PRESETS = [0, 120, 220, 260] as const
 
@@ -280,15 +285,6 @@ function nozzleTemperature(nozzles: ReturnType<typeof presentNozzles>) {
   }
 }
 
-export function presentNozzles(nozzles: NonNullable<Printer['nozzle_temperatures']>) {
-  return nozzles
-    .filter((nozzle) => nozzle.current_celsius)
-    .map((nozzle, index) => ({
-      ...nozzle,
-      label: nozzle.label ?? String(index + 1),
-    }))
-}
-
 function activeNozzleLabel(printer: Printer) {
   const activeNozzle = normalizeToolhead(printer.active_nozzle)
   if (activeNozzle) {
@@ -328,21 +324,4 @@ function normalizeToolhead(value?: string | null) {
 
 function extruderIdForNozzle(nozzle: 'L' | 'R') {
   return nozzle === 'L' ? 1 : 0
-}
-
-export function formatTemperatureValue(value?: string | null, suffix = true) {
-  if (!value) {
-    return suffix ? '-°C' : '-°'
-  }
-  const parsed = Number(value)
-  const text = Number.isFinite(parsed) ? `${Math.round(parsed)}` : value
-  return suffix ? `${text}°C` : `${text}°`
-}
-
-export function hasActiveTargetTemperature(value?: string | null) {
-  if (!value) {
-    return false
-  }
-  const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed > 0
 }

@@ -227,27 +227,6 @@ function agentName(agents: Agent[], id: string): string {
   return agents.find((agent) => agent.id === id)?.name ?? "Unknown agent";
 }
 
-export function maxSeverity(items: AttentionItem[]): Severity | null {
-  if (items.length === 0) return null;
-  return items.reduce<Severity>(
-    (current, item) =>
-      SEVERITY_RANK[item.severity] < SEVERITY_RANK[current]
-        ? item.severity
-        : current,
-    items[0].severity,
-  );
-}
-
-export function notificationSeverity(title: string, detail: string): Severity {
-  const text = `${title} ${detail}`.toLowerCase();
-  if (text.includes("failed") || text.includes("unavailable"))
-    return "critical";
-  if (text.includes("disconnected") || text.includes("stalled"))
-    return "warning";
-  if (text.includes("complete")) return "success";
-  return "info";
-}
-
 const STATUS_SEVERITY: Array<{ severity: Severity; tokens: string[] }> = [
   {
     severity: "success",

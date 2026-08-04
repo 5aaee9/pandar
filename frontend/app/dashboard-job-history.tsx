@@ -6,14 +6,6 @@ import { useTranslations } from 'next-intl'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import type { Agent, Job, Printer, Tenant } from './dashboard-types'
 import { apiIdSegment } from './api-path'
 import { JobsRouteData, routeDataKeys } from './route-data'
@@ -25,6 +17,8 @@ import {
 } from './dashboard-job-status'
 import { EmptyState, SectionHeader } from './dashboard-ui'
 import { JobRow } from './dashboard-job-row'
+import { ClearJobsDialog } from './clear-jobs-dialog'
+import { DeleteJobDialog } from './delete-job-dialog'
 
 export function JobHistory({
   selectedTenant,
@@ -280,96 +274,26 @@ export function JobHistory({
           )}
         </>
       )}
-      <Dialog
+      <ClearJobsDialog
         open={clearOpen}
-        onOpenChange={(open) => {
-          if (!open && clearing) return
-          setClearOpen(open)
-        }}
-      >
-        <DialogContent closeLabel={t('cancel')} showCloseButton={!clearing}>
-          <DialogHeader>
-            <DialogTitle>{t('clearJobsTitle')}</DialogTitle>
-            <DialogDescription>
-              {t('clearJobsDescription', { count: clearableCount })}
-            </DialogDescription>
-            {clearError ? (
-              <p className="text-sm text-destructive" role="alert">
-                {clearError === 'permission' ? t('clearJobsFailedPermission') : t('clearJobsFailed')}
-              </p>
-            ) : null}
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              disabled={clearing}
-              onClick={() => setClearOpen(false)}
-              type="button"
-              variant="outline"
-            >
-              {t('cancel')}
-            </Button>
-            <Button
-              disabled={clearing}
-              onClick={clearJobs}
-              type="button"
-              variant="destructive"
-            >
-              {clearing ? t('clearingJobs') : t('confirmClearJobs')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => {
-          if (!open && !deleting) {
+        clearing={clearing}
+        clearableCount={clearableCount}
+        error={clearError}
+        onOpenChange={setClearOpen}
+        onConfirm={clearJobs}
+      />
+      <DeleteJobDialog
+        target={deleteTarget}
+        deleting={deleting}
+        error={deleteError}
+        onClose={() => {
+          if (!deleting) {
             setDeleteTarget(null)
             setDeleteError(false)
           }
         }}
-      >
-        <DialogContent
-          closeLabel={t('closeDialog')}
-          showCloseButton={!deleting}
-        >
-          <DialogHeader>
-            <DialogTitle>{t('deleteJobTitle')}</DialogTitle>
-            <DialogDescription>
-              {deleteTarget
-                ? t('deleteJobDescription', {
-                    filename: deleteTarget.artifact.filename,
-                  })
-                : null}
-            </DialogDescription>
-            {deleteError ? (
-              <p className="text-sm text-destructive" role="alert">
-                {t('deleteJobFailed')}
-              </p>
-            ) : null}
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              disabled={deleting}
-              onClick={() => {
-                setDeleteTarget(null)
-                setDeleteError(false)
-              }}
-              type="button"
-              variant="outline"
-            >
-              {t('cancel')}
-            </Button>
-            <Button
-              disabled={deleting}
-              onClick={deleteJob}
-              type="button"
-              variant="destructive"
-            >
-              {deleting ? t('deletingJob') : t('confirmDeleteJob')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onConfirm={deleteJob}
+      />
     </section>
   )
 }

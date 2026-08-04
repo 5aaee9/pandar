@@ -15,7 +15,7 @@ function ClockPresence({ printers }: { printers: ClockPrinter[] }) {
   return (
     <>
       {printers.map((printer, index) => (
-        <span data-testid={`presence-${index}`} key={`${printer.last_seen_at}:${index}`}>
+        <span data-testid={`presence-${index}`} key={printer.last_seen_at}>
           <PrinterLastSeen nowMs={nowMs} value={printer.last_seen_at} />
         </span>
       ))}

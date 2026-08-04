@@ -146,7 +146,7 @@ export function PrinterMismatchWarning({ printer }: { printer: Printer }) {
   );
 }
 
-export function PrinterMismatchDialog({
+function PrinterMismatchDialog({
   printer,
   open,
   onDismiss,

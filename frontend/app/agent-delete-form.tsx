@@ -39,35 +39,20 @@ export function AgentDeleteForm({
         <HoverCardTrigger
           delay={0}
           render={
-            <span
+            <button
               aria-describedby={disabledMessageId}
               aria-disabled="true"
               aria-label={buttonAriaLabel}
-              className="inline-flex cursor-not-allowed"
+              className={`${DELETE_BUTTON_CLASS} cursor-not-allowed`}
               onClick={(event) => {
-              event.preventDefault()
-              toast.warning(disabledMessage)
-            }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  toast.warning(disabledMessage)
-                }
+                event.preventDefault()
+                toast.warning(disabledMessage)
               }}
-              role="button"
-              tabIndex={0}
+              type="button"
             />
           }
         >
-          <button
-            aria-hidden="true"
-            className={DELETE_BUTTON_CLASS}
-            disabled
-            tabIndex={-1}
-            type="button"
-          >
-            {buttonLabel}
-          </button>
+          {buttonLabel}
           <span className="sr-only" id={disabledMessageId}>
             {disabledMessage}
           </span>

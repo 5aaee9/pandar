@@ -23,8 +23,16 @@ function CopyButton({ label, value }: { label: string; value: string }) {
   return (
     <button
       className="inline-flex items-center gap-1 self-start rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-foreground transition-colors duration-150 ease-out hover:bg-muted"
-      onClick={() => {
-        void navigator.clipboard?.writeText(value).then(() => setCopied(true));
+      onClick={async () => {
+        if (!navigator.clipboard) {
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+        } catch {
+          setCopied(false);
+        }
       }}
       type="button"
     >
@@ -96,7 +104,7 @@ export function SecretActionResult({ state }: { state: SecretActionState }) {
   );
 }
 
-export function FormField({
+function FormField({
   label,
   children,
 }: {
@@ -145,37 +153,6 @@ export function Input({
         required={required}
         type={type}
       />
-    </FormField>
-  );
-}
-
-export function Select({
-  name,
-  label,
-  values,
-  defaultValue,
-  disabled = false,
-}: {
-  name: string;
-  label: string;
-  values: string[];
-  defaultValue?: string;
-  disabled?: boolean;
-}) {
-  return (
-    <FormField label={label}>
-      <select
-        className={inputClasses}
-        defaultValue={defaultValue}
-        disabled={disabled}
-        name={name}
-      >
-        {values.map((value) => (
-          <option key={value} value={value}>
-            {value}
-          </option>
-        ))}
-      </select>
     </FormField>
   );
 }

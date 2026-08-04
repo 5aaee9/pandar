@@ -22,4 +22,12 @@ describe("Auth security proxy", () => {
     expect(policy).toContain("frame-ancestors 'none'");
     expect(response.headers.get("x-frame-options")).toBe("DENY");
   });
+
+  it("rejects a malformed Dashboard callback URL", () => {
+    process.env.PANDAR_AUTH_DASHBOARD_CALLBACK_URL = "not a valid URL";
+
+    expect(() => proxy(new NextRequest("https://auth.example/sign-in"))).toThrow(
+      "PANDAR_AUTH_DASHBOARD_CALLBACK_URL must be a valid URL",
+    );
+  });
 });

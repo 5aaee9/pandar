@@ -35,9 +35,11 @@ export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
             toolhead={unit.toolhead}
             humidity={unit.humidity}
             temperature={unit.temperature_celsius}
-            slots={(unit.trays ?? [])
-              .filter((tray) => tray.exists !== false)
-              .map((tray) => ({
+            slots={(unit.trays ?? []).flatMap((tray) =>
+              tray.exists === false
+                ? []
+                : [{
+                key: `ams:${unit.unit_id ?? 'unknown'}:${tray.tray_id ?? tray.global_tray_id ?? 'unknown'}`,
                 amsId: parseOptionalInt(unit.unit_id),
                 externalId: null,
                 globalTrayId: tray.global_tray_id ?? globalTrayId(unit.unit_id, unit.unit_kind, tray.tray_id),
@@ -48,7 +50,8 @@ export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
                 remaining: percentValue(tray.remaining_estimate),
                 kValue: stringValue(tray.k_value),
                 toolhead: tray.toolhead ?? unit.toolhead,
-              }))}
+              }],
+            )}
             active={materials.active_tray}
           />
         ))}
@@ -57,6 +60,7 @@ export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
             printer={printer}
             title={t('external')}
             slots={externalSpools.map((spool, index) => ({
+              key: `external:${spool.external_id ?? spool.global_tray_id ?? spool.tray_id ?? 'unknown'}`,
               amsId: 255,
               externalId: spool.external_id ?? null,
               globalTrayId: spool.global_tray_id ?? parseOptionalInt(spool.external_id),
@@ -77,6 +81,7 @@ export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
 }
 
 type MaterialSlot = {
+  key: string
   amsId: number | null
   externalId: string | null
   globalTrayId: number | null
@@ -136,7 +141,7 @@ function MaterialUnitCard({
         {slots.map((slot, index) => (
           <MaterialSlotButton
             active={isActiveSlot(slot, active)}
-            key={`${slot.externalId ?? slot.amsId ?? 'slot'}-${slot.slotId ?? index}`}
+            key={slot.key}
             printer={printer}
             slot={slot}
             title={title}

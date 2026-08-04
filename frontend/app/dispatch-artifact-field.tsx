@@ -46,6 +46,7 @@ export function DispatchArtifactField({
         <>
           <input
             accept=".3mf,.gcode,.gcode.3mf,application/octet-stream,model/3mf"
+            aria-label={t('artifact')}
             aria-describedby={fileStatusId}
             aria-invalid={artifact.state === 'too_large'}
             className="rounded-md border border-input px-2 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm file:font-medium"

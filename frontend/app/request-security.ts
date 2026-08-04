@@ -16,8 +16,14 @@ export function rejectTrustedAuthSignOutMutation(request: Request) {
 
 export function rejectCrossOriginMutation(request: Request) {
   const origin = request.headers.get("origin");
-  const expectedOrigin = new URL(process.env.APP_BASE_URL || request.url)
-    .origin;
+  const baseUrl = process.env.APP_BASE_URL || request.url;
+  if (!URL.canParse(baseUrl)) {
+    return NextResponse.json(
+      { error: "cross_origin_request" },
+      { status: 403 },
+    );
+  }
+  const expectedOrigin = new URL(baseUrl).origin;
   const fetchSite = request.headers.get("sec-fetch-site");
   if (origin !== expectedOrigin || (fetchSite && fetchSite !== "same-origin")) {
     return NextResponse.json(

@@ -34,13 +34,15 @@ import { apiIdSegment } from './api-path'
 import { ConfirmForm } from './confirm-dialog'
 import type { Printer } from './dashboard-types'
 import {
-  formatTemperatureValue,
-  hasActiveTargetTemperature,
   NozzleSwitchControl,
   NozzleTemperatureCard,
-  presentNozzles,
   TemperatureReading,
 } from './dashboard-printer-nozzle-temperature-controls'
+import {
+  formatTemperatureValue,
+  hasActiveTargetTemperature,
+  presentNozzles,
+} from './dashboard-printer-nozzle-temperature'
 
 type TemperatureControl = {
   title: string

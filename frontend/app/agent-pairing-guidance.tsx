@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl'
 
-import { CreateAgentPairingForm } from './admin-settings-panel'
+import { CreateAgentPairingForm } from './create-agent-pairing-form'
 import type { Tenant } from './dashboard-types'
 
 export function AgentPairingGuidance({

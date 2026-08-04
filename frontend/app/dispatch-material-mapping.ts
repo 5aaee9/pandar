@@ -1,4 +1,8 @@
 import type { ArtifactMetadata, Printer } from "./dashboard-types";
+import {
+  materialColorDistance,
+  materialPayloadColor,
+} from "./dispatch-material-color";
 import { isDualNozzleModel } from "./dispatch-print-options-model";
 import { mixedAmsLiteGlobalTrayId } from "./material-tray-routing";
 
@@ -225,19 +229,23 @@ export function autoMapSlotSelections(
   const remainingFilaments = new Set(filaments.map(({ mappingIndex }) => mappingIndex));
   const remainingSlots = new Set(slots.map(({ key }) => key));
 
-  while (true) {
-    const pair = pairs.find(
-      (candidate) =>
-        remainingFilaments.has(candidate.mappingIndex) && remainingSlots.has(candidate.slotKey),
-    );
-    if (!pair) break;
-    selections.set(pair.mappingIndex, pair.slotKey);
-    remainingFilaments.delete(pair.mappingIndex);
-    remainingSlots.delete(pair.slotKey);
+  const firstPairByFilament = new Map<number, (typeof pairs)[number]>();
+  for (const pair of pairs) {
+    if (!firstPairByFilament.has(pair.mappingIndex)) {
+      firstPairByFilament.set(pair.mappingIndex, pair);
+    }
+    if (
+      remainingFilaments.has(pair.mappingIndex) &&
+      remainingSlots.has(pair.slotKey)
+    ) {
+      selections.set(pair.mappingIndex, pair.slotKey);
+      remainingFilaments.delete(pair.mappingIndex);
+      remainingSlots.delete(pair.slotKey);
+    }
   }
 
   for (const mappingIndex of remainingFilaments) {
-    const pair = pairs.find((candidate) => candidate.mappingIndex === mappingIndex);
+    const pair = firstPairByFilament.get(mappingIndex);
     if (pair) selections.set(mappingIndex, pair.slotKey);
   }
 
@@ -287,9 +295,12 @@ export function materialMappingPayload(
     amsMapping2[filament.mappingIndex] = { ams_id: slot.amsId, slot_id: slot.slotId };
   }
 
+  const filamentsByIndex = new Map(
+    filaments.map((filament) => [filament.mappingIndex, filament]),
+  );
   const orderedFilaments = Array.from(
     { length },
-    (_, mappingIndex) => filaments.find((filament) => filament.mappingIndex === mappingIndex),
+    (_, mappingIndex) => filamentsByIndex.get(mappingIndex),
   );
   const amsMappingInfo = orderedFilaments.every(
     (filament): filament is ProjectFilament =>
@@ -302,8 +313,8 @@ export function materialMappingPayload(
           filamentType: filament.filamentType ?? "",
           filamentId: filament.trayInfoIdx ?? "",
           nozzleId: filament.nozzleId!,
-          sourceColor: payloadColor(filament.color),
-          targetColor: payloadColor(slot?.color ?? null),
+          sourceColor: materialPayloadColor(filament.color),
+          targetColor: materialPayloadColor(slot?.color ?? null),
         };
       })
     : null;
@@ -333,7 +344,7 @@ function compatiblePairs(
           (useAms || slot.kind === "ams") &&
           normalizedType(filament.filamentType) !== normalizedType(slot.filamentType)
         ) return [];
-        const distance = colorDistance(filament.color, slot.color) ?? 10_000;
+        const distance = materialColorDistance(filament.color, slot.color) ?? 10_000;
         const presetPenalty = filament.trayInfoIdx && slot.filamentId
           ? filament.trayInfoIdx === slot.filamentId ? 0 : 1_000
           : 1_000;
@@ -373,28 +384,4 @@ function finiteNumber(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function payloadColor(value: string | null) {
-  const normalized = value?.trim().replace(/^#/, "").toUpperCase() ?? "";
-  if (/^[0-9A-F]{6}$/.test(normalized)) return "#" + normalized + "FF";
-  return /^[0-9A-F]{8}$/.test(normalized) ? "#" + normalized : "";
-}
-
-function colorDistance(left: string | null, right: string | null): number | null {
-  const a = parsedColor(left);
-  const b = parsedColor(right);
-  if (!a || !b || a.alpha !== b.alpha) return null;
-  return Math.hypot(a.red - b.red, a.green - b.green, a.blue - b.blue);
-}
-
-function parsedColor(value: string | null) {
-  const normalized = value?.trim().replace(/^#/, "");
-  if (!normalized || !/^[0-9a-f]{6}([0-9a-f]{2})?$/i.test(normalized)) return null;
-  return {
-    red: Number.parseInt(normalized.slice(0, 2), 16),
-    green: Number.parseInt(normalized.slice(2, 4), 16),
-    blue: Number.parseInt(normalized.slice(4, 6), 16),
-    alpha: normalized.length === 8 ? Number.parseInt(normalized.slice(6, 8), 16) : 255,
-  };
 }
