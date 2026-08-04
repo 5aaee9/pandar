@@ -8,6 +8,10 @@ use anyhow::Context;
 use serde::Serialize;
 use tokio::{net::UdpSocket, time::Instant};
 
+mod scan;
+
+use scan::local_discovery_targets;
+
 const SSDP_PORT: u16 = 2021;
 const SSDP_ADDR: SocketAddr =
     SocketAddr::new(IpAddr::V4(Ipv4Addr::new(239, 255, 255, 250)), SSDP_PORT);
@@ -42,6 +46,14 @@ pub struct DiscoveredPrinter {
 }
 
 pub async fn discover_printers(timeout_seconds: u32) -> anyhow::Result<PrinterDiscoveryResult> {
+    let targets = std::iter::once(SSDP_ADDR).chain(local_discovery_targets()?);
+    discover_printers_at_targets(timeout_seconds, targets).await
+}
+
+async fn discover_printers_at_targets(
+    timeout_seconds: u32,
+    targets: impl IntoIterator<Item = SocketAddr>,
+) -> anyhow::Result<PrinterDiscoveryResult> {
     let timeout_seconds = timeout_seconds.clamp(1, 15);
     let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))
         .await
@@ -53,10 +65,12 @@ pub async fn discover_printers(timeout_seconds: u32) -> anyhow::Result<PrinterDi
     let request = format!(
         "M-SEARCH * HTTP/1.1\r\nHOST: {SSDP_ADDR}\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\nST: {SSDP_ST}\r\n\r\n"
     );
-    socket
-        .send_to(request.as_bytes(), SSDP_ADDR)
-        .await
-        .context("send Bambu SSDP discovery request")?;
+    for target in targets {
+        socket
+            .send_to(request.as_bytes(), target)
+            .await
+            .with_context(|| format!("send Bambu SSDP discovery request to {target}"))?;
+    }
 
     let deadline = Instant::now() + Duration::from_secs(timeout_seconds.into());
     let mut buf = [0u8; 4096];
@@ -285,5 +299,63 @@ mod tests {
         assert_eq!(printer.name.as_deref(), Some("Office X1C"));
         assert_eq!(printer.model.as_deref(), Some("X1 Carbon"));
         server_task.await.unwrap();
+    }
+
+    #[test]
+    fn local_subnet_targets_cover_private_interface_peers_only() {
+        let targets = scan::local_subnet_targets(
+            Ipv4Addr::new(10, 1, 61, 3),
+            Ipv4Addr::new(255, 255, 255, 0),
+        );
+
+        assert_eq!(targets.len(), 253);
+        assert!(targets.contains(&SocketAddr::from((Ipv4Addr::new(10, 1, 61, 84), 2021))));
+        assert!(!targets.contains(&SocketAddr::from((Ipv4Addr::new(10, 1, 61, 0), 2021))));
+        assert!(!targets.contains(&SocketAddr::from((Ipv4Addr::new(10, 1, 61, 3), 2021))));
+        assert!(!targets.contains(&SocketAddr::from((Ipv4Addr::new(10, 1, 61, 255), 2021))));
+    }
+
+    #[test]
+    fn local_subnet_targets_are_bounded_and_never_scan_public_networks() {
+        let broad_private_targets =
+            scan::local_subnet_targets(Ipv4Addr::new(10, 1, 61, 3), Ipv4Addr::new(255, 0, 0, 0));
+
+        assert_eq!(broad_private_targets.len(), 1021);
+        assert!(
+            broad_private_targets.contains(&SocketAddr::from((Ipv4Addr::new(10, 1, 61, 84), 2021)))
+        );
+        assert!(
+            scan::local_subnet_targets(
+                Ipv4Addr::new(203, 0, 113, 3),
+                Ipv4Addr::new(255, 255, 255, 0),
+            )
+            .is_empty()
+        );
+    }
+
+    #[tokio::test]
+    async fn discovery_finds_unicast_printer_when_another_target_does_not_respond() {
+        let silent_target = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let printer = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let printer_addr = printer.local_addr().unwrap();
+        let printer_task = tokio::spawn(async move {
+            let mut buf = [0u8; 4096];
+            let (_len, peer) = printer.recv_from(&mut buf).await.unwrap();
+            let response = b"HTTP/1.1 200 OK\r\nUSN: FALLBACK123\r\nDevName.bambu.com: Unicast Printer\r\nDevModel.bambu.com: P1S\r\nST: urn:bambulab-com:device:3dprinter:1\r\n\r\n";
+            printer.send_to(response, peer).await.unwrap();
+        });
+
+        let result =
+            discover_printers_at_targets(1, [silent_target.local_addr().unwrap(), printer_addr])
+                .await
+                .unwrap();
+
+        assert_eq!(result.printers.len(), 1);
+        assert_eq!(
+            result.printers[0].serial_number.as_deref(),
+            Some("FALLBACK123")
+        );
+        assert_eq!(result.printers[0].name.as_deref(), Some("Unicast Printer"));
+        printer_task.await.unwrap();
     }
 }

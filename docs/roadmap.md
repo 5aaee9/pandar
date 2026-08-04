@@ -9,12 +9,14 @@
 - Print dispatch should be modeled as upload artifact, verify artifact, send MQTT `project_file`, then reconcile state from reports.
 - `reference/bambuddy/backend/app/services/bambu_ftp.py` adds details needed for the real runtime: implicit FTPS, username `bblp`, manual 64 KiB `STOR` chunks, post-upload `226`/`SIZE` verification, and model profiles such as TLS 1.2 caps for affected firmware. Pandar intentionally requires protected FTPS data channels and does not copy the reference's A1 clear-data fallback.
 - `reference/bambuddy/backend/app/services/bambu_mqtt.py` shows that physical job state must be reconciled from `gcode_state`, `mc_percent`, remaining time, layer counts, `subtask_id`, `print_error`, and HMS-style errors instead of treating MQTT publish success as print completion.
-- `reference/bambuddy/backend/app/services/discovery.py` shows Bambu LAN discovery through SSDP multicast `239.255.255.250:2021` with search target `urn:bambulab-com:device:3dprinter:1`.
+- `reference/bambuddy/backend/app/services/discovery.py` shows Bambu LAN discovery through SSDP multicast `239.255.255.250:2021` with search target `urn:bambulab-com:device:3dprinter:1`, plus bounded subnet scanning and direct-host SSDP when multicast is unavailable.
 - Clerk and Logto both support backend API protection through JWT verification against provider JWKS plus issuer, audience, expiration, and optional authorized-party/scope checks. Pandar should treat the identity provider as authentication only; Rust remains the source of truth for user-to-tenant membership and tenant role authorization.
 - `reference/open-bamboo-networking` documents and implements the Bambu Studio network plugin ABI surface, including the `bambu_network_*` and `ft_*` dynamic-library exports that a compatible replacement must provide.
 - `reference/BambuStudio` drives login through the network plugin ABI: Studio opens `agent->get_bambulab_host() + "/sign-in"` in a WebView, accepts page messages such as `user_login`, `user_ticket_login`, `get_localhost_url`, and `thirdparty_login`, starts its own localhost HTTP server on port `13618`, then calls plugin token/profile ABI methods before applying `change_user(login_info)`.
 
 ## Completed
+
+- Fixed agent-wide LAN discovery on networks that suppress Bambu multicast responses. Discovery now supplements multicast M-SEARCH with bounded unicast SSDP across operational, non-point-to-point private IPv4 interfaces, limits broad networks to the local `/22`, never scans public addresses, and de-duplicates combined responses. Real-LAN verification discovered all three reachable printers that the previous multicast-only path returned as an empty result.
 
 - Aligned A1/A1 Mini FTPS compatibility reporting and operator documentation with the protected-only
   runtime policy. Shared diagnostics and the Web UI no longer advertise a clear-data fallback;

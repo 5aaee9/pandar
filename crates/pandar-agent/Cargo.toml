@@ -13,6 +13,7 @@ base64.workspace = true
 cap-std.workspace = true
 clap.workspace = true
 futures-util.workspace = true
+if-addrs.workspace = true
 md-5.workspace = true
 pandar-core.workspace = true
 prost.workspace = true

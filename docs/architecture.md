@@ -114,6 +114,8 @@ Evidence from `reference/bambuddy/backend/app/services/discovery.py`:
 
 - Bambu LAN discovery uses SSDP multicast `239.255.255.250:2021`.
 - The search target is `urn:bambulab-com:device:3dprinter:1`.
+- When multicast is unavailable, the reference subnet scanner identifies local candidates and sends the same SSDP request directly to each printer host.
+- Pandar sends discovery to multicast and to hosts on operational, non-point-to-point private IPv4 interfaces. Broad interface networks are limited to the `/22` containing the agent address, and public networks are never scanned.
 - Discovery and compatibility must remain agent-local because they depend on the user's LAN, local credentials, printer firmware, and model-specific transport behavior.
 
 ### External Identity Providers
@@ -434,7 +436,7 @@ Agent phase status after Phase 7:
 
 - Phase 8 added the real file-transfer runtime with implicit FTPS on port `990`, post-upload size verification, model/profile transport policy, and actionable upload diagnostics.
 - Phase 9 converts continuous MQTT reports into normalized job progress and terminal print events that can be correlated to hub jobs. Configured printers use a separate report MQTT client id from command transport so long-running subscriptions do not collide with command sessions.
-- Phase 13 adds LAN discovery, credential validation, printer diagnostics, and centralized compatibility rules for feature availability and transport policy. Discovery uses agent-local SSDP and can run without configured printers. Diagnostics run only for agent-configured serials, keep access codes agent-local, and return structured checks for MQTT reachability/report flow, FTPS reachability/storage probe, configured-printer status, and compatibility. Expected printer or environment problems are represented as successful command results with `overall = "problem"` instead of failed hub commands.
+- Phase 13 adds LAN discovery, credential validation, printer diagnostics, and centralized compatibility rules for feature availability and transport policy. Discovery uses agent-local multicast SSDP plus bounded private-subnet unicast SSDP and can run without configured printers. Diagnostics run only for agent-configured serials, keep access codes agent-local, and return structured checks for MQTT reachability/report flow, FTPS reachability/storage probe, configured-printer status, and compatibility. Expected printer or environment problems are represented as successful command results with `overall = "problem"` instead of failed hub commands.
 - Phase 14 promotes AMS, external-spool, tray-change, and filament usage data into stable Pandar models. The agent remains responsible for Bambu MQTT shape normalization, credential-key filtering, `tray_exist_bits` cleanup, `vir_slot`/`vt_tray` external-spool handling, active-tray derivation, and Bambu MQTT `ams_mapping_2` spelling. It does not persist material inventory locally.
 
 Agent phase status after Phase 15:
