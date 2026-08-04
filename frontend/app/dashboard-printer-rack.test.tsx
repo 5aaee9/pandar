@@ -41,7 +41,7 @@ const rackPrinter: Printer = {
       src_id: 16,
       tar_id: 18,
       info: [
-        { id: 0, diameter: 0.4, type: "E3D High Flow", wear: 0.12 },
+        { id: 0, diameter: 0.4000000059604645, type: "HS01", wear: 0.12 },
         { id: 16, diameter: 0.4, type: "E3D High Flow", wear: 0.5 },
         { id: 17, diameter: 0.6, type: "Standard" },
         { id: 20, diameter: 0.2, type: "Standard" },
@@ -61,6 +61,7 @@ describe("PrinterRackPanel", () => {
     renderWithMessages(<PrinterRackPanel printer={rackPrinter} />);
 
     expect(screen.getByText("Hotend rack")).toBeVisible();
+    expect(screen.getByText("0.4 mm HS01")).toBeVisible();
     expect(screen.getByText("Mounted")).toBeVisible();
     expect(screen.getByText("A top · Calibrated")).toBeVisible();
     expect(screen.getByRole("button", { name: "Rack slot 1, 0.4 mm E3D High Flow" })).toBeVisible();

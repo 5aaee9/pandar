@@ -276,7 +276,9 @@ function RackOperationForm({
 }
 
 function nozzleLabel(nozzle: RackNozzle, fallback: string) {
-  const diameter = Number.isFinite(nozzle.diameter) ? `${nozzle.diameter} mm` : null
+  const diameter = Number.isFinite(nozzle.diameter)
+    ? `${Number(nozzle.diameter.toFixed(2))} mm`
+    : null
   const type = nozzle.type?.trim() || null
   return [diameter, type].filter(Boolean).join(' ') || fallback
 }
