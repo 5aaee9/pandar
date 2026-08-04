@@ -187,7 +187,7 @@ function AgentsView({
   adminUnavailable,
 }: DashboardViewContentProps) {
   return (
-    <>
+    <div className="grid gap-4">
       <AgentPairingGuidance
         selectedTenant={selectedTenant}
         restricted={adminUnavailable}
@@ -200,6 +200,6 @@ function AgentsView({
         selectedCommand={selectedCommand}
         commandData={commandData}
       />
-    </>
+    </div>
   );
 }

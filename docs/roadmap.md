@@ -16,6 +16,8 @@
 
 ## Completed
 
+- Added consistent spacing between the Cards on the Agents page so pairing, printer linking, linked Agents, and diagnostics no longer render flush against each other.
+
 - Raised both `pandar-web` and `pandar-auth` from 58 React Doctor findings to a clean 100/100 without rule suppression. Server actions now authenticate before issuing login tickets, runtime URL handling fails closed, browser timers and asynchronous work own their failures and cleanup, controls carry native accessible semantics, independent server reads run concurrently, and material mapping state lives with its dispatch owner instead of synchronizing upward through an effect. Large job/dispatch and admin modules were split along existing UI boundaries, render-only sidebar adapters and nozzle-temperature helpers moved behind focused modules, stable list identities and one-pass lookups replaced index keys and repeated scans, and dead files/exports were removed. React Doctor 0.9.4 reports zero findings across 276 files; Web lint, typecheck, 399 tests, and production build pass, as do Auth typecheck, 11 tests, and production build.
 
 - Fixed agent-wide LAN discovery on networks that suppress Bambu multicast responses. Discovery now supplements multicast M-SEARCH with bounded unicast SSDP across operational, non-point-to-point private IPv4 interfaces, limits broad networks to the local `/22`, never scans public addresses, and de-duplicates combined responses. Real-LAN verification discovered all three reachable printers that the previous multicast-only path returned as an empty result.

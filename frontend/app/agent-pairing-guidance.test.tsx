@@ -110,6 +110,10 @@ describe("Agents view pairing guidance", () => {
     });
 
     expect(pairingHeading).toBeVisible();
+    expect(pairingHeading.closest("section")?.parentElement).toHaveClass(
+      "grid",
+      "gap-4",
+    );
     expect(
       pairingHeading.compareDocumentPosition(linkedAgentsHeading) &
         Node.DOCUMENT_POSITION_FOLLOWING,
