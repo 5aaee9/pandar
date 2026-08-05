@@ -125,6 +125,59 @@ async fn grpc_link_printer_result_json_redacts_access_code() {
 }
 
 #[tokio::test]
+async fn grpc_link_printer_failed_result_preserves_error_code() {
+    let state = fixture_state().await;
+    let (tenant_id, agent_id) = tenant_agent(&state).await;
+    let access_code = "SECRET-LINK-CODE";
+    let command = state
+        .commands()
+        .create_link_printer_sent_with_audit(
+            tenant_id,
+            agent_id,
+            LinkPrinterPayload {
+                printer_type: "BambuLab".to_owned(),
+                host: "192.0.2.10".to_owned(),
+                access_code: access_code.to_owned(),
+                name: None,
+            },
+            test_audit_actor(),
+        )
+        .await
+        .unwrap();
+
+    handle_result_and_job(
+        &state,
+        tenant_id,
+        agent_id,
+        command.id,
+        command_result_payload(
+            false,
+            "printer rejected the access code".to_owned(),
+            r#"{"type":"printer_link_error","error_code":"invalid_access_code"}"#.to_owned(),
+        ),
+        Some(access_code),
+    )
+    .await
+    .unwrap();
+
+    let stored = state
+        .commands()
+        .get_for_tenant(tenant_id, command.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.status, CommandStatus::Failed);
+    let stored_result = stored.result_json.unwrap();
+    assert_eq!(
+        redacted_result::<RedactedLinkPrinterFailure>(&stored_result),
+        RedactedLinkPrinterFailure {
+            kind: "printer_link_error".to_owned(),
+            error_code: "invalid_access_code".to_owned(),
+        }
+    );
+}
+
+#[tokio::test]
 async fn grpc_link_printer_numeric_result_json_redacts_digit_access_code() {
     let state = fixture_state().await;
     let (tenant_id, agent_id) = tenant_agent(&state).await;

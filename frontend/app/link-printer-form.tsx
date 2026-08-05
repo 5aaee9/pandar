@@ -1,51 +1,183 @@
-import { useTranslations } from 'next-intl'
+'use client'
 
-import { linkPrinter } from './actions'
-import type { Agent, Tenant } from './dashboard-types'
-import { EmptyState } from './dashboard-ui'
+import { useActionState, useEffect, useRef, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { useQueryClient } from '@tanstack/react-query'
+import { Loader2Icon } from 'lucide-react'
+import { toast } from 'sonner'
+
+import { Button } from '@/components/ui/button'
 import { inputClasses } from '@/lib/utils'
+import { linkPrinter } from './actions'
+import { apiIdSegment } from './api-path'
+import { isTerminalCommandStatus } from './command-status'
+import type { Agent, Command, Tenant } from './dashboard-types'
+import { EmptyState } from './dashboard-ui'
+import { routeDataKeys } from './route-data'
+
+const POLL_INTERVAL_MS = 2000
+const POLL_TIMEOUT_MS = 90_000
+
+type LinkFailure = {
+  code: string | null
+  detail: string | null
+}
+
+type PollOutcome =
+  | { commandId: string; status: 'succeeded' }
+  | ({ commandId: string; status: 'failed' } & LinkFailure)
 
 export function LinkPrinterMachineForm({
   selectedTenant,
   agents,
+  fixedAgentId,
+  defaultHost,
+  defaultName,
+  submitLabel,
+  onLinked,
 }: {
   selectedTenant: Tenant | null
   agents: Agent[]
+  fixedAgentId?: string
+  defaultHost?: string
+  defaultName?: string
+  submitLabel?: string
+  onLinked?: () => void
 }) {
   const t = useTranslations('linkPrinter')
-  const defaultAgent = agents.find((agent) => agent.status.toLowerCase() === 'online') ?? agents[0]
+  const queryClient = useQueryClient()
+  const [state, formAction, dispatching] = useActionState(linkPrinter, null)
+  const [pollOutcome, setPollOutcome] = useState<PollOutcome | null>(null)
+  const onLinkedRef = useRef(onLinked)
+
+  useEffect(() => {
+    onLinkedRef.current = onLinked
+  }, [onLinked])
+
+  const handledCommandRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!state?.ok || !selectedTenant) {
+      return
+    }
+    const commandId = state.commandId
+    if (handledCommandRef.current === commandId) {
+      return
+    }
+    const tenantId = selectedTenant.id
+    const deadline = Date.now() + POLL_TIMEOUT_MS
+    let active = true
+
+    const poll = async () => {
+      while (active) {
+        try {
+          const command = await fetchLinkCommand(tenantId, commandId)
+          if (!active) {
+            return
+          }
+          if (isTerminalCommandStatus(command.status)) {
+            handledCommandRef.current = commandId
+            if (command.status === 'succeeded') {
+              toast.success(t('linked'))
+              await Promise.all([
+                queryClient.invalidateQueries({
+                  queryKey: routeDataKeys.devices(tenantId),
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: routeDataKeys.agents(tenantId),
+                }),
+              ])
+              if (!active) {
+                return
+              }
+              setPollOutcome({ commandId, status: 'succeeded' })
+              onLinkedRef.current?.()
+            } else {
+              setPollOutcome({
+                commandId,
+                status: 'failed',
+                code: linkErrorCode(command),
+                detail: command.error,
+              })
+            }
+            return
+          }
+        } catch {
+          // Transient poll failure; keep polling until the deadline.
+        }
+        if (Date.now() >= deadline) {
+          handledCommandRef.current = commandId
+          if (active) {
+            setPollOutcome({
+              commandId,
+              status: 'failed',
+              code: 'link_timeout',
+              detail: null,
+            })
+          }
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+      }
+    }
+    void poll()
+
+    return () => {
+      active = false
+    }
+  }, [state, selectedTenant, queryClient, t])
+
+  const defaultAgent =
+    agents.find((agent) => agent.status.toLowerCase() === 'online') ?? agents[0]
+
+  const outcome =
+    state?.ok === true && pollOutcome?.commandId === state.commandId
+      ? pollOutcome
+      : null
+  const busy = dispatching || (state?.ok === true && outcome === null)
+  const failure: LinkFailure | null =
+    state && !state.ok
+      ? { code: state.error, detail: null }
+      : outcome?.status === 'failed'
+        ? { code: outcome.code, detail: outcome.detail }
+        : null
 
   if (!selectedTenant) {
     return <EmptyState title={t('noTenantTitle')} message={t('noTenantMessage')} />
   }
 
-  if (agents.length === 0 || !defaultAgent) {
+  if (!fixedAgentId && (agents.length === 0 || !defaultAgent)) {
     return <EmptyState title={t('noAgentsTitle')} message={t('noAgentsMessage')} />
   }
 
   return (
-    <form action={linkPrinter} className="grid gap-4">
+    <form action={formAction} className="grid gap-4">
       <input name="tenant_id" type="hidden" value={selectedTenant.id} />
       <input name="type" type="hidden" value="BambuLab" />
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-xs font-medium text-muted-foreground">{t('agent')}</span>
-        <select
-          className={inputClasses}
-          defaultValue={defaultAgent.id}
-          name="agent_id"
-          required
-        >
-          {agents.map((agent) => (
-            <option key={agent.id} value={agent.id}>
-              {t('agentOption', { name: agent.name, status: agent.status })}
-            </option>
-          ))}
-        </select>
-      </label>
+      {fixedAgentId ? (
+        <input name="agent_id" type="hidden" value={fixedAgentId} />
+      ) : defaultAgent ? (
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-xs font-medium text-muted-foreground">{t('agent')}</span>
+          <select
+            className={inputClasses}
+            defaultValue={defaultAgent.id}
+            name="agent_id"
+            required
+          >
+            {agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {t('agentOption', { name: agent.name, status: agent.status })}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-xs font-medium text-muted-foreground">{t('host')}</span>
         <input
           className={inputClasses}
+          defaultValue={defaultHost}
           name="host"
           required
           type="text"
@@ -65,18 +197,69 @@ export function LinkPrinterMachineForm({
         <span className="text-xs font-medium text-muted-foreground">{t('name')}</span>
         <input
           className={inputClasses}
+          defaultValue={defaultName}
           name="name"
           type="text"
         />
       </label>
-      <div>
-        <button
-          className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
-          type="submit"
+      {failure ? (
+        <div
+          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          role="alert"
         >
-          {t('submit')}
-        </button>
+          <p className="font-medium">{failureMessage(t, failure)}</p>
+          {failure.code ? (
+            <p className="mt-1 font-mono text-xs text-destructive/80">{failure.code}</p>
+          ) : null}
+        </div>
+      ) : null}
+      <div>
+        <Button disabled={busy} type="submit">
+          {busy ? <Loader2Icon className="animate-spin" /> : null}
+          {busy ? t('linking') : (submitLabel ?? t('submit'))}
+        </Button>
       </div>
     </form>
   )
+}
+
+type MessageTranslator = {
+  (key: string): string
+  has: (key: string) => boolean
+}
+
+function failureMessage(t: MessageTranslator, failure: LinkFailure) {
+  if (failure.code && t.has(`errors.${failure.code}`)) {
+    return t(`errors.${failure.code}`)
+  }
+  return failure.detail ?? failure.code ?? t('errors.link_failed')
+}
+
+function linkErrorCode(command: Command): string | null {
+  if (!command.result_json) {
+    return null
+  }
+  try {
+    const parsed: unknown = JSON.parse(command.result_json)
+    if (!parsed || typeof parsed !== 'object') {
+      return null
+    }
+    const record = parsed as Record<string, unknown>
+    return record.type === 'printer_link_error' &&
+      typeof record.error_code === 'string'
+      ? record.error_code
+      : null
+  } catch {
+    return null
+  }
+}
+
+async function fetchLinkCommand(tenantId: string, commandId: string): Promise<Command> {
+  const response = await fetch(
+    `/api/tenants/${apiIdSegment(tenantId, 'tenant_id')}/commands/${apiIdSegment(commandId, 'command_id')}`,
+  )
+  if (!response.ok) {
+    throw new Error(`Link command poll failed: ${response.status}`)
+  }
+  return (await response.json()) as Command
 }

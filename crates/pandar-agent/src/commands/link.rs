@@ -1,14 +1,24 @@
 use anyhow::{Context, anyhow};
+use rumqttc::{ConnectReturnCode, ConnectionError};
 use serde::Serialize;
 use tokio::sync::mpsc;
 
 use crate::{
     AgentConfig,
-    machine::{BambuMachineGateway, BambuPrinterEndpoint, discovery::DiscoveredPrinter},
+    machine::{
+        BambuMachineGateway, BambuPrinterEndpoint, discovery::DiscoveredPrinter,
+        mqtt::is_mqtt_report_idle_timeout,
+    },
     protocol::agent::v1::{AgentEvent, LinkPrinter},
 };
 
-use super::responses::{ack_event, failure_event, success_event_with_result};
+use super::responses::{ack_event, failure_event_with_result, success_event_with_result};
+
+const LINK_ERROR_UNSUPPORTED_TYPE: &str = "unsupported_printer_type";
+const LINK_ERROR_PRINTER_NOT_FOUND: &str = "printer_not_found";
+const LINK_ERROR_INVALID_ACCESS_CODE: &str = "invalid_access_code";
+const LINK_ERROR_PRINTER_UNREACHABLE: &str = "printer_unreachable";
+const LINK_ERROR_FAILED: &str = "link_failed";
 
 pub(super) async fn emit_link_printer_events<G>(
     config: &AgentConfig,
@@ -30,10 +40,11 @@ where
     let printer_type = command.printer_type.trim().to_owned();
     if printer_type != "BambuLab" {
         sender
-            .send(failure_event(
+            .send(link_failure_event(
                 config,
                 command_id,
                 format!("unsupported printer type {printer_type}"),
+                LINK_ERROR_UNSUPPORTED_TYPE,
             ))
             .await
             .context("queue link-printer unsupported type failure")?;
@@ -47,7 +58,12 @@ where
             Err(err) => {
                 let error = redact_link_error(gateway, &format!("{err:#}"), &access_code_for_error);
                 sender
-                    .send(failure_event(config, command_id, error))
+                    .send(link_failure_event(
+                        config,
+                        command_id,
+                        error,
+                        LINK_ERROR_PRINTER_NOT_FOUND,
+                    ))
                     .await
                     .context("queue link-printer discovery failure")?;
                 return Ok(());
@@ -71,6 +87,7 @@ where
                 .context("queue link-printer command success")?;
         }
         Err(err) => {
+            let error_code = link_failure_code(&err);
             let error = redact_link_error(gateway, &format!("{err:#}"), &endpoint.access_code);
             tracing::warn!(
                 serial = %endpoint.serial,
@@ -78,13 +95,51 @@ where
                 "runtime printer link failed"
             );
             sender
-                .send(failure_event(config, command_id, error))
+                .send(link_failure_event(config, command_id, error, error_code))
                 .await
                 .context("queue link-printer command failure")?;
         }
     }
 
     Ok(())
+}
+
+pub(super) fn link_failure_code(err: &anyhow::Error) -> &'static str {
+    for cause in err.chain() {
+        if let Some(error) = cause.downcast_ref::<ConnectionError>() {
+            return match error {
+                ConnectionError::ConnectionRefused(
+                    ConnectReturnCode::BadUserNamePassword | ConnectReturnCode::NotAuthorized,
+                ) => LINK_ERROR_INVALID_ACCESS_CODE,
+                _ => LINK_ERROR_PRINTER_UNREACHABLE,
+            };
+        }
+    }
+    if is_mqtt_report_idle_timeout(err) {
+        return LINK_ERROR_PRINTER_UNREACHABLE;
+    }
+    LINK_ERROR_FAILED
+}
+
+fn link_failure_event(
+    config: &AgentConfig,
+    command_id: &str,
+    error: String,
+    error_code: &'static str,
+) -> AgentEvent {
+    let result_json = serde_json::to_string(&PrinterLinkFailure {
+        kind: "printer_link_error",
+        error_code,
+    })
+    .expect("printer link failure result is serializable");
+    failure_event_with_result(config, command_id, error, result_json)
+}
+
+#[derive(Serialize)]
+struct PrinterLinkFailure<'a> {
+    #[serde(rename = "type")]
+    kind: &'a str,
+    error_code: &'a str,
 }
 
 #[derive(Serialize)]

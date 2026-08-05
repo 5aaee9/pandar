@@ -146,6 +146,13 @@ struct TestPrinterLinkResult {
     status: String,
 }
 
+#[derive(Debug, Deserialize, PartialEq)]
+struct TestPrinterLinkFailure {
+    #[serde(rename = "type")]
+    kind: String,
+    error_code: String,
+}
+
 #[derive(Debug, Default, Deserialize, PartialEq)]
 struct TestPrinterOperationResult {
     #[serde(rename = "type")]
@@ -189,6 +196,10 @@ struct TestMaterialPatchTray {
 }
 
 fn link_result(result_json: &str) -> TestPrinterLinkResult {
+    serde_json::from_str(result_json).unwrap()
+}
+
+fn link_failure(result_json: &str) -> TestPrinterLinkFailure {
     serde_json::from_str(result_json).unwrap()
 }
 

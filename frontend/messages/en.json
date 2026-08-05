@@ -674,6 +674,19 @@
     "accessCode": "Access code",
     "name": "Name",
     "submit": "Link printer",
+    "linking": "Linking…",
+    "linked": "Printer linked to the agent.",
+    "errors": {
+      "invalid_access_code": "The printer rejected the access code. Check the 8-digit access code on the printer screen or in Bambu Handy.",
+      "printer_not_found": "No printer found at this address. Check the IPv4 address and make sure the printer is on the same LAN as the agent.",
+      "printer_unreachable": "The printer could not be reached. Make sure it is online and LAN mode is enabled.",
+      "unsupported_printer_type": "This printer type is not supported.",
+      "link_failed": "The printer could not be linked.",
+      "link_timeout": "Timed out waiting for the agent to confirm the printer link. Check the agent connection and try again.",
+      "agent_not_connected": "The agent is not connected. Wait for it to come online, then try again.",
+      "agent_not_found": "The selected agent no longer exists. Refresh the page and try again.",
+      "bad_request": "Check the printer address and access code, then try again."
+    },
     "closeDialog": "Close"
   },
   "admin": {

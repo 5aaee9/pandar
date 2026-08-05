@@ -16,6 +16,25 @@
 
 ## Completed
 
+- Reworked the link-printer dialog into a confirmed in-place flow. The shared link form (Devices
+  dialog and discovery Adopt dialog) now keeps the dialog open while linking: the submit button
+  switches to a disabled spinner state, the browser polls the command every 2s (90s deadline)
+  through the existing same-origin command proxy, and the dialog only closes once the agent
+  confirms the link (command `succeeded`), followed by a success toast and React Query
+  invalidation of the devices/agents route data so the new machine appears immediately. Failures
+  stay in the dialog as a `role="alert"` panel with a localized message plus the machine-readable
+  error code: the Agent classifies link failures into stable codes (`invalid_access_code` from
+  MQTT connack `BadUserNamePassword`/`NotAuthorized`, `printer_not_found` for discovery misses,
+  `printer_unreachable` for transport/timeout errors, `unsupported_printer_type`, `link_failed`)
+  and reports them in a typed `printer_link_error` result JSON that survives Hub credential
+  redaction, while Hub dispatch rejections (`agent_not_connected`, `agent_not_found`,
+  `bad_request`) return as action state from the redirect-free `linkPrinter` server action. The
+  obsolete `discovery_command_id` redirect handoff is gone since the dialog no longer navigates.
+  Coverage: Agent classification unit tests plus end-to-end link command cases, a Hub redaction
+  test proving the error code JSON is preserved, form tests for the loading/success/failure/dispatch
+  states, and updated action/discovery/inventory suites; web lint, typecheck, 418 tests, production
+  build, and the full Rust nextest workspace run all pass.
+
 - Moved the dashboard's current-tenant selection out of the `?tenant=` query param into a
   `pandar.tenant` cookie. Server pages and the dashboard layout resolve the selected tenant from
   the cookie via `resolveSelectedTenant` (falling back to the first effective tenant), so SSR stays

@@ -5,6 +5,11 @@ export type MutationActionState =
   | { ok: false; error: string }
   | null;
 
+export type LinkPrinterActionState =
+  | { ok: true; commandId: string }
+  | { ok: false; error: string }
+  | null;
+
 export type SecretActionState =
   | {
       ok: true;

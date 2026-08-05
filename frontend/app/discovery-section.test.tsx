@@ -1,4 +1,5 @@
 import { NextIntlClientProvider } from "next-intl";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -20,7 +21,9 @@ vi.mock("./actions", () => ({
 function renderWithMessages(children: React.ReactNode) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
-      {children}
+      <QueryClientProvider client={new QueryClient()}>
+        {children}
+      </QueryClientProvider>
     </NextIntlClientProvider>,
   );
 }
@@ -173,7 +176,6 @@ describe("DiscoverySection", () => {
       tenant_id: tenant.id,
       agent_id: agent.id,
       type: "BambuLab",
-      discovery_command_id: "cmd-discovery",
       host: "192.0.2.10",
       name: "Garage P1S",
       access_code: "",

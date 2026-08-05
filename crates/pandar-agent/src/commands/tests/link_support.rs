@@ -87,6 +87,15 @@ impl LinkGateway {
         }
     }
 
+    pub(super) fn failure_with_error(access_code: &str, err: anyhow::Error) -> Self {
+        Self {
+            result: Arc::new(Mutex::new(
+                Err(err).context("validate runtime printer SERIAL123"),
+            )),
+            ..Self::failure(access_code)
+        }
+    }
+
     pub(super) async fn linked_endpoints(&self) -> Vec<BambuPrinterEndpoint> {
         self.linked_endpoints.lock().await.clone()
     }

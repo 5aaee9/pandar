@@ -58,6 +58,13 @@ struct RedactedLinkPrinterResult {
 }
 
 #[derive(Debug, Deserialize, PartialEq, Eq)]
+struct RedactedLinkPrinterFailure {
+    #[serde(rename = "type")]
+    kind: String,
+    error_code: String,
+}
+
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 struct RedactedNumericLinkPrinterResult {
     echoed: String,
     status: String,

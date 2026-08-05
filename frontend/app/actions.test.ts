@@ -100,9 +100,10 @@ describe("linkPrinter", () => {
     formData.set("access_code", "SECRET-LINK-CODE");
     formData.set("name", "Office X1C");
 
-    await expect(linkPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/agents?command=command-1",
-    );
+    await expect(linkPrinter(null, formData)).resolves.toEqual({
+      ok: true,
+      commandId: "command-1",
+    });
 
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/tenants/tenant-1/agents/agent-1/link-printer",
@@ -122,18 +123,28 @@ describe("linkPrinter", () => {
     expect(body.model).toBeUndefined();
   });
 
-  it("keeps the discovery context in the redirect when adopting", async () => {
+  it("returns the hub error code when the dispatch is rejected", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: "agent_not_connected" }), {
+            status: 409,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
     const formData = new FormData();
     formData.set("tenant_id", "tenant-1");
     formData.set("agent_id", "agent-1");
     formData.set("type", "BambuLab");
     formData.set("host", "192.0.2.10");
     formData.set("access_code", "SECRET-LINK-CODE");
-    formData.set("discovery_command_id", "discovery-1");
 
-    await expect(linkPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/agents?command=command-1&discovery=discovery-1",
-    );
+    await expect(linkPrinter(null, formData)).resolves.toEqual({
+      ok: false,
+      error: "agent_not_connected",
+    });
   });
 });
 

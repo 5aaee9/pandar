@@ -11,10 +11,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { inputClasses } from '@/lib/utils'
-import { linkPrinter } from './actions'
 import { isTerminalCommandStatus } from './command-status'
 import { EmptyState, SectionHeader, Tag } from './dashboard-ui'
+import { LinkPrinterMachineForm } from './link-printer-form'
 import type {
   Agent,
   Command,
@@ -166,7 +165,6 @@ function AdoptPrinterDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const t = useTranslations('discovery')
-  const tLink = useTranslations('linkPrinter')
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -179,58 +177,16 @@ function AdoptPrinterDialog({
                 {t('adoptDescription', { agent: agentName, host: target.host })}
               </DialogDescription>
             </DialogHeader>
-            <form
-              action={linkPrinter}
-              className="grid gap-3"
+            <LinkPrinterMachineForm
+              agents={[]}
+              defaultHost={target.host}
+              defaultName={target.name ?? ''}
+              fixedAgentId={command.agent_id}
               key={`${target.serial_number ?? 'unknown'}-${target.host}`}
-            >
-              <input name="tenant_id" type="hidden" value={tenant.id} />
-              <input name="agent_id" type="hidden" value={command.agent_id} />
-              <input name="type" type="hidden" value="BambuLab" />
-              <input
-                name="discovery_command_id"
-                type="hidden"
-                value={command.id}
-              />
-              <label className="grid gap-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {tLink('host')}
-                </span>
-                <input
-                  className={inputClasses}
-                  defaultValue={target.host}
-                  name="host"
-                  required
-                  type="text"
-                />
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {tLink('name')}
-                </span>
-                <input
-                  className={inputClasses}
-                  defaultValue={target.name ?? ''}
-                  name="name"
-                  type="text"
-                />
-              </label>
-              <label className="grid gap-1 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">
-                  {tLink('accessCode')}
-                </span>
-                <input
-                  autoComplete="off"
-                  className={inputClasses}
-                  name="access_code"
-                  required
-                  type="password"
-                />
-              </label>
-              <div>
-                <Button type="submit">{t('adoptSubmit')}</Button>
-              </div>
-            </form>
+              onLinked={() => onOpenChange(false)}
+              selectedTenant={tenant}
+              submitLabel={t('adoptSubmit')}
+            />
           </>
         ) : null}
       </DialogContent>

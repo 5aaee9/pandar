@@ -15,6 +15,7 @@ import {
 } from "./action-helpers";
 import { apiHeaders, requireAuth } from "./api-auth";
 import { apiIdSegment } from "./api-path";
+import type { LinkPrinterActionState } from "./action-state";
 
 export async function discoverPrinters(formData: FormData) {
   await requireAuth();
@@ -152,7 +153,10 @@ export async function diagnosePrinter(formData: FormData) {
   redirect(commandUrl(command.id));
 }
 
-export async function linkPrinter(formData: FormData) {
+export async function linkPrinter(
+  _previousState: LinkPrinterActionState,
+  formData: FormData,
+): Promise<LinkPrinterActionState> {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const agentId = stringField(formData, "agent_id");
@@ -166,15 +170,10 @@ export async function linkPrinter(formData: FormData) {
     },
   );
   if (!response.ok) {
-    redirect(agentsStatusUrl(await errorCode(response)));
+    return { ok: false, error: await errorCode(response) };
   }
   const command = (await response.json()) as { id: string };
-  redirect(
-    commandUrl(
-      command.id,
-      nullableField(formData, "discovery_command_id"),
-    ),
-  );
+  return { ok: true, commandId: command.id };
 }
 
 export async function controlPrinter(formData: FormData) {
