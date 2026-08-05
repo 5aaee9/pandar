@@ -24,6 +24,22 @@ struct PrinterSelectExtruderRequest {
 }
 
 #[derive(Serialize)]
+struct PrinterAmsStartDryingRequest<'a> {
+    action: &'static str,
+    ams_id: u32,
+    temperature_celsius: u16,
+    duration_hours: u16,
+    filament: &'a str,
+    rotate_tray: bool,
+}
+
+#[derive(Serialize)]
+struct PrinterAmsStopDryingRequest {
+    action: &'static str,
+    ams_id: u32,
+}
+
+#[derive(Serialize)]
 struct LinkPrinterRequest<'a> {
     #[serde(rename = "type")]
     printer_type: &'a str,
@@ -87,6 +103,27 @@ pub(super) fn printer_select_extruder_body(extruder_id: u32) -> Option<Value> {
     Some(value(PrinterSelectExtruderRequest {
         action: "select_extruder",
         extruder_id,
+    }))
+}
+
+pub(super) fn printer_ams_start_drying_body(
+    temperature_celsius: u16,
+    duration_hours: u16,
+) -> Option<Value> {
+    Some(value(PrinterAmsStartDryingRequest {
+        action: "ams_start_drying",
+        ams_id: 0,
+        temperature_celsius,
+        duration_hours,
+        filament: "PETG",
+        rotate_tray: true,
+    }))
+}
+
+pub(super) fn printer_ams_stop_drying_body() -> Option<Value> {
+    Some(value(PrinterAmsStopDryingRequest {
+        action: "ams_stop_drying",
+        ams_id: 0,
     }))
 }
 

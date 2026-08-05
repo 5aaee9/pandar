@@ -76,6 +76,16 @@ enum OperationAuditFields {
         external_id: Option<String>,
         extruder_id: Option<u32>,
     },
+    AmsDrying {
+        ams_id: u32,
+        temperature_celsius: u16,
+        duration_hours: u16,
+        filament: String,
+        rotate_tray: bool,
+    },
+    AmsUnit {
+        ams_id: u32,
+    },
     HolderCtrl {
         holder_action: u32,
     },
@@ -180,6 +190,20 @@ impl OperationAuditFields {
             PrinterOperationKind::NozzleHolderCtrl { action } => Self::HolderCtrl {
                 holder_action: *action,
             },
+            PrinterOperationKind::AmsStartDrying {
+                ams_id,
+                temperature_celsius,
+                duration_hours,
+                filament,
+                rotate_tray,
+            } => Self::AmsDrying {
+                ams_id: *ams_id,
+                temperature_celsius: *temperature_celsius,
+                duration_hours: *duration_hours,
+                filament: filament.clone(),
+                rotate_tray: *rotate_tray,
+            },
+            PrinterOperationKind::AmsStopDrying { ams_id } => Self::AmsUnit { ams_id: *ams_id },
             PrinterOperationKind::NozzleInfoConfirm { id }
             | PrinterOperationKind::HolderNozzleRefresh { id } => {
                 Self::RackNozzle { nozzle_id: *id }

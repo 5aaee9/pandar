@@ -57,6 +57,8 @@ export type PrinterMaterials = {
     humidity?: number | string | null;
     humidity_level?: number | string | null;
     temperature_celsius?: number | string | null;
+    dry_status?: number | string | null;
+    dry_time_minutes?: number | string | null;
     toolhead?: string | null;
     trays?: Array<{
       tray_id?: string;

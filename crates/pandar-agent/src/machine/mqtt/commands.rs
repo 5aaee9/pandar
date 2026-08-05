@@ -5,6 +5,7 @@ use pandar_core::{H2cAutoNozzleMappingEnvelope, H2cAutoNozzleMappingRequest};
 use serde::Serialize;
 use serde_json::{Number, Value};
 
+mod ams;
 mod axis;
 pub(super) mod payload;
 mod print_error;
@@ -12,6 +13,7 @@ mod project_file;
 mod rack;
 mod sequence;
 
+pub use ams::{AmsDryingCommand, AmsFilamentCommand, AmsSlotCommand};
 pub use axis::GcodeLineCommand;
 use payload::*;
 pub use print_error::{HandlePrintErrorCommand, PrintErrorAction};
@@ -63,20 +65,6 @@ pub struct SetNozzleTemperatureCommand {
 pub struct ChamberLightCommand {
     pub node: String,
     pub on: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AmsSlotCommand {
-    pub ams_id: u32,
-    pub slot_id: u32,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AmsFilamentCommand {
-    pub ams_id: u32,
-    pub slot_id: u32,
-    pub target: u32,
-    pub extruder_id: Option<u32>,
 }
 
 pub(crate) struct BambuMqttCommandPayload {
@@ -148,6 +136,8 @@ pub enum BambuMqttCommand {
     AmsRereadRfid(AmsSlotCommand),
     AmsLoadFilament(AmsFilamentCommand),
     AmsUnloadFilament(AmsFilamentCommand),
+    AmsStartDrying(AmsDryingCommand),
+    AmsStopDrying(u32),
     HandlePrintError(HandlePrintErrorCommand),
     GetAutoNozzleMapping(H2cAutoNozzleMappingRequest),
     NozzleHolderCtrl(u32),
@@ -185,9 +175,11 @@ impl BambuMqttCommand {
                 mode,
             } => axis::xyz_control_payload(*axis, *direction, *mode),
             Self::GcodeLine(command) => axis::gcode_line_payload(command),
-            Self::AmsRereadRfid(command) => ams_reread_rfid_payload(command),
-            Self::AmsLoadFilament(command) => ams_load_filament_payload(command),
-            Self::AmsUnloadFilament(command) => ams_unload_filament_payload(command),
+            Self::AmsRereadRfid(command) => ams::ams_reread_rfid_payload(command),
+            Self::AmsLoadFilament(command) => ams::ams_load_filament_payload(command),
+            Self::AmsUnloadFilament(command) => ams::ams_unload_filament_payload(command),
+            Self::AmsStartDrying(command) => ams::ams_start_drying_payload(command),
+            Self::AmsStopDrying(ams_id) => ams::ams_stop_drying_payload(*ams_id),
             Self::HandlePrintError(command) => print_error::print_error_payload(command),
             Self::GetAutoNozzleMapping(request) => BambuMqttCommandPayload::with_sequence(
                 payload::json_payload(H2cAutoNozzleMappingEnvelope {
@@ -207,7 +199,7 @@ impl BambuMqttCommand {
 }
 
 impl BambuMqttCommandPayload {
-    fn with_sequence(payload: Value, sequence_id: String) -> Self {
+    pub(super) fn with_sequence(payload: Value, sequence_id: String) -> Self {
         Self {
             payload,
             sequence_id: Some(sequence_id),
@@ -309,21 +301,6 @@ fn set_nozzle_temperature_payload(
     )
 }
 
-fn ams_reread_rfid_payload(command: &AmsSlotCommand) -> BambuMqttCommandPayload {
-    let sequence_id = next_studio_sequence_id();
-    BambuMqttCommandPayload::with_sequence(
-        json_payload(PrintPayload {
-            print: AmsSlotPayload {
-                command: "ams_get_rfid",
-                sequence_id: sequence_id.clone(),
-                ams_id: command.ams_id,
-                slot_id: command.slot_id,
-            },
-        }),
-        sequence_id,
-    )
-}
-
 pub(crate) fn chamber_light_commands_for_nodes<'a>(
     nodes: impl IntoIterator<Item = &'a str>,
     on: bool,
@@ -352,46 +329,6 @@ fn chamber_light_payload(node: &str, on: bool) -> BambuMqttCommandPayload {
                 loop_times: 1,
                 interval_time: 1000,
                 sequence_id: sequence_id.clone(),
-            },
-        }),
-        sequence_id,
-    )
-}
-
-fn ams_load_filament_payload(command: &AmsFilamentCommand) -> BambuMqttCommandPayload {
-    let sequence_id = next_studio_sequence_id();
-    BambuMqttCommandPayload::with_sequence(
-        json_payload(PrintPayload {
-            print: AmsChangeFilamentPayload {
-                command: "ams_change_filament",
-                sequence_id: sequence_id.clone(),
-                ams_id: command.ams_id,
-                slot_id: command.slot_id,
-                target: command.target,
-                curr_temp: -1,
-                tar_temp: -1,
-                extruder_id: command.extruder_id,
-            },
-        }),
-        sequence_id,
-    )
-}
-
-fn ams_unload_filament_payload(command: &AmsFilamentCommand) -> BambuMqttCommandPayload {
-    let _ = command.slot_id;
-    let _ = command.target;
-    let sequence_id = next_studio_sequence_id();
-    BambuMqttCommandPayload::with_sequence(
-        json_payload(PrintPayload {
-            print: AmsChangeFilamentPayload {
-                command: "ams_change_filament",
-                sequence_id: sequence_id.clone(),
-                ams_id: command.ams_id,
-                slot_id: 255,
-                target: 255,
-                curr_temp: 210,
-                tar_temp: 210,
-                extruder_id: None,
             },
         }),
         sequence_id,

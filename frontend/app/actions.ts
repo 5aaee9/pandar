@@ -192,6 +192,9 @@ export async function controlPrinter(formData: FormData) {
   const slotId = nullableField(formData, "slot_id");
   const globalTrayId = nullableField(formData, "global_tray_id");
   const externalId = nullableField(formData, "external_id");
+  const durationHours = nullableField(formData, "duration_hours");
+  const filament = nullableField(formData, "filament");
+  const rotateTray = nullableField(formData, "rotate_tray");
   const holderAction = nullableField(formData, "holder_action");
   const nozzleId = nullableField(formData, "nozzle_id");
   const extruderId = nullableField(formData, "extruder_id");
@@ -223,6 +226,11 @@ export async function controlPrinter(formData: FormData) {
       slot_id: slotId ? Number(slotId) : undefined,
       global_tray_id: globalTrayId ? Number(globalTrayId) : undefined,
       external_id: externalId || undefined,
+      duration_hours: durationHours ? Number(durationHours) : undefined,
+      filament: filament || undefined,
+      rotate_tray: rotateTray
+        ? rotateTray === "true" || rotateTray === "on"
+        : undefined,
       holder_action: holderAction ? Number(holderAction) : undefined,
       nozzle_id: nozzleId ? Number(nozzleId) : undefined,
       extruder_id: extruderId ? Number(extruderId) : undefined,

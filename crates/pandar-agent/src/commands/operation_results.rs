@@ -23,6 +23,8 @@ pub(super) fn printer_operation_action(operation: &MachinePrinterOperation) -> &
         MachinePrinterOperation::AmsRereadRfid { .. } => "ams_reread_rfid",
         MachinePrinterOperation::AmsLoadFilament { .. } => "ams_load_filament",
         MachinePrinterOperation::AmsUnloadFilament { .. } => "ams_unload_filament",
+        MachinePrinterOperation::AmsStartDrying { .. } => "ams_start_drying",
+        MachinePrinterOperation::AmsStopDrying { .. } => "ams_stop_drying",
         MachinePrinterOperation::GcodeLine { .. } => "gcode_line",
         MachinePrinterOperation::GetAutoNozzleMapping(_) => "get_auto_nozzle_mapping",
         MachinePrinterOperation::NozzleHolderCtrl { .. } => "nozzle_holder_ctrl",
@@ -112,6 +114,12 @@ struct OperationResultFields {
     holder_action: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     nozzle_id: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    duration_hours: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    filament: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rotate_tray: Option<bool>,
 }
 
 impl OperationResultFields {
@@ -171,6 +179,24 @@ impl OperationResultFields {
             MachinePrinterOperation::AmsRereadRfid { ams_id, slot_id } => Self {
                 ams_id: Some(*ams_id),
                 slot_id: Some(*slot_id),
+                ..Self::default()
+            },
+            MachinePrinterOperation::AmsStartDrying {
+                ams_id,
+                temperature_celsius,
+                duration_hours,
+                filament,
+                rotate_tray,
+            } => Self {
+                ams_id: Some(*ams_id),
+                temperature_celsius: Some(*temperature_celsius),
+                duration_hours: Some(*duration_hours),
+                filament: Some(filament.clone()),
+                rotate_tray: Some(*rotate_tray),
+                ..Self::default()
+            },
+            MachinePrinterOperation::AmsStopDrying { ams_id } => Self {
+                ams_id: Some(*ams_id),
                 ..Self::default()
             },
             MachinePrinterOperation::AmsLoadFilament {

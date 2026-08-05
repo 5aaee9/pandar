@@ -46,14 +46,15 @@ use crate::{
         runtime::test_support::TestRuntimeBambuMachineGateway,
     },
     protocol::agent::v1::{
-        AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation, Axis,
-        AxisMovement, DeviceFeature, DiagnosePrinter, DiscoverPrinters, GcodeLineOperation,
-        HolderNozzleRefreshOperation, HomeOperation, HubCommand, LinkPrinter, MoveAxesOperation,
-        NozzleHolderCtrlOperation, NozzleInfoConfirmOperation, PauseOperation,
-        PrinterOperation as ProtoPrinterOperation, RefreshPrinterMaterials, RefreshPrinters,
-        SelectExtruderOperation, SetBedTemperatureOperation, SetChamberLightOperation,
-        SetChamberTemperatureOperation, SetHotendTemperatureOperation, SetPrintSpeedOperation,
-        ToggleLightOperation, printer_operation,
+        AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsStartDryingOperation,
+        AmsStopDryingOperation, AmsUnloadFilamentOperation, Axis, AxisMovement, DeviceFeature,
+        DiagnosePrinter, DiscoverPrinters, GcodeLineOperation, HolderNozzleRefreshOperation,
+        HomeOperation, HubCommand, LinkPrinter, MoveAxesOperation, NozzleHolderCtrlOperation,
+        NozzleInfoConfirmOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
+        RefreshPrinterMaterials, RefreshPrinters, SelectExtruderOperation,
+        SetBedTemperatureOperation, SetChamberLightOperation, SetChamberTemperatureOperation,
+        SetHotendTemperatureOperation, SetPrintSpeedOperation, ToggleLightOperation,
+        printer_operation,
     },
 };
 
@@ -164,6 +165,9 @@ struct TestPrinterOperationResult {
     slot_id: Option<u32>,
     holder_action: Option<u32>,
     nozzle_id: Option<u32>,
+    duration_hours: Option<u16>,
+    filament: Option<String>,
+    rotate_tray: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, PartialEq)]

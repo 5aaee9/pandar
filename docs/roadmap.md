@@ -16,6 +16,23 @@
 
 ## Completed
 
+- Added AMS filament drying control end to end. The dashboard AMS unit card now offers a Dry
+  popover for AMS 2 Pro and AMS HT units (filament select from loaded trays, 45–85°C temperature,
+  1–24h duration, rotate-tray toggle) and switches to a live "Drying · remaining time" badge with a
+  Cancel action while the firmware reports an active cycle. Agent MQTT gains typed
+  `ams_filament_drying` payloads matching Bambu Studio's `DevFilaSystemCtrl` wire shape
+  (`mode: 1` start with `cooling_temp: 20`, zeroed `mode: 0` stop), new `AmsStartDrying` /
+  `AmsStopDrying` printer operations with 45–85°C / 1–24h validation at both the Hub boundary and
+  the Agent proto parser, and a materials refresh after dispatch so the UI state follows the
+  firmware push. Agent materials telemetry now extracts per-unit `dry_status` (Studio `info` bits
+  4–7) and `dry_time` remaining minutes into the patch document, which flows through the Hub's
+  generic JSON merge to `dry_status` / `dry_time_minutes` on dashboard AMS units without Hub schema
+  changes. New gRPC `AmsStartDryingOperation` / `AmsStopDryingOperation` fields 31/32 carry the
+  command, and Hub audit records the full drying parameter set. Regression coverage locks the MQTT
+  payload shapes against the Studio reference, info-bit/dry-time normalization, Agent proto
+  validation rejections, Hub route validation (400 on out-of-range temperature or duration), and
+  enqueued payload contents for both operations.
+
 - Fixed the Checks workflow audit failures on main. The npm production audit failed because the
   root security override pinned `postcss` to 8.5.20, inside the vulnerable `<=8.5.22` range of
   GHSA-fxqj-rqcc-2cmp; the pin is now 8.5.25, which clears all six moderate findings (postcss,

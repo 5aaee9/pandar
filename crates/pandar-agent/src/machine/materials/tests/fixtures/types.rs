@@ -26,6 +26,8 @@ pub(crate) struct TestAmsUnit {
     pub(crate) humidity: Option<f64>,
     pub(crate) humidity_level: Option<f64>,
     pub(crate) temperature_celsius: Option<f64>,
+    pub(crate) dry_status: Option<i64>,
+    pub(crate) dry_time_minutes: Option<f64>,
     pub(crate) toolhead: Option<String>,
 }
 

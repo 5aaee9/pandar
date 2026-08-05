@@ -24,10 +24,11 @@ pub(crate) use commands::chamber_light_commands_for_nodes;
 #[cfg(test)]
 pub(crate) use commands::next_studio_sequence_id_from;
 pub use commands::{
-    AmsFilamentCommand, AmsSlotCommand, BambuMqttCommand, BambuMqttTopics, GcodeLineCommand,
-    HandlePrintErrorCommand, MachineReportDiagnostic, MachineReportDiagnosticPayload,
-    PrintErrorAction, PrintReportProgress, PrintSpeed, ProjectFileAmsMapping2,
-    ProjectFileAmsMappingInfo, ProjectFileCommand, SetNozzleTemperatureCommand,
+    AmsDryingCommand, AmsFilamentCommand, AmsSlotCommand, BambuMqttCommand, BambuMqttTopics,
+    GcodeLineCommand, HandlePrintErrorCommand, MachineReportDiagnostic,
+    MachineReportDiagnosticPayload, PrintErrorAction, PrintReportProgress, PrintSpeed,
+    ProjectFileAmsMapping2, ProjectFileAmsMappingInfo, ProjectFileCommand,
+    SetNozzleTemperatureCommand,
 };
 pub(crate) use device_features::{feature_event, probe_device_features};
 #[cfg(test)]

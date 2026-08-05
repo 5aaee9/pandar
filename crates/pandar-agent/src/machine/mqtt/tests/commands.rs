@@ -56,6 +56,18 @@ fn studio_command_payloads_use_incrementing_studio_sequence_ids() {
             .payload(),
             "print",
         ),
+        (
+            BambuMqttCommand::AmsStartDrying(AmsDryingCommand {
+                ams_id: 0,
+                temperature_celsius: 55,
+                duration_hours: 8,
+                filament: "PLA".to_string(),
+                rotate_tray: false,
+            })
+            .payload(),
+            "print",
+        ),
+        (BambuMqttCommand::AmsStopDrying(0).payload(), "print"),
     ];
 
     let command_count = commands.len();
@@ -83,6 +95,56 @@ fn studio_sequence_id_wraps_before_leaving_studio_range() {
     let out_of_range = AtomicU32::new(30000);
     assert_eq!(next_studio_sequence_id_from(&out_of_range), "20000");
     assert_eq!(next_studio_sequence_id_from(&out_of_range), "20001");
+}
+
+#[test]
+fn ams_drying_payloads_match_bambu_studio_reference() {
+    let start = BambuMqttCommand::AmsStartDrying(AmsDryingCommand {
+        ams_id: 0,
+        temperature_celsius: 55,
+        duration_hours: 8,
+        filament: "PETG".to_string(),
+        rotate_tray: true,
+    })
+    .payload();
+    assert_eq!(
+        start,
+        serde_json::json!({
+            "print": {
+                "command": "ams_filament_drying",
+                "sequence_id": studio_sequence_id(&start, "print"),
+                "ams_id": 0,
+                "mode": 1,
+                "filament": "PETG",
+                "temp": 55,
+                "duration": 8,
+                "humidity": 0,
+                "rotate_tray": true,
+                "cooling_temp": 20,
+                "close_power_conflict": false,
+            }
+        })
+    );
+
+    let stop = BambuMqttCommand::AmsStopDrying(128).payload();
+    assert_eq!(
+        stop,
+        serde_json::json!({
+            "print": {
+                "command": "ams_filament_drying",
+                "sequence_id": studio_sequence_id(&stop, "print"),
+                "ams_id": 128,
+                "mode": 0,
+                "filament": "",
+                "temp": 0,
+                "duration": 0,
+                "humidity": 0,
+                "rotate_tray": false,
+                "cooling_temp": 0,
+                "close_power_conflict": false,
+            }
+        })
+    );
 }
 
 #[test]

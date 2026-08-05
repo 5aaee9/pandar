@@ -39,6 +39,10 @@ pub(super) struct AmsUnitPatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) temperature_celsius: Option<Number>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) dry_status: Option<Number>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) dry_time_minutes: Option<Number>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) toolhead: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(super) trays: Vec<MaterialTrayPatch>,

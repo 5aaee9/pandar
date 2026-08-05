@@ -2,7 +2,7 @@ use pandar_core::BambuDeviceFeatures;
 
 use super::{PrinterOperation, axis};
 use crate::machine::mqtt::{
-    AmsFilamentCommand, AmsSlotCommand, BambuMqttCommand, GcodeLineCommand,
+    AmsDryingCommand, AmsFilamentCommand, AmsSlotCommand, BambuMqttCommand, GcodeLineCommand,
     HandlePrintErrorCommand, PrintSpeed, SetNozzleTemperatureCommand,
 };
 
@@ -150,6 +150,20 @@ pub(super) fn mqtt_command_for_printer_operation_with_features(
             target: global_tray_id.unwrap_or(slot_id),
             extruder_id,
         })),
+        PrinterOperation::AmsStartDrying {
+            ams_id,
+            temperature_celsius,
+            duration_hours,
+            filament,
+            rotate_tray,
+        } => Ok(BambuMqttCommand::AmsStartDrying(AmsDryingCommand {
+            ams_id,
+            temperature_celsius,
+            duration_hours,
+            filament,
+            rotate_tray,
+        })),
+        PrinterOperation::AmsStopDrying { ams_id } => Ok(BambuMqttCommand::AmsStopDrying(ams_id)),
     }
 }
 

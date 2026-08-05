@@ -1,14 +1,14 @@
 use crate::{
     protocol::agent::v1::{
-        AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsUnloadFilamentOperation,
-        AutoNozzleMappingFilamentInfo, AutoNozzleMappingGroupInfo, AutoNozzleMappingNozzleInfo,
-        Axis, AxisMovement, GcodeLineOperation, GetAutoNozzleMappingOperation,
-        HandlePrintErrorOperation, HolderNozzleRefreshOperation, HomeOperation, MoveAxesOperation,
-        NozzleHolderCtrlOperation, NozzleInfoConfirmOperation, PauseOperation,
-        PrintErrorAction as ProtoPrintErrorAction, ResumeOperation, SelectExtruderOperation,
-        SetBedTemperatureOperation, SetChamberLightOperation, SetChamberTemperatureOperation,
-        SetHotendTemperatureOperation, SetPrintSpeedOperation, StopOperation, ToggleLightOperation,
-        printer_operation,
+        AmsLoadFilamentOperation, AmsRereadRfidOperation, AmsStartDryingOperation,
+        AmsStopDryingOperation, AmsUnloadFilamentOperation, AutoNozzleMappingFilamentInfo,
+        AutoNozzleMappingGroupInfo, AutoNozzleMappingNozzleInfo, Axis, AxisMovement,
+        GcodeLineOperation, GetAutoNozzleMappingOperation, HandlePrintErrorOperation,
+        HolderNozzleRefreshOperation, HomeOperation, MoveAxesOperation, NozzleHolderCtrlOperation,
+        NozzleInfoConfirmOperation, PauseOperation, PrintErrorAction as ProtoPrintErrorAction,
+        ResumeOperation, SelectExtruderOperation, SetBedTemperatureOperation,
+        SetChamberLightOperation, SetChamberTemperatureOperation, SetHotendTemperatureOperation,
+        SetPrintSpeedOperation, StopOperation, ToggleLightOperation, printer_operation,
     },
     repositories::{PrintErrorAction, PrinterAxis, PrinterAxisMovement, PrinterOperationKind},
 };
@@ -113,6 +113,22 @@ pub(super) fn proto_printer_operation(
             external_id: external_id.unwrap_or_default(),
             extruder_id,
         }),
+        PrinterOperationKind::AmsStartDrying {
+            ams_id,
+            temperature_celsius,
+            duration_hours,
+            filament,
+            rotate_tray,
+        } => printer_operation::Operation::AmsStartDrying(AmsStartDryingOperation {
+            ams_id,
+            temperature_celsius: temperature_celsius.into(),
+            duration_hours: duration_hours.into(),
+            filament,
+            rotate_tray,
+        }),
+        PrinterOperationKind::AmsStopDrying { ams_id } => {
+            printer_operation::Operation::AmsStopDrying(AmsStopDryingOperation { ams_id })
+        }
         PrinterOperationKind::GetAutoNozzleMapping { request } => {
             printer_operation::Operation::GetAutoNozzleMapping(GetAutoNozzleMappingOperation {
                 sequence_id: request.sequence_id,

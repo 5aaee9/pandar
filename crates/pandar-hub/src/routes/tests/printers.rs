@@ -8,7 +8,8 @@ use pandar_core::{AgentId, TenantId};
 use requests::{
     link_printer_body, link_printer_value, link_printer_with_model_value,
     link_printer_with_serial_number_value, link_printer_with_unexpected_field_body,
-    printer_ams_load_body, printer_select_extruder_body, update_printer_body,
+    printer_ams_load_body, printer_ams_start_drying_body, printer_ams_stop_drying_body,
+    printer_select_extruder_body, update_printer_body,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -116,6 +117,16 @@ enum PrinterOperation {
         global_tray_id: u32,
         extruder_id: u32,
     },
+    #[serde(rename = "ams_start_drying")]
+    AmsStartDrying {
+        ams_id: u32,
+        temperature_celsius: u16,
+        duration_hours: u16,
+        filament: String,
+        rotate_tray: bool,
+    },
+    #[serde(rename = "ams_stop_drying")]
+    AmsStopDrying { ams_id: u32 },
     #[serde(rename = "select_extruder")]
     SelectExtruder { extruder_id: u32 },
 }
@@ -767,6 +778,104 @@ async fn printer_control_enqueues_ams_slot_operation() {
             assert_eq!(extruder_id, 0);
         }
         other => panic!("expected ams_load_filament operation, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn printer_control_enqueues_ams_drying_operations() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        state.database(),
+        tenant_id,
+        agent_id,
+        Some("Bambu Lab P2S"),
+    )
+    .await
+    .unwrap();
+
+    let (status, body) = request_as(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls"),
+        printer_ams_start_drying_body(65, 8),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = decode::<CommandResponse>(body);
+    assert_eq!(body.kind, "printer_operation");
+    let payload: PrinterOperationPayload = serde_json::from_str(&body.payload_json).unwrap();
+    match payload.operation {
+        PrinterOperation::AmsStartDrying {
+            ams_id,
+            temperature_celsius,
+            duration_hours,
+            filament,
+            rotate_tray,
+        } => {
+            assert_eq!(ams_id, 0);
+            assert_eq!(temperature_celsius, 65);
+            assert_eq!(duration_hours, 8);
+            assert_eq!(filament, "PETG");
+            assert!(rotate_tray);
+        }
+        other => panic!("expected ams_start_drying operation, got {other:?}"),
+    }
+
+    let (status, body) = request_as(
+        app.clone(),
+        Method::POST,
+        &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls"),
+        printer_ams_stop_drying_body(),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = decode::<CommandResponse>(body);
+    let payload: PrinterOperationPayload = serde_json::from_str(&body.payload_json).unwrap();
+    match payload.operation {
+        PrinterOperation::AmsStopDrying { ams_id } => assert_eq!(ams_id, 0),
+        other => panic!("expected ams_stop_drying operation, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn printer_control_rejects_invalid_ams_drying_params() {
+    let state = state().await;
+    let app = router(state.clone());
+    let (tenant, agent, token) = tenant_and_agent(&state, app.clone()).await;
+    let tenant_id = TenantId::parse(&decode::<TenantResponse>(tenant).id).unwrap();
+    let agent_id = AgentId::parse(&decode::<AgentResponse>(agent).id).unwrap();
+    let printer_id = crate::repositories::test_helpers::insert_printer_fixture_with_model(
+        state.database(),
+        tenant_id,
+        agent_id,
+        Some("Bambu Lab P2S"),
+    )
+    .await
+    .unwrap();
+
+    for body in [
+        printer_ams_start_drying_body(30, 8),
+        printer_ams_start_drying_body(90, 8),
+        printer_ams_start_drying_body(65, 0),
+        printer_ams_start_drying_body(65, 48),
+    ] {
+        let (status, _) = request_as(
+            app.clone(),
+            Method::POST,
+            &format!("/api/v1/tenants/{tenant_id}/printers/{printer_id}/controls"),
+            body,
+            &token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 }
 

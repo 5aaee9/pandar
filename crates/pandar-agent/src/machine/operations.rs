@@ -75,6 +75,16 @@ pub enum PrinterOperation {
         external_id: Option<String>,
         extruder_id: Option<u32>,
     },
+    AmsStartDrying {
+        ams_id: u32,
+        temperature_celsius: u16,
+        duration_hours: u16,
+        filament: String,
+        rotate_tray: bool,
+    },
+    AmsStopDrying {
+        ams_id: u32,
+    },
     GcodeLine {
         param: String,
     },

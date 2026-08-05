@@ -114,12 +114,17 @@ fn normalize_ams_units(
                     .collect();
             }
 
+            let dry_status = parse_dry_status(unit.info.as_ref()).map(Number::from);
+            let dry_time_minutes = unit.dry_time.as_ref().and_then(normalized_number);
+
             (unit.humidity_raw.is_some()
                 || unit.humidity.is_some()
                 || unit.temperature_celsius.is_some()
                 || unit.temp.is_some()
                 || info.is_some()
                 || toolhead.is_some()
+                || dry_status.is_some()
+                || dry_time_minutes.is_some()
                 || !trays.is_empty()
                 || replace_trays)
                 .then_some(AmsUnitPatch {
@@ -133,6 +138,8 @@ fn normalize_ams_units(
                         .as_ref()
                         .or(unit.temp.as_ref())
                         .and_then(normalized_number),
+                    dry_status,
+                    dry_time_minutes,
                     toolhead,
                     trays,
                     replace_trays,

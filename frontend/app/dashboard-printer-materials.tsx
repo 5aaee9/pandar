@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { CheckCircle2Icon, DownloadIcon, DropletsIcon, RotateCwIcon, ThermometerIcon, UploadIcon } from 'lucide-react'
 
 import { controlPrinter } from './actions'
+import { DryingControl, type DryingProps, dryingProps } from './dashboard-printer-drying'
 import type { Printer } from './dashboard-types'
 import { mixedAmsLiteGlobalTrayId } from './material-tray-routing'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
@@ -35,6 +36,7 @@ export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
             toolhead={unit.toolhead}
             humidity={unit.humidity}
             temperature={unit.temperature_celsius}
+            drying={dryingProps(unit)}
             slots={(unit.trays ?? []).flatMap((tray) =>
               tray.exists === false
                 ? []
@@ -104,6 +106,7 @@ function MaterialUnitCard({
   toolhead,
   humidity,
   temperature,
+  drying,
   slots,
   active,
 }: {
@@ -112,6 +115,7 @@ function MaterialUnitCard({
   toolhead?: string | null
   humidity?: number | string | null
   temperature?: number | string | null
+  drying?: DryingProps | null
   slots: MaterialSlot[]
   active: ActiveMaterialTray
 }) {
@@ -135,6 +139,7 @@ function MaterialUnitCard({
               {formatTemperature(temperature)}
             </span>
           ) : null}
+          {drying ? <DryingControl drying={drying} printer={printer} /> : null}
         </div>
       </div>
       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
@@ -339,8 +344,9 @@ function stringValue(value: string | number | null | undefined) {
   return null
 }
 
-function parseOptionalInt(value?: string | null) {
-  if (!value) return null
+function parseOptionalInt(value?: string | number | null) {
+  if (value === undefined || value === null) return null
+  if (typeof value === 'string' && value.trim() === '') return null
   const parsed = Number(value)
   return Number.isInteger(parsed) ? parsed : null
 }

@@ -73,6 +73,14 @@ pub(super) fn parse_tray_exist_bits(value: Option<&ScalarValue>) -> Option<u64> 
     value?.parse_u64_or_hex()
 }
 
+// Studio DevFilaSystem.cpp: dry_status lives in info bits 4..=7.
+pub(super) fn parse_dry_status(value: Option<&ScalarValue>) -> Option<i64> {
+    let raw = normalized_string(value)?;
+    let parsed =
+        u64::from_str_radix(raw.trim_start_matches("0x").trim_start_matches("0X"), 16).ok()?;
+    Some(((parsed >> 4) & 0xF) as i64)
+}
+
 pub(super) fn parse_i64(value: &ScalarValue) -> Option<i64> {
     value.parse_i64()
 }

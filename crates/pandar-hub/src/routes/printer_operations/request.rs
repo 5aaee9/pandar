@@ -1,5 +1,6 @@
 use serde::Deserialize;
 
+mod ams;
 mod plugin;
 
 use super::{device_features, invalid_printer_control, request_field::RequestField};
@@ -35,6 +36,12 @@ pub(in crate::routes) struct PrinterOperationRequest {
     global_tray_id: RequestField<u32>,
     #[serde(default)]
     external_id: RequestField<String>,
+    #[serde(default)]
+    duration_hours: RequestField<u16>,
+    #[serde(default)]
+    filament: RequestField<String>,
+    #[serde(default)]
+    rotate_tray: RequestField<bool>,
     #[serde(default)]
     holder_action: RequestField<u32>,
     #[serde(default)]
@@ -95,6 +102,11 @@ impl PrinterOperationRequest {
         }
         if !self.no_native_fields() {
             return Err(invalid_printer_control());
+        }
+        if self.action.starts_with("ams_") {
+            return self
+                .into_ams_operation()
+                .map(TenantPrinterOperation::Queued);
         }
 
         let operation: Result<PrinterOperationKind, ApiError> = match self.action.as_str() {
@@ -172,6 +184,7 @@ impl PrinterOperationRequest {
                     && self.slot_id.is_missing()
                     && self.global_tray_id.is_missing()
                     && self.external_id.is_missing()
+                    && self.no_drying_fields()
                     && self.no_rack_fields()
                     && self.extruder_id.is_some() =>
             {
@@ -250,63 +263,6 @@ impl PrinterOperationRequest {
                     wait: self.wait.unwrap_or(false),
                 })
             }
-            "ams_reread_rfid"
-                if self.speed_mode.is_missing()
-                    && self.axes.is_missing()
-                    && self.movements.is_missing()
-                    && self.feedrate_mm_per_min.is_missing()
-                    && self.temperature_celsius.is_missing()
-                    && self.wait.is_missing()
-                    && self.ams_id.is_some()
-                    && self.slot_id.is_some()
-                    && self.global_tray_id.is_missing()
-                    && self.external_id.is_missing()
-                    && self.extruder_id.is_missing()
-                    && self.no_rack_fields() =>
-            {
-                Ok(PrinterOperationKind::AmsRereadRfid {
-                    ams_id: self.ams_id.expect("checked above"),
-                    slot_id: self.slot_id.expect("checked above"),
-                })
-            }
-            "ams_load_filament"
-                if self.speed_mode.is_missing()
-                    && self.axes.is_missing()
-                    && self.movements.is_missing()
-                    && self.feedrate_mm_per_min.is_missing()
-                    && self.temperature_celsius.is_missing()
-                    && self.wait.is_missing()
-                    && self.ams_id.is_some()
-                    && self.slot_id.is_some()
-                    && self.no_rack_fields() =>
-            {
-                Ok(PrinterOperationKind::AmsLoadFilament {
-                    ams_id: self.ams_id.expect("checked above"),
-                    slot_id: self.slot_id.expect("checked above"),
-                    global_tray_id: self.global_tray_id.into_option(),
-                    external_id: self.external_id.into_option(),
-                    extruder_id: self.extruder_id.into_option(),
-                })
-            }
-            "ams_unload_filament"
-                if self.speed_mode.is_missing()
-                    && self.axes.is_missing()
-                    && self.movements.is_missing()
-                    && self.feedrate_mm_per_min.is_missing()
-                    && self.temperature_celsius.is_missing()
-                    && self.wait.is_missing()
-                    && self.ams_id.is_some()
-                    && self.slot_id.is_some()
-                    && self.no_rack_fields() =>
-            {
-                Ok(PrinterOperationKind::AmsUnloadFilament {
-                    ams_id: self.ams_id.expect("checked above"),
-                    slot_id: self.slot_id.expect("checked above"),
-                    global_tray_id: self.global_tray_id.into_option(),
-                    external_id: self.external_id.into_option(),
-                    extruder_id: self.extruder_id.into_option(),
-                })
-            }
             _ => return Err(invalid_printer_control()),
         };
         let operation = operation?;
@@ -341,6 +297,13 @@ impl PrinterOperationRequest {
             && self.slot_id.is_missing()
             && self.global_tray_id.is_missing()
             && self.external_id.is_missing()
+            && self.no_drying_fields()
+    }
+
+    fn no_drying_fields(&self) -> bool {
+        self.duration_hours.is_missing()
+            && self.filament.is_missing()
+            && self.rotate_tray.is_missing()
     }
 
     pub(super) fn no_native_fields(&self) -> bool {

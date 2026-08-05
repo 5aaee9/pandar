@@ -119,6 +119,52 @@ async fn printer_operation_invalid_move_bounds_reject_ack_without_dispatch() {
 }
 
 #[tokio::test]
+async fn printer_operation_invalid_ams_drying_params_reject_ack_without_dispatch() {
+    let drying = |temperature_celsius: u32, duration_hours: u32| {
+        printer_operation_command(
+            uuid::Uuid::new_v4().to_string(),
+            "SERIAL1",
+            Some(printer_operation::Operation::AmsStartDrying(
+                AmsStartDryingOperation {
+                    ams_id: 0,
+                    temperature_celsius,
+                    duration_hours,
+                    filament: "PLA".to_owned(),
+                    rotate_tray: false,
+                },
+            )),
+        )
+    };
+    for (command, expected_error) in [
+        (drying(44, 8), "drying temperature"),
+        (drying(86, 8), "drying temperature"),
+        (drying(55, 0), "drying duration"),
+        (drying(55, 25), "drying duration"),
+    ] {
+        let config = test_config();
+        let command_id = command.command_id.clone();
+        let gateway = OperationGateway::default();
+        let (sender, mut receiver) = mpsc::channel(1);
+
+        handle_command_with_gateway(&config, &gateway, &sender, command)
+            .await
+            .unwrap();
+        drop(sender);
+
+        match receiver.recv().await.unwrap().event.unwrap() {
+            agent_event::Event::CommandAck(ack) => {
+                assert_eq!(ack.command_id, command_id);
+                assert!(!ack.accepted);
+                assert!(ack.error.contains(expected_error), "{}", ack.error);
+            }
+            other => panic!("expected command ack, got {other:?}"),
+        }
+        assert!(receiver.recv().await.is_none());
+        assert!(gateway.operations().await.is_empty());
+    }
+}
+
+#[tokio::test]
 async fn printer_operation_required_features_reject_unknown_duplicate_and_mismatched_semantics() {
     let home = || printer_operation::Operation::Home(HomeOperation { axes: Vec::new() });
     let modern_move = || {

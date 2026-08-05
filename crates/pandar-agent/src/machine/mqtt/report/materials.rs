@@ -69,6 +69,8 @@ pub(in crate::machine) struct AmsUnitReport {
     pub(in crate::machine) temperature_celsius: Option<ScalarValue>,
     #[serde(default)]
     pub(in crate::machine) temp: Option<ScalarValue>,
+    #[serde(default)]
+    pub(in crate::machine) dry_time: Option<ScalarValue>,
     #[serde(default, rename = "tray")]
     pub(in crate::machine) trays: Vec<MaterialSlotReport>,
 }

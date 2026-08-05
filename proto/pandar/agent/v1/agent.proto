@@ -265,7 +265,21 @@ message PrinterOperation {
     NozzleHolderCtrlOperation nozzle_holder_ctrl = 28;
     NozzleInfoConfirmOperation nozzle_info_confirm = 29;
     HolderNozzleRefreshOperation holder_nozzle_refresh = 30;
+    AmsStartDryingOperation ams_start_drying = 31;
+    AmsStopDryingOperation ams_stop_drying = 32;
   }
+}
+
+message AmsStartDryingOperation {
+  uint32 ams_id = 1;
+  uint32 temperature_celsius = 2;
+  uint32 duration_hours = 3;
+  string filament = 4;
+  bool rotate_tray = 5;
+}
+
+message AmsStopDryingOperation {
+  uint32 ams_id = 1;
 }
 
 // H2C nozzle-rack movement: 0 = centre (home), 1 = A top, 2 = B top.

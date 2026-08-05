@@ -76,6 +76,38 @@ fn humidity_raw_is_normalized_as_percent_and_humidity_as_level() {
 }
 
 #[test]
+fn ams_drying_state_is_normalized_from_info_bits_and_dry_time() {
+    // Studio DevFilaSystem.cpp: dry_status is info bits 4..=7 (2 = drying);
+    // dry_time is the remaining drying time in minutes.
+    let patch = normalize(serde_json::json!({
+        "print": {
+            "ams": {
+                "ams": [{
+                    "id": "0",
+                    "info": "10001123",
+                    "dry_time": 480,
+                    "tray": [{"id": "0"}]
+                }]
+            }
+        }
+    }))
+    .unwrap();
+
+    let unit = &patch.ams_units[0];
+    assert_eq!(unit.unit_kind.as_deref(), Some("ams_2_pro"));
+    assert_eq!(unit.dry_status, Some(2));
+    assert_eq!(unit.dry_time_minutes, Some(480.0));
+}
+
+#[test]
+fn ams_unit_without_drying_report_omits_drying_fields() {
+    let patch = normalize(humidity_raw_report()).unwrap();
+
+    assert_eq!(patch.ams_units[0].dry_status, None);
+    assert_eq!(patch.ams_units[0].dry_time_minutes, None);
+}
+
+#[test]
 fn dual_nozzle_report_defaults_two_ams_units_to_right_and_left_toolheads() {
     let patch = normalize(dual_nozzle_ams_report()).unwrap();
 

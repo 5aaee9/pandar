@@ -2,6 +2,7 @@ use anyhow::Context;
 use pandar_core::BambuDeviceFeature;
 use tokio::sync::mpsc;
 
+mod ams;
 mod h2c;
 
 use super::{
@@ -74,7 +75,7 @@ where
             )
         }) {
         Ok(dispatch_result) => {
-            if refresh_materials_after_operation(&operation) {
+            if ams::refresh_materials_after_operation(&operation) {
                 match gateway
                     .refresh_printer_materials(&command.serial_number, None)
                     .await
@@ -259,32 +260,13 @@ fn parse_printer_operation(
                 wait: operation.wait,
             })
         }
-        Some(printer_operation::Operation::AmsRereadRfid(operation)) => {
-            Ok(MachinePrinterOperation::AmsRereadRfid {
-                ams_id: operation.ams_id,
-                slot_id: operation.slot_id,
-            })
-        }
-        Some(printer_operation::Operation::AmsLoadFilament(operation)) => {
-            Ok(MachinePrinterOperation::AmsLoadFilament {
-                ams_id: operation.ams_id,
-                slot_id: operation.slot_id,
-                global_tray_id: Some(operation.global_tray_id),
-                external_id: (!operation.external_id.is_empty())
-                    .then(|| operation.external_id.clone()),
-                extruder_id: operation.extruder_id,
-            })
-        }
-        Some(printer_operation::Operation::AmsUnloadFilament(operation)) => {
-            Ok(MachinePrinterOperation::AmsUnloadFilament {
-                ams_id: operation.ams_id,
-                slot_id: operation.slot_id,
-                global_tray_id: Some(operation.global_tray_id),
-                external_id: (!operation.external_id.is_empty())
-                    .then(|| operation.external_id.clone()),
-                extruder_id: operation.extruder_id,
-            })
-        }
+        Some(
+            operation @ (printer_operation::Operation::AmsRereadRfid(_)
+            | printer_operation::Operation::AmsLoadFilament(_)
+            | printer_operation::Operation::AmsUnloadFilament(_)
+            | printer_operation::Operation::AmsStartDrying(_)
+            | printer_operation::Operation::AmsStopDrying(_)),
+        ) => ams::parse_ams_operation(operation),
         Some(printer_operation::Operation::HandlePrintError(operation)) => {
             let error_action = match ProtoPrintErrorAction::try_from(operation.error_action) {
                 Ok(ProtoPrintErrorAction::Resume) => MachinePrintErrorAction::Resume,
@@ -372,13 +354,4 @@ fn parse_printer_axis(axis: i32) -> anyhow::Result<MachinePrinterAxis> {
         Ok(Axis::Z) => Ok(MachinePrinterAxis::Z),
         Ok(Axis::Unspecified) | Err(_) => anyhow::bail!("invalid printer operation axis"),
     }
-}
-
-fn refresh_materials_after_operation(operation: &MachinePrinterOperation) -> bool {
-    matches!(
-        operation,
-        MachinePrinterOperation::AmsRereadRfid { .. }
-            | MachinePrinterOperation::AmsLoadFilament { .. }
-            | MachinePrinterOperation::AmsUnloadFilament { .. }
-    )
 }

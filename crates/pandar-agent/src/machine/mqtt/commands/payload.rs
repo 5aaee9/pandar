@@ -112,6 +112,21 @@ pub(super) struct AmsChangeFilamentPayload {
     pub(super) extruder_id: Option<u32>,
 }
 
+#[derive(Serialize)]
+pub(super) struct AmsFilamentDryingPayload<'a> {
+    pub(super) command: &'static str,
+    pub(super) sequence_id: String,
+    pub(super) ams_id: u32,
+    pub(super) mode: u8,
+    pub(super) filament: &'a str,
+    pub(super) temp: u16,
+    pub(super) duration: u16,
+    pub(super) humidity: u8,
+    pub(super) rotate_tray: bool,
+    pub(super) cooling_temp: u16,
+    pub(super) close_power_conflict: bool,
+}
+
 #[derive(Clone, Serialize)]
 pub(in crate::machine::mqtt) struct ProjectFilePayload {
     pub(in crate::machine::mqtt) print: ProjectFilePayloadPrint,

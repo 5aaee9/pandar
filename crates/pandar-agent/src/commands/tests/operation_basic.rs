@@ -234,6 +234,132 @@ async fn printer_operation_ams_unload_emits_material_snapshot_after_dispatch() {
 }
 
 #[tokio::test]
+async fn printer_operation_ams_start_drying_emits_result_with_drying_fields() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::with_materials(material_result("SERIAL1", None));
+    let (sender, mut receiver) = mpsc::channel(4);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_operation_command(
+            command_id.clone(),
+            "SERIAL1",
+            Some(printer_operation::Operation::AmsStartDrying(
+                AmsStartDryingOperation {
+                    ams_id: 0,
+                    temperature_celsius: 65,
+                    duration_hours: 8,
+                    filament: "PETG".to_owned(),
+                    rotate_tray: true,
+                },
+            )),
+        ),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_material_snapshot(receiver.recv().await.unwrap(), "SERIAL1", None);
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert_eq!(result.command_id, command_id);
+            assert!(result.success);
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "ams_start_drying".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    ams_id: Some(0),
+                    temperature_celsius: Some(65),
+                    duration_hours: Some(8),
+                    filament: Some("PETG".to_owned()),
+                    rotate_tray: Some(true),
+                    ..empty_operation_result()
+                }
+            );
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert!(receiver.recv().await.is_none());
+    assert_eq!(
+        gateway.operations().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::AmsStartDrying {
+                ams_id: 0,
+                temperature_celsius: 65,
+                duration_hours: 8,
+                filament: "PETG".to_owned(),
+                rotate_tray: true,
+            }
+        )]
+    );
+}
+
+#[tokio::test]
+async fn printer_operation_ams_stop_drying_emits_material_snapshot_after_dispatch() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::with_materials(material_result("SERIAL1", None));
+    let (sender, mut receiver) = mpsc::channel(4);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        printer_operation_command(
+            command_id.clone(),
+            "SERIAL1",
+            Some(printer_operation::Operation::AmsStopDrying(
+                AmsStopDryingOperation { ams_id: 0 },
+            )),
+        ),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    assert_material_snapshot(receiver.recv().await.unwrap(), "SERIAL1", None);
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert_eq!(result.command_id, command_id);
+            assert!(result.success);
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "ams_stop_drying".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    ams_id: Some(0),
+                    ..empty_operation_result()
+                }
+            );
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert!(receiver.recv().await.is_none());
+    assert_eq!(
+        gateway.operations().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::AmsStopDrying { ams_id: 0 }
+        )]
+    );
+}
+
+#[tokio::test]
 async fn printer_operation_unknown_serial_rejects_ack_without_dispatch() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
