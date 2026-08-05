@@ -2,6 +2,7 @@ import {
   getAuthForRequest,
   getTenantsForRequest,
   getIdentityForRequest,
+  getSelectedTenantId,
   resolveEffectiveTenants,
   resolveSelectedTenant,
 } from "../../dashboard-data";
@@ -9,13 +10,9 @@ import { DevicesPageClient } from "./devices-page-client";
 
 const configuredTenantId = process.env.APP_TENANT_ID;
 
-export default async function DevicesPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ tenant?: string | string[] }>;
-}) {
-  const [params, auth, identity, tenantsResult] = await Promise.all([
-    searchParams,
+export default async function DevicesPage() {
+  const [tenantId, auth, identity, tenantsResult] = await Promise.all([
+    getSelectedTenantId(),
     getAuthForRequest(),
     getIdentityForRequest(),
     getTenantsForRequest(),
@@ -27,7 +24,7 @@ export default async function DevicesPage({
     configuredTenantId,
     auth.provider,
   );
-  const selectedTenant = resolveSelectedTenant(params, effectiveTenants);
+  const selectedTenant = resolveSelectedTenant(tenantId, effectiveTenants);
 
   if (!selectedTenant) {
     return <div>No tenant selected</div>;

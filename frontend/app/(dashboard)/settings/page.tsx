@@ -3,6 +3,7 @@ import {
   getIdentityForRequest,
   getTenantsForRequest,
   getMembershipForRequest,
+  getSelectedTenantId,
   resolveEffectiveTenants,
   resolveSelectedTenant,
 } from "../../dashboard-data";
@@ -10,13 +11,9 @@ import { SettingsPageClient } from "./settings-page-client";
 
 const configuredTenantId = process.env.APP_TENANT_ID;
 
-export default async function SettingsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ tenant?: string | string[] }>;
-}) {
-  const [params, auth, identity, tenantsResult] = await Promise.all([
-    searchParams,
+export default async function SettingsPage() {
+  const [tenantId, auth, identity, tenantsResult] = await Promise.all([
+    getSelectedTenantId(),
     getAuthForRequest(),
     getIdentityForRequest(),
     getTenantsForRequest(),
@@ -28,7 +25,7 @@ export default async function SettingsPage({
     configuredTenantId,
     auth.provider,
   );
-  const selectedTenant = resolveSelectedTenant(params, effectiveTenants);
+  const selectedTenant = resolveSelectedTenant(tenantId, effectiveTenants);
 
   if (!selectedTenant) {
     return <div>No tenant selected</div>;

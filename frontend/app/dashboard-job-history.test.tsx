@@ -150,7 +150,7 @@ describe('JobHistory actions', () => {
       })
     })
     expect(onClearRedirect).toHaveBeenCalledWith(
-      '/jobs?tenant=tenant-1&status=jobs_cleared',
+      '/jobs?status=jobs_cleared',
     )
   })
 

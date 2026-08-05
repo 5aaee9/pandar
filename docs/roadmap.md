@@ -16,6 +16,19 @@
 
 ## Completed
 
+- Moved the dashboard's current-tenant selection out of the `?tenant=` query param into a
+  `pandar.tenant` cookie. Server pages and the dashboard layout resolve the selected tenant from
+  the cookie via `resolveSelectedTenant` (falling back to the first effective tenant), so SSR stays
+  correct with no hydration flicker; the sidebar tenant switcher is now a button that writes the
+  cookie and re-renders the current view, dropping transient `command`/`status` context that belongs
+  to the previous tenant. Server actions keep receiving their target tenant through hidden
+  `tenant_id` form fields, but their redirect URLs (`statusUrl`, `agentsStatusUrl`, `commandUrl`,
+  dispatch/job-history pushes) no longer carry `tenant`; `createTenantFromExternal` and
+  `acceptJoinLink` set the cookie to the new tenant before redirecting. Sidebar and settings/agent
+  navigation hrefs are tenant-free (`/agents`, `/agents/{id}/settings`), and the standalone
+  plugin/mobile sign-in flows intentionally keep their explicit tenant picker param. Web lint,
+  typecheck, 414 tests, and production build pass.
+
 - Added AMS filament drying control end to end. The dashboard AMS unit card now offers a Dry
   popover for AMS 2 Pro and AMS HT units (filament select from loaded trays, 45–85°C temperature,
   1–24h duration, rotate-tray toggle) and switches to a live "Drying · remaining time" badge with a

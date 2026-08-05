@@ -64,7 +64,7 @@ describe("discoverPrinters", () => {
     formData.set("timeout_seconds", "9");
 
     await expect(discoverPrinters(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/agents?tenant=tenant-1&command=command-1",
+      "NEXT_REDIRECT:/agents?command=command-1",
     );
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/tenants/tenant-1/agents/agent-1/discover-printers",
@@ -101,7 +101,7 @@ describe("linkPrinter", () => {
     formData.set("name", "Office X1C");
 
     await expect(linkPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/agents?tenant=tenant-1&command=command-1",
+      "NEXT_REDIRECT:/agents?command=command-1",
     );
 
     expect(fetch).toHaveBeenCalledWith(
@@ -132,7 +132,7 @@ describe("linkPrinter", () => {
     formData.set("discovery_command_id", "discovery-1");
 
     await expect(linkPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/agents?tenant=tenant-1&command=command-1&discovery=discovery-1",
+      "NEXT_REDIRECT:/agents?command=command-1&discovery=discovery-1",
     );
   });
 });
@@ -207,7 +207,7 @@ describe("updatePrinter", () => {
     formData.set("name", "Office A1 Updated");
 
     await expect(updatePrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_updated",
+      "NEXT_REDIRECT:/devices?status=printer_updated",
     );
 
     expect(fetch).toHaveBeenCalledWith(
@@ -245,7 +245,7 @@ describe("refreshPrinterMaterials", () => {
     formData.set("printer_id", "printer-1");
 
     await expect(refreshPrinterMaterials(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=materials_refresh_queued",
+      "NEXT_REDIRECT:/devices?status=materials_refresh_queued",
     );
 
     expect(fetch).toHaveBeenCalledWith(
@@ -297,7 +297,7 @@ describe("controlPrinter axis operations", () => {
       formData.set("feedrate_mm_per_min", String(feedrateMmPerMin));
 
       await expect(controlPrinter(formData)).rejects.toThrow(
-        "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_control_queued",
+        "NEXT_REDIRECT:/devices?status=printer_control_queued",
       );
 
       const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
@@ -316,7 +316,7 @@ describe("controlPrinter axis operations", () => {
     formData.set("action", "home");
 
     await expect(controlPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_control_queued",
+      "NEXT_REDIRECT:/devices?status=printer_control_queued",
     );
 
     const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
@@ -354,7 +354,7 @@ describe("controlPrinter AMS operations", () => {
     formData.set("external_id", "");
 
     await expect(controlPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_control_queued",
+      "NEXT_REDIRECT:/devices?status=printer_control_queued",
     );
 
     expect(fetch).toHaveBeenCalledWith(
@@ -383,7 +383,7 @@ describe("controlPrinter AMS operations", () => {
     formData.set("extruder_id", "1");
 
     await expect(controlPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_control_queued",
+      "NEXT_REDIRECT:/devices?status=printer_control_queued",
     );
 
     const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
@@ -404,7 +404,7 @@ describe("controlPrinter AMS operations", () => {
     formData.set("temperature_celsius", "75");
 
     await expect(controlPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_control_queued",
+      "NEXT_REDIRECT:/devices?status=printer_control_queued",
     );
 
     const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
@@ -423,7 +423,7 @@ describe("controlPrinter AMS operations", () => {
     formData.set("temperature_celsius", "45");
 
     await expect(controlPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_control_queued",
+      "NEXT_REDIRECT:/devices?status=printer_control_queued",
     );
 
     const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
@@ -442,7 +442,7 @@ describe("controlPrinter AMS operations", () => {
     formData.set("light_on", "true");
 
     await expect(controlPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_control_queued",
+      "NEXT_REDIRECT:/devices?status=printer_control_queued",
     );
 
     const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
@@ -475,7 +475,7 @@ describe("deletePrinter", () => {
     formData.set("printer_id", "printer-1");
 
     await expect(deletePrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=printer_deleted",
+      "NEXT_REDIRECT:/devices?status=printer_deleted",
     );
 
     expect(fetch).toHaveBeenCalledWith(
@@ -540,7 +540,7 @@ describe("job action redirects", () => {
       }
 
       await expect(action(formData)).rejects.toThrow(
-        `NEXT_REDIRECT:/jobs?tenant=tenant-1&status=${status}`,
+        `NEXT_REDIRECT:/jobs?status=${status}`,
       );
     },
   );
@@ -552,7 +552,7 @@ describe("job action redirects", () => {
     formData.set("return_to", "agents");
 
     await expect(refreshPrinters(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/agents?tenant=tenant-1&status=refresh_queued",
+      "NEXT_REDIRECT:/agents?status=refresh_queued",
     );
   });
 
@@ -562,7 +562,7 @@ describe("job action redirects", () => {
     formData.set("job_id", "job-1");
 
     await expect(retryDispatchJob(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?tenant=tenant-1&status=retry_queued",
+      "NEXT_REDIRECT:/devices?status=retry_queued",
     );
   });
 });
@@ -589,7 +589,7 @@ describe("revokeTenantToken", () => {
     formData.set("return_to", "settings");
 
     await expect(revokeTenantToken(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/settings?tenant=tenant-1&status=tenant_token_revoked",
+      "NEXT_REDIRECT:/settings?status=tenant_token_revoked",
     );
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/tenants/tenant-1/tenant-tokens/token-1",

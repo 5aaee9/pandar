@@ -3,13 +3,11 @@ import { useTranslations } from 'next-intl'
 
 import { FormattedDate } from '../components/formatted-date'
 import { StatusBadge } from './dashboard-ui'
-import type { Agent, Tenant } from './dashboard-types'
+import type { Agent } from './dashboard-types'
 
 export function AgentSettingsPanel({
-  selectedTenant,
   agent,
 }: {
-  selectedTenant: Tenant
   agent: Agent
 }) {
   const t = useTranslations('agentSettings')
@@ -18,7 +16,7 @@ export function AgentSettingsPanel({
     <div className="grid gap-4">
       <Link
         className="w-fit text-sm font-medium text-muted-foreground hover:text-foreground"
-        href={`/agents?tenant=${encodeURIComponent(selectedTenant.id)}`}
+        href="/agents"
       >
         {t('backToAgents')}
       </Link>

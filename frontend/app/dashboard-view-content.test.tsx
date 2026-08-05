@@ -180,10 +180,10 @@ describe("DashboardViewContent", () => {
 
     expect(
       screen.getByRole("link", { name: "Agents 1/1 connected" }),
-    ).toHaveAttribute("href", "/agents?tenant=t1");
+    ).toHaveAttribute("href", "/agents");
     expect(
       screen.getByRole("link", { name: "Active jobs 0 active" }),
-    ).toHaveAttribute("href", "/jobs?tenant=t1");
+    ).toHaveAttribute("href", "/jobs");
   });
 
   it("opens the dispatch form in a dialog from jobs", async () => {

@@ -105,7 +105,6 @@ function DevicesView({
           liveState={liveState}
           lastEventAt={lastEventAt}
           fleetEmpty={fleetEmpty}
-          tenantId={selectedTenant?.id}
         />
         <NeedsAttention
           items={attentionItems}

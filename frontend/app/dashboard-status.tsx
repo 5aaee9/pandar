@@ -163,7 +163,7 @@ function AttentionAction({
   const tAct = useTranslations('overview.action')
   const sectionHref = item.sectionId === 'printers'
     ? '#printers'
-    : dashboardSidebarHref('jobs', { tenant: tenant?.id })
+    : dashboardSidebarHref('jobs')
   if (!tenant) {
     return (
       <a href={sectionHref} className="text-xs font-medium text-primary hover:underline">

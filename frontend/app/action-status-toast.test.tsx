@@ -9,12 +9,18 @@ import { AppSidebar } from "../components/app-sidebar";
 import { SidebarProvider } from "../components/ui/sidebar";
 import { actionStatusTone, formatActionStatus } from "./action-status";
 import { ActionStatusToast } from "./action-status-toast";
-import type { DashboardQuery, DashboardView } from "./dashboard-shell";
+import type { DashboardView } from "./dashboard-shell";
 import type { AuthMetadata, Tenant } from "./dashboard-types";
 import { toast } from "sonner";
 
+const { pushMock, refreshMock } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  refreshMock: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ push: pushMock, refresh: refreshMock }),
+  usePathname: () => window.location.pathname,
 }));
 
 vi.mock("sonner", () => ({
@@ -51,6 +57,7 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   window.history.replaceState({}, "", "/");
+  document.cookie = "pandar.tenant=; path=/; max-age=0";
 });
 
 describe("action status toast helpers", () => {
@@ -139,10 +146,6 @@ const auth: AuthMetadata = {
 };
 
 function DashboardSidebarWithActionStatus({ actionStatus }: { actionStatus: string }) {
-  const query: DashboardQuery = {
-    tenant: "t1",
-    command: "cmd1",
-  };
   const view: DashboardView = "agents";
   return (
     <>
@@ -151,7 +154,6 @@ function DashboardSidebarWithActionStatus({ actionStatus }: { actionStatus: stri
         <AppSidebar
           activeView={view}
           auth={auth}
-          query={query}
           selectedTenant={tenants[0]}
           tenants={tenants}
         />
@@ -163,15 +165,14 @@ function DashboardSidebarWithActionStatus({ actionStatus }: { actionStatus: stri
 describe("action status navigation", () => {
   it("does not preserve action status when switching tenants", async () => {
     const user = userEvent.setup();
-    setUrl("/agents?tenant=t1&command=cmd1&status=refresh_queued");
+    setUrl("/agents?command=cmd1&status=refresh_queued");
 
     renderWithMessages(<DashboardSidebarWithActionStatus actionStatus="refresh_queued" />);
     await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
     await user.click(screen.getByRole("button", { name: "Select tenant access" }));
+    await user.click(screen.getByRole("button", { name: "Tenant Two" }));
 
-    expect(screen.getByRole("link", { name: "Tenant Two" })).toHaveAttribute(
-      "href",
-      "/agents?tenant=t2&command=cmd1",
-    );
+    expect(document.cookie).toContain("pandar.tenant=t2");
+    expect(pushMock).toHaveBeenCalledWith("/agents");
   });
 });

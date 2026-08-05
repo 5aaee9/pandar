@@ -32,7 +32,7 @@ function renderWithMessages(children: React.ReactNode) {
 describe('agent settings panel', () => {
   it('renders agent connection details without discovery controls', () => {
     renderWithMessages(
-      <AgentSettingsPanel agent={agent} selectedTenant={tenant} />,
+      <AgentSettingsPanel agent={agent} />,
     )
 
     expect(
@@ -41,7 +41,7 @@ describe('agent settings panel', () => {
     expect(screen.getByText('agent-1')).toBeVisible()
     expect(screen.getByRole('link', { name: '← Back to agents' })).toHaveAttribute(
       'href',
-      '/agents?tenant=tenant-1',
+      '/agents',
     )
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
     expect(

@@ -203,7 +203,7 @@ function AgentRow({
         <Link
           aria-label={t('settingsFor', { name: agent.name })}
           className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-[min(var(--radius-md),12px)] border border-border bg-background px-2.5 text-[0.8rem] font-medium whitespace-nowrap transition-colors duration-150 ease-out hover:bg-muted hover:text-foreground"
-          href={agentSettingsHref(selectedTenant.id, agent.id)}
+          href={agentSettingsHref(agent.id)}
         >
           {t('settings')}
         </Link>

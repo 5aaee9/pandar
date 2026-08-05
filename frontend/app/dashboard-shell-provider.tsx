@@ -6,7 +6,7 @@ import {
   useMemo,
   type ReactNode,
 } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 import type { Tenant } from "./dashboard-types";
 import type { DashboardView } from "./dashboard-shell";
@@ -14,8 +14,6 @@ import type { DashboardView } from "./dashboard-shell";
 export type DashboardShellContextValue = {
   shellView: DashboardView;
   shellTenant: Tenant | null;
-  shellCommand: string | null;
-  shellStatus: string | null;
 };
 
 const DashboardShellContext = createContext<DashboardShellContextValue | null>(
@@ -32,29 +30,20 @@ export function useDashboardShell() {
 
 export function DashboardShellProvider({
   children,
-  initialTenants,
+  selectedTenant,
 }: {
   children: ReactNode;
-  initialTenants: Tenant[];
+  selectedTenant: Tenant | null;
 }) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-
   const view = (pathname.split("/")[1] || "devices") as DashboardView;
-  const tenantParam = searchParams.get("tenant");
-  const shellTenant =
-    initialTenants.find((t) => t.id === tenantParam) ??
-    initialTenants[0] ??
-    null;
 
   const value = useMemo<DashboardShellContextValue>(
     () => ({
       shellView: view,
-      shellTenant,
-      shellCommand: searchParams.get("command"),
-      shellStatus: searchParams.get("status"),
+      shellTenant: selectedTenant,
     }),
-    [view, shellTenant, searchParams],
+    [view, selectedTenant],
   );
 
   return (

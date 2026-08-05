@@ -1,6 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import {
@@ -15,7 +16,16 @@ import {
 import type { MutationActionState, SecretActionState } from "./action-state";
 import { apiHeaders, requireAuth } from "./api-auth";
 import { apiIdSegment } from "./api-path";
+import { TENANT_COOKIE } from "./tenant-cookie";
 import type { Agent, JoinLink, Tenant, TenantToken } from "./dashboard-types";
+
+async function selectTenant(tenantId: string) {
+  (await cookies()).set(TENANT_COOKIE, tenantId, {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: "lax",
+  });
+}
 
 export async function createTenantToken(
   _previousState: SecretActionState,
@@ -68,7 +78,6 @@ export async function revokeTenantToken(formData: FormData) {
   redirect(
     statusUrlForForm(
       formData,
-      tenantId,
       response.ok ? "tenant_token_revoked" : await errorCode(response),
     ),
   );
@@ -114,11 +123,10 @@ export async function createTenantFromExternal(formData: FormData) {
     redirect(`/?status=${encodeURIComponent(await errorCode(response))}`);
   }
   const body = (await response.json()) as { tenant: Tenant };
+  await selectTenant(body.tenant.id);
   const { revalidatePath } = await import("next/cache");
   revalidatePath("/(dashboard)", "layout");
-  redirect(
-    `/?tenant=${encodeURIComponent(body.tenant.id)}&status=tenant_created`,
-  );
+  redirect("/?status=tenant_created");
 }
 
 export async function createJoinLink(
@@ -181,11 +189,10 @@ export async function acceptJoinLink(formData: FormData) {
     redirect(`/?status=${encodeURIComponent(await errorCode(response))}`);
   }
   const body = (await response.json()) as { tenant: Tenant };
+  await selectTenant(body.tenant.id);
   const { revalidatePath } = await import("next/cache");
   revalidatePath("/(dashboard)", "layout");
-  redirect(
-    `/?tenant=${encodeURIComponent(body.tenant.id)}&status=join_link_accepted`,
-  );
+  redirect("/?status=join_link_accepted");
 }
 
 export async function updateTenantUserRole(

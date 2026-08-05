@@ -9,7 +9,6 @@ export const DASHBOARD_VIEWS = [
 export type DashboardView = (typeof DASHBOARD_VIEWS)[number];
 
 export type DashboardQuery = {
-  tenant?: string;
   command?: string;
   status?: string;
 };
@@ -22,33 +21,16 @@ export function dashboardRootRedirectTarget(query: DashboardQuery) {
   return dashboardPath(query.command ? "agents" : "devices", query);
 }
 
-export function dashboardSidebarHref(
-  view: DashboardView,
-  query: DashboardQuery,
-) {
-  return dashboardPath(view, { tenant: query.tenant });
+export function dashboardSidebarHref(view: DashboardView) {
+  return `/${view}`;
 }
 
-export function dashboardTenantHref(
-  view: DashboardView,
-  tenant: string,
-  query: DashboardQuery,
-) {
-  return dashboardPath(view, {
-    tenant,
-    status: query.status,
-    command: view === "agents" ? query.command : undefined,
-  });
-}
-
-export function agentSettingsHref(tenantId: string, agentId: string) {
-  const params = new URLSearchParams({ tenant: tenantId });
-  return `/agents/${encodeURIComponent(agentId)}/settings?${params.toString()}`;
+export function agentSettingsHref(agentId: string) {
+  return `/agents/${encodeURIComponent(agentId)}/settings`;
 }
 
 function dashboardPath(view: DashboardView, query: DashboardQuery = {}) {
   const params = new URLSearchParams();
-  if (query.tenant) params.set("tenant", query.tenant);
   if (query.command) params.set("command", query.command);
   if (query.status) params.set("status", query.status);
   const suffix = params.toString();

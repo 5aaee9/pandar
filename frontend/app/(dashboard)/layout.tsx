@@ -1,11 +1,12 @@
-import { Suspense } from "react";
 import { redirect } from "next/navigation";
 
 import {
   getAuthForRequest,
   getIdentityForRequest,
   getTenantsForRequest,
+  getSelectedTenantId,
   resolveEffectiveTenants,
+  resolveSelectedTenant,
   dashboardSidebarDefaultOpen,
 } from "../dashboard-data";
 import { dashboardAuthRedirectTarget } from "../auth-redirect";
@@ -48,19 +49,21 @@ export default async function DashboardLayout({
     return <OnboardingPanel me={identity.me} />;
   }
 
+  const selectedTenant = resolveSelectedTenant(
+    await getSelectedTenantId(),
+    effectiveTenants,
+  );
   const sidebarDefaultOpen = await dashboardSidebarDefaultOpen();
 
   return (
-    <Suspense fallback={null}>
-      <DashboardShellProvider initialTenants={effectiveTenants}>
-        <DashboardShellLayout
-          sidebarDefaultOpen={sidebarDefaultOpen}
-          tenants={effectiveTenants}
-          auth={auth}
-        >
-          {children}
-        </DashboardShellLayout>
-      </DashboardShellProvider>
-    </Suspense>
+    <DashboardShellProvider selectedTenant={selectedTenant}>
+      <DashboardShellLayout
+        sidebarDefaultOpen={sidebarDefaultOpen}
+        tenants={effectiveTenants}
+        auth={auth}
+      >
+        {children}
+      </DashboardShellLayout>
+    </DashboardShellProvider>
   );
 }

@@ -17,7 +17,6 @@ export function FleetStatusStrip({
   topSeverity,
   liveState,
   fleetEmpty,
-  tenantId,
 }: {
   health: Health
   attentionCount: number
@@ -25,13 +24,11 @@ export function FleetStatusStrip({
   liveState: LiveState
   lastEventAt: string | null
   fleetEmpty: boolean
-  tenantId?: string
 }) {
   const t = useTranslations('overview.verdict')
   const tStat = useTranslations('overview.stat')
   const tAria = useTranslations('overview')
   const verdict = computeVerdict({ attentionCount, topSeverity, liveState, fleetEmpty }, t)
-  const dashboardQuery = { tenant: tenantId }
 
   return (
     <section
@@ -58,7 +55,7 @@ export function FleetStatusStrip({
             state={health.printersOnline < health.printersTotal ? 'warning' : 'success'}
           />
           <StatCell
-            href={fleetEmpty ? undefined : dashboardSidebarHref('agents', dashboardQuery)}
+            href={fleetEmpty ? undefined : dashboardSidebarHref('agents')}
             label={tStat('agents')}
             value={fleetEmpty ? tStat('dash') : tStat('agentsValue', { connected: health.agentsConnected, total: health.agentsTotal })}
             note={health.agentsTotal - health.agentsConnected > 0 ? tStat('agentsNote', { count: health.agentsTotal - health.agentsConnected }) : null}
@@ -66,7 +63,7 @@ export function FleetStatusStrip({
             state={health.agentsConnected < health.agentsTotal ? 'warning' : 'success'}
           />
           <StatCell
-            href={fleetEmpty ? undefined : dashboardSidebarHref('jobs', dashboardQuery)}
+            href={fleetEmpty ? undefined : dashboardSidebarHref('jobs')}
             label={tStat('activeJobs')}
             value={fleetEmpty ? tStat('dash') : tStat('activeJobsValue', { count: health.jobsActive })}
             note={health.jobsFailed > 0 ? tStat('activeJobsNote', { count: health.jobsFailed }) : null}

@@ -74,7 +74,7 @@ export function DispatchForm({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
       onRedirect(
-        `/jobs?tenant=${encodeURIComponent(selectedTenant!.id)}&status=${encodeURIComponent(
+        `/jobs?status=${encodeURIComponent(
           sourceJob ? 'reprint_queued' : 'job_created',
         )}`,
       )

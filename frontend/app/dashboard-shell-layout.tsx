@@ -21,7 +21,7 @@ export function DashboardShellLayout({
   tenants: Tenant[];
   auth: AuthMetadata;
 }) {
-  const { shellView, shellTenant, shellCommand, shellStatus } = useDashboardShell();
+  const { shellView, shellTenant } = useDashboardShell();
   const actionToast = useDashboardShellStore((state) => state.actionToast);
   const errorBanner = useDashboardShellStore((state) => state.errorBanner);
 
@@ -30,11 +30,6 @@ export function DashboardShellLayout({
       <AppSidebar
         activeView={shellView}
         auth={auth}
-        query={{
-          tenant: shellTenant?.id,
-          command: shellCommand ?? undefined,
-          status: shellStatus ?? undefined,
-        }}
         selectedTenant={shellTenant}
         tenants={tenants}
       />

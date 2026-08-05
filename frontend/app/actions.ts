@@ -37,7 +37,7 @@ export async function discoverPrinters(formData: FormData) {
   }
 
   const command = (await response.json()) as { id: string };
-  redirect(commandUrl(tenantId, command.id));
+  redirect(commandUrl(command.id));
 }
 
 export async function refreshPrinters(formData: FormData) {
@@ -51,7 +51,6 @@ export async function refreshPrinters(formData: FormData) {
   redirect(
     statusUrlForForm(
       formData,
-      tenantId,
       response.ok ? "refresh_queued" : await errorCode(response),
     ),
   );
@@ -67,7 +66,6 @@ export async function refreshPrinterMaterials(formData: FormData) {
   );
   redirect(
     statusUrl(
-      tenantId,
       response.ok ? "materials_refresh_queued" : await errorCode(response),
     ),
   );
@@ -86,7 +84,6 @@ export async function deletePrinter(formData: FormData) {
   );
   redirect(
     statusUrl(
-      tenantId,
       response.ok ? "printer_deleted" : await errorCode(response),
     ),
   );
@@ -109,9 +106,9 @@ export async function updatePrinter(formData: FormData) {
     },
   );
   if (!response.ok) {
-    redirect(statusUrl(tenantId, await errorCode(response)));
+    redirect(statusUrl(await errorCode(response)));
   }
-  redirect(statusUrl(tenantId, "printer_updated"));
+  redirect(statusUrl("printer_updated"));
 }
 
 export async function deleteAgent(formData: FormData) {
@@ -127,7 +124,6 @@ export async function deleteAgent(formData: FormData) {
   );
   redirect(
     agentsStatusUrl(
-      tenantId,
       response.ok ? "agent_deleted" : await errorCode(response),
     ),
   );
@@ -153,7 +149,7 @@ export async function diagnosePrinter(formData: FormData) {
   }
 
   const command = (await response.json()) as { id: string };
-  redirect(commandUrl(tenantId, command.id));
+  redirect(commandUrl(command.id));
 }
 
 export async function linkPrinter(formData: FormData) {
@@ -170,12 +166,11 @@ export async function linkPrinter(formData: FormData) {
     },
   );
   if (!response.ok) {
-    redirect(agentsStatusUrl(tenantId, await errorCode(response)));
+    redirect(agentsStatusUrl(await errorCode(response)));
   }
   const command = (await response.json()) as { id: string };
   redirect(
     commandUrl(
-      tenantId,
       command.id,
       nullableField(formData, "discovery_command_id"),
     ),
@@ -240,7 +235,6 @@ export async function controlPrinter(formData: FormData) {
   redirect(
     statusUrlForForm(
       formData,
-      tenantId,
       response.ok ? "printer_control_queued" : await errorCode(response),
     ),
   );
@@ -257,7 +251,7 @@ export async function createPluginTicket(formData: FormData) {
     },
   );
   if (!response.ok) {
-    redirect(statusUrl(tenantId, await errorCode(response)));
+    redirect(statusUrl(await errorCode(response)));
   }
   const body = (await response.json()) as {
     ticket: string;
@@ -283,7 +277,7 @@ export async function createMobileTicket(formData: FormData) {
     },
   );
   if (!response.ok) {
-    redirect(statusUrl(tenantId, await errorCode(response)));
+    redirect(statusUrl(await errorCode(response)));
   }
   const body = (await response.json()) as {
     ticket: string;

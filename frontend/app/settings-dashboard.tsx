@@ -163,13 +163,13 @@ export function SettingsDashboard(props: SettingsDashboardProps) {
             <div className="grid gap-4 border-t border-border p-4 sm:grid-cols-2">
               <WorkspaceLink
                 description={t("agentsDescription", { connected: connectedAgents, total: props.agents.length })}
-                href={dashboardSidebarHref("agents", { tenant: props.selectedTenant.id })}
+                href={dashboardSidebarHref("agents")}
                 icon={ServerCogIcon}
                 title={t("manageAgents")}
               />
               <WorkspaceLink
                 description={t("printersDescription", { online: onlinePrinters, total: props.printers.length })}
-                href={dashboardSidebarHref("devices", { tenant: props.selectedTenant.id })}
+                href={dashboardSidebarHref("devices")}
                 icon={MonitorCogIcon}
                 title={t("managePrinters")}
               />

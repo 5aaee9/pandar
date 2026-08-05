@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { usePathname, useRouter } from "next/navigation"
 import { useTranslations } from "next-intl"
 import {
   BotIcon,
@@ -18,11 +19,10 @@ import {
 import type { AuthMetadata, Tenant } from "@/app/dashboard-types"
 import {
   dashboardSidebarHref,
-  dashboardTenantHref,
   logoutHref,
-  type DashboardQuery,
   type DashboardView,
 } from "@/app/dashboard-shell"
+import { setTenantCookie } from "@/app/tenant-cookie"
 import {
   Sidebar,
   SidebarContent,
@@ -45,7 +45,6 @@ import {
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   activeView: DashboardView
   auth: AuthMetadata
-  query: DashboardQuery
   selectedTenant: Tenant | null
   tenants: Tenant[]
 }
@@ -64,7 +63,6 @@ const navItems: Array<{
 export function AppSidebar({
   activeView,
   auth,
-  query,
   selectedTenant,
   tenants,
   ...props
@@ -73,11 +71,25 @@ export function AppSidebar({
   const signOutHref = logoutHref(auth)
   const [tenantAccessOpen, setTenantAccessOpen] = React.useState(false)
   const { isMobile, setOpenMobile } = useSidebar()
+  const router = useRouter()
+  const pathname = usePathname()
 
   function closeTenantAccess() {
     setTenantAccessOpen(false)
     if (isMobile) {
       setOpenMobile(false)
+    }
+  }
+
+  function selectTenant(tenantId: string) {
+    setTenantCookie(tenantId)
+    closeTenantAccess()
+    // Drop transient query context (command/status): it belongs to the
+    // previously selected tenant.
+    if (window.location.search) {
+      router.push(pathname)
+    } else {
+      router.refresh()
     }
   }
 
@@ -130,19 +142,18 @@ export function AppSidebar({
                     tenants.map((tenant) => {
                       const isSelected = tenant.id === selectedTenant?.id
                       return (
-                        <Link
+                        <button
                           aria-current={isSelected ? "true" : undefined}
-                          className="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-foreground transition-colors duration-150 ease-out hover:bg-muted focus-visible:bg-muted"
-                          href={dashboardTenantHref(activeView, tenant.id, query)}
+                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-muted focus-visible:bg-muted"
                           key={tenant.id}
-                          onClick={closeTenantAccess}
-                          prefetch={false}
+                          onClick={() => selectTenant(tenant.id)}
+                          type="button"
                         >
                           <span className="flex size-5 items-center justify-center">
                             {isSelected ? <CheckIcon className="size-4" /> : null}
                           </span>
                           <span className="truncate">{tenant.display_name}</span>
-                        </Link>
+                        </button>
                       )
                     })
                   )}
@@ -168,7 +179,7 @@ export function AppSidebar({
                       render={
                         <Link
                           aria-current={isActive ? "page" : undefined}
-                          href={dashboardSidebarHref(item.view, query)}
+                          href={dashboardSidebarHref(item.view)}
                           prefetch={false}
                         >
                           <Icon />

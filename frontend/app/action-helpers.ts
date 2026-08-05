@@ -38,19 +38,11 @@ export async function errorCode(response: Response) {
   }
 }
 
-export function statusUrlForForm(
-  formData: FormData,
-  tenantId: string,
-  status: string,
-) {
-  return statusUrl(tenantId, status, stringField(formData, "return_to"));
+export function statusUrlForForm(formData: FormData, status: string) {
+  return statusUrl(status, stringField(formData, "return_to"));
 }
 
-export function statusUrl(
-  tenantId: string,
-  status: string,
-  returnTo?: string,
-) {
+export function statusUrl(status: string, returnTo?: string) {
   const view =
     returnTo === "jobs"
       ? "jobs"
@@ -59,19 +51,15 @@ export function statusUrl(
         : returnTo === "settings"
           ? "settings"
           : "devices";
-  return `/${view}?tenant=${encodeURIComponent(tenantId)}&status=${encodeURIComponent(status)}`;
+  return `/${view}?status=${encodeURIComponent(status)}`;
 }
 
-export function agentsStatusUrl(tenantId: string, status: string) {
-  return `/agents?tenant=${encodeURIComponent(tenantId)}&status=${encodeURIComponent(status)}`;
+export function agentsStatusUrl(status: string) {
+  return `/agents?status=${encodeURIComponent(status)}`;
 }
 
-export function commandUrl(
-  tenantId: string,
-  commandId: string,
-  discoveryId?: string | null,
-) {
-  const base = `/agents?tenant=${encodeURIComponent(tenantId)}&command=${encodeURIComponent(commandId)}`;
+export function commandUrl(commandId: string, discoveryId?: string | null) {
+  const base = `/agents?command=${encodeURIComponent(commandId)}`;
   return discoveryId
     ? `${base}&discovery=${encodeURIComponent(discoveryId)}`
     : base;

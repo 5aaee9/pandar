@@ -346,7 +346,7 @@ describe('JobHistory row actions', () => {
       )
     })
     expect(onDeleteRedirect).toHaveBeenCalledWith(
-      '/jobs?tenant=tenant-1&status=job_deleted',
+      '/jobs?status=job_deleted',
     )
   })
 

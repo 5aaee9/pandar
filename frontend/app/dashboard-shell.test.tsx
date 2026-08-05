@@ -16,15 +16,18 @@ import {
   agentSettingsHref,
   dashboardRootRedirectTarget,
   dashboardSidebarHref,
-  dashboardTenantHref,
   dashboardViewTitleKey,
   logoutHref,
-  type DashboardQuery,
 } from "./dashboard-shell";
 import type { AuthMetadata, Tenant } from "./dashboard-types";
 
+const { pushMock, refreshMock } = vi.hoisted(() => ({
+  pushMock: vi.fn(),
+  refreshMock: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ push: pushMock, refresh: refreshMock }),
   usePathname: () => window.location.pathname,
   useSearchParams: () => new URLSearchParams(window.location.search),
 }));
@@ -45,10 +48,6 @@ function renderWithMessages(children: React.ReactNode) {
       {children}
     </NextIntlClientProvider>,
   );
-}
-
-function preventNavigation(link: HTMLElement) {
-  link.addEventListener("click", (event) => event.preventDefault(), { once: true });
 }
 
 const tenants: Tenant[] = [
@@ -93,61 +92,25 @@ describe("dashboard shell helpers", () => {
     expect(dashboardRootRedirectTarget({})).toBe("/devices");
     expect(
       dashboardRootRedirectTarget({
-        tenant: "tenant 1",
         status: "job_created",
       }),
-    ).toBe("/devices?tenant=tenant+1&status=job_created");
+    ).toBe("/devices?status=job_created");
     expect(
       dashboardRootRedirectTarget({
-        tenant: "t1",
         command: "cmd1",
         status: "refresh_queued",
       }),
-    ).toBe("/agents?tenant=t1&command=cmd1&status=refresh_queued");
+    ).toBe("/agents?command=cmd1&status=refresh_queued");
 
-    expect(
-      dashboardSidebarHref("agents", {
-        tenant: "t1",
-        command: "cmd1",
-        status: "done",
-      }),
-    ).toBe("/agents?tenant=t1");
-    expect(
-      dashboardSidebarHref("jobs", {
-        tenant: "t1",
-        command: "cmd1",
-        status: "done",
-      }),
-    ).toBe("/jobs?tenant=t1");
-    expect(dashboardSidebarHref("users", {})).toBe("/users");
-    expect(agentSettingsHref("tenant 1", "agent/1")).toBe(
-      "/agents/agent%2F1/settings?tenant=tenant+1",
+    expect(dashboardSidebarHref("agents")).toBe("/agents");
+    expect(dashboardSidebarHref("jobs")).toBe("/jobs");
+    expect(dashboardSidebarHref("users")).toBe("/users");
+    expect(agentSettingsHref("agent/1")).toBe(
+      "/agents/agent%2F1/settings",
     );
-    expect(agentSettingsHref("t1", "a1")).toBe(
-      "/agents/a1/settings?tenant=t1",
+    expect(agentSettingsHref("a1")).toBe(
+      "/agents/a1/settings",
     );
-
-    expect(
-      dashboardTenantHref("agents", "t2", {
-        tenant: "t1",
-        command: "cmd1",
-        status: "done",
-      }),
-    ).toBe("/agents?tenant=t2&command=cmd1&status=done");
-    expect(
-      dashboardTenantHref("devices", "t2", {
-        tenant: "t1",
-        command: "cmd1",
-        status: "done",
-      }),
-    ).toBe("/devices?tenant=t2&status=done");
-    expect(
-      dashboardTenantHref("jobs", "t2", {
-        tenant: "t1",
-        command: "cmd1",
-        status: "done",
-      }),
-    ).toBe("/jobs?tenant=t2&status=done");
   });
 
   it("returns a logout href only when a provider sign-out URL exists", () => {
@@ -266,6 +229,8 @@ describe("AppSidebar", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    window.history.replaceState({}, "", "/");
+    document.cookie = "pandar.tenant=; path=/; max-age=0";
   });
 
   it("switches desktop sidebar state on the keyboard shortcut", () => {
@@ -300,12 +265,12 @@ describe("AppSidebar", () => {
   it("keeps tenant access available inside the mobile sidebar", async () => {
     const user = userEvent.setup();
     vi.stubGlobal("innerWidth", 500);
+    window.history.replaceState({}, "", "/devices");
     renderWithMessages(
       <SidebarProvider defaultOpen>
         <AppSidebar
           activeView="devices"
           auth={auth}
-          query={{ tenant: "t1" }}
           selectedTenant={tenants[0]}
           tenants={tenants}
         />
@@ -319,34 +284,25 @@ describe("AppSidebar", () => {
     );
 
     const menu = screen.getByRole("dialog", { name: "Tenant access" });
-    const tenantLink = within(menu).getByRole("link", { name: "Tenant Two" });
-    expect(tenantLink).toHaveAttribute(
-      "href",
-      "/devices?tenant=t2",
-    );
-    preventNavigation(tenantLink);
-    await user.click(tenantLink);
+    await user.click(within(menu).getByRole("button", { name: "Tenant Two" }));
 
+    expect(document.cookie).toContain("pandar.tenant=t2");
+    expect(refreshMock).toHaveBeenCalled();
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Tenant access" })).not.toBeInTheDocument();
       expect(screen.queryByRole("dialog", { name: "Dashboard" })).not.toBeInTheDocument();
     });
   });
 
-  it("switches tenant access while preserving the agents command context", async () => {
+  it("switches tenant via cookie and drops transient query context", async () => {
     const user = userEvent.setup();
-    const query: DashboardQuery = {
-      tenant: "t1",
-      command: "cmd1",
-      status: "done",
-    };
+    window.history.replaceState({}, "", "/agents?command=cmd1&status=done");
 
     renderWithMessages(
       <SidebarProvider>
         <AppSidebar
           activeView="agents"
           auth={auth}
-          query={query}
           selectedTenant={tenants[0]}
           tenants={tenants}
         />
@@ -359,17 +315,14 @@ describe("AppSidebar", () => {
 
     const menu = screen.getByRole("dialog", { name: "Tenant access" });
     expect(within(menu).getByText("Tenant access")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Tenant One" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Tenant One" })).toHaveAttribute(
       "aria-current",
       "true",
     );
-    const tenantLink = screen.getByRole("link", { name: "Tenant Two" });
-    expect(tenantLink).toHaveAttribute(
-      "href",
-      dashboardTenantHref("agents", "t2", query),
-    );
-    preventNavigation(tenantLink);
-    await user.click(tenantLink);
+    await user.click(screen.getByRole("button", { name: "Tenant Two" }));
+
+    expect(document.cookie).toContain("pandar.tenant=t2");
+    expect(pushMock).toHaveBeenCalledWith("/agents");
     await waitFor(() => {
       expect(trigger).toHaveAttribute("aria-expanded", "false");
       expect(screen.queryByRole("dialog", { name: "Tenant access" })).not.toBeInTheDocument();
@@ -383,7 +336,6 @@ describe("AppSidebar", () => {
         <AppSidebar
           activeView="devices"
           auth={auth}
-          query={{ tenant: "t1" }}
           selectedTenant={tenants[0]}
           tenants={tenants}
         />
@@ -395,20 +347,18 @@ describe("AppSidebar", () => {
       "collapsed",
     );
     await user.click(screen.getByRole("button", { name: "Select tenant access" }));
-    const tenantLink = screen.getByRole("link", { name: "Tenant Two" });
-    preventNavigation(tenantLink);
-    await user.click(tenantLink);
+    await user.click(screen.getByRole("button", { name: "Tenant Two" }));
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Tenant access" })).not.toBeInTheDocument();
     });
   });
 
-  it("wires route command and status context through the dashboard layout", async () => {
+  it("exposes the selected tenant through the dashboard layout", async () => {
     const user = userEvent.setup();
-    window.history.replaceState({}, "", "/agents?tenant=t1&command=cmd1&status=done");
+    window.history.replaceState({}, "", "/agents");
     renderWithMessages(
-      <DashboardShellProvider initialTenants={tenants}>
+      <DashboardShellProvider selectedTenant={tenants[0]}>
         <DashboardShellLayout
           auth={auth}
           sidebarDefaultOpen
@@ -420,10 +370,9 @@ describe("AppSidebar", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Select tenant access" }));
-    expect(screen.getByRole("link", { name: "Tenant Two" })).toHaveAttribute(
-      "href",
-      "/agents?tenant=t2&command=cmd1&status=done",
-    );
+    await user.click(screen.getByRole("button", { name: "Tenant Two" }));
+    expect(document.cookie).toContain("pandar.tenant=t2");
+    expect(refreshMock).toHaveBeenCalled();
   });
 
   it("renders a jobs navigation link", () => {
@@ -432,7 +381,6 @@ describe("AppSidebar", () => {
         <AppSidebar
           activeView="jobs"
           auth={auth}
-          query={{ tenant: "t1", command: "cmd1", status: "done" }}
           selectedTenant={tenants[0]}
           tenants={tenants}
         />
@@ -441,7 +389,7 @@ describe("AppSidebar", () => {
 
     expect(screen.getByRole("link", { name: "Jobs" })).toHaveAttribute(
       "href",
-      "/jobs?tenant=t1",
+      "/jobs",
     );
   });
 });

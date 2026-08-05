@@ -78,7 +78,7 @@ export function JobHistory({
       setClearOpen(false)
       queryClient.invalidateQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
       onClearRedirect(
-        `/jobs?tenant=${encodeURIComponent(selectedTenant!.id)}&status=jobs_cleared`,
+        `/jobs?status=jobs_cleared`,
       )
     },
     onError: (error: { status?: number }, _variables, context) => {
@@ -115,7 +115,7 @@ export function JobHistory({
       setDeleteTarget(null)
       queryClient.invalidateQueries({ queryKey: routeDataKeys.jobs(selectedTenant!.id) })
       onDeleteRedirect(
-        `/jobs?tenant=${encodeURIComponent(selectedTenant!.id)}&status=job_deleted`,
+        `/jobs?status=job_deleted`,
       )
     },
     onError: (_error, _jobId, context) => {

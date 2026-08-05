@@ -26,7 +26,6 @@ export async function retryDispatchJob(formData: FormData) {
   redirect(
     statusUrlForForm(
       formData,
-      tenantId,
       response.ok ? "retry_queued" : await errorCode(response),
     ),
   );
@@ -52,7 +51,6 @@ export async function retryDispatchJobs(formData: FormData) {
   redirect(
     statusUrlForForm(
       formData,
-      tenantId,
       allOk ? "retry_queued" : "retry_partial",
     ),
   );
@@ -78,7 +76,6 @@ export async function duplicateJob(formData: FormData) {
   redirect(
     statusUrlForForm(
       formData,
-      tenantId,
       response.ok ? "duplicate_queued" : await errorCode(response),
     ),
   );

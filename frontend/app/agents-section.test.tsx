@@ -96,7 +96,7 @@ describe("AgentsSection", () => {
     ).toBeEnabled();
     expect(
       within(onlineRow).getByRole("link", { name: "Settings for Online agent" }),
-    ).toHaveAttribute("href", "/agents/agent-online/settings?tenant=tenant-1");
+    ).toHaveAttribute("href", "/agents/agent-online/settings");
     expect(
       within(onlineRow).getByRole("button", { name: "Delete Online agent" }),
     ).toHaveAttribute("aria-disabled", "true");

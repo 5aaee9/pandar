@@ -3,6 +3,7 @@ import {
   getIdentityForRequest,
   getTenantsForRequest,
   getMembershipForRequest,
+  getSelectedTenantId,
   resolveEffectiveTenants,
   resolveSelectedTenant,
 } from "../../dashboard-data";
@@ -14,13 +15,13 @@ export default async function AgentsPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    tenant?: string | string[];
     command?: string | string[];
     discovery?: string | string[];
   }>;
 }) {
-  const [params, auth, identity, tenantsResult] = await Promise.all([
+  const [params, tenantId, auth, identity, tenantsResult] = await Promise.all([
     searchParams,
+    getSelectedTenantId(),
     getAuthForRequest(),
     getIdentityForRequest(),
     getTenantsForRequest(),
@@ -32,7 +33,7 @@ export default async function AgentsPage({
     configuredTenantId,
     auth.provider,
   );
-  const selectedTenant = resolveSelectedTenant(params, effectiveTenants);
+  const selectedTenant = resolveSelectedTenant(tenantId, effectiveTenants);
 
   if (!selectedTenant) {
     return <div>No tenant selected</div>;

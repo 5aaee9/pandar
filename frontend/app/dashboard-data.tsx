@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 
 import { apiHeaders, authSource } from "./api-auth";
 import { authProviderConfig } from "./auth-provider";
+import { TENANT_COOKIE } from "./tenant-cookie";
 import type {
   FetchResult,
   MeResponse,
@@ -84,16 +85,16 @@ export function resolveEffectiveTenants(
   return tenants;
 }
 
+export async function getSelectedTenantId() {
+  return (await cookies()).get(TENANT_COOKIE)?.value;
+}
+
 export function resolveSelectedTenant(
-  searchParams: { tenant?: string | string[] },
+  tenantId: string | undefined,
   effectiveTenants: Tenant[],
 ): Tenant | null {
-  const tenantParam = Array.isArray(searchParams.tenant)
-    ? searchParams.tenant[0]
-    : searchParams.tenant;
-
-  if (tenantParam) {
-    const found = effectiveTenants.find((t) => t.id === tenantParam);
+  if (tenantId) {
+    const found = effectiveTenants.find((t) => t.id === tenantId);
     if (found) {
       return found;
     }
@@ -104,7 +105,6 @@ export function resolveSelectedTenant(
 
 export type DashboardPageProps = {
   searchParams?: Promise<{
-    tenant?: string | string[];
     command?: string | string[];
     status?: string | string[];
   }>;

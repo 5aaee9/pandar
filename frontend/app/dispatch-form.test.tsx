@@ -192,7 +192,7 @@ describe("DispatchForm", () => {
     fireEvent.submit(form as HTMLFormElement);
 
     await waitFor(() =>
-      expect(onRedirect).toHaveBeenCalledWith("/jobs?tenant=tenant-1&status=job_created"),
+      expect(onRedirect).toHaveBeenCalledWith("/jobs?status=job_created"),
     );
   });
 
@@ -305,7 +305,7 @@ describe("DispatchForm", () => {
       ams_mapping2: [{ ams_id: 0, slot_id: 0 }],
     });
     expect(onRedirect).toHaveBeenCalledWith(
-      "/jobs?tenant=tenant-1&status=reprint_queued",
+      "/jobs?status=reprint_queued",
     );
   });
 

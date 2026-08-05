@@ -4,6 +4,7 @@ import {
   getAuthForRequest,
   getIdentityForRequest,
   getTenantsForRequest,
+  getSelectedTenantId,
   resolveEffectiveTenants,
   resolveSelectedTenant,
 } from '../../../../dashboard-data'
@@ -14,14 +15,12 @@ const configuredTenantId = process.env.APP_TENANT_ID
 
 export default async function AgentSettingsPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ agentId: string }>
-  searchParams: Promise<{ tenant?: string | string[] }>
 }) {
-  const [{ agentId }, query, auth, identity, tenantsResult] = await Promise.all([
+  const [{ agentId }, tenantId, auth, identity, tenantsResult] = await Promise.all([
     params,
-    searchParams,
+    getSelectedTenantId(),
     getAuthForRequest(),
     getIdentityForRequest(),
     getTenantsForRequest(),
@@ -32,7 +31,7 @@ export default async function AgentSettingsPage({
     configuredTenantId,
     auth.provider,
   )
-  const selectedTenant = resolveSelectedTenant(query, effectiveTenants)
+  const selectedTenant = resolveSelectedTenant(tenantId, effectiveTenants)
 
   if (!selectedTenant) {
     const t = await getTranslations('agents')

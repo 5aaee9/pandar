@@ -43,7 +43,7 @@ export function AgentSettingsPageClient({
 
   return (
     <QueryErrorBoundary>
-      <AgentSettingsPanel agent={data.agent} selectedTenant={selectedTenant} />
+      <AgentSettingsPanel agent={data.agent} />
     </QueryErrorBoundary>
   )
 }
