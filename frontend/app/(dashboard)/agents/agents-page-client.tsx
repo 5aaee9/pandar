@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 
+import { computeAttention, computeHealth, topSeverityOf } from "../../dashboard-attention";
 import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
 import { agentsRouteQuery } from "../../route-data";
@@ -50,6 +51,9 @@ export function AgentsPageClient({
       discoveryData: null,
     };
 
+  const health = computeHealth(agents, printers, []);
+  const attentionItems = computeAttention({ agents, printers, jobs: [], nowMs: 0 });
+
   return (
     <QueryErrorBoundary>
       <DashboardViewContent
@@ -59,16 +63,9 @@ export function AgentsPageClient({
       printers={printers}
       agents={agents}
       jobs={[]}
-      health={{
-        printersTotal: printers.length,
-        printersOnline: printers.filter((p) => p.status === "online").length,
-        agentsTotal: agents.length,
-        agentsConnected: agents.filter((a) => a.status === "online").length,
-        jobsActive: 0,
-        jobsFailed: 0,
-      }}
-      attentionItems={[]}
-      topSeverity={null}
+      health={health}
+      attentionItems={attentionItems}
+      topSeverity={topSeverityOf(attentionItems)}
       liveState="idle"
       lastEventAt={null}
       fleetEmpty={printers.length === 0}

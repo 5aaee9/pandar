@@ -223,6 +223,16 @@ export function computeAttention(args: {
   });
 }
 
+export function topSeverityOf(items: AttentionItem[]): Severity | null {
+  let top: Severity | null = null;
+  for (const item of items) {
+    if (top === null || SEVERITY_RANK[item.severity] < SEVERITY_RANK[top]) {
+      top = item.severity;
+    }
+  }
+  return top;
+}
+
 function agentName(agents: Agent[], id: string): string {
   return agents.find((agent) => agent.id === id)?.name ?? "Unknown agent";
 }

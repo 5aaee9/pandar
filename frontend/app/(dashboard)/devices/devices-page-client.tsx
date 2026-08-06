@@ -2,7 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { OFFLINE_PRINTER_STATUSES } from "../../dashboard-attention";
+import {
+  computeAttention,
+  computeHealth,
+  topSeverityOf,
+} from "../../dashboard-attention";
 import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
 import { devicesRouteQuery } from "../../route-data";
@@ -40,6 +44,8 @@ export function DevicesPageClient({
   }
 
   const { printers, agents, jobs } = data ?? { printers: [], agents: [], jobs: [] };
+  const health = computeHealth(agents, printers, jobs);
+  const attentionItems = computeAttention({ agents, printers, jobs, nowMs });
 
   return (
     <QueryErrorBoundary>
@@ -50,18 +56,9 @@ export function DevicesPageClient({
       printers={printers}
       agents={agents}
       jobs={jobs}
-      health={{
-        printersTotal: printers.length,
-        printersOnline: printers.filter(
-          (printer) => !OFFLINE_PRINTER_STATUSES.has(printer.status.toLowerCase()),
-        ).length,
-        agentsTotal: agents.length,
-        agentsConnected: agents.filter((a) => a.status === "online").length,
-        jobsActive: jobs.filter((j) => j.status === "running").length,
-        jobsFailed: jobs.filter((j) => j.status === "failed").length,
-      }}
-      attentionItems={[]}
-      topSeverity={null}
+      health={health}
+      attentionItems={attentionItems}
+      topSeverity={topSeverityOf(attentionItems)}
       liveState="idle"
       lastEventAt={null}
       fleetEmpty={printers.length === 0}
