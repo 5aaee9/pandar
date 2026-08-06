@@ -147,6 +147,7 @@ describe("DashboardViewContent", () => {
     auth,
     selectedTenant: tenant,
     membershipRole: "tenant_admin",
+    canAdmin: true,
     agents: [],
     printers: [],
     tenantTokens: [],
@@ -286,7 +287,7 @@ describe("DashboardViewContent", () => {
       "revoked-token",
     ]);
 
-    expect(screen.getByRole("heading", { name: "Make Pandar yours" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeVisible();
     expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeVisible();
     expect(
       screen.queryByRole("dialog", { name: "Create tenant token" }),

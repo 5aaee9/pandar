@@ -35,7 +35,7 @@ export function DashboardShellLayout({
       />
       <SidebarInset>
         <DashboardShellHeader view={shellView} />
-        <main className="flex-1 overflow-y-auto p-4" id="main-content">
+        <main className="flex-1 p-4" id="main-content">
           {errorBanner ? (
             <div
               className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive"

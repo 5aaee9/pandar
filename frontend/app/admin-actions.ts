@@ -195,6 +195,31 @@ export async function acceptJoinLink(formData: FormData) {
   redirect("/?status=join_link_accepted");
 }
 
+export async function updateTenantDisplayName(
+  _previousState: MutationActionState,
+  formData: FormData,
+): Promise<MutationActionState> {
+  await requireAuth();
+  const tenantId = stringField(formData, "tenant_id");
+  const displayName = stringField(formData, "display_name").trim();
+  if (!displayName) {
+    return { ok: false, error: "bad_request" };
+  }
+  const response = await fetch(
+    `${apiUrl}/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}`,
+    {
+      method: "PATCH",
+      headers: await apiHeaders("application/json"),
+      body: JSON.stringify({ display_name: displayName }),
+    },
+  );
+  if (!response.ok) {
+    return { ok: false, error: await errorCode(response) };
+  }
+  refresh();
+  return { ok: true };
+}
+
 export async function updateTenantUserRole(
   _previousState: MutationActionState,
   formData: FormData,

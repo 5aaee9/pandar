@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -26,7 +26,10 @@ const tenant: Tenant = {
   created_at: "2026-06-30T00:00:00Z",
 };
 
-function renderSettings(membership: { role: string | null; error: string | null }) {
+function renderSettings(
+  membership: { role: string | null; error: string | null },
+  authMetadata: AuthMetadata = auth,
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -34,7 +37,7 @@ function renderSettings(membership: { role: string | null; error: string | null 
     <QueryClientProvider client={queryClient}>
       <NextIntlClientProvider locale="en" messages={en}>
         <SettingsPageClient
-          auth={auth}
+          auth={authMetadata}
           membership={membership}
           selectedTenant={tenant}
         />
@@ -58,8 +61,13 @@ function stubWorkspaceFetch() {
   return fetchMock;
 }
 
-function activeTokenMetric() {
-  return screen.getByText("Active tokens").closest("div")!;
+function expectNoAdminRequests(fetchMock: ReturnType<typeof stubWorkspaceFetch>) {
+  expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("tenant-tokens"),
+      expect.stringContaining("audit-events"),
+    ]),
+  );
 }
 
 describe("SettingsPageClient authorization states", () => {
@@ -72,20 +80,17 @@ describe("SettingsPageClient authorization states", () => {
     renderSettings({ role: null, error: "membership request failed" });
 
     expect(
-      await screen.findByRole("heading", { name: "Make Pandar yours" }),
+      await screen.findByRole("heading", { name: "Settings" }),
     ).toBeVisible();
     expect(screen.getByText("Role unavailable")).toBeVisible();
     expect(
       screen.getByText("Security settings could not be loaded"),
     ).toBeVisible();
-    expect(within(activeTokenMetric()).getByText("—")).toBeVisible();
+    expect(
+      screen.queryByRole("textbox", { name: "Workspace name" }),
+    ).not.toBeInTheDocument();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-    expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toEqual(
-      expect.arrayContaining([
-        expect.stringContaining("tenant-tokens"),
-        expect.stringContaining("audit-events"),
-      ]),
-    );
+    expectNoAdminRequests(fetchMock);
   });
 
   it("shows restricted administration without requesting protected data", async () => {
@@ -94,7 +99,19 @@ describe("SettingsPageClient authorization states", () => {
 
     expect(await screen.findByText("Viewer")).toBeVisible();
     expect(screen.getByText("Administrator access required")).toBeVisible();
-    expect(within(activeTokenMetric()).getByText("—")).toBeVisible();
+    expect(
+      screen.queryByRole("textbox", { name: "Workspace name" }),
+    ).not.toBeInTheDocument();
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expectNoAdminRequests(fetchMock);
+  });
+
+  it("offers the rename form to workspace administrators", async () => {
+    stubWorkspaceFetch();
+    renderSettings({ role: "tenant_admin", error: null });
+
+    expect(
+      await screen.findByRole("textbox", { name: "Workspace name" }),
+    ).toHaveValue("Maker Lab");
   });
 });

@@ -67,6 +67,28 @@ impl TenantRepository {
             .transpose()
     }
 
+    pub async fn update_display_name(
+        &self,
+        tenant_id: TenantId,
+        display_name: impl Into<String>,
+    ) -> RepositoryResult<(Tenant, String)> {
+        let model = tenants::Entity::find_by_id(tenant_id.to_string())
+            .one(&self.database.sea_orm_connection())
+            .await
+            .context("failed to get tenant before rename")?
+            .ok_or(RepositoryError::MissingTenant)?;
+        let previous_display_name = model.display_name.clone();
+
+        let mut active = tenants::ActiveModel::from(model);
+        active.display_name = Set(display_name.into());
+        let updated = active
+            .update(&self.database.sea_orm_connection())
+            .await
+            .context("failed to rename tenant")?;
+
+        Ok((tenant_from_model(updated)?, previous_display_name))
+    }
+
     pub async fn count(&self) -> RepositoryResult<i64> {
         let count = tenants::Entity::find()
             .count(&self.database.sea_orm_connection())

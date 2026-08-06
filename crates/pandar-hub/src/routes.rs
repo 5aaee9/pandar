@@ -32,6 +32,7 @@ mod printers;
 mod provisioning;
 mod status;
 mod tenant_tokens;
+mod tenants;
 
 pub fn router(state: AppState) -> Router {
     let default_body_limit = 64 * 1024;
@@ -51,6 +52,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/v1/tenants",
             get(admin::list_tenants).post(admin::create_tenant),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}",
+            axum::routing::patch(tenants::update_tenant),
         )
         .route(
             "/api/v1/bootstrap/tenant-admin",

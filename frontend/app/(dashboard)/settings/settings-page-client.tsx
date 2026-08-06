@@ -78,6 +78,7 @@ export function SettingsPageClient({
         agents={workspace.agents}
         auditEvents={adminQuery.data?.auditEvents ?? []}
         auth={auth}
+        canAdmin={canAdmin}
         membershipRole={membership.role}
         nowMs={nowMs}
         printers={workspace.printers}
@@ -90,13 +91,16 @@ export function SettingsPageClient({
 
 function SettingsLoading() {
   return (
-    <div className="mx-auto max-w-6xl animate-pulse space-y-6">
-      <div className="h-40 rounded-2xl bg-muted" />
-      <div className="grid gap-6 lg:grid-cols-[12rem_minmax(0,1fr)]">
-        <div className="h-44 rounded-xl bg-muted/70" />
+    <div className="mx-auto max-w-5xl animate-pulse">
+      <div className="space-y-2 pb-6">
+        <div className="h-8 w-40 rounded-lg bg-muted" />
+        <div className="h-4 w-72 rounded-lg bg-muted/70" />
+      </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
+        <div className="hidden h-44 rounded-xl bg-muted/70 lg:block" />
         <div className="space-y-6">
-          <div className="h-48 rounded-xl bg-muted" />
           <div className="h-64 rounded-xl bg-muted" />
+          <div className="h-40 rounded-xl bg-muted" />
         </div>
       </div>
     </div>

@@ -16,6 +16,25 @@
 
 ## Completed
 
+- Rebuilt the dashboard Settings page around a compact header plus a sticky scrollspy section
+  navigation (Workspace, Appearance, Access & security, Account) instead of the metric hero with
+  passive anchor links: `useScrollSpy` tracks the current section against the sticky-header offset
+  with a last-section-dominance rule for short pages, and removing the never-scrolling
+  `overflow-y-auto` trap on the dashboard `<main>` lets the section nav actually stick while the
+  window scrolls. Workspaces can now be renamed in place by tenant administrators through a new
+  audited `PATCH /api/v1/tenants/{tenant_id}` Hub endpoint (admin users or no-auth only, tenant
+  tokens rejected, empty names rejected, `tenant.rename` audit metadata carries previous and new
+  display names, backend-neutral SeaORM update works on SQLite and PostgreSQL); the form saves
+  through a server action with `refresh()` so the sidebar, subtitle, and form state update
+  immediately, shows inline translated errors, and toasts on success. Non-admin roles see the
+  workspace name as a read-only fact and keep the restricted/error access-section states; token
+  management, agent enrollment, and audit panels are reused unchanged. Workspace facts (slug,
+  created, ID, auth provider) are shown directly instead of behind a disclosure. Coverage: Hub
+  route tests for rename success/audit/empty-name/viewer/token rejection, rename-form interaction
+  tests, and rewritten settings authorization-state tests; Rust workspace Nextest 1,956 pass,
+  web lint/typecheck/422 tests pass, and the rebuilt page was verified in a real browser against a
+  live no-auth Hub (scrollspy, sticky nav, rename round-trip, audit event).
+
 - Reworked the link-printer dialog into a confirmed in-place flow. The shared link form (Devices
   dialog and discovery Adopt dialog) now keeps the dialog open while linking: the submit button
   switches to a disabled spinner state, the browser polls the command every 2s (90s deadline)

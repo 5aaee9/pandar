@@ -399,6 +399,7 @@ describe("SettingsView", () => {
     auth,
     selectedTenant: tenants[0],
     membershipRole: "tenant_admin",
+    canAdmin: true,
     agents: [],
     printers: [],
     tenantTokens: [],
