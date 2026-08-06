@@ -56,7 +56,7 @@ fn unknown_printer_identity_is_not_replaced_with_a_different_model_or_state() {
 
 #[test]
 fn rust_owns_file_transfer_errors_and_firmware_identity_admission() {
-    let transfer = include_str!("../src/shim_file_transfer.hpp");
+    let transfer = include_str!("../src/file_transfer.rs");
     let firmware = include_str!("../src/shim_firmware.hpp");
     let firmware_request = include_str!("../src/shim_firmware_request.hpp");
     let policy = include_str!("../src/studio_policy.rs");
@@ -64,7 +64,7 @@ fn rust_owns_file_transfer_errors_and_firmware_identity_admission() {
 
     assert!(!transfer.contains(r#"R"({"#));
     assert!(
-        transfer.contains("pandar_plugin_studio_file_transfer_unavailable")
+        transfer.contains(r#"stable_error_body("unsupported_file_transfer")"#)
             && policy.contains("pandar_plugin_studio_file_transfer_unavailable")
     );
     assert!(!firmware.contains("normalized_dev_id.empty() || printer_id.empty()"));

@@ -110,7 +110,6 @@ fn main() {
         "shim_ams_types.hpp",
         "shim_connection.hpp",
         "shim_exports.hpp",
-        "shim_file_transfer.hpp",
         "shim_file_transfer_types.hpp",
         "shim_firmware.hpp",
         "shim_model_task.hpp",

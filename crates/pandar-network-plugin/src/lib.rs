@@ -4,6 +4,7 @@ mod account;
 mod camera;
 mod cancellation;
 mod connection;
+pub mod file_transfer;
 pub mod firmware;
 mod gcode;
 mod h2c;

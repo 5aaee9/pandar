@@ -8,4 +8,3 @@
 #include "shim_tasks.hpp"
 #include "shim_model_task.hpp"
 #include "shim_abi_content.hpp"
-#include "shim_file_transfer.hpp"
