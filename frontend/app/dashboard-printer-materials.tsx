@@ -2,11 +2,11 @@
 
 import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
-import { CheckCircle2Icon, DownloadIcon, DropletsIcon, RotateCwIcon, ThermometerIcon, UploadIcon } from 'lucide-react'
+import { CheckCircle2Icon, DownloadIcon, DropletsIcon, Loader2Icon, RotateCwIcon, ThermometerIcon, UploadIcon } from 'lucide-react'
 
-import { controlPrinter } from './actions'
 import { DryingControl, type DryingProps, dryingProps } from './dashboard-printer-drying'
 import type { Printer } from './dashboard-types'
+import { usePrinterControl } from './use-printer-control'
 import { mixedAmsLiteGlobalTrayId } from './material-tray-routing'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
 export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
@@ -266,9 +266,10 @@ function SlotOperationForm({
 }) {
   const includeTarget = action !== 'ams_reread_rfid'
   const extruderId = action === 'ams_load_filament' ? slotExtruderId(slot, printer) : null
+  const { formAction, pending } = usePrinterControl()
 
   return (
-    <form action={controlPrinter}>
+    <form action={formAction}>
       <input name="tenant_id" type="hidden" value={printer.tenant_id} />
       <input name="printer_id" type="hidden" value={printer.id} />
       <input name="action" type="hidden" value={action} />
@@ -278,10 +279,11 @@ function SlotOperationForm({
       {includeTarget && slot.externalId ? <input name="external_id" type="hidden" value={slot.externalId} /> : null}
       {extruderId !== null ? <input name="extruder_id" type="hidden" value={extruderId} /> : null}
       <button
-        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring [&_svg]:size-4"
+        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:text-muted-foreground [&_svg]:size-4"
+        disabled={pending}
         type="submit"
       >
-        {icon}
+        {pending ? <Loader2Icon className="animate-spin" /> : icon}
         {label}
       </button>
     </form>

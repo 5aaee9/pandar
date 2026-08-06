@@ -16,6 +16,43 @@
 
 ## Completed
 
+- Extended the Devices in-place mutation treatment to the printer-card overflow menu. Refresh AMS
+  now submits in place through the same pending/toast pattern (disabled spinner item while in
+  flight, "AMS refresh queued" or the translated hub error, no `?status=` redirect), and
+  `refreshPrinterMaterials` / `deletePrinter` / `updatePrinter` join `controlPrinter` in returning
+  typed `MutationActionState` instead of redirecting. Delete keeps its confirmation dialog but the
+  dialog's confirm button now carries the loading state: it spins and disables while the DELETE is
+  in flight (blocking repeat confirms), the dialog stays open on failure with an error toast so the
+  operator can retry or cancel, and only closes on success. The edit-printer dialog likewise saves
+  in place with a spinner submit, toasts "Printer updated" or the error code, and closes only on
+  success; both successful delete and edit invalidate the tenant's React Query devices route data
+  so the card list reflects the change immediately instead of waiting for the 30s poll. The toast
+  wiring is shared behind a generic `useActionStatusFeedback` in `mutation-feedback.ts` (success
+  status key + optional onSuccess), which `usePrinterControl` now delegates to, and `ConfirmDialog`
+  gained an optional `pending` prop. Coverage: printer-card mutation tests lock the refresh-in-place
+  dedupe, delete confirm loading/stay-open-on-failure/invalidate-on-success, and edit
+  loading/close-on-success flows; action tests assert the returned states; web lint, typecheck, and
+  429 tests pass.
+
+- Made Devices printer-control buttons navigation-free with per-command pending feedback.
+  `controlPrinter` no longer ends in a `redirect("?status=printer_control_queued")` (which scrolled
+  the page back to the top and only surfaced the outcome through the URL query param); it now
+  returns typed `MutationActionState` like the other redirect-free actions. A shared
+  `usePrinterControl()` hook wraps `useActionState` plus the existing `useMutationFeedback` toast
+  wiring, so every control form on the printer card (stop/pause/resume, chamber light, bed/chamber/
+  nozzle temperature presets and custom inputs, nozzle switch, axis moves and homing, AMS slot
+  load/unload/RFID reread, drying start/cancel, nozzle-rack moves and confirm/refresh) submits in
+  place without losing scroll position. While a command is in flight its own button disables and
+  swaps/prepends a spinner, which also blocks re-sending the same instruction until the Hub
+  answers; success shows the existing localized "Printer control queued" toast and Hub rejections
+  (e.g. `agent_not_connected`) show an error toast with the translated or humanized error code.
+  `ConfirmForm` gained an optional `pending` prop for the confirm-gated controls, and the axis
+  homing flow now reuses it instead of a hand-rolled dialog. Coverage: action tests now assert the
+  returned state (including the hub-rejection path), a new `use-printer-control` suite locks the
+  pending spinner/disabled/dedupe behavior and both toast outcomes through `PrinterControlsPanel`,
+  and the axis-controls suite was updated for the new action signature; web lint, typecheck, and
+  425 tests pass.
+
 - Rebuilt the dashboard Settings page around a compact header plus a sticky scrollspy section
   navigation (Workspace, Appearance, Access & security, Account) instead of the metric hero with
   passive anchor links: `useScrollSpy` tracks the current section against the sticky-header offset

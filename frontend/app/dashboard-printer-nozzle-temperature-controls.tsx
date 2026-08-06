@@ -1,7 +1,7 @@
 
 
 import { useTranslations } from 'next-intl'
-import { ArrowLeftRightIcon, CheckCircle2Icon, ThermometerIcon } from 'lucide-react'
+import { ArrowLeftRightIcon, CheckCircle2Icon, Loader2Icon, ThermometerIcon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,8 +12,8 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 
-import { controlPrinter } from './actions'
 import type { Printer } from './dashboard-types'
+import { usePrinterControl } from './use-printer-control'
 import {
   formatTemperatureValue,
   hasActiveTargetTemperature,
@@ -60,6 +60,7 @@ export function NozzleTemperatureCard({
 export function NozzleSwitchControl({ printer }: { printer: Printer }) {
   const t = useTranslations('inventory')
   const nozzles = presentNozzles(printer.nozzle_temperatures ?? [])
+  const { formAction, pending } = usePrinterControl()
   if (nozzles.length < 2) {
     return null
   }
@@ -67,17 +68,22 @@ export function NozzleSwitchControl({ printer }: { printer: Printer }) {
   const activeNozzle = activeNozzleLabel(printer)
   const targetNozzle = activeNozzle === 'L' ? 'R' : 'L'
   return (
-    <form action={controlPrinter} className="h-full lg:col-start-4">
+    <form action={formAction} className="h-full lg:col-start-4">
       <input name="tenant_id" type="hidden" value={printer.tenant_id} />
       <input name="printer_id" type="hidden" value={printer.id} />
       <input name="action" type="hidden" value="select_extruder" />
       <input name="extruder_id" type="hidden" value={extruderIdForNozzle(targetNozzle)} />
       <button
         aria-label={t('switchNozzleTo', { nozzle: targetNozzle })}
-        className="flex h-full min-h-16 w-full flex-col items-center justify-center rounded-md bg-muted/50 px-3 py-2 text-center transition-colors duration-150 ease-out hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="flex h-full min-h-16 w-full flex-col items-center justify-center rounded-md bg-muted/50 px-3 py-2 text-center transition-colors duration-150 ease-out hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:text-muted-foreground"
+        disabled={pending}
         type="submit"
       >
-        <ArrowLeftRightIcon className="size-4 text-muted-foreground" />
+        {pending ? (
+          <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
+        ) : (
+          <ArrowLeftRightIcon className="size-4 text-muted-foreground" />
+        )}
         <div className="mt-1 flex items-start justify-center gap-2 text-xs font-semibold">
           {nozzles.map((nozzle) => (
             <span
@@ -207,14 +213,16 @@ function TemperaturePresetButton({
   extruderId: number | null
 }) {
   const t = useTranslations('inventory')
+  const { formAction, pending } = usePrinterControl()
   return (
-    <form action={controlPrinter}>
+    <form action={formAction}>
       <PrinterTemperatureHiddenFields
         extruderId={extruderId}
         printer={printer}
         temperature={temperature}
       />
-      <Button className="w-full" size="sm" type="submit" variant="outline">
+      <Button className="w-full" disabled={pending} size="sm" type="submit" variant="outline">
+        {pending ? <Loader2Icon className="animate-spin" /> : null}
         {temperature === 0 ? t('temperatureOff') : `${temperature} C`}
       </Button>
     </form>
@@ -229,8 +237,9 @@ function CustomTemperatureForm({
   extruderId: number | null
 }) {
   const t = useTranslations('inventory')
+  const { formAction, pending } = usePrinterControl()
   return (
-    <form action={controlPrinter} className="flex gap-1.5">
+    <form action={formAction} className="flex gap-1.5">
       <PrinterTemperatureHiddenFields extruderId={extruderId} printer={printer} />
       <Input
         aria-label={t('customTemperature')}
@@ -240,7 +249,8 @@ function CustomTemperatureForm({
         placeholder={t('customTemperature')}
         type="number"
       />
-      <Button size="sm" type="submit" variant="secondary">
+      <Button disabled={pending} size="sm" type="submit" variant="secondary">
+        {pending ? <Loader2Icon className="animate-spin" /> : null}
         {t('setTemperature')}
       </Button>
     </form>

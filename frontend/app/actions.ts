@@ -15,7 +15,7 @@ import {
 } from "./action-helpers";
 import { apiHeaders, requireAuth } from "./api-auth";
 import { apiIdSegment } from "./api-path";
-import type { LinkPrinterActionState } from "./action-state";
+import type { LinkPrinterActionState, MutationActionState } from "./action-state";
 
 export async function discoverPrinters(formData: FormData) {
   await requireAuth();
@@ -57,7 +57,10 @@ export async function refreshPrinters(formData: FormData) {
   );
 }
 
-export async function refreshPrinterMaterials(formData: FormData) {
+export async function refreshPrinterMaterials(
+  _previousState: MutationActionState,
+  formData: FormData,
+): Promise<MutationActionState> {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const printerId = stringField(formData, "printer_id");
@@ -65,14 +68,16 @@ export async function refreshPrinterMaterials(formData: FormData) {
     `/api/v1/tenants/${apiIdSegment(tenantId, "tenant_id")}/printers/${apiIdSegment(printerId, "printer_id")}/materials:refresh`,
     {},
   );
-  redirect(
-    statusUrl(
-      response.ok ? "materials_refresh_queued" : await errorCode(response),
-    ),
-  );
+  if (!response.ok) {
+    return { ok: false, error: await errorCode(response) };
+  }
+  return { ok: true };
 }
 
-export async function deletePrinter(formData: FormData) {
+export async function deletePrinter(
+  _previousState: MutationActionState,
+  formData: FormData,
+): Promise<MutationActionState> {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const printerId = stringField(formData, "printer_id");
@@ -83,14 +88,16 @@ export async function deletePrinter(formData: FormData) {
       headers: await apiHeaders("application/json"),
     },
   );
-  redirect(
-    statusUrl(
-      response.ok ? "printer_deleted" : await errorCode(response),
-    ),
-  );
+  if (!response.ok) {
+    return { ok: false, error: await errorCode(response) };
+  }
+  return { ok: true };
 }
 
-export async function updatePrinter(formData: FormData) {
+export async function updatePrinter(
+  _previousState: MutationActionState,
+  formData: FormData,
+): Promise<MutationActionState> {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const printerId = stringField(formData, "printer_id");
@@ -107,9 +114,9 @@ export async function updatePrinter(formData: FormData) {
     },
   );
   if (!response.ok) {
-    redirect(statusUrl(await errorCode(response)));
+    return { ok: false, error: await errorCode(response) };
   }
-  redirect(statusUrl("printer_updated"));
+  return { ok: true };
 }
 
 export async function deleteAgent(formData: FormData) {
@@ -176,7 +183,10 @@ export async function linkPrinter(
   return { ok: true, commandId: command.id };
 }
 
-export async function controlPrinter(formData: FormData) {
+export async function controlPrinter(
+  _previousState: MutationActionState,
+  formData: FormData,
+): Promise<MutationActionState> {
   await requireAuth();
   const tenantId = stringField(formData, "tenant_id");
   const printerId = stringField(formData, "printer_id");
@@ -231,12 +241,10 @@ export async function controlPrinter(formData: FormData) {
       light_on: lightOn ? lightOn === "true" || lightOn === "on" : undefined,
     },
   );
-  redirect(
-    statusUrlForForm(
-      formData,
-      response.ok ? "printer_control_queued" : await errorCode(response),
-    ),
-  );
+  if (!response.ok) {
+    return { ok: false, error: await errorCode(response) };
+  }
+  return { ok: true };
 }
 
 export async function createPluginTicket(formData: FormData) {

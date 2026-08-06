@@ -3,10 +3,12 @@
 import { useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import dynamic from 'next/dynamic'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   BoxIcon,
   BotIcon,
   ClockIcon,
+  Loader2Icon,
   MoreVerticalIcon,
   PencilIcon,
   PrinterIcon,
@@ -30,6 +32,8 @@ import {
 import { inputClasses } from '@/lib/utils'
 import { deletePrinter, refreshPrinterMaterials, updatePrinter } from './actions'
 import type { Printer } from './dashboard-types'
+import { useActionStatusFeedback } from './mutation-feedback'
+import { routeDataKeys } from './route-data'
 import { PrinterAxisControls } from './dashboard-printer-axis-controls'
 import { PrinterMaterialsPanel } from './dashboard-printer-materials'
 import { PrinterRackPanel } from './dashboard-printer-rack'
@@ -157,6 +161,24 @@ function PrinterActions({ printer }: { printer: Printer }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const queryClient = useQueryClient()
+
+  const refreshAction = useActionStatusFeedback(
+    refreshPrinterMaterials,
+    'materials_refresh_queued',
+  )
+  const deleteAction = useActionStatusFeedback(deletePrinter, 'printer_deleted', () => {
+    setConfirmOpen(false)
+    void queryClient.invalidateQueries({
+      queryKey: routeDataKeys.devices(printer.tenant_id),
+    })
+  })
+  const editAction = useActionStatusFeedback(updatePrinter, 'printer_updated', () => {
+    setEditOpen(false)
+    void queryClient.invalidateQueries({
+      queryKey: routeDataKeys.devices(printer.tenant_id),
+    })
+  })
 
   return (
     <div className="shrink-0">
@@ -190,15 +212,20 @@ function PrinterActions({ printer }: { printer: Printer }) {
             <PencilIcon className="size-4" />
             {t('editPrinter')}
           </button>
-          <form action={refreshPrinterMaterials}>
+          <form action={refreshAction.formAction}>
             <input name="tenant_id" type="hidden" value={printer.tenant_id} />
             <input name="printer_id" type="hidden" value={printer.id} />
             <button
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 ease-out hover:bg-muted"
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 ease-out hover:bg-muted disabled:text-muted-foreground"
+              disabled={refreshAction.pending}
               onClick={() => setMenuOpen(false)}
               type="submit"
             >
-              <RotateCwIcon className="size-4" />
+              {refreshAction.pending ? (
+                <Loader2Icon className="size-4 animate-spin" />
+              ) : (
+                <RotateCwIcon className="size-4" />
+              )}
               {t('refreshAms')}
             </button>
           </form>
@@ -216,7 +243,7 @@ function PrinterActions({ printer }: { printer: Printer }) {
           </button>
         </PopoverContent>
       </Popover>
-      <form ref={formRef} action={deletePrinter}>
+      <form ref={formRef} action={deleteAction.formAction}>
         <input name="tenant_id" type="hidden" value={printer.tenant_id} />
         <input name="printer_id" type="hidden" value={printer.id} />
       </form>
@@ -226,8 +253,8 @@ function PrinterActions({ printer }: { printer: Printer }) {
         message={t('deletePrinterMessage', { name: printer.name })}
         confirmLabel={t('deletePrinterConfirm')}
         tone="danger"
+        pending={deleteAction.pending}
         onConfirm={() => {
-          setConfirmOpen(false)
           formRef.current?.requestSubmit()
         }}
         onCancel={() => setConfirmOpen(false)}
@@ -238,7 +265,7 @@ function PrinterActions({ printer }: { printer: Printer }) {
             <DialogTitle>{t('editPrinterTitle')}</DialogTitle>
             <DialogDescription>{t('editPrinterDescription')}</DialogDescription>
           </DialogHeader>
-          <form action={updatePrinter} className="grid gap-4">
+          <form action={editAction.formAction} className="grid gap-4">
             <input name="tenant_id" type="hidden" value={printer.tenant_id} />
             <input name="printer_id" type="hidden" value={printer.id} />
             <label className="flex flex-col gap-1 text-sm">
@@ -270,9 +297,11 @@ function PrinterActions({ printer }: { printer: Printer }) {
             </label>
             <DialogFooter className="-mx-4 -mb-4 mt-2">
               <button
-                className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
+                disabled={editAction.pending}
                 type="submit"
               >
+                {editAction.pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
                 {t('editPrinterSubmit')}
               </button>
             </DialogFooter>

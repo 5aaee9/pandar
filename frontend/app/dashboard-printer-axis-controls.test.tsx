@@ -8,10 +8,20 @@ import zh from "../messages/zh.json";
 import { PrinterAxisControls } from "./dashboard-printer-axis-controls";
 import type { Printer } from "./dashboard-types";
 
-const controlPrinterMock = vi.hoisted(() => vi.fn(async (_formData: FormData) => undefined));
+const controlPrinterMock = vi.hoisted(() =>
+  vi.fn(async (_prev: unknown, _formData: FormData) => ({ ok: true as const })),
+);
 
 vi.mock("./actions", () => ({
   controlPrinter: controlPrinterMock,
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    success: vi.fn(),
+    warning: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 function renderWithMessages(children: React.ReactNode, locale = "en") {
@@ -100,7 +110,7 @@ describe("PrinterAxisControls", () => {
     await user.click(screen.getByRole("button", { name: "Home all axes" }));
     await user.click(screen.getByRole("button", { name: "Homing" }));
     await waitFor(() => expect(controlPrinterMock).toHaveBeenCalledTimes(1));
-    const submitted = controlPrinterMock.mock.calls[0][0];
+    const submitted = controlPrinterMock.mock.calls[0][1];
     expect(Object.fromEntries(submitted.entries())).toEqual({
       tenant_id: "tenant-1",
       printer_id: "printer-1",

@@ -5,6 +5,7 @@ import { useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   LightbulbIcon,
+  Loader2Icon,
   MaximizeIcon,
   PauseIcon,
   PlayIcon,
@@ -29,10 +30,10 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 
-import { controlPrinter } from './actions'
 import { apiIdSegment } from './api-path'
 import { ConfirmForm } from './confirm-dialog'
 import type { Printer } from './dashboard-types'
+import { usePrinterControl } from './use-printer-control'
 import {
   NozzleSwitchControl,
   NozzleTemperatureCard,
@@ -92,19 +93,21 @@ export function PrinterTemperatureControls({ printer }: { printer: Printer }) {
 export function PrinterControlsPanel({ printer }: { printer: Printer }) {
   const t = useTranslations('inventory')
   const controlsEnabled = printerControlEnabled(printer)
+  const stopControl = usePrinterControl()
 
   return (
     <div className="mt-4 space-y-2">
       <div className="text-xs font-medium text-muted-foreground">{t('controlsLabel')}</div>
       <div aria-label={t('controlsLabel')} className="grid grid-cols-2 gap-2" role="group">
         <ConfirmForm
-          action={controlPrinter}
+          action={stopControl.formAction}
           buttonAriaLabel={t('stopPrint')}
           buttonClassName="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors duration-150 ease-out disabled:bg-muted/60 disabled:text-muted-foreground enabled:bg-destructive/10 enabled:text-destructive enabled:hover:bg-destructive/20 dark:enabled:bg-destructive/20 dark:enabled:hover:bg-destructive/30 [&_svg]:size-4"
           buttonLabel={<><SquareIcon />{t('stopPrint')}</>}
           confirmLabel={t('stopPrint')}
           disabled={!controlsEnabled.stop}
           message={t('stopPrintMessage')}
+          pending={stopControl.pending}
           title={t('stopPrintTitle')}
         >
           <input name="tenant_id" type="hidden" value={printer.tenant_id} />
@@ -235,24 +238,21 @@ function TemperatureMenu({
   presets: readonly number[]
 }) {
   const t = useTranslations('inventory')
+  const customControl = usePrinterControl()
 
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-1.5">
         {presets.map((temperature) => (
-          <form action={controlPrinter} key={temperature}>
-            <PrinterTemperatureHiddenFields
-              action={action}
-              printer={printer}
-              temperature={temperature}
-            />
-            <Button className="w-full" size="sm" type="submit" variant="outline">
-              {temperature === 0 ? t('temperatureOff') : `${temperature} C`}
-            </Button>
-          </form>
+          <TemperaturePresetButton
+            action={action}
+            key={temperature}
+            printer={printer}
+            temperature={temperature}
+          />
         ))}
       </div>
-      <form action={controlPrinter} className="flex gap-1.5">
+      <form action={customControl.formAction} className="flex gap-1.5">
         <PrinterTemperatureHiddenFields action={action} printer={printer} />
         <Input
           aria-label={t('customTemperature')}
@@ -262,11 +262,39 @@ function TemperatureMenu({
           placeholder={t('customTemperature')}
           type="number"
         />
-        <Button size="sm" type="submit" variant="secondary">
+        <Button disabled={customControl.pending} size="sm" type="submit" variant="secondary">
+          {customControl.pending ? <Loader2Icon className="animate-spin" /> : null}
           {t('setTemperature')}
         </Button>
       </form>
     </div>
+  )
+}
+
+function TemperaturePresetButton({
+  printer,
+  action,
+  temperature,
+}: {
+  printer: Printer
+  action: string
+  temperature: number
+}) {
+  const t = useTranslations('inventory')
+  const { formAction, pending } = usePrinterControl()
+
+  return (
+    <form action={formAction}>
+      <PrinterTemperatureHiddenFields
+        action={action}
+        printer={printer}
+        temperature={temperature}
+      />
+      <Button className="w-full" disabled={pending} size="sm" type="submit" variant="outline">
+        {pending ? <Loader2Icon className="animate-spin" /> : null}
+        {temperature === 0 ? t('temperatureOff') : `${temperature} C`}
+      </Button>
+    </form>
   )
 }
 
@@ -312,6 +340,7 @@ function PrinterInlineControl({
   stateLabel?: string
   tone: 'danger' | 'warning' | 'neutral'
 }) {
+  const { formAction, pending } = usePrinterControl()
   const toneClass = {
     danger:
       'enabled:bg-destructive/10 enabled:text-destructive enabled:hover:bg-destructive/20 dark:enabled:bg-destructive/20 dark:enabled:hover:bg-destructive/30',
@@ -322,7 +351,7 @@ function PrinterInlineControl({
   }[tone]
 
   return (
-    <form action={controlPrinter}>
+    <form action={formAction}>
       <input name="tenant_id" type="hidden" value={printer.tenant_id} />
       <input name="printer_id" type="hidden" value={printer.id} />
       <input name="action" type="hidden" value={action} />
@@ -331,10 +360,10 @@ function PrinterInlineControl({
         aria-label={stateLabel ? `${label} ${stateLabel}` : undefined}
         aria-pressed={pressed}
         className={`inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors duration-150 ease-out disabled:bg-muted/60 disabled:text-muted-foreground ${toneClass} [&_svg]:size-4`}
-        disabled={!enabled}
+        disabled={!enabled || pending}
         type="submit"
       >
-        {icon}
+        {pending ? <Loader2Icon className="animate-spin" /> : icon}
         {label}
         {stateLabel ? <span className="text-xs font-normal opacity-75">{` ${stateLabel}`}</span> : null}
       </button>

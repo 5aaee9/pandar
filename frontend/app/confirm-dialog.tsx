@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
+import { Loader2Icon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -20,6 +21,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel,
   tone = 'danger',
+  pending = false,
   onConfirm,
   onCancel,
 }: {
@@ -29,6 +31,7 @@ export function ConfirmDialog({
   confirmLabel?: string
   cancelLabel?: string
   tone?: 'default' | 'danger'
+  pending?: boolean
   onConfirm: () => void
   onCancel: () => void
 }) {
@@ -53,10 +56,12 @@ export function ConfirmDialog({
             {cancelLabel ?? tCommon('cancel')}
           </Button>
           <Button
+            disabled={pending}
             onClick={onConfirm}
             type="button"
             variant={tone === 'danger' ? 'destructive' : 'default'}
           >
+            {pending ? <Loader2Icon className="animate-spin" /> : null}
             {confirmLabel ?? tCommon('confirm')}
           </Button>
         </DialogFooter>
@@ -76,6 +81,7 @@ export function ConfirmForm({
   buttonLabel,
   buttonAriaLabel,
   disabled,
+  pending = false,
   children,
 }: {
   action: (formData: FormData) => void
@@ -88,6 +94,7 @@ export function ConfirmForm({
   buttonLabel: ReactNode
   buttonAriaLabel?: string
   disabled?: boolean
+  pending?: boolean
   children?: ReactNode
 }) {
   const formRef = useRef<HTMLFormElement>(null)
@@ -102,10 +109,11 @@ export function ConfirmForm({
         <button
           aria-label={buttonAriaLabel}
           className={buttonClassName}
-          disabled={disabled}
+          disabled={disabled || pending}
           onClick={openDialog}
           type="button"
         >
+          {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
           {buttonLabel}
         </button>
       </form>

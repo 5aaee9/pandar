@@ -1,11 +1,11 @@
 import { useTranslations } from 'next-intl'
-import { FlameIcon } from 'lucide-react'
+import { FlameIcon, Loader2Icon } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
-import { controlPrinter } from './actions'
 import type { Printer } from './dashboard-types'
+import { usePrinterControl } from './use-printer-control'
 
 export type DryingProps = {
   amsId: number
@@ -52,18 +52,7 @@ export function DryingControl({ printer, drying }: { printer: Printer; drying: D
             ? t('dryingRemaining', { time: formatDryTime(drying.remainingMinutes) })
             : t('dryingActive')}
         </span>
-        <form action={controlPrinter}>
-          <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-          <input name="printer_id" type="hidden" value={printer.id} />
-          <input name="action" type="hidden" value="ams_stop_drying" />
-          <input name="ams_id" type="hidden" value={drying.amsId} />
-          <button
-            className="rounded-sm px-1.5 py-0.5 text-xs font-medium text-foreground underline-offset-2 transition-colors hover:bg-accent hover:underline focus-visible:outline-2 focus-visible:outline-ring"
-            type="submit"
-          >
-            {t('cancelDrying')}
-          </button>
-        </form>
+        <StopDryingForm amsId={drying.amsId} printer={printer} />
       </span>
     )
   }
@@ -77,64 +66,94 @@ export function DryingControl({ printer, drying }: { printer: Printer; drying: D
         {t('dryFilament')}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-64 p-3">
-        <form action={controlPrinter} className="space-y-2">
-          <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-          <input name="printer_id" type="hidden" value={printer.id} />
-          <input name="action" type="hidden" value="ams_start_drying" />
-          <input name="ams_id" type="hidden" value={drying.amsId} />
-          <label className="grid gap-1 text-xs">
-            <span className="text-muted-foreground">{t('dryingFilament')}</span>
-            {drying.filamentTypes.length > 0 ? (
-              <select
-                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                name="filament"
-              >
-                {drying.filamentTypes.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <Input defaultValue="PLA" name="filament" required />
-            )}
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <label className="grid gap-1 text-xs">
-              <span className="text-muted-foreground">{t('dryingTemperature')}</span>
-              <Input
-                defaultValue={55}
-                inputMode="numeric"
-                max={85}
-                min={45}
-                name="temperature_celsius"
-                required
-                type="number"
-              />
-            </label>
-            <label className="grid gap-1 text-xs">
-              <span className="text-muted-foreground">{t('dryingDuration')}</span>
-              <Input
-                defaultValue={8}
-                inputMode="numeric"
-                max={24}
-                min={1}
-                name="duration_hours"
-                required
-                type="number"
-              />
-            </label>
-          </div>
-          <label className="flex items-center gap-2 text-xs text-foreground">
-            <input name="rotate_tray" type="checkbox" />
-            {t('dryingRotateTray')}
-          </label>
-          <Button className="w-full" size="sm" type="submit">
-            {t('startDrying')}
-          </Button>
-        </form>
+        <StartDryingForm drying={drying} printer={printer} />
       </PopoverContent>
     </Popover>
+  )
+}
+
+function StopDryingForm({ printer, amsId }: { printer: Printer; amsId: number }) {
+  const t = useTranslations('inventory')
+  const { formAction, pending } = usePrinterControl()
+  return (
+    <form action={formAction}>
+      <input name="tenant_id" type="hidden" value={printer.tenant_id} />
+      <input name="printer_id" type="hidden" value={printer.id} />
+      <input name="action" type="hidden" value="ams_stop_drying" />
+      <input name="ams_id" type="hidden" value={amsId} />
+      <button
+        className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-medium text-foreground underline-offset-2 transition-colors hover:bg-accent hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:text-muted-foreground"
+        disabled={pending}
+        type="submit"
+      >
+        {pending ? <Loader2Icon aria-hidden="true" className="size-3 animate-spin" /> : null}
+        {t('cancelDrying')}
+      </button>
+    </form>
+  )
+}
+
+function StartDryingForm({ printer, drying }: { printer: Printer; drying: DryingProps }) {
+  const t = useTranslations('inventory')
+  const { formAction, pending } = usePrinterControl()
+  return (
+    <form action={formAction} className="space-y-2">
+      <input name="tenant_id" type="hidden" value={printer.tenant_id} />
+      <input name="printer_id" type="hidden" value={printer.id} />
+      <input name="action" type="hidden" value="ams_start_drying" />
+      <input name="ams_id" type="hidden" value={drying.amsId} />
+      <label className="grid gap-1 text-xs">
+        <span className="text-muted-foreground">{t('dryingFilament')}</span>
+        {drying.filamentTypes.length > 0 ? (
+          <select
+            className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            name="filament"
+          >
+            {drying.filamentTypes.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <Input defaultValue="PLA" name="filament" required />
+        )}
+      </label>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="grid gap-1 text-xs">
+          <span className="text-muted-foreground">{t('dryingTemperature')}</span>
+          <Input
+            defaultValue={55}
+            inputMode="numeric"
+            max={85}
+            min={45}
+            name="temperature_celsius"
+            required
+            type="number"
+          />
+        </label>
+        <label className="grid gap-1 text-xs">
+          <span className="text-muted-foreground">{t('dryingDuration')}</span>
+          <Input
+            defaultValue={8}
+            inputMode="numeric"
+            max={24}
+            min={1}
+            name="duration_hours"
+            required
+            type="number"
+          />
+        </label>
+      </div>
+      <label className="flex items-center gap-2 text-xs text-foreground">
+        <input name="rotate_tray" type="checkbox" />
+        {t('dryingRotateTray')}
+      </label>
+      <Button className="w-full" disabled={pending} size="sm" type="submit">
+        {pending ? <Loader2Icon className="animate-spin" /> : null}
+        {t('startDrying')}
+      </Button>
+    </form>
   )
 }
 

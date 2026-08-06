@@ -2,7 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
-import { CheckCircle2Icon, RotateCwIcon } from 'lucide-react'
+import { CheckCircle2Icon, Loader2Icon, RotateCwIcon } from 'lucide-react'
 
 import {
   Popover,
@@ -10,8 +10,8 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 
-import { controlPrinter } from './actions'
 import { ConfirmForm } from './confirm-dialog'
+import { usePrinterControl } from './use-printer-control'
 import {
   type RackNozzle,
   formatWear,
@@ -251,15 +251,17 @@ function RackMoveButton({
   disabled: boolean
 }) {
   const t = useTranslations('inventory')
+  const { formAction, pending } = usePrinterControl()
   return (
     <ConfirmForm
-      action={controlPrinter}
+      action={formAction}
       buttonAriaLabel={label}
       buttonClassName="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors duration-150 ease-out disabled:bg-muted/60 disabled:text-muted-foreground enabled:bg-primary/10 enabled:text-primary enabled:hover:bg-primary/15 dark:enabled:bg-primary/20"
       buttonLabel={label}
       confirmLabel={label}
       disabled={disabled}
       message={t('rackMoveWarningMessage')}
+      pending={pending}
       title={t('rackMoveWarningTitle')}
       tone="default"
     >
@@ -289,6 +291,7 @@ function RackOperationForm({
   confirm?: boolean
 }) {
   const t = useTranslations('inventory')
+  const { formAction, pending } = usePrinterControl()
   const fields = (
     <>
       <input name="tenant_id" type="hidden" value={printer.tenant_id} />
@@ -300,13 +303,14 @@ function RackOperationForm({
   if (confirm) {
     return (
       <ConfirmForm
-        action={controlPrinter}
+        action={formAction}
         buttonAriaLabel={label}
         buttonClassName="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors duration-150 ease-out disabled:bg-muted/60 disabled:text-muted-foreground enabled:bg-primary/10 enabled:text-primary enabled:hover:bg-primary/15 dark:enabled:bg-primary/20 [&_svg]:size-4"
         buttonLabel={<>{icon}{label}</>}
         confirmLabel={label}
         disabled={disabled}
         message={t('rackMoveWarningMessage')}
+        pending={pending}
         title={t('rackMoveWarningTitle')}
         tone="default"
       >
@@ -315,14 +319,14 @@ function RackOperationForm({
     )
   }
   return (
-    <form action={controlPrinter}>
+    <form action={formAction}>
       {fields}
       <button
         className="flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors duration-150 ease-out disabled:bg-muted/60 disabled:text-muted-foreground enabled:bg-primary/10 enabled:text-primary enabled:hover:bg-primary/15 dark:enabled:bg-primary/20 [&_svg]:size-4"
-        disabled={disabled}
+        disabled={disabled || pending}
         type="submit"
       >
-        {icon}
+        {pending ? <Loader2Icon className="animate-spin" /> : icon}
         {label}
       </button>
     </form>

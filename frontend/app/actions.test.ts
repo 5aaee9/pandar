@@ -209,7 +209,7 @@ describe("updatePrinter", () => {
     );
   });
 
-  it("patches printer connection details and redirects to devices", async () => {
+  it("patches printer connection details and returns success", async () => {
     const formData = new FormData();
     formData.set("tenant_id", "tenant-1");
     formData.set("printer_id", "printer-1");
@@ -217,9 +217,7 @@ describe("updatePrinter", () => {
     formData.set("access_code", "UPDATED-LINK-CODE");
     formData.set("name", "Office A1 Updated");
 
-    await expect(updatePrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?status=printer_updated",
-    );
+    await expect(updatePrinter(null, formData)).resolves.toEqual({ ok: true });
 
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/tenants/tenant-1/printers/printer-1",
@@ -250,14 +248,14 @@ describe("refreshPrinterMaterials", () => {
     );
   });
 
-  it("posts refresh printer materials to the API and redirects to devices", async () => {
+  it("posts refresh printer materials to the API and returns success", async () => {
     const formData = new FormData();
     formData.set("tenant_id", "tenant-1");
     formData.set("printer_id", "printer-1");
 
-    await expect(refreshPrinterMaterials(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?status=materials_refresh_queued",
-    );
+    await expect(refreshPrinterMaterials(null, formData)).resolves.toEqual({
+      ok: true,
+    });
 
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/tenants/tenant-1/printers/printer-1/materials:refresh",
@@ -270,7 +268,7 @@ describe("refreshPrinterMaterials", () => {
     formData.set("tenant_id", "tenant-1");
     formData.set("printer_id", "../jobs/00000000-0000-0000-0000-000000000001");
 
-    await expect(refreshPrinterMaterials(formData)).rejects.toThrow(
+    await expect(refreshPrinterMaterials(null, formData)).rejects.toThrow(
       "printer_id must be a valid ID",
     );
     expect(fetch).not.toHaveBeenCalled();
@@ -307,9 +305,7 @@ describe("controlPrinter axis operations", () => {
       formData.set("delta_mm", deltaMm);
       formData.set("feedrate_mm_per_min", String(feedrateMmPerMin));
 
-      await expect(controlPrinter(formData)).rejects.toThrow(
-        "NEXT_REDIRECT:/devices?status=printer_control_queued",
-      );
+      await expect(controlPrinter(null, formData)).resolves.toEqual({ ok: true });
 
       const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
       expect(JSON.parse(String(init.body))).toEqual({
@@ -326,9 +322,7 @@ describe("controlPrinter axis operations", () => {
     formData.set("printer_id", "printer-1");
     formData.set("action", "home");
 
-    await expect(controlPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?status=printer_control_queued",
-    );
+    await expect(controlPrinter(null, formData)).resolves.toEqual({ ok: true });
 
     const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
     expect(JSON.parse(String(init.body))).toEqual({
@@ -364,9 +358,7 @@ describe("controlPrinter AMS operations", () => {
     formData.set("extruder_id", "0");
     formData.set("external_id", "");
 
-    await expect(controlPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?status=printer_control_queued",
-    );
+    await expect(controlPrinter(null, formData)).resolves.toEqual({ ok: true });
 
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/tenants/tenant-1/printers/printer-1/controls",
@@ -393,9 +385,7 @@ describe("controlPrinter AMS operations", () => {
     formData.set("temperature_celsius", "220");
     formData.set("extruder_id", "1");
 
-    await expect(controlPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?status=printer_control_queued",
-    );
+    await expect(controlPrinter(null, formData)).resolves.toEqual({ ok: true });
 
     const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
@@ -414,9 +404,7 @@ describe("controlPrinter AMS operations", () => {
     formData.set("action", "set_bed_temperature");
     formData.set("temperature_celsius", "75");
 
-    await expect(controlPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?status=printer_control_queued",
-    );
+    await expect(controlPrinter(null, formData)).resolves.toEqual({ ok: true });
 
     const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
@@ -433,9 +421,7 @@ describe("controlPrinter AMS operations", () => {
     formData.set("action", "set_chamber_temperature");
     formData.set("temperature_celsius", "45");
 
-    await expect(controlPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?status=printer_control_queued",
-    );
+    await expect(controlPrinter(null, formData)).resolves.toEqual({ ok: true });
 
     const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
@@ -452,15 +438,35 @@ describe("controlPrinter AMS operations", () => {
     formData.set("action", "set_chamber_light");
     formData.set("light_on", "true");
 
-    await expect(controlPrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?status=printer_control_queued",
-    );
+    await expect(controlPrinter(null, formData)).resolves.toEqual({ ok: true });
 
     const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     expect(body).toMatchObject({
       action: "set_chamber_light",
       light_on: true,
+    });
+  });
+
+  it("returns the hub error code when the control command is rejected", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: "agent_not_connected" }), {
+            status: 409,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("printer_id", "printer-1");
+    formData.set("action", "pause");
+
+    await expect(controlPrinter(null, formData)).resolves.toEqual({
+      ok: false,
+      error: "agent_not_connected",
     });
   });
 });
@@ -480,14 +486,12 @@ describe("deletePrinter", () => {
     );
   });
 
-  it("deletes the printer through the API and redirects to devices", async () => {
+  it("deletes the printer through the API and returns success", async () => {
     const formData = new FormData();
     formData.set("tenant_id", "tenant-1");
     formData.set("printer_id", "printer-1");
 
-    await expect(deletePrinter(formData)).rejects.toThrow(
-      "NEXT_REDIRECT:/devices?status=printer_deleted",
-    );
+    await expect(deletePrinter(null, formData)).resolves.toEqual({ ok: true });
 
     expect(fetch).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/tenants/tenant-1/printers/printer-1",
@@ -531,15 +535,6 @@ describe("job action redirects", () => {
       "retry_queued",
     ],
     ["duplicateJob", duplicateJob, [["job_id", "job-1"]], "duplicate_queued"],
-    [
-      "controlPrinter",
-      controlPrinter,
-      [
-        ["printer_id", "printer-1"],
-        ["action", "pause"],
-      ],
-      "printer_control_queued",
-    ],
   ] as const)(
     "redirects %s back to jobs when submitted from jobs",
     async (_name, action, fields, status) => {
