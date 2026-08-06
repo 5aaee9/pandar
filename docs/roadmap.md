@@ -16,6 +16,34 @@
 
 ## Completed
 
+- Deepened the web printer-control seam into `frontend/app/printer-controls.tsx`: the module now
+  owns the `PrinterControlIntent` tagged union, the hidden form-field contract
+  (`PrinterControlFields`, including per-action field-selection policy such as AMS target
+  inclusion and load-only extruder routing), the `printerControlFieldNames` constants for
+  user-editable inputs, and the `usePrinterControl` hook. The six control surfaces (axis,
+  temperature, nozzle temperature, materials, rack, drying) declare semantic intents instead of
+  hand-writing `tenant_id` / `printer_id` / `action` hidden fields, so a payload-contract change
+  now lands in one module. `SlotOperationForm` and the camera dialog moved into their own modules
+  to keep every touched file under the 400-line module limit.
+
+- Wired the dashboard attention model into production: `computeHealth` / `computeAttention` (plus
+  a new `topSeverityOf`) from `dashboard-attention.ts` are now the single source of truth for the
+  devices/jobs/agents page clients, replacing three hand-rolled inline health computations that
+  had diverged (online vs non-offline printer counting) and the hard-coded `attentionItems={[]}`.
+  The previously dormant `NeedsAttention` section now renders real items.
+
+- Moved Bambu Studio shim behavior from C++ into Rust (thin-shim rule). The fail-closed `ft_*`
+  file-transfer ABI (Tunnel/Job handle state machines, refcounts, condition-variable result
+  wait, callback fan-out) now lives in `pandar-network-plugin/src/file_transfer.rs` +
+  `file_transfer/job.rs`; the C++ `shim_file_transfer.hpp` is deleted and all 21 `ft_*` symbols
+  are exported from Rust (upstream ft contract fixture passes against the built library).
+  Connection delivery policy (claim-before-invoke, per-kind callback selection,
+  delivered/undelivered completion) moved from `shim_connection.hpp` into the new Rust module
+  `connection/studio/shim_dispatch.rs`; the C++ side keeps only the ABI-legitimate parts — the
+  callback gate trampolines and `std::function` invocation — exposed as the flat
+  `ShimCallbackBridge` vtable. Full plugin suite: 410 tests pass including the compiled C++ ABI
+  probes.
+
 - Completed the project-wide Button unification: every remaining hand-rolled `<button>` and
   Trigger with copy-pasted button classes now renders the shared `Button` primitive. The shared
   component gained a `soft` variant (`bg-primary/10 text-primary`) covering the dense printer
