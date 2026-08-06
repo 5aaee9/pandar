@@ -17,6 +17,24 @@ struct PluginConnectionResult {
     uint64_t auth_ticket;
 };
 
+struct PandarShimBridge {
+    void (*gate_lock)(void*);
+    void (*gate_unlock)(void*);
+    int32_t (*status_thread_stopped)(void*);
+    int32_t (*invoke_server_connected)(void*, int32_t, int32_t);
+    int32_t (*invoke_message)(
+        void*, int32_t, const uint8_t*, std::size_t, const uint8_t*, std::size_t
+    );
+    int32_t (*invoke_local_connected)(void*, int32_t, const uint8_t*, std::size_t);
+};
+
+void pandar_plugin_shim_dispatch_connection_transition(
+    const PandarShimBridge*, void*, void*, PluginConnectionResult
+);
+void pandar_plugin_shim_dispatch_offline_deliveries(
+    const PandarShimBridge*, void*, void*, const uint64_t*, std::size_t
+);
+
 using PluginConnectionPrinterVisitor = void (*)(
     void*,
     const uint8_t*, std::size_t,
@@ -49,10 +67,76 @@ int32_t pandar_plugin_connection_printer_eligible(
 int32_t pandar_plugin_connection_take_offline(
     void*, void*, PluginConnectionDeviceVisitor
 );
-int32_t pandar_plugin_connection_claim_delivery(void*, uint64_t);
 void pandar_plugin_printer_refresh_session_destroy(void*);
 
 } // extern "C"
+
+void shim_gate_lock(void* context) {
+    static_cast<Agent*>(context)->callback_mutex.lock();
+}
+
+void shim_gate_unlock(void* context) {
+    static_cast<Agent*>(context)->callback_mutex.unlock();
+}
+
+int32_t shim_status_thread_stopped(void* context) {
+    return static_cast<Agent*>(context)->status_thread_stop.load() ? 1 : 0;
+}
+
+int32_t shim_invoke_server_connected(void* context, int32_t event, int32_t code) {
+    auto* agent = static_cast<Agent*>(context);
+    BBL::OnServerConnectedFn callback;
+    {
+        std::lock_guard<std::mutex> lock(agent->status_mutex);
+        callback = agent->on_server_connected;
+    }
+    if (!callback) return 0;
+    callback(event, code);
+    return 1;
+}
+
+int32_t shim_invoke_message(
+    void* context,
+    int32_t kind,
+    const uint8_t* dev_id, std::size_t dev_id_len,
+    const uint8_t* body, std::size_t body_len
+) {
+    auto* agent = static_cast<Agent*>(context);
+    BBL::OnMessageFn callback;
+    {
+        std::lock_guard<std::mutex> lock(agent->status_mutex);
+        callback = kind == 1 ? agent->on_message : agent->on_local_message;
+    }
+    if (!callback) return 0;
+    callback(
+        std::string(reinterpret_cast<const char*>(dev_id), dev_id_len),
+        std::string(reinterpret_cast<const char*>(body), body_len)
+    );
+    return 1;
+}
+
+int32_t shim_invoke_local_connected(
+    void* context, int32_t state, const uint8_t* dev_id, std::size_t dev_id_len
+) {
+    auto* agent = static_cast<Agent*>(context);
+    BBL::OnLocalConnectedFn callback;
+    {
+        std::lock_guard<std::mutex> lock(agent->status_mutex);
+        callback = agent->on_local_connect;
+    }
+    if (!callback) return 0;
+    callback(state, std::string(reinterpret_cast<const char*>(dev_id), dev_id_len), {});
+    return 1;
+}
+
+const PandarShimBridge kShimBridge = {
+    shim_gate_lock,
+    shim_gate_unlock,
+    shim_status_thread_stopped,
+    shim_invoke_server_connected,
+    shim_invoke_message,
+    shim_invoke_local_connected,
+};
 
 PluginConnectionResult take_connection_transition(Agent* agent) {
     if (!agent) return {};
@@ -62,44 +146,9 @@ PluginConnectionResult take_connection_transition(Agent* agent) {
 
 void dispatch_connection_transition(Agent* agent, const PluginConnectionResult& result) {
     if (!agent || (!result.changed && !result.auth_changed)) return;
-    if (result.changed) {
-        std::lock_guard<std::recursive_timed_mutex> gate(agent->callback_mutex);
-        BBL::OnServerConnectedFn callback;
-        bool claimed = false;
-        {
-            std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-            std::lock_guard<std::mutex> lock(agent->status_mutex);
-            if (!agent->status_thread_stop.load() &&
-                pandar_plugin_connection_claim_delivery(
-                    agent->printer_refresh_session,
-                    result.transition_ticket
-                ) == 1) {
-                callback = agent->on_server_connected;
-                claimed = true;
-            }
-        }
-        if (claimed && callback) {
-            callback(
-                result.connected ? BBL::BAMBU_NETWORK_SUCCESS : BBL::BAMBU_NETWORK_ERR_CONNECT_FAILED,
-                0
-            );
-        }
-    }
-    if (result.auth_changed) {
-        std::lock_guard<std::recursive_timed_mutex> gate(agent->callback_mutex);
-        BBL::OnServerConnectedFn callback;
-        {
-            std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
-            std::lock_guard<std::mutex> lock(agent->status_mutex);
-            if (agent->status_thread_stop.load() ||
-                pandar_plugin_connection_claim_delivery(
-                    agent->printer_refresh_session,
-                    result.auth_ticket
-                ) != 1) return;
-            callback = agent->on_server_connected;
-        }
-        if (callback && result.auth_rejected) callback(5, 0);
-    }
+    pandar_plugin_shim_dispatch_connection_transition(
+        &kShimBridge, agent, agent->printer_refresh_session, result
+    );
 }
 
 bool connection_printer_eligible_under_refresh(
@@ -122,15 +171,6 @@ bool connection_printer_eligible(const Agent* agent, const std::string& dev_id) 
 struct IssuedOfflineDelivery {
     std::string dev_id;
     std::uint64_t ticket = 0;
-};
-
-struct IssuedStudioDelivery {
-    int32_t kind = 0;
-    int32_t state = 0;
-    std::uint64_t ticket = 0;
-    std::uint64_t generation = 0;
-    std::string dev_id;
-    std::string body;
 };
 
 extern "C" void collect_offline_device(
@@ -159,80 +199,18 @@ std::vector<IssuedOfflineDelivery> take_printer_offline_transitions(Agent* agent
     return issued;
 }
 
-std::vector<IssuedStudioDelivery> take_studio_offline_transitions(Agent* agent) {
-    std::vector<IssuedStudioDelivery> deliveries;
-    if (!agent) return deliveries;
-    auto collect = [](void* context, int32_t kind, int32_t state,
-                      uint64_t ticket, uint64_t generation,
-                      const uint8_t* dev_id, std::size_t dev_id_len,
-                      const uint8_t* body, std::size_t body_len) {
-        static_cast<std::vector<IssuedStudioDelivery>*>(context)->push_back({
-            kind,
-            state,
-            ticket,
-            generation,
-            std::string(reinterpret_cast<const char*>(dev_id), dev_id_len),
-            std::string(reinterpret_cast<const char*>(body), body_len),
-        });
-    };
-    pandar_plugin_studio_take_work(
-        agent->printer_refresh_session, &deliveries, collect
-    );
-    return deliveries;
-}
-
-void dispatch_issued_printer_offline_transitions(
-    Agent* agent,
-    std::vector<IssuedOfflineDelivery> issued,
-    std::vector<IssuedStudioDelivery> deliveries
-) {
-    if (!agent) return;
-    for (const auto& offline : issued) {
-        pandar_plugin_connection_claim_delivery(
-            agent->printer_refresh_session, offline.ticket
-        );
-    }
-    for (const auto& delivery : deliveries) {
-        std::lock_guard<std::recursive_timed_mutex> gate(agent->callback_mutex);
-        if (pandar_plugin_studio_claim_delivery(
-                agent->printer_refresh_session, delivery.ticket
-            ) != 1) continue;
-        bool delivered = false;
-        if (delivery.kind == 1 || delivery.kind == 2) {
-            BBL::OnMessageFn callback;
-            {
-                std::lock_guard<std::mutex> lock(agent->status_mutex);
-                callback = delivery.kind == 1
-                    ? agent->on_message
-                    : agent->on_local_message;
-            }
-            if (callback) {
-                callback(delivery.dev_id, delivery.body);
-                delivered = true;
-            }
-        } else if (delivery.kind == 3) {
-            BBL::OnLocalConnectedFn callback;
-            {
-                std::lock_guard<std::mutex> lock(agent->status_mutex);
-                callback = agent->on_local_connect;
-            }
-            if (callback) {
-                callback(delivery.state, delivery.dev_id, {});
-                delivered = true;
-            }
-        }
-        pandar_plugin_studio_complete_delivery(
-            agent->printer_refresh_session, delivery.ticket, delivered
-        );
-    }
-}
-
 void dispatch_printer_offline_transitions(
     Agent* agent,
-    std::vector<IssuedOfflineDelivery> issued
+    const std::vector<IssuedOfflineDelivery>& issued
 ) {
-    dispatch_issued_printer_offline_transitions(
-        agent, std::move(issued), take_studio_offline_transitions(agent)
+    if (!agent) return;
+    std::vector<std::uint64_t> tickets;
+    tickets.reserve(issued.size());
+    for (const auto& offline : issued) {
+        tickets.push_back(offline.ticket);
+    }
+    pandar_plugin_shim_dispatch_offline_deliveries(
+        &kShimBridge, agent, agent->printer_refresh_session, tickets.data(), tickets.size()
     );
 }
 

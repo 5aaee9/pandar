@@ -178,33 +178,29 @@ fn printer_refresh_cache_admission_and_delivery_share_serialization_boundary() {
 #[test]
 fn agent_state_callbacks_share_final_claim_serialization() {
     let connection = include_str!("../src/shim_connection.hpp");
-    let server = connection
-        .split_once("void dispatch_connection_transition")
-        .expect("server transition dispatcher")
-        .1
-        .split_once("bool connection_printer_eligible_under_refresh")
-        .expect("server transition dispatcher end")
-        .0;
+    let dispatch = include_str!("../src/connection/studio/shim_dispatch.rs");
     assert!(
-        server
-            .matches("std::lock_guard<std::recursive_timed_mutex> gate(agent->callback_mutex)")
-            .count()
-            >= 2,
-        "server reachability and auth callbacks can overtake claimed state"
+        connection.contains("pandar_plugin_shim_dispatch_connection_transition(")
+            && connection.contains("pandar_plugin_shim_dispatch_offline_deliveries(")
+            && connection.contains("shim_gate_lock")
+            && connection.contains("callback_mutex.lock()")
+            && connection.contains("callback = agent->on_server_connected")
+            && connection.contains("callback = agent->on_local_connect"),
+        "shim must expose only gate/invoke trampolines to the Rust dispatch policy"
     );
-
-    let offline = connection
-        .split_once("void dispatch_issued_printer_offline_transitions")
-        .expect("offline transition dispatcher")
-        .1;
     assert!(
-        connection.contains("pandar_plugin_studio_take_work(")
-            && offline.contains("pandar_plugin_studio_claim_delivery(")
-            && offline.contains("pandar_plugin_studio_complete_delivery(")
-            && offline.contains("gate(agent->callback_mutex)")
-            && offline.contains("callback = agent->on_local_connect")
-            && offline.contains("delivery.kind == 3"),
-        "offline message and Lost callbacks bypass the Rust-owned two-phase final claim"
+        !connection.contains("pandar_plugin_studio_claim_delivery(")
+            && !connection.contains("pandar_plugin_studio_complete_delivery(")
+            && !connection.contains("pandar_plugin_connection_claim_delivery("),
+        "delivery claim policy must not live in the C++ shim"
+    );
+    assert!(
+        dispatch.contains("session.claim_delivery(result.transition_ticket)")
+            && dispatch.contains("session.studio_claim_delivery(work.ticket)")
+            && dispatch.contains("session.studio_complete_delivery(work.ticket")
+            && dispatch.contains("CallbackGate::lock(bridge, agent)")
+            && dispatch.contains("STUDIO_WORK_LOCAL_CONNECTED"),
+        "Rust dispatch must own claim-before-invoke, kind selection, and completion"
     );
 
     let connected = include_str!("../src/shim_status.hpp")
@@ -236,13 +232,12 @@ fn agent_state_callbacks_share_final_claim_serialization() {
         .expect("account Lost final claim end")
         .0;
     assert!(
-        account_lost.contains("dispatch_issued_printer_offline_transitions")
-            && account_lost.contains("take_studio_offline_transitions")
+        account_lost.contains("dispatch_printer_offline_transitions")
             && account_lost.contains("pandar_plugin_studio_finish_account_transition"),
         "account Lost work bypasses the Rust-owned offline dispatcher"
     );
     assert!(
-        account_lost.find("dispatch_issued_printer_offline_transitions")
+        account_lost.find("dispatch_printer_offline_transitions")
             < account_lost.find("pandar_plugin_studio_finish_account_transition"),
         "account transition admission reopened before Lost delivery completed"
     );

@@ -144,12 +144,9 @@ std::function<void()> finish_account_printer_transition(
 ) {
     std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
     auto offline = take_printer_offline_transitions(agent);
-    auto studio = take_studio_offline_transitions(agent);
     return [agent, account_epoch = transition.account_epoch,
-            offline = std::move(offline), studio = std::move(studio)]() mutable {
-        dispatch_issued_printer_offline_transitions(
-            agent, std::move(offline), std::move(studio)
-        );
+            offline = std::move(offline)]() mutable {
+        dispatch_printer_offline_transitions(agent, offline);
         std::lock_guard<std::recursive_mutex> refresh(agent->printer_refresh_mutex);
         pandar_plugin_studio_finish_account_transition(
             agent->printer_refresh_session, account_epoch

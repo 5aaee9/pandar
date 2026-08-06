@@ -1,8 +1,13 @@
 mod delivery;
 mod ffi;
 mod session;
+mod shim_dispatch;
 
 pub use ffi::*;
+pub use shim_dispatch::{
+    ShimCallbackBridge, pandar_plugin_shim_dispatch_connection_transition,
+    pandar_plugin_shim_dispatch_offline_deliveries,
+};
 
 use std::collections::{BTreeMap, BTreeSet};
 
