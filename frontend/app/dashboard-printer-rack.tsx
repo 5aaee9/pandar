@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 
 import { ConfirmForm } from './confirm-dialog'
-import { usePrinterControl } from './use-printer-control'
+import { PrinterControlFields, usePrinterControl } from './printer-controls'
 import {
   type RackNozzle,
   formatWear,
@@ -272,10 +272,10 @@ function RackMoveButton({
       title={t('rackMoveWarningTitle')}
       tone="default"
     >
-      <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-      <input name="printer_id" type="hidden" value={printer.id} />
-      <input name="action" type="hidden" value="nozzle_holder_ctrl" />
-      <input name="holder_action" type="hidden" value={action} />
+      <PrinterControlFields
+        printer={printer}
+        intent={{ action: 'nozzle_holder_ctrl', holderAction: action }}
+      />
     </ConfirmForm>
   )
 }
@@ -300,12 +300,7 @@ function RackOperationForm({
   const t = useTranslations('inventory')
   const { formAction, pending } = usePrinterControl()
   const fields = (
-    <>
-      <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-      <input name="printer_id" type="hidden" value={printer.id} />
-      <input name="action" type="hidden" value={action} />
-      <input name="nozzle_id" type="hidden" value={nozzleId} />
-    </>
+    <PrinterControlFields printer={printer} intent={{ action, nozzleId }} />
   )
   if (confirm) {
     return (

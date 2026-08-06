@@ -16,6 +16,10 @@ The Next.js route surface under `frontend/app/api/tenants/[tenantId]/` and the m
 
 The dashboard's per-view React Query data, owned by `frontend/app/route-data.ts`. The module exports `routeDataKeys` (per-view, tenant-scoped key prefixes), per-view query factories (`devicesRouteQuery`, `jobsRouteQuery`, `agentsRouteQuery`, `usersRouteQuery`, `settingsRouteQuery`, `agentSettingsRouteQuery`) carrying the fetch composition and cache policy, and the route-data types. Readers use the factories with `useQuery`; queryFns fetch same-origin through the Hub proxy. Mutations invalidate through `routeDataKeys` — never hand-written key literals.
 
+## Printer control
+
+The dashboard's printer-action seam, owned by `frontend/app/printer-controls.tsx`. The module exports `usePrinterControl()` (the mutation hook bound to the `controlPrinter` server action), the `PrinterControlIntent` tagged union (semantic actions such as `move_axes`, `set_hotend_temperature`, `ams_load_filament`, `nozzle_holder_ctrl`), `PrinterControlFields` (renders the hidden form fields for an intent, including per-action field-selection policy such as AMS target inclusion), and `printerControlFieldNames` for the user-editable inputs. View components declare intents; they never hand-write `tenant_id` / `printer_id` / `action` hidden fields.
+
 ## Machine report
 
 One Bambu MQTT report message decoded once into typed sections, owned by `crates/pandar-agent/src/machine/mqtt/report/` (`MachineReport`, with `print` / `snapshot` / `materials` sections plus firmware views). The `MachineReports<T>` adapter wraps a `BambuMqttTransport` so every consumer — refresh flows, report forwarding, the firmware session pump — crosses the seam typed; raw `serde_json::Value` stays inside the transport pumps and the report module, which privately retains the source payload for diagnostics pass-through only.

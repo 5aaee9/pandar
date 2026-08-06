@@ -1,27 +1,17 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { useRef } from 'react'
 import { useTranslations } from 'next-intl'
 import {
   LightbulbIcon,
   Loader2Icon,
-  MaximizeIcon,
   PauseIcon,
   PlayIcon,
   SquareIcon,
   ThermometerIcon,
-  VideoIcon,
 } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
   Popover,
@@ -30,10 +20,15 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 
-import { apiIdSegment } from './api-path'
+import { CameraDialogControl } from './dashboard-printer-camera-control'
 import { ConfirmForm } from './confirm-dialog'
 import type { Printer } from './dashboard-types'
-import { usePrinterControl } from './use-printer-control'
+import {
+  PrinterControlFields,
+  printerControlFieldNames,
+  usePrinterControl,
+} from './printer-controls'
+import type { PrinterTemperatureAction } from './printer-controls'
 import {
   NozzleSwitchControl,
   NozzleTemperatureCard,
@@ -52,7 +47,7 @@ type TemperatureControl = {
   target: string | null
   value: string
   tone: string
-  action: string
+  action: PrinterTemperatureAction
   ariaLabel: string
   popoverTitle: string
   presets: readonly number[]
@@ -111,24 +106,21 @@ export function PrinterControlsPanel({ printer }: { printer: Printer }) {
           pending={stopControl.pending}
           title={t('stopPrintTitle')}
         >
-          <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-          <input name="printer_id" type="hidden" value={printer.id} />
-          <input name="action" type="hidden" value="stop" />
+          <PrinterControlFields printer={printer} intent={{ action: 'stop' }} />
         </ConfirmForm>
         <PrinterInlineControl
-          action={controlsEnabled.resume ? 'resume' : 'pause'}
           enabled={controlsEnabled.resume || controlsEnabled.pause}
           icon={controlsEnabled.resume ? <PlayIcon /> : <PauseIcon />}
+          intent={{ action: controlsEnabled.resume ? 'resume' : 'pause' }}
           label={controlsEnabled.resume ? t('resumePrint') : t('pausePrint')}
           printer={printer}
           tone={controlsEnabled.resume ? 'neutral' : 'warning'}
         />
         <PrinterInlineControl
-          action="set_chamber_light"
           enabled={controlsEnabled.light}
           icon={<LightbulbIcon />}
+          intent={{ action: 'set_chamber_light', lightOn: printer.chamber_light_on === true ? false : true }}
           label={t('lightControl')}
-          lightOn={printer.chamber_light_on === true ? false : true}
           pressed={printer.chamber_light_on === true}
           printer={printer}
           stateLabel={printer.chamber_light_on === true ? t('lightStateOn') : t('lightStateOff')}
@@ -137,54 +129,6 @@ export function PrinterControlsPanel({ printer }: { printer: Printer }) {
         <CameraDialogControl printer={printer} />
       </div>
     </div>
-  )
-}
-
-function CameraDialogControl({ printer }: { printer: Printer }) {
-  const t = useTranslations('inventory')
-  const frameRef = useRef<HTMLDivElement>(null)
-
-  return (
-    <Dialog>
-      <DialogTrigger
-        render={
-          <Button
-            className="min-h-8 w-full gap-2 rounded-md bg-muted/50 px-3 py-2 hover:bg-muted dark:hover:bg-muted"
-            type="button"
-            variant="ghost"
-          />
-        }
-      >
-        <VideoIcon />
-        {t('viewCamera')}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-3xl" closeLabel={t('closeCamera')}>
-        <DialogHeader>
-          <DialogTitle>{t('cameraTitle')}</DialogTitle>
-        </DialogHeader>
-        <div ref={frameRef} className="relative overflow-hidden rounded-md bg-black">
-          <video
-            aria-label={t('cameraTitle')}
-            autoPlay
-            className="aspect-video w-full bg-black object-contain"
-            muted
-            playsInline
-            src={`/api/tenants/${apiIdSegment(printer.tenant_id, 'tenant_id')}/printers/${apiIdSegment(printer.id, 'printer_id')}/camera.mp4`}
-          />
-          <Button
-            aria-label={t('cameraFullscreen')}
-            className="absolute right-3 top-3 rounded-md bg-black/70 text-white hover:bg-black/90 hover:text-white dark:hover:bg-black/90"
-            onClick={() => void frameRef.current?.requestFullscreen()}
-            size="icon"
-            title={t('cameraFullscreen')}
-            type="button"
-            variant="ghost"
-          >
-            <MaximizeIcon className="size-4" />
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
   )
 }
 
@@ -202,7 +146,7 @@ function TemperatureCard({
   tone,
 }: {
   printer: Printer
-  action: string
+  action: PrinterTemperatureAction
   ariaLabel: string
   popoverTitle: string
   presets: readonly number[]
@@ -247,7 +191,7 @@ function TemperatureMenu({
   presets,
 }: {
   printer: Printer
-  action: string
+  action: PrinterTemperatureAction
   presets: readonly number[]
 }) {
   const t = useTranslations('inventory')
@@ -266,12 +210,12 @@ function TemperatureMenu({
         ))}
       </div>
       <form action={customControl.formAction} className="flex gap-1.5">
-        <PrinterTemperatureHiddenFields action={action} printer={printer} />
+        <PrinterControlFields printer={printer} intent={{ action }} />
         <Input
           aria-label={t('customTemperature')}
           inputMode="numeric"
           min="0"
-          name="temperature_celsius"
+          name={printerControlFieldNames.temperatureCelsius}
           placeholder={t('customTemperature')}
           type="number"
         />
@@ -290,7 +234,7 @@ function TemperaturePresetButton({
   temperature,
 }: {
   printer: Printer
-  action: string
+  action: PrinterTemperatureAction
   temperature: number
 }) {
   const t = useTranslations('inventory')
@@ -298,10 +242,9 @@ function TemperaturePresetButton({
 
   return (
     <form action={formAction}>
-      <PrinterTemperatureHiddenFields
-        action={action}
+      <PrinterControlFields
         printer={printer}
-        temperature={temperature}
+        intent={{ action, temperatureCelsius: temperature }}
       />
       <Button className="w-full" disabled={pending} size="sm" type="submit" variant="outline">
         {pending ? <Loader2Icon className="animate-spin" /> : null}
@@ -311,44 +254,23 @@ function TemperaturePresetButton({
   )
 }
 
-function PrinterTemperatureHiddenFields({
-  printer,
-  action,
-  temperature,
-}: {
-  printer: Printer
-  action: string
-  temperature?: number
-}) {
-  return (
-    <>
-      <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-      <input name="printer_id" type="hidden" value={printer.id} />
-      <input name="action" type="hidden" value={action} />
-      {temperature !== undefined ? (
-        <input name="temperature_celsius" type="hidden" value={temperature} />
-      ) : null}
-    </>
-  )
-}
-
 function PrinterInlineControl({
   printer,
-  action,
+  intent,
   label,
   icon,
   enabled,
-  lightOn,
   pressed,
   stateLabel,
   tone,
 }: {
   printer: Printer
-  action: string
+  intent:
+    | { action: 'resume' | 'pause' }
+    | { action: 'set_chamber_light'; lightOn: boolean }
   label: string
   icon: ReactNode
   enabled: boolean
-  lightOn?: boolean
   pressed?: boolean
   stateLabel?: string
   tone: 'danger' | 'warning' | 'neutral'
@@ -362,10 +284,7 @@ function PrinterInlineControl({
 
   return (
     <form action={formAction}>
-      <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-      <input name="printer_id" type="hidden" value={printer.id} />
-      <input name="action" type="hidden" value={action} />
-      {lightOn !== undefined ? <input name="light_on" type="hidden" value={String(lightOn)} /> : null}
+      <PrinterControlFields printer={printer} intent={intent} />
       <Button
         aria-label={stateLabel ? `${label} ${stateLabel}` : undefined}
         aria-pressed={pressed}

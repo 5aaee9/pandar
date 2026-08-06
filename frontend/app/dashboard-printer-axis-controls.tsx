@@ -15,7 +15,7 @@ import {
 
 import { ConfirmForm } from './confirm-dialog'
 import type { Printer } from './dashboard-types'
-import { usePrinterControl } from './use-printer-control'
+import { PrinterControlFields, usePrinterControl } from './printer-controls'
 
 const AXES = [
   { id: 'x', label: 'X', feedrate: 3000 },
@@ -76,9 +76,7 @@ export function PrinterAxisControls({ printer }: { printer: Printer }) {
               title={t('homeAxesTitle')}
               tone="default"
             >
-              <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-              <input name="printer_id" type="hidden" value={printer.id} />
-              <input name="action" type="hidden" value="home" />
+              <PrinterControlFields printer={printer} intent={{ action: 'home' }} />
             </ConfirmForm>
           </div>
         </DialogContent>
@@ -102,12 +100,15 @@ function AxisMoveButton({
 
   return (
     <form action={formAction}>
-      <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-      <input name="printer_id" type="hidden" value={printer.id} />
-      <input name="action" type="hidden" value="move_axes" />
-      <input name="axis" type="hidden" value={axis.id} />
-      <input name="delta_mm" type="hidden" value={distance} />
-      <input name="feedrate_mm_per_min" type="hidden" value={axis.feedrate} />
+      <PrinterControlFields
+        printer={printer}
+        intent={{
+          action: 'move_axes',
+          axis: axis.id,
+          deltaMm: distance,
+          feedrateMmPerMin: axis.feedrate,
+        }}
+      />
       <Button
         aria-label={t('moveAxisBy', { axis: axis.label, distance: signed })}
         className="w-full"

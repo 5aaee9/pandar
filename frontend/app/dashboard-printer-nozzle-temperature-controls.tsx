@@ -13,7 +13,11 @@ import {
 } from '@/components/ui/popover'
 
 import type { Printer } from './dashboard-types'
-import { usePrinterControl } from './use-printer-control'
+import {
+  PrinterControlFields,
+  printerControlFieldNames,
+  usePrinterControl,
+} from './printer-controls'
 import {
   formatTemperatureValue,
   hasActiveTargetTemperature,
@@ -74,10 +78,10 @@ export function NozzleSwitchControl({ printer }: { printer: Printer }) {
   const targetNozzle = activeNozzle === 'L' ? 'R' : 'L'
   return (
     <form action={formAction} className="h-full lg:col-start-4">
-      <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-      <input name="printer_id" type="hidden" value={printer.id} />
-      <input name="action" type="hidden" value="select_extruder" />
-      <input name="extruder_id" type="hidden" value={extruderIdForNozzle(targetNozzle)} />
+      <PrinterControlFields
+        printer={printer}
+        intent={{ action: 'select_extruder', extruderId: extruderIdForNozzle(targetNozzle) }}
+      />
       <Button
         aria-label={t('switchNozzleTo', { nozzle: targetNozzle })}
         className="h-full min-h-16 w-full flex-col rounded-md bg-muted/50 px-3 py-2 text-center disabled:text-muted-foreground"
@@ -222,10 +226,9 @@ function TemperaturePresetButton({
   const { formAction, pending } = usePrinterControl()
   return (
     <form action={formAction}>
-      <PrinterTemperatureHiddenFields
-        extruderId={extruderId}
+      <PrinterControlFields
         printer={printer}
-        temperature={temperature}
+        intent={{ action: 'set_hotend_temperature', extruderId, temperatureCelsius: temperature }}
       />
       <Button className="w-full" disabled={pending} size="sm" type="submit" variant="outline">
         {pending ? <Loader2Icon className="animate-spin" /> : null}
@@ -246,12 +249,15 @@ function CustomTemperatureForm({
   const { formAction, pending } = usePrinterControl()
   return (
     <form action={formAction} className="flex gap-1.5">
-      <PrinterTemperatureHiddenFields extruderId={extruderId} printer={printer} />
+      <PrinterControlFields
+        printer={printer}
+        intent={{ action: 'set_hotend_temperature', extruderId }}
+      />
       <Input
         aria-label={t('customTemperature')}
         inputMode="numeric"
         min="0"
-        name="temperature_celsius"
+        name={printerControlFieldNames.temperatureCelsius}
         placeholder={t('customTemperature')}
         type="number"
       />
@@ -260,28 +266,6 @@ function CustomTemperatureForm({
         {t('setTemperature')}
       </Button>
     </form>
-  )
-}
-
-function PrinterTemperatureHiddenFields({
-  printer,
-  temperature,
-  extruderId,
-}: {
-  printer: Printer
-  temperature?: number
-  extruderId: number | null
-}) {
-  return (
-    <>
-      <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-      <input name="printer_id" type="hidden" value={printer.id} />
-      <input name="action" type="hidden" value="set_hotend_temperature" />
-      {temperature !== undefined ? (
-        <input name="temperature_celsius" type="hidden" value={temperature} />
-      ) : null}
-      {extruderId !== null ? <input name="extruder_id" type="hidden" value={extruderId} /> : null}
-    </>
   )
 }
 

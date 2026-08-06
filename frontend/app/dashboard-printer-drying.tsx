@@ -5,7 +5,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
 import type { Printer } from './dashboard-types'
-import { usePrinterControl } from './use-printer-control'
+import {
+  PrinterControlFields,
+  printerControlFieldNames,
+  usePrinterControl,
+} from './printer-controls'
 
 export type DryingProps = {
   amsId: number
@@ -83,10 +87,7 @@ function StopDryingForm({ printer, amsId }: { printer: Printer; amsId: number })
   const { formAction, pending } = usePrinterControl()
   return (
     <form action={formAction}>
-      <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-      <input name="printer_id" type="hidden" value={printer.id} />
-      <input name="action" type="hidden" value="ams_stop_drying" />
-      <input name="ams_id" type="hidden" value={amsId} />
+      <PrinterControlFields printer={printer} intent={{ action: 'ams_stop_drying', amsId }} />
       <Button
         className="h-auto gap-1 rounded-sm px-1.5 py-0.5 text-xs hover:bg-accent hover:underline disabled:text-muted-foreground"
         disabled={pending}
@@ -105,16 +106,13 @@ function StartDryingForm({ printer, drying }: { printer: Printer; drying: Drying
   const { formAction, pending } = usePrinterControl()
   return (
     <form action={formAction} className="space-y-2">
-      <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-      <input name="printer_id" type="hidden" value={printer.id} />
-      <input name="action" type="hidden" value="ams_start_drying" />
-      <input name="ams_id" type="hidden" value={drying.amsId} />
+      <PrinterControlFields printer={printer} intent={{ action: 'ams_start_drying', amsId: drying.amsId }} />
       <label className="grid gap-1 text-xs">
         <span className="text-muted-foreground">{t('dryingFilament')}</span>
         {drying.filamentTypes.length > 0 ? (
           <select
             className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            name="filament"
+            name={printerControlFieldNames.filament}
           >
             {drying.filamentTypes.map((type) => (
               <option key={type} value={type}>
@@ -123,7 +121,7 @@ function StartDryingForm({ printer, drying }: { printer: Printer; drying: Drying
             ))}
           </select>
         ) : (
-          <Input defaultValue="PLA" name="filament" required />
+          <Input defaultValue="PLA" name={printerControlFieldNames.filament} required />
         )}
       </label>
       <div className="grid grid-cols-2 gap-2">
@@ -134,7 +132,7 @@ function StartDryingForm({ printer, drying }: { printer: Printer; drying: Drying
             inputMode="numeric"
             max={85}
             min={45}
-            name="temperature_celsius"
+            name={printerControlFieldNames.temperatureCelsius}
             required
             type="number"
           />
@@ -146,14 +144,14 @@ function StartDryingForm({ printer, drying }: { printer: Printer; drying: Drying
             inputMode="numeric"
             max={24}
             min={1}
-            name="duration_hours"
+            name={printerControlFieldNames.durationHours}
             required
             type="number"
           />
         </label>
       </div>
       <label className="flex items-center gap-2 text-xs text-foreground">
-        <input name="rotate_tray" type="checkbox" />
+        <input name={printerControlFieldNames.rotateTray} type="checkbox" />
         {t('dryingRotateTray')}
       </label>
       <Button className="w-full" disabled={pending} size="sm" type="submit">

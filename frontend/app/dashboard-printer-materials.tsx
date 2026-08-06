@@ -1,12 +1,11 @@
 
 
-import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
-import { CheckCircle2Icon, DownloadIcon, DropletsIcon, Loader2Icon, RotateCwIcon, ThermometerIcon, UploadIcon } from 'lucide-react'
+import { CheckCircle2Icon, DownloadIcon, DropletsIcon, RotateCwIcon, ThermometerIcon, UploadIcon } from 'lucide-react'
 
 import { DryingControl, type DryingProps, dryingProps } from './dashboard-printer-drying'
+import { SlotOperationForm } from './dashboard-printer-slot-operation-form'
 import type { Printer } from './dashboard-types'
-import { usePrinterControl } from './use-printer-control'
 import { mixedAmsLiteGlobalTrayId } from './material-tray-routing'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
@@ -83,7 +82,7 @@ export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
   )
 }
 
-type MaterialSlot = {
+export type MaterialSlot = {
   key: string
   amsId: number | null
   externalId: string | null
@@ -256,56 +255,6 @@ function MaterialSlotButton({
       </PopoverContent>
     </Popover>
   )
-}
-
-function SlotOperationForm({
-  printer,
-  slot,
-  action,
-  label,
-  icon,
-}: {
-  printer: Printer
-  slot: MaterialSlot
-  action: string
-  label: string
-  icon: ReactNode
-}) {
-  const includeTarget = action !== 'ams_reread_rfid'
-  const extruderId = action === 'ams_load_filament' ? slotExtruderId(slot, printer) : null
-  const { formAction, pending } = usePrinterControl()
-
-  return (
-    <form action={formAction}>
-      <input name="tenant_id" type="hidden" value={printer.tenant_id} />
-      <input name="printer_id" type="hidden" value={printer.id} />
-      <input name="action" type="hidden" value={action} />
-      {slot.amsId !== null ? <input name="ams_id" type="hidden" value={slot.amsId} /> : null}
-      {slot.slotId !== null ? <input name="slot_id" type="hidden" value={slot.slotId} /> : null}
-      {includeTarget && slot.globalTrayId !== null ? <input name="global_tray_id" type="hidden" value={slot.globalTrayId} /> : null}
-      {includeTarget && slot.externalId ? <input name="external_id" type="hidden" value={slot.externalId} /> : null}
-      {extruderId !== null ? <input name="extruder_id" type="hidden" value={extruderId} /> : null}
-      <Button
-        className="h-auto w-full justify-start gap-2 rounded-sm px-2 py-1.5 font-normal"
-        disabled={pending}
-        type="submit"
-        variant="ghost"
-      >
-        {pending ? <Loader2Icon className="animate-spin" /> : icon}
-        {label}
-      </Button>
-    </form>
-  )
-}
-
-function slotExtruderId(slot: MaterialSlot, printer: Printer) {
-  const toolhead = slot.toolhead?.trim().toUpperCase()
-  if (toolhead === 'R') return 0
-  if (toolhead === 'L') return 1
-  if (slot.externalId === '255') return 0
-  if (slot.externalId === '254') return 1
-  const model = printer.model?.toLowerCase() ?? ''
-  return model.includes('x2d') || model.includes('h2d') ? 0 : null
 }
 
 function ToolheadBadge({ value }: { value: string }) {
