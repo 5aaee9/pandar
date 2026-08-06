@@ -191,7 +191,10 @@ fn extract_bundle(bundle: Vec<u8>) -> anyhow::Result<StudioHookRelease> {
 }
 
 fn hex_sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 #[cfg(test)]

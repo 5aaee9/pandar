@@ -12,8 +12,9 @@ pub(super) fn assert_plugin_identity_reported(evidence: &ProbeEvidence) {
     } else {
         assert_eq!(evidence.plugin_source, "debug-build");
     }
-    assert_eq!(
-        evidence.plugin_sha256,
-        format!("{:x}", Sha256::digest(fs::read(reported).unwrap()))
-    );
+    let actual_sha256 = Sha256::digest(fs::read(reported).unwrap())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<String>();
+    assert_eq!(evidence.plugin_sha256, actual_sha256);
 }

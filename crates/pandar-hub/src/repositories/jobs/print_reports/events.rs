@@ -235,7 +235,12 @@ fn code_or_message_hash(diagnostic: &PrintReportDiagnostic) -> String {
             hash.update(diagnostic.message.trim().as_bytes());
             hash.update(b"\n");
             hash.update(diagnostic.payload_json.trim().as_bytes());
-            format!("{:x}", hash.finalize())[..16].to_string()
+            let fingerprint = hash
+                .finalize()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>();
+            fingerprint[..16].to_string()
         })
 }
 

@@ -76,5 +76,8 @@ impl From<&PendingRevocation> for CompletedRevocation {
 }
 
 fn token_sha256(token: &str) -> String {
-    format!("{:x}", Sha256::digest(token.as_bytes()))
+    Sha256::digest(token.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }

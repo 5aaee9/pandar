@@ -49,5 +49,5 @@ tonic-prost-build.workspace = true
 http-body-util.workspace = true
 rcgen.workspace = true
 tempfile.workspace = true
-tokio-tungstenite = "0.29"
+tokio-tungstenite = "0.30"
 tower = { workspace = true, features = ["util"] }

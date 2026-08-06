@@ -33,7 +33,10 @@ fn plugin_identity(path: &Path) -> Result<PluginIdentity, String> {
         .map_err(|error| format!("read plugin {}: {error}", canonical.display()))?;
     Ok(PluginIdentity {
         path: canonical,
-        sha256: format!("{:x}", Sha256::digest(contents)),
+        sha256: Sha256::digest(contents)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect(),
     })
 }
 

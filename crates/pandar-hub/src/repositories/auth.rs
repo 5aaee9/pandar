@@ -205,8 +205,10 @@ impl AuthRepository {
 }
 
 pub(crate) fn hash_token(token: &str) -> String {
-    let digest = Sha256::digest(token.as_bytes());
-    format!("{digest:x}")
+    Sha256::digest(token.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 pub(super) fn user_from_row(

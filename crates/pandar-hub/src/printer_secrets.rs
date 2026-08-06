@@ -2,7 +2,7 @@ use std::{fmt, sync::Arc};
 
 use aes_gcm::{
     Aes256Gcm, Nonce,
-    aead::{Aead, KeyInit, OsRng, Payload, rand_core::RngCore},
+    aead::{Aead, Generate, KeyInit, Payload},
 };
 use anyhow::{Context, bail};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -65,13 +65,12 @@ impl PrinterAccessCodeCipher {
         serial_number: &str,
         access_code: &str,
     ) -> anyhow::Result<String> {
-        let mut nonce = [0_u8; AES_GCM_NONCE_SIZE];
-        OsRng.fill_bytes(&mut nonce);
+        let nonce = Nonce::generate();
         let aad = access_code_aad(tenant_id, serial_number);
         let ciphertext = self
             .cipher
             .encrypt(
-                Nonce::from_slice(&nonce),
+                &nonce,
                 Payload {
                     msg: access_code.as_bytes(),
                     aad: aad.as_bytes(),
@@ -105,11 +104,12 @@ impl PrinterAccessCodeCipher {
             bail!("printer access-code envelope is truncated");
         }
         let (nonce, ciphertext) = envelope.split_at(AES_GCM_NONCE_SIZE);
+        let nonce = <&Nonce<_>>::try_from(nonce).expect("nonce split at nonce size");
         let aad = access_code_aad(tenant_id, serial_number);
         let plaintext = self
             .cipher
             .decrypt(
-                Nonce::from_slice(nonce),
+                nonce,
                 Payload {
                     msg: ciphertext,
                     aad: aad.as_bytes(),

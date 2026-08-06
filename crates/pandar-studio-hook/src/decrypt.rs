@@ -1,4 +1,4 @@
-use aes::cipher::{BlockDecryptMut, KeyIvInit, block_padding::NoPadding};
+use aes::cipher::{BlockModeDecrypt, KeyIvInit, block_padding::NoPadding};
 use anyhow::{Context, bail};
 use std::{fs, path::Path};
 
@@ -25,7 +25,7 @@ pub fn decrypt_bambu_studio_local_key_log(
     }
 
     let plaintext = Aes256CbcDecryptor::new(DEFAULT_CN_KEY.into(), DEFAULT_CN_IV.into())
-        .decrypt_padded_mut::<NoPadding>(&mut ciphertext)
+        .decrypt_padded::<NoPadding>(&mut ciphertext)
         .map_err(|_| anyhow::anyhow!("decrypt Bambu Studio log with local CN key"))?;
     let decoded = plaintext
         .iter()
@@ -55,7 +55,7 @@ fn ciphertext_offset(input: &[u8]) -> anyhow::Result<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aes::cipher::{BlockEncryptMut, KeyIvInit};
+    use aes::cipher::{BlockModeEncrypt, KeyIvInit};
 
     type Aes256CbcEncryptor = cbc::Encryptor<aes::Aes256>;
 
@@ -68,7 +68,7 @@ mod tests {
         block[..12].copy_from_slice(b"hello studio");
         let mut ciphertext = block.to_vec();
         let encrypted = Aes256CbcEncryptor::new(DEFAULT_CN_KEY.into(), DEFAULT_CN_IV.into())
-            .encrypt_padded_mut::<NoPadding>(&mut ciphertext, 16)
+            .encrypt_padded::<NoPadding>(&mut ciphertext, 16)
             .expect("encrypt fixture");
 
         let mut input = b"BEGIN_HEADER\n{}\nEND_HEADER\n".to_vec();

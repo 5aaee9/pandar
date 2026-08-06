@@ -54,11 +54,17 @@ impl BrtcMachineFileTransfer {
 }
 
 pub fn md5_lower(bytes: &[u8]) -> String {
-    format!("{:x}", Md5::digest(bytes))
+    Md5::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 pub fn md5_upper(bytes: &[u8]) -> String {
-    format!("{:X}", Md5::digest(bytes))
+    Md5::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect()
 }
 
 struct BrtcSession {
