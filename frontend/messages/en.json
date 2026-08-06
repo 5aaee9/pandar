@@ -356,6 +356,7 @@
     "cameraTitle": "Camera",
     "closeCamera": "Close camera",
     "cameraFullscreen": "Full screen",
+    "cameraPictureInPicture": "Picture in picture",
     "controlsLabel": "Controls",
     "filamentsLabel": "Filaments",
     "noMaterialReport": "No AMS report yet",

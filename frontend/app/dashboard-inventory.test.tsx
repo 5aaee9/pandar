@@ -1,6 +1,6 @@
 import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -381,6 +381,45 @@ describe("PrinterInventory", () => {
     );
     expect(video).not.toHaveAttribute("controls");
     expect(screen.getByRole("button", { name: "Full screen" })).toBeVisible();
+  });
+
+  it("keeps the camera stream mounted while picture in picture is active", async () => {
+    const requestPictureInPicture = vi.fn().mockResolvedValue({});
+    Object.defineProperty(document, "pictureInPictureEnabled", {
+      configurable: true,
+      value: true,
+    });
+    Object.defineProperty(HTMLVideoElement.prototype, "requestPictureInPicture", {
+      configurable: true,
+      value: requestPictureInPicture,
+    });
+
+    const user = userEvent.setup();
+    const heatingPrinter: Printer = {
+      ...printer,
+      nozzle_temperatures: [{ label: null, current_celsius: "27", target_celsius: "0" }],
+    };
+
+    renderWithMessages(
+      <PrinterInventory selectedTenant={tenant} printers={[heatingPrinter]} agents={[agent]} nowMs={0} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "View camera" }));
+    const video = document.querySelector("video");
+    expect(video).not.toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Picture in picture" }));
+
+    await waitFor(() => expect(requestPictureInPicture).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(video?.isConnected).toBe(true);
+    expect(screen.getByRole("button", { name: "Light Off" })).toBeEnabled();
+
+    act(() => video?.dispatchEvent(new Event("leavepictureinpicture")));
+    await waitFor(() => expect(video?.isConnected).toBe(false));
+
+    Reflect.deleteProperty(document, "pictureInPictureEnabled");
+    Reflect.deleteProperty(HTMLVideoElement.prototype, "requestPictureInPicture");
   });
 
   it("sends explicit light-off controls when chamber light is on", () => {

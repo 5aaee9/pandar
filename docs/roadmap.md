@@ -16,6 +16,12 @@
 
 ## Completed
 
+- Added native browser picture-in-picture support to the Devices camera viewer. Supported browsers now
+  show a PiP action beside fullscreen; entering PiP closes the camera dialog while keeping the same
+  MP4 video element mounted so pause/resume, chamber light, and other printer controls remain usable.
+  Leaving PiP tears down the hidden stream, unsupported browsers keep the existing fullscreen-only UI,
+  and frontend coverage locks the modal-to-page transition and stream lifetime.
+
 - Deepened the web printer-control seam into `frontend/app/printer-controls.tsx`: the module now
   owns the `PrinterControlIntent` tagged union, the hidden form-field contract
   (`PrinterControlFields`, including per-action field-selection policy such as AMS target
@@ -1676,6 +1682,10 @@ Exit criteria:
 
 ## Immediate Next
 
+- After deploying the updated Web frontend, validate camera picture-in-picture with a live stream in
+  current Chrome/Edge and Safari, including returning to Devices controls while PiP is active and
+  confirming that closing PiP releases the camera stream. Firefox lacks the standard video PiP API
+  exposed to page controls and should retain the fullscreen-only UI.
 - Run the `verify_a1_protected_ftps` read-only firmware gate against one real A1 and one real A1 Mini,
   record each exact main-module firmware version, and prove a root directory listing succeeds after `PROT P`.
   Do not upload, delete, print, or issue printer controls during this gate, and do not claim either
