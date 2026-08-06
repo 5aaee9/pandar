@@ -10,14 +10,6 @@ export function cn(...inputs: ClassValue[]) {
  * Keep these in one place to avoid repeating the same long class chains.
  */
 
-/** Small action button (border + background) used in dense tables/lists. */
-export const actionButtonSm =
-  "h-8 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground transition-colors duration-150 ease-out hover:bg-muted focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60";
-
-/** Danger-styled small action button for destructive operations. */
-export const actionButtonSmDanger =
-  "h-8 rounded-md border border-destructive/40 px-2 text-xs font-medium text-destructive transition-colors duration-150 ease-out hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50";
-
 /** Focus ring classes for native form controls (select, input). */
 export const focusRingClasses =
   "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";

@@ -1,5 +1,7 @@
 import { getTranslations } from "next-intl/server";
 
+import { Button } from "@/components/ui/button";
+
 import type { Tenant } from "../dashboard-types";
 
 type MobileTicketFormProps = {
@@ -53,12 +55,9 @@ export async function MobileTicketForm({
           {t("mobileTicketSummary")}
         </div>
       </div>
-      <button
-        className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
-        type="submit"
-      >
+      <Button size="lg" type="submit">
         {t("mobileSignInSubmit")}
-      </button>
+      </Button>
     </form>
   );
 }

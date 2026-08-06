@@ -107,13 +107,14 @@ export function DispatchMaterialSlotMenu({
           ))}
         </div>
         <div className="border-t border-border p-2">
-          <button
-            className="w-full rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors duration-150 ease-out hover:bg-muted"
+          <Button
+            className="h-auto w-full justify-start rounded-md px-3 py-2 font-normal text-muted-foreground hover:text-muted-foreground"
             onClick={() => select("")}
             type="button"
+            variant="ghost"
           >
             {t("unmapped")}
-          </button>
+          </Button>
         </div>
       </PopoverContent>
     </Popover>
@@ -219,12 +220,12 @@ function MaterialSlotButton({
     : null;
 
   return (
-    <button
+    <Button
       aria-disabled={ineligibility !== null}
       aria-label={[slotCode(slot), material, remainingLabel, reason].filter(Boolean).join(", ")}
       aria-pressed={selected}
       className={cn(
-        "relative min-w-0 overflow-hidden rounded-md border bg-background text-left transition-colors duration-150 ease-out",
+        "relative h-auto min-w-0 justify-start overflow-hidden whitespace-normal rounded-md border bg-background p-0 text-left font-normal",
         selected ? "border-primary ring-2 ring-primary/20" : "border-border",
         ineligibility
           ? "cursor-not-allowed opacity-40"
@@ -254,7 +255,7 @@ function MaterialSlotButton({
           </span>
         ) : null}
       </span>
-    </button>
+    </Button>
   );
 }
 

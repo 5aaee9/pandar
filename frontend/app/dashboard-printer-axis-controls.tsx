@@ -32,10 +32,15 @@ export function PrinterAxisControls({ printer }: { printer: Printer }) {
     <div className="mt-2">
       <Dialog>
         <DialogTrigger
-          className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-primary/10 px-2 text-sm font-semibold text-primary transition hover:bg-primary/15"
-          type="button"
+          render={
+            <Button
+              className="w-full rounded-md font-semibold"
+              type="button"
+              variant="soft"
+            />
+          }
         >
-          <Axis3dIcon className="size-4" />
+          <Axis3dIcon />
           {t('moveAxes')}
         </DialogTrigger>
         <DialogContent closeLabel={t('closeMoveAxes')}>
@@ -62,8 +67,9 @@ export function PrinterAxisControls({ printer }: { printer: Printer }) {
             <ConfirmForm
               action={homeControl.formAction}
               buttonAriaLabel={t('homeAxes')}
-              buttonClassName="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-muted px-2 text-sm font-semibold text-foreground hover:bg-muted/80 disabled:text-muted-foreground [&_svg]:size-4"
+              buttonClassName="w-full rounded-md bg-muted font-semibold text-foreground hover:bg-muted/80 dark:hover:bg-muted/80 disabled:text-muted-foreground"
               buttonLabel={t('homeAxes')}
+              buttonVariant="ghost"
               confirmLabel={t('homeAxesConfirm')}
               message={t('homeAxesMessage')}
               pending={homeControl.pending}

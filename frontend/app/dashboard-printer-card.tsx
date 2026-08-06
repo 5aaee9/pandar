@@ -24,6 +24,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
 import {
   Popover,
   PopoverContent,
@@ -185,11 +186,13 @@ function PrinterActions({ printer }: { printer: Printer }) {
       <Popover open={menuOpen} onOpenChange={setMenuOpen}>
         <PopoverTrigger
           render={
-            <button
+            <Button
               aria-haspopup="dialog"
               aria-label={t('detailsFor', { name: printer.name })}
-              className="rounded-md p-1 text-muted-foreground transition-colors duration-150 ease-out hover:bg-muted hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground"
+              size="icon-xs"
               type="button"
+              variant="ghost"
             />
           }
         >
@@ -201,25 +204,27 @@ function PrinterActions({ printer }: { printer: Printer }) {
           side="bottom"
           sideOffset={4}
         >
-          <button
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 ease-out hover:bg-muted"
+          <Button
+            className="h-auto w-full justify-start gap-2 rounded-sm px-2 py-1.5 font-normal"
             onClick={() => {
               setMenuOpen(false)
               setEditOpen(true)
             }}
             type="button"
+            variant="ghost"
           >
             <PencilIcon className="size-4" />
             {t('editPrinter')}
-          </button>
+          </Button>
           <form action={refreshAction.formAction}>
             <input name="tenant_id" type="hidden" value={printer.tenant_id} />
             <input name="printer_id" type="hidden" value={printer.id} />
-            <button
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 ease-out hover:bg-muted disabled:text-muted-foreground"
+            <Button
+              className="h-auto w-full justify-start gap-2 rounded-sm px-2 py-1.5 font-normal"
               disabled={refreshAction.pending}
               onClick={() => setMenuOpen(false)}
               type="submit"
+              variant="ghost"
             >
               {refreshAction.pending ? (
                 <Loader2Icon className="size-4 animate-spin" />
@@ -227,20 +232,21 @@ function PrinterActions({ printer }: { printer: Printer }) {
                 <RotateCwIcon className="size-4" />
               )}
               {t('refreshAms')}
-            </button>
+            </Button>
           </form>
           <div className="my-1 border-t border-border" />
-          <button
-            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-destructive transition-colors duration-150 ease-out hover:bg-muted"
+          <Button
+            className="h-auto w-full justify-start gap-2 rounded-sm px-2 py-1.5 font-normal text-destructive hover:text-destructive"
             onClick={() => {
               setMenuOpen(false)
               setConfirmOpen(true)
             }}
             type="button"
+            variant="ghost"
           >
             <TrashIcon className="size-4" />
             {t('deletePrinter')}
-          </button>
+          </Button>
         </PopoverContent>
       </Popover>
       <form ref={formRef} action={deleteAction.formAction}>
@@ -296,14 +302,10 @@ function PrinterActions({ printer }: { printer: Printer }) {
               />
             </label>
             <DialogFooter className="-mx-4 -mb-4 mt-2">
-              <button
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
-                disabled={editAction.pending}
-                type="submit"
-              >
-                {editAction.pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
+              <Button disabled={editAction.pending} size="lg" type="submit">
+                {editAction.pending ? <Loader2Icon className="animate-spin" /> : null}
                 {t('editPrinterSubmit')}
-              </button>
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -15,7 +15,7 @@ import { ConfirmForm } from "./confirm-dialog";
 import type { JoinLink, Tenant } from "./dashboard-types";
 import { EmptyState, SectionHeader, Tag } from "./dashboard-ui";
 import { getRelativeTime } from "./dayjs-relative-time";
-import { actionButtonSmDanger, rowHoverClasses } from "../lib/utils";
+import { rowHoverClasses } from "../lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -176,8 +176,8 @@ function RevokeInviteButton({
     <ConfirmForm
       action={formAction}
       buttonAriaLabel={t("revokeFor", { id: link.id })}
-      buttonClassName={actionButtonSmDanger}
       buttonLabel={t("revoke")}
+      buttonVariant="destructive"
       confirmLabel={t("revokeConfirm")}
       message={t("revokeMessage")}
       title={t("revokeTitle")}
@@ -323,14 +323,15 @@ function CreateInviteForm({
       )}
       <SecretActionResult state={state} />
       {state?.ok ? (
-        <button
-          className="inline-flex items-center gap-1 self-start text-xs font-medium text-primary underline-offset-4 transition-colors duration-150 ease-out hover:text-primary/80 hover:underline"
+        <Button
+          className="h-auto gap-1 self-start px-0 text-xs"
           onClick={onCreateAnother}
           type="button"
+          variant="link"
         >
           <LinkIcon aria-hidden="true" className="size-3" />
           {t("createAnother")}
-        </button>
+        </Button>
       ) : null}
     </form>
   );

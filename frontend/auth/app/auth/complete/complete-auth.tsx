@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
+
 import { authClient } from "../../../lib/auth-client";
 import type { CompleteAuthMessages } from "../../../lib/i18n";
 import { redirectWithAuthToken } from "../../../lib/token";
@@ -66,22 +68,21 @@ export function CompleteAuth({
         </div>
       ) : null}
       <div className="auth-actions">
-        <button
-          className="auth-button"
+        <Button
           disabled={pending !== null}
           type="button"
           onClick={addPasskey}
         >
           {pending === "passkey" ? messages.addingPasskey : messages.addPasskey}
-        </button>
-        <button
-          className="auth-secondary-button"
+        </Button>
+        <Button
           disabled={pending === "redirect"}
           type="button"
+          variant="outline"
           onClick={continueToDashboard}
         >
           {added ? messages.continueDashboard : messages.skipPasskey}
-        </button>
+        </Button>
       </div>
     </div>
   );

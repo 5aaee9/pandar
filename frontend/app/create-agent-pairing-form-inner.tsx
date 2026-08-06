@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { UserPlusIcon } from 'lucide-react'
 
 import { createAgentPairing } from './admin-actions'
+import { Button } from '@/components/ui/button'
 import {
   Input,
   PrimaryButton,
@@ -34,14 +35,15 @@ export function CreateAgentPairingFormInner({
       )}
       <SecretActionResult state={state} />
       {state?.ok ? (
-        <button
-          className="inline-flex items-center gap-1 self-start text-xs font-medium text-primary underline-offset-4 transition-colors duration-150 ease-out hover:text-primary/80 hover:underline"
+        <Button
+          className="h-auto gap-1 self-start px-0 text-xs"
           onClick={onCreateAnother}
           type="button"
+          variant="link"
         >
           <UserPlusIcon aria-hidden="true" className="size-3" />
           {t('createAnother')}
-        </button>
+        </Button>
       ) : null}
     </form>
   )

@@ -5,6 +5,7 @@ import { apiHeaders, authSource } from "../api-auth";
 import { authProviderConfig } from "../auth-provider";
 import type { Tenant, TenantList } from "../dashboard-types";
 import { LanguageSwitcher } from "../../components/language-switcher";
+import { Button } from "@/components/ui/button";
 import { pluginAuthSignInUrl, pluginSignInReturnTarget } from "./auth-return";
 import { PluginTicketForm } from "./plugin-ticket-form";
 
@@ -207,12 +208,9 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
                   ))}
                 </select>
               </label>
-              <button
-                className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
-                type="submit"
-              >
+              <Button size="lg" type="submit">
                 {t("continue")}
-              </button>
+              </Button>
             </form>
           </div>
         ) : (

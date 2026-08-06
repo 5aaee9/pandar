@@ -3,12 +3,10 @@
 import { useId, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
+import { Button } from '@/components/ui/button'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 
 import { ConfirmForm } from './confirm-dialog'
-
-const DELETE_BUTTON_CLASS =
-  'h-9 rounded-md border border-destructive/40 px-3 text-sm font-medium text-destructive transition-colors duration-150 ease-out hover:bg-destructive/10 disabled:pointer-events-none disabled:border-border disabled:text-muted-foreground'
 
 export function AgentDeleteForm({
   action,
@@ -39,16 +37,18 @@ export function AgentDeleteForm({
         <HoverCardTrigger
           delay={0}
           render={
-            <button
+            <Button
               aria-describedby={disabledMessageId}
               aria-disabled="true"
               aria-label={buttonAriaLabel}
-              className={`${DELETE_BUTTON_CLASS} cursor-not-allowed`}
+              className="cursor-not-allowed opacity-50"
               onClick={(event) => {
                 event.preventDefault()
                 toast.warning(disabledMessage)
               }}
+              size="sm"
               type="button"
+              variant="destructive"
             />
           }
         >
@@ -68,8 +68,9 @@ export function AgentDeleteForm({
     <ConfirmForm
       action={action}
       buttonAriaLabel={buttonAriaLabel}
-      buttonClassName={DELETE_BUTTON_CLASS}
       buttonLabel={buttonLabel}
+      buttonSize="sm"
+      buttonVariant="destructive"
       disabled={disabled}
       title={title}
       message={message}

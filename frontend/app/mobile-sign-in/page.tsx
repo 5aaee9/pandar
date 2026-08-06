@@ -5,6 +5,7 @@ import { apiHeaders, authSource } from "../api-auth";
 import { authProviderConfig } from "../auth-provider";
 import type { Tenant, TenantList } from "../dashboard-types";
 import { LanguageSwitcher } from "../../components/language-switcher";
+import { Button } from "@/components/ui/button";
 import { MobileTicketForm } from "./mobile-ticket-form";
 
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
@@ -155,12 +156,9 @@ export default async function MobileSignInPage({ searchParams }: PageProps) {
                   ))}
                 </select>
               </label>
-              <button
-                className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
-                type="submit"
-              >
+              <Button size="lg" type="submit">
                 {t("continue")}
-              </button>
+              </Button>
             </form>
           </div>
         ) : (

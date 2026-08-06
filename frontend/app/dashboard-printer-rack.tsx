@@ -9,6 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import { Button } from '@/components/ui/button'
 
 import { ConfirmForm } from './confirm-dialog'
 import { usePrinterControl } from './use-printer-control'
@@ -175,9 +176,14 @@ function RackSlotButton({
   return (
     <Popover>
       <PopoverTrigger
-        aria-label={t('rackSlotAria', { number: slotNumber, hotend: label })}
-        className="flex min-h-12 w-full flex-col items-center justify-center rounded-md bg-muted/50 px-1 py-1.5 text-center transition hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-        type="button"
+        render={
+          <Button
+            aria-label={t('rackSlotAria', { number: slotNumber, hotend: label })}
+            className="h-auto min-h-12 w-full flex-col rounded-md bg-muted/50 px-1 py-1.5 text-center font-normal hover:bg-muted dark:hover:bg-muted"
+            type="button"
+            variant="ghost"
+          />
+        }
       >
         <span className="text-[10px] font-medium text-muted-foreground">{slotNumber}</span>
         <span className="w-full truncate text-xs font-semibold text-foreground" title={label}>
@@ -256,8 +262,9 @@ function RackMoveButton({
     <ConfirmForm
       action={formAction}
       buttonAriaLabel={label}
-      buttonClassName="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors duration-150 ease-out disabled:bg-muted/60 disabled:text-muted-foreground enabled:bg-primary/10 enabled:text-primary enabled:hover:bg-primary/15 dark:enabled:bg-primary/20"
+      buttonClassName="w-full rounded-md font-semibold disabled:bg-muted/60 disabled:text-muted-foreground"
       buttonLabel={label}
+      buttonVariant="soft"
       confirmLabel={label}
       disabled={disabled}
       message={t('rackMoveWarningMessage')}
@@ -305,8 +312,9 @@ function RackOperationForm({
       <ConfirmForm
         action={formAction}
         buttonAriaLabel={label}
-        buttonClassName="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors duration-150 ease-out disabled:bg-muted/60 disabled:text-muted-foreground enabled:bg-primary/10 enabled:text-primary enabled:hover:bg-primary/15 dark:enabled:bg-primary/20 [&_svg]:size-4"
+        buttonClassName="w-full rounded-md font-semibold disabled:bg-muted/60 disabled:text-muted-foreground"
         buttonLabel={<>{icon}{label}</>}
+        buttonVariant="soft"
         confirmLabel={label}
         disabled={disabled}
         message={t('rackMoveWarningMessage')}
@@ -321,14 +329,15 @@ function RackOperationForm({
   return (
     <form action={formAction}>
       {fields}
-      <button
-        className="flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors duration-150 ease-out disabled:bg-muted/60 disabled:text-muted-foreground enabled:bg-primary/10 enabled:text-primary enabled:hover:bg-primary/15 dark:enabled:bg-primary/20 [&_svg]:size-4"
+      <Button
+        className="w-full rounded-md font-semibold disabled:bg-muted/60 disabled:text-muted-foreground"
         disabled={disabled || pending}
         type="submit"
+        variant="soft"
       >
         {pending ? <Loader2Icon className="animate-spin" /> : icon}
         {label}
-      </button>
+      </Button>
     </form>
   )
 }

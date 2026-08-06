@@ -1,5 +1,7 @@
 import { useTranslations } from 'next-intl'
 
+import { Button } from '@/components/ui/button'
+
 import {
   diagnosePrinter,
 } from './actions'
@@ -61,13 +63,14 @@ export function DiagnosticsSection({
                     {printer.serial_number}
                   </div>
                 </div>
-                <button
+                <Button
                   aria-label={t('diagnoseFor', { name: printer.name })}
-                  className="h-9 rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors duration-150 ease-out hover:bg-muted"
+                  size="lg"
                   type="submit"
+                  variant="outline"
                 >
                   {t('diagnose')}
-                </button>
+                </Button>
               </form>
             ))}
           </div>

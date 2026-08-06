@@ -149,10 +149,11 @@ function TenantAccessMenuItem({
   onSelect: () => void;
 }) {
   return (
-    <button
-      className="flex w-full items-center gap-2 px-2 py-2 text-left text-sm transition-colors duration-150 ease-out hover:bg-muted focus-visible:bg-muted"
+    <Button
+      className="h-auto w-full justify-start gap-2 rounded-none px-2 py-2 text-left font-normal"
       onClick={onSelect}
       type="button"
+      variant="ghost"
     >
       <span className="flex size-7 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
         {icon}
@@ -163,7 +164,7 @@ function TenantAccessMenuItem({
           {description}
         </span>
       </span>
-    </button>
+    </Button>
   );
 }
 

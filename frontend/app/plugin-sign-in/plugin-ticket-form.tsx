@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
+import { Button } from "@/components/ui/button";
+
 import type { Tenant } from "../dashboard-types";
 
 type PluginTicketFormProps = {
@@ -136,12 +138,9 @@ export function PluginTicketForm({
           {t("ticketSummary")}
         </div>
       </div>
-      <button
-        className="h-9 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
-        type="submit"
-      >
+      <Button size="lg" type="submit">
         {t("signInSubmit")}
-      </button>
+      </Button>
     </form>
   );
 }

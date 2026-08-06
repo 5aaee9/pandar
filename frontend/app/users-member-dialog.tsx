@@ -9,7 +9,8 @@ import { roles, useAdminDate } from "./admin-model";
 import { ConfirmForm } from "./confirm-dialog";
 import { Tag } from "./dashboard-ui";
 import type { Tenant, User, UserIdentity } from "./dashboard-types";
-import { actionButtonSm, actionButtonSmDanger, inputSmClasses, monoIdClasses } from "../lib/utils";
+import { inputSmClasses, monoIdClasses } from "../lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -128,13 +129,13 @@ function RoleForm({ tenant, user }: { tenant: Tenant; user: User }) {
             </option>
           ))}
         </select>
-        <button
-          className={actionButtonSm}
+        <Button
           disabled={pending || !roleChanged}
           type="submit"
+          variant="outline"
         >
           {pending ? t("saving") : t("saveRole")}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -223,7 +224,8 @@ function RemoveMemberSection({
         <ConfirmForm
           action={formAction}
           buttonAriaLabel={t("removeFor", { user: user.display_name })}
-          buttonClassName={`${actionButtonSmDanger} mt-2`}
+          buttonClassName="mt-2"
+          buttonVariant="destructive"
           buttonLabel={
             <span className="inline-flex items-center gap-1">
               <TrashIcon aria-hidden="true" className="size-3.5" />

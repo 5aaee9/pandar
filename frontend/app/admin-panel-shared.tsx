@@ -21,8 +21,8 @@ function CopyButton({ label, value }: { label: string; value: string }) {
   }, [copied]);
 
   return (
-    <button
-      className="inline-flex items-center gap-1 self-start rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-foreground transition-colors duration-150 ease-out hover:bg-muted"
+    <Button
+      className="self-start"
       onClick={async () => {
         if (!navigator.clipboard) {
           return;
@@ -34,7 +34,9 @@ function CopyButton({ label, value }: { label: string; value: string }) {
           setCopied(false);
         }
       }}
+      size="xs"
       type="button"
+      variant="outline"
     >
       {copied ? (
         <CheckIcon aria-hidden="true" className="size-3.5 text-success" />
@@ -42,7 +44,7 @@ function CopyButton({ label, value }: { label: string; value: string }) {
         <CopyIcon aria-hidden="true" className="size-3.5" />
       )}
       {copied ? t("copied") : label}
-    </button>
+    </Button>
   );
 }
 

@@ -59,8 +59,14 @@ export function DryingControl({ printer, drying }: { printer: Printer; drying: D
   return (
     <Popover>
       <PopoverTrigger
-        aria-label={t('dryFilament')}
-        className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring [&_svg]:size-3"
+        render={
+          <Button
+            aria-label={t('dryFilament')}
+            className="h-auto gap-1 rounded-sm px-1.5 py-0.5 text-xs hover:bg-accent dark:hover:bg-accent [&_svg]:size-3"
+            type="button"
+            variant="ghost"
+          />
+        }
       >
         <FlameIcon aria-hidden="true" />
         {t('dryFilament')}
@@ -81,14 +87,15 @@ function StopDryingForm({ printer, amsId }: { printer: Printer; amsId: number })
       <input name="printer_id" type="hidden" value={printer.id} />
       <input name="action" type="hidden" value="ams_stop_drying" />
       <input name="ams_id" type="hidden" value={amsId} />
-      <button
-        className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-medium text-foreground underline-offset-2 transition-colors hover:bg-accent hover:underline focus-visible:outline-2 focus-visible:outline-ring disabled:text-muted-foreground"
+      <Button
+        className="h-auto gap-1 rounded-sm px-1.5 py-0.5 text-xs hover:bg-accent hover:underline disabled:text-muted-foreground"
         disabled={pending}
         type="submit"
+        variant="ghost"
       >
         {pending ? <Loader2Icon aria-hidden="true" className="size-3 animate-spin" /> : null}
         {t('cancelDrying')}
-      </button>
+      </Button>
     </form>
   )
 }

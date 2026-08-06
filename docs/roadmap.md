@@ -16,6 +16,39 @@
 
 ## Completed
 
+- Completed the project-wide Button unification: every remaining hand-rolled `<button>` and
+  Trigger with copy-pasted button classes now renders the shared `Button` primitive. The shared
+  component gained a `soft` variant (`bg-primary/10 text-primary`) covering the dense printer
+  control grids, which replaced the repeated tone-override strings in the rack/axis/nozzle
+  controls (`ConfirmForm` call sites included) with `variant="soft"` + layout-only classes.
+  Migrated: sign-in page submits (plugin/mobile, `size="lg"`), printer-card overflow trigger
+  (`ghost`/`icon-xs`) and menu items (`ghost` full-width), printer camera/fullscreen and rack/
+  drying/materials/nozzle popover triggers and tile controls, error-boundary retry buttons,
+  mismatch review action (`link`), tenant switcher/sidebar menu rows, users filter chips
+  (`soft`/`outline` toggle) and row actions, theme/language segmented switchers
+  (`default`/`ghost` toggle), copy button (`outline`/`xs`), "create another" actions (`link`),
+  and the dashboard-inventory link-printer trigger which had carried a full copy of the Button
+  classes. The auth sub-app (`frontend/auth`, a separate Next.js app with its own shadcn
+  primitives) keeps its local `components/ui/button.tsx`; its passkey complete/sign-out pages
+  moved from the deleted `auth-button`/`auth-secondary-button` CSS classes onto that local Button
+  (`default`/`outline`), matching the auth login form. The only raw `<button>` left is the
+  sidebar resize rail, an invisible layout drag handle with no button styling. Web + auth apps:
+  lint, typecheck, builds, and 429 + 11 tests pass.
+
+- Unified dashboard action buttons onto the shared `Button` primitive. The Agents row Delete
+  button previously used a hand-rolled class string (`h-9 rounded-md border-destructive/40`), so it
+  was visibly taller and differently shaped than the neighboring Discover/Refresh/Settings buttons;
+  it now renders the shared `Button` with `variant="destructive" size="sm"` (including the disabled
+  HoverCard trigger), matching the row's `outline`/`sm` buttons. The row's Settings entry is real
+  navigation, so it stays a semantic `Link` but now takes its classes from the newly exported
+  `buttonVariants` helper instead of a copy-pasted class chain. `ConfirmForm` no longer requires a
+  raw `buttonClassName` string: it renders the shared `Button` internally and accepts
+  `buttonVariant`/`buttonSize` (plus optional extra classes), and all call sites were migrated —
+  Users revoke/remove/save buttons onto standard variants (deleting the now-unused
+  `actionButtonSm`/`actionButtonSmDanger` constants), and the printer control grids (axis homing,
+  stop print, nozzle-rack moves) onto variant + tone overrides that preserve their existing dense
+  grid look next to their raw-button siblings. Web lint, typecheck, and 429 tests pass.
+
 - Extended the Devices in-place mutation treatment to the printer-card overflow menu. Refresh AMS
   now submits in place through the same pending/toast pattern (disabled spinner item while in
   flight, "AMS refresh queued" or the translated hub error, no `?status=` redirect), and

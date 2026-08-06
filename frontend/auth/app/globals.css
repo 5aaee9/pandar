@@ -289,35 +289,6 @@ input {
   margin-top: 14px;
 }
 
-.auth-button {
-  min-height: 40px;
-  border: 0;
-  border-radius: 6px;
-  background: var(--primary);
-  color: var(--primary-foreground);
-  cursor: pointer;
-  font-weight: 700;
-  line-height: 1.25;
-  padding: 10px 14px;
-}
-
-.auth-button:hover:not(:disabled) {
-  background: var(--foreground);
-}
-
-.auth-button:active:not(:disabled) {
-  background: var(--primary);
-}
-
-.auth-button:disabled {
-  cursor: progress;
-  opacity: 0.72;
-}
-
-.auth-button:disabled:not(:first-child) {
-  cursor: not-allowed;
-}
-
 .auth-link {
   color: var(--primary);
   font-size: 14px;
@@ -385,32 +356,6 @@ input {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.auth-secondary-button {
-  display: inline-flex;
-  min-height: 38px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--panel);
-  color: var(--foreground);
-  cursor: pointer;
-  font-weight: 650;
-  line-height: 1.25;
-  padding: 8px 12px;
-  text-decoration: none;
-}
-
-.auth-secondary-button:hover {
-  border-color: var(--ring);
-  background: var(--secondary);
-}
-
-.auth-secondary-button:disabled {
-  cursor: progress;
-  opacity: 0.72;
 }
 
 @media (min-width: 760px) {

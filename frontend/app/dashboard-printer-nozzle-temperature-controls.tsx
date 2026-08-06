@@ -38,9 +38,14 @@ export function NozzleTemperatureCard({
   return (
     <Popover>
       <PopoverTrigger
-        aria-label={nozzles.length > 1 ? t('setNozzleTemperatures') : t('setNozzleTemperature')}
-        className="flex min-h-16 flex-col items-center justify-center rounded-md bg-muted/50 px-3 py-2 text-center transition-colors duration-150 ease-out hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-        type="button"
+        render={
+          <Button
+            aria-label={nozzles.length > 1 ? t('setNozzleTemperatures') : t('setNozzleTemperature')}
+            className="h-auto min-h-16 w-full flex-col rounded-md bg-muted/50 px-3 py-2 text-center font-normal hover:bg-muted dark:hover:bg-muted"
+            type="button"
+            variant="ghost"
+          />
+        }
       >
         <ThermometerIcon className="size-4 text-muted-foreground" />
         <div className="mt-1 text-xs font-medium text-muted-foreground">{t('nozzleTemperature')}</div>
@@ -73,11 +78,12 @@ export function NozzleSwitchControl({ printer }: { printer: Printer }) {
       <input name="printer_id" type="hidden" value={printer.id} />
       <input name="action" type="hidden" value="select_extruder" />
       <input name="extruder_id" type="hidden" value={extruderIdForNozzle(targetNozzle)} />
-      <button
+      <Button
         aria-label={t('switchNozzleTo', { nozzle: targetNozzle })}
-        className="flex h-full min-h-16 w-full flex-col items-center justify-center rounded-md bg-muted/50 px-3 py-2 text-center transition-colors duration-150 ease-out hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:text-muted-foreground"
+        className="h-full min-h-16 w-full flex-col rounded-md bg-muted/50 px-3 py-2 text-center disabled:text-muted-foreground"
         disabled={pending}
         type="submit"
+        variant="ghost"
       >
         {pending ? (
           <Loader2Icon className="size-4 animate-spin text-muted-foreground" />
@@ -104,7 +110,7 @@ export function NozzleSwitchControl({ printer }: { printer: Printer }) {
           ))}
         </div>
         <div className="text-xs font-medium text-muted-foreground">{t('nozzleTemperature')}</div>
-      </button>
+      </Button>
     </form>
   )
 }

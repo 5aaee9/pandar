@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import { PlusIcon } from 'lucide-react'
 
 import { FormattedDate } from '../components/formatted-date'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -202,7 +202,7 @@ function AgentRow({
         </form>
         <Link
           aria-label={t('settingsFor', { name: agent.name })}
-          className="inline-flex h-7 shrink-0 items-center justify-center gap-1 rounded-[min(var(--radius-md),12px)] border border-border bg-background px-2.5 text-[0.8rem] font-medium whitespace-nowrap transition-colors duration-150 ease-out hover:bg-muted hover:text-foreground"
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}
           href={agentSettingsHref(agent.id)}
         >
           {t('settings')}

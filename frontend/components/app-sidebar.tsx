@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 
 import type { AuthMetadata, Tenant } from "@/app/dashboard-types"
+import { Button } from "@/components/ui/button"
 import {
   dashboardSidebarHref,
   logoutHref,
@@ -142,18 +143,19 @@ export function AppSidebar({
                     tenants.map((tenant) => {
                       const isSelected = tenant.id === selectedTenant?.id
                       return (
-                        <button
+                        <Button
                           aria-current={isSelected ? "true" : undefined}
-                          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-muted focus-visible:bg-muted"
+                          className="h-auto w-full justify-start gap-2 rounded-md px-2 py-2 font-normal text-foreground"
                           key={tenant.id}
                           onClick={() => selectTenant(tenant.id)}
                           type="button"
+                          variant="ghost"
                         >
                           <span className="flex size-5 items-center justify-center">
                             {isSelected ? <CheckIcon className="size-4" /> : null}
                           </span>
                           <span className="truncate">{tenant.display_name}</span>
-                        </button>
+                        </Button>
                       )
                     })
                   )}

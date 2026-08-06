@@ -2,6 +2,8 @@
 
 import { useTranslations } from "next-intl";
 
+import { Button } from "@/components/ui/button";
+
 import { themeModes, type ThemeMode, useSettings } from "../lib/settings-store";
 
 const labelKeys: Record<ThemeMode, string> = {
@@ -23,19 +25,17 @@ export function ThemeSwitcher() {
       {themeModes.map((theme) => {
         const isActive = theme === active;
         return (
-          <button
-            key={theme}
+          <Button
             aria-pressed={isActive}
-            className={`h-7 rounded-md px-3 text-xs font-medium transition-colors ${
-              isActive
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
-            }`}
+            className={`rounded-md px-3 ${isActive ? "" : "text-muted-foreground"}`}
+            key={theme}
             onClick={() => useSettings.setState({ theme })}
+            size="sm"
             type="button"
+            variant={isActive ? "default" : "ghost"}
           >
             {t(labelKeys[theme])}
-          </button>
+          </Button>
         );
       })}
     </div>

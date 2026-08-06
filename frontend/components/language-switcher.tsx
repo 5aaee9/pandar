@@ -6,6 +6,7 @@ import { useTransition } from 'react'
 
 import { locales, type Locale } from '../i18n/routing'
 import { useSettings } from '../lib/settings-store'
+import { Button } from '@/components/ui/button'
 
 const LABELS: Record<Locale, string> = {
   en: 'EN',
@@ -42,21 +43,19 @@ export function LanguageSwitcher() {
       {locales.map((locale) => {
         const isActive = locale === active
         return (
-          <button
-            key={locale}
+          <Button
             aria-label={locale === 'en' ? 'English' : '中文'}
             aria-pressed={isActive}
-            className={`h-7 rounded-md px-3 text-xs font-medium transition-colors ${
-              isActive
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            }`}
+            className={`rounded-md px-3 ${isActive ? "" : "text-muted-foreground"}`}
             disabled={pending}
+            key={locale}
             onClick={() => choose(locale)}
+            size="sm"
             type="button"
+            variant={isActive ? "default" : "ghost"}
           >
             {LABELS[locale]}
-          </button>
+          </Button>
         )
       })}
     </div>

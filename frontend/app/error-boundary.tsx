@@ -3,6 +3,8 @@
 import { unstable_rethrow } from 'next/navigation'
 import { Component, type ReactNode } from 'react'
 
+import { Button } from '@/components/ui/button'
+
 interface Props {
   children: ReactNode
   fallback?: ReactNode
@@ -39,12 +41,13 @@ export class ErrorBoundary extends Component<Props, State> {
         <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
           <h3 className="font-semibold">Something went wrong</h3>
           <p className="mt-1">{this.state.error?.message ?? 'An unexpected error occurred'}</p>
-          <button
-            className="mt-3 rounded-md bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground transition hover:bg-destructive/90"
+          <Button
+            className="mt-3 bg-destructive text-destructive-foreground hover:bg-destructive/90"
             onClick={() => this.setState({ hasError: false, error: null })}
+            size="sm"
           >
             Try again
-          </button>
+          </Button>
         </div>
       )
     }

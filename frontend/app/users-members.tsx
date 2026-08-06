@@ -12,6 +12,7 @@ import {
   rowHoverClasses,
   tableScrollClasses,
 } from "../lib/utils";
+import { Button } from "@/components/ui/button";
 import { MemberDialog } from "./users-member-dialog";
 import {
   countByRole,
@@ -68,19 +69,18 @@ export function MembersSection({
   const filterChip = (id: RoleFilter, label: string, count: number) => {
     const active = roleFilter === id;
     return (
-      <button
+      <Button
         aria-pressed={active}
-        className={`rounded-md border px-2 py-1 text-xs font-medium transition-colors duration-150 ease-out ${
-          active
-            ? "border-primary/40 bg-primary/10 text-primary"
-            : "border-border bg-background text-muted-foreground hover:bg-muted"
+        className={`h-auto rounded-md px-2 py-1 text-xs ${
+          active ? "border-primary/40" : "text-muted-foreground hover:text-muted-foreground"
         }`}
         key={id}
         onClick={() => setRoleFilter(id)}
         type="button"
+        variant={active ? "soft" : "outline"}
       >
         {label} · {count}
-      </button>
+      </Button>
     );
   };
 
@@ -150,10 +150,11 @@ export function MembersSection({
                     return (
                       <tr key={user.id} className={rowHoverClasses}>
                         <td className="px-4 py-3">
-                          <button
-                            className="flex w-full min-w-0 items-center gap-3 rounded-md text-left focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                          <Button
+                            className="h-auto w-full min-w-0 justify-start gap-3 rounded-md p-0 font-normal hover:bg-transparent dark:hover:bg-transparent"
                             onClick={() => setSelectedUserId(user.id)}
                             type="button"
+                            variant="ghost"
                           >
                             <UserAvatar name={user.display_name} />
                             <span className="min-w-0">
@@ -167,7 +168,7 @@ export function MembersSection({
                                 {user.email}
                               </span>
                             </span>
-                          </button>
+                          </Button>
                         </td>
                         <td className="px-4 py-3">
                           <Tag value={user.role} />
@@ -189,19 +190,21 @@ export function MembersSection({
                           {formatDate(user.created_at)}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <button
+                          <Button
                             aria-label={t("manageFor", {
                               user: user.display_name,
                             })}
-                            className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 ease-out hover:bg-muted hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                            className="text-muted-foreground hover:text-foreground"
                             onClick={() => setSelectedUserId(user.id)}
+                            size="icon-sm"
                             type="button"
+                            variant="ghost"
                           >
                             <ChevronRightIcon
                               aria-hidden="true"
                               className="size-4"
                             />
-                          </button>
+                          </Button>
                         </td>
                       </tr>
                     );

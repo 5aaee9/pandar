@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+
 import { authClient } from "../../lib/auth-client";
 import type { SignOutMessages } from "../../lib/i18n";
 
@@ -69,17 +71,17 @@ export function SignOutClient({
         <span>{messages.signOutWarning}</span>
         {error}
         <div className="auth-status-actions">
-          <button
-            className="auth-secondary-button"
+          <Button
+            variant="outline"
             onClick={() => window.location.reload()}
             type="button"
           >
             {messages.retrySignOut}
-          </button>
+          </Button>
           <form action={dashboardSignOutUrl} method="post">
-            <button className="auth-secondary-button" type="submit">
+            <Button variant="outline" type="submit">
               {messages.returnToDashboard}
-            </button>
+            </Button>
           </form>
         </div>
       </div>

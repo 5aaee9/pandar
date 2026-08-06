@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { Loader2Icon } from 'lucide-react'
 
@@ -77,6 +77,8 @@ export function ConfirmForm({
   confirmLabel,
   cancelLabel,
   tone = 'danger',
+  buttonVariant = 'default',
+  buttonSize = 'default',
   buttonClassName,
   buttonLabel,
   buttonAriaLabel,
@@ -90,7 +92,9 @@ export function ConfirmForm({
   confirmLabel?: string
   cancelLabel?: string
   tone?: 'default' | 'danger'
-  buttonClassName: string
+  buttonVariant?: ComponentProps<typeof Button>['variant']
+  buttonSize?: ComponentProps<typeof Button>['size']
+  buttonClassName?: string
   buttonLabel: ReactNode
   buttonAriaLabel?: string
   disabled?: boolean
@@ -106,16 +110,18 @@ export function ConfirmForm({
     <>
       <form ref={formRef} action={action}>
         {children}
-        <button
+        <Button
           aria-label={buttonAriaLabel}
           className={buttonClassName}
           disabled={disabled || pending}
           onClick={openDialog}
+          size={buttonSize}
           type="button"
+          variant={buttonVariant}
         >
-          {pending ? <Loader2Icon className="size-4 animate-spin" /> : null}
+          {pending ? <Loader2Icon className="animate-spin" /> : null}
           {buttonLabel}
-        </button>
+        </Button>
       </form>
       <ConfirmDialog
         open={open}

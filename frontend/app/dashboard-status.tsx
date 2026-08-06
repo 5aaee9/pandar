@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { refreshPrinters } from './actions'
 import { retryDispatchJob } from './job-actions'
 import { dashboardSidebarHref } from './dashboard-shell'
+import { Button } from '@/components/ui/button'
 import type { AttentionItem, Severity, TextKey } from './dashboard-attention'
 import type { Tenant } from './dashboard-types'
 
@@ -177,26 +178,27 @@ function AttentionAction({
       <form action={refreshPrinters}>
         <input name="tenant_id" type="hidden" value={tenant.id} />
         <input name="agent_id" type="hidden" value={item.agentId} />
-        <button
-          className={`h-8 rounded-md border border-border bg-background px-2 text-xs font-medium text-foreground transition-colors duration-150 ease-out hover:bg-accent`}
+        <Button
+          className="px-2 text-xs"
           type="submit"
+          variant="outline"
         >
           {tAct('refresh')}
-        </button>
+        </Button>
       </form>
     )
   }
 
   if (item.kind === 'job' && item.reason === 'job_print_failed') {
     return (
-      <button
+      <Button
         aria-haspopup="dialog"
-        className={`h-8 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/80`}
+        className="px-2 text-xs"
         onClick={() => onOpenReprint(item.mono)}
         type="button"
       >
         {tAct('reprint')}
-      </button>
+      </Button>
     )
   }
 
@@ -205,12 +207,12 @@ function AttentionAction({
       <form action={retryDispatchJob}>
         <input name="tenant_id" type="hidden" value={tenant.id} />
         <input name="job_id" type="hidden" value={item.mono} />
-        <button
-          className={`h-8 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/80`}
+        <Button
+          className="px-2 text-xs"
           type="submit"
         >
           {tAct('retryDispatch')}
-        </button>
+        </Button>
       </form>
     )
   }

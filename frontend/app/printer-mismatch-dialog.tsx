@@ -134,14 +134,15 @@ export function PrinterMismatchWarning({ printer }: { printer: Printer }) {
   return (
     <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
       <div className="font-medium">{t(copy.title)}</div>
-      <button
+      <Button
         aria-label={t(copy.review, { name: printer.name })}
-        className="mt-1 text-xs font-medium underline underline-offset-2"
+        className="mt-1 h-auto p-0 text-xs text-inherit underline underline-offset-2"
         onClick={() => coordinator?.open(key)}
         type="button"
+        variant="link"
       >
         {t("reviewAction")}
-      </button>
+      </Button>
     </div>
   );
 }

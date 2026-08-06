@@ -8,6 +8,7 @@ import { DryingControl, type DryingProps, dryingProps } from './dashboard-printe
 import type { Printer } from './dashboard-types'
 import { usePrinterControl } from './use-printer-control'
 import { mixedAmsLiteGlobalTrayId } from './material-tray-routing'
+import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover'
 export function PrinterMaterialsPanel({ printer }: { printer: Printer }) {
   const t = useTranslations('inventory')
@@ -188,10 +189,16 @@ function MaterialSlotButton({
   return (
     <Popover>
       <PopoverTrigger
-        aria-label={accessibleLabel}
-        className={`flex min-h-14 w-full flex-col justify-between rounded-md bg-background p-2 text-left transition-colors duration-150 ease-out hover:bg-accent ${
-          active ? 'ring-2 ring-success' : ''
-        }`}
+        render={
+          <Button
+            aria-label={accessibleLabel}
+            className={`h-auto min-h-14 w-full flex-col items-stretch justify-between whitespace-normal rounded-md bg-background p-2 text-left font-normal hover:bg-accent dark:hover:bg-accent ${
+              active ? 'ring-2 ring-success' : ''
+            }`}
+            type="button"
+            variant="ghost"
+          />
+        }
       >
         <div className="flex items-start justify-between gap-1">
           <span
@@ -278,14 +285,15 @@ function SlotOperationForm({
       {includeTarget && slot.globalTrayId !== null ? <input name="global_tray_id" type="hidden" value={slot.globalTrayId} /> : null}
       {includeTarget && slot.externalId ? <input name="external_id" type="hidden" value={slot.externalId} /> : null}
       {extruderId !== null ? <input name="extruder_id" type="hidden" value={extruderId} /> : null}
-      <button
-        className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring disabled:text-muted-foreground [&_svg]:size-4"
+      <Button
+        className="h-auto w-full justify-start gap-2 rounded-sm px-2 py-1.5 font-normal"
         disabled={pending}
         type="submit"
+        variant="ghost"
       >
         {pending ? <Loader2Icon className="animate-spin" /> : icon}
         {label}
-      </button>
+      </Button>
     </form>
   )
 }

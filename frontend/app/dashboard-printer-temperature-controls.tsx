@@ -102,8 +102,9 @@ export function PrinterControlsPanel({ printer }: { printer: Printer }) {
         <ConfirmForm
           action={stopControl.formAction}
           buttonAriaLabel={t('stopPrint')}
-          buttonClassName="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors duration-150 ease-out disabled:bg-muted/60 disabled:text-muted-foreground enabled:bg-destructive/10 enabled:text-destructive enabled:hover:bg-destructive/20 dark:enabled:bg-destructive/20 dark:enabled:hover:bg-destructive/30 [&_svg]:size-4"
+          buttonClassName="w-full rounded-md font-semibold disabled:bg-muted/60 disabled:text-muted-foreground"
           buttonLabel={<><SquareIcon />{t('stopPrint')}</>}
+          buttonVariant="destructive"
           confirmLabel={t('stopPrint')}
           disabled={!controlsEnabled.stop}
           message={t('stopPrintMessage')}
@@ -146,10 +147,15 @@ function CameraDialogControl({ printer }: { printer: Printer }) {
   return (
     <Dialog>
       <DialogTrigger
-        className="inline-flex min-h-8 items-center justify-center gap-2 rounded-md bg-muted/50 px-3 py-2 text-sm font-medium text-foreground transition hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-        type="button"
+        render={
+          <Button
+            className="min-h-8 w-full gap-2 rounded-md bg-muted/50 px-3 py-2 hover:bg-muted dark:hover:bg-muted"
+            type="button"
+            variant="ghost"
+          />
+        }
       >
-        <VideoIcon className="size-4" />
+        <VideoIcon />
         {t('viewCamera')}
       </DialogTrigger>
       <DialogContent className="sm:max-w-3xl" closeLabel={t('closeCamera')}>
@@ -165,15 +171,17 @@ function CameraDialogControl({ printer }: { printer: Printer }) {
             playsInline
             src={`/api/tenants/${apiIdSegment(printer.tenant_id, 'tenant_id')}/printers/${apiIdSegment(printer.id, 'printer_id')}/camera.mp4`}
           />
-          <button
+          <Button
             aria-label={t('cameraFullscreen')}
-            className="absolute right-3 top-3 inline-flex size-8 items-center justify-center rounded-md bg-black/70 text-white transition hover:bg-black/90 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="absolute right-3 top-3 rounded-md bg-black/70 text-white hover:bg-black/90 hover:text-white dark:hover:bg-black/90"
             onClick={() => void frameRef.current?.requestFullscreen()}
+            size="icon"
             title={t('cameraFullscreen')}
             type="button"
+            variant="ghost"
           >
             <MaximizeIcon className="size-4" />
-          </button>
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -208,9 +216,14 @@ function TemperatureCard({
   return (
     <Popover>
       <PopoverTrigger
-        aria-label={ariaLabel}
-        className="flex min-h-16 flex-col items-center justify-center rounded-md bg-muted/50 px-3 py-2 text-center transition hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-        type="button"
+        render={
+          <Button
+            aria-label={ariaLabel}
+            className="h-auto min-h-16 w-full flex-col rounded-md bg-muted/50 px-3 py-2 text-center font-normal hover:bg-muted dark:hover:bg-muted"
+            type="button"
+            variant="ghost"
+          />
+        }
       >
         <ThermometerIcon className={`size-4 ${tone}`} />
         <div className="mt-1 text-xs font-medium text-muted-foreground">{title}</div>
@@ -341,14 +354,11 @@ function PrinterInlineControl({
   tone: 'danger' | 'warning' | 'neutral'
 }) {
   const { formAction, pending } = usePrinterControl()
-  const toneClass = {
-    danger:
-      'enabled:bg-destructive/10 enabled:text-destructive enabled:hover:bg-destructive/20 dark:enabled:bg-destructive/20 dark:enabled:hover:bg-destructive/30',
-    warning:
-      'enabled:bg-warning/15 enabled:text-warning enabled:hover:bg-warning/25',
-    neutral:
-      'enabled:bg-primary/10 enabled:text-primary enabled:hover:bg-primary/15 dark:enabled:bg-primary/20',
-  }[tone]
+  const variant = tone === 'danger' ? 'destructive' : 'soft'
+  const toneClass =
+    tone === 'warning'
+      ? 'bg-warning/15 text-warning hover:bg-warning/25 dark:bg-warning/15 dark:hover:bg-warning/25'
+      : undefined
 
   return (
     <form action={formAction}>
@@ -356,17 +366,18 @@ function PrinterInlineControl({
       <input name="printer_id" type="hidden" value={printer.id} />
       <input name="action" type="hidden" value={action} />
       {lightOn !== undefined ? <input name="light_on" type="hidden" value={String(lightOn)} /> : null}
-      <button
+      <Button
         aria-label={stateLabel ? `${label} ${stateLabel}` : undefined}
         aria-pressed={pressed}
-        className={`inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-sm font-semibold transition-colors duration-150 ease-out disabled:bg-muted/60 disabled:text-muted-foreground ${toneClass} [&_svg]:size-4`}
+        className={`w-full rounded-md font-semibold disabled:bg-muted/60 disabled:text-muted-foreground ${toneClass ?? ''}`}
         disabled={!enabled || pending}
         type="submit"
+        variant={variant}
       >
         {pending ? <Loader2Icon className="animate-spin" /> : icon}
         {label}
         {stateLabel ? <span className="text-xs font-normal opacity-75">{` ${stateLabel}`}</span> : null}
-      </button>
+      </Button>
     </form>
   )
 }
