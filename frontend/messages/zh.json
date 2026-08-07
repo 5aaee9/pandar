@@ -674,6 +674,9 @@
     "submit": "连接打印机",
     "linking": "正在连接…",
     "linked": "打印机已连接到 Agent。",
+    "errorWithCode": "错误：{message}（{code}）",
+    "errorWithDetail": "错误：{message}：{detail}（{code}）",
+    "errorWithoutCode": "错误：{message}",
     "errors": {
       "invalid_access_code": "打印机拒绝了访问码。请核对打印机屏幕上或 Bambu Handy 中的 8 位访问码。",
       "printer_not_found": "未在该地址发现打印机。请检查 IPv4 地址，并确认打印机与 Agent 处于同一局域网。",

@@ -677,6 +677,9 @@
     "submit": "Link printer",
     "linking": "Linking…",
     "linked": "Printer linked to the agent.",
+    "errorWithCode": "Error: {message} ({code})",
+    "errorWithDetail": "Error: {message}: {detail} ({code})",
+    "errorWithoutCode": "Error: {message}",
     "errors": {
       "invalid_access_code": "The printer rejected the access code. Check the 8-digit access code on the printer screen or in Bambu Handy.",
       "printer_not_found": "No printer found at this address. Check the IPv4 address and make sure the printer is on the same LAN as the agent.",

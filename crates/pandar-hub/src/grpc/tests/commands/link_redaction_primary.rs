@@ -145,6 +145,7 @@ async fn grpc_link_printer_failed_result_preserves_error_code() {
         .await
         .unwrap();
 
+    let error = "validate runtime printer: printer rejected the access code";
     handle_result_and_job(
         &state,
         tenant_id,
@@ -152,7 +153,7 @@ async fn grpc_link_printer_failed_result_preserves_error_code() {
         command.id,
         command_result_payload(
             false,
-            "printer rejected the access code".to_owned(),
+            error.to_owned(),
             r#"{"type":"printer_link_error","error_code":"invalid_access_code"}"#.to_owned(),
         ),
         Some(access_code),
@@ -167,6 +168,7 @@ async fn grpc_link_printer_failed_result_preserves_error_code() {
         .unwrap()
         .unwrap();
     assert_eq!(stored.status, CommandStatus::Failed);
+    assert_eq!(stored.error.as_deref(), Some(error));
     let stored_result = stored.result_json.unwrap();
     assert_eq!(
         redacted_result::<RedactedLinkPrinterFailure>(&stored_result),

@@ -155,8 +155,10 @@
   through the existing same-origin command proxy, and the dialog only closes once the agent
   confirms the link (command `succeeded`), followed by a success toast and React Query
   invalidation of the devices/agents route data so the new machine appears immediately. Failures
-  stay in the dialog as a `role="alert"` panel with a localized message plus the machine-readable
-  error code: the Agent classifies link failures into stable codes (`invalid_access_code` from
+  stay in the dialog as a `role="alert"` panel that combines a localized human-readable message
+  with the machine-readable error code. Unclassified `link_failed` results also show the Agent's
+  redacted full error chain, so TLS certificate and other lower-level causes are not hidden behind
+  the fallback code. The Agent classifies link failures into stable codes (`invalid_access_code` from
   MQTT connack `BadUserNamePassword`/`NotAuthorized`, `printer_not_found` for discovery misses,
   `printer_unreachable` for transport/timeout errors, `unsupported_printer_type`, `link_failed`)
   and reports them in a typed `printer_link_error` result JSON that survives Hub credential
@@ -165,8 +167,8 @@
   obsolete `discovery_command_id` redirect handoff is gone since the dialog no longer navigates.
   Coverage: Agent classification unit tests plus end-to-end link command cases, a Hub redaction
   test proving the error code JSON is preserved, form tests for the loading/success/failure/dispatch
-  states, and updated action/discovery/inventory suites; web lint, typecheck, 418 tests, production
-  build, and the full Rust nextest workspace run all pass.
+  states, including fallback TLS detail preservation; web lint, typecheck, and 431 tests pass, and
+  the full Rust nextest workspace run passes 1,963 tests with 1 skipped.
 
 - Moved the dashboard's current-tenant selection out of the `?tenant=` query param into a
   `pandar.tenant` cookie. Server pages and the dashboard layout resolve the selected tenant from

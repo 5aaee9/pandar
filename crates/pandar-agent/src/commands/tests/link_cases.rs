@@ -309,7 +309,11 @@ async fn link_printer_failure_redacts_access_code_from_result_error() {
     let config = test_config();
     let command_id = uuid::Uuid::new_v4().to_string();
     let access_code = "SECRET-LINK-CODE";
-    let gateway = LinkGateway::failure(access_code);
+    let gateway = LinkGateway::failure_with_error(
+        access_code,
+        anyhow::anyhow!("Certificate is not valid for {access_code}")
+            .context("complete Bambu MQTT TLS handshake"),
+    );
     let (sender, mut receiver) = mpsc::channel(2);
 
     handle_command_with_gateway(
@@ -330,6 +334,8 @@ async fn link_printer_failure_redacts_access_code_from_result_error() {
         agent_event::Event::CommandResult(result) => {
             assert!(!result.success);
             assert!(result.error.contains("validate runtime printer"));
+            assert!(result.error.contains("complete Bambu MQTT TLS handshake"));
+            assert!(result.error.contains("Certificate is not valid"));
             assert!(result.error.contains("[REDACTED_ACCESS_CODE]"));
             assert!(!result.error.contains(access_code));
             assert_eq!(

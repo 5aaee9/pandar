@@ -208,9 +208,6 @@ export function LinkPrinterMachineForm({
           role="alert"
         >
           <p className="font-medium">{failureMessage(t, failure)}</p>
-          {failure.code ? (
-            <p className="mt-1 font-mono text-xs text-destructive/80">{failure.code}</p>
-          ) : null}
         </div>
       ) : null}
       <div>
@@ -224,15 +221,28 @@ export function LinkPrinterMachineForm({
 }
 
 type MessageTranslator = {
-  (key: string): string
+  (key: string, values?: Record<string, string>): string
   has: (key: string) => boolean
 }
 
 function failureMessage(t: MessageTranslator, failure: LinkFailure) {
   if (failure.code && t.has(`errors.${failure.code}`)) {
-    return t(`errors.${failure.code}`)
+    const message = t(`errors.${failure.code}`)
+    if (failure.code === 'link_failed' && failure.detail) {
+      return t('errorWithDetail', {
+        message: message.replace(/[.!?。！？]+$/, ''),
+        detail: failure.detail,
+        code: failure.code,
+      })
+    }
+    return t('errorWithCode', { message, code: failure.code })
   }
-  return failure.detail ?? failure.code ?? t('errors.link_failed')
+  if (failure.code && failure.detail) {
+    return t('errorWithCode', { message: failure.detail, code: failure.code })
+  }
+  return t('errorWithoutCode', {
+    message: failure.detail ?? failure.code ?? t('errors.link_failed'),
+  })
 }
 
 function linkErrorCode(command: Command): string | null {

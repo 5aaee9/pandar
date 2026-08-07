@@ -133,8 +133,9 @@ describe("LinkPrinterMachineForm", () => {
 
     await submitForm(user);
 
-    await screen.findByText(/rejected the access code/);
-    expect(screen.getByText("invalid_access_code")).toBeVisible();
+    await screen.findByText(
+      "Error: The printer rejected the access code. Check the 8-digit access code on the printer screen or in Bambu Handy. (invalid_access_code)",
+    );
     expect(onLinked).not.toHaveBeenCalled();
     expect(
       screen.getByRole("button", { name: "Link printer" }),
@@ -148,9 +149,35 @@ describe("LinkPrinterMachineForm", () => {
 
     await submitForm(user);
 
-    await screen.findByText(/agent is not connected/);
-    expect(screen.getByText("agent_not_connected")).toBeVisible();
+    await screen.findByText(
+      "Error: The agent is not connected. Wait for it to come online, then try again. (agent_not_connected)",
+    );
     expect(onLinked).not.toHaveBeenCalled();
+  });
+
+  it("shows the detailed cause when an unclassified link failure occurs", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          linkCommand({
+            status: "failed",
+            error: "complete Bambu MQTT TLS handshake: Certificate is not valid",
+            result_json: JSON.stringify({
+              type: "printer_link_error",
+              error_code: "link_failed",
+            }),
+          }),
+        ),
+      ),
+    );
+    const { user } = renderForm();
+
+    await submitForm(user);
+
+    await screen.findByText(
+      "Error: The printer could not be linked: complete Bambu MQTT TLS handshake: Certificate is not valid (link_failed)",
+    );
   });
 
   it("falls back to the raw error when the failure has no error code", async () => {
@@ -170,7 +197,7 @@ describe("LinkPrinterMachineForm", () => {
     await submitForm(user);
 
     await screen.findByText(
-      "agent connection closed before printer link completed",
+      "Error: agent connection closed before printer link completed",
     );
   });
 });
