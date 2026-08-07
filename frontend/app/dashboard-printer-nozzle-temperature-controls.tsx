@@ -77,7 +77,7 @@ export function NozzleSwitchControl({ printer }: { printer: Printer }) {
   const activeNozzle = activeNozzleLabel(printer)
   const targetNozzle = activeNozzle === 'L' ? 'R' : 'L'
   return (
-    <form action={formAction} className="h-full lg:col-start-4">
+    <form action={formAction} className="col-span-3 h-full">
       <PrinterControlFields
         printer={printer}
         intent={{ action: 'select_extruder', extruderId: extruderIdForNozzle(targetNozzle) }}

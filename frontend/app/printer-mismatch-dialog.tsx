@@ -186,7 +186,7 @@ function PrinterMismatchDialog({
         }
       }}
     >
-      <DialogContent className="sm:max-w-md" showCloseButton={false}>
+      <DialogContent className="sm:max-w-2xl" showCloseButton={false}>
         <Button
           aria-label={t(copy.close)}
           className="absolute right-2 top-2"

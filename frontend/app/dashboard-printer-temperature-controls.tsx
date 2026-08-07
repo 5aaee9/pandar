@@ -62,7 +62,11 @@ export function PrinterTemperatureControls({ printer }: { printer: Printer }) {
   }
 
   return (
-    <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-[1fr_1fr_1fr_5rem]">
+    <div
+      className={`mt-4 grid gap-2 ${
+        nozzles.length > 1 ? 'grid-cols-3' : 'grid-cols-2 lg:grid-cols-3'
+      }`}
+    >
       {nozzles.length > 0 ? <NozzleTemperatureCard nozzles={nozzles} printer={printer} /> : null}
       {temperatures.map((temperature) => (
         <TemperatureCard

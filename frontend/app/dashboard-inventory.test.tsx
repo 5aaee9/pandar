@@ -467,7 +467,7 @@ describe("PrinterInventory", () => {
     expect(screen.getByRole("button", { name: "灯光 已关闭" })).toBeVisible();
   });
 
-  it("shows active nozzle switch control for dual-nozzle printers", () => {
+  it("shows a full-width active nozzle switch control for dual-nozzle printers", () => {
     const dualNozzlePrinter: Printer = {
       ...printerWithMaterials,
       nozzle_temperatures: [
@@ -498,9 +498,8 @@ describe("PrinterInventory", () => {
     const switchButton = screen.getByRole("button", { name: "Switch to nozzle L" });
     const switchForm = switchButton.closest("form");
     const temperatureGrid = switchForm?.parentElement;
-    expect(temperatureGrid).toHaveClass("grid-cols-2");
-    expect(temperatureGrid).toHaveClass("lg:grid-cols-[1fr_1fr_1fr_5rem]");
-    expect(switchForm).toHaveClass("lg:col-start-4");
+    expect(temperatureGrid).toHaveClass("grid-cols-3");
+    expect(switchForm).toHaveClass("col-span-3");
     expect(switchForm).toHaveClass("h-full");
     expect(switchButton).toHaveClass("h-full");
     expect(switchForm?.querySelector('input[name="action"]')).toHaveValue("select_extruder");
