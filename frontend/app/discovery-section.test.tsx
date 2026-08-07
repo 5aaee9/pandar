@@ -184,5 +184,8 @@ describe("DiscoverySection", () => {
       "type",
       "password",
     );
+    expect(
+      within(dialog).getByRole("button", { name: "Show access code" }),
+    ).toBeVisible();
   });
 });

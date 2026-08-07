@@ -1,18 +1,10 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { useDashboardFilterStore } from './dashboard-filter-store'
 import { useFormatter, useTranslations } from 'next-intl'
 import { PlusIcon, PrinterIcon } from 'lucide-react'
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
 import {
   Empty,
   EmptyContent,
@@ -27,7 +19,7 @@ import { formatPrinterMaterials } from './dashboard-runtime-helpers'
 import { Button } from '@/components/ui/button'
 import { FilterBar } from './dashboard-filter-bar'
 import { PrinterCard } from './dashboard-printer-card'
-import { LinkPrinterMachineForm } from './link-printer-form'
+import { LinkPrinterDialog } from './link-printer-dialog'
 
 export { JobHistory } from './dashboard-job-history'
 
@@ -52,6 +44,7 @@ export function PrinterInventory({
   nowMs: number
 }) {
   const t = useTranslations('inventory')
+  const tLink = useTranslations('linkPrinter')
   const tMat = useTranslations('material')
   const formatDate = useLocaleDate()
   const query = useDashboardFilterStore((state) => state.query)
@@ -91,7 +84,14 @@ export function PrinterInventory({
         {selectedTenant && printers.length > 0 ? (
           <LinkPrinterDialog
             agents={agents}
+            mode="add"
             selectedTenant={selectedTenant}
+            trigger={
+              <Button type="button">
+                <PlusIcon />
+                {tLink('submit')}
+              </Button>
+            }
           />
         ) : null}
       </div>
@@ -102,7 +102,14 @@ export function PrinterInventory({
           action={
             <LinkPrinterDialog
               agents={agents}
+              mode="add"
               selectedTenant={selectedTenant}
+              trigger={
+                <Button type="button">
+                  <PlusIcon />
+                  {tLink('submit')}
+                </Button>
+              }
             />
           }
           message={t('noPrintersMessage')}
@@ -145,36 +152,6 @@ export function PrinterInventory({
         </>
       )}
     </section>
-  )
-}
-
-function LinkPrinterDialog({
-  selectedTenant,
-  agents,
-}: {
-  selectedTenant: Tenant
-  agents: Agent[]
-}) {
-  const t = useTranslations('linkPrinter')
-  const [open, setOpen] = useState(false)
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button type="button" />}>
-        <PlusIcon />
-        {t('submit')}
-      </DialogTrigger>
-      <DialogContent closeLabel={t('closeDialog')} className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>{t('title')}</DialogTitle>
-          <DialogDescription>{t('subtitleTenant', { name: selectedTenant.display_name })}</DialogDescription>
-        </DialogHeader>
-        <LinkPrinterMachineForm
-          agents={agents}
-          onLinked={() => setOpen(false)}
-          selectedTenant={selectedTenant}
-        />
-      </DialogContent>
-    </Dialog>
   )
 }
 

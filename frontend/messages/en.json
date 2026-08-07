@@ -673,6 +673,8 @@
     "agentOption": "{name} ({status})",
     "host": "Printer IPv4 address",
     "accessCode": "Access code",
+    "showAccessCode": "Show access code",
+    "hideAccessCode": "Hide access code",
     "name": "Name",
     "submit": "Link printer",
     "linking": "Linking…",

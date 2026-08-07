@@ -149,9 +149,13 @@
   web lint/typecheck/422 tests pass, and the rebuilt page was verified in a real browser against a
   live no-auth Hub (scrollspy, sticky nav, rename round-trip, audit event).
 
-- Reworked the link-printer dialog into a confirmed in-place flow. The shared link form (Devices
-  dialog and discovery Adopt dialog) now keeps the dialog open while linking: the submit button
-  switches to a disabled spinner state, the browser polls the command every 2s (90s deadline)
+- Reworked the link-printer dialog into a confirmed in-place flow. The Devices Add and discovery
+  Adopt entry points now use one shared dialog module while retaining their context-specific title,
+  description, trigger, defaults, and fixed-Agent behavior. Its shared link form keeps the entered
+  access code in component memory across submissions and failed retries while the dialog remains
+  open, clears it when the dialog closes, and provides an accessible show/hide control. During
+  linking, the submit button switches to a disabled spinner state and the browser polls the command
+  every 2s (90s deadline)
   through the existing same-origin command proxy, and the dialog only closes once the agent
   confirms the link (command `succeeded`), followed by a success toast and React Query
   invalidation of the devices/agents route data so the new machine appears immediately. Failures
@@ -167,7 +171,8 @@
   obsolete `discovery_command_id` redirect handoff is gone since the dialog no longer navigates.
   Coverage: Agent classification unit tests plus end-to-end link command cases, a Hub redaction
   test proving the error code JSON is preserved, form tests for the loading/success/failure/dispatch
-  states, including fallback TLS detail preservation; web lint, typecheck, and 431 tests pass, and
+  states, including fallback TLS detail preservation and access-code retention/visibility; web
+  lint, typecheck, and 432 tests pass, and
   the full Rust nextest workspace run passes 1,963 tests with 1 skipped.
 
 - Moved the dashboard's current-tenant selection out of the `?tenant=` query param into a

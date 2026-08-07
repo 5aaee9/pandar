@@ -256,9 +256,24 @@ describe("PrinterInventory", () => {
 
     await user.click(trigger);
 
-    expect(screen.getByRole("dialog")).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Link printer to agent" })).toBeVisible();
-    expect(screen.getByLabelText("Printer IPv4 address")).toBeVisible();
+    const dialog = screen.getByRole("dialog", { name: "Link printer to agent" });
+    const form = within(dialog)
+      .getByRole("button", { name: "Link printer" })
+      .closest("form")!;
+    expect(form).toHaveFormValues({
+      tenant_id: tenant.id,
+      agent_id: agent.id,
+      type: "BambuLab",
+      host: "",
+      name: "",
+      access_code: "",
+    });
+
+    await user.type(within(dialog).getByLabelText("Access code"), "SECRET-LINK-CODE");
+    await user.click(within(dialog).getByRole("button", { name: "Close" }));
+    await user.click(trigger);
+
+    expect(screen.getByLabelText("Access code")).toHaveValue("");
   });
 
   it("renders AMS refresh inside the printer actions popover with tenant and printer ids", async () => {

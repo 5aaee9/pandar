@@ -112,6 +112,23 @@ describe("LinkPrinterMachineForm", () => {
     );
   });
 
+  it("toggles access-code visibility without changing its value", async () => {
+    const { user } = renderForm();
+    const input = screen.getByLabelText("Access code");
+
+    await user.type(input, "SECRET-LINK-CODE");
+    expect(input).toHaveAttribute("type", "password");
+
+    await user.click(screen.getByRole("button", { name: "Show access code" }));
+    expect(input).toHaveAttribute("type", "text");
+    expect(input).toHaveValue("SECRET-LINK-CODE");
+
+    await user.click(screen.getByRole("button", { name: "Hide access code" }));
+    expect(input).toHaveAttribute("type", "password");
+    expect(input).toHaveValue("SECRET-LINK-CODE");
+    expect(linkPrinterMock).not.toHaveBeenCalled();
+  });
+
   it("shows the error code when the printer rejects the access code", async () => {
     vi.stubGlobal(
       "fetch",
@@ -137,6 +154,9 @@ describe("LinkPrinterMachineForm", () => {
       "Error: The printer rejected the access code. Check the 8-digit access code on the printer screen or in Bambu Handy. (invalid_access_code)",
     );
     expect(onLinked).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Access code")).toHaveValue(
+      "SECRET-LINK-CODE",
+    );
     expect(
       screen.getByRole("button", { name: "Link printer" }),
     ).toBeEnabled();

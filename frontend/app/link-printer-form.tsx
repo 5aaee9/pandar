@@ -1,9 +1,9 @@
 'use client'
 
-import { useActionState, useEffect, useRef, useState } from 'react'
+import { useActionState, useEffect, useId, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { useQueryClient } from '@tanstack/react-query'
-import { Loader2Icon } from 'lucide-react'
+import { EyeIcon, EyeOffIcon, Loader2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -48,6 +48,9 @@ export function LinkPrinterMachineForm({
   const queryClient = useQueryClient()
   const [state, formAction, dispatching] = useActionState(linkPrinter, null)
   const [pollOutcome, setPollOutcome] = useState<PollOutcome | null>(null)
+  const [accessCode, setAccessCode] = useState('')
+  const [accessCodeVisible, setAccessCodeVisible] = useState(false)
+  const accessCodeId = useId()
   const onLinkedRef = useRef(onLinked)
 
   useEffect(() => {
@@ -183,16 +186,37 @@ export function LinkPrinterMachineForm({
           type="text"
         />
       </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-xs font-medium text-muted-foreground">{t('accessCode')}</span>
-        <input
-          autoComplete="off"
-          className={inputClasses}
-          name="access_code"
-          required
-          type="password"
-        />
-      </label>
+      <div className="flex flex-col gap-1 text-sm">
+        <label
+          className="text-xs font-medium text-muted-foreground"
+          htmlFor={accessCodeId}
+        >
+          {t('accessCode')}
+        </label>
+        <div className="relative">
+          <input
+            autoComplete="off"
+            className={`${inputClasses} pr-10`}
+            id={accessCodeId}
+            name="access_code"
+            onChange={(event) => setAccessCode(event.target.value)}
+            required
+            type={accessCodeVisible ? 'text' : 'password'}
+            value={accessCode}
+          />
+          <Button
+            aria-label={t(accessCodeVisible ? 'hideAccessCode' : 'showAccessCode')}
+            aria-pressed={accessCodeVisible}
+            className="absolute right-1 top-1"
+            onClick={() => setAccessCodeVisible((visible) => !visible)}
+            size="icon-sm"
+            type="button"
+            variant="ghost"
+          >
+            {accessCodeVisible ? <EyeOffIcon /> : <EyeIcon />}
+          </Button>
+        </div>
+      </div>
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-xs font-medium text-muted-foreground">{t('name')}</span>
         <input

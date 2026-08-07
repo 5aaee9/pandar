@@ -1,23 +1,14 @@
 'use client'
 
-import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { isTerminalCommandStatus } from './command-status'
 import { EmptyState, SectionHeader, Tag } from './dashboard-ui'
-import { LinkPrinterMachineForm } from './link-printer-form'
+import { LinkPrinterDialog } from './link-printer-dialog'
 import type {
   Agent,
   Command,
-  DiscoveredPrinter,
   DiscoveryResultData,
   Printer,
   Tenant,
@@ -37,7 +28,6 @@ export function DiscoverySection({
   data: DiscoveryResultData | null
 }) {
   const t = useTranslations('discovery')
-  const [adoptTarget, setAdoptTarget] = useState<DiscoveredPrinter | null>(null)
   const agent = agents.find((candidate) => candidate.id === command.agent_id)
   const agentName = agent?.name ?? command.agent_id
   const linkedBySerial = new Map(
@@ -114,17 +104,25 @@ export function DiscoverySection({
                           </span>
                         </span>
                       ) : (
-                        <Button
-                          aria-label={t('adoptFor', {
-                            name: printer.name ?? printer.host,
-                          })}
-                          onClick={() => setAdoptTarget(printer)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          {t('adopt')}
-                        </Button>
+                        <LinkPrinterDialog
+                          agentId={command.agent_id}
+                          agents={agents}
+                          mode="adopt"
+                          selectedTenant={selectedTenant}
+                          target={printer}
+                          trigger={
+                            <Button
+                              aria-label={t('adoptFor', {
+                                name: printer.name ?? printer.host,
+                              })}
+                              size="sm"
+                              type="button"
+                              variant="outline"
+                            >
+                              {t('adopt')}
+                            </Button>
+                          }
+                        />
                       )}
                     </td>
                   </tr>
@@ -135,61 +133,6 @@ export function DiscoverySection({
         </div>
       )}
 
-      <AdoptPrinterDialog
-        agentName={agentName}
-        command={command}
-        onOpenChange={(open) => {
-          if (!open) setAdoptTarget(null)
-        }}
-        open={adoptTarget !== null}
-        target={adoptTarget}
-        tenant={selectedTenant}
-      />
     </section>
-  )
-}
-
-function AdoptPrinterDialog({
-  tenant,
-  command,
-  agentName,
-  target,
-  open,
-  onOpenChange,
-}: {
-  tenant: Tenant
-  command: Command
-  agentName: string
-  target: DiscoveredPrinter | null
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const t = useTranslations('discovery')
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent closeLabel={t('adoptClose')}>
-        {target ? (
-          <>
-            <DialogHeader>
-              <DialogTitle>{t('adoptTitle')}</DialogTitle>
-              <DialogDescription>
-                {t('adoptDescription', { agent: agentName, host: target.host })}
-              </DialogDescription>
-            </DialogHeader>
-            <LinkPrinterMachineForm
-              agents={[]}
-              defaultHost={target.host}
-              defaultName={target.name ?? ''}
-              fixedAgentId={command.agent_id}
-              key={`${target.serial_number ?? 'unknown'}-${target.host}`}
-              onLinked={() => onOpenChange(false)}
-              selectedTenant={tenant}
-              submitLabel={t('adoptSubmit')}
-            />
-          </>
-        ) : null}
-      </DialogContent>
-    </Dialog>
   )
 }

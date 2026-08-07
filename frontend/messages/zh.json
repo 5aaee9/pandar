@@ -670,6 +670,8 @@
     "agentOption": "{name}（{status}）",
     "host": "打印机 IPv4 地址",
     "accessCode": "访问码",
+    "showAccessCode": "显示访问码",
+    "hideAccessCode": "隐藏访问码",
     "name": "名称",
     "submit": "连接打印机",
     "linking": "正在连接…",
