@@ -11,12 +11,16 @@ use rustls::{
     pki_types::{CertificateDer, ServerName, SubjectPublicKeyInfoDer, UnixTime, pem::PemObject},
 };
 use sha2::{Digest, Sha256};
-use x509_parser::prelude::{FromDer, X509Certificate};
+use x509_parser::{
+    oid_registry::OID_PKCS1_SHA256WITHRSA,
+    prelude::{FromDer, X509Certificate, X509Version},
+};
 
 #[derive(Debug)]
 pub(crate) struct BambuLanCertificateVerifier {
     expected_serial: String,
     roots: RootCertStore,
+    trusted_roots: Vec<CertificateDer<'static>>,
     bundled_intermediates: Vec<CertificateDer<'static>>,
     trusted_leaf_sha256: Result<Option<[u8; 32]>, String>,
 }
@@ -24,11 +28,13 @@ pub(crate) struct BambuLanCertificateVerifier {
 impl BambuLanCertificateVerifier {
     pub(crate) fn new(expected_serial: &str) -> Self {
         let mut roots = RootCertStore::empty();
-        for certificate in
+        let trusted_roots =
             CertificateDer::pem_slice_iter(include_bytes!("../../bambu-printer-ca.pem"))
-        {
+                .map(|certificate| certificate.expect("bundled Bambu printer CA must be valid PEM"))
+                .collect::<Vec<_>>();
+        for certificate in &trusted_roots {
             roots
-                .add(certificate.expect("bundled Bambu printer CA must be valid PEM"))
+                .add(certificate.clone())
                 .expect("bundled Bambu printer CA must be a valid trust anchor");
         }
         let bundled_intermediates =
@@ -40,6 +46,7 @@ impl BambuLanCertificateVerifier {
         Self {
             expected_serial: expected_serial.to_owned(),
             roots,
+            trusted_roots,
             bundled_intermediates,
             trusted_leaf_sha256: configured_bambu_leaf_pin(expected_serial),
         }
@@ -48,12 +55,17 @@ impl BambuLanCertificateVerifier {
     #[cfg(test)]
     pub(crate) fn with_trust_material(
         expected_serial: &str,
-        roots: RootCertStore,
+        trusted_roots: Vec<CertificateDer<'static>>,
         bundled_intermediates: Vec<CertificateDer<'static>>,
     ) -> Self {
+        let mut roots = RootCertStore::empty();
+        for certificate in &trusted_roots {
+            roots.add(certificate.clone()).unwrap();
+        }
         Self {
             expected_serial: expected_serial.to_owned(),
             roots,
+            trusted_roots,
             bundled_intermediates,
             trusted_leaf_sha256: Ok(None),
         }
@@ -134,6 +146,9 @@ impl ServerCertVerifier for BambuLanCertificateVerifier {
                     return Err(TlsError::InvalidCertificate(CertificateError::Expired));
                 }
             }
+            Ok(None) if certificate.version() == X509Version::V1 => {
+                verify_bambu_v1_certificate(&certificate, &self.trusted_roots, now)?;
+            }
             Ok(None) => {
                 let provider = rustls::crypto::aws_lc_rs::default_provider();
                 let certificate = rustls::server::ParsedCertificate::try_from(end_entity)?;
@@ -211,6 +226,57 @@ impl ServerCertVerifier for BambuLanCertificateVerifier {
             .signature_verification_algorithms
             .supported_schemes()
     }
+}
+
+fn verify_bambu_v1_certificate(
+    certificate: &X509Certificate<'_>,
+    trusted_roots: &[CertificateDer<'_>],
+    now: UnixTime,
+) -> Result<(), TlsError> {
+    if certificate.signature_algorithm != certificate.tbs_certificate.signature {
+        return Err(TlsError::InvalidCertificate(CertificateError::BadEncoding));
+    }
+    if certificate.signature_algorithm.algorithm != OID_PKCS1_SHA256WITHRSA {
+        return Err(TlsError::InvalidCertificate(
+            CertificateError::ApplicationVerificationFailure,
+        ));
+    }
+
+    let mut matching_issuer = false;
+    let mut valid_signature = false;
+    for root in trusted_roots {
+        let root = parse_bambu_certificate(root)?;
+        if certificate.issuer() != root.subject() {
+            continue;
+        }
+        matching_issuer = true;
+        if certificate
+            .verify_signature(Some(root.public_key()))
+            .is_ok()
+        {
+            valid_signature = true;
+            break;
+        }
+    }
+    if !matching_issuer {
+        return Err(TlsError::InvalidCertificate(
+            CertificateError::UnknownIssuer,
+        ));
+    }
+    if !valid_signature {
+        return Err(TlsError::InvalidCertificate(CertificateError::BadSignature));
+    }
+
+    let now = i64::try_from(now.as_secs())
+        .map_err(|_| TlsError::InvalidCertificate(CertificateError::BadEncoding))?;
+    if now < certificate.validity().not_before.timestamp() {
+        return Err(TlsError::InvalidCertificate(CertificateError::NotValidYet));
+    }
+    if now > certificate.validity().not_after.timestamp() {
+        return Err(TlsError::InvalidCertificate(CertificateError::Expired));
+    }
+
+    Ok(())
 }
 
 fn parse_bambu_certificate<'a>(

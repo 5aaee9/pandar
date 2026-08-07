@@ -6,7 +6,7 @@ use rcgen::{
 };
 use rumqttc::TlsConfiguration;
 use rustls::{
-    ClientConfig, RootCertStore, ServerConfig, SupportedProtocolVersion,
+    ClientConfig, ServerConfig, SupportedProtocolVersion,
     client::danger::ServerCertVerifier,
     pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime, pem::PemObject},
     server::{ClientHello, ResolvesServerCert},
@@ -105,6 +105,9 @@ async fn lan_tls_accepts_pinned_leaf_only_certificate_without_san() {
     }
 }
 
+#[path = "tls/v1.rs"]
+mod v1;
+
 #[test]
 fn lan_tls_accepts_leaf_only_certificate_with_bundled_intermediate() {
     let root_key = KeyPair::generate().unwrap();
@@ -127,11 +130,9 @@ fn lan_tls_accepts_leaf_only_certificate_with_bundled_intermediate() {
     let leaf = test_certificate_params("test-bambu-chain", IsCa::NoCa)
         .signed_by(&leaf_key, &intermediate)
         .unwrap();
-    let mut roots = RootCertStore::empty();
-    roots.add(root.der().clone()).unwrap();
     let verifier = BambuLanCertificateVerifier::with_trust_material(
         "test-bambu-chain",
-        roots,
+        vec![root.der().clone()],
         vec![intermediate.der().clone()],
     );
 
@@ -169,8 +170,32 @@ async fn connect_to_v1_server(
     tls_version: TestTlsVersion,
     trusted_leaf_sha256: Option<[u8; 32]>,
 ) -> Result<(), String> {
-    let certificate =
-        CertificateDer::from_pem_slice(include_bytes!("tls/bambu-v1-cert.pem")).unwrap();
+    let client_config = tls_version.client_config(trusted_leaf_sha256);
+    connect_to_server(
+        include_bytes!("tls/bambu-v1-cert.pem"),
+        private_key_pem,
+        tls_version,
+        client_config,
+    )
+    .await
+}
+
+async fn connect_to_server(
+    certificate_pem: &[u8],
+    private_key_pem: &[u8],
+    tls_version: TestTlsVersion,
+    client_config: Arc<ClientConfig>,
+) -> Result<(), String> {
+    let certificate = CertificateDer::from_pem_slice(certificate_pem).unwrap();
+    connect_to_server_certificate(certificate, private_key_pem, tls_version, client_config).await
+}
+
+async fn connect_to_server_certificate(
+    certificate: CertificateDer<'static>,
+    private_key_pem: &[u8],
+    tls_version: TestTlsVersion,
+    client_config: Arc<ClientConfig>,
+) -> Result<(), String> {
     let private_key = PrivateKeyDer::from_pem_slice(private_key_pem).unwrap();
     let provider = rustls::crypto::aws_lc_rs::default_provider();
     let signing_key = provider.key_provider.load_private_key(private_key).unwrap();
@@ -189,7 +214,6 @@ async fn connect_to_v1_server(
             .await
     });
 
-    let client_config = tls_version.client_config(trusted_leaf_sha256);
     let stream = TcpStream::connect(address).await.unwrap();
     let result = tokio::time::timeout(
         Duration::from_secs(2),
