@@ -4,12 +4,12 @@ pub(crate) fn newer_firmware_identity_marker_resets_and_rejects_late_old_generat
     let start = Instant::now();
     let mut cache = FirmwareStatusCache::new(11);
     cache
-        .observe_printers_at(&batch_json(Some(populated_firmware())), 11, 1, start)
+        .observe_printers_at(&batch_projection(Some(populated_firmware())), 11, 1, start)
         .unwrap();
 
     cache
         .observe_printers_at(
-            &batch_json(Some(marker_firmware("session-1", 6))),
+            &batch_projection(Some(marker_firmware("session-1", 6))),
             11,
             2,
             start + Duration::from_millis(1),
@@ -22,7 +22,7 @@ pub(crate) fn newer_firmware_identity_marker_resets_and_rejects_late_old_generat
 
     cache
         .observe_printers_at(
-            &batch_json(Some(populated_firmware())),
+            &batch_projection(Some(populated_firmware())),
             11,
             1,
             start + Duration::from_secs(1),
@@ -43,7 +43,7 @@ pub(crate) fn newer_firmware_identity_partial_state_follows_one_exact_reset() {
     let start = Instant::now();
     let mut cache = FirmwareStatusCache::new(12);
     cache
-        .observe_printers_at(&batch_json(Some(populated_firmware())), 12, 1, start)
+        .observe_printers_at(&batch_projection(Some(populated_firmware())), 12, 1, start)
         .unwrap();
 
     let mut partial = marker_firmware("session-1", 6);
@@ -51,7 +51,7 @@ pub(crate) fn newer_firmware_identity_partial_state_follows_one_exact_reset() {
     partial["modules"] = serde_json::json!([]);
     cache
         .observe_printers_at(
-            &batch_json(Some(partial)),
+            &batch_projection(Some(partial)),
             12,
             2,
             start + Duration::from_millis(1),
@@ -74,14 +74,19 @@ pub(crate) fn fresh_current_after_invalidation_waits_for_one_exact_reset() {
     let start = Instant::now();
     let mut cache = FirmwareStatusCache::new(13);
     cache
-        .observe_printers_at(&batch_json(Some(populated_firmware())), 13, 1, start)
-        .unwrap();
-    cache
-        .observe_printers_at(&batch_json(None), 13, 2, start + Duration::from_millis(1))
+        .observe_printers_at(&batch_projection(Some(populated_firmware())), 13, 1, start)
         .unwrap();
     cache
         .observe_printers_at(
-            &batch_json(Some(populated_firmware())),
+            &batch_projection(None),
+            13,
+            2,
+            start + Duration::from_millis(1),
+        )
+        .unwrap();
+    cache
+        .observe_printers_at(
+            &batch_projection(Some(populated_firmware())),
             13,
             3,
             start + Duration::from_millis(2),
@@ -102,7 +107,7 @@ pub(crate) fn delayed_lower_revisions_do_not_overwrite_newer_current_state() {
     let start = Instant::now();
     let mut cache = FirmwareStatusCache::new(14);
     cache
-        .observe_printers_at(&batch_json(Some(populated_firmware())), 14, 1, start)
+        .observe_printers_at(&batch_projection(Some(populated_firmware())), 14, 1, start)
         .unwrap();
 
     let mut newer = populated_firmware();
@@ -112,7 +117,7 @@ pub(crate) fn delayed_lower_revisions_do_not_overwrite_newer_current_state() {
     newer["cfg"] = serde_json::json!("newer-cfg");
     cache
         .observe_printers_at(
-            &batch_json(Some(newer)),
+            &batch_projection(Some(newer)),
             14,
             2,
             start + Duration::from_millis(1),
@@ -120,7 +125,7 @@ pub(crate) fn delayed_lower_revisions_do_not_overwrite_newer_current_state() {
         .unwrap();
     cache
         .observe_printers_at(
-            &batch_json(Some(populated_firmware())),
+            &batch_projection(Some(populated_firmware())),
             14,
             3,
             start + Duration::from_millis(2),
@@ -136,7 +141,7 @@ pub(crate) fn delayed_unseen_session_does_not_overwrite_newer_observation() {
     let start = Instant::now();
     let mut cache = FirmwareStatusCache::new(15);
     cache
-        .observe_printers_at(&batch_json(Some(populated_firmware())), 15, 1, start)
+        .observe_printers_at(&batch_projection(Some(populated_firmware())), 15, 1, start)
         .unwrap();
 
     let mut delayed = populated_firmware();
@@ -153,7 +158,7 @@ pub(crate) fn delayed_unseen_session_does_not_overwrite_newer_observation() {
     newer["modules"][0]["sw_ver"] = serde_json::json!("08.08.08.08");
     cache
         .observe_printers_at(
-            &batch_json(Some(newer)),
+            &batch_projection(Some(newer)),
             15,
             3,
             start + Duration::from_millis(1),
@@ -170,7 +175,7 @@ pub(crate) fn delayed_unseen_session_does_not_overwrite_newer_observation() {
 
     cache
         .observe_printers_at(
-            &batch_json(Some(delayed)),
+            &batch_projection(Some(delayed)),
             15,
             2,
             start + Duration::from_millis(3),
@@ -187,10 +192,15 @@ pub(crate) fn delayed_same_identity_observations_cannot_undo_invalidation_but_ne
     let start = Instant::now();
     let mut cache = FirmwareStatusCache::new(18);
     cache
-        .observe_printers_at(&batch_json(Some(populated_firmware())), 18, 10, start)
+        .observe_printers_at(&batch_projection(Some(populated_firmware())), 18, 10, start)
         .unwrap();
     cache
-        .observe_printers_at(&batch_json(None), 18, 12, start + Duration::from_millis(1))
+        .observe_printers_at(
+            &batch_projection(None),
+            18,
+            12,
+            start + Duration::from_millis(1),
+        )
         .unwrap();
     assert_eq!(
         status_json(&mut cache, start + Duration::from_millis(1)),
@@ -202,7 +212,7 @@ pub(crate) fn delayed_same_identity_observations_cannot_undo_invalidation_but_ne
     lower["status_revision"] = serde_json::json!(8);
     cache
         .observe_printers_at(
-            &batch_json(Some(lower)),
+            &batch_projection(Some(lower)),
             18,
             9,
             start + Duration::from_secs(1),
@@ -210,7 +220,7 @@ pub(crate) fn delayed_same_identity_observations_cannot_undo_invalidation_but_ne
         .unwrap();
     cache
         .observe_printers_at(
-            &batch_json(Some(populated_firmware())),
+            &batch_projection(Some(populated_firmware())),
             18,
             11,
             start + Duration::from_secs(2),
@@ -228,7 +238,7 @@ pub(crate) fn delayed_same_identity_observations_cannot_undo_invalidation_but_ne
 
     cache
         .observe_printers_at(
-            &batch_json(Some(populated_firmware())),
+            &batch_projection(Some(populated_firmware())),
             18,
             13,
             start + Duration::from_millis(3_004),

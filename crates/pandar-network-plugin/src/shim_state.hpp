@@ -10,15 +10,18 @@ using PluginPrinterRefreshTransaction = std::int32_t (*)(void*);
 using PluginPrinterRefreshWithLock = std::int32_t (*)(
     void*, void*, PluginPrinterRefreshTransaction
 );
-using PluginPrinterRefreshFirmwareObserver = void (*)(
-    void*, const std::uint8_t*, std::size_t
+using PluginPrinterRefreshFirmwareTransaction = std::int32_t (*)(
+    void*, void*, std::uint64_t, std::uint64_t
+);
+using PluginPrinterRefreshWithFirmware = std::int32_t (*)(
+    void*, void*, PluginPrinterRefreshFirmwareTransaction
 );
 
 struct PluginPrinterRefreshAdapter {
     void* context;
     PluginPrinterRefreshWithLock with_refresh_lock;
     void (*reserve_observation)(void*);
-    PluginPrinterRefreshFirmwareObserver observe_printers;
+    PluginPrinterRefreshWithFirmware with_firmware_observation;
     PluginConnectionDeviceVisitor collect_offline;
 };
 
@@ -85,20 +88,19 @@ extern "C" void reserve_printer_refresh_observation(void* context) noexcept {
     adapter->observation = begin_firmware_observation(adapter->agent);
 }
 
-extern "C" void observe_printer_refresh_firmware(
+extern "C" std::int32_t with_printer_refresh_firmware(
     void* context,
-    const std::uint8_t* body,
-    std::size_t body_len
+    void* projection_context,
+    PluginPrinterRefreshFirmwareTransaction transaction
 ) noexcept {
     auto* adapter = static_cast<PrinterRefreshAdapterState*>(context);
-    if (!adapter->agent->firmware_session) return;
+    if (!adapter || !adapter->agent || !adapter->agent->firmware_session || !transaction) return 0;
     std::lock_guard<std::recursive_mutex> transition(
         adapter->agent->firmware_transition_mutex
     );
-    pandar_plugin_firmware_observe_printers(
+    return transaction(
+        projection_context,
         adapter->agent->firmware_session,
-        body,
-        body_len,
         adapter->observation.generation,
         adapter->observation.sequence
     );
@@ -122,7 +124,7 @@ PluginPrinterRefreshAdapter printer_refresh_adapter(PrinterRefreshAdapterState* 
         state,
         with_printer_refresh_lock,
         reserve_printer_refresh_observation,
-        observe_printer_refresh_firmware,
+        with_printer_refresh_firmware,
         collect_printer_refresh_offline,
     };
 }

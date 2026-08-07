@@ -34,21 +34,21 @@ pub(super) struct PrinterStatus {
     #[serde(default)]
     pub(super) hms: Vec<PrinterHms>,
     #[serde(default)]
-    pub(super) dev_model_name: Option<Scalar>,
+    pub(super) dev_model_name: Option<String>,
     #[serde(default)]
     pub(super) nozzle_temperatures: Vec<NozzleTemperature>,
     #[serde(default)]
     pub(super) nozzle_system: Option<BambuNozzleSystem>,
     #[serde(default)]
-    pub(super) active_nozzle: Option<Scalar>,
+    pub(super) active_nozzle: Option<String>,
     #[serde(default)]
-    pub(super) bed_temperature_celsius: Option<Scalar>,
+    pub(super) bed_temperature_celsius: Option<String>,
     #[serde(default)]
-    pub(super) bed_target_temperature_celsius: Option<Scalar>,
+    pub(super) bed_target_temperature_celsius: Option<String>,
     #[serde(default)]
-    pub(super) chamber_temperature_celsius: Option<Scalar>,
+    pub(super) chamber_temperature_celsius: Option<String>,
     #[serde(default)]
-    pub(super) chamber_target_temperature_celsius: Option<Scalar>,
+    pub(super) chamber_target_temperature_celsius: Option<String>,
     #[serde(default)]
     pub(super) chamber_light_on: Option<bool>,
     #[serde(default)]
@@ -66,15 +66,15 @@ pub(super) struct PrinterHms {
 #[derive(Default, Deserialize)]
 pub(super) struct NozzleTemperature {
     #[serde(default)]
-    pub(super) label: Option<Scalar>,
+    pub(super) label: Option<String>,
     #[serde(default)]
-    pub(super) current_celsius: Option<Scalar>,
+    pub(super) current_celsius: Option<String>,
     #[serde(default)]
-    pub(super) target_celsius: Option<Scalar>,
+    pub(super) target_celsius: Option<String>,
     #[serde(default)]
-    pub(super) diameter_mm: Option<Scalar>,
+    pub(super) diameter_mm: Option<String>,
     #[serde(default)]
-    pub(super) nozzle_type: Option<Scalar>,
+    pub(super) nozzle_type: Option<String>,
     #[serde(default)]
     pub(super) snow: Option<u32>,
     #[serde(default)]

@@ -97,11 +97,13 @@ pub extern "C" fn pandar_plugin_printer_refresh(
     let Some(session) = session(session_ptr) else {
         return invalid_input("invalid_printer_refresh_session");
     };
-    session.refresh_printers(None, true, || {
-        if let Some(reserve_observation) = reserve_observation {
-            reserve_observation(observation_context);
-        }
-    })
+    session
+        .refresh_printers(None, true, || {
+            if let Some(reserve_observation) = reserve_observation {
+                reserve_observation(observation_context);
+            }
+        })
+        .http
 }
 
 #[unsafe(no_mangle)]

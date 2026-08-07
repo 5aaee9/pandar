@@ -4,26 +4,12 @@ pub(crate) fn malformed_higher_sequence_does_not_block_lower_valid_typed_batch()
     let start = Instant::now();
     let mut cache = FirmwareStatusCache::new(19);
     cache
-        .observe_printers_at(&batch_json(Some(populated_firmware())), 19, 1, start)
+        .observe_printers_at(&batch_projection(Some(populated_firmware())), 19, 1, start)
         .unwrap();
 
     let mut malformed = batch_json_value(Some(populated_firmware()));
     malformed["devices"][0]["firmware"]["module_revision"] = serde_json::json!("wrong");
-    assert!(
-        cache
-            .observe_printers_at(&malformed.to_string(), 19, 0, start)
-            .is_err()
-    );
-    assert!(
-        cache
-            .observe_printers_at(
-                &malformed.to_string(),
-                19,
-                5,
-                start + Duration::from_millis(1),
-            )
-            .is_err()
-    );
+    assert!(project_hub_printers(&malformed.to_string()).is_err());
 
     let mut valid = populated_firmware();
     valid["session_id"] = serde_json::json!("session-2");
@@ -33,7 +19,7 @@ pub(crate) fn malformed_higher_sequence_does_not_block_lower_valid_typed_batch()
     valid["modules"][0]["sw_ver"] = serde_json::json!("07.07.07.07");
     cache
         .observe_printers_at(
-            &batch_json(Some(valid)),
+            &batch_projection(Some(valid)),
             19,
             4,
             start + Duration::from_millis(2),
@@ -54,7 +40,7 @@ pub(crate) fn never_populated_marker_does_not_fabricate_reset() {
     let mut cache = FirmwareStatusCache::new(16);
     cache
         .observe_printers_at(
-            &batch_json(Some(marker_firmware("session-1", 5))),
+            &batch_projection(Some(marker_firmware("session-1", 5))),
             16,
             1,
             start,
@@ -71,10 +57,6 @@ pub(crate) fn firmware_status_rejects_malformed_typed_batch_member_without_mutat
     let mut malformed = malformed;
     malformed["devices"][0]["firmware"]["module_revision"] = serde_json::json!("wrong");
 
-    assert!(
-        cache
-            .observe_printers_at(&malformed.to_string(), 3, 1, start)
-            .is_err()
-    );
+    assert!(project_hub_printers(&malformed.to_string()).is_err());
     assert!(cache.next_status_override_at("SERIAL", start).is_none());
 }

@@ -1,31 +1,30 @@
-use pandar_network_plugin::{PluginHttpResult, pandar_plugin_free_with_capacity};
-
-unsafe extern "C" {
-    fn pandar_plugin_printer_telemetry_json(
-        printer_ptr: *const u8,
-        printer_len: usize,
-    ) -> PluginHttpResult;
-}
-
-fn body(result: PluginHttpResult) -> String {
-    if result.body_ptr.is_null() || result.body_len == 0 {
-        return String::new();
-    }
-    let bytes = unsafe { std::slice::from_raw_parts(result.body_ptr, result.body_len) };
-    let body = String::from_utf8(bytes.to_vec()).unwrap();
-    pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap);
-    body
-}
+use pandar_network_plugin::studio_status::project_hub_printers;
 
 fn telemetry(printer: &str) -> String {
-    let result = unsafe { pandar_plugin_printer_telemetry_json(printer.as_ptr(), printer.len()) };
-    assert_eq!(result.status, 0);
-    assert_eq!(result.http_code, 200);
-    body(result)
+    let fields = serde_json::from_str::<serde_json::Value>(printer).unwrap();
+    let mut device = serde_json::json!({
+        "dev_id": "studio-serial-1",
+        "pandar_printer_id": "printer-1",
+        "dev_online": true,
+        "online": true,
+        "firmware": null
+    });
+    device
+        .as_object_mut()
+        .unwrap()
+        .extend(fields.as_object().unwrap().clone());
+    let body = serde_json::json!({"message": "success", "devices": [device]}).to_string();
+    let projection = project_hub_printers(&body).unwrap();
+    projection.printers()[0]
+        .status_report()
+        .strip_prefix(r#"{"print":"#)
+        .and_then(|status| status.strip_suffix('}'))
+        .expect("Studio push status envelope")
+        .to_owned()
 }
 
 fn telemetry_json(printer: &str) -> serde_json::Value {
-    serde_json::from_str(&format!("{{{}}}", telemetry(printer))).unwrap()
+    serde_json::from_str(&telemetry(printer)).unwrap()
 }
 
 #[test]
@@ -175,7 +174,7 @@ fn studio_status_defaults_missing_or_null_fun_without_discarding_telemetry() {
 #[test]
 fn printer_telemetry_omits_unknown_model_and_state() {
     let body = telemetry("{}");
-    let json: serde_json::Value = serde_json::from_str(&format!("{{{body}}}")).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
 
     assert!(json.get("gcode_state").is_none());
     assert!(body.contains(r#""mc_percent":0"#));
@@ -376,5 +375,8 @@ fn printer_telemetry_uses_present_state_without_inventing_idle() {
 fn explicit_chamber_light_off_is_reported_as_off() {
     let body = telemetry(r#"{"chamber_light_on":false}"#);
 
-    assert!(body.contains(r#""lights_report":[{"node":"chamber_light","mode":"off"}]"#));
+    assert!(
+        body.contains(r#""lights_report":[{"node":"chamber_light","mode":"off"}]"#),
+        "{body}"
+    );
 }

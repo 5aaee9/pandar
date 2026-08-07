@@ -1,6 +1,10 @@
 use std::{ffi::c_void, slice};
 
-use pandar_network_plugin::{PluginHttpResult, firmware::PluginFirmwareCallbackResult};
+use pandar_network_plugin::{
+    PluginHttpResult,
+    firmware::{FirmwarePluginSession, PluginFirmwareCallbackResult},
+    studio_status::project_hub_printers,
+};
 
 unsafe extern "C" {
     fn pandar_plugin_firmware_session_create(
@@ -17,13 +21,6 @@ unsafe extern "C" {
         token_ptr: *const u8,
         token_len: usize,
         generation: u64,
-    ) -> i32;
-    fn pandar_plugin_firmware_observe_printers(
-        session: *mut c_void,
-        body_ptr: *const u8,
-        body_len: usize,
-        generation: u64,
-        observation_sequence: u64,
     ) -> i32;
     fn pandar_plugin_firmware_catalog(
         session: *mut c_void,
@@ -125,15 +122,19 @@ impl Session {
     }
 
     pub(super) fn observe(&self, body: &str, generation: u64, observation_sequence: u64) -> i32 {
-        unsafe {
-            pandar_plugin_firmware_observe_printers(
-                self.raw,
-                body.as_ptr(),
-                body.len(),
-                generation,
-                observation_sequence,
-            )
-        }
+        let Ok(projection) = project_hub_printers(body) else {
+            return 1;
+        };
+        let session = unsafe { &*self.raw.cast::<FirmwarePluginSession>() };
+        i32::from(
+            session
+                .observe_printers(
+                    &projection.into_firmware(),
+                    generation,
+                    observation_sequence,
+                )
+                .is_err(),
+        )
     }
 
     pub(super) fn catalog(

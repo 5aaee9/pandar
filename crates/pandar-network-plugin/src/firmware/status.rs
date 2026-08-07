@@ -6,7 +6,7 @@ use std::{
 
 use pandar_core::PrinterFirmwareState;
 
-use crate::studio_status::{current_firmware_json, firmware_observations, firmware_reset_json};
+use crate::studio_status::{FirmwareProjection, current_firmware_json, firmware_reset_json};
 
 const RESET_GUARD: Duration = Duration::from_secs(3);
 
@@ -54,7 +54,7 @@ impl FirmwareStatusCache {
 
     pub fn observe_printers_at(
         &mut self,
-        body: &str,
+        projection: &FirmwareProjection,
         generation: u64,
         observation_sequence: u64,
         now: Instant,
@@ -63,22 +63,21 @@ impl FirmwareStatusCache {
             generation == self.generation,
             "stale plugin firmware generation"
         );
-        let observations = firmware_observations(body)?;
         if self
             .last_observation_sequence
             .is_some_and(|last| observation_sequence <= last)
         {
             return Ok(());
         }
-        let observed_ids = observations
+        let observed_ids = projection
+            .observations()
             .iter()
             .map(|printer| printer.dev_id.clone())
             .collect::<HashSet<_>>();
 
-        for observation in observations {
-            let _ = observation.pandar_printer_id;
-            match observation.firmware {
-                Some(firmware) => self.observe(&observation.dev_id, firmware, now),
+        for observation in projection.observations() {
+            match &observation.firmware {
+                Some(firmware) => self.observe(&observation.dev_id, firmware.clone(), now),
                 None => self.invalidate(&observation.dev_id, now),
             }
         }

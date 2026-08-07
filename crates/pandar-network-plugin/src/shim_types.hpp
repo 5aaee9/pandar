@@ -221,9 +221,7 @@ int32_t pandar_plugin_firmware_session_update(
     const uint8_t*, std::size_t,
     uint64_t
 );
-int32_t pandar_plugin_firmware_observe_printers(
-    void*, const uint8_t*, std::size_t, uint64_t, uint64_t
-);
+
 PluginHttpResult pandar_plugin_firmware_catalog(
     void*,
     const uint8_t*, std::size_t,
@@ -288,7 +286,6 @@ PluginHttpResult pandar_plugin_submit_h2c_auto_nozzle_mapping(
 );
 PluginHttpResult pandar_plugin_operation_json_from_gcode(const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_classify_status_request(const uint8_t*, std::size_t);
-PluginHttpResult pandar_plugin_printer_telemetry_json(const uint8_t*, std::size_t);
 PluginHttpResult pandar_plugin_start_local_webserver(
     const uint8_t*, std::size_t,
     const uint8_t*, std::size_t,

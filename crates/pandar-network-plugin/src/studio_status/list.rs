@@ -2,34 +2,32 @@ use anyhow::{Context, bail};
 use pandar_core::PrinterFirmwareState;
 use serde::Deserialize;
 
-use super::{
-    input::{ActiveTray, AmsUnit, MaterialTray, PrinterHms, PrinterStatus},
-    payload::push_status_json,
-};
+use super::{input::PrinterStatus, payload::push_status_json};
 
 #[derive(Deserialize)]
 struct PrinterList {
     message: String,
-    devices: Vec<Printer>,
+    devices: Vec<HubPrinter>,
 }
 
 #[derive(Deserialize)]
-struct ObservationList {
-    devices: Vec<ObservationPrinter>,
-}
-
-#[derive(Deserialize)]
-struct ObservationPrinter {
+struct HubPrinter {
     dev_id: String,
     pandar_printer_id: String,
     dev_online: bool,
     online: bool,
     #[serde(flatten)]
     status: PrinterStatus,
+    firmware: Option<PrinterFirmwareState>,
+}
+
+pub struct StudioStatusProjection {
+    printers: Vec<PrinterObservation>,
+    firmware: FirmwareProjection,
 }
 
 #[derive(Clone)]
-pub(crate) struct PrinterObservation {
+pub struct PrinterObservation {
     pub(crate) dev_id: String,
     pub(crate) pandar_printer_id: String,
     pub(crate) model: Option<String>,
@@ -38,159 +36,49 @@ pub(crate) struct PrinterObservation {
     pub(crate) studio_local_camera: bool,
 }
 
-#[derive(Deserialize)]
-struct Printer {
-    dev_id: String,
-    #[serde(rename = "dev_name")]
-    _dev_name: String,
-    #[serde(rename = "name")]
-    _name: String,
-    #[serde(rename = "dev_model_name")]
-    _dev_model_name: Option<String>,
-    #[serde(rename = "model")]
-    _model: Option<String>,
-    #[serde(rename = "dev_online")]
-    _dev_online: bool,
-    #[serde(rename = "online")]
-    _online: bool,
-    #[serde(rename = "task_status")]
-    _task_status: String,
-    #[serde(rename = "state")]
-    _state: String,
-    #[serde(rename = "gcode_state")]
-    _gcode_state: Option<String>,
-    #[serde(rename = "mc_percent")]
-    _mc_percent: Option<u8>,
-    #[serde(rename = "mc_remaining_time")]
-    _mc_remaining_time: Option<u32>,
-    #[serde(rename = "layer_num")]
-    _layer_num: Option<u32>,
-    #[serde(rename = "total_layer_num")]
-    _total_layer_num: Option<u32>,
-    #[serde(rename = "task_id")]
-    _task_id: Option<String>,
-    #[serde(rename = "print_error")]
-    _print_error: Option<u32>,
-    #[serde(rename = "job_id")]
-    _job_id: Option<String>,
-    #[serde(rename = "subtask_id")]
-    _subtask_id: Option<String>,
-    #[serde(rename = "gcode_file")]
-    _gcode_file: Option<String>,
-    #[serde(rename = "subtask_name")]
-    _subtask_name: Option<String>,
-    #[serde(rename = "hms")]
-    _hms: Vec<PrinterHms>,
-    pandar_printer_id: String,
-    #[serde(rename = "nozzle_temperatures")]
-    _nozzle_temperatures: Vec<ValidatedNozzleTemperature>,
-    #[serde(rename = "active_nozzle")]
-    _active_nozzle: Option<String>,
-    #[serde(rename = "bed_temperature_celsius")]
-    _bed_temperature_celsius: Option<String>,
-    #[serde(rename = "bed_target_temperature_celsius")]
-    _bed_target_temperature_celsius: Option<String>,
-    #[serde(rename = "chamber_temperature_celsius")]
-    _chamber_temperature_celsius: Option<String>,
-    #[serde(rename = "chamber_target_temperature_celsius")]
-    _chamber_target_temperature_celsius: Option<String>,
-    #[serde(rename = "chamber_light_on")]
-    _chamber_light_on: Option<bool>,
-    #[serde(rename = "materials")]
-    _materials: Option<ValidatedMaterials>,
-    firmware: Option<PrinterFirmwareState>,
+pub struct FirmwareProjection {
+    source_len: usize,
+    observations: Vec<FirmwareObservation>,
 }
 
 pub(crate) struct FirmwareObservation {
     pub(crate) dev_id: String,
-    pub(crate) pandar_printer_id: String,
     pub(crate) firmware: Option<PrinterFirmwareState>,
 }
 
-#[derive(Deserialize)]
-struct ValidatedNozzleTemperature {
-    #[serde(rename = "label")]
-    _label: Option<String>,
-    #[serde(rename = "current_celsius")]
-    _current_celsius: Option<String>,
-    #[serde(rename = "target_celsius")]
-    _target_celsius: Option<String>,
-    #[serde(rename = "diameter_mm")]
-    _diameter_mm: Option<String>,
-    #[serde(rename = "nozzle_type")]
-    _nozzle_type: Option<String>,
+impl StudioStatusProjection {
+    pub fn printers(&self) -> &[PrinterObservation] {
+        &self.printers
+    }
+
+    pub fn into_firmware(self) -> FirmwareProjection {
+        self.firmware
+    }
+
+    pub(crate) fn into_parts(self) -> (Vec<PrinterObservation>, FirmwareProjection) {
+        (self.printers, self.firmware)
+    }
 }
 
-#[derive(Deserialize)]
-struct ValidatedMaterials {
-    #[serde(rename = "cfg")]
-    _cfg: Option<String>,
-    #[serde(rename = "aux")]
-    _aux: Option<String>,
-    #[serde(rename = "stat")]
-    _stat: Option<String>,
-    #[serde(rename = "ams_units")]
-    _ams_units: Vec<AmsUnit>,
-    #[serde(rename = "external_spools")]
-    _external_spools: Vec<MaterialTray>,
-    #[serde(rename = "active_tray")]
-    _active_tray: Option<ActiveTray>,
-    #[serde(rename = "filament_switch_installed")]
-    _filament_switch_installed: Option<bool>,
-    #[serde(rename = "observed_at")]
-    _observed_at: String,
+impl PrinterObservation {
+    pub fn status_report(&self) -> &str {
+        &self.status_report
+    }
 }
 
-pub(crate) fn validate_printer_list(body: &str) -> anyhow::Result<()> {
-    let response = parse_printer_list(body)?;
-    validate_response(&response)
+impl FirmwareProjection {
+    pub(crate) fn source_len(&self) -> usize {
+        self.source_len
+    }
+
+    pub(crate) fn observations(&self) -> &[FirmwareObservation] {
+        &self.observations
+    }
 }
 
-pub(crate) fn printer_observations(body: &str) -> anyhow::Result<Vec<PrinterObservation>> {
-    validate_printer_list(body)?;
-    let response = serde_json::from_str::<ObservationList>(body)
-        .context("deserialize Hub plugin printer observations")?;
-    Ok(response
-        .devices
-        .into_iter()
-        .map(|printer| {
-            let online = printer.dev_online && printer.online;
-            PrinterObservation {
-                dev_id: printer.dev_id,
-                pandar_printer_id: printer.pandar_printer_id,
-                model: printer
-                    .status
-                    .dev_model_name
-                    .as_ref()
-                    .map(|model| model.text()),
-                status_report: push_status_json(&printer.status, online),
-                online,
-                studio_local_camera: printer.status.studio_local_camera,
-            }
-        })
-        .collect())
-}
-
-pub(crate) fn firmware_observations(body: &str) -> anyhow::Result<Vec<FirmwareObservation>> {
-    let response = parse_printer_list(body)?;
-    validate_response(&response)?;
-    Ok(response
-        .devices
-        .into_iter()
-        .map(|printer| FirmwareObservation {
-            dev_id: printer.dev_id,
-            pandar_printer_id: printer.pandar_printer_id,
-            firmware: printer.firmware,
-        })
-        .collect())
-}
-
-fn parse_printer_list(body: &str) -> anyhow::Result<PrinterList> {
-    serde_json::from_str::<PrinterList>(body)
-        .context("deserialize Hub plugin printer status response")
-}
-
-fn validate_response(response: &PrinterList) -> anyhow::Result<()> {
+pub fn project_hub_printers(body: &str) -> anyhow::Result<StudioStatusProjection> {
+    let response = serde_json::from_str::<PrinterList>(body)
+        .context("deserialize Hub plugin printer status response")?;
     if response.message != "success" {
         bail!("Hub plugin printer status response was not successful");
     }
@@ -201,12 +89,40 @@ fn validate_response(response: &PrinterList) -> anyhow::Result<()> {
     {
         bail!("Hub plugin printer status response contained an empty device id");
     }
-    Ok(())
+
+    let mut printers = Vec::with_capacity(response.devices.len());
+    let mut firmware = Vec::with_capacity(response.devices.len());
+    for printer in response.devices {
+        let online = printer.dev_online && printer.online;
+        let model = printer.status.dev_model_name.clone();
+        let studio_local_camera = printer.status.studio_local_camera;
+        let status_report = push_status_json(&printer.status, online);
+        firmware.push(FirmwareObservation {
+            dev_id: printer.dev_id.clone(),
+            firmware: printer.firmware,
+        });
+        printers.push(PrinterObservation {
+            dev_id: printer.dev_id,
+            pandar_printer_id: printer.pandar_printer_id,
+            model,
+            status_report,
+            online,
+            studio_local_camera,
+        });
+    }
+
+    Ok(StudioStatusProjection {
+        printers,
+        firmware: FirmwareProjection {
+            source_len: body.len(),
+            observations: firmware,
+        },
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{printer_observations, validate_printer_list};
+    use super::project_hub_printers;
 
     fn printer_list_with_fields(fields: serde_json::Value) -> String {
         let mut printer = serde_json::json!({
@@ -235,8 +151,10 @@ mod tests {
             "bed_temperature_celsius": null,
             "bed_target_temperature_celsius": null,
             "chamber_temperature_celsius": null,
+            "chamber_target_temperature_celsius": null,
             "chamber_light_on": null,
-            "materials": null
+            "materials": null,
+            "firmware": null
         });
         printer
             .as_object_mut()
@@ -251,38 +169,45 @@ mod tests {
     }
 
     #[test]
-    fn studio_status_list_rejects_wrong_print_error_type() {
-        let body = printer_list_with_fields(serde_json::json!({"print_error": "83918929"}));
-
-        assert!(validate_printer_list(&body).is_err());
-    }
-
-    #[test]
-    fn studio_status_list_rejects_wrong_job_id_type() {
-        let body = printer_list_with_fields(serde_json::json!({"job_id": 42}));
-
-        assert!(validate_printer_list(&body).is_err());
-    }
-
-    #[test]
-    fn printer_observation_requires_both_online_signals() {
+    fn projection_rejects_wrong_known_field_types() {
         for fields in [
-            serde_json::json!({"dev_online": false, "online": true}),
-            serde_json::json!({"dev_online": true, "online": false}),
+            serde_json::json!({"print_error": "83918929"}),
+            serde_json::json!({"job_id": 42}),
+            serde_json::json!({"bed_temperature_celsius": 60}),
         ] {
-            let observations = printer_observations(&printer_list_with_fields(fields)).unwrap();
-            assert!(!observations[0].online);
+            assert!(project_hub_printers(&printer_list_with_fields(fields)).is_err());
         }
     }
 
     #[test]
-    fn printer_observation_keeps_missing_model_unknown() {
-        let observations = printer_observations(&printer_list_with_fields(serde_json::json!({
+    fn projection_accepts_additive_unknown_fields() {
+        assert!(
+            project_hub_printers(&printer_list_with_fields(
+                serde_json::json!({"future_status_field": {"enabled": true}})
+            ))
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn projection_requires_both_online_signals() {
+        for fields in [
+            serde_json::json!({"dev_online": false, "online": true}),
+            serde_json::json!({"dev_online": true, "online": false}),
+        ] {
+            let projection = project_hub_printers(&printer_list_with_fields(fields)).unwrap();
+            assert!(!projection.printers()[0].online);
+        }
+    }
+
+    #[test]
+    fn projection_keeps_missing_model_unknown() {
+        let projection = project_hub_printers(&printer_list_with_fields(serde_json::json!({
             "dev_model_name": null,
             "model": null
         })))
         .unwrap();
 
-        assert!(observations[0].model.is_none());
+        assert!(projection.printers()[0].model.is_none());
     }
 }

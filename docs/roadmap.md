@@ -22,6 +22,16 @@
   Leaving PiP tears down the hidden stream, unsupported browsers keep the existing fullscreen-only UI,
   and frontend coverage locks the modal-to-page transition and stream lifetime.
 
+- Deepened the network plugin's Studio status projection into one typed, in-process module. Each Hub
+  printer-list response is now deserialized and validated once into an ephemeral aggregate that supplies
+  both connection observations and firmware observations; malformed known fields reject the whole
+  projection while additive unknown fields remain compatible. The aggregate stays in Rust during the
+  refresh transaction, while the C++ shim supplies only its existing synchronization and opaque firmware
+  session handle. Removed the duplicate validation schema, the raw Rust-to-C++-to-Rust firmware JSON
+  handoff, and the test-only printer telemetry FFI export. Projection, firmware, refresh, and compiled
+  Studio contract coverage now exercise the production aggregate interface; all 410 network-plugin tests
+  pass (1 skipped).
+
 - Deepened the web printer-control seam into `frontend/app/printer-controls.tsx`: the module now
   owns the `PrinterControlIntent` tagged union, the hidden form-field contract
   (`PrinterControlFields`, including per-action field-selection policy such as AMS target

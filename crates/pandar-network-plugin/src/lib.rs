@@ -17,7 +17,7 @@ mod studio_disposition;
 mod studio_message;
 mod studio_policy;
 mod studio_print;
-mod studio_status;
+pub mod studio_status;
 
 pub use camera::pandar_plugin_camera_url;
 pub use connection::{
@@ -273,19 +273,6 @@ pub extern "C" fn pandar_plugin_submit_printer_operation(
         Some(&token),
         operation,
         RequestKind::PrinterOperation,
-    )
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn pandar_plugin_printer_telemetry_json(
-    printer_ptr: *const u8,
-    printer_len: usize,
-) -> PluginHttpResult {
-    let printer_json = read_utf8(printer_ptr, printer_len).unwrap_or_default();
-    result(
-        0,
-        200,
-        studio_status::printer_telemetry_fragment(&printer_json),
     )
 }
 

@@ -35,13 +35,7 @@ struct LiveView {
 pub(super) fn push_status_json(printer: &PrinterStatus, online: bool) -> String {
     let camera = printer.studio_local_camera
         && online
-        && studio_local_camera_supported(
-            printer
-                .dev_model_name
-                .as_ref()
-                .map(|model| model.text())
-                .as_deref(),
-        );
+        && studio_local_camera_supported(printer.dev_model_name.as_deref());
     serde_json::to_string(&PushStatusEnvelope {
         print: PushStatus {
             command: "push_status",

@@ -85,31 +85,6 @@ pub unsafe extern "C" fn pandar_plugin_firmware_session_update(
 
 #[unsafe(no_mangle)]
 /// # Safety
-/// `session` must be live and `batch_json_ptr` valid for its length.
-pub unsafe extern "C" fn pandar_plugin_firmware_observe_printers(
-    session: *mut c_void,
-    batch_json_ptr: *const u8,
-    batch_json_len: usize,
-    generation: u64,
-    observation_sequence: u64,
-) -> i32 {
-    let Some(session) = (unsafe { session_ref(session) }) else {
-        return 1;
-    };
-    let Some(body) = read_utf8(batch_json_ptr, batch_json_len) else {
-        return 1;
-    };
-    match session.observe_printers(&body, generation, observation_sequence) {
-        Ok(()) => 0,
-        Err(error) => {
-            eprintln!("pandar firmware printer observation failed: {error:#}");
-            1
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
-/// # Safety
 /// `session` must be live and string pointers valid for their lengths.
 pub unsafe extern "C" fn pandar_plugin_firmware_catalog(
     session: *mut c_void,
@@ -336,7 +311,7 @@ unsafe fn request_parts<'a>(
     Some((session, studio_dev_id, printer_id))
 }
 
-unsafe fn session_ref<'a>(session: *mut c_void) -> Option<&'a FirmwarePluginSession> {
+pub(crate) unsafe fn session_ref<'a>(session: *mut c_void) -> Option<&'a FirmwarePluginSession> {
     unsafe { session.cast::<FirmwarePluginSession>().as_ref() }
 }
 

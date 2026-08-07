@@ -2,16 +2,32 @@ use serde::{Serialize, Serializer};
 
 use super::input::Scalar;
 
-pub(super) fn text(value: &Option<Scalar>) -> String {
-    value.as_ref().map(Scalar::text).unwrap_or_default()
+pub(super) trait TextValue {
+    fn text(&self) -> String;
 }
 
-pub(super) fn text_if_present(value: &Option<Scalar>) -> Option<String> {
+impl TextValue for String {
+    fn text(&self) -> String {
+        self.clone()
+    }
+}
+
+impl TextValue for Scalar {
+    fn text(&self) -> String {
+        Scalar::text(self)
+    }
+}
+
+pub(super) fn text<T: TextValue>(value: &Option<T>) -> String {
+    value.as_ref().map(TextValue::text).unwrap_or_default()
+}
+
+pub(super) fn text_if_present<T: TextValue>(value: &Option<T>) -> Option<String> {
     let value = text(value);
     (!value.is_empty()).then_some(value)
 }
 
-pub(super) fn scalar_if_present(value: &Option<Scalar>) -> Option<StudioScalar> {
+pub(super) fn scalar_if_present<T: TextValue>(value: &Option<T>) -> Option<StudioScalar> {
     text_if_present(value).map(StudioScalar::from_text)
 }
 

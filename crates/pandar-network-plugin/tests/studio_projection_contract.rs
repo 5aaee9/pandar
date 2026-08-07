@@ -5,23 +5,27 @@ mod compiler;
 #[path = "studio_projection_contract/pinned.rs"]
 mod pinned;
 
-use pandar_network_plugin::{PluginHttpResult, pandar_plugin_free_with_capacity};
-
-unsafe extern "C" {
-    fn pandar_plugin_printer_telemetry_json(
-        printer_ptr: *const u8,
-        printer_len: usize,
-    ) -> PluginHttpResult;
-}
+use pandar_network_plugin::studio_status::project_hub_printers;
 
 fn telemetry(printer: &str) -> serde_json::Value {
-    let result = unsafe { pandar_plugin_printer_telemetry_json(printer.as_ptr(), printer.len()) };
-    assert_eq!(result.status, 0);
-    assert_eq!(result.http_code, 200);
-    let bytes = unsafe { std::slice::from_raw_parts(result.body_ptr, result.body_len) };
-    let fragment = String::from_utf8(bytes.to_vec()).unwrap();
-    pandar_plugin_free_with_capacity(result.body_ptr.cast(), result.body_len, result.body_cap);
-    serde_json::from_str(&format!("{{{fragment}}}")).unwrap()
+    let fields = serde_json::from_str::<serde_json::Value>(printer).unwrap();
+    let mut device = serde_json::json!({
+        "dev_id": "studio-serial-1",
+        "pandar_printer_id": "printer-1",
+        "dev_online": true,
+        "online": true,
+        "firmware": null
+    });
+    device
+        .as_object_mut()
+        .unwrap()
+        .extend(fields.as_object().unwrap().clone());
+    let body = serde_json::json!({"message": "success", "devices": [device]}).to_string();
+    let projection = project_hub_printers(&body).unwrap();
+    let status =
+        serde_json::from_str::<serde_json::Value>(projection.printers()[0].status_report())
+            .unwrap();
+    status["print"].clone()
 }
 
 fn projected(raw: &str) -> (serde_json::Value, serde_json::Value) {

@@ -12,7 +12,9 @@ use super::{
     parser::{PLUGIN_JSON_BODY_LIMIT, parse_studio_firmware},
     status::FirmwareStatusCache,
 };
-use crate::studio_status::{firmware_refresh_failure_json, firmware_refresh_success_json};
+use crate::studio_status::{
+    FirmwareProjection, firmware_refresh_failure_json, firmware_refresh_success_json,
+};
 
 #[cfg(test)]
 mod tests;
@@ -142,28 +144,28 @@ impl FirmwarePluginSession {
 
     pub fn observe_printers_at(
         &self,
-        body: &str,
+        projection: &FirmwareProjection,
         generation: u64,
         observation_sequence: u64,
         now: Instant,
     ) -> anyhow::Result<()> {
         anyhow::ensure!(
-            body.len() <= PLUGIN_JSON_BODY_LIMIT,
+            projection.source_len() <= PLUGIN_JSON_BODY_LIMIT,
             "printer batch exceeded body limit"
         );
         self.status
             .lock()
             .expect("firmware status cache poisoned")
-            .observe_printers_at(body, generation, observation_sequence, now)
+            .observe_printers_at(projection, generation, observation_sequence, now)
     }
 
     pub fn observe_printers(
         &self,
-        body: &str,
+        projection: &FirmwareProjection,
         generation: u64,
         observation_sequence: u64,
     ) -> anyhow::Result<()> {
-        self.observe_printers_at(body, generation, observation_sequence, Instant::now())
+        self.observe_printers_at(projection, generation, observation_sequence, Instant::now())
     }
 
     pub fn next_status_override_at(&self, dev_id: &str, now: Instant) -> Option<String> {

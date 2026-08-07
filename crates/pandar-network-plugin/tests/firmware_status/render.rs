@@ -4,7 +4,7 @@ pub(crate) fn firmware_status_renders_exact_current_modules_upgrade_state_and_cf
     let now = Instant::now();
     let mut cache = FirmwareStatusCache::new(17);
     cache
-        .observe_printers_at(&batch_json(Some(populated_firmware())), 17, 1, now)
+        .observe_printers_at(&batch_projection(Some(populated_firmware())), 17, 1, now)
         .unwrap();
 
     let status = cache
@@ -109,10 +109,15 @@ pub(crate) fn firmware_status_emits_exact_reset_immediately_and_past_three_secon
     let start = Instant::now();
     let mut cache = FirmwareStatusCache::new(7);
     cache
-        .observe_printers_at(&batch_json(Some(populated_firmware())), 7, 1, start)
+        .observe_printers_at(&batch_projection(Some(populated_firmware())), 7, 1, start)
         .unwrap();
     cache
-        .observe_printers_at(&batch_json(None), 7, 2, start + Duration::from_millis(10))
+        .observe_printers_at(
+            &batch_projection(None),
+            7,
+            2,
+            start + Duration::from_millis(10),
+        )
         .unwrap();
 
     let reset = exact_reset();
@@ -136,10 +141,15 @@ pub(crate) fn firmware_status_fresh_current_state_cancels_reset_repetition() {
     let start = Instant::now();
     let mut cache = FirmwareStatusCache::new(9);
     cache
-        .observe_printers_at(&batch_json(Some(populated_firmware())), 9, 1, start)
+        .observe_printers_at(&batch_projection(Some(populated_firmware())), 9, 1, start)
         .unwrap();
     cache
-        .observe_printers_at(&batch_json(None), 9, 2, start + Duration::from_millis(1))
+        .observe_printers_at(
+            &batch_projection(None),
+            9,
+            2,
+            start + Duration::from_millis(1),
+        )
         .unwrap();
     assert!(
         cache
@@ -149,7 +159,7 @@ pub(crate) fn firmware_status_fresh_current_state_cancels_reset_repetition() {
 
     cache
         .observe_printers_at(
-            &batch_json(Some(populated_firmware())),
+            &batch_projection(Some(populated_firmware())),
             9,
             3,
             start + Duration::from_secs(1),

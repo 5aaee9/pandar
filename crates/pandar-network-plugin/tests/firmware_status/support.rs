@@ -1,7 +1,10 @@
 pub(crate) use std::time::{Duration, Instant};
 
 pub(crate) use pandar_core::{FirmwareCatalogEntry, FirmwareCatalogTarget};
-pub(crate) use pandar_network_plugin::firmware::{FirmwareStatusCache, firmware_catalog_json};
+pub(crate) use pandar_network_plugin::{
+    firmware::{FirmwareStatusCache, firmware_catalog_json},
+    studio_status::{FirmwareProjection, project_hub_printers},
+};
 
 pub(crate) fn populated_firmware() -> serde_json::Value {
     serde_json::json!({
@@ -68,8 +71,10 @@ pub(crate) fn exact_reset() -> serde_json::Value {
     })
 }
 
-pub(crate) fn batch_json(firmware: Option<serde_json::Value>) -> String {
-    batch_json_value(firmware).to_string()
+pub(crate) fn batch_projection(firmware: Option<serde_json::Value>) -> FirmwareProjection {
+    project_hub_printers(&batch_json_value(firmware).to_string())
+        .expect("firmware projection")
+        .into_firmware()
 }
 
 pub(crate) fn batch_json_value(firmware: Option<serde_json::Value>) -> serde_json::Value {
