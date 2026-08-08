@@ -4,7 +4,7 @@ use std::{
 };
 
 use pandar_core::{
-    BambuNozzleSystem, CommandRecord, PrinterNozzleTemperature, TenantId,
+    BambuNozzleSystem, CommandRecord, PrinterCoolingSystem, PrinterNozzleTemperature, TenantId,
     compatibility::normalize_model,
 };
 use serde::{Deserialize, Serialize};
@@ -48,6 +48,8 @@ pub struct PrinterEventPrinter {
     pub chamber_temperature_celsius: Option<String>,
     pub chamber_target_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cooling_system: Option<PrinterCoolingSystem>,
     pub materials: Option<PrinterEventMaterials>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nozzle_system: Option<BambuNozzleSystem>,
@@ -171,6 +173,7 @@ pub fn printer_event_printer(
         chamber_temperature_celsius: printer.chamber_temperature_celsius,
         chamber_target_temperature_celsius: printer.chamber_target_temperature_celsius,
         chamber_light_on: printer.chamber_light_on,
+        cooling_system: printer.cooling_system,
         materials: materials.map(PrinterEventMaterials::from),
         nozzle_system: printer.bambu_nozzle_system,
         state_revision: Some(state_revision),

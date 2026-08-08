@@ -163,6 +163,9 @@ fn printer_snapshot_event_with_connection_authority(
             nozzle_system: snapshot
                 .nozzle_system
                 .map(crate::protocol::proto_nozzle_system),
+            cooling_system: snapshot
+                .cooling_system
+                .map(crate::protocol::proto_cooling_system),
         }),
     )
 }

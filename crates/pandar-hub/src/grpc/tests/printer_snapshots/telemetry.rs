@@ -21,6 +21,13 @@ async fn grpc_partial_snapshot_preserves_absent_telemetry_and_updates_present_fi
     full.chamber_temperature_celsius = "32".to_owned();
     full.chamber_target_temperature_celsius = "45".to_owned();
     full.chamber_light_on = Some(true);
+    full.cooling_system = Some(crate::protocol::agent::v1::PrinterCoolingSystem {
+        mode: Some(crate::protocol::agent::v1::PrinterCoolingMode::Cooling as i32),
+        fans: vec![crate::protocol::agent::v1::PrinterCoolingFan {
+            kind: crate::protocol::agent::v1::PrinterCoolingFanKind::PartCooling as i32,
+            speed_percent: 70,
+        }],
+    });
     handle_snapshot(&state, tenant_id, agent_id, token, full)
         .await
         .unwrap();
@@ -49,6 +56,16 @@ async fn grpc_partial_snapshot_preserves_absent_telemetry_and_updates_present_fi
         Some("48")
     );
     assert_eq!(stored.chamber_light_on, Some(true));
+    assert_eq!(
+        stored.cooling_system,
+        Some(pandar_core::PrinterCoolingSystem {
+            mode: Some(pandar_core::PrinterCoolingMode::Cooling),
+            fans: vec![pandar_core::PrinterCoolingFan {
+                kind: pandar_core::PrinterCoolingFanKind::PartCooling,
+                speed_percent: 70,
+            }],
+        })
+    );
 }
 
 #[tokio::test]
@@ -98,4 +115,5 @@ async fn grpc_authoritative_telemetry_snapshot_can_clear_stale_fields_independen
     assert_eq!(stored.chamber_temperature_celsius, None);
     assert_eq!(stored.chamber_target_temperature_celsius, None);
     assert_eq!(stored.chamber_light_on, None);
+    assert_eq!(stored.cooling_system, None);
 }

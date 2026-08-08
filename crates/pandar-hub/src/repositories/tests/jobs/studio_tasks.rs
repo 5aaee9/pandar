@@ -22,6 +22,7 @@ fn printer_snapshot(serial_number: &str, name: &str) -> PrinterSnapshotUpsert {
         chamber_temperature_celsius: None,
         chamber_target_temperature_celsius: None,
         chamber_light_on: None,
+        cooling_system: None,
         nozzle_system: None,
         connection_authoritative: false,
         telemetry_authoritative: true,

@@ -28,11 +28,87 @@ fn report_maps_to_snapshot_uses_configured_model() {
             chamber_temperature_celsius: None,
             chamber_target_temperature_celsius: None,
             chamber_light_on: None,
+            cooling_system: None,
             device_features: None,
             device_features2: None,
             nozzle_system: None,
             telemetry_authoritative: false,
         }
+    );
+}
+
+#[test]
+fn report_maps_legacy_fan_levels_to_bambu_studio_percentages() {
+    let report = report_with_print(SnapshotPrintFixture {
+        cooling_fan_speed: Some(15),
+        big_fan1_speed: Some(9),
+        big_fan2_speed: Some(0),
+        ..Default::default()
+    });
+
+    let cooling = snapshot_from_report(&endpoint(), &MachineReport::decode(report))
+        .cooling_system
+        .unwrap();
+
+    assert_eq!(cooling.mode, None);
+    assert_eq!(
+        cooling.fans,
+        vec![
+            pandar_core::PrinterCoolingFan {
+                kind: pandar_core::PrinterCoolingFanKind::PartCooling,
+                speed_percent: 100,
+            },
+            pandar_core::PrinterCoolingFan {
+                kind: pandar_core::PrinterCoolingFanKind::Auxiliary,
+                speed_percent: 60,
+            },
+            pandar_core::PrinterCoolingFan {
+                kind: pandar_core::PrinterCoolingFanKind::Chamber,
+                speed_percent: 0,
+            },
+        ]
+    );
+}
+
+#[test]
+fn report_maps_modern_airduct_mode_and_parts() {
+    let report = report_with_print(SnapshotPrintFixture {
+        cooling_fan_speed: Some(15),
+        device: Some(DeviceFixture {
+            airduct: Some(AirDuctFixture {
+                mode: 1,
+                parts: vec![
+                    AirDuctPartFixture { id: 16, state: 80 },
+                    AirDuctPartFixture { id: 48, state: 40 },
+                    AirDuctPartFixture { id: 80, state: 100 },
+                ],
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    });
+
+    let cooling = snapshot_from_report(&endpoint(), &MachineReport::decode(report))
+        .cooling_system
+        .unwrap();
+
+    assert_eq!(cooling.mode, Some(pandar_core::PrinterCoolingMode::Heating));
+    assert_eq!(
+        cooling.fans,
+        vec![
+            pandar_core::PrinterCoolingFan {
+                kind: pandar_core::PrinterCoolingFanKind::PartCooling,
+                speed_percent: 80,
+            },
+            pandar_core::PrinterCoolingFan {
+                kind: pandar_core::PrinterCoolingFanKind::Chamber,
+                speed_percent: 40,
+            },
+            pandar_core::PrinterCoolingFan {
+                kind: pandar_core::PrinterCoolingFanKind::Controller,
+                speed_percent: 100,
+            },
+        ]
     );
 }
 
@@ -202,6 +278,7 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
                 ],
             }),
             holder: None,
+            airduct: None,
         }),
         ..Default::default()
     });

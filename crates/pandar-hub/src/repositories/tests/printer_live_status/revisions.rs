@@ -91,6 +91,7 @@ pub(crate) async fn exercise_atomic_revisions(database: Database) {
                 chamber_temperature_celsius: None,
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
+                cooling_system: None,
                 nozzle_system: None,
                 connection_authoritative: false,
                 telemetry_authoritative: true,

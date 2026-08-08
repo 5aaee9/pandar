@@ -23,6 +23,7 @@ pub struct Model {
     pub chamber_temperature_celsius: Option<String>,
     pub chamber_target_temperature_celsius: Option<String>,
     pub chamber_light_on: Option<bool>,
+    pub cooling_system_json: Option<String>,
     pub bambu_fun_bits: Option<String>,
     pub bambu_fun_session_id: Option<String>,
     pub bambu_fun2_bits: Option<String>,

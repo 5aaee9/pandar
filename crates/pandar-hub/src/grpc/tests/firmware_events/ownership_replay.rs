@@ -290,6 +290,7 @@ fn snapshot_event(
             chamber_target_temperature_celsius: String::new(),
             active_nozzle: String::new(),
             chamber_light_on: None,
+            cooling_system: None,
             device_features: None,
             connection_authoritative: false,
             telemetry_authoritative: false,

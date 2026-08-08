@@ -1,7 +1,5 @@
 use anyhow::Context;
-use pandar_core::{
-    AgentId, BambuDeviceFeatures, BambuNozzleSystem, Printer, PrinterNozzleTemperature, TenantId,
-};
+use pandar_core::{AgentId, Printer, TenantId};
 use sea_orm::{
     ActiveValue::Set,
     ColumnTrait, ConnectionTrait, DatabaseTransaction, EntityTrait, PaginatorTrait, QueryFilter,
@@ -28,6 +26,7 @@ mod firmware;
 mod live_status;
 mod queries;
 mod rows;
+mod snapshot;
 
 use crate::db::ConnectionDialectExt;
 use audit_metadata::{PrinterDeleteAuditMetadata, PrinterUpdateAuditMetadata};
@@ -39,42 +38,9 @@ pub(crate) use live_status::{
     persist_merged_live_status,
 };
 use rows::printer_from_model;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PrinterSnapshotUpsert {
-    pub serial_number: String,
-    pub host: Option<String>,
-    pub access_code: Option<String>,
-    pub name: String,
-    pub model: Option<String>,
-    pub status: Option<String>,
-    pub observed_at: String,
-    pub nozzle_temperatures: Vec<PrinterNozzleTemperature>,
-    pub active_nozzle: Option<String>,
-    pub bed_temperature_celsius: Option<String>,
-    pub bed_target_temperature_celsius: Option<String>,
-    pub chamber_temperature_celsius: Option<String>,
-    pub chamber_target_temperature_celsius: Option<String>,
-    pub chamber_light_on: Option<bool>,
-    pub nozzle_system: Option<BambuNozzleSystem>,
-    pub connection_authoritative: bool,
-    pub telemetry_authoritative: bool,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct SnapshotSessionState<'a> {
-    pub(crate) device_features: Option<BambuDeviceFeatures>,
-    pub(crate) device_features_session_id: Option<&'a str>,
-    pub(crate) nozzle_system_session_id: Option<&'a str>,
-    pub(crate) mqtt_presence_session_id: Option<&'a str>,
-}
-
-const EMPTY_SNAPSHOT_SESSION_STATE: SnapshotSessionState<'static> = SnapshotSessionState {
-    device_features: None,
-    device_features_session_id: None,
-    nozzle_system_session_id: None,
-    mqtt_presence_session_id: None,
-};
+use snapshot::EMPTY_SNAPSHOT_SESSION_STATE;
+pub use snapshot::PrinterSnapshotUpsert;
+pub(crate) use snapshot::SnapshotSessionState;
 
 #[derive(Debug, Clone)]
 pub struct PrinterRepository {

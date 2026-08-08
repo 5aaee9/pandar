@@ -59,6 +59,7 @@ async fn plugin_print_error_rejects_same_serial_reassignment_between_owner_read_
                 chamber_temperature_celsius: None,
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
+                cooling_system: None,
                 nozzle_system: None,
                 connection_authoritative: false,
                 telemetry_authoritative: true,

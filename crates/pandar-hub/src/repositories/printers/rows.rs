@@ -1,6 +1,7 @@
 use anyhow::{Context, bail};
 use pandar_core::{
-    AgentId, BambuDeviceFeatures, BambuNozzleSystem, Printer, PrinterParts, TenantId,
+    AgentId, BambuDeviceFeatures, BambuNozzleSystem, Printer, PrinterCoolingSystem, PrinterParts,
+    TenantId,
 };
 
 use crate::{
@@ -54,6 +55,11 @@ pub(super) fn printer_from_model(
             chamber_temperature_celsius: model.chamber_temperature_celsius,
             chamber_target_temperature_celsius: model.chamber_target_temperature_celsius,
             chamber_light_on: model.chamber_light_on,
+            cooling_system: model
+                .cooling_system_json
+                .map(|value| serde_json::from_str::<PrinterCoolingSystem>(&value))
+                .transpose()
+                .context("failed to rehydrate printer cooling system")?,
             bambu_device_features: model
                 .bambu_fun_bits
                 .map(|value| BambuDeviceFeatures::from_hex(&value))

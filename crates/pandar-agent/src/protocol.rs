@@ -14,6 +14,39 @@ pub(crate) fn proto_device_features(
     })
 }
 
+pub(crate) fn proto_cooling_system(
+    system: pandar_core::PrinterCoolingSystem,
+) -> agent::v1::PrinterCoolingSystem {
+    use agent::v1::{PrinterCoolingFanKind as ProtoFanKind, PrinterCoolingMode as ProtoMode};
+    use pandar_core::{PrinterCoolingFanKind as FanKind, PrinterCoolingMode as Mode};
+
+    agent::v1::PrinterCoolingSystem {
+        mode: system.mode.map(|mode| match mode {
+            Mode::Cooling => ProtoMode::Cooling as i32,
+            Mode::Heating => ProtoMode::Heating as i32,
+            Mode::Exhaust => ProtoMode::Exhaust as i32,
+            Mode::FullCooling => ProtoMode::FullCooling as i32,
+        }),
+        fans: system
+            .fans
+            .into_iter()
+            .map(|fan| agent::v1::PrinterCoolingFan {
+                kind: match fan.kind {
+                    FanKind::Hotend => ProtoFanKind::Hotend,
+                    FanKind::PartCooling => ProtoFanKind::PartCooling,
+                    FanKind::Auxiliary => ProtoFanKind::Auxiliary,
+                    FanKind::Chamber => ProtoFanKind::Chamber,
+                    FanKind::HotendSecond => ProtoFanKind::HotendSecond,
+                    FanKind::Controller => ProtoFanKind::Controller,
+                    FanKind::InnerLoop => ProtoFanKind::InnerLoop,
+                    FanKind::AuxiliarySecond => ProtoFanKind::AuxiliarySecond,
+                } as i32,
+                speed_percent: fan.speed_percent.into(),
+            })
+            .collect(),
+    }
+}
+
 pub(crate) fn proto_nozzle_system(
     system: pandar_core::BambuNozzleSystem,
 ) -> agent::v1::PrinterNozzleSystem {

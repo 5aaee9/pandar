@@ -122,6 +122,18 @@ pub(in crate::machine::mqtt) struct SnapshotPrint {
     )]
     pub(in crate::machine::mqtt) nozzle_target_temper2: Option<TemperatureValue>,
     #[serde(default)]
+    pub(in crate::machine::mqtt) fan_gear: Option<ScalarValue>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) cooling_fan_speed: Option<ScalarValue>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) big_fan1_speed: Option<ScalarValue>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) big_fan2_speed: Option<ScalarValue>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) support_aux_fan: Option<bool>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) support_chamber_fan: Option<bool>,
+    #[serde(default)]
     pub(in crate::machine::mqtt) lights_report: Vec<LightReport>,
     #[serde(default)]
     pub(in crate::machine::mqtt) device: SnapshotDevice,
@@ -139,6 +151,22 @@ pub(in crate::machine::mqtt) struct SnapshotDevice {
     pub(in crate::machine::mqtt) nozzle: Option<NozzleDevice>,
     #[serde(default)]
     pub(in crate::machine::mqtt) holder: Option<NozzleHolder>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) airduct: Option<AirDuctDevice>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub(in crate::machine::mqtt) struct AirDuctDevice {
+    #[serde(default, rename = "modeCur")]
+    pub(in crate::machine::mqtt) mode: Option<u32>,
+    #[serde(default)]
+    pub(in crate::machine::mqtt) parts: Vec<AirDuctPart>,
+}
+
+#[derive(Debug, Deserialize)]
+pub(in crate::machine::mqtt) struct AirDuctPart {
+    pub(in crate::machine::mqtt) id: u32,
+    pub(in crate::machine::mqtt) state: u32,
 }
 
 #[derive(Debug, Default, Deserialize)]

@@ -54,6 +54,7 @@ fn snapshot_has_telemetry(snapshot: &MachineSnapshot) -> bool {
         || snapshot.chamber_temperature_celsius.is_some()
         || snapshot.chamber_target_temperature_celsius.is_some()
         || snapshot.chamber_light_on.is_some()
+        || snapshot.cooling_system.is_some()
         || snapshot.device_features2.is_some()
         || snapshot.nozzle_system.is_some()
 }
@@ -365,6 +366,7 @@ async fn mark_mqtt_offline(
         chamber_temperature_celsius: None,
         chamber_target_temperature_celsius: None,
         chamber_light_on: None,
+        cooling_system: None,
         device_features: None,
         device_features2: None,
         nozzle_system: None,

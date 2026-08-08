@@ -15,6 +15,7 @@ struct TelemetryWriteMask {
     chamber_temperature: bool,
     chamber_target_temperature: bool,
     chamber_light: bool,
+    cooling_system: bool,
 }
 
 impl TelemetryWriteMask {
@@ -31,6 +32,7 @@ impl TelemetryWriteMask {
             chamber_target_temperature: authoritative
                 || snapshot.chamber_target_temperature_celsius.is_some(),
             chamber_light: authoritative || snapshot.chamber_light_on.is_some(),
+            cooling_system: authoritative || snapshot.cooling_system.is_some(),
         }
     }
 }
@@ -50,6 +52,12 @@ pub(crate) async fn upsert_snapshot(
         .device_features
         .map(BambuDeviceFeatures::to_hex);
     let bambu_fun_session_id = session_state.device_features_session_id.map(str::to_owned);
+    let cooling_system_json = snapshot
+        .cooling_system
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .context("failed to serialize printer cooling system")?;
     let bambu_nozzle_system_json = snapshot
         .nozzle_system
         .as_ref()
@@ -76,32 +84,33 @@ pub(crate) async fn upsert_snapshot(
                      last_seen_at, created_at, nozzle_temperatures_json,
                      active_nozzle, bed_temperature_celsius, bed_target_temperature_celsius,
                      chamber_temperature_celsius, chamber_target_temperature_celsius,
-                     chamber_light_on, bambu_fun_bits,
+                     chamber_light_on, cooling_system_json, bambu_fun_bits,
                      bambu_fun_session_id, bambu_nozzle_system_json,
                      bambu_nozzle_system_session_id, mqtt_presence_session_id, state_revision
                   )
-                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, 1)
+                 VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, 1)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
                      host = CASE
-                         WHEN ?23 THEN excluded.host
+                         WHEN ?24 THEN excluded.host
                          ELSE COALESCE(printers.host, excluded.host)
                      END,
                      access_code = NULL,
                      access_code_encrypted = CASE
-                         WHEN ?23 THEN excluded.access_code_encrypted
+                         WHEN ?24 THEN excluded.access_code_encrypted
                          ELSE COALESCE(printers.access_code_encrypted, excluded.access_code_encrypted)
                      END,
                      model = COALESCE(excluded.model, printers.model),
-                     status = CASE WHEN ?24 THEN excluded.status ELSE printers.status END,
+                     status = CASE WHEN ?25 THEN excluded.status ELSE printers.status END,
                      last_seen_at = excluded.last_seen_at,
-                     nozzle_temperatures_json = CASE WHEN ?25 THEN excluded.nozzle_temperatures_json ELSE printers.nozzle_temperatures_json END,
-                     active_nozzle = CASE WHEN ?26 THEN excluded.active_nozzle ELSE printers.active_nozzle END,
-                     bed_temperature_celsius = CASE WHEN ?27 THEN excluded.bed_temperature_celsius ELSE printers.bed_temperature_celsius END,
-                     bed_target_temperature_celsius = CASE WHEN ?28 THEN excluded.bed_target_temperature_celsius ELSE printers.bed_target_temperature_celsius END,
-                     chamber_temperature_celsius = CASE WHEN ?29 THEN excluded.chamber_temperature_celsius ELSE printers.chamber_temperature_celsius END,
-                     chamber_target_temperature_celsius = CASE WHEN ?30 THEN excluded.chamber_target_temperature_celsius ELSE printers.chamber_target_temperature_celsius END,
-                     chamber_light_on = CASE WHEN ?31 THEN excluded.chamber_light_on ELSE printers.chamber_light_on END,
+                     nozzle_temperatures_json = CASE WHEN ?26 THEN excluded.nozzle_temperatures_json ELSE printers.nozzle_temperatures_json END,
+                     active_nozzle = CASE WHEN ?27 THEN excluded.active_nozzle ELSE printers.active_nozzle END,
+                     bed_temperature_celsius = CASE WHEN ?28 THEN excluded.bed_temperature_celsius ELSE printers.bed_temperature_celsius END,
+                     bed_target_temperature_celsius = CASE WHEN ?29 THEN excluded.bed_target_temperature_celsius ELSE printers.bed_target_temperature_celsius END,
+                     chamber_temperature_celsius = CASE WHEN ?30 THEN excluded.chamber_temperature_celsius ELSE printers.chamber_temperature_celsius END,
+                     chamber_target_temperature_celsius = CASE WHEN ?31 THEN excluded.chamber_target_temperature_celsius ELSE printers.chamber_target_temperature_celsius END,
+                     chamber_light_on = CASE WHEN ?32 THEN excluded.chamber_light_on ELSE printers.chamber_light_on END,
+                     cooling_system_json = CASE WHEN ?33 THEN excluded.cooling_system_json ELSE printers.cooling_system_json END,
                      bambu_fun_bits = COALESCE(excluded.bambu_fun_bits, printers.bambu_fun_bits),
                      bambu_fun_session_id = CASE
                          WHEN excluded.bambu_fun_bits IS NULL THEN printers.bambu_fun_session_id
@@ -132,6 +141,7 @@ pub(crate) async fn upsert_snapshot(
                         snapshot.chamber_temperature_celsius.clone().into(),
                         snapshot.chamber_target_temperature_celsius.clone().into(),
                         snapshot.chamber_light_on.into(),
+                        cooling_system_json.clone().into(),
                         bambu_fun_bits.clone().into(),
                         bambu_fun_session_id.clone().into(),
                         bambu_nozzle_system_json.clone().into(),
@@ -146,6 +156,7 @@ pub(crate) async fn upsert_snapshot(
                         telemetry_write.chamber_temperature.into(),
                         telemetry_write.chamber_target_temperature.into(),
                         telemetry_write.chamber_light.into(),
+                        telemetry_write.cooling_system.into(),
                     ],
                 ))
                 .await
@@ -163,32 +174,33 @@ pub(crate) async fn upsert_snapshot(
                      last_seen_at, created_at, nozzle_temperatures_json,
                      active_nozzle, bed_temperature_celsius, bed_target_temperature_celsius,
                      chamber_temperature_celsius, chamber_target_temperature_celsius,
-                     chamber_light_on, bambu_fun_bits,
+                     chamber_light_on, cooling_system_json, bambu_fun_bits,
                      bambu_fun_session_id, bambu_nozzle_system_json,
                      bambu_nozzle_system_session_id, mqtt_presence_session_id, state_revision
                   )
-                 VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $8, $9, $10, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, 1)
+                 VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, $8, $9, $10, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 1)
                  ON CONFLICT (tenant_id, serial_number) DO UPDATE SET
                      agent_id = excluded.agent_id,
                      host = CASE
-                         WHEN $23 THEN excluded.host
+                         WHEN $24 THEN excluded.host
                          ELSE COALESCE(printers.host, excluded.host)
                      END,
                      access_code = NULL,
                      access_code_encrypted = CASE
-                         WHEN $23 THEN excluded.access_code_encrypted
+                         WHEN $24 THEN excluded.access_code_encrypted
                          ELSE COALESCE(printers.access_code_encrypted, excluded.access_code_encrypted)
                      END,
                      model = COALESCE(excluded.model, printers.model),
-                     status = CASE WHEN $24 THEN excluded.status ELSE printers.status END,
+                     status = CASE WHEN $25 THEN excluded.status ELSE printers.status END,
                      last_seen_at = excluded.last_seen_at,
-                     nozzle_temperatures_json = CASE WHEN $25 THEN excluded.nozzle_temperatures_json ELSE printers.nozzle_temperatures_json END,
-                     active_nozzle = CASE WHEN $26 THEN excluded.active_nozzle ELSE printers.active_nozzle END,
-                     bed_temperature_celsius = CASE WHEN $27 THEN excluded.bed_temperature_celsius ELSE printers.bed_temperature_celsius END,
-                     bed_target_temperature_celsius = CASE WHEN $28 THEN excluded.bed_target_temperature_celsius ELSE printers.bed_target_temperature_celsius END,
-                     chamber_temperature_celsius = CASE WHEN $29 THEN excluded.chamber_temperature_celsius ELSE printers.chamber_temperature_celsius END,
-                     chamber_target_temperature_celsius = CASE WHEN $30 THEN excluded.chamber_target_temperature_celsius ELSE printers.chamber_target_temperature_celsius END,
-                     chamber_light_on = CASE WHEN $31 THEN excluded.chamber_light_on ELSE printers.chamber_light_on END,
+                     nozzle_temperatures_json = CASE WHEN $26 THEN excluded.nozzle_temperatures_json ELSE printers.nozzle_temperatures_json END,
+                     active_nozzle = CASE WHEN $27 THEN excluded.active_nozzle ELSE printers.active_nozzle END,
+                     bed_temperature_celsius = CASE WHEN $28 THEN excluded.bed_temperature_celsius ELSE printers.bed_temperature_celsius END,
+                     bed_target_temperature_celsius = CASE WHEN $29 THEN excluded.bed_target_temperature_celsius ELSE printers.bed_target_temperature_celsius END,
+                     chamber_temperature_celsius = CASE WHEN $30 THEN excluded.chamber_temperature_celsius ELSE printers.chamber_temperature_celsius END,
+                     chamber_target_temperature_celsius = CASE WHEN $31 THEN excluded.chamber_target_temperature_celsius ELSE printers.chamber_target_temperature_celsius END,
+                     chamber_light_on = CASE WHEN $32 THEN excluded.chamber_light_on ELSE printers.chamber_light_on END,
+                     cooling_system_json = CASE WHEN $33 THEN excluded.cooling_system_json ELSE printers.cooling_system_json END,
                      bambu_fun_bits = COALESCE(excluded.bambu_fun_bits, printers.bambu_fun_bits),
                      bambu_fun_session_id = CASE
                          WHEN excluded.bambu_fun_bits IS NULL THEN printers.bambu_fun_session_id
@@ -219,6 +231,7 @@ pub(crate) async fn upsert_snapshot(
                         snapshot.chamber_temperature_celsius.clone().into(),
                         snapshot.chamber_target_temperature_celsius.clone().into(),
                         snapshot.chamber_light_on.into(),
+                        cooling_system_json.into(),
                         bambu_fun_bits.into(),
                         bambu_fun_session_id.into(),
                         bambu_nozzle_system_json.into(),
@@ -233,6 +246,7 @@ pub(crate) async fn upsert_snapshot(
                         telemetry_write.chamber_temperature.into(),
                         telemetry_write.chamber_target_temperature.into(),
                         telemetry_write.chamber_light.into(),
+                        telemetry_write.cooling_system.into(),
                     ],
                 ))
                 .await

@@ -1,4 +1,7 @@
-use pandar_core::PrinterNozzleTemperature;
+use pandar_core::{
+    PrinterCoolingFan, PrinterCoolingFanKind, PrinterCoolingMode, PrinterCoolingSystem,
+    PrinterNozzleTemperature,
+};
 
 use super::*;
 
@@ -11,9 +14,10 @@ enum TelemetryPatch {
     ChamberCurrent,
     ChamberTarget,
     ChamberLight,
+    CoolingSystem,
 }
 
-const PATCHES: [TelemetryPatch; 7] = [
+const PATCHES: [TelemetryPatch; 8] = [
     TelemetryPatch::NozzleTemperatures,
     TelemetryPatch::ActiveNozzle,
     TelemetryPatch::BedCurrent,
@@ -21,6 +25,7 @@ const PATCHES: [TelemetryPatch; 7] = [
     TelemetryPatch::ChamberCurrent,
     TelemetryPatch::ChamberTarget,
     TelemetryPatch::ChamberLight,
+    TelemetryPatch::CoolingSystem,
 ];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -32,6 +37,7 @@ struct StoredTelemetry {
     chamber_temperature_celsius: Option<String>,
     chamber_target_temperature_celsius: Option<String>,
     chamber_light_on: Option<bool>,
+    cooling_system: Option<PrinterCoolingSystem>,
 }
 
 impl StoredTelemetry {
@@ -44,6 +50,7 @@ impl StoredTelemetry {
             chamber_temperature_celsius: Some("32".to_owned()),
             chamber_target_temperature_celsius: Some("45".to_owned()),
             chamber_light_on: Some(true),
+            cooling_system: Some(cooling_system(PrinterCoolingMode::Heating, 70)),
         }
     }
 
@@ -67,6 +74,9 @@ impl StoredTelemetry {
                 expected.chamber_target_temperature_celsius = Some("48".to_owned());
             }
             TelemetryPatch::ChamberLight => expected.chamber_light_on = Some(false),
+            TelemetryPatch::CoolingSystem => {
+                expected.cooling_system = Some(cooling_system(PrinterCoolingMode::Cooling, 100));
+            }
         }
         expected
     }
@@ -141,6 +151,7 @@ pub(super) async fn exercise_partial_snapshot_presence(database: Database) {
             chamber_temperature_celsius: None,
             chamber_target_temperature_celsius: None,
             chamber_light_on: None,
+            cooling_system: None,
         },
         "a matching full snapshot must clear telemetry absent from that full report"
     );
@@ -295,6 +306,7 @@ fn full_snapshot(serial_number: String, observed_at: &str) -> PrinterSnapshotUps
         chamber_temperature_celsius: telemetry.chamber_temperature_celsius,
         chamber_target_temperature_celsius: telemetry.chamber_target_temperature_celsius,
         chamber_light_on: telemetry.chamber_light_on,
+        cooling_system: telemetry.cooling_system,
         nozzle_system: None,
         connection_authoritative: false,
         telemetry_authoritative: true,
@@ -321,6 +333,7 @@ fn partial_snapshot(
         chamber_temperature_celsius: None,
         chamber_target_temperature_celsius: None,
         chamber_light_on: None,
+        cooling_system: None,
         nozzle_system: None,
         connection_authoritative: false,
         telemetry_authoritative: false,
@@ -343,6 +356,9 @@ fn partial_snapshot(
             snapshot.chamber_target_temperature_celsius = Some("48".to_owned());
         }
         TelemetryPatch::ChamberLight => snapshot.chamber_light_on = Some(false),
+        TelemetryPatch::CoolingSystem => {
+            snapshot.cooling_system = Some(cooling_system(PrinterCoolingMode::Cooling, 100));
+        }
     }
     snapshot
 }
@@ -356,6 +372,17 @@ fn telemetry(printer: &pandar_core::Printer) -> StoredTelemetry {
         chamber_temperature_celsius: printer.chamber_temperature_celsius.clone(),
         chamber_target_temperature_celsius: printer.chamber_target_temperature_celsius.clone(),
         chamber_light_on: printer.chamber_light_on,
+        cooling_system: printer.cooling_system.clone(),
+    }
+}
+
+fn cooling_system(mode: PrinterCoolingMode, speed_percent: u8) -> PrinterCoolingSystem {
+    PrinterCoolingSystem {
+        mode: Some(mode),
+        fans: vec![PrinterCoolingFan {
+            kind: PrinterCoolingFanKind::PartCooling,
+            speed_percent,
+        }],
     }
 }
 

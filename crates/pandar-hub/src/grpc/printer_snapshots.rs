@@ -1,5 +1,6 @@
 use pandar_core::{
     AgentId, BambuNozzleDevice, BambuNozzleHolder, BambuNozzleInfo, BambuNozzleSystem,
+    PrinterCoolingFan, PrinterCoolingFanKind, PrinterCoolingMode, PrinterCoolingSystem,
     StudioFiniteF64, TenantId, valid_physical_nozzle_id,
 };
 use tonic::Status;
@@ -39,6 +40,10 @@ pub async fn handle_snapshot(
         .nozzle_system
         .map(proto_nozzle_system)
         .transpose()?;
+    let cooling_system = snapshot
+        .cooling_system
+        .map(proto_cooling_system)
+        .transpose()?;
     let observed_at = pandar_core::created_at_now();
 
     let snapshot = PrinterSnapshotUpsert {
@@ -70,6 +75,7 @@ pub async fn handle_snapshot(
             snapshot.chamber_target_temperature_celsius,
         ),
         chamber_light_on: snapshot.chamber_light_on,
+        cooling_system,
         nozzle_system,
         connection_authoritative: snapshot.connection_authoritative,
         telemetry_authoritative: snapshot.telemetry_authoritative,
@@ -143,6 +149,65 @@ pub async fn handle_snapshot(
         .await;
 
     Ok(())
+}
+
+fn proto_cooling_system(
+    system: crate::protocol::agent::v1::PrinterCoolingSystem,
+) -> Result<PrinterCoolingSystem, Status> {
+    use crate::protocol::agent::v1::{
+        PrinterCoolingFanKind as ProtoFanKind, PrinterCoolingMode as ProtoMode,
+    };
+
+    let mode = system
+        .mode
+        .map(|mode| {
+            ProtoMode::try_from(mode)
+                .map_err(|_| Status::invalid_argument("invalid cooling system mode"))
+                .and_then(|mode| match mode {
+                    ProtoMode::Cooling => Ok(PrinterCoolingMode::Cooling),
+                    ProtoMode::Heating => Ok(PrinterCoolingMode::Heating),
+                    ProtoMode::Exhaust => Ok(PrinterCoolingMode::Exhaust),
+                    ProtoMode::FullCooling => Ok(PrinterCoolingMode::FullCooling),
+                    ProtoMode::Unspecified => {
+                        Err(Status::invalid_argument("invalid cooling system mode"))
+                    }
+                })
+        })
+        .transpose()?;
+    let mut fans = Vec::with_capacity(system.fans.len());
+    for fan in system.fans {
+        let kind = match ProtoFanKind::try_from(fan.kind)
+            .map_err(|_| Status::invalid_argument("invalid cooling fan kind"))?
+        {
+            ProtoFanKind::Hotend => PrinterCoolingFanKind::Hotend,
+            ProtoFanKind::PartCooling => PrinterCoolingFanKind::PartCooling,
+            ProtoFanKind::Auxiliary => PrinterCoolingFanKind::Auxiliary,
+            ProtoFanKind::Chamber => PrinterCoolingFanKind::Chamber,
+            ProtoFanKind::HotendSecond => PrinterCoolingFanKind::HotendSecond,
+            ProtoFanKind::Controller => PrinterCoolingFanKind::Controller,
+            ProtoFanKind::InnerLoop => PrinterCoolingFanKind::InnerLoop,
+            ProtoFanKind::AuxiliarySecond => PrinterCoolingFanKind::AuxiliarySecond,
+            ProtoFanKind::Unspecified => {
+                return Err(Status::invalid_argument("invalid cooling fan kind"));
+            }
+        };
+        if fan.speed_percent > 100
+            || fans
+                .iter()
+                .any(|value: &PrinterCoolingFan| value.kind == kind)
+        {
+            return Err(Status::invalid_argument("invalid cooling fan entry"));
+        }
+        fans.push(PrinterCoolingFan {
+            kind,
+            speed_percent: fan.speed_percent as u8,
+        });
+    }
+    fans.sort_by_key(|fan| fan.kind);
+    if mode.is_none() && fans.is_empty() {
+        return Err(Status::invalid_argument("cooling system is empty"));
+    }
+    Ok(PrinterCoolingSystem { mode, fans })
 }
 
 fn proto_nozzle_system(

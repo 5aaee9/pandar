@@ -16,6 +16,16 @@
 
 ## Completed
 
+- Added read-only Bambu fan and cooling-system telemetry to printer detail cards. The Agent now
+  normalizes legacy `fan_gear` / 0–15 fan levels with Bambu Studio's percentage semantics and the
+  modern `device.airduct` mode/parts shape into typed cooling modes and fan kinds. The typed gRPC
+  snapshot contract, backend-neutral persisted JSON field, SQLite/PostgreSQL migrations, Hub API and
+  live printer events carry the data without replacing fields omitted by partial snapshots. Devices
+  cards show the current cooling/heating/exhaust/full-cooling mode plus per-fan percentages and
+  progress bars for part, auxiliary, chamber/exhaust, hotend, controller, and modern multi-fan
+  variants; known open-frame models hide meaningless chamber-fan readings. Agent, Hub persistence,
+  gRPC, and localized frontend coverage lock the protocol normalization and presentation behavior.
+
 - Added print-speed switching to each printer detail card in the Devices inventory. Active and
   paused prints now expose the four Bambu speed modes (Silent, Standard, Sport, Ludicrous), mapped
   to the existing validated `set_print_speed` control contract as modes 1–4; idle printers keep the

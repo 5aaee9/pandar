@@ -1,0 +1,67 @@
+import { NextIntlClientProvider } from "next-intl";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import en from "../messages/en.json";
+import { PrinterCoolingSystem } from "./dashboard-printer-cooling";
+import type { Printer } from "./dashboard-types";
+
+const printer: Printer = {
+  id: "printer-1",
+  tenant_id: "tenant-1",
+  agent_id: "agent-1",
+  serial_number: "SERIAL123",
+  name: "Office X2D",
+  model: "X2D",
+  status: "RUNNING",
+  last_seen_at: "2026-08-08T00:00:00Z",
+  created_at: "2026-08-08T00:00:00Z",
+  materials: null,
+  cooling_system: {
+    mode: "cooling",
+    fans: [
+      { kind: "part_cooling", speed_percent: 100 },
+      { kind: "auxiliary", speed_percent: 60 },
+      { kind: "chamber", speed_percent: 40 },
+      { kind: "hotend", speed_percent: 20 },
+    ],
+  },
+};
+
+function renderCooling(value: Printer) {
+  return render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <PrinterCoolingSystem printer={value} />
+    </NextIntlClientProvider>,
+  );
+}
+
+describe("PrinterCoolingSystem", () => {
+  it("shows the Bambu cooling mode and reported fan percentages", () => {
+    renderCooling(printer);
+
+    expect(screen.getByRole("region", { name: "Cooling system" })).toBeVisible();
+    expect(screen.getByText("Cooling")).toBeVisible();
+    expect(screen.getByText("Part cooling")).toBeVisible();
+    expect(screen.getByText("Auxiliary")).toBeVisible();
+    expect(screen.getByText("Chamber / exhaust")).toBeVisible();
+    expect(screen.getByText("Hotend")).toBeVisible();
+    expect(screen.getByText("100%")).toBeVisible();
+    expect(screen.getByText("60%")).toBeVisible();
+    expect(screen.getByText("40%")).toBeVisible();
+    expect(screen.getByText("20%")).toBeVisible();
+  });
+
+  it("does not invent a chamber fan for an open-frame printer", () => {
+    renderCooling({
+      ...printer,
+      model: "A1",
+      cooling_system: {
+        mode: null,
+        fans: [{ kind: "chamber", speed_percent: 0 }],
+      },
+    });
+
+    expect(screen.queryByRole("region", { name: "Cooling system" })).not.toBeInTheDocument();
+  });
+});

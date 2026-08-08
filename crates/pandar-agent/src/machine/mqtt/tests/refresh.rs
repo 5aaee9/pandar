@@ -29,6 +29,7 @@ async fn refresh_subscribes_publishes_and_maps_report() {
             chamber_temperature_celsius: None,
             chamber_target_temperature_celsius: None,
             chamber_light_on: None,
+            cooling_system: None,
             device_features: None,
             device_features2: None,
             nozzle_system: None,

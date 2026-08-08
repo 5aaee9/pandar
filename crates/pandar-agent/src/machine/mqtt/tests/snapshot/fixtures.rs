@@ -35,6 +35,18 @@ pub(super) struct SnapshotPrintFixture {
     pub(super) chamber_temper: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) ctt: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) fan_gear: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) cooling_fan_speed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) big_fan1_speed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) big_fan2_speed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) support_aux_fan: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) support_chamber_fan: Option<bool>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(super) lights_report: Vec<LightReportFixture>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -53,6 +65,21 @@ pub(super) struct DeviceFixture {
     pub(super) nozzle: Option<NozzleFixture>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) holder: Option<HolderFixture>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) airduct: Option<AirDuctFixture>,
+}
+
+#[derive(Serialize)]
+pub(super) struct AirDuctFixture {
+    #[serde(rename = "modeCur")]
+    pub(super) mode: u32,
+    pub(super) parts: Vec<AirDuctPartFixture>,
+}
+
+#[derive(Serialize)]
+pub(super) struct AirDuctPartFixture {
+    pub(super) id: u32,
+    pub(super) state: u32,
 }
 
 #[derive(Serialize)]

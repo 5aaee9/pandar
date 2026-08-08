@@ -21,6 +21,7 @@ fn printer_serialization_omits_access_code() {
         chamber_temperature_celsius: None,
         chamber_target_temperature_celsius: None,
         chamber_light_on: None,
+        cooling_system: None,
         bambu_device_features: None,
         bambu_device_features_session_id: None,
         bambu_device_features2: None,

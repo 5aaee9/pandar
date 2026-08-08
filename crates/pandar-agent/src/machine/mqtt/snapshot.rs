@@ -8,6 +8,8 @@ use pandar_core::{
     valid_physical_nozzle_id,
 };
 
+mod cooling;
+
 use super::report::snapshot::{NozzleInfo, ScalarValue, SnapshotPrint, TemperatureValue};
 use super::report::{device_feature_observation, device_feature2_observation};
 
@@ -63,6 +65,7 @@ pub(crate) fn snapshot_from_parsed_report(
             temperature_string(print.and_then(|print| print.chamber_target_temper.as_ref()))
         }),
         chamber_light_on: chamber_light_on_from_report(print),
+        cooling_system: cooling::cooling_system_from_report(print),
         device_features: report
             .and_then(|report| device_feature_observation(&endpoint.serial, report).ok())
             .flatten(),

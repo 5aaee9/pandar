@@ -68,6 +68,7 @@ async fn h2c_auto_mapping_returns_correlated_failure_from_failed_command() {
                 chamber_temperature_celsius: None,
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
+                cooling_system: None,
                 nozzle_system: Some(
                     serde_json::from_value(serde_json::json!({
                         "nozzle": {

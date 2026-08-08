@@ -1,5 +1,6 @@
 import type { PrinterPrintState } from "./printer-live-types";
 import type { PrinterNozzleSystem } from "./dashboard-printer-rack-types";
+import type { PrinterCoolingSystem } from "./printer-cooling-types";
 
 export type { PrinterNozzleSystem } from "./dashboard-printer-rack-types";
 
@@ -40,6 +41,7 @@ export type Printer = {
   chamber_temperature_celsius?: string | null;
   chamber_target_temperature_celsius?: string | null;
   chamber_light_on?: boolean | null;
+  cooling_system?: PrinterCoolingSystem | null;
   materials: PrinterMaterials | null;
   nozzle_system?: PrinterNozzleSystem | null;
   state_revision?: number;

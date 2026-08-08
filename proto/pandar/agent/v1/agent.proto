@@ -71,6 +71,37 @@ message PrinterSnapshot {
   string chamber_target_temperature_celsius = 15;
   bool telemetry_authoritative = 16;
   PrinterNozzleSystem nozzle_system = 17;
+  PrinterCoolingSystem cooling_system = 18;
+}
+
+message PrinterCoolingSystem {
+  optional PrinterCoolingMode mode = 1;
+  repeated PrinterCoolingFan fans = 2;
+}
+
+message PrinterCoolingFan {
+  PrinterCoolingFanKind kind = 1;
+  uint32 speed_percent = 2;
+}
+
+enum PrinterCoolingMode {
+  PRINTER_COOLING_MODE_UNSPECIFIED = 0;
+  PRINTER_COOLING_MODE_COOLING = 1;
+  PRINTER_COOLING_MODE_HEATING = 2;
+  PRINTER_COOLING_MODE_EXHAUST = 3;
+  PRINTER_COOLING_MODE_FULL_COOLING = 4;
+}
+
+enum PrinterCoolingFanKind {
+  PRINTER_COOLING_FAN_KIND_UNSPECIFIED = 0;
+  PRINTER_COOLING_FAN_KIND_HOTEND = 1;
+  PRINTER_COOLING_FAN_KIND_PART_COOLING = 2;
+  PRINTER_COOLING_FAN_KIND_AUXILIARY = 3;
+  PRINTER_COOLING_FAN_KIND_CHAMBER = 4;
+  PRINTER_COOLING_FAN_KIND_HOTEND_SECOND = 5;
+  PRINTER_COOLING_FAN_KIND_CONTROLLER = 6;
+  PRINTER_COOLING_FAN_KIND_INNER_LOOP = 7;
+  PRINTER_COOLING_FAN_KIND_AUXILIARY_SECOND = 8;
 }
 
 message PrinterNozzleSystem {

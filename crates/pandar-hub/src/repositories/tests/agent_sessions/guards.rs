@@ -78,6 +78,7 @@ pub(super) async fn exercise_exact_session_guards(database: Database, mutation_d
                 chamber_temperature_celsius: None,
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
+                cooling_system: None,
                 nozzle_system: None,
                 connection_authoritative: false,
                 telemetry_authoritative: true,

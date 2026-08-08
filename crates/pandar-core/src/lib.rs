@@ -5,6 +5,7 @@ pub mod agent;
 pub mod ams;
 pub mod command;
 pub mod compatibility;
+pub mod cooling;
 pub mod device_features;
 pub mod firmware;
 pub mod h2c;
@@ -17,6 +18,9 @@ pub mod tenant;
 pub use agent::{Agent, AgentStatus};
 pub use ams::AmsUnitKind;
 pub use command::{CommandRecord, CommandRecordParts, CommandStatus};
+pub use cooling::{
+    PrinterCoolingFan, PrinterCoolingFanKind, PrinterCoolingMode, PrinterCoolingSystem,
+};
 pub use device_features::{BambuDeviceFeature, BambuDeviceFeatures, BambuDeviceFeaturesParseError};
 pub use firmware::{
     AmsFirmwareDescriptor, AmsFirmwareSwitchState, FirmwareAcknowledgement, FirmwareCatalogEntry,

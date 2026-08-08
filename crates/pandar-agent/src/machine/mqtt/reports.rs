@@ -169,6 +169,9 @@ fn printer_snapshot_event(config: &AgentConfig, snapshot: MachineSnapshot) -> Ag
             nozzle_system: snapshot
                 .nozzle_system
                 .map(crate::protocol::proto_nozzle_system),
+            cooling_system: snapshot
+                .cooling_system
+                .map(crate::protocol::proto_cooling_system),
         })),
     }
 }

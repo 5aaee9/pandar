@@ -1698,6 +1698,7 @@ async fn upsert_h2c_rack_snapshot(
                 chamber_temperature_celsius: None,
                 chamber_target_temperature_celsius: None,
                 chamber_light_on: None,
+                cooling_system: None,
                 nozzle_system: Some(nozzle_system),
                 connection_authoritative: false,
                 telemetry_authoritative: false,

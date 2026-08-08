@@ -323,6 +323,7 @@ fn snapshot_event(tenant_id: TenantId, agent_id: AgentId) -> AgentEvent {
             chamber_temperature_celsius: String::new(),
             chamber_target_temperature_celsius: "45".to_owned(),
             chamber_light_on: None,
+            cooling_system: None,
             device_features: None,
             connection_authoritative: false,
             telemetry_authoritative: false,
