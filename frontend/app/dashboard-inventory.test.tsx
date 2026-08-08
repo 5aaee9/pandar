@@ -1,5 +1,6 @@
 import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -7,6 +8,10 @@ import { describe, expect, it, vi } from "vitest";
 import en from "../messages/en.json";
 import zh from "../messages/zh.json";
 import { PrinterInventory } from "./dashboard-inventory";
+import {
+  CameraDialogControl,
+  DashboardCameraProvider,
+} from "./dashboard-printer-camera-control";
 import type { Agent, Printer, Tenant } from "./dashboard-types";
 
 vi.mock("./actions", () => ({
@@ -21,7 +26,7 @@ function renderWithMessages(children: React.ReactNode, locale = "en") {
   return render(
     <NextIntlClientProvider locale={locale} messages={locale === "zh" ? zh : en}>
       <QueryClientProvider client={new QueryClient()}>
-        {children}
+        <DashboardCameraProvider>{children}</DashboardCameraProvider>
       </QueryClientProvider>
     </NextIntlClientProvider>,
   );
@@ -103,6 +108,23 @@ const printerWithMaterials: Printer = {
     observed_at: "2026-07-02T00:00:00Z",
   },
 };
+
+function CameraRouteHarness() {
+  const [view, setView] = useState<"devices" | "jobs">("devices");
+
+  return (
+    <>
+      <button onClick={() => setView("jobs")} type="button">
+        Go to jobs
+      </button>
+      {view === "devices" ? (
+        <CameraDialogControl printer={printer} />
+      ) : (
+        <div>Jobs page</div>
+      )}
+    </>
+  );
+}
 
 describe("PrinterInventory", () => {
   it("renders enriched native print details in the existing card summary", () => {
@@ -429,6 +451,38 @@ describe("PrinterInventory", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(video?.isConnected).toBe(true);
     expect(screen.getByRole("button", { name: "Light Off" })).toBeEnabled();
+
+    act(() => video?.dispatchEvent(new Event("leavepictureinpicture")));
+    await waitFor(() => expect(video?.isConnected).toBe(false));
+
+    Reflect.deleteProperty(document, "pictureInPictureEnabled");
+    Reflect.deleteProperty(HTMLVideoElement.prototype, "requestPictureInPicture");
+  });
+
+  it("keeps picture in picture mounted when the devices page unmounts", async () => {
+    const requestPictureInPicture = vi.fn().mockResolvedValue({});
+    Object.defineProperty(document, "pictureInPictureEnabled", {
+      configurable: true,
+      value: true,
+    });
+    Object.defineProperty(HTMLVideoElement.prototype, "requestPictureInPicture", {
+      configurable: true,
+      value: requestPictureInPicture,
+    });
+
+    const user = userEvent.setup();
+    renderWithMessages(<CameraRouteHarness />);
+
+    await user.click(screen.getByRole("button", { name: "View camera" }));
+    const video = document.querySelector("video");
+    await user.click(screen.getByRole("button", { name: "Picture in picture" }));
+    await waitFor(() => expect(requestPictureInPicture).toHaveBeenCalledOnce());
+
+    await user.click(screen.getByRole("button", { name: "Go to jobs" }));
+
+    expect(screen.getByText("Jobs page")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "View camera" })).not.toBeInTheDocument();
+    expect(video?.isConnected).toBe(true);
 
     act(() => video?.dispatchEvent(new Event("leavepictureinpicture")));
     await waitFor(() => expect(video?.isConnected).toBe(false));

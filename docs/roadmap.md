@@ -16,6 +16,11 @@
 
 ## Completed
 
+- Hoisted the Devices camera viewer into the persistent dashboard layout so an active native
+  picture-in-picture stream now survives navigation to Jobs, Agents, and the other dashboard pages.
+  The printer-card camera button opens the shared viewer, leaving PiP still tears down the hidden
+  stream, and frontend coverage verifies that unmounting the Devices controls does not disconnect it.
+
 - Added native browser picture-in-picture support to the Devices camera viewer. Supported browsers now
   show a PiP action beside fullscreen; entering PiP closes the camera dialog while keeping the same
   MP4 video element mounted so pause/resume, chamber light, and other printer controls remain usable.

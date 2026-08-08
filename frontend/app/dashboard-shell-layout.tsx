@@ -9,6 +9,7 @@ import { DashboardShellHeader } from "./dashboard-shell-header";
 import { ActionStatusToast } from "./action-status-toast";
 import { useDashboardShell } from "./dashboard-shell-provider";
 import { useDashboardShellStore } from "./dashboard-shell-store";
+import { DashboardCameraProvider } from "./dashboard-printer-camera-control";
 
 export function DashboardShellLayout({
   children,
@@ -26,30 +27,32 @@ export function DashboardShellLayout({
   const errorBanner = useDashboardShellStore((state) => state.errorBanner);
 
   return (
-    <SidebarProvider defaultOpen={sidebarDefaultOpen}>
-      <AppSidebar
-        activeView={shellView}
-        auth={auth}
-        selectedTenant={shellTenant}
-        tenants={tenants}
-      />
-      <SidebarInset>
-        <DashboardShellHeader view={shellView} />
-        <main className="flex-1 p-4" id="main-content">
-          {errorBanner ? (
-            <div
-              className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-              role="alert"
-            >
-              {errorBanner}
-            </div>
+    <DashboardCameraProvider>
+      <SidebarProvider defaultOpen={sidebarDefaultOpen}>
+        <AppSidebar
+          activeView={shellView}
+          auth={auth}
+          selectedTenant={shellTenant}
+          tenants={tenants}
+        />
+        <SidebarInset>
+          <DashboardShellHeader view={shellView} />
+          <main className="flex-1 p-4" id="main-content">
+            {errorBanner ? (
+              <div
+                className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                role="alert"
+              >
+                {errorBanner}
+              </div>
+            ) : null}
+            {children}
+          </main>
+          {actionToast ? (
+            <ActionStatusToast status={actionToast.message} />
           ) : null}
-          {children}
-        </main>
-        {actionToast ? (
-          <ActionStatusToast status={actionToast.message} />
-        ) : null}
-      </SidebarInset>
-    </SidebarProvider>
+        </SidebarInset>
+      </SidebarProvider>
+    </DashboardCameraProvider>
   );
 }

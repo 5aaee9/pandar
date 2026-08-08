@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 
 import en from "../messages/en.json";
+import { DashboardCameraProvider } from "./dashboard-printer-camera-control";
 import { PrinterControlsPanel } from "./dashboard-printer-temperature-controls";
 import type { Printer } from "./dashboard-types";
 
@@ -25,7 +26,7 @@ vi.mock("sonner", () => ({
 function renderWithMessages(children: React.ReactNode) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
-      {children}
+      <DashboardCameraProvider>{children}</DashboardCameraProvider>
     </NextIntlClientProvider>,
   );
 }

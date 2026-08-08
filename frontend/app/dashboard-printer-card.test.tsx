@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import en from "../messages/en.json";
 import type { Printer } from "./dashboard-types";
 import { PrinterCard } from "./dashboard-printer-card";
+import { DashboardCameraProvider } from "./dashboard-printer-camera-control";
 
 const actionMocks = vi.hoisted(() => ({
   controlPrinter: vi.fn(async () => ({ ok: true as const })),
@@ -43,12 +44,14 @@ function renderPrinterCard(queryClient = new QueryClient()) {
   return render(
     <QueryClientProvider client={queryClient}>
       <NextIntlClientProvider locale="en" messages={en}>
-        <PrinterCard
-          agentName="Agent One"
-          materialDetail="No material data"
-          nowMs={Date.parse("2026-07-17T00:00:30Z")}
-          printer={printer}
-        />
+        <DashboardCameraProvider>
+          <PrinterCard
+            agentName="Agent One"
+            materialDetail="No material data"
+            nowMs={Date.parse("2026-07-17T00:00:30Z")}
+            printer={printer}
+          />
+        </DashboardCameraProvider>
       </NextIntlClientProvider>
     </QueryClientProvider>,
   );
