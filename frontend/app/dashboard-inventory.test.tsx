@@ -521,7 +521,7 @@ describe("PrinterInventory", () => {
     expect(screen.getByRole("button", { name: "灯光 已关闭" })).toBeVisible();
   });
 
-  it("shows a full-width active nozzle switch control for dual-nozzle printers", () => {
+  it("keeps the active nozzle switch in the temperature grid with nozzle details on separate lines", () => {
     const dualNozzlePrinter: Printer = {
       ...printerWithMaterials,
       nozzle_temperatures: [
@@ -530,14 +530,14 @@ describe("PrinterInventory", () => {
           current_celsius: "41",
           target_celsius: "220",
           diameter_mm: "0.4",
-          nozzle_type: "Hardened steel",
+          nozzle_type: "HH05",
         },
         {
           label: "R",
           current_celsius: "42",
           target_celsius: "230",
           diameter_mm: "0.4",
-          nozzle_type: "Hardened steel",
+          nozzle_type: "HH05",
         },
       ],
       active_nozzle: "R",
@@ -552,8 +552,8 @@ describe("PrinterInventory", () => {
     const switchButton = screen.getByRole("button", { name: "Switch to nozzle L" });
     const switchForm = switchButton.closest("form");
     const temperatureGrid = switchForm?.parentElement;
-    expect(temperatureGrid).toHaveClass("grid-cols-3");
-    expect(switchForm).toHaveClass("col-span-3");
+    expect(temperatureGrid).toHaveClass("grid-cols-2", "lg:grid-cols-4");
+    expect(switchForm).not.toHaveClass("col-span-3");
     expect(switchForm).toHaveClass("h-full");
     expect(switchButton).toHaveClass("h-full");
     expect(switchForm?.querySelector('input[name="action"]')).toHaveValue("select_extruder");
@@ -562,7 +562,12 @@ describe("PrinterInventory", () => {
     expect(switchButton).toHaveTextContent("L");
     expect(switchButton).toHaveTextContent("R");
     expect(switchButton).toHaveTextContent("0.4 mm");
-    expect(switchButton).toHaveTextContent("Hardened steel");
+    const diameters = within(switchButton).getAllByText("0.4 mm");
+    expect(diameters).toHaveLength(2);
+    for (const diameter of diameters) {
+      expect(diameter.parentElement).toHaveClass("flex-col");
+      expect(diameter.nextElementSibling).toHaveTextContent("HH05");
+    }
     expect(within(switchButton).getByText("R").parentElement?.parentElement).toHaveClass("text-primary");
   });
 

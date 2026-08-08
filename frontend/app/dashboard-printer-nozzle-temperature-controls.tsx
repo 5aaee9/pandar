@@ -77,7 +77,7 @@ export function NozzleSwitchControl({ printer }: { printer: Printer }) {
   const activeNozzle = activeNozzleLabel(printer)
   const targetNozzle = activeNozzle === 'L' ? 'R' : 'L'
   return (
-    <form action={formAction} className="col-span-3 h-full">
+    <form action={formAction} className="h-full">
       <PrinterControlFields
         printer={printer}
         intent={{ action: 'select_extruder', extruderId: extruderIdForNozzle(targetNozzle) }}
@@ -120,11 +120,15 @@ export function NozzleSwitchControl({ printer }: { printer: Printer }) {
 }
 
 function NozzleInfo({ nozzle }: { nozzle: ReturnType<typeof presentNozzles>[number] }) {
-  const details = [nozzle.diameter_mm ? `${nozzle.diameter_mm} mm` : null, nozzle.nozzle_type].filter(Boolean)
-  if (details.length === 0) {
+  if (!nozzle.diameter_mm && !nozzle.nozzle_type) {
     return null
   }
-  return <span className="mt-0.5 text-xs font-medium leading-tight text-muted-foreground">{details.join(' ')}</span>
+  return (
+    <span className="mt-0.5 flex flex-col text-xs font-medium leading-tight text-muted-foreground">
+      {nozzle.diameter_mm ? <span>{`${nozzle.diameter_mm} mm`}</span> : null}
+      {nozzle.nozzle_type ? <span>{nozzle.nozzle_type}</span> : null}
+    </span>
+  )
 }
 
 function NozzleTemperatureMenu({

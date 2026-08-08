@@ -16,6 +16,10 @@
 
 ## Completed
 
+- Compacted the dual-nozzle temperature controls so the nozzle switch shares the responsive
+  temperature grid instead of occupying a full row. Each nozzle's diameter and type now render on
+  separate lines, keeping values such as `0.4 mm` and `HH05` readable in the narrower card.
+
 - Hoisted the Devices camera viewer into the persistent dashboard layout so an active native
   picture-in-picture stream now survives navigation to Jobs, Agents, and the other dashboard pages.
   The printer-card camera button opens the shared viewer, leaving PiP still tears down the hidden
