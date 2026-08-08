@@ -19,9 +19,11 @@ export const printerControlFieldNames = {
 type AmsSlotAction = 'ams_load_filament' | 'ams_unload_filament' | 'ams_reread_rfid'
 
 export type PrinterTemperatureAction = 'set_bed_temperature' | 'set_chamber_temperature'
+export type PrinterSpeedMode = 1 | 2 | 3 | 4
 
 export type PrinterControlIntent =
   | { action: 'home' | 'stop' | 'pause' | 'resume' }
+  | { action: 'set_print_speed'; speedMode: PrinterSpeedMode }
   | { action: 'move_axes'; axis: string; deltaMm: number; feedrateMmPerMin: number }
   | { action: PrinterTemperatureAction; temperatureCelsius?: number }
   | { action: 'set_hotend_temperature'; extruderId: number | null; temperatureCelsius?: number }
@@ -64,6 +66,8 @@ function IntentFields({ intent }: { intent: PrinterControlIntent }) {
     case 'pause':
     case 'resume':
       return null
+    case 'set_print_speed':
+      return <input name="speed_mode" type="hidden" value={intent.speedMode} />
     case 'move_axes':
       return (
         <>

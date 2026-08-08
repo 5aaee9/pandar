@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/popover'
 
 import { CameraDialogControl } from './dashboard-printer-camera-control'
+import { PrinterSpeedControl } from './dashboard-printer-speed-control'
 import { ConfirmForm } from './confirm-dialog'
 import type { Printer } from './dashboard-types'
 import {
@@ -132,6 +133,7 @@ export function PrinterControlsPanel({ printer }: { printer: Printer }) {
         />
         <CameraDialogControl printer={printer} />
       </div>
+      <PrinterSpeedControl printer={printer} />
     </div>
   )
 }

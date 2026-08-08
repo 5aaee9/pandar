@@ -146,4 +146,38 @@ describe("usePrinterControl", () => {
     );
     expect(toast.success).toHaveBeenCalledWith("Printer control queued");
   });
+
+  it("offers all four print speed modes and submits the selected mode", async () => {
+    const user = userEvent.setup();
+    controlPrinterMock.mockResolvedValue({ ok: true });
+    renderWithMessages(<PrinterControlsPanel printer={runningPrinter} />);
+
+    expect(screen.getByRole("button", { name: "Silent" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Standard" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Sport" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Ludicrous" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Sport" }));
+
+    expect(controlPrinterMock).toHaveBeenCalledTimes(1);
+    const submitted = controlPrinterMock.mock.calls[0][1] as FormData;
+    expect(submitted.get("action")).toBe("set_print_speed");
+    expect(submitted.get("speed_mode")).toBe("3");
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Printer control queued"),
+    );
+  });
+
+  it("disables print speed switching when the printer is idle", () => {
+    renderWithMessages(
+      <PrinterControlsPanel
+        printer={{ ...runningPrinter, status: "idle", print: null }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Silent" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Standard" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Sport" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Ludicrous" })).toBeDisabled();
+  });
 });

@@ -16,6 +16,13 @@
 
 ## Completed
 
+- Added print-speed switching to each printer detail card in the Devices inventory. Active and
+  paused prints now expose the four Bambu speed modes (Silent, Standard, Sport, Ludicrous), mapped
+  to the existing validated `set_print_speed` control contract as modes 1–4; idle printers keep the
+  selector disabled. The shared printer-control intent owns the hidden `speed_mode` field, localized
+  English and Chinese labels cover the new controls, and frontend interaction tests verify all four
+  choices, the Sport payload, idle-state disabling, pending feedback, and success feedback.
+
 - Compacted the dual-nozzle temperature controls so the nozzle switch shares the responsive
   temperature grid instead of occupying a full row. Each nozzle's diameter and type now render on
   separate lines, keeping values such as `0.4 mm` and `HH05` readable in the narrower card.
