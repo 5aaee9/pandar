@@ -37,6 +37,7 @@ import { useActionStatusFeedback } from './mutation-feedback'
 import { routeDataKeys } from './route-data'
 import { PrinterAxisControls } from './dashboard-printer-axis-controls'
 import { PrinterCoolingSystem } from './dashboard-printer-cooling'
+import { PrinterHmsPanel } from './dashboard-printer-hms'
 import { PrinterMaterialsPanel } from './dashboard-printer-materials'
 import { PrinterRackPanel } from './dashboard-printer-rack'
 import { StatusBadge } from './dashboard-ui'
@@ -143,6 +144,8 @@ export function PrinterCard({
       </div>
 
       <PrinterMismatchWarning printer={printer} />
+
+      <PrinterHmsPanel printer={printer} />
 
       <PrinterTemperatureControls printer={printer} />
 

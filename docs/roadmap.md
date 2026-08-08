@@ -16,6 +16,12 @@
 
 ## Completed
 
+- Added active HMS messages to printer detail cards. The dashboard now consumes the existing typed
+  HMS live-status stream, hides the panel when no messages are present, and shows each message's
+  Bambu-compatible 16-digit code and severity. Every entry links to the localized Bambu HMS details
+  page for troubleshooting, with localized English and Chinese presentation and frontend coverage
+  for code formatting, severity, links, and empty-state behavior.
+
 - Added read-only Bambu fan and cooling-system telemetry to printer detail cards. The Agent now
   normalizes legacy `fan_gear` / 0–15 fan levels with Bambu Studio's percentage semantics and the
   modern `device.airduct` mode/parts shape into typed cooling modes and fan kinds. The typed gRPC
