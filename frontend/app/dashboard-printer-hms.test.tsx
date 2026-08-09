@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import en from "../messages/en.json";
+import zh from "../messages/zh.json";
 import { PrinterHmsPanel } from "./dashboard-printer-hms";
 import type { Printer } from "./dashboard-types";
 
@@ -10,9 +11,9 @@ const printer: Printer = {
   id: "printer-1",
   tenant_id: "tenant-1",
   agent_id: "agent-1",
-  serial_number: "094123456",
+  serial_number: "20P123456",
   name: "Office printer",
-  model: "X1C",
+  model: "A1",
   status: "RUNNING",
   last_seen_at: "2026-08-09T00:00:00Z",
   created_at: "2026-08-09T00:00:00Z",
@@ -33,36 +34,59 @@ const printer: Printer = {
     print_error: null,
     printer_job_id: null,
     hms: [
-      { attr: 0x07ff0200, code: 0x00008011 },
+      { attr: 0x18002000, code: 0x00020026 },
       { attr: 0x05000600, code: 0x00020070 },
     ],
   },
 };
 
-function renderHms(value: Printer) {
+function renderHms(value: Printer, locale: "en" | "zh" = "en") {
   return render(
-    <NextIntlClientProvider locale="en" messages={en}>
+    <NextIntlClientProvider locale={locale} messages={locale === "zh" ? zh : en}>
       <PrinterHmsPanel printer={value} />
     </NextIntlClientProvider>,
   );
 }
 
 describe("PrinterHmsPanel", () => {
-  it("shows active HMS messages with Bambu-compatible codes and detail links", () => {
+  it("shows only cataloged HMS messages with Bambu text, codes, and detail links", () => {
     renderHms(printer);
 
-    expect(screen.getByRole("region", { name: "2 HMS messages" })).toBeVisible();
-    expect(screen.getByText("Unknown system message")).toBeVisible();
+    expect(screen.getByRole("region", { name: "1 HMS message" })).toBeVisible();
+    expect(screen.getByText(
+      "AMS-HT A assist motor overloaded. Excessive resistance in the filament tube between the AMS and the filament track switch.",
+    )).toBeVisible();
     expect(screen.getByText("Serious system message")).toBeVisible();
-    expect(screen.getByText("HMS 07FF020000008011")).toBeVisible();
-    expect(screen.getByText("HMS 0500060000020070")).toBeVisible();
+    expect(screen.getByText("HMS 1800200000020026")).toBeVisible();
+    expect(screen.queryByText("HMS 0500060000020070")).not.toBeInTheDocument();
 
-    const links = screen.getAllByRole("link", { name: "View details" });
-    expect(links[0]).toHaveAttribute(
+    const link = screen.getByRole("link", { name: "View details" });
+    expect(link).toHaveAttribute(
       "href",
-      "https://e.bambulab.com/index.php?e=07FF020000008011&s=device_hms&lang=en",
+      "https://e.bambulab.com/index.php?e=1800200000020026&s=device_hms&lang=en",
     );
-    expect(links[0]).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
+  it("hides the internal 0500060000020070 report like Bambu Studio", () => {
+    renderHms({
+      ...printer,
+      print: { ...printer.print!, hms: [printer.print!.hms[1]] },
+    });
+
+    expect(screen.queryByText("Serious system message")).not.toBeInTheDocument();
+    expect(screen.queryByText("HMS 0500060000020070")).not.toBeInTheDocument();
+  });
+
+  it("uses the localized Bambu catalog", () => {
+    renderHms({
+      ...printer,
+      print: { ...printer.print!, hms: [printer.print!.hms[0]] },
+    }, "zh");
+
+    expect(screen.getByText(
+      "AMS-HT A 助力电机过载，AMS至耗材变轨器之间料管阻力过大。",
+    )).toBeVisible();
   });
 
   it("stays hidden when the printer has no HMS messages", () => {

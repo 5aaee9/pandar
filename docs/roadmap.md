@@ -16,6 +16,12 @@
 
 ## Completed
 
+- Matched Bambu Studio's HMS presentation path. A compact generated catalog now selects the HMS
+  definitions by serial-number prefix and dashboard locale, displays Bambu's localized message text,
+  and suppresses reports whose catalog entry is missing or empty. This keeps the internal 20P report
+  `0500060000020070` out of the UI without a code-specific blacklist while preserving real HMS detail
+  links and severity labels.
+
 - Restored the GitHub Checks and dependent Docker workflows after two CI-only strict gates began
   failing. The frontend lock now forces the patched `nanoid` 3.3.18 release, with refreshed Nix npm
   dependency hashes, so the production npm audit no longer reports GHSA-2v37-7h3g-55p8. The two

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 
 import type { Printer } from './dashboard-types'
+import { hmsMessage } from './hms-catalog'
 
 type PrinterHmsItem = NonNullable<Printer['print']>['hms'][number]
 type HmsLevel = 'fatal' | 'serious' | 'warning' | 'info' | 'unknown'
@@ -16,7 +17,11 @@ type HmsLevel = 'fatal' | 'serious' | 'warning' | 'info' | 'unknown'
 export function PrinterHmsPanel({ printer }: { printer: Printer }) {
   const t = useTranslations('inventory')
   const locale = useLocale()
-  const hms = printer.print?.hms ?? []
+  const hms = (printer.print?.hms ?? []).flatMap((item) => {
+    const code = formatHmsCode(item)
+    const message = hmsMessage(printer.serial_number, code, locale)
+    return message ? [{ item, code, message }] : []
+  })
   if (hms.length === 0) {
     return null
   }
@@ -32,8 +37,7 @@ export function PrinterHmsPanel({ printer }: { printer: Printer }) {
         {t('hmsMessages', { count: hms.length })}
       </div>
       <ul className="mt-2 divide-y divide-amber-500/20">
-        {hms.map((item, index) => {
-          const code = formatHmsCode(item)
+        {hms.map(({ item, code, message }, index) => {
           const level = hmsLevel(item.code)
           const Icon = level === 'info' ? InfoIcon : CircleAlertIcon
 
@@ -41,8 +45,11 @@ export function PrinterHmsPanel({ printer }: { printer: Printer }) {
             <li className="flex items-center gap-3 py-2 first:pt-0 last:pb-0" key={`${item.attr}-${item.code}-${index}`}>
               <Icon className={`size-4 shrink-0 ${levelColor(level)}`} />
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-foreground">{levelLabel(level, t)}</div>
-                <code className="block truncate text-xs text-muted-foreground">HMS {code}</code>
+                <div className="text-sm font-medium text-foreground">{message}</div>
+                <div className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
+                  <span>{levelLabel(level, t)}</span>
+                  <code>HMS {code}</code>
+                </div>
               </div>
               <a
                 className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-foreground underline-offset-4 hover:underline"
