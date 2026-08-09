@@ -92,6 +92,13 @@ pub extern "C" fn pandar_plugin_shim_dispatch_connection_transition(
     }
 }
 
+/// Dispatches offline tickets and queued Studio work through the shim callback bridge.
+///
+/// # Safety
+///
+/// Non-null bridge and session pointers must remain valid for this call, and `agent` must
+/// satisfy the callback bridge's lifetime contract. `offline_tickets` must be null or point
+/// to `offline_len` initialized `u64` values that remain borrowed for this call.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pandar_plugin_shim_dispatch_offline_deliveries(
     bridge_ptr: *const ShimCallbackBridge,

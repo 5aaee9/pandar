@@ -16,6 +16,12 @@
 
 ## Completed
 
+- Restored the GitHub Checks and dependent Docker workflows after two CI-only strict gates began
+  failing. The frontend lock now forces the patched `nanoid` 3.3.18 release, with refreshed Nix npm
+  dependency hashes, so the production npm audit no longer reports GHSA-2v37-7h3g-55p8. The two
+  unsafe network-plugin FFI exports now document their caller safety contracts so the Nix
+  `clippy --deny warnings` derivation passes.
+
 - Added active HMS messages to printer detail cards. The dashboard now consumes the existing typed
   HMS live-status stream, hides the panel when no messages are present, and shows each message's
   Bambu-compatible 16-digit code and severity. Every entry links to the localized Bambu HMS details

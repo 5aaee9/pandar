@@ -115,6 +115,13 @@ pub extern "C" fn ft_job_result_destroy(_result: *mut FtJobResult) {}
 #[unsafe(no_mangle)]
 pub extern "C" fn ft_job_msg_destroy(_msg: *mut FtJobMsg) {}
 
+/// Creates a file-transfer tunnel handle for the Studio ABI.
+///
+/// # Safety
+///
+/// `out` must be null or point to writable storage for one tunnel-handle pointer. On
+/// success, the caller owns the returned reference and must release it with
+/// [`ft_tunnel_release`].
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ft_tunnel_create(
     _config_json: *const c_char,
