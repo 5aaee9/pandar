@@ -16,6 +16,8 @@
 
 ## Completed
 
+- Prepared the `v0.1.2` patch release metadata for the single-Web-URL Studio login flow and Pandar Auth readiness fix, including aligned Rust, Node, Nix, Android, Helm, changelog, installation, and release-runbook versions. Next: pass local and GitHub release gates, tag `v0.1.2`, and verify all desktop, container, and Helm artifacts before recording publication evidence.
+
 - Simplified Bambu Studio plugin targeting to one Web URL. Pandar Web now publishes the Studio-reachable Hub URL through `/.well-known/pandar` (using `APP_PUBLIC_API_URL` when the server-side API address is internal), and the embedded plugin page discovers and stores it automatically instead of asking users for a second Hub URL. Fixed the plugin sign-in page to inspect `/readyz` rather than `/healthz`, so a correctly configured Pandar Auth JWT verifier is no longer misreported as “external auth unavailable.” Focused Web and compiled plugin-local tests cover both regressions. Next: validate the updated packaged plugin in an authenticated Studio session.
 
 - Published `v0.1.1` from commit `a442a120c198c17961c3663635e65ae63bf0ec98` after the release
