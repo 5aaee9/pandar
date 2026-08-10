@@ -131,7 +131,7 @@ The Hub stores and forwards typed printer operations. Bambu-specific MQTT constr
 
 Run `npm --prefix frontend run lint`, `npm run test:web`, and `npm run typecheck:web` before submitting frontend changes. The workspace production-module guard (`cargo test -p pandar-core --test module_size`) enforces the 400-line limit across Rust, C/C++ headers and sources, and frontend TypeScript/TSX while excluding tests and generated output.
 
-Server-side frontend code reads the hub through `APP_API_URL`, defaulting to `http://localhost:8080` when unset. Browser code never calls the hub directly; reads and mutations cross the Hub proxy (`frontend/app/hub-proxy.ts` and the `frontend/app/api/tenants/[tenantId]/` routes). `APP_BASE_URL` remains the frontend's public URL for deployment wiring.
+Server-side frontend code reads the hub through `APP_API_URL`, defaulting to `http://localhost:8080` when unset. Browser code never calls the hub directly; reads and mutations cross the Hub proxy (`frontend/app/hub-proxy.ts` and the `frontend/app/api/tenants/[tenantId]/` routes). `APP_BASE_URL` remains the frontend's public URL for deployment wiring. The public `/.well-known/pandar` document advertises `APP_PUBLIC_API_URL`, falling back to `APP_API_URL`, so Studio can derive its Hub URL from the Web URL; set `APP_PUBLIC_API_URL` when the server-side Hub address is not reachable from Studio.
 
 `APP_AUTH_PROVIDER` selects the browser-facing provider metadata for `pandar-web`. Supported values are `clerk`, `logto`, `betterauth`, or unset/`none`; any other value fails Web startup. Provider-specific frontend metadata is configured with `APP_AUTH_CLERK_PUBLISHABLE_KEY`, `APP_AUTH_LOGTO_ENDPOINT`, `APP_AUTH_LOGTO_APP_ID`, or `APP_AUTH_BETTER_AUTH_BASE_URL`. The frontend still forwards only a bearer token from the configured cookie or static single-user bridge to `pandar-hub`; Pandar tenant membership is resolved by the hub.
 
@@ -253,7 +253,7 @@ Implemented login flow:
 
 1. Bambu Studio opens the plugin-provided host plus `/sign-in`.
 2. The plugin starts a loopback HTTP server on `127.0.0.1:0`; that server is the host returned by `bambu_network_get_bambulab_host`.
-3. The local server serves `frontend/plugin-local/dist` with `rust-embed`. The page shows default web/hub URLs when no configuration is present and lets the user switch the target server before sign-in.
+3. The local server serves `frontend/plugin-local/dist` with `rust-embed`. The page asks only for the Web URL and reads `/.well-known/pandar` from that Web deployment to discover the Hub URL before sign-in.
 4. The local page links to the configured Pandar frontend `/plugin-sign-in` route with the local callback URL.
 5. The frontend relies on the configured Pandar auth token/cookie bridge and tenant selection through Pandar-managed membership. With Better Auth, `/plugin-sign-in` adds a versioned base64url return intent to the issuer URL; magic-link and passkey completion carry that opaque value back through the dashboard callback, which accepts only `/plugin-sign-in` and never copies the JWT into the return target.
 6. The hub issues a short-lived one-use plugin login ticket.
@@ -262,12 +262,7 @@ Implemented login flow:
 9. The plugin exchanges the ticket with the selected hub, creating a tenant-owned `["plugin:studio"]` credential. The ABI shim stores Bambu-shaped login state for Studio UI compatibility.
 10. Hub-backed plugin calls read printers/jobs and submit prints through `/api/v1/plugin/*` routes using the plugin credential.
 
-Plugin URL configuration uses this precedence:
-
-- Frontend URL: `PANDAR_PLUGIN_FRONTEND_URL`, then `APP_BASE_URL`, then `http://localhost:3000`.
-- Hub URL: `PANDAR_PLUGIN_HUB_URL`, then `APP_API_URL`, then `http://127.0.0.1:8080`.
-
-The local `/config` endpoint stores an in-process target-server override. Later hub-facing ABI calls refresh only the hub URL from that local config; the existing Next.js `/plugin-sign-in` flow remains responsible for authentication and ticket creation.
+The initial plugin Web URL uses `PANDAR_PLUGIN_FRONTEND_URL`, then `APP_BASE_URL`, then `http://localhost:3000`. The local page fetches that deployment's `/.well-known/pandar` document and stores the discovered Hub URL through the local `/config` endpoint. Later hub-facing ABI calls refresh only the Hub URL from that local config; the existing Next.js `/plugin-sign-in` flow remains responsible for authentication and ticket creation.
 
 Plugin credentials are revocable tenant-owned credentials. They do not carry `agent:register`. Phase
 23 has automated ABI/status/command/print-task probes and a manual smoke runbook, but real exact-Studio

@@ -168,7 +168,7 @@ Pandar's plugin design:
 
 1. `pandar-network-plugin` starts a process-local loopback HTTP server and returns that server as the plugin host/sign-in URL.
 2. The loopback server serves an embedded minimal sign-in/configuration page from `frontend/plugin-local/dist` through `rust-embed`.
-3. The local page displays default Pandar web and hub URLs when no configuration is present, lets the user switch the target server, and links to the configured Pandar frontend `/plugin-sign-in` page.
+3. The local page asks for the Pandar Web URL, discovers the Hub URL from that deployment's public `/.well-known/pandar` document, and links to the configured frontend `/plugin-sign-in` page.
 4. The Pandar frontend completes Clerk, Logto, or Better Auth authentication and asks the hub to create a short-lived, one-use plugin login ticket for a selected tenant. Better Auth preserves the selected tenant and Studio localhost callback through its magic-link, optional passkey, and dashboard callback hops with the validated opaque return intent described above.
 5. The page uses Studio's `get_localhost_url` flow and redirects the browser to Studio's local callback with `ticket` and `redirect_url`.
 6. Studio calls the plugin's token/profile ABI. The plugin exchanges the ticket with `pandar-hub` for a tenant-owned plugin credential and returns Bambu-shaped token/profile JSON to Studio.

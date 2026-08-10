@@ -47,6 +47,7 @@ services:
       - /app/frontend/.next/cache:uid=1000,gid=1000
     environment:
       APP_API_URL: http://pandar-api:8080
+      APP_PUBLIC_API_URL: ${APP_PUBLIC_API_URL:-http://localhost:8080}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
       APP_API_TOKEN: ${APP_API_TOKEN:-}
       APP_TENANT_ID: ${APP_TENANT_ID:-}

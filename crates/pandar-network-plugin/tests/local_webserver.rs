@@ -166,10 +166,13 @@ fn local_webserver_serves_assets_rejects_bad_requests_and_switches_target_server
     assert!(sign_in.starts_with("HTTP/1.1 200 OK"));
     assert!(sign_in.contains("Content-Type: text/html; charset=utf-8"));
     assert!(sign_in.contains("Target server"));
+    assert!(sign_in.contains("Web URL"));
+    assert!(!sign_in.contains("Hub URL"));
 
     let script = get(base_url, "/assets/app.js");
     assert!(script.starts_with("HTTP/1.1 200 OK"));
     assert!(script.contains("Content-Type: application/javascript; charset=utf-8"));
+    assert!(script.contains("/.well-known/pandar"));
     assert!(script.contains("hubUrl"));
 
     let styles = get(base_url, "/assets/styles.css");

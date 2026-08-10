@@ -11,7 +11,7 @@
     <main class="shell">
       <section class="panel" aria-labelledby="page-title">
         <h1 id="page-title">Target server</h1>
-        <p class="summary">Choose the Pandar web and API endpoints used by this local plugin.</p>
+        <p class="summary">Enter the Pandar Web URL. The plugin discovers its Hub automatically.</p>
 
         <div id="notice-list" class="notice-list" aria-live="polite"></div>
 
@@ -19,10 +19,7 @@
           <label for="web-url">Web URL</label>
           <input id="web-url" name="webUrl" type="url" autocomplete="url" required />
 
-          <label for="hub-url">Hub URL</label>
-          <input id="hub-url" name="hubUrl" type="url" autocomplete="url" required />
-
-          <button type="submit">Switch Target server</button>
+          <button type="submit">Use Web URL</button>
         </form>
 
         <div id="status" class="status" role="status" aria-live="polite"></div>

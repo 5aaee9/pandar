@@ -16,6 +16,8 @@
 
 ## Completed
 
+- Simplified Bambu Studio plugin targeting to one Web URL. Pandar Web now publishes the Studio-reachable Hub URL through `/.well-known/pandar` (using `APP_PUBLIC_API_URL` when the server-side API address is internal), and the embedded plugin page discovers and stores it automatically instead of asking users for a second Hub URL. Fixed the plugin sign-in page to inspect `/readyz` rather than `/healthz`, so a correctly configured Pandar Auth JWT verifier is no longer misreported as “external auth unavailable.” Focused Web and compiled plugin-local tests cover both regressions. Next: validate the updated packaged plugin in an authenticated Studio session.
+
 - Published `v0.1.1` from commit `a442a120c198c17961c3663635e65ae63bf0ec98` after the release
   commit's Checks run passed. Tagged Checks, Release, and Docker/Helm workflows all passed; the
   GitHub Release contains 60 ABI-series-specific desktop assets, and all 30 downloaded SHA-256

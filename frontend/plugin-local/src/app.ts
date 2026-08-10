@@ -8,6 +8,10 @@ type Config = {
   configNonce: string;
 };
 
+type DiscoveryConfig = {
+  hubUrl: string;
+};
+
 type StudioWindow = Window & {
   wx?: {
     postMessage?: (message: string) => void;
@@ -24,7 +28,6 @@ type StudioLocalhostMessage = {
 
 const form = document.querySelector<HTMLFormElement>("#target-form")!;
 const webUrlInput = document.querySelector<HTMLInputElement>("#web-url")!;
-const hubUrlInput = document.querySelector<HTMLInputElement>("#hub-url")!;
 const noticeList = document.querySelector<HTMLDivElement>("#notice-list")!;
 const statusMessage = document.querySelector<HTMLDivElement>("#status")!;
 const continueLink =
@@ -34,7 +37,6 @@ const submitButton = form.querySelector<HTMLButtonElement>("button")!;
 let callbackUrl = "";
 let savedWebUrl = "";
 let usingDefaultWebServer = false;
-let usingDefaultHubServer = false;
 let configNonce = "";
 let isDirty = true;
 
@@ -122,10 +124,6 @@ const renderNotices = () => {
     notices.push(`Web URL is using the default: ${webUrlInput.value}`);
   }
 
-  if (usingDefaultHubServer) {
-    notices.push(`Hub URL is using the default: ${hubUrlInput.value}`);
-  }
-
   noticeList.replaceChildren(
     ...notices.map((notice) => {
       const element = document.createElement("p");
@@ -138,43 +136,41 @@ const renderNotices = () => {
 
 const applyConfig = (config: Config) => {
   webUrlInput.value = config.webUrl;
-  hubUrlInput.value = config.hubUrl;
   callbackUrl = config.callbackUrl;
   savedWebUrl = config.webUrl;
   usingDefaultWebServer = config.usingDefaultWebServer;
-  usingDefaultHubServer = config.usingDefaultHubServer;
   configNonce = config.configNonce;
   isDirty = false;
   renderNotices();
   updateContinueLink();
 };
 
-const loadConfig = async () => {
-  const response = await fetch("/config");
+const discoverHubUrl = async (webUrl: string) => {
+  const discoveryUrl = new URL("/.well-known/pandar", webUrl);
+  const response = await fetch(discoveryUrl);
   if (!response.ok) {
-    throw new Error(`GET /config failed with ${response.status}`);
+    throw new Error(`Hub discovery failed with ${response.status}`);
   }
 
-  applyConfig((await response.json()) as Config);
-  const studioCallbackUrl = await requestStudioCallbackUrl();
-  if (studioCallbackUrl) {
-    callbackUrl = studioCallbackUrl;
-    updateContinueLink();
-  }
+  const config = (await response.json()) as DiscoveryConfig;
+  return config.hubUrl;
 };
 
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
+const saveTargetServer = async (
+  pendingMessage: string,
+  successMessage: string,
+) => {
   submitButton.disabled = true;
-  setStatus("Switching target server...");
+  setStatus(pendingMessage);
 
   try {
+    const hubUrl = await discoverHubUrl(webUrlInput.value);
     const response = await fetch("/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         webUrl: webUrlInput.value,
-        hubUrl: hubUrlInput.value,
+        hubUrl,
         configNonce,
       }),
     });
@@ -184,7 +180,7 @@ form.addEventListener("submit", async (event) => {
     }
 
     applyConfig((await response.json()) as Config);
-    setStatus("Target server updated.");
+    setStatus(successMessage);
   } catch (error) {
     setStatus(
       error instanceof Error
@@ -195,6 +191,27 @@ form.addEventListener("submit", async (event) => {
   } finally {
     submitButton.disabled = false;
   }
+};
+
+const loadConfig = async () => {
+  const response = await fetch("/config");
+  if (!response.ok) {
+    throw new Error(`GET /config failed with ${response.status}`);
+  }
+
+  applyConfig((await response.json()) as Config);
+  markDirty();
+  await saveTargetServer("Discovering Hub URL...", "Target server ready.");
+  const studioCallbackUrl = await requestStudioCallbackUrl();
+  if (studioCallbackUrl) {
+    callbackUrl = studioCallbackUrl;
+    updateContinueLink();
+  }
+};
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await saveTargetServer("Discovering Hub URL...", "Target server updated.");
 });
 
 continueLink.addEventListener("click", async (event) => {
@@ -210,7 +227,6 @@ continueLink.addEventListener("click", async (event) => {
 });
 
 webUrlInput.addEventListener("input", markDirty);
-hubUrlInput.addEventListener("input", markDirty);
 
 loadConfig().catch((error) => {
   setStatus(
