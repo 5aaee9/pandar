@@ -1,6 +1,6 @@
 # Releasing Pandar
 
-This runbook prepares and publishes a Pandar release. The `v0.1.0` tag publishes desktop archives, Hub/Web container images, and the Helm chart. It does not publish an Android APK.
+This runbook prepares and publishes a Pandar release. The `v0.1.1` tag publishes desktop archives, Hub/Web container images, and the Helm chart. It does not publish an Android APK.
 
 ## 1. Prepare the release commit
 
@@ -10,7 +10,7 @@ Use a clean, up-to-date `main` checkout and verify that every declared product v
 git switch main
 git pull --ff-only origin main
 git status --short
-bash scripts/check-release-version.sh 0.1.0
+bash scripts/check-release-version.sh 0.1.1
 ```
 
 Review `CHANGELOG.md`, `docs/release-installation.md`, and the known limitations before tagging.
@@ -50,33 +50,33 @@ Only after the release commit and remote Checks are green:
 git switch main
 git pull --ff-only origin main
 test -z "$(git status --porcelain)"
-bash scripts/check-release-version.sh 0.1.0
-git tag -a v0.1.0 -m "Pandar 0.1.0"
-git push origin v0.1.0
+bash scripts/check-release-version.sh 0.1.1
+git tag -a v0.1.1 -m "Pandar 0.1.1"
+git push origin v0.1.1
 ```
 
 Pushing the tag starts:
 
 - `Checks`, which repeats the quality gates and validates tag/version consistency;
 - `Release`, which builds and target-architecture smoke-tests the Linux amd64, macOS amd64/arm64, and Windows amd64 three-file archives, and builds the Windows Studio hook bundle, before creating the GitHub Release; both macOS rows use Apple Silicon, with the amd64 checks running under Rosetta 2;
-- `Docker`, which publishes `hub:v0.1.0`, `web:v0.1.0`, and Helm chart `0.1.0` after Checks succeeds.
+- `Docker`, which publishes `hub:v0.1.1`, `web:v0.1.1`, and Helm chart `0.1.1` after Checks succeeds.
 
 Do not create the GitHub Release manually while these workflows are running.
 
 ## 4. Verify publication
 
 ```bash
-gh run list --commit "$(git rev-list -n 1 v0.1.0)" --limit 20
-gh release view v0.1.0
-gh release download v0.1.0 --dir /tmp/pandar-v0.1.0
-helm show chart oci://ghcr.io/projectpandar/pandar/chart/pandar --version 0.1.0
-docker pull ghcr.io/projectpandar/pandar/hub:v0.1.0
-docker pull ghcr.io/projectpandar/pandar/web:v0.1.0
+gh run list --commit "$(git rev-list -n 1 v0.1.1)" --limit 20
+gh release view v0.1.1
+gh release download v0.1.1 --dir /tmp/pandar-v0.1.1
+helm show chart oci://ghcr.io/projectpandar/pandar/chart/pandar --version 0.1.1
+docker pull ghcr.io/projectpandar/pandar/hub:v0.1.1
+docker pull ghcr.io/projectpandar/pandar/web:v0.1.1
 ```
 
-The immutable `v0.1.0` release has six desktop files. A tag produced by the current macOS-enabled
-workflow has ten: four `.tar.gz` archives and their `.sha256` sidecars, plus the Windows Studio hook
-`.zip` and its `.sha256` sidecar. Run the checksum, CLI startup, and plugin checks from
+The `v0.1.1` release is expected to have ten desktop files: four `.tar.gz` archives and their
+`.sha256` sidecars, plus the Windows Studio hook `.zip` and its `.sha256` sidecar. Run the checksum,
+CLI startup, and plugin checks from
 `docs/release-installation.md` on every target host.
 
 Record tagged-artifact evidence in `docs/compatibility/release-artifacts.md`, record real Studio evidence separately in `docs/compatibility/bambu-studio-plugin.md`, and update `docs/roadmap.md`. A failed or partial workflow is not a completed release.

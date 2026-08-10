@@ -16,6 +16,11 @@
 
 ## Completed
 
+- Prepared the `v0.1.1` release metadata across Rust crates/tools, Node workspaces, Nix packages,
+  Android, and the Helm chart. Added the release changelog and refreshed the maintainer runbook,
+  installation guide, deployment security assertion, and release-facing README references. The tag
+  remains intentionally uncreated until the release commit is pushed and its GitHub Checks run passes.
+
 - Displayed the printer's current print-speed mode in the Devices detail controls. The Agent now
   parses Bambu Studio's typed `spd_lvl` report field (modes 1–4), carries it through gRPC and the
   Hub's SQLite/PostgreSQL-backed live printer status, and exposes it in API/WebSocket snapshots.
