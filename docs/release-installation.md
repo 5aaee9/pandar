@@ -1,6 +1,6 @@
 # Release Installation
 
-Release `v0.1.1` will be published at <https://github.com/ProjectPandar/pandar/releases/tag/v0.1.1>. The tag also publishes these service artifacts:
+Release `v0.1.1` is published at <https://github.com/ProjectPandar/pandar/releases/tag/v0.1.1>. The tag also publishes these service artifacts:
 
 - `ghcr.io/projectpandar/pandar/hub:v0.1.1`
 - `ghcr.io/projectpandar/pandar/web:v0.1.1`

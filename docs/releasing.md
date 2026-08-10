@@ -74,9 +74,9 @@ docker pull ghcr.io/projectpandar/pandar/hub:v0.1.1
 docker pull ghcr.io/projectpandar/pandar/web:v0.1.1
 ```
 
-The `v0.1.1` release is expected to have ten desktop files: four `.tar.gz` archives and their
-`.sha256` sidecars, plus the Windows Studio hook `.zip` and its `.sha256` sidecar. Run the checksum,
-CLI startup, and plugin checks from
+The `v0.1.1` release is expected to have 60 desktop files: each of the six ABI series has four
+`.tar.gz` archives and their `.sha256` sidecars, plus a Windows Studio hook `.zip` and its
+`.sha256` sidecar. Run the checksum, CLI startup, and plugin checks from
 `docs/release-installation.md` on every target host.
 
 Record tagged-artifact evidence in `docs/compatibility/release-artifacts.md`, record real Studio evidence separately in `docs/compatibility/bambu-studio-plugin.md`, and update `docs/roadmap.md`. A failed or partial workflow is not a completed release.

@@ -32,17 +32,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Updated Rust and frontend dependencies, including patched Nano ID and PostCSS releases, and restored strict dependency-audit and Clippy CI gates.
 
-### Planned distribution
+### Distribution
 
-- The release workflow will publish archives containing the CLI, ABI-series-matched network plugin, and BambuSource companion with SHA-256 sidecars; Windows also publishes the Studio hook bundle.
-- The tag will publish Hub and Web images at `ghcr.io/projectpandar/pandar/hub:v0.1.1` and `ghcr.io/projectpandar/pandar/web:v0.1.1`.
-- The tag will publish Helm chart `0.1.1` at `oci://ghcr.io/projectpandar/pandar/chart/pandar`.
+- The release publishes archives containing the CLI, ABI-series-matched network plugin, and BambuSource companion with SHA-256 sidecars; Windows also publishes the Studio hook bundle.
+- Hub and Web images are published at `ghcr.io/projectpandar/pandar/hub:v0.1.1` and `ghcr.io/projectpandar/pandar/web:v0.1.1`.
+- Helm chart `0.1.1` is published at `oci://ghcr.io/projectpandar/pandar/chart/pandar`.
 
 ### Known limitations
 
 - Desktop archives remain unsigned. Verify the supplied SHA-256 sidecar; Windows SmartScreen and macOS Gatekeeper may warn.
 - Real-host installation and real Bambu Studio replacement evidence is not complete for every target and ABI series.
-- The planned container images target Linux amd64 only.
+- The container images target Linux amd64 only.
 - Native firmware and recovery ownership still requires one active Hub; the firmware package catalog is intentionally empty.
 - The Android client is built separately and is not attached to the GitHub Release.
 

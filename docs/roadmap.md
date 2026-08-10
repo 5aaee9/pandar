@@ -16,10 +16,11 @@
 
 ## Completed
 
-- Prepared the `v0.1.1` release metadata across Rust crates/tools, Node workspaces, Nix packages,
-  Android, and the Helm chart. Added the release changelog and refreshed the maintainer runbook,
-  installation guide, deployment security assertion, and release-facing README references. The tag
-  remains intentionally uncreated until the release commit is pushed and its GitHub Checks run passes.
+- Published `v0.1.1` from commit `a442a120c198c17961c3663635e65ae63bf0ec98` after the release
+  commit's Checks run passed. Tagged Checks, Release, and Docker/Helm workflows all passed; the
+  GitHub Release contains 60 ABI-series-specific desktop assets, and all 30 downloaded SHA-256
+  sidecars verified. Hub/Web manifests and Helm chart `0.1.1` were published to GHCR with their
+  workflow-recorded digests.
 
 - Displayed the printer's current print-speed mode in the Devices detail controls. The Agent now
   parses Bambu Studio's typed `spd_lvl` report field (modes 1–4), carries it through gRPC and the

@@ -104,6 +104,34 @@ reached its normal home UI and mapped the exact Pandar plugin and companion from
 module-load evidence for macOS arm64 only. It is not a tagged artifact, macOS amd64 evidence,
 authenticated sign-in/session evidence, Hub/Agent/printer evidence, or a hardware-operation claim.
 
+## v0.1.1 Tagged Release Evidence
+
+Annotated tag `v0.1.1` resolves to commit `a442a120c198c17961c3663635e65ae63bf0ec98`.
+Release-commit Checks run `31367299202`, tagged Checks run `31370250709`, Release run
+`31370250664`, and Docker/Helm run `31370250632` all passed. The GitHub Release was published on
+2026-08-10 with 60 assets: 24 desktop archives, six Windows Studio hook bundles, and one SHA-256
+sidecar for each archive or bundle. All 30 downloaded sidecars passed `sha256sum -c`.
+
+| ABI series | Linux amd64 | macOS amd64 | macOS arm64 | Windows amd64 | Windows hook |
+| --- | --- | --- | --- | --- | --- |
+| `02.06.00` | `b4c12035349af110ed857b56520b4b6c5f7e79b9e57728f110c0e10be6d0d0f1` | `e5c06d80dbe687df4f7d1d37b3d71856951679335765d7689f99b9c03e4a3047` | `3d970bcd0d73ef61c0c299a1a293d0b773d4a6269336599783a0896a1cbdd92b` | `d52c8771391841df2c01fbe907fd9aaa6838b410ff0af42d0e91ea40a373f957` | `10ec41b662ae65379824ee3de04b934df932817e7898bcc2c528f3a5b60f7bf7` |
+| `02.06.01` | `4515ede4b2afe442cc51ed989fdbe759ed95f20943a19dac8537eba377470128` | `d51f5d125bbd2e863d7b0803a16ffe37b0178921169e624145e8310b63b7e847` | `7e4638ccb9217f0597e4e251cfb915427fcdf452d26c0946dfde256f2ca1782b` | `34d6dc4e9cefbe8dc380362436d7ecb778ed1dd029c3f4811d99a4995588dd31` | `7ab97339dc61d30a3a3f171e4ef63e4bb4eb0027254fb648ba37ddb666cbcef8` |
+| `02.07.00` | `9e7de83b6aabdbe8b102fab65d06ebeb34d03959002b3571e3f8c6afadc3294b` | `bd60644e956d3ee1ea40d9a1ed0b41854ef10b06197352cd4885eb9bc9d8db91` | `1c8159726b70efea79c7cd3804256bf5032e556fa06a8847e820cec31cf8c247` | `8d6981833bee1c936ac850917aa7abafe7994d757b0ce560b753524a27d05071` | `b75ede3703904ac257291bf5bfaafd6f597e7c0037c397bca3ca5399fc952552` |
+| `02.07.01` | `94005a45a830c2e689ea32e751131d031636400c6bd03a3420308d46d544ade4` | `459186b54d42932968333caa0a1d98690d6c31ac87cb3e5f087e91e69b1058ef` | `9a58378ac908db5542fcb8fa1d919f3d713e63ed1a5537d7c51025c3be3d7c15` | `22386f853ca16ad80d099e3c6739a14727aa74c5f60943d0d8e3a518a0f4fdae` | `9ffb69b032d8bed6ff6337b9c2c7b15e4636ce5d3bc6e308e33c90774f5fd27b` |
+| `02.08.00` | `f9e03c79bf6d1abb9b07a83004a3718731fc951259b3556cdc4852f6ed1f26fa` | `0840981f580bb7ec9841f6bf7012579ecc5d673ce762bd91bcf514d362a44b78` | `395694f23a7f6f1d6d1e08893524c80e5b44672e913dff2fe4e0bab99e78d9b8` | `57add4cbfdd6eee390133fbbb0d82e09d2407a5b807cd726239a1260e571a438` | `d930de32151b173b43a29b751c41024a353dd31c627e07ba67664ef0262e74e8` |
+| `02.08.01` | `a982e7662f98b4b5b5d77330a088428f23ca53f062529e1f3cc2e82b82689c6c` | `b9e7297438de1a946bb8167af3bb618c90ac08d88a531632b7c21ced7da322f2` | `19cd95113b6e539a403d3dc5a1d0deb44872d2d9388a17c893ec457a09e20949` | `6db89f704fb3463d9eb929f10b0250d54b54c2d8ff3d541be009e8979617ea58` | `15262805153c6e97bd5854677fffcfcbf2c8abebaf6d905317b00d7f488d2817` |
+
+Every Release matrix job built on its target OS, ran the packaged CLI and ABI probe, verified the
+exact three-file archive layout, and passed its ABI-series-specific Studio export contract before
+publication. This remains package evidence, not real Studio or printer-hardware evidence.
+
+The published Hub manifest digest is
+`sha256:a54ecfd1a2c79bb208b39b5d6ff900d31385d0aa62d54215c98ca7b1b167f8c9`; the Web manifest
+digest is `sha256:c10c65dcba1bd34934eeb412f1137bdc628145993ac01c3922436becc510d66d`.
+Helm chart `0.1.1` has OCI digest
+`sha256:7299c24ecd9274bdae5e395d5060be8d01e1e2e5b687129fc554824950b19926` and declares
+`appVersion: 0.1.1`.
+
 ## v0.1.0 Tagged Release Evidence
 
 Annotated tag `v0.1.0` resolves to commit `d50ef4223daf1fe5f45b6adc254ec91a9823bacc`.
@@ -615,7 +643,7 @@ historical provenance only and are not instructions to re-run or modify a workfl
 
 ## Release Availability Boundary
 
-Release `v0.1.0` is available from GitHub Releases with the tagged evidence recorded above. Historical
+Release `v0.1.1` is available from GitHub Releases with the tagged evidence recorded above. Historical
 workflow artifacts that lack the current three-file layout remain non-promotable. Future releases must
 be validated again from their own downloaded archives on each native target.
 
