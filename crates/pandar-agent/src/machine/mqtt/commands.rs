@@ -62,6 +62,12 @@ pub struct SetNozzleTemperatureCommand {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetFanSpeedCommand {
+    pub fan_index: u8,
+    pub speed_percent: u8,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChamberLightCommand {
     pub node: String,
     pub on: bool,
@@ -83,6 +89,7 @@ pub struct PrintReportProgress {
     pub subtask_id: Option<String>,
     pub gcode_state: Option<String>,
     pub percent: Option<u8>,
+    pub speed_level: Option<u8>,
     pub remaining_time_minutes: Option<u32>,
     pub current_layer: Option<u32>,
     pub total_layers: Option<u32>,
@@ -124,6 +131,7 @@ pub enum BambuMqttCommand {
     SetChamberLight(bool),
     SetChamberLightNode(ChamberLightCommand),
     SetPrintSpeed(PrintSpeed),
+    SetFanSpeed(SetFanSpeedCommand),
     SelectExtruder(u32),
     SetNozzleTemperature(SetNozzleTemperatureCommand),
     BackToCenter,
@@ -166,6 +174,7 @@ impl BambuMqttCommand {
             Self::SetChamberLight(on) => chamber_light_payload("chamber_light", *on),
             Self::SetChamberLightNode(command) => chamber_light_payload(&command.node, command.on),
             Self::SetPrintSpeed(speed) => print_speed_payload(*speed),
+            Self::SetFanSpeed(command) => set_fan_speed_payload(command),
             Self::SelectExtruder(extruder_id) => select_extruder_payload(*extruder_id),
             Self::SetNozzleTemperature(command) => set_nozzle_temperature_payload(command),
             Self::BackToCenter => axis::back_to_center_payload(),
@@ -263,6 +272,21 @@ fn print_speed_payload(speed: PrintSpeed) -> BambuMqttCommandPayload {
             print: PrintSpeedCommand {
                 command: "print_speed",
                 param: speed.as_u8().to_string(),
+                sequence_id: sequence_id.clone(),
+            },
+        }),
+        sequence_id,
+    )
+}
+
+fn set_fan_speed_payload(command: &SetFanSpeedCommand) -> BambuMqttCommandPayload {
+    let sequence_id = next_studio_sequence_id();
+    BambuMqttCommandPayload::with_sequence(
+        json_payload(PrintPayload {
+            print: SetFanSpeedPayload {
+                command: "set_fan",
+                fan_index: command.fan_index,
+                speed: command.speed_percent,
                 sequence_id: sequence_id.clone(),
             },
         }),

@@ -332,6 +332,7 @@
     "setChamberTemperature": "设置仓温",
     "setChamberTemperatureTitle": "设置仓温",
     "coolingSystem": "冷却系统",
+    "setCoolingFanSpeed": "设置{fan}速度",
     "coolingModeCooling": "冷却",
     "coolingModeHeating": "加热循环",
     "coolingModeExhaust": "排风",

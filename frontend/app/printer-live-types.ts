@@ -9,6 +9,7 @@ export type PrinterPrintState = {
   subtask_name: string | null;
   gcode_file: string | null;
   progress_percent: number | null;
+  speed_level: number | null;
   remaining_time_minutes: number | null;
   current_layer: number | null;
   total_layers: number | null;

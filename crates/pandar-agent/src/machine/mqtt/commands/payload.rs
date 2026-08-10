@@ -60,6 +60,14 @@ pub(super) struct PrintSpeedCommand {
 }
 
 #[derive(Serialize)]
+pub(super) struct SetFanSpeedPayload {
+    pub(super) command: &'static str,
+    pub(super) fan_index: u8,
+    pub(super) speed: u8,
+    pub(super) sequence_id: String,
+}
+
+#[derive(Serialize)]
 pub(super) struct SelectExtruderCommand {
     pub(super) command: &'static str,
     pub(super) extruder_index: u32,

@@ -92,6 +92,7 @@ pub(crate) fn print_report_from_parsed_report(
             _ => None,
         }),
         percent: bounded_u32(print.mc_percent.as_ref(), 0, 100).map(|value| value as u8),
+        speed_level: bounded_u32(print.spd_lvl.as_ref(), 1, 4).map(|value| value as u8),
         remaining_time_minutes: bounded_u32(print.mc_remaining_time.as_ref(), 0, 4320),
         current_layer: bounded_u32(print.layer_num.as_ref(), 0, 100_000),
         total_layers: bounded_u32(print.total_layer_num.as_ref(), 0, 100_000),

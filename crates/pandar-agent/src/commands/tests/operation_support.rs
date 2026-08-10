@@ -32,6 +32,26 @@ pub(super) fn set_print_speed_operation_command(
     )
 }
 
+pub(super) fn set_fan_speed_operation_command(
+    command_id: String,
+    serial_number: &str,
+    fan_index: u32,
+    speed_percent: u32,
+    airduct: bool,
+) -> HubCommand {
+    printer_operation_command(
+        command_id,
+        serial_number,
+        Some(printer_operation::Operation::SetFanSpeed(
+            SetFanSpeedOperation {
+                fan_index,
+                speed_percent,
+                airduct,
+            },
+        )),
+    )
+}
+
 pub(super) fn select_extruder_operation_command(
     command_id: String,
     serial_number: &str,

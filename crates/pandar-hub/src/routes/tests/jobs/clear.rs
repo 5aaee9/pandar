@@ -233,6 +233,7 @@ pub(super) fn report(
         subtask_name: None,
         gcode_state: Some(gcode_state.to_owned()),
         percent: Some(100),
+        speed_level: Some(2),
         remaining_time_minutes: Some(0),
         current_layer: Some(10),
         total_layers: Some(10),

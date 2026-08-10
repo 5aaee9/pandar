@@ -19,6 +19,7 @@ const print: PrinterPrintState = {
   subtask_name: null,
   gcode_file: null,
   progress_percent: null,
+  speed_level: null,
   remaining_time_minutes: null,
   current_layer: null,
   total_layers: null,

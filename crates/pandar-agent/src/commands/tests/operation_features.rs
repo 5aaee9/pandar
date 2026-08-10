@@ -186,3 +186,55 @@ async fn printer_operation_does_not_reject_missing_local_model() {
         )]
     );
 }
+
+#[tokio::test]
+async fn printer_operation_parses_typed_fan_speed_control() {
+    let config = test_config();
+    let command_id = uuid::Uuid::new_v4().to_string();
+    let gateway = OperationGateway::default();
+    let (sender, mut receiver) = mpsc::channel(2);
+
+    handle_command_with_gateway(
+        &config,
+        &gateway,
+        &sender,
+        set_fan_speed_operation_command(command_id.clone(), "SERIAL1", 2, 50, true),
+    )
+    .await
+    .unwrap();
+    drop(sender);
+
+    assert_eq!(
+        receiver.recv().await.unwrap(),
+        ack_event(&config, &command_id)
+    );
+    match receiver.recv().await.unwrap().event.unwrap() {
+        agent_event::Event::CommandResult(result) => {
+            assert!(result.success);
+            assert_eq!(
+                operation_result(&result.result_json),
+                TestPrinterOperationResult {
+                    kind: "printer_operation".to_owned(),
+                    action: "set_fan_speed".to_owned(),
+                    serial_number: "SERIAL1".to_owned(),
+                    fan_index: Some(2),
+                    speed_percent: Some(50),
+                    airduct: Some(true),
+                    ..empty_operation_result()
+                }
+            );
+        }
+        other => panic!("expected command result, got {other:?}"),
+    }
+    assert_eq!(
+        gateway.operations().await,
+        vec![(
+            "SERIAL1".to_string(),
+            MachinePrinterOperation::SetFanSpeed {
+                fan_index: 2,
+                speed_percent: 50,
+                airduct: true,
+            }
+        )]
+    );
+}

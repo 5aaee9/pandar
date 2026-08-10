@@ -7,8 +7,9 @@ use crate::{
         HolderNozzleRefreshOperation, HomeOperation, MoveAxesOperation, NozzleHolderCtrlOperation,
         NozzleInfoConfirmOperation, PauseOperation, PrintErrorAction as ProtoPrintErrorAction,
         ResumeOperation, SelectExtruderOperation, SetBedTemperatureOperation,
-        SetChamberLightOperation, SetChamberTemperatureOperation, SetHotendTemperatureOperation,
-        SetPrintSpeedOperation, StopOperation, ToggleLightOperation, printer_operation,
+        SetChamberLightOperation, SetChamberTemperatureOperation, SetFanSpeedOperation,
+        SetHotendTemperatureOperation, SetPrintSpeedOperation, StopOperation, ToggleLightOperation,
+        printer_operation,
     },
     repositories::{PrintErrorAction, PrinterAxis, PrinterAxisMovement, PrinterOperationKind},
 };
@@ -45,6 +46,15 @@ pub(super) fn proto_printer_operation(
                 speed_mode: speed_mode.into(),
             })
         }
+        PrinterOperationKind::SetFanSpeed {
+            fan_index,
+            speed_percent,
+            airduct,
+        } => printer_operation::Operation::SetFanSpeed(SetFanSpeedOperation {
+            fan_index: fan_index.into(),
+            speed_percent: speed_percent.into(),
+            airduct,
+        }),
         PrinterOperationKind::SelectExtruder { extruder_id } => {
             printer_operation::Operation::SelectExtruder(SelectExtruderOperation { extruder_id })
         }

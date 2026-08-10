@@ -77,6 +77,11 @@ pub enum PrinterOperationKind {
     SetPrintSpeed {
         speed_mode: u8,
     },
+    SetFanSpeed {
+        fan_index: u8,
+        speed_percent: u8,
+        airduct: bool,
+    },
     SelectExtruder {
         extruder_id: u32,
     },
@@ -159,6 +164,7 @@ impl PrinterOperationKind {
             Self::ToggleLight {} => "toggle_light",
             Self::SetChamberLight { .. } => "set_chamber_light",
             Self::SetPrintSpeed { .. } => "set_print_speed",
+            Self::SetFanSpeed { .. } => "set_fan_speed",
             Self::SelectExtruder { .. } => "select_extruder",
             Self::Home { .. } => "home",
             Self::MoveAxes { .. } => "move_axes",

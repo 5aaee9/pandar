@@ -397,6 +397,27 @@ describe("controlPrinter AMS operations", () => {
     expect(body.wait).toBeUndefined();
   });
 
+  it("posts fan speed details to the printer controls API", async () => {
+    const formData = new FormData();
+    formData.set("tenant_id", "tenant-1");
+    formData.set("printer_id", "printer-1");
+    formData.set("action", "set_fan_speed");
+    formData.set("fan_index", "2");
+    formData.set("speed_percent", "50");
+    formData.set("airduct", "true");
+
+    await expect(controlPrinter(null, formData)).resolves.toEqual({ ok: true });
+
+    const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      action: "set_fan_speed",
+      fan_index: 2,
+      speed_percent: 50,
+      airduct: true,
+    });
+  });
+
   it("posts bed temperature details to the printer controls API", async () => {
     const formData = new FormData();
     formData.set("tenant_id", "tenant-1");

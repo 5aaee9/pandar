@@ -19,6 +19,12 @@ pub(in crate::routes) struct PrinterOperationRequest {
     #[serde(default)]
     speed_mode: RequestField<u8>,
     #[serde(default)]
+    fan_index: RequestField<u8>,
+    #[serde(default)]
+    speed_percent: RequestField<u8>,
+    #[serde(default)]
+    airduct: RequestField<bool>,
+    #[serde(default)]
     axes: RequestField<Vec<PrinterAxis>>,
     #[serde(default)]
     movements: RequestField<Vec<PrinterAxisMovement>>,
@@ -145,6 +151,7 @@ impl PrinterOperationRequest {
             }
             "set_chamber_light"
                 if self.speed_mode.is_missing()
+                    && self.no_fan_fields()
                     && self.axes.is_missing()
                     && self.movements.is_missing()
                     && self.feedrate_mm_per_min.is_missing()
@@ -173,8 +180,30 @@ impl PrinterOperationRequest {
                     speed_mode: self.speed_mode.expect("checked above"),
                 })
             }
+            "set_fan_speed"
+                if self.speed_mode.is_missing()
+                    && self.fan_index.is_some()
+                    && self.speed_percent.is_some()
+                    && self.airduct.is_some()
+                    && self.axes.is_missing()
+                    && self.movements.is_missing()
+                    && self.feedrate_mm_per_min.is_missing()
+                    && self.temperature_celsius.is_missing()
+                    && self.wait.is_missing()
+                    && self.no_material_fields()
+                    && self.extruder_id.is_missing()
+                    && self.light_on.is_missing()
+                    && self.no_rack_fields() =>
+            {
+                Ok(PrinterOperationKind::SetFanSpeed {
+                    fan_index: self.fan_index.expect("checked above"),
+                    speed_percent: self.speed_percent.expect("checked above"),
+                    airduct: self.airduct.expect("checked above"),
+                })
+            }
             "select_extruder"
                 if self.speed_mode.is_missing()
+                    && self.no_fan_fields()
                     && self.axes.is_missing()
                     && self.movements.is_missing()
                     && self.feedrate_mm_per_min.is_missing()
@@ -222,6 +251,7 @@ impl PrinterOperationRequest {
             }
             "set_hotend_temperature"
                 if self.speed_mode.is_missing()
+                    && self.no_fan_fields()
                     && self.axes.is_missing()
                     && self.movements.is_missing()
                     && self.feedrate_mm_per_min.is_missing()
@@ -275,6 +305,7 @@ impl PrinterOperationRequest {
 
     fn no_non_rack_fields(&self) -> bool {
         self.speed_mode.is_missing()
+            && self.no_fan_fields()
             && self.axes.is_missing()
             && self.movements.is_missing()
             && self.feedrate_mm_per_min.is_missing()
@@ -289,7 +320,14 @@ impl PrinterOperationRequest {
     }
 
     fn no_ams_fields(&self) -> bool {
-        self.no_material_fields() && self.extruder_id.is_missing() && self.light_on.is_missing()
+        self.no_material_fields()
+            && self.extruder_id.is_missing()
+            && self.light_on.is_missing()
+            && self.no_fan_fields()
+    }
+
+    fn no_fan_fields(&self) -> bool {
+        self.fan_index.is_missing() && self.speed_percent.is_missing() && self.airduct.is_missing()
     }
 
     fn no_material_fields(&self) -> bool {

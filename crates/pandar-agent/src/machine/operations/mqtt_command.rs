@@ -3,7 +3,7 @@ use pandar_core::BambuDeviceFeatures;
 use super::{PrinterOperation, axis};
 use crate::machine::mqtt::{
     AmsDryingCommand, AmsFilamentCommand, AmsSlotCommand, BambuMqttCommand, GcodeLineCommand,
-    HandlePrintErrorCommand, PrintSpeed, SetNozzleTemperatureCommand,
+    HandlePrintErrorCommand, PrintSpeed, SetFanSpeedCommand, SetNozzleTemperatureCommand,
 };
 
 pub(in crate::machine) fn mqtt_command_for_printer_operation(
@@ -41,6 +41,23 @@ pub(super) fn mqtt_command_for_printer_operation_with_features(
         }
         PrinterOperation::SetPrintSpeed(mode) => {
             Ok(BambuMqttCommand::SetPrintSpeed(PrintSpeed::new(mode)?))
+        }
+        PrinterOperation::SetFanSpeed {
+            fan_index,
+            speed_percent,
+            airduct,
+        } => {
+            if airduct {
+                Ok(BambuMqttCommand::SetFanSpeed(SetFanSpeedCommand {
+                    fan_index,
+                    speed_percent,
+                }))
+            } else {
+                let pwm = (u16::from(speed_percent) * 255 + 50) / 100;
+                Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand {
+                    param: format!("M106 P{fan_index} S{pwm}"),
+                }))
+            }
         }
         PrinterOperation::GcodeLine { param } => {
             Ok(BambuMqttCommand::GcodeLine(GcodeLineCommand { param }))

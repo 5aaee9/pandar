@@ -27,7 +27,7 @@ pub use commands::{
     AmsDryingCommand, AmsFilamentCommand, AmsSlotCommand, BambuMqttCommand, BambuMqttTopics,
     GcodeLineCommand, HandlePrintErrorCommand, MachineReportDiagnostic,
     MachineReportDiagnosticPayload, PrintErrorAction, PrintReportProgress, PrintSpeed,
-    ProjectFileAmsMapping2, ProjectFileAmsMappingInfo, ProjectFileCommand,
+    ProjectFileAmsMapping2, ProjectFileAmsMappingInfo, ProjectFileCommand, SetFanSpeedCommand,
     SetNozzleTemperatureCommand,
 };
 pub(crate) use device_features::{feature_event, probe_device_features};

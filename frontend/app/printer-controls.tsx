@@ -24,6 +24,7 @@ export type PrinterSpeedMode = 1 | 2 | 3 | 4
 export type PrinterControlIntent =
   | { action: 'home' | 'stop' | 'pause' | 'resume' }
   | { action: 'set_print_speed'; speedMode: PrinterSpeedMode }
+  | { action: 'set_fan_speed'; fanIndex: 1 | 2 | 3; speedPercent: number; airduct: boolean }
   | { action: 'move_axes'; axis: string; deltaMm: number; feedrateMmPerMin: number }
   | { action: PrinterTemperatureAction; temperatureCelsius?: number }
   | { action: 'set_hotend_temperature'; extruderId: number | null; temperatureCelsius?: number }
@@ -68,6 +69,14 @@ function IntentFields({ intent }: { intent: PrinterControlIntent }) {
       return null
     case 'set_print_speed':
       return <input name="speed_mode" type="hidden" value={intent.speedMode} />
+    case 'set_fan_speed':
+      return (
+        <>
+          <input name="fan_index" type="hidden" value={intent.fanIndex} />
+          <input name="speed_percent" type="hidden" value={intent.speedPercent} />
+          <input name="airduct" type="hidden" value={String(intent.airduct)} />
+        </>
+      )
     case 'move_axes':
       return (
         <>

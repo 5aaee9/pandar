@@ -157,6 +157,7 @@ fn apply_display_patch(state: &mut PrinterLiveStatus, patch: &PrinterLiveStatusP
     apply_option(&mut state.task_id, &patch.task_id);
     apply_option(&mut state.subtask_id, &patch.subtask_id);
     apply_copy(&mut state.progress_percent, patch.progress_percent);
+    apply_copy(&mut state.speed_level, patch.speed_level);
     apply_copy(
         &mut state.remaining_time_minutes,
         patch.remaining_time_minutes,
@@ -226,6 +227,7 @@ fn clear_task_state(state: &mut PrinterLiveStatus) {
     state.task_id = None;
     state.subtask_id = None;
     state.progress_percent = None;
+    state.speed_level = None;
     state.remaining_time_minutes = None;
     state.current_layer = None;
     state.total_layers = None;

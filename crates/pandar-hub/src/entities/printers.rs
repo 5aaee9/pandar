@@ -42,6 +42,7 @@ pub struct Model {
     pub print_task_id: Option<String>,
     pub print_subtask_id: Option<String>,
     pub print_progress_percent: Option<i64>,
+    pub print_speed_level: Option<i64>,
     pub print_remaining_time_minutes: Option<i64>,
     pub print_current_layer: Option<i64>,
     pub print_total_layers: Option<i64>,

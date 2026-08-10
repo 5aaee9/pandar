@@ -61,6 +61,12 @@ pub fn validate_printer_operation(operation: &PrinterOperationKind) -> Repositor
             Ok(())
         }
         PrinterOperationKind::SetPrintSpeed { .. } => Err(RepositoryError::InvalidPrinterControl),
+        PrinterOperationKind::SetFanSpeed {
+            fan_index,
+            speed_percent,
+            ..
+        } if (1..=3).contains(fan_index) && *speed_percent <= 100 => Ok(()),
+        PrinterOperationKind::SetFanSpeed { .. } => Err(RepositoryError::InvalidPrinterControl),
         PrinterOperationKind::SelectExtruder { extruder_id } if *extruder_id <= MAX_EXTRUDER_ID => {
             Ok(())
         }

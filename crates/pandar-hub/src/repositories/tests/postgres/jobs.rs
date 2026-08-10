@@ -301,6 +301,7 @@ async fn postgres_print_report_reconciliation_when_configured() {
         subtask_name: None,
         gcode_state: Some("RUNNING".to_string()),
         percent: Some(50),
+        speed_level: Some(2),
         remaining_time_minutes: Some(30),
         current_layer: Some(4),
         total_layers: Some(8),

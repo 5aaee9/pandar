@@ -28,6 +28,81 @@ async fn configured_operate_printer_print_speed_mode_4_publishes_to_request_topi
 }
 
 #[tokio::test]
+async fn configured_operate_printer_legacy_fan_speed_uses_studio_pwm_gcode() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::SetFanSpeed {
+                fan_index: 1,
+                speed_percent: 50,
+                airduct: false,
+            },
+        )
+        .await
+        .unwrap();
+
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
+    assert_eq!(
+        published,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: expected_print_command_payload("gcode_line", "M106 P1 S128", &sequence_id),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
+async fn configured_operate_printer_airduct_fan_speed_uses_studio_set_fan() {
+    let mqtt = FakeMqttTransport::default();
+    let transfer = FakeMachineFileTransfer::default();
+    let gateway = ConfiguredBambuMachineGateway::with_file_transfer(
+        vec![(endpoint("SERIAL1"), mqtt.clone(), transfer)],
+        Duration::from_secs(1),
+        TransferModeCache::default(),
+    );
+
+    gateway
+        .operate_printer(
+            "SERIAL1",
+            PrinterOperation::SetFanSpeed {
+                fan_index: 2,
+                speed_percent: 60,
+                airduct: true,
+            },
+        )
+        .await
+        .unwrap();
+
+    let published = mqtt.published_commands().await;
+    let sequence_id = dynamic_sequence_id(&published[0].payload);
+    assert_eq!(
+        published,
+        vec![PublishedMqttCommand {
+            topic: "device/SERIAL1/request".to_string(),
+            payload: serde_json::json!({
+                "print": {
+                    "command": "set_fan",
+                    "sequence_id": sequence_id,
+                    "fan_index": 2,
+                    "speed": 60
+                }
+            }),
+            qos: BAMBU_MQTT_QOS,
+        }]
+    );
+}
+
+#[tokio::test]
 async fn configured_operate_printer_gcode_line_preserves_exact_param() {
     let mqtt = FakeMqttTransport::default();
     let transfer = FakeMachineFileTransfer::default();

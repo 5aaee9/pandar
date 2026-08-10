@@ -17,6 +17,7 @@ fn report(tenant_id: TenantId, agent_id: AgentId, serial: String) -> ApplyPrintR
         subtask_name: None,
         gcode_state: None,
         percent: None,
+        speed_level: None,
         remaining_time_minutes: None,
         current_layer: None,
         total_layers: None,

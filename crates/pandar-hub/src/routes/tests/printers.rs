@@ -57,6 +57,7 @@ struct EnrichedPrint {
     task_id: Option<String>,
     subtask_id: Option<String>,
     progress_percent: Option<u8>,
+    speed_level: Option<u8>,
     remaining_time_minutes: Option<u32>,
     current_layer: Option<u32>,
     total_layers: Option<u32>,
@@ -286,6 +287,7 @@ async fn printer_list_and_detail_share_enriched_sanitized_print_shape() {
             subtask_name: Some("Cube".to_owned()),
             gcode_state: Some("RUNNING".to_owned()),
             percent: Some(42),
+            speed_level: Some(3),
             remaining_time_minutes: Some(11),
             current_layer: Some(2),
             total_layers: Some(128),
@@ -349,6 +351,7 @@ async fn printer_list_and_detail_share_enriched_sanitized_print_shape() {
     assert_eq!(printer.print.task_id.as_deref(), Some("task-42"));
     assert_eq!(printer.print.subtask_id, None);
     assert_eq!(printer.print.progress_percent, Some(42));
+    assert_eq!(printer.print.speed_level, Some(3));
     assert_eq!(printer.print.remaining_time_minutes, Some(11));
     assert_eq!(printer.print.current_layer, Some(2));
     assert_eq!(printer.print.total_layers, Some(128));

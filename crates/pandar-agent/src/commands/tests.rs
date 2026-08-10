@@ -53,8 +53,8 @@ use crate::{
         NozzleInfoConfirmOperation, PauseOperation, PrinterOperation as ProtoPrinterOperation,
         RefreshPrinterMaterials, RefreshPrinters, SelectExtruderOperation,
         SetBedTemperatureOperation, SetChamberLightOperation, SetChamberTemperatureOperation,
-        SetHotendTemperatureOperation, SetPrintSpeedOperation, ToggleLightOperation,
-        printer_operation,
+        SetFanSpeedOperation, SetHotendTemperatureOperation, SetPrintSpeedOperation,
+        ToggleLightOperation, printer_operation,
     },
 };
 
@@ -160,6 +160,9 @@ struct TestPrinterOperationResult {
     action: String,
     serial_number: String,
     speed_mode: Option<u8>,
+    fan_index: Option<u8>,
+    speed_percent: Option<u8>,
+    airduct: Option<bool>,
     extruder_id: Option<u32>,
     x_mm: Option<f64>,
     y_mm: Option<f64>,

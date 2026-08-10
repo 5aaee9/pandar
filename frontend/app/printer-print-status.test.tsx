@@ -18,6 +18,7 @@ const basePrint: PrinterPrintState = {
   subtask_name: "Benchy",
   gcode_file: "/cache/plate_1.gcode.3mf",
   progress_percent: 42,
+  speed_level: 2,
   remaining_time_minutes: 65,
   current_layer: 12,
   total_layers: 100,

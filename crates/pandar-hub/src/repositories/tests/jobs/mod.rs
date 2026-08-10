@@ -85,6 +85,7 @@ pub(super) fn report_input(
         subtask_name: None,
         gcode_state: Some(gcode_state.to_string()),
         percent: Some(42),
+        speed_level: Some(2),
         remaining_time_minutes: Some(60),
         current_layer: Some(3),
         total_layers: Some(9),

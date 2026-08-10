@@ -192,6 +192,9 @@ export async function controlPrinter(
   const printerId = stringField(formData, "printer_id");
   const action = stringField(formData, "action");
   const speedMode = nullableField(formData, "speed_mode");
+  const fanIndex = nullableField(formData, "fan_index");
+  const speedPercent = nullableField(formData, "speed_percent");
+  const airduct = nullableField(formData, "airduct");
   const amsId = nullableField(formData, "ams_id");
   const slotId = nullableField(formData, "slot_id");
   const globalTrayId = nullableField(formData, "global_tray_id");
@@ -222,6 +225,9 @@ export async function controlPrinter(
           ? Number(feedrateMmPerMin)
           : undefined,
       speed_mode: speedMode ? Number(speedMode) : undefined,
+      fan_index: fanIndex ? Number(fanIndex) : undefined,
+      speed_percent: speedPercent ? Number(speedPercent) : undefined,
+      airduct: airduct ? airduct === "true" || airduct === "on" : undefined,
       temperature_celsius: temperatureCelsius
         ? Number(temperatureCelsius)
         : undefined,

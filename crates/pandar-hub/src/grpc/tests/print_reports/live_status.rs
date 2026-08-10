@@ -26,6 +26,8 @@ async fn grpc_print_job_report_preserves_raw_task_id_and_hms_presence() {
             gcode_state: "RUNNING".to_string(),
             percent: 42,
             has_percent: true,
+            speed_level: 3,
+            has_speed_level: true,
             print_error: 0,
             has_print_error: true,
             printer_job_id: String::new(),
@@ -56,6 +58,7 @@ async fn grpc_print_job_report_preserves_raw_task_id_and_hms_presence() {
         Some("external-mqtt-task")
     );
     assert_eq!(current.live_status.progress_percent, Some(42));
+    assert_eq!(current.live_status.speed_level, Some(3));
     assert_eq!(current.live_status.print_error, Some(0));
     assert_eq!(current.live_status.printer_job_id.as_deref(), Some(""));
     assert_eq!(current.live_status.job_attr, Some(0x21));

@@ -405,6 +405,7 @@ fn progress_with_job_attr(job_attr: Option<u32>) -> PrintReportProgress {
         subtask_id: None,
         gcode_state: None,
         percent: None,
+        speed_level: None,
         remaining_time_minutes: None,
         current_layer: None,
         total_layers: None,

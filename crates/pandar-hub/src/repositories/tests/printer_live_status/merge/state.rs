@@ -78,6 +78,7 @@ fn idle_has_highest_precedence_and_terminal_frames_retain_final_fields() {
         task_id: Some("stale-task".to_owned()),
         subtask_id: Some("stale-subtask".to_owned()),
         progress_percent: Some(99),
+        speed_level: Some(4),
         remaining_time_minutes: Some(99),
         current_layer: Some(99),
         total_layers: Some(99),

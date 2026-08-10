@@ -34,6 +34,8 @@ pub(in crate::machine::mqtt) struct PrintReportSection {
     #[serde(default)]
     pub(in crate::machine::mqtt) mc_remaining_time: Option<NumericValue>,
     #[serde(default)]
+    pub(in crate::machine::mqtt) spd_lvl: Option<NumericValue>,
+    #[serde(default)]
     pub(in crate::machine::mqtt) layer_num: Option<NumericValue>,
     #[serde(default)]
     pub(in crate::machine::mqtt) total_layer_num: Option<NumericValue>,

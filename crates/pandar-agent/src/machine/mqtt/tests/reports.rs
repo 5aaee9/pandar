@@ -12,6 +12,7 @@ fn print_report_from_report_extracts_progress_and_diagnostics() {
     assert_eq!(progress.subtask_id.as_deref(), Some("artifact-456"));
     assert_eq!(progress.gcode_state.as_deref(), Some("RUNNING"));
     assert_eq!(progress.percent, Some(42));
+    assert_eq!(progress.speed_level, Some(3));
     assert_eq!(progress.remaining_time_minutes, Some(87));
     assert_eq!(progress.current_layer, Some(12));
     assert_eq!(progress.total_layers, Some(120));
@@ -88,6 +89,7 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
         subtask_id: None,
         gcode_state: Some("RUNNING".to_owned()),
         percent: Some(0),
+        speed_level: Some(2),
         remaining_time_minutes: None,
         current_layer: Some(7),
         total_layers: None,
@@ -112,6 +114,8 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
         has_current_layer,
         total_layers,
         has_total_layers,
+        speed_level,
+        has_speed_level,
         hms,
         has_hms,
         printer_materials_json,
@@ -128,6 +132,8 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
     assert!(has_current_layer);
     assert_eq!(total_layers, 0);
     assert!(!has_total_layers);
+    assert_eq!(speed_level, 2);
+    assert!(has_speed_level);
     assert!(hms.is_empty());
     assert!(!has_hms);
     assert!(printer_materials_json.is_empty());

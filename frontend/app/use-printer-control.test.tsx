@@ -53,6 +53,7 @@ const runningPrinter: Printer = {
     subtask_name: "Benchy",
     gcode_file: null,
     progress_percent: 42,
+    speed_level: 2,
     remaining_time_minutes: 10,
     current_layer: 12,
     total_layers: 100,
@@ -153,9 +154,10 @@ describe("usePrinterControl", () => {
     renderWithMessages(<PrinterControlsPanel printer={runningPrinter} />);
 
     expect(screen.getByRole("button", { name: "Silent" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Standard" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Standard" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Sport" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Ludicrous" })).toBeEnabled();
+    expect(screen.getAllByText("Standard")).toHaveLength(2);
 
     await user.click(screen.getByRole("button", { name: "Sport" }));
 

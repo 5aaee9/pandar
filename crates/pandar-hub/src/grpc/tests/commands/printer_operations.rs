@@ -40,6 +40,48 @@ async fn grpc_hub_command_from_record_maps_printer_operation() {
 }
 
 #[tokio::test]
+async fn grpc_hub_command_from_record_maps_fan_speed_operation() {
+    let tenant_id = TenantId::new();
+    let agent_id = AgentId::new();
+    let printer_id = "printer-1".to_string();
+    let payload = PrinterOperationPayload {
+        printer_id: printer_id.clone(),
+        serial_number: "SERIAL123".to_string(),
+        operation: PrinterOperationKind::SetFanSpeed {
+            fan_index: 3,
+            speed_percent: 50,
+            airduct: true,
+        },
+    };
+    let command = CommandRecord::from_parts(CommandRecordParts {
+        id: CommandId::new(),
+        tenant_id,
+        agent_id,
+        printer_id: Some(printer_id),
+        kind: "printer_operation".to_string(),
+        status: "queued".to_string(),
+        payload_json: serde_json::to_string(&payload).unwrap(),
+        result_json: None,
+        error: None,
+        created_at: "2026-01-01T00:00:00Z".to_string(),
+        updated_at: "2026-01-01T00:00:00Z".to_string(),
+    })
+    .unwrap();
+
+    let hub_command = hub_command_from_record(command).unwrap();
+
+    assert!(matches!(
+        hub_command.command,
+        Some(hub_command::Command::PrinterOperation(command))
+            if matches!(
+                command.operation,
+                Some(printer_operation::Operation::SetFanSpeed(fan))
+                    if fan.fan_index == 3 && fan.speed_percent == 50 && fan.airduct
+            )
+    ));
+}
+
+#[tokio::test]
 async fn grpc_hub_command_from_record_maps_toggle_light_operation() {
     let tenant_id = TenantId::new();
     let agent_id = AgentId::new();

@@ -164,6 +164,11 @@ fn apply_input(
             .then_some(report.percent)
             .filter(|value| *value <= 100)
             .map(|value| value as u8),
+        speed_level: report
+            .has_speed_level
+            .then_some(report.speed_level)
+            .filter(|value| (1..=4).contains(value))
+            .map(|value| value as u8),
         remaining_time_minutes: report
             .has_remaining_time_minutes
             .then_some(report.remaining_time_minutes)

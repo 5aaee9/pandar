@@ -14,6 +14,7 @@ pub(super) fn printer_operation_action(operation: &MachinePrinterOperation) -> &
         MachinePrinterOperation::ToggleLight => "toggle_light",
         MachinePrinterOperation::SetChamberLight(_) => "set_chamber_light",
         MachinePrinterOperation::SetPrintSpeed(_) => "set_print_speed",
+        MachinePrinterOperation::SetFanSpeed { .. } => "set_fan_speed",
         MachinePrinterOperation::SelectExtruder(_) => "select_extruder",
         MachinePrinterOperation::Home { .. } => "home",
         MachinePrinterOperation::MoveAxes { .. } => "move_axes",
@@ -85,6 +86,12 @@ struct OperationResultFields {
     #[serde(skip_serializing_if = "Option::is_none")]
     speed_mode: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    fan_index: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speed_percent: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    airduct: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     extruder_id: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     axes: Option<Vec<&'static str>>,
@@ -127,6 +134,16 @@ impl OperationResultFields {
         match operation {
             MachinePrinterOperation::SetPrintSpeed(speed_mode) => Self {
                 speed_mode: Some(*speed_mode),
+                ..Self::default()
+            },
+            MachinePrinterOperation::SetFanSpeed {
+                fan_index,
+                speed_percent,
+                airduct,
+            } => Self {
+                fan_index: Some(*fan_index),
+                speed_percent: Some(*speed_percent),
+                airduct: Some(*airduct),
                 ..Self::default()
             },
             MachinePrinterOperation::SelectExtruder(extruder_id) => Self {

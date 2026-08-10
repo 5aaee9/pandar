@@ -44,6 +44,7 @@ function mismatchPrinter(
       subtask_name: "Benchy",
       gcode_file: null,
       progress_percent: 42,
+      speed_level: 2,
       remaining_time_minutes: 10,
       current_layer: 12,
       total_layers: 100,

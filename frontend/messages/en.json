@@ -335,6 +335,7 @@
     "setChamberTemperature": "Set chamber temperature",
     "setChamberTemperatureTitle": "Set chamber temperature",
     "coolingSystem": "Cooling system",
+    "setCoolingFanSpeed": "Set {fan} fan speed",
     "coolingModeCooling": "Cooling",
     "coolingModeHeating": "Heating",
     "coolingModeExhaust": "Exhaust",

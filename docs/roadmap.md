@@ -16,6 +16,18 @@
 
 ## Completed
 
+- Displayed the printer's current print-speed mode in the Devices detail controls. The Agent now
+  parses Bambu Studio's typed `spd_lvl` report field (modes 1–4), carries it through gRPC and the
+  Hub's SQLite/PostgreSQL-backed live printer status, and exposes it in API/WebSocket snapshots.
+  The speed selector shows the current localized mode beside its title and highlights the matching
+  Silent, Standard, Sport, or Ludicrous button.
+
+- Added interactive cooling fan controls to printer detail cards. Part, auxiliary, and chamber fans
+  now offer 0%, 50%, and 100% presets while automatic hotend/controller fans remain read-only. The
+  typed control path validates fan indices and percentages end to end, uses Bambu Studio's `set_fan`
+  payload for airduct printers, and converts legacy controls to `M106` PWM commands. Fan names and
+  speed values now occupy separate rows so long localized titles are no longer truncated or obscured.
+
 - Matched Bambu Studio's HMS presentation path. A compact generated catalog now selects the HMS
   definitions by serial-number prefix and dashboard locale, displays Bambu's localized message text,
   and suppresses reports whose catalog entry is missing or empty. This keeps the internal 20P report

@@ -56,6 +56,9 @@ struct PrinterOperationPayloadDetails {
     #[serde(rename = "type")]
     kind: String,
     speed_mode: Option<u8>,
+    fan_index: Option<u8>,
+    speed_percent: Option<u8>,
+    airduct: Option<bool>,
     extruder_id: Option<u32>,
     on: Option<bool>,
     action: Option<u32>,
@@ -772,6 +775,9 @@ async fn printer_control_rejects_invalid_action_and_speed_payloads() {
         printer_control_value(PrinterControlRequest::action("set_print_speed")),
         printer_control_value(PrinterControlRequest::set_print_speed(0)),
         printer_control_value(PrinterControlRequest::set_print_speed(5)),
+        printer_control_value(PrinterControlRequest::set_fan_speed(0, 50, false)),
+        printer_control_value(PrinterControlRequest::set_fan_speed(4, 50, true)),
+        printer_control_value(PrinterControlRequest::set_fan_speed(1, 101, false)),
         printer_control_value(PrinterControlRequest::action("select_extruder")),
         printer_control_value(PrinterControlRequest::select_extruder(2)),
         printer_control_value(PrinterControlRequest::action("pause").with_speed_mode(2)),
@@ -867,6 +873,10 @@ async fn printer_control_accepts_semantic_home_move_and_hotend_operations() {
             "set_chamber_light",
         ),
         (
+            printer_control_value(PrinterControlRequest::set_fan_speed(2, 50, true)),
+            "set_fan_speed",
+        ),
+        (
             printer_control_value(PrinterControlRequest::action("toggle_light")),
             "toggle_light",
         ),
@@ -890,6 +900,11 @@ async fn printer_control_accepts_semantic_home_move_and_hotend_operations() {
         }
         if expected_type == "set_chamber_light" {
             assert_eq!(payload.operation.on, Some(true));
+        }
+        if expected_type == "set_fan_speed" {
+            assert_eq!(payload.operation.fan_index, Some(2));
+            assert_eq!(payload.operation.speed_percent, Some(50));
+            assert_eq!(payload.operation.airduct, Some(true));
         }
     }
 }

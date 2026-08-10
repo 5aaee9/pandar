@@ -39,6 +39,11 @@ enum OperationAuditFields {
     PrintSpeed {
         speed_mode: u8,
     },
+    FanSpeed {
+        fan_index: u8,
+        speed_percent: u8,
+        airduct: bool,
+    },
     Extruder {
         extruder_id: u32,
     },
@@ -116,6 +121,15 @@ impl OperationAuditFields {
             },
             PrinterOperationKind::SetPrintSpeed { speed_mode } => Self::PrintSpeed {
                 speed_mode: *speed_mode,
+            },
+            PrinterOperationKind::SetFanSpeed {
+                fan_index,
+                speed_percent,
+                airduct,
+            } => Self::FanSpeed {
+                fan_index: *fan_index,
+                speed_percent: *speed_percent,
+                airduct: *airduct,
             },
             PrinterOperationKind::SelectExtruder { extruder_id } => Self::Extruder {
                 extruder_id: *extruder_id,

@@ -25,17 +25,24 @@ const speedModes: Array<{
 export function PrinterSpeedControl({ printer }: { printer: Printer }) {
   const t = useTranslations('inventory')
   const enabled = printSpeedControlEnabled(printer)
+  const currentMode = speedModes.find(({ mode }) => mode === printer.print?.speed_level)
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-        <GaugeIcon className="size-3.5" />
-        {t('printSpeed')}
+      <div className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <GaugeIcon className="size-3.5" />
+          {t('printSpeed')}
+        </span>
+        {currentMode ? (
+          <span className="font-semibold text-foreground">{t(currentMode.label)}</span>
+        ) : null}
       </div>
       <div aria-label={t('printSpeed')} className="grid grid-cols-4 gap-1.5" role="group">
         {speedModes.map(({ mode, label }) => (
           <SpeedModeButton
             enabled={enabled}
+            current={mode === currentMode?.mode}
             key={mode}
             label={t(label)}
             mode={mode}
@@ -52,11 +59,13 @@ function SpeedModeButton({
   mode,
   label,
   enabled,
+  current,
 }: {
   printer: Printer
   mode: PrinterSpeedMode
   label: string
   enabled: boolean
+  current: boolean
 }) {
   const { formAction, pending } = usePrinterControl()
 
@@ -67,11 +76,12 @@ function SpeedModeButton({
         printer={printer}
       />
       <Button
+        aria-pressed={current}
         className="w-full px-1"
         disabled={!enabled || pending}
         size="sm"
         type="submit"
-        variant="outline"
+        variant={current ? 'secondary' : 'outline'}
       >
         {pending ? <Loader2Icon className="animate-spin" /> : null}
         {label}

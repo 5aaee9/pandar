@@ -26,6 +26,7 @@ pub struct PrinterLiveStatus {
     pub task_id: Option<String>,
     pub subtask_id: Option<String>,
     pub progress_percent: Option<u8>,
+    pub speed_level: Option<u8>,
     pub remaining_time_minutes: Option<u32>,
     pub current_layer: Option<u32>,
     pub total_layers: Option<u32>,
@@ -49,6 +50,7 @@ pub(crate) struct PrinterLiveStatusPatch {
     pub task_id: Option<String>,
     pub subtask_id: Option<String>,
     pub progress_percent: Option<u8>,
+    pub speed_level: Option<u8>,
     pub remaining_time_minutes: Option<u32>,
     pub current_layer: Option<u32>,
     pub total_layers: Option<u32>,
@@ -106,6 +108,11 @@ pub(crate) fn from_model(
                     .map(u8::try_from)
                     .transpose()
                     .context("failed to read printer progress percent")?,
+                speed_level: model
+                    .print_speed_level
+                    .map(u8::try_from)
+                    .transpose()
+                    .context("failed to read printer speed level")?,
                 remaining_time_minutes: model
                     .print_remaining_time_minutes
                     .map(u32::try_from)

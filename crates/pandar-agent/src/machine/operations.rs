@@ -32,6 +32,11 @@ pub enum PrinterOperation {
     ToggleLight,
     SetChamberLight(bool),
     SetPrintSpeed(u8),
+    SetFanSpeed {
+        fan_index: u8,
+        speed_percent: u8,
+        airduct: bool,
+    },
     SelectExtruder(u32),
     Home {
         axes: Vec<PrinterAxis>,

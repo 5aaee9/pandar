@@ -207,6 +207,8 @@ message PrintJobReport {
   bool has_printer_job_id = 24;
   uint32 job_attr = 25;
   bool has_job_attr = 26;
+  uint32 speed_level = 27;
+  bool has_speed_level = 28;
 }
 
 message PrinterHmsItem {
@@ -298,6 +300,7 @@ message PrinterOperation {
     HolderNozzleRefreshOperation holder_nozzle_refresh = 30;
     AmsStartDryingOperation ams_start_drying = 31;
     AmsStopDryingOperation ams_stop_drying = 32;
+    SetFanSpeedOperation set_fan_speed = 33;
   }
 }
 
@@ -311,6 +314,12 @@ message AmsStartDryingOperation {
 
 message AmsStopDryingOperation {
   uint32 ams_id = 1;
+}
+
+message SetFanSpeedOperation {
+  uint32 fan_index = 1;
+  uint32 speed_percent = 2;
+  bool airduct = 3;
 }
 
 // H2C nozzle-rack movement: 0 = centre (home), 1 = A top, 2 = B top.

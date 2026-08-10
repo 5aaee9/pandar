@@ -164,6 +164,19 @@ fn parse_printer_operation(
                 _ => anyhow::bail!("invalid printer operation speed_mode; expected 1..=4"),
             }
         }
+        Some(printer_operation::Operation::SetFanSpeed(operation)) => {
+            if !(1..=3).contains(&operation.fan_index) {
+                anyhow::bail!("invalid printer operation fan_index; expected 1..=3");
+            }
+            if operation.speed_percent > 100 {
+                anyhow::bail!("invalid printer operation fan speed; expected <= 100");
+            }
+            Ok(MachinePrinterOperation::SetFanSpeed {
+                fan_index: operation.fan_index as u8,
+                speed_percent: operation.speed_percent as u8,
+                airduct: operation.airduct,
+            })
+        }
         Some(printer_operation::Operation::SelectExtruder(operation)) => {
             match operation.extruder_id {
                 0..=1 => Ok(MachinePrinterOperation::SelectExtruder(

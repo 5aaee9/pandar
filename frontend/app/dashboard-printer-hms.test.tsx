@@ -28,6 +28,7 @@ const printer: Printer = {
     subtask_name: null,
     gcode_file: null,
     progress_percent: 20,
+    speed_level: 2,
     remaining_time_minutes: null,
     current_layer: null,
     total_layers: null,

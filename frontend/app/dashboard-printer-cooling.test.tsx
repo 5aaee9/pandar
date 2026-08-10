@@ -1,5 +1,6 @@
 import { NextIntlClientProvider } from "next-intl";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import en from "../messages/en.json";
@@ -50,6 +51,28 @@ describe("PrinterCoolingSystem", () => {
     expect(screen.getByText("60%")).toBeVisible();
     expect(screen.getByText("40%")).toBeVisible();
     expect(screen.getByText("20%")).toBeVisible();
+    expect(screen.getByText("Part cooling")).not.toHaveClass("truncate");
+  });
+
+  it("offers Bambu fan controls for user-adjustable airduct fans", async () => {
+    const user = userEvent.setup();
+    renderCooling(printer);
+
+    await user.click(screen.getByRole("button", { name: "Set Part cooling fan speed" }));
+
+    expect(screen.getByRole("group", { name: "Set Part cooling fan speed" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Off" })).toBeEnabled();
+    const halfSpeed = screen.getByRole("button", { name: "50%" });
+    expect(halfSpeed).toBeEnabled();
+    expect(halfSpeed.closest("form")).toHaveFormValues({
+      tenant_id: "tenant-1",
+      printer_id: "printer-1",
+      action: "set_fan_speed",
+      fan_index: "1",
+      speed_percent: "50",
+      airduct: "true",
+    });
+    expect(screen.getByRole("button", { name: "100%" })).toBeEnabled();
   });
 
   it("does not invent a chamber fan for an open-frame printer", () => {

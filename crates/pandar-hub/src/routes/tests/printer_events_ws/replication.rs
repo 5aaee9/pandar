@@ -39,6 +39,7 @@ async fn printer_events_websocket_receives_event_from_sibling_instance() {
             subtask_name: None,
             gcode_state: Some("RUNNING".to_owned()),
             percent: Some(66),
+            speed_level: Some(4),
             remaining_time_minutes: None,
             current_layer: None,
             total_layers: None,

@@ -45,6 +45,12 @@ pub(super) struct PrinterControlRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     speed_mode: Option<u8>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    fan_index: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    speed_percent: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    airduct: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     extruder_id: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     raw_command: Option<&'a str>,
@@ -77,6 +83,9 @@ impl<'a> PrinterControlRequest<'a> {
         Self {
             action,
             speed_mode: None,
+            fan_index: None,
+            speed_percent: None,
+            airduct: None,
             extruder_id: None,
             raw_command: None,
             movements: None,
@@ -92,6 +101,14 @@ impl<'a> PrinterControlRequest<'a> {
 
     pub(super) fn set_print_speed(speed_mode: u8) -> Self {
         Self::action("set_print_speed").with_speed_mode(speed_mode)
+    }
+
+    pub(super) fn set_fan_speed(fan_index: u8, speed_percent: u8, airduct: bool) -> Self {
+        let mut request = Self::action("set_fan_speed");
+        request.fan_index = Some(fan_index);
+        request.speed_percent = Some(speed_percent);
+        request.airduct = Some(airduct);
+        request
     }
 
     pub(super) fn select_extruder(extruder_id: u32) -> Self {
