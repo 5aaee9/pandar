@@ -12,17 +12,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Changed Studio and mobile sign-in tenant discovery to use the authenticated identity's `/api/v1/me` memberships instead of the bootstrap-only global tenant list, eliminating `Tenant lookup returned 403` after external sign-in.
 
-### Planned distribution
+### Distribution
 
-- The release workflow will publish ABI-series-specific CLI, network plugin, and BambuSource archives with SHA-256 sidecars; Windows also publishes Studio hook bundles.
-- The tag will publish Hub and Web images at `ghcr.io/projectpandar/pandar/hub:v0.1.4` and `ghcr.io/projectpandar/pandar/web:v0.1.4`.
-- The tag will publish Helm chart `0.1.4` at `oci://ghcr.io/projectpandar/pandar/chart/pandar`.
+- The release publishes ABI-series-specific CLI, network plugin, and BambuSource archives with SHA-256 sidecars; Windows also publishes Studio hook bundles.
+- Hub and Web images are published at `ghcr.io/projectpandar/pandar/hub:v0.1.4` and `ghcr.io/projectpandar/pandar/web:v0.1.4`.
+- Helm chart `0.1.4` is published at `oci://ghcr.io/projectpandar/pandar/chart/pandar`.
 
 ### Known limitations
 
 - Desktop archives remain unsigned. Verify the supplied SHA-256 sidecar; Windows SmartScreen and macOS Gatekeeper may warn.
 - Real-host installation and real Bambu Studio replacement evidence is not complete for every target and ABI series.
-- The planned container images target Linux amd64 only.
+- The container images target Linux amd64 only.
 - Native firmware and recovery ownership still requires one active Hub; the firmware package catalog is intentionally empty.
 - The Android client is built separately and is not attached to the GitHub Release.
 

@@ -16,7 +16,7 @@
 
 ## Completed
 
-- Prepared v0.1.4 as the focused patch release for authenticated Studio/mobile tenant discovery. Updated Rust, Node, Nix, Android, Helm, workflow fallback, generated deployment docs, release instructions, and lockfile version declarations together. Next: run all release gates, tag v0.1.4, and verify every published artifact.
+- Published `v0.1.4` from commit `2e67aa94a6be2d341b9b7cc5340259347a68a092` as the focused patch release for authenticated Studio/mobile tenant discovery. Release-commit Checks run `31502775271`, tagged Checks run `31506224611`, Release run `31506224671`, and Docker/Helm run `31506224613` passed. The GitHub Release contains 60 ABI-series-specific desktop files, and all 30 downloaded SHA-256 sidecars verified. Hub/Web manifests were pushed with digests `sha256:ce4851ad9e269c024f0c66087f8847ff2b94a1d0d3a4128f3e42523c14bf8d4c` and `sha256:b1e2444c37b8d94580218b2cb9610b6f0a7a13756d1eff27e8ed371639e2ebb1`; Helm chart `0.1.4` was pushed with digest `sha256:78a7d89d67b850b172bd583e6fdf0bb470c0034c641df8e3f0f626ce971cb08b`. Next: validate the packaged plugin in an authenticated Studio session against Pandar Auth.
 
 - Fixed external-auth tenant discovery for Studio and mobile sign-in. Both pages now resolve tenant choices from the signed-in identity's `/api/v1/me` memberships, matching the dashboard flow, instead of calling the bootstrap-only `/api/v1/tenants` endpoint that returned 403 for valid Pandar Auth JWTs. Focused page-level regression tests reproduce the exact `Tenant lookup returned 403` failure and cover both ticket flows. Next: publish the fix and validate an authenticated Studio ticket exchange against Pandar Auth.
 
