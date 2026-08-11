@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- Changed Studio and mobile sign-in tenant discovery to use the authenticated identity's `/api/v1/me` memberships instead of the bootstrap-only global tenant list, eliminating `Tenant lookup returned 403` after external sign-in.
+
 ## [0.1.3] - 2026-08-11
 
 ### Fixed

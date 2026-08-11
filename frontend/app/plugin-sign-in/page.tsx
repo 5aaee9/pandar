@@ -1,16 +1,21 @@
 import { getTranslations } from "next-intl/server";
 
 import { createPluginTicket } from "../actions";
-import { apiHeaders, authSource } from "../api-auth";
-import { authProviderConfig } from "../auth-provider";
-import type { Tenant, TenantList } from "../dashboard-types";
+import { authSource } from "../api-auth";
+import { authProviderConfig, type AuthProvider } from "../auth-provider";
+import {
+  getIdentityForRequest,
+  getTenantsForRequest,
+  resolveEffectiveTenants,
+} from "../dashboard-data";
+import type { Tenant } from "../dashboard-types";
 import { LanguageSwitcher } from "../../components/language-switcher";
 import { Button } from "@/components/ui/button";
 import { pluginAuthSignInUrl, pluginSignInReturnTarget } from "./auth-return";
 import { fetchExternalAuthStatus } from "./external-auth-status";
 import { PluginTicketForm } from "./plugin-ticket-form";
 
-const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
+const configuredTenantId = process.env.APP_TENANT_ID;
 const defaultRedirectUrl = "http://localhost:32200/callback";
 
 type PageProps = {
@@ -25,26 +30,20 @@ type TenantFetchResult = {
   error: string | null;
 };
 
-async function fetchTenants(): Promise<TenantFetchResult> {
-  try {
-    const response = await fetch(`${apiUrl}/api/v1/tenants`, {
-      cache: "no-store",
-      headers: await apiHeaders(),
-    });
-    if (!response.ok) {
-      return {
-        tenants: [],
-        error: `Tenant lookup returned ${response.status}`,
-      };
-    }
-    const body = (await response.json()) as TenantList;
-    return { tenants: body.tenants, error: null };
-  } catch (error) {
-    return {
-      tenants: [],
-      error: `Tenant lookup failed: ${error instanceof Error ? error.message : "unknown error"}`,
-    };
-  }
+async function fetchTenants(provider: AuthProvider): Promise<TenantFetchResult> {
+  const [tenantResult, identityResult] = await Promise.all([
+    getTenantsForRequest(),
+    getIdentityForRequest(),
+  ]);
+  return {
+    tenants: resolveEffectiveTenants(
+      tenantResult.tenants,
+      identityResult.me,
+      configuredTenantId,
+      provider,
+    ),
+    error: tenantResult.error ?? identityResult.error,
+  };
 }
 
 export default async function PluginSignInPage({ searchParams }: PageProps) {
@@ -55,7 +54,7 @@ export default async function PluginSignInPage({ searchParams }: PageProps) {
   ]);
   const provider = authProviderConfig();
   const [tenantResult, readiness] = await Promise.all([
-    fetchTenants(),
+    fetchTenants(provider.provider),
     fetchExternalAuthStatus(),
   ]);
   const tenants = tenantResult.tenants;
