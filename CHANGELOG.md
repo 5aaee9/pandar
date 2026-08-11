@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- Moved the Studio sign-in external-auth probe from the private observability-only `/readyz` route to the public, sanitized `/api/v1/auth/status` endpoint, eliminating the `Readiness check returned 404` failure on normal Hub deployments.
+
 ## [0.1.2] - 2026-08-10
 
 ### Changed
@@ -15,7 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
-- Corrected the Studio sign-in page to read Hub `/readyz` data instead of `/healthz`, preventing configured Pandar Auth deployments from being reported as having unavailable external authentication.
+- Changed the Studio sign-in external-auth probe from `/healthz` to `/readyz`; a post-release follow-up was required because `/readyz` is available only on the private observability listener.
 
 ### Distribution
 

@@ -14,6 +14,49 @@ struct HealthResponse {
 }
 
 #[derive(Debug, serde::Deserialize)]
+struct AuthStatusResponse {
+    external_auth: ExternalAuthStatus,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ExternalAuthStatus {
+    enabled: bool,
+    ready: bool,
+}
+
+#[tokio::test]
+async fn public_auth_status_reports_external_auth_configuration() {
+    let (status, body) = request(
+        router(external_auth_state(state().await)),
+        Method::GET,
+        "/api/v1/auth/status",
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let external_auth = decode::<AuthStatusResponse>(body).external_auth;
+    assert!(external_auth.enabled);
+    assert!(external_auth.ready);
+}
+
+#[tokio::test]
+async fn public_auth_status_reports_disabled_external_auth() {
+    let (status, body) = request(
+        router(state().await),
+        Method::GET,
+        "/api/v1/auth/status",
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let external_auth = decode::<AuthStatusResponse>(body).external_auth;
+    assert!(!external_auth.enabled);
+    assert!(external_auth.ready);
+}
+
+#[derive(Debug, serde::Deserialize)]
 struct ErrorResponse {
     error: String,
 }

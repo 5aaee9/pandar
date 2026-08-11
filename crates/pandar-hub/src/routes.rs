@@ -39,6 +39,7 @@ pub fn router(state: AppState) -> Router {
 
     Router::new()
         .route("/healthz", get(status::healthz))
+        .route("/api/v1/auth/status", get(status::auth_status))
         .route("/api/v1/me", get(onboarding::me))
         .route(
             "/api/v1/onboarding/tenants",

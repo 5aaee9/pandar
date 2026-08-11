@@ -17,6 +17,42 @@ pub(in crate::routes) async fn healthz() -> Json<HealthResponse> {
     Json(HealthResponse { status: "ok" })
 }
 
+#[derive(Debug, Serialize)]
+pub(in crate::routes) struct AuthStatusResponse {
+    external_auth: ExternalAuthStatus,
+}
+
+#[derive(Debug, Serialize)]
+struct ExternalAuthStatus {
+    enabled: bool,
+    ready: bool,
+}
+
+pub(in crate::routes) async fn auth_status(
+    State(state): State<AppState>,
+) -> Json<AuthStatusResponse> {
+    let external_auth = match state.external_auth() {
+        Some(verifier) => {
+            let ready = match verifier.check_ready().await {
+                Ok(()) => true,
+                Err(err) => {
+                    tracing::warn!(error = %format!("{err:#}"), "external auth status check failed");
+                    false
+                }
+            };
+            ExternalAuthStatus {
+                enabled: true,
+                ready,
+            }
+        }
+        None => ExternalAuthStatus {
+            enabled: false,
+            ready: true,
+        },
+    };
+    Json(AuthStatusResponse { external_auth })
+}
+
 pub(in crate::routes) async fn readyz(
     State(state): State<AppState>,
 ) -> (StatusCode, Json<crate::readiness::ReadinessResponse>) {

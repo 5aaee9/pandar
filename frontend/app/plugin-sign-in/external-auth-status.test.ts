@@ -7,18 +7,13 @@ describe("plugin sign-in external auth readiness", () => {
     vi.unstubAllGlobals();
   });
 
-  it("reads the Hub readiness check instead of treating health as disabled auth", async () => {
+  it("reads external auth status from the public Hub API", async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = String(input);
-      if (url.endsWith("/healthz")) {
-        return Response.json({ status: "ok" });
+      if (url.endsWith("/readyz")) {
+        return Response.json({}, { status: 404 });
       }
-      return Response.json({
-        status: "ready",
-        checks: {
-          external_auth: { ready: true, detail: "configured" },
-        },
-      });
+      return Response.json({ external_auth: { enabled: true, ready: true } });
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -26,8 +21,9 @@ describe("plugin sign-in external auth readiness", () => {
       externalAuthEnabled: true,
       error: null,
     });
-    expect(fetchMock).toHaveBeenCalledWith("http://localhost:8080/readyz", {
-      cache: "no-store",
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8080/api/v1/auth/status",
+      { cache: "no-store" },
+    );
   });
 });

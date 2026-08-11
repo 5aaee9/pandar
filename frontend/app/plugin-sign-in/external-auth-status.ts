@@ -5,30 +5,33 @@ type ReadinessResult = {
   error: string | null;
 };
 
-type ReadinessResponse = {
-  checks?: {
-    external_auth?: {
-      ready?: boolean;
-      detail?: string;
-    };
+type AuthStatusResponse = {
+  external_auth?: {
+    enabled?: boolean;
+    ready?: boolean;
   };
 };
 
 export async function fetchExternalAuthStatus(): Promise<ReadinessResult> {
   try {
-    const response = await fetch(`${apiUrl}/readyz`, { cache: "no-store" });
+    const response = await fetch(`${apiUrl}/api/v1/auth/status`, {
+      cache: "no-store",
+    });
     if (!response.ok) {
       return {
         externalAuthEnabled: false,
-        error: `Readiness check returned ${response.status}`,
+        error: `Auth status check returned ${response.status}`,
       };
     }
-    const body = (await response.json()) as ReadinessResponse;
-    const externalAuth = body.checks?.external_auth;
+    const body = (await response.json()) as AuthStatusResponse;
+    const externalAuth = body.external_auth;
     return {
       externalAuthEnabled:
-        externalAuth?.ready === true && externalAuth.detail !== "disabled",
-      error: null,
+        externalAuth?.enabled === true && externalAuth.ready === true,
+      error:
+        externalAuth?.enabled === true && externalAuth.ready !== true
+          ? "External authentication is not ready"
+          : null,
     };
   } catch (error) {
     return {

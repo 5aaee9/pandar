@@ -255,7 +255,7 @@ Implemented login flow:
 2. The plugin starts a loopback HTTP server on `127.0.0.1:0`; that server is the host returned by `bambu_network_get_bambulab_host`.
 3. The local server serves `frontend/plugin-local/dist` with `rust-embed`. The page asks only for the Web URL and reads `/.well-known/pandar` from that Web deployment to discover the Hub URL before sign-in.
 4. The local page links to the configured Pandar frontend `/plugin-sign-in` route with the local callback URL.
-5. The frontend relies on the configured Pandar auth token/cookie bridge and tenant selection through Pandar-managed membership. With Better Auth, `/plugin-sign-in` adds a versioned base64url return intent to the issuer URL; magic-link and passkey completion carry that opaque value back through the dashboard callback, which accepts only `/plugin-sign-in` and never copies the JWT into the return target.
+5. The frontend reads the Hub's public `/api/v1/auth/status` endpoint for the external-auth enabled/readiness booleans; `/readyz` remains private to the observability listener. It then relies on the configured Pandar auth token/cookie bridge and tenant selection through Pandar-managed membership. With Better Auth, `/plugin-sign-in` adds a versioned base64url return intent to the issuer URL; magic-link and passkey completion carry that opaque value back through the dashboard callback, which accepts only `/plugin-sign-in` and never copies the JWT into the return target.
 6. The hub issues a short-lived one-use plugin login ticket.
 7. The page uses Studio's `get_localhost_url` message and redirects to Studio's local HTTP server with `ticket` and `redirect_url`.
 8. Studio calls the plugin's `get_my_token(ticket)` and `get_my_profile(token)` ABI methods.
