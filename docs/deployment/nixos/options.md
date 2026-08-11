@@ -44,7 +44,7 @@ package
 _Default:_
 
 ```nix
-<derivation pandar-agent-0.1.3>
+<derivation pandar-agent-0.1.4>
 ```
 
 ## services\.pandar\.agent\.agentId
@@ -174,7 +174,7 @@ package
 _Default:_
 
 ```nix
-<derivation pandar-hub-0.1.3>
+<derivation pandar-hub-0.1.4>
 ```
 
 ## services\.pandar\.hub\.bind
@@ -318,7 +318,7 @@ package
 _Default:_
 
 ```nix
-<derivation pandar-web-0.1.3>
+<derivation pandar-web-0.1.4>
 ```
 
 ## services\.pandar\.web\.apiUrl
@@ -415,7 +415,7 @@ package
 _Default:_
 
 ```nix
-<derivation pandar-auth-0.1.3>
+<derivation pandar-auth-0.1.4>
 ```
 
 ## services\.pandar-auth\.baseURL
