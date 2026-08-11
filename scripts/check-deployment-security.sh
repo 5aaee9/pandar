@@ -46,4 +46,4 @@ grep -Fx 'USER 10001:10001' "$root/Dockerfile" >/dev/null
 grep -Fx 'USER 1000:1000' "$root/frontend/Dockerfile" >/dev/null
 [[ "$(grep -c '^FROM .*@sha256:' "$root/Dockerfile")" == 2 ]]
 [[ "$(grep -c '^FROM .*@sha256:' "$root/frontend/Dockerfile")" == 3 ]]
-grep -Fx 'appVersion: "0.1.2"' "$chart/Chart.yaml" >/dev/null
+grep -Fx 'appVersion: "0.1.3"' "$chart/Chart.yaml" >/dev/null

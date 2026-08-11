@@ -6,9 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-08-11
+
 ### Fixed
 
 - Moved the Studio sign-in external-auth probe from the private observability-only `/readyz` route to the public, sanitized `/api/v1/auth/status` endpoint, eliminating the `Readiness check returned 404` failure on normal Hub deployments.
+
+### Planned distribution
+
+- The release workflow will publish ABI-series-specific CLI, network plugin, and BambuSource archives with SHA-256 sidecars; Windows also publishes Studio hook bundles.
+- The tag will publish Hub and Web images at `ghcr.io/projectpandar/pandar/hub:v0.1.3` and `ghcr.io/projectpandar/pandar/web:v0.1.3`.
+- The tag will publish Helm chart `0.1.3` at `oci://ghcr.io/projectpandar/pandar/chart/pandar`.
+
+### Known limitations
+
+- Desktop archives remain unsigned. Verify the supplied SHA-256 sidecar; Windows SmartScreen and macOS Gatekeeper may warn.
+- Real-host installation and real Bambu Studio replacement evidence is not complete for every target and ABI series.
+- The planned container images target Linux amd64 only.
+- Native firmware and recovery ownership still requires one active Hub; the firmware package catalog is intentionally empty.
+- The Android client is built separately and is not attached to the GitHub Release.
 
 ## [0.1.2] - 2026-08-10
 
@@ -109,7 +125,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Native firmware and recovery ownership still requires one active Hub; the firmware package catalog is intentionally empty.
 - The Android client is built separately and will not be attached to the GitHub Release.
 
-[Unreleased]: https://github.com/ProjectPandar/pandar/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/ProjectPandar/pandar/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/ProjectPandar/pandar/releases/tag/v0.1.3
 [0.1.2]: https://github.com/ProjectPandar/pandar/releases/tag/v0.1.2
 [0.1.1]: https://github.com/ProjectPandar/pandar/releases/tag/v0.1.1
 [0.1.0]: https://github.com/ProjectPandar/pandar/releases/tag/v0.1.0

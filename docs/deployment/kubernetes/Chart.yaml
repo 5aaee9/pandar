@@ -2,6 +2,6 @@ apiVersion: v2
 name: pandar
 description: Kubernetes deployment chart for Pandar hub and web
 type: application
-version: 0.1.2
-appVersion: "0.1.2"
+version: 0.1.3
+appVersion: "0.1.3"
 kubeVersion: ">=1.25.0-0"
