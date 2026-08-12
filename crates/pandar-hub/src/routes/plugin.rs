@@ -19,11 +19,16 @@ use crate::{
 mod camera;
 pub(super) mod firmware;
 mod h2c;
+mod personal_presets;
 mod responses;
 mod studio_devices;
 mod studio_jobs;
 pub(super) use camera::stream_camera;
 pub(super) use h2c::get_auto_nozzle_mapping;
+pub(super) use personal_presets::{
+    create as create_preset, delete as delete_preset, get as get_preset, list as list_presets,
+    replace as replace_preset,
+};
 pub(crate) use responses::redact_artifact_error;
 use studio_devices::{PluginPrinterListResponse, plugin_printer_devices};
 pub(super) use studio_jobs::{

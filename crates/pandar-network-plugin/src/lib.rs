@@ -11,6 +11,7 @@ mod h2c;
 mod http;
 pub mod installer;
 mod local_webserver;
+mod personal_presets;
 mod plugin_session;
 mod studio_abi;
 mod studio_disposition;
@@ -49,6 +50,11 @@ pub use h2c::pandar_plugin_submit_h2c_auto_nozzle_mapping;
 pub use local_webserver::ffi::{
     pandar_plugin_local_webserver_base_url, pandar_plugin_local_webserver_config,
     pandar_plugin_start_local_webserver,
+};
+pub use personal_presets::{
+    PresetBytes, PresetCallbacks, PresetEntry, PresetResult, pandar_plugin_personal_preset_drain,
+    pandar_plugin_personal_preset_list, pandar_plugin_personal_preset_mutate,
+    pandar_plugin_personal_preset_reset,
 };
 pub use plugin_session::{
     pandar_plugin_create_no_auth_session, pandar_plugin_delete_session,

@@ -135,6 +135,23 @@ async fn authorize_user_login_ticket_creation(
     Ok(principal)
 }
 
+pub(super) async fn authorize_plugin_studio_user(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<crate::repositories::AuthenticatedTenantToken, ApiError> {
+    let authenticated = authorize_plugin_studio(state, headers).await?;
+    let Some(user) = authenticated.session_user.as_ref() else {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "personal_presets_require_user",
+        ));
+    };
+    if !user.role.allows(UserRole::Operator) {
+        return Err(ApiError::new(StatusCode::FORBIDDEN, "role_forbidden"));
+    }
+    Ok(authenticated)
+}
+
 pub(super) async fn authorize_plugin_studio(
     state: &AppState,
     headers: &HeaderMap,

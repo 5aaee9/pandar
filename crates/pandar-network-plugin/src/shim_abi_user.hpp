@@ -1,6 +1,7 @@
 #pragma once
 
 #include "shim_firmware.hpp"
+#include "shim_personal_presets.hpp"
 
 namespace pandar::network_plugin {
 
@@ -110,9 +111,8 @@ PANDAR_ABI std::string bambu_network_get_studio_info_url(void* agent) {
     return action == AccountPolicyAction::Apply ? body : std::string{};
 }
 
-PANDAR_ABI std::string bambu_network_request_setting_id(void* agent, std::string, std::map<std::string, std::string>*, unsigned int* http_code) {
-    studio_disposition(as_agent(agent), StudioDisposition::RequestSettingId, nullptr, http_code);
-    return {};
+PANDAR_ABI std::string bambu_network_request_setting_id(void* agent, std::string name, std::map<std::string, std::string>* values, unsigned int* http_code) {
+    return preset_create(as_agent(agent), name, values, http_code);
 }
 
 PANDAR_IGNORE_CXX_LINKAGE_END
@@ -160,6 +160,7 @@ PANDAR_ABI int bambu_network_destroy_agent(void* agent) {
     stop_status_heartbeat(a);
     stop_firmware_dispatcher(a);
     if (a) {
+        pandar_plugin_personal_preset_reset(a->account_identity);
         pandar_plugin_account_login_observation_clear(a->account_identity);
         pandar_plugin_studio_set_listener(
             a->printer_refresh_session, kStudioCloudListener, false
@@ -208,6 +209,7 @@ PANDAR_ABI int bambu_network_set_config_dir(void* agent, std::string config_dir)
             a->config_dir = std::move(config_dir);
         }
         a->account_config_epoch.fetch_add(1, std::memory_order_release);
+        pandar_plugin_personal_preset_reset(a->account_identity);
     }
     auto lifecycle = pandar_plugin_account_load_persisted(a, with_current_account);
     body_from_result(lifecycle.http);

@@ -174,6 +174,8 @@ Pandar's plugin design:
 6. Studio calls the plugin's token/profile ABI. The plugin exchanges the ticket with `pandar-hub` for a tenant-owned plugin credential and returns Bambu-shaped token/profile JSON to Studio.
 7. `change_user` stores enough session state for Studio login UI and future hub API calls.
 
+Personal preset synchronization is a direct Studio plugin → Hub flow; `pandar-agent` is not involved. The Hub derives the owner from the live Operator user attached to the exact `plugin:studio` token, so no-auth sessions and tenant-wide token identities cannot access this surface. Process, Filament, and Printer presets use a complete owner catalogue plus owner-scoped full/create/replace/delete routes. SQLite and PostgreSQL persist the same schema behind `PersonalPresetRepository`, including a durable owner clock that supplies strictly increasing Studio timestamps. The plugin builds list results in temporary Rust state, publishes only a complete generation-current catalogue, drains it once into Studio's name-keyed map, and clears it on failure, cancellation, logout, account/configuration replacement, or destroy.
+
 Rust owns typed account/persisted-login policy, session selection, Cloud subscriptions, virtual-local
 generations, heartbeat scheduling and delivery eligibility, status projection, and the one-pass
 firmware -> status -> semantic-operation -> unsupported message classifier. C++ is limited to ABI/STL

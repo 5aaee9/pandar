@@ -7,6 +7,8 @@ mod firmware_commands;
 mod jobs;
 mod materials;
 mod no_auth_session;
+mod personal_presets;
+mod personal_presets_quota;
 mod phase1;
 mod plugin_session_revocation;
 mod postgres;

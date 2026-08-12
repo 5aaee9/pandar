@@ -126,6 +126,28 @@ impl From<RepositoryError> for ApiError {
             RepositoryError::MissingPrinter => {
                 Self::new(StatusCode::NOT_FOUND, "printer_not_found")
             }
+            RepositoryError::MissingPersonalPreset => {
+                Self::new(StatusCode::NOT_FOUND, "personal_preset_not_found")
+            }
+            RepositoryError::DuplicatePersonalPresetName => {
+                Self::new(StatusCode::CONFLICT, "personal_preset_name_conflict")
+            }
+            RepositoryError::PersonalPresetLimitExceeded => {
+                Self::new(StatusCode::CONFLICT, "personal_preset_limit_exceeded")
+            }
+            RepositoryError::InvalidPersonalPreset => {
+                Self::new(StatusCode::BAD_REQUEST, "invalid_personal_preset")
+            }
+            RepositoryError::PersonalPresetTooLarge => {
+                Self::new(StatusCode::PAYLOAD_TOO_LARGE, "personal_preset_too_large")
+            }
+            RepositoryError::PersonalPresetClockExhausted => {
+                Self::new(StatusCode::CONFLICT, "personal_preset_clock_exhausted")
+            }
+            RepositoryError::InvalidPersistedPersonalPreset(err) => {
+                tracing::error!(error = %format!("{err:#}"), "invalid persisted personal preset");
+                Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal_server_error")
+            }
             RepositoryError::MissingJob => Self::new(StatusCode::NOT_FOUND, "job_not_found"),
             RepositoryError::ArtifactQuotaExceeded => {
                 Self::new(StatusCode::PAYLOAD_TOO_LARGE, "artifact_quota_exceeded")

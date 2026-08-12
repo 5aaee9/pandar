@@ -16,6 +16,7 @@ mod live_status;
 mod login_tickets;
 mod models;
 mod operations;
+mod personal_presets;
 mod printers;
 mod printing;
 mod requests;

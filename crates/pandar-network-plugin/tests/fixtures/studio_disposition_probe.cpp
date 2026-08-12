@@ -173,7 +173,7 @@ int main(int argc, char** argv) {
 
     auto settings = required<int (*)(void*, std::string, BBL::ProgressFn, BBL::WasCancelledFn)>(library, "bambu_network_get_setting_list");
     int progress = 0;
-    if (settings(agent, "", [&](int) { ++progress; }, [] { return false; }) != kInvalid || progress != 0) fail("settings silently succeeded");
+    if (settings(agent, "", [&](int) { ++progress; }, [] { return false; }) != -9 || progress != 0) fail("settings did not fail explicitly without an authenticated account");
     auto extra = required<int (*)(void*, std::map<std::string,std::string>)>(library, "bambu_network_set_extra_http_header");
     if (extra(agent, {}) != kInvalid) fail("extra headers silently succeeded");
     auto task_report = required<int (*)(void*, int*, bool*)>(library, "bambu_network_check_user_task_report");

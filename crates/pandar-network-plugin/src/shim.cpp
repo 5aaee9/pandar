@@ -2,6 +2,7 @@
 #include "shim_connection.hpp"
 #include "shim_file_transfer_types.hpp"
 #include "shim_exports.hpp"
+#include "shim_personal_presets.hpp"
 #include "shim_abi_user.hpp"
 #include "shim_print.hpp"
 #include "shim_abi_operations.hpp"

@@ -137,6 +137,19 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/plugin/session", delete(plugin::revoke_session))
         .route("/api/v1/plugin/printers", get(plugin::list_printers))
         .route(
+            "/api/v1/plugin/presets",
+            get(plugin::list_presets)
+                .post(plugin::create_preset)
+                .layer(DefaultBodyLimit::max(512 * 1024)),
+        )
+        .route(
+            "/api/v1/plugin/presets/{setting_id}",
+            get(plugin::get_preset)
+                .patch(plugin::replace_preset)
+                .delete(plugin::delete_preset)
+                .layer(DefaultBodyLimit::max(512 * 1024)),
+        )
+        .route(
             "/api/v1/plugin/printers/{printer_id}/camera.mjpeg",
             get(plugin::stream_camera),
         )

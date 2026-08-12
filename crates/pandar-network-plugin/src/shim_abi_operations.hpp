@@ -227,25 +227,62 @@ PANDAR_ABI int bambu_network_start_sdcard_print(void* agent, BBL::PrintParams pa
 
 PANDAR_ABI int bambu_network_get_user_presets(void* agent, std::map<std::string, std::map<std::string, std::string>>* user_presets) {
     if (user_presets) user_presets->clear();
-    return studio_disposition(as_agent(agent), StudioDisposition::UserPresets);
+    auto* a = as_agent(agent);
+    if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    auto account_copy = personal_preset_account(a);
+    auto account = account_copy.view();
+    if (!user_presets) return BBL::BAMBU_NETWORK_ERR_INVALID_RESULT;
+    PresetDrainAdapter adapter{user_presets};
+    return pandar_plugin_personal_preset_drain(&account, &adapter, preset_drain);
 }
 
-PANDAR_ABI int bambu_network_put_setting(void* agent, std::string, std::string, std::map<std::string, std::string>*, unsigned int* http_code) {
-    return studio_disposition(
-        as_agent(agent), StudioDisposition::PutSetting, nullptr, http_code
+PANDAR_ABI int bambu_network_put_setting(void* agent, std::string id, std::string name, std::map<std::string, std::string>* values, unsigned int* http_code) {
+    auto* a = as_agent(agent);
+    if (!a) {
+        if (http_code) *http_code = 0;
+        return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    }
+    if (!values) {
+        if (http_code) *http_code = 400;
+        return BBL::BAMBU_NETWORK_ERR_PUT_SETTING_FAILED;
+    }
+    auto response = preset_mutate(a, 2, id, name, values);
+    if (http_code) *http_code = response.http_code;
+    if (values && response.updated_time > 0)
+        (*values)["updated_time"] = std::to_string(response.updated_time);
+    if (values && response.code > 0) (*values)["code"] = std::to_string(response.code);
+    take_preset_id(response);
+    return response.status;
+}
+
+PANDAR_ABI int bambu_network_get_setting_list(void* agent, std::string version, BBL::ProgressFn progress, BBL::WasCancelledFn cancel) {
+    auto* a = as_agent(agent);
+    if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    auto account_copy = personal_preset_account(a);
+    auto account = account_copy.view();
+    PresetListAdapter adapter{a, account.account_epoch, account.config_epoch, {}, std::move(progress), std::move(cancel)};
+    return pandar_plugin_personal_preset_list(
+        &account, preset_bytes(version), {&adapter, nullptr, preset_progress, preset_cancel, preset_current}
     );
 }
 
-PANDAR_ABI int bambu_network_get_setting_list(void* agent, std::string, BBL::ProgressFn, BBL::WasCancelledFn) {
-    return studio_disposition(as_agent(agent), StudioDisposition::GetSettingList);
+PANDAR_ABI int bambu_network_get_setting_list2(void* agent, std::string version, BBL::CheckFn check, BBL::ProgressFn progress, BBL::WasCancelledFn cancel) {
+    auto* a = as_agent(agent);
+    if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    auto account_copy = personal_preset_account(a);
+    auto account = account_copy.view();
+    PresetListAdapter adapter{a, account.account_epoch, account.config_epoch, std::move(check), std::move(progress), std::move(cancel)};
+    return pandar_plugin_personal_preset_list(
+        &account, preset_bytes(version), {&adapter, preset_check, preset_progress, preset_cancel, preset_current}
+    );
 }
 
-PANDAR_ABI int bambu_network_get_setting_list2(void* agent, std::string, BBL::CheckFn, BBL::ProgressFn, BBL::WasCancelledFn) {
-    return studio_disposition(as_agent(agent), StudioDisposition::GetSettingList2);
-}
-
-PANDAR_ABI int bambu_network_delete_setting(void* agent, std::string) {
-    return studio_disposition(as_agent(agent), StudioDisposition::DeleteSetting);
+PANDAR_ABI int bambu_network_delete_setting(void* agent, std::string id) {
+    auto* a = as_agent(agent);
+    if (!a) return BBL::BAMBU_NETWORK_ERR_INVALID_HANDLE;
+    auto response = preset_mutate(a, 3, id, {}, nullptr);
+    take_preset_id(response);
+    return response.status;
 }
 
 PANDAR_ABI int bambu_network_set_extra_http_header(void* agent, std::map<std::string, std::string>) {

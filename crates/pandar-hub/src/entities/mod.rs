@@ -7,6 +7,8 @@ pub mod job_filament_usages;
 pub mod jobs;
 pub mod join_links;
 pub mod machine_events;
+pub mod personal_preset_clocks;
+pub mod personal_presets;
 pub mod plugin_login_tickets;
 pub mod printer_event_tickets;
 pub mod printer_material_snapshots;

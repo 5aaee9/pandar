@@ -20,6 +20,8 @@ The hub runs backend-specific SQLx migrations automatically when it connects. SQ
 
 Repository and HTTP tests use SQLite by default, including `sqlite::memory:` for API tests. Optional PostgreSQL repository tests run only when `PANDAR_TEST_POSTGRES_URL` points at a disposable PostgreSQL database.
 
+Personal-preset synchronization has focused repository/route coverage with `cargo nextest run -p pandar-hub -E 'test(personal_preset)' --no-tests=fail`; backend parity requires rerunning that filter with `PANDAR_TEST_POSTGRES_URL` set. Its compiled Studio seam is `cargo nextest run -p pandar-network-plugin -E 'binary(personal_presets) | binary(studio_abi_probe)' --no-tests=fail`. Automated ABI tests are not a real-Studio compatibility claim: record a packaged two-installation create/update/delete/cancel/outage flow before marking an exact Studio/platform row verified.
+
 ## Agent Runtime
 
 `pandar-agent` connects outward to the hub gRPC endpoint. Current local-development identity values are:

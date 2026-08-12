@@ -5,6 +5,7 @@ mod auth;
 mod commands;
 mod jobs;
 mod materials;
+mod personal_presets;
 pub(crate) mod printer_event_tickets;
 mod printers;
 mod tenants;
@@ -45,6 +46,10 @@ pub(crate) use materials::CurrentMaterialPatchOutcome;
 pub use materials::{
     MaterialJsonValue, MaterialPatchInput, MaterialPatchOutcome, MaterialRepository,
     MaterialSnapshot,
+};
+pub use personal_presets::{
+    CreatePersonalPreset, PersonalPreset, PersonalPresetMetadata, PersonalPresetRepository,
+    PersonalPresetType, ReplacePersonalPreset,
 };
 pub use printer_event_tickets::{
     IssuedPrinterEventTicket, PrinterEventTicketConsumeResult, PrinterEventTicketRepository,
@@ -103,6 +108,20 @@ pub enum RepositoryError {
     AgentSessionNotCurrent,
     #[error("printer not found")]
     MissingPrinter,
+    #[error("personal preset not found")]
+    MissingPersonalPreset,
+    #[error("personal preset name already exists")]
+    DuplicatePersonalPresetName,
+    #[error("personal preset limit exceeded")]
+    PersonalPresetLimitExceeded,
+    #[error("invalid personal preset")]
+    InvalidPersonalPreset,
+    #[error("personal preset is too large")]
+    PersonalPresetTooLarge,
+    #[error("personal preset timestamp range is exhausted")]
+    PersonalPresetClockExhausted,
+    #[error("invalid persisted personal preset: {0:#}")]
+    InvalidPersistedPersonalPreset(anyhow::Error),
     #[error("command not found")]
     MissingCommand,
     #[error("job not found")]

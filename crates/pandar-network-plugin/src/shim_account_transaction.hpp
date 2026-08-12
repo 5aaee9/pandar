@@ -1,5 +1,7 @@
 #pragma once
 
+#include "shim_personal_preset_types.hpp"
+
 namespace pandar::network_plugin {
 
 constexpr std::int32_t kAccountMutationReplace = 1;
@@ -157,6 +159,10 @@ extern "C" std::int32_t with_current_account(
                     if (!body.empty() && current()) dispatch_http_error(agent, code, body);
                 }
             );
+        }
+        if (status == 0 && mutation.action != 0 && mutation.action != kAccountMutationHttpError &&
+            mutation.action != kAccountMutationFirmwareFence) {
+            pandar_plugin_personal_preset_reset(agent->account_identity);
         }
     }
     if (drain_callbacks) drain_account_callbacks(agent);

@@ -167,6 +167,7 @@ pub enum UniqueConstraint {
     UserIdentityExternal,
     UserIdentityUserProvider,
     JobFilamentUsageSlot,
+    PersonalPresetName,
 }
 
 impl UniqueConstraint {
@@ -197,6 +198,10 @@ impl UniqueConstraint {
             Self::JobFilamentUsageSlot => (
                 "job_filament_usages.tenant_id, job_filament_usages.job_id, job_filament_usages.slot_index, job_filament_usages.source",
                 "job_filament_usages_tenant_id_job_id_slot_index_source_key",
+            ),
+            Self::PersonalPresetName => (
+                "personal_presets.tenant_id, personal_presets.owner_user_id, personal_presets.name",
+                "personal_presets_tenant_id_owner_user_id_name_key",
             ),
         }
     }

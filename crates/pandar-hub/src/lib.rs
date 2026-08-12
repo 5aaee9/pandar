@@ -1,3 +1,4 @@
+mod app_state_accessors;
 pub mod artifacts;
 mod bootstrap;
 pub mod camera_sessions;
@@ -45,7 +46,8 @@ use crate::{
     },
     repositories::{
         AgentRepository, AuditEventRepository, AuthRepository, CommandRepository, JobRepository,
-        MaterialRepository, PrinterEventTicketRepository, PrinterRepository, TenantRepository,
+        MaterialRepository, PersonalPresetRepository, PrinterEventTicketRepository,
+        PrinterRepository, TenantRepository,
     },
     sessions::SessionRegistry,
 };
@@ -61,6 +63,7 @@ pub struct AppState {
     commands: CommandRepository,
     jobs: JobRepository,
     materials: MaterialRepository,
+    personal_presets: PersonalPresetRepository,
     printer_event_tickets: PrinterEventTicketRepository,
     artifact_storage: Arc<dyn ArtifactStorage>,
     external_auth: Option<JwtVerifier>,
@@ -208,6 +211,7 @@ impl AppState {
             commands: CommandRepository::new(database.clone()),
             jobs: JobRepository::new_with_cipher(database.clone(), printer_access_code_cipher),
             materials: MaterialRepository::new(database.clone()),
+            personal_presets: PersonalPresetRepository::new(database.clone()),
             printer_event_tickets: PrinterEventTicketRepository::new(database),
             artifact_storage: artifact_storage.into_artifact_storage(),
             external_auth: None,
@@ -233,42 +237,6 @@ impl AppState {
     fn with_bootstrap_token_option(mut self, token: Option<String>) -> Self {
         self.bootstrap_token = token;
         self
-    }
-
-    pub fn tenants(&self) -> &TenantRepository {
-        &self.tenants
-    }
-
-    pub fn auth(&self) -> &AuthRepository {
-        &self.auth
-    }
-
-    pub fn audit_events(&self) -> &AuditEventRepository {
-        &self.audit_events
-    }
-
-    pub fn agents(&self) -> &AgentRepository {
-        &self.agents
-    }
-
-    pub fn printers(&self) -> &PrinterRepository {
-        &self.printers
-    }
-
-    pub fn commands(&self) -> &CommandRepository {
-        &self.commands
-    }
-
-    pub fn jobs(&self) -> &JobRepository {
-        &self.jobs
-    }
-
-    pub fn materials(&self) -> &MaterialRepository {
-        &self.materials
-    }
-
-    pub fn printer_event_tickets(&self) -> &PrinterEventTicketRepository {
-        &self.printer_event_tickets
     }
 
     pub fn artifact_storage(&self) -> &dyn ArtifactStorage {

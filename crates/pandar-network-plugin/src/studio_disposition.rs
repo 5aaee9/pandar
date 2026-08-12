@@ -136,7 +136,7 @@ impl Operation {
             | Self::PutSetting
             | Self::GetSettingList
             | Self::GetSettingList2
-            | Self::DeleteSetting => "unsupported_cloud_settings",
+            | Self::DeleteSetting => unreachable!("personal preset operations are handled"),
             Self::ExtraHttpHeader => "unsupported_extra_http_headers",
             Self::UserMessages => "unsupported_user_messages",
             Self::UserTaskReport => "unsupported_user_task_report",
@@ -194,6 +194,12 @@ impl Operation {
     fn abi_status(self) -> i32 {
         match self {
             Self::Bind => -5,
+            Self::UserPresets
+            | Self::RequestSettingId
+            | Self::PutSetting
+            | Self::GetSettingList
+            | Self::GetSettingList2
+            | Self::DeleteSetting => 0,
             operation if operation.is_tracking() => 0,
             _ => -19,
         }
@@ -221,15 +227,24 @@ pub extern "C" fn pandar_plugin_studio_disposition(
         return result(-19, 0, stable_error_body("unknown_studio_disposition"));
     };
     let tracking = operation.is_tracking();
+    let handled = matches!(
+        operation,
+        Operation::UserPresets
+            | Operation::RequestSettingId
+            | Operation::PutSetting
+            | Operation::GetSettingList
+            | Operation::GetSettingList2
+            | Operation::DeleteSetting
+    );
     let body = serde_json::to_string(&DispositionBody {
         disposition_version: DISPOSITION_VERSION,
-        error: (!tracking).then(|| operation.error()),
+        error: (!tracking && !handled).then(|| operation.error()),
         policy: tracking.then_some("never_track"),
     })
     .expect("Studio disposition body is serializable");
     result(
         operation.abi_status(),
-        if tracking { 200 } else { 501 },
+        if tracking || handled { 200 } else { 501 },
         body,
     )
 }
@@ -239,11 +254,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn every_version_one_disposition_is_total_and_non_success_except_never_track() {
+    fn every_version_one_disposition_is_total_and_only_handled_or_never_track_succeeds() {
         for raw in 1..=53 {
             let operation = Operation::from_raw(raw).expect("version one operation");
             let result = pandar_plugin_studio_disposition(raw, true);
-            assert_eq!(result.status == 0, operation.is_tracking());
+            assert_eq!(
+                result.status == 0,
+                operation.is_tracking()
+                    || matches!(
+                        operation,
+                        Operation::UserPresets
+                            | Operation::RequestSettingId
+                            | Operation::PutSetting
+                            | Operation::GetSettingList
+                            | Operation::GetSettingList2
+                            | Operation::DeleteSetting
+                    )
+            );
         }
         assert!(Operation::from_raw(54).is_none());
     }
