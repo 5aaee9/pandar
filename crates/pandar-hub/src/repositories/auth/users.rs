@@ -15,6 +15,10 @@ mod provisioning;
 use super::user_from_model;
 
 impl AuthRepository {
+    pub async fn get_user(&self, tenant_id: TenantId, user_id: &str) -> RepositoryResult<User> {
+        select_user(&self.database.sea_orm_connection(), tenant_id, user_id).await
+    }
+
     pub async fn list_users_for_tenant(&self, tenant_id: TenantId) -> RepositoryResult<Vec<User>> {
         users::Entity::find()
             .filter(users::Column::TenantId.eq(tenant_id.to_string()))

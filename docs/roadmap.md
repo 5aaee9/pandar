@@ -16,6 +16,8 @@
 
 ## Completed
 
+- Changed authenticated Bambu Studio plugin profiles to use the owning Pandar user's display name with a ` [pandar]` suffix instead of the fixed tenant-token label `Bambu Studio plugin`. Studio now displays names such as `Alice [pandar]`, while no-auth sessions keep their explicit local-plugin identity. Next: confirm the updated label in a packaged authenticated Studio session.
+
 - Implemented the Rust-owned Bambu Studio personal-preset synchronization path. Process, Filament, and Printer presets now use typed Hub requests, strict flat-map admission, generation-scoped atomic list/drain caching, callback-safe selective downloads, cancellation, replay-safe create/update/delete responses, and thin ABI/STL C++ adapters across all six preset exports. Pinned-source compiled tests pass for every catalogued ABI series, and focused SQLite plus disposable PostgreSQL repository tests pass. Unrelated cloud settings and cloud filament surfaces remain explicitly unsupported. Next: run the packaged two-installation Studio evidence gate before claiming exact-version/platform compatibility.
 
 - Added the authenticated Hub REST surface for Bambu Studio personal presets. The five plugin routes expose typed complete-catalogue, full-body, replay-safe create, replace, and idempotent delete behavior with exact `plugin:studio` scope, live Operator ownership, no-auth exclusion, tenant/user isolation, `cache-control: no-store`, bounded JSON bodies, stable errors, and quota code `14`; route tests cover round trips, authorization, conflicts, deletion, body rejection, quota, and audit redaction. Next: implement the Rust network-plugin HTTP/cache/FFI core and turn the pinned ABI contract GREEN.

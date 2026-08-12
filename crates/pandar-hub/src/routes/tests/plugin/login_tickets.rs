@@ -247,6 +247,7 @@ async fn plugin_login_ticket_exchange_is_unauthenticated_one_use_and_rejects_exp
     let exchanged = decode::<ExchangeLoginTicketResponse>(exchanged);
     assert!(exchanged.token.starts_with("pandar_plugin_"));
     assert!(exchanged.expires_at.ends_with('Z'));
+    assert_eq!(exchanged.profile.user_name, "External Test User [pandar]");
     assert_eq!(exchanged.profile.tenant_id, tenant.id.to_string());
     assert_eq!(exchanged.profile.tenant_name, "Plugin Exchange");
 

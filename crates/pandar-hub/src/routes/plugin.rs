@@ -161,12 +161,25 @@ pub(super) async fn exchange_login_ticket(
         .get(token.tenant_id)
         .await?
         .ok_or_else(|| ApiError::not_found("tenant_not_found"))?;
+    let user_id = token
+        .created_by_user_id
+        .clone()
+        .unwrap_or_else(|| token.id.clone());
+    let user_name = if let Some(owner_id) = token.created_by_user_id.as_deref() {
+        format!(
+            "{} [pandar]",
+            state
+                .auth()
+                .get_user(token.tenant_id, owner_id)
+                .await?
+                .display_name
+        )
+    } else {
+        format!("{} [pandar]", token.name)
+    };
     let profile = PluginProfileResponse {
-        user_id: token
-            .created_by_user_id
-            .clone()
-            .unwrap_or_else(|| token.id.clone()),
-        user_name: token.name.clone(),
+        user_id,
+        user_name,
         tenant_id: token.tenant_id.to_string(),
         tenant_name: tenant.display_name,
     };

@@ -39,6 +39,7 @@ struct ExchangeLoginTicketResponse {
 
 #[derive(Debug, Deserialize)]
 struct PluginProfileResponse {
+    user_name: String,
     tenant_id: String,
     tenant_name: String,
 }
