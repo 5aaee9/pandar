@@ -30,7 +30,7 @@ where
     })
 }
 
-pub(crate) fn device_feature_observation(
+pub(super) fn parse_primary_device_features(
     serial: &str,
     report: &SnapshotReport,
 ) -> anyhow::Result<Option<BambuDeviceFeatures>> {
@@ -41,7 +41,7 @@ pub(crate) fn device_feature_observation(
     )
 }
 
-pub(crate) fn device_feature2_observation(
+pub(super) fn parse_secondary_device_features(
     serial: &str,
     report: &SnapshotReport,
 ) -> anyhow::Result<Option<BambuDeviceFeatures>> {

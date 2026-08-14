@@ -1,7 +1,6 @@
-#[cfg(test)]
-use crate::machine::mqtt::MachineReport;
 use crate::machine::{
-    BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot, mqtt::report::SnapshotReport,
+    BambuPrinterEndpoint, MachineNozzleTemperature, MachineSnapshot,
+    mqtt::report::{DeviceFeatureObservations, SnapshotReport},
 };
 use pandar_core::{
     BambuNozzleDevice, BambuNozzleHolder, BambuNozzleInfo, BambuNozzleSystem,
@@ -11,19 +10,15 @@ use pandar_core::{
 mod cooling;
 
 use super::report::snapshot::{NozzleInfo, ScalarValue, SnapshotPrint, TemperatureValue};
-use super::report::{device_feature_observation, device_feature2_observation};
-
-#[cfg(test)]
-pub(crate) fn snapshot_from_report(
-    endpoint: &BambuPrinterEndpoint,
-    report: &MachineReport,
-) -> MachineSnapshot {
-    snapshot_from_parsed_report(endpoint, report.snapshot())
+pub(crate) fn snapshot_from_endpoint(endpoint: &BambuPrinterEndpoint) -> MachineSnapshot {
+    project_snapshot(endpoint, None, DeviceFeatureObservations::default(), None)
 }
 
-pub(crate) fn snapshot_from_parsed_report(
+pub(super) fn project_snapshot(
     endpoint: &BambuPrinterEndpoint,
     report: Option<&SnapshotReport>,
+    features: DeviceFeatureObservations,
+    nozzle_patch: Option<&NozzleSystemPatch>,
 ) -> MachineSnapshot {
     let print = report.and_then(|report| report.print.as_ref());
     let state = print
@@ -66,16 +61,12 @@ pub(crate) fn snapshot_from_parsed_report(
         }),
         chamber_light_on: chamber_light_on_from_report(print),
         cooling_system: cooling::cooling_system_from_report(print),
-        device_features: report
-            .and_then(|report| device_feature_observation(&endpoint.serial, report).ok())
-            .flatten(),
-        device_features2: report
-            .and_then(|report| device_feature2_observation(&endpoint.serial, report).ok())
-            .flatten(),
-        nozzle_system: nozzle_system_patch_from_report(report).and_then(|patch| {
-            patch.nozzle.map(|nozzle| BambuNozzleSystem {
+        device_features: features.primary,
+        device_features2: features.secondary,
+        nozzle_system: nozzle_patch.and_then(|patch| {
+            patch.nozzle.clone().map(|nozzle| BambuNozzleSystem {
                 nozzle,
-                holder: patch.holder,
+                holder: patch.holder.clone(),
             })
         }),
         telemetry_authoritative: false,
@@ -198,13 +189,13 @@ fn nozzle_temperatures_from_v2_report(
     )
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct NozzleSystemPatch {
     pub(crate) nozzle: Option<BambuNozzleDevice>,
     pub(crate) holder: Option<BambuNozzleHolder>,
 }
 
-pub(crate) fn nozzle_system_patch_from_report(
+pub(super) fn project_nozzle_system_patch(
     report: Option<&SnapshotReport>,
 ) -> Option<NozzleSystemPatch> {
     let device = &report?.print.as_ref()?.device;

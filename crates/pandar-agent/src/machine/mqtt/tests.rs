@@ -21,6 +21,7 @@ mod firmware_persistent;
 mod firmware_session;
 mod fixtures;
 mod hms;
+mod interpretation;
 mod print_error;
 mod recovery;
 mod snapshot;
@@ -44,11 +45,33 @@ fn endpoint() -> BambuPrinterEndpoint {
     }
 }
 
+fn interpret_report(
+    endpoint: &BambuPrinterEndpoint,
+    report: serde_json::Value,
+) -> report::MachineReportInterpretation {
+    MachineReport::decode(report).interpret(endpoint, "2026-06-22T00:00:00Z".to_owned())
+}
+
 fn print_report_from_json(
     endpoint: &BambuPrinterEndpoint,
     report: &serde_json::Value,
 ) -> PrintReportProgress {
-    print_report_from_report(endpoint, &MachineReport::decode(report.clone()))
+    interpret_report(endpoint, report.clone())
+        .print
+        .expect("report should contain operational print telemetry")
+}
+
+fn snapshot_from_json(report: serde_json::Value) -> crate::machine::MachineSnapshot {
+    snapshot_from_json_for(&endpoint(), report)
+}
+
+fn snapshot_from_json_for(
+    endpoint: &BambuPrinterEndpoint,
+    report: serde_json::Value,
+) -> crate::machine::MachineSnapshot {
+    interpret_report(endpoint, report)
+        .snapshot
+        .expect("report should contain a valid snapshot section")
 }
 
 fn get_version_report(model: &str) -> serde_json::Value {

@@ -31,3 +31,7 @@ The deterministic translation of one validated Hub printer-list response into Ba
 ## Machine report
 
 One Bambu MQTT report message decoded once into typed sections, owned by `crates/pandar-agent/src/machine/mqtt/report/` (`MachineReport`, with `print` / `snapshot` / `materials` sections plus firmware views). The `MachineReports<T>` adapter wraps a `BambuMqttTransport` so every consumer — refresh flows, report forwarding, the firmware session pump — crosses the seam typed; raw `serde_json::Value` stays inside the transport pumps and the report module, which privately retains the source payload for diagnostics pass-through only.
+
+## Machine snapshot
+
+A normalized point-in-time printer observation produced by the Agent before wire projection. It may contain connection details, inventory identity, state, telemetry, and capability observations; explicit authority facts state which absent values may clear previously persisted data.

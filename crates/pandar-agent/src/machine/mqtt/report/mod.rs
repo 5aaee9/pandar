@@ -3,85 +3,61 @@ use std::time::Duration;
 use serde_json::Value;
 
 use super::{BambuMqttTransport, MachineReportDiagnosticPayload, PublishedMqttCommand};
-use crate::machine::types::decode_json_payload;
+use crate::machine::types::decode_json_payload_result;
 
 mod firmware;
+mod interpretation;
 pub(in crate::machine) mod materials;
 pub(in crate::machine::mqtt) mod print;
 pub(in crate::machine::mqtt) mod snapshot;
 
 pub(crate) use firmware::FirmwareReportReducer;
+pub(crate) use interpretation::{
+    DeviceFeatureObservations, MachineReportSectionDiagnostic, PrintTelemetryClass,
+    SnapshotAuthority, SnapshotContent,
+};
+#[cfg(test)]
+pub(crate) use interpretation::{MachineReportInterpretation, MachineReportSection};
 pub(crate) use materials::MaterialsReport;
 pub(crate) use print::PrintReportEnvelope;
-pub(crate) use snapshot::{
-    SnapshotReport, device_feature_observation, device_feature2_observation,
-};
+pub(crate) use snapshot::SnapshotReport;
 
 /// One Bambu MQTT report decoded once into typed sections. The raw payload is
 /// retained privately for open-ended diagnostics pass-through only.
 #[derive(Debug)]
 pub(crate) struct MachineReport {
     raw: Value,
-    print: Option<PrintReportEnvelope>,
-    snapshot: Option<SnapshotReport>,
-    materials: Option<MaterialsReport>,
+    print: DecodedSection<PrintReportEnvelope>,
+    snapshot: DecodedSection<SnapshotReport>,
+    materials: DecodedSection<MaterialsReport>,
+}
+
+#[derive(Debug)]
+pub(super) enum DecodedSection<T> {
+    Decoded(T),
+    Invalid(serde_json::Error),
+}
+
+impl<T> DecodedSection<T>
+where
+    T: for<'de> serde::Deserialize<'de>,
+{
+    fn decode(value: &Value) -> Self {
+        match decode_json_payload_result(value) {
+            Ok(value) => Self::Decoded(value),
+            Err(error) => Self::Invalid(error),
+        }
+    }
 }
 
 impl MachineReport {
     pub(crate) fn decode(value: Value) -> Self {
         Self {
-            print: decode_json_payload(&value),
-            snapshot: decode_json_payload(&value),
-            materials: decode_json_payload(&value),
+            print: DecodedSection::decode(&value),
+            snapshot: DecodedSection::decode(&value),
+            materials: DecodedSection::decode(&value),
             raw: value,
         }
-    }
-
-    pub(crate) fn print(&self) -> Option<&PrintReportEnvelope> {
-        self.print.as_ref()
-    }
-
-    pub(crate) fn snapshot(&self) -> Option<&SnapshotReport> {
-        self.snapshot.as_ref()
-    }
-
-    pub(crate) fn materials(&self) -> Option<&MaterialsReport> {
-        self.materials.as_ref()
-    }
-
-    pub(crate) fn device_feature_observation(
-        &self,
-        serial: &str,
-    ) -> anyhow::Result<Option<pandar_core::BambuDeviceFeatures>> {
-        match self.snapshot() {
-            Some(report) => snapshot::device_feature_observation(serial, report),
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) fn device_feature2_observation(
-        &self,
-        serial: &str,
-    ) -> anyhow::Result<Option<pandar_core::BambuDeviceFeatures>> {
-        match self.snapshot() {
-            Some(report) => snapshot::device_feature2_observation(serial, report),
-            None => Ok(None),
-        }
-    }
-
-    pub(crate) fn is_feature_only_report(&self) -> bool {
-        self.raw.as_object().is_some_and(|fields| fields.len() == 1)
-            && self
-                .raw
-                .get("print")
-                .and_then(Value::as_object)
-                .is_some_and(|fields| {
-                    fields.len() == 1 && (fields.contains_key("fun") || fields.contains_key("fun2"))
-                })
-    }
-
-    pub(crate) fn raw_print_payload(&self) -> Option<MachineReportDiagnosticPayload> {
-        self.raw.get("print").map(value_payload)
     }
 }
 

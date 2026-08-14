@@ -218,37 +218,6 @@ fn firmware_reducer_only_revises_changed_status_and_ignores_pure_info() {
 }
 
 #[test]
-fn firmware_reducer_firmware_only_reports_do_not_claim_job_or_snapshot_telemetry() {
-    assert!(
-        !MachineReport::decode(json!({
-            "info": { "command": "get_version", "module": [] }
-        }))
-        .has_non_firmware_print_telemetry()
-    );
-    assert!(
-        !MachineReport::decode(json!({
-            "print": {
-                "command": "push_status",
-                "msg": 1,
-                "cfg": "force-upgrade",
-                "upgrade_state": { "status": "DOWNLOADING" }
-            }
-        }))
-        .has_non_firmware_print_telemetry()
-    );
-    assert!(
-        MachineReport::decode(json!({
-            "print": {
-                "msg": 1,
-                "upgrade_state": { "status": "DOWNLOADING" },
-                "gcode_state": "RUNNING"
-            }
-        }))
-        .has_non_firmware_print_telemetry()
-    );
-}
-
-#[test]
 fn firmware_reducer_retains_every_known_upgrade_field() {
     let mut reducer = FirmwareReportReducer::new("SERIAL1", 2);
     let observation = reducer

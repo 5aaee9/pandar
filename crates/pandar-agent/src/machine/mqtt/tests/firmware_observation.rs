@@ -4,7 +4,7 @@ use serde_json::json;
 use super::super::{
     FakeMqttTransport, MachineReport, read_firmware_version, refresh_printer_with_firmware,
 };
-use super::{endpoint, print_report_from_json};
+use super::{endpoint, interpret_report, print_report_from_json};
 
 #[test]
 fn firmware_observation_preserves_order_duplicates_and_all_module_fields() {
@@ -106,7 +106,11 @@ fn firmware_observation_malformed_fields_do_not_discard_sibling_telemetry() {
             .as_deref(),
         Some("job-9")
     );
-    assert!(MachineReport::decode(report.clone()).snapshot().is_some());
+    assert!(
+        interpret_report(&endpoint(), report.clone())
+            .snapshot
+            .is_some()
+    );
 }
 
 #[test]
@@ -148,7 +152,11 @@ fn firmware_observation_rejects_empty_module_name_without_discarding_sibling_tel
             .as_deref(),
         Some("job-empty-name")
     );
-    assert!(MachineReport::decode(report.clone()).snapshot().is_some());
+    assert!(
+        interpret_report(&endpoint(), report.clone())
+            .snapshot
+            .is_some()
+    );
 }
 
 #[test]

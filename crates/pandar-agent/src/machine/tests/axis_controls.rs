@@ -3,7 +3,7 @@ use pandar_core::BambuDeviceFeature;
 
 use crate::{
     machine::{
-        mqtt::{MachineReport, decode_mqtt_report_payload, device_feature_observation},
+        mqtt::{MachineReport, decode_mqtt_report_payload},
         operations::{device_feature_dispatch_pause, operate_printer_with_feature_selection},
     },
     protocol::agent::v1::{AgentEvent, agent_event},
@@ -100,10 +100,9 @@ fn feature_report(fun: &str) -> Value {
 }
 
 async fn ingest_feature_report(cache: &DeviceFeatureCache, fun: &str) {
-    let report = MachineReport::decode(feature_report(fun));
-    let observed = device_feature_observation("SERIAL1", report.snapshot().unwrap())
-        .unwrap()
-        .unwrap();
+    let interpreted = MachineReport::decode(feature_report(fun))
+        .interpret(&endpoint("SERIAL1"), "2026-06-22T00:00:00Z".to_owned());
+    let observed = interpreted.features.primary.unwrap();
     cache.update("SERIAL1", observed).await;
 }
 

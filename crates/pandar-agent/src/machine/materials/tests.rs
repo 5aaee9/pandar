@@ -1,7 +1,6 @@
 use serde_json::Value;
 
-use super::*;
-use crate::machine::mqtt::MachineReport;
+use crate::machine::{BambuPrinterEndpoint, mqtt::MachineReport};
 
 mod a2l;
 mod fixtures;
@@ -9,20 +8,23 @@ mod fixtures;
 use fixtures::*;
 
 fn normalize(report: Value) -> Option<TestMaterialPatch> {
-    let report = MachineReport::decode(report);
-    let patch = normalize_material_patch(report.materials()?, "2026-06-23T00:00:00Z")?;
-    Some(decode_patch(&patch))
+    normalize_json(report).map(|json| serde_json::from_str(&json).unwrap())
 }
 
 fn normalize_json(report: Value) -> Option<String> {
-    let report = MachineReport::decode(report);
-    let patch = normalize_material_patch(report.materials()?, "2026-06-23T00:00:00Z")?;
-    Some(serde_json::to_string(&patch).unwrap())
-}
-
-fn decode_patch(input: impl serde::Serialize) -> TestMaterialPatch {
-    let value = serde_json::to_value(input).unwrap();
-    serde::Deserialize::deserialize(value).unwrap()
+    MachineReport::decode(report)
+        .interpret(
+            &BambuPrinterEndpoint {
+                host: "192.0.2.10".to_owned(),
+                serial: "01S00EXAMPLE".to_owned(),
+                access_code: "12345678".to_owned(),
+                model: None,
+                name: None,
+            },
+            "2026-06-23T00:00:00Z".to_owned(),
+        )
+        .materials
+        .map(|patch| patch.into_json())
 }
 
 #[test]

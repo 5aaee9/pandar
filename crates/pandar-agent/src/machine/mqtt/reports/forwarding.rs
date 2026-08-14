@@ -17,19 +17,16 @@ use crate::{
     AgentConfig,
     machine::{
         BambuPrinterEndpoint, DeviceFeatureCache, FirmwareReportContext, MachineSnapshot,
-        MaterialRefreshResult, materials::normalize_material_patch,
+        MaterialRefreshResult,
     },
     protocol::agent::v1::AgentEvent,
 };
 
-use super::{
-    print_job_report_event, print_report_from_parsed_report, printer_materials_snapshot_event,
-    printer_snapshot_event,
-};
+use super::{print_job_report_event, printer_materials_snapshot_event, printer_snapshot_event};
 use crate::machine::mqtt::{
     BAMBU_MQTT_QOS, BambuMqttCommand, BambuMqttTopics, BambuMqttTransport, MachineReports,
-    PublishedMqttCommand, feature_event, is_mqtt_report_idle_timeout,
-    nozzle_system_patch_from_report, snapshot_from_parsed_report,
+    PrintTelemetryClass, PublishedMqttCommand, SnapshotAuthority, SnapshotContent, feature_event,
+    is_mqtt_report_idle_timeout,
 };
 const PRINTER_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 
@@ -42,21 +39,6 @@ pub(crate) struct MqttForwardingContext<'a> {
     pub(crate) device_features: &'a DeviceFeatureCache,
     pub(crate) firmware: Option<FirmwareReportContext>,
     pub(crate) presence: &'a mut MqttPresenceState,
-}
-
-fn snapshot_has_telemetry(snapshot: &MachineSnapshot) -> bool {
-    snapshot.telemetry_authoritative
-        || snapshot.state.is_some()
-        || !snapshot.nozzle_temperatures.is_empty()
-        || snapshot.active_nozzle.is_some()
-        || snapshot.bed_temperature_celsius.is_some()
-        || snapshot.bed_target_temperature_celsius.is_some()
-        || snapshot.chamber_temperature_celsius.is_some()
-        || snapshot.chamber_target_temperature_celsius.is_some()
-        || snapshot.chamber_light_on.is_some()
-        || snapshot.cooling_system.is_some()
-        || snapshot.device_features2.is_some()
-        || snapshot.nozzle_system.is_some()
 }
 
 #[cfg(test)]
@@ -208,70 +190,47 @@ where
                 if let Some(processor) = &mut firmware_processor {
                     processor.observe(config, &report, sender).await?;
                 }
-                let observed_at = created_at_now();
-                let printer_materials_json = report
-                    .materials()
-                    .and_then(|report| normalize_material_patch(report, &observed_at))
-                    .and_then(|patch| serde_json::to_string(&patch).ok())
-                    .unwrap_or_default();
-                let progress = print_report_from_parsed_report(
-                    endpoint,
-                    report.print(),
-                    report.raw_print_payload(),
-                    observed_at,
-                    printer_materials_json,
-                );
-                let device_features = match report.device_feature_observation(&endpoint.serial) {
-                    Ok(value) => value,
-                    Err(error) => {
-                        tracing::warn!(
-                            serial = %endpoint.serial,
-                            error = %format!("{error:#}"),
-                            "invalid printer device feature observation"
-                        );
-                        None
-                    }
-                };
+                let mut interpreted = report.interpret(endpoint, created_at_now());
+                for diagnostic in &interpreted.diagnostics {
+                    tracing::warn!(
+                        serial = %endpoint.serial,
+                        section = ?diagnostic.section,
+                        issue = ?diagnostic.issue,
+                        error = %format!("{diagnostic:#}"),
+                        "invalid printer report observation"
+                    );
+                }
+                let device_features = interpreted.features.primary;
                 if let Some(value) = device_features {
                     context.device_features.update(&endpoint.serial, value).await;
                 }
-                let device_features2 = match report.device_feature2_observation(&endpoint.serial) {
-                    Ok(value) => value,
-                    Err(error) => {
-                        tracing::warn!(
-                            serial = %endpoint.serial,
-                            error = %format!("{error:#}"),
-                            "invalid printer secondary device feature observation"
-                        );
-                        None
-                    }
-                };
-                let mut snapshot = snapshot_from_parsed_report(endpoint, report.snapshot());
-                if let Some(patch) = nozzle_system_patch_from_report(report.snapshot()) {
+                if let Some(patch) = interpreted.nozzle_patch.take()
+                    && let Some(snapshot) = &mut interpreted.snapshot
+                {
                     snapshot.nozzle_system = nozzle_system.update(patch);
                 }
-                snapshot.telemetry_authoritative = report
-                    .snapshot()
-                    .is_some_and(|report| report.is_full_push_status());
-                snapshot.model = None;
-                snapshot.device_features = device_features;
-                snapshot.device_features2 = device_features2;
-                if context.presence.offline && !snapshot.telemetry_authoritative {
-                    snapshot.state = None;
+                if let Some(snapshot) = &mut interpreted.snapshot {
+                    snapshot.model = None;
+                    if context.presence.offline && !snapshot.telemetry_authoritative {
+                        snapshot.state = None;
+                    }
                 }
-                let restores_presence = snapshot.telemetry_authoritative;
-                let snapshot_event = snapshot_has_telemetry(&snapshot)
-                    .then(|| printer_snapshot_event(config, snapshot));
+                let restores_presence =
+                    interpreted.facts.authority == SnapshotAuthority::FullPushStatus;
+                let snapshot_event = interpreted.snapshot.take().and_then(|snapshot| {
+                    (interpreted.facts.snapshot == SnapshotContent::Telemetry
+                        || snapshot.nozzle_system.is_some())
+                    .then(|| printer_snapshot_event(config, snapshot))
+                });
                 let feature_event = (snapshot_event.is_none() && device_features.is_some())
                     .then(|| feature_event(config, endpoint.serial.clone(), device_features));
-                let materials =
-                    (!progress.printer_materials_json.is_empty()).then(|| MaterialRefreshResult {
-                        serial: progress.serial.clone(),
-                        printer_id: None,
-                        printer_materials_json: progress.printer_materials_json.clone(),
-                    });
-                if report.has_non_firmware_print_telemetry()
-                    && !report.is_feature_only_report()
+                let materials = interpreted.materials.map(|patch| MaterialRefreshResult {
+                    serial: endpoint.serial.clone(),
+                    printer_id: None,
+                    printer_materials_json: patch.into_json(),
+                });
+                if interpreted.facts.print == PrintTelemetryClass::Operational
+                    && let Some(progress) = interpreted.print
                     && sender
                         .send(print_job_report_event(config, progress))
                         .await

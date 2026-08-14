@@ -8,14 +8,11 @@ use crate::{machine::DeviceFeatureCache, protocol::agent::v1::agent_event};
 
 const HIGH_BITS: u64 = 0x8000_0041_0000_0020;
 
-fn report_from_mqtt_bytes(payload: &[u8]) -> MachineReport {
+fn interpret_mqtt_bytes(payload: &[u8]) -> report::MachineReportInterpretation {
     let value = decode_mqtt_report_payload(payload).expect("valid MQTT-shaped JSON bytes");
-    let report = MachineReport::decode(value);
-    assert!(
-        report.snapshot().is_some(),
-        "snapshot report should retain sibling telemetry"
-    );
-    report
+    let mut report_endpoint = endpoint();
+    report_endpoint.serial = "SERIAL-1".to_owned();
+    interpret_report(&report_endpoint, value)
 }
 
 fn feature_report(fun: &str) -> serde_json::Value {
@@ -39,14 +36,14 @@ fn test_config() -> AgentConfig {
 
 #[test]
 fn device_features_parser_preserves_presence_and_sibling_telemetry() {
-    let valid = report_from_mqtt_bytes(
+    let valid = interpret_mqtt_bytes(
         br#"{"print":{"fun":"8000004100000020","gcode_state":"RUNNING","bed_temper":60}}"#,
     );
-    let observed = device_feature_observation("SERIAL-1", valid.snapshot().unwrap())
-        .unwrap()
-        .expect("print.fun is present");
-    assert_eq!(observed.bits(), HIGH_BITS);
-    let snapshot = snapshot_from_parsed_report(&endpoint(), valid.snapshot());
+    assert_eq!(
+        valid.features.primary.expect("print.fun is present").bits(),
+        HIGH_BITS
+    );
+    let snapshot = valid.snapshot.unwrap();
     assert_eq!(snapshot.state.as_deref(), Some("RUNNING"));
     assert_eq!(snapshot.bed_temperature_celsius.as_deref(), Some("60"));
 
@@ -55,12 +52,16 @@ fn device_features_parser_preserves_presence_and_sibling_telemetry() {
         br#"{"print":{"fun":null,"gcode_state":"RUNNING","bed_temper":60}}"#.as_slice(),
         br#"{"print":{"fun":"not-hex","gcode_state":"RUNNING","bed_temper":60}}"#.as_slice(),
     ] {
-        let report = report_from_mqtt_bytes(payload);
-        let snapshot = snapshot_from_parsed_report(&endpoint(), report.snapshot());
+        let interpreted = interpret_mqtt_bytes(payload);
+        let snapshot = interpreted.snapshot.unwrap();
         assert_eq!(snapshot.state.as_deref(), Some("RUNNING"));
         assert_eq!(snapshot.bed_temperature_celsius.as_deref(), Some("60"));
 
-        let error = device_feature_observation("SERIAL-1", report.snapshot().unwrap()).unwrap_err();
+        let error = interpreted
+            .diagnostics
+            .into_iter()
+            .find(|diagnostic| diagnostic.is_primary_device_features())
+            .expect("invalid print.fun should produce a diagnostic");
         let error = format!("{error:#}");
         assert!(error.contains("SERIAL-1"), "{error}");
         assert!(error.contains("print.fun"), "{error}");
@@ -74,12 +75,16 @@ fn device_features_parser_preserves_presence_and_sibling_telemetry() {
 
 #[test]
 fn device_features_parser_does_not_unicode_trim_fun() {
-    let report = report_from_mqtt_bytes(
+    let interpreted = interpret_mqtt_bytes(
         "{\"print\":{\"fun\":\"\u{00a0}8000004100000020\u{00a0}\",\"gcode_state\":\"RUNNING\",\"bed_temper\":60}}"
             .as_bytes(),
     );
 
-    let error = device_feature_observation("SERIAL-1", report.snapshot().unwrap()).unwrap_err();
+    let error = interpreted
+        .diagnostics
+        .into_iter()
+        .find(|diagnostic| diagnostic.is_primary_device_features())
+        .expect("invalid print.fun should produce a diagnostic");
     let error = format!("{error:#}");
     assert!(error.contains("SERIAL-1"), "{error}");
     assert!(error.contains("print.fun"), "{error}");

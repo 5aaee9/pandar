@@ -13,7 +13,7 @@ fn report_maps_to_snapshot_uses_configured_model() {
     });
 
     assert_eq!(
-        snapshot_from_report(&endpoint(), &MachineReport::decode(report)),
+        snapshot_from_json(report),
         MachineSnapshot {
             serial: "01S00EXAMPLE".to_string(),
             host: Some("192.0.2.10".to_string()),
@@ -46,9 +46,7 @@ fn report_maps_legacy_fan_levels_to_bambu_studio_percentages() {
         ..Default::default()
     });
 
-    let cooling = snapshot_from_report(&endpoint(), &MachineReport::decode(report))
-        .cooling_system
-        .unwrap();
+    let cooling = snapshot_from_json(report).cooling_system.unwrap();
 
     assert_eq!(cooling.mode, None);
     assert_eq!(
@@ -88,9 +86,7 @@ fn report_maps_modern_airduct_mode_and_parts() {
         ..Default::default()
     });
 
-    let cooling = snapshot_from_report(&endpoint(), &MachineReport::decode(report))
-        .cooling_system
-        .unwrap();
+    let cooling = snapshot_from_json(report).cooling_system.unwrap();
 
     assert_eq!(cooling.mode, Some(pandar_core::PrinterCoolingMode::Heating));
     assert_eq!(
@@ -120,7 +116,7 @@ fn report_maps_device_features_to_full_snapshot() {
     });
 
     assert_eq!(
-        snapshot_from_report(&endpoint(), &MachineReport::decode(report))
+        snapshot_from_json(report)
             .device_features
             .expect("valid print.fun maps to the full snapshot")
             .bits(),
@@ -136,10 +132,7 @@ fn report_preserves_secondary_device_features_without_interpreting_them() {
     });
 
     assert_eq!(
-        snapshot_from_report(&endpoint(), &MachineReport::decode(report))
-            .device_features2
-            .unwrap()
-            .bits(),
+        snapshot_from_json(report).device_features2.unwrap().bits(),
         0x8000_0000_0000_0021
     );
 }
@@ -161,7 +154,7 @@ fn report_maps_only_known_chamber_light_modes_to_snapshot() {
         });
 
         assert_eq!(
-            snapshot_from_report(&endpoint(), &MachineReport::decode(report)).chamber_light_on,
+            snapshot_from_json(report).chamber_light_on,
             expected,
             "mode {mode}"
         );
@@ -174,12 +167,12 @@ fn report_maps_to_snapshot_without_configured_model() {
     endpoint.model = None;
 
     assert_eq!(
-        snapshot_from_report(
+        snapshot_from_json_for(
             &endpoint,
-            &MachineReport::decode(report_with_print(SnapshotPrintFixture {
+            report_with_print(SnapshotPrintFixture {
                 gcode_state: Some(ScalarFixture::Text("RUNNING")),
                 ..Default::default()
-            }))
+            }),
         )
         .model,
         None,
@@ -201,7 +194,7 @@ fn report_maps_temperatures_to_snapshot() {
         ..Default::default()
     });
 
-    let snapshot = snapshot_from_report(&endpoint(), &MachineReport::decode(report));
+    let snapshot = snapshot_from_json(report);
 
     assert_eq!(snapshot.nozzle_temperatures.len(), 2);
     assert_eq!(snapshot.nozzle_temperatures[0].label.as_deref(), Some("L"));
@@ -283,7 +276,7 @@ fn report_maps_bambu_studio_v2_temperatures_to_snapshot() {
         ..Default::default()
     });
 
-    let snapshot = snapshot_from_report(&endpoint(), &MachineReport::decode(report));
+    let snapshot = snapshot_from_json(report);
 
     assert_eq!(snapshot.nozzle_temperatures.len(), 2);
     assert_eq!(snapshot.nozzle_temperatures[0].label.as_deref(), Some("L"));
@@ -342,7 +335,7 @@ fn report_maps_bambu_studio_v2_active_right_nozzle_to_snapshot() {
         ..Default::default()
     });
 
-    let snapshot = snapshot_from_report(&endpoint(), &MachineReport::decode(report));
+    let snapshot = snapshot_from_json(report);
 
     assert_eq!(snapshot.active_nozzle.as_deref(), Some("R"));
 }
@@ -360,7 +353,7 @@ fn report_ignores_bambu_studio_v2_target_nozzle_for_active_snapshot() {
         ..Default::default()
     });
 
-    let snapshot = snapshot_from_report(&endpoint(), &MachineReport::decode(report));
+    let snapshot = snapshot_from_json(report);
 
     assert_eq!(snapshot.active_nozzle.as_deref(), Some("R"));
 }
@@ -401,7 +394,7 @@ fn report_maps_h2c_rack_holder_and_extruder_routing() {
         ..Default::default()
     });
 
-    let snapshot = snapshot_from_report(&endpoint(), &MachineReport::decode(report));
+    let snapshot = snapshot_from_json(report);
     let system = snapshot.nozzle_system.unwrap();
     assert_eq!(system.nozzle.exist, Some(1 << 16));
     assert_eq!(system.nozzle.src_id, Some(16));
@@ -419,12 +412,7 @@ fn report_state_falls_back_to_print_state() {
         ..Default::default()
     });
 
-    assert_eq!(
-        snapshot_from_report(&endpoint(), &MachineReport::decode(report))
-            .state
-            .as_deref(),
-        Some("READY")
-    );
+    assert_eq!(snapshot_from_json(report).state.as_deref(), Some("READY"));
 }
 
 #[test]
@@ -434,12 +422,7 @@ fn report_state_falls_back_to_root_state() {
         ..Default::default()
     });
 
-    assert_eq!(
-        snapshot_from_report(&endpoint(), &MachineReport::decode(report))
-            .state
-            .as_deref(),
-        Some("IDLE")
-    );
+    assert_eq!(snapshot_from_json(report).state.as_deref(), Some("IDLE"));
 }
 
 #[test]
@@ -450,12 +433,7 @@ fn report_state_skips_non_string_candidates() {
         ..Default::default()
     });
 
-    assert_eq!(
-        snapshot_from_report(&endpoint(), &MachineReport::decode(report))
-            .state
-            .as_deref(),
-        Some("READY")
-    );
+    assert_eq!(snapshot_from_json(report).state.as_deref(), Some("READY"));
 }
 
 #[test]
@@ -465,10 +443,7 @@ fn report_with_unusable_state_keeps_state_absent() {
         ..Default::default()
     });
 
-    assert_eq!(
-        snapshot_from_report(&endpoint(), &MachineReport::decode(report)).state,
-        None
-    );
+    assert_eq!(snapshot_from_json(report).state, None);
 }
 
 #[test]
@@ -477,11 +452,7 @@ fn report_name_defaults_to_serial() {
     endpoint.name = None;
 
     assert_eq!(
-        snapshot_from_report(
-            &endpoint,
-            &MachineReport::decode(value(SnapshotReportFixture::default()))
-        )
-        .name,
+        snapshot_from_json_for(&endpoint, value(SnapshotReportFixture::default())).name,
         "01S00EXAMPLE"
     );
 }

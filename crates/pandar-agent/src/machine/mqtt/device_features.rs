@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::{Context, anyhow};
-use pandar_core::BambuDeviceFeatures;
+use pandar_core::{BambuDeviceFeatures, created_at_now};
 
 use crate::{
     AgentConfig,
@@ -86,7 +86,16 @@ where
                     endpoint.serial, topics.report
                 )
             })?;
-        let Some(value) = report.device_feature_observation(&endpoint.serial)? else {
+        let interpreted = report.interpret(endpoint, created_at_now());
+        if let Some(diagnostic) = interpreted
+            .diagnostics
+            .into_iter()
+            .find(|diagnostic| diagnostic.is_primary_device_features())
+        {
+            return Err(diagnostic.source)
+                .context("interpret printer primary device feature observation");
+        }
+        let Some(value) = interpreted.features.primary else {
             continue;
         };
         cache.update(&endpoint.serial, value).await;

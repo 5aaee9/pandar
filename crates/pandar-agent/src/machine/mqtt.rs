@@ -44,7 +44,9 @@ pub(crate) use firmware::{
 };
 pub use hms::MachineHmsItem;
 pub(super) use recovery::dispatch_sequence_zero_recovery;
-pub(crate) use report::{MachineReport, MachineReports, device_feature_observation};
+pub(crate) use report::{
+    MachineReport, MachineReports, PrintTelemetryClass, SnapshotAuthority, SnapshotContent,
+};
 pub(crate) use report_payload::decode_mqtt_report_payload;
 pub(crate) use reports::{
     MqttForwardingContext, MqttPresenceState, forward_print_reports_with_context,
@@ -53,13 +55,10 @@ pub(crate) use reports::{
 #[cfg(test)]
 pub(crate) use reports::{
     forward_print_reports, forward_print_reports_with_firmware, print_job_report_event,
-    print_report_from_report,
 };
 #[cfg(test)]
 pub(crate) use rumqttc::TlsConfiguration;
-#[cfg(test)]
-pub(crate) use snapshot::snapshot_from_report;
-pub(crate) use snapshot::{nozzle_system_patch_from_report, snapshot_from_parsed_report};
+pub(crate) use snapshot::snapshot_from_endpoint;
 pub(crate) use transport::BambuLanCertificateVerifier;
 #[cfg(test)]
 pub(crate) use transport::mqtt_report_idle_timeout;
@@ -72,7 +71,6 @@ pub(crate) use transport::{
 
 use crate::machine::{
     BambuPrinterEndpoint, FirmwareVersionObservation, MaterialRefreshResult, PrinterRefreshResult,
-    materials::normalize_material_patch,
 };
 
 pub const BAMBU_MQTT_PORT: u16 = 8883;
@@ -141,32 +139,26 @@ where
             .await
             .with_context(|| format!("publish pushall to request topic {}", topics.request))?;
         let material_deadline = tokio::time::Instant::now() + report_timeout;
-        let report = reports
+        let interpreted = reports
             .next_report(report_timeout)
             .await
-            .context("wait for MQTT report")?;
-        if let Some(snapshot_report) = report.snapshot()
-            && let Err(error) = device_feature_observation(&endpoint.serial, snapshot_report)
-        {
-            tracing::warn!(
-                serial = %endpoint.serial,
-                error = %format!("{error:#}"),
-                "invalid printer device feature observation during refresh"
-            );
-        }
-        let mut snapshot = snapshot_from_parsed_report(endpoint, report.snapshot());
+            .context("wait for MQTT report")?
+            .interpret(endpoint, created_at_now());
+        log_interpretation_diagnostics(
+            endpoint,
+            &interpreted.diagnostics,
+            "invalid printer report observation during refresh",
+        );
+        let mut snapshot = interpreted
+            .snapshot
+            .ok_or_else(|| anyhow!("pushall response did not contain a valid printer snapshot"))?;
         snapshot.model = Some(firmware.model.clone());
         snapshot.telemetry_authoritative = true;
-        let observed_at = created_at_now();
-        let materials = match report
-            .materials()
-            .and_then(|report| normalize_material_patch(report, &observed_at))
-        {
+        let materials = match interpreted.materials {
             Some(patch) => Some(MaterialRefreshResult {
                 serial: endpoint.serial.clone(),
                 printer_id: None,
-                printer_materials_json: serde_json::to_string(&patch)
-                    .context("encode printer materials patch")?,
+                printer_materials_json: patch.into_json(),
             }),
             None => scan_materials_after_snapshot(&reports, endpoint, material_deadline).await?,
         };
@@ -207,16 +199,17 @@ where
                 return Ok(None);
             }
         };
-        let observed_at = created_at_now();
-        if let Some(patch) = report
-            .materials()
-            .and_then(|report| normalize_material_patch(report, &observed_at))
-        {
+        let interpreted = report.interpret(endpoint, created_at_now());
+        log_interpretation_diagnostics(
+            endpoint,
+            &interpreted.diagnostics,
+            "invalid printer report observation during material scan",
+        );
+        if let Some(patch) = interpreted.materials {
             return Ok(Some(MaterialRefreshResult {
                 serial: endpoint.serial.clone(),
                 printer_id: None,
-                printer_materials_json: serde_json::to_string(&patch)
-                    .context("encode printer materials patch")?,
+                printer_materials_json: patch.into_json(),
             }));
         }
     }
@@ -277,18 +270,35 @@ where
             }
             Err(err) => return Err(err),
         };
-        let observed_at = created_at_now();
-        if let Some(patch) = report
-            .materials()
-            .and_then(|report| normalize_material_patch(report, &observed_at))
-        {
+        let interpreted = report.interpret(endpoint, created_at_now());
+        log_interpretation_diagnostics(
+            endpoint,
+            &interpreted.diagnostics,
+            "invalid printer report observation during material refresh",
+        );
+        if let Some(patch) = interpreted.materials {
             return Ok(MaterialRefreshResult {
                 serial: endpoint.serial.clone(),
                 printer_id: printer_id.map(str::to_owned),
-                printer_materials_json: serde_json::to_string(&patch)
-                    .context("encode printer materials patch")?,
+                printer_materials_json: patch.into_json(),
             });
         }
+    }
+}
+
+fn log_interpretation_diagnostics(
+    endpoint: &BambuPrinterEndpoint,
+    diagnostics: &[report::MachineReportSectionDiagnostic],
+    message: &'static str,
+) {
+    for diagnostic in diagnostics {
+        tracing::warn!(
+            serial = %endpoint.serial,
+            section = ?diagnostic.section,
+            issue = ?diagnostic.issue,
+            error = %format!("{diagnostic:#}"),
+            "{message}"
+        );
     }
 }
 

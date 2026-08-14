@@ -8,8 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::Mutex;
 
-use crate::machine::materials::normalize_material_patch;
-use crate::machine::mqtt::MachineReport;
+use crate::machine::{BambuPrinterEndpoint, mqtt::MachineReport};
 
 use super::{BambuMqttTransport, PublishedMqttCommand, mqtt_report_idle_timeout};
 
@@ -182,9 +181,16 @@ impl BambuMqttTransport for FakeMqttTransport {
                 return Err(mqtt_report_idle_timeout(timeout));
             }
             if let Some(report) = state.reports.pop_front() {
+                let endpoint = BambuPrinterEndpoint {
+                    host: String::new(),
+                    serial: "fake-material-printer".to_owned(),
+                    access_code: String::new(),
+                    model: None,
+                    name: None,
+                };
                 let is_material_report = MachineReport::decode(report.clone())
-                    .materials()
-                    .and_then(|report| normalize_material_patch(report, "2026-07-02T00:00:00Z"))
+                    .interpret(&endpoint, "2026-07-02T00:00:00Z".to_owned())
+                    .materials
                     .is_some();
                 if is_material_report {
                     state.last_material_report = Some(report.clone());

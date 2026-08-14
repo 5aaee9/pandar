@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn print_report_from_report_extracts_progress_and_diagnostics() {
+fn interpretation_extracts_progress_and_diagnostics() {
     let report = detailed_progress_report();
 
     let progress = print_report_from_json(&endpoint(), &report);
@@ -29,7 +29,7 @@ fn print_report_from_report_extracts_progress_and_diagnostics() {
         Some("0300_0A00_0001_0002")
     );
     assert_eq!(progress.diagnostics[1].message, "fan speed is low");
-    assert!(!progress.observed_at.is_empty());
+    assert_eq!(progress.observed_at, "2026-06-22T00:00:00Z");
 }
 
 #[test]
@@ -55,7 +55,7 @@ fn print_report_diagnostic_payload_includes_raw_print_report() {
 }
 
 #[test]
-fn print_report_from_report_drops_out_of_range_numeric_values() {
+fn interpretation_drops_out_of_range_numeric_values() {
     let report = out_of_range_progress_report();
 
     let progress = print_report_from_json(&endpoint(), &report);
@@ -140,7 +140,7 @@ fn print_job_report_event_sets_numeric_presence_booleans() {
 }
 
 #[test]
-fn print_report_from_report_populates_printer_materials_json() {
+fn interpretation_populates_printer_materials_json() {
     let report = external_vt_tray_report(254, "GFL05", "#abcdef");
 
     let progress = print_report_from_json(&endpoint(), &report);

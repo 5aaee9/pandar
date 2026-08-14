@@ -1,4 +1,4 @@
-mod diagnostics;
+pub(super) mod diagnostics;
 mod firmware;
 mod forwarding;
 mod protocol;
@@ -9,8 +9,6 @@ pub(crate) use forwarding::{
 };
 #[cfg(test)]
 pub use forwarding::{forward_print_reports, forward_print_reports_with_firmware};
-#[cfg(test)]
-use pandar_core::created_at_now;
 pub use protocol::print_job_report_event;
 
 use crate::{
@@ -21,44 +19,16 @@ use crate::{
     },
 };
 
-#[cfg(test)]
-use crate::machine::materials::normalize_material_patch;
-
-#[cfg(test)]
-use super::MachineReport;
 use super::{MachineReportDiagnostic, MachineReportDiagnosticPayload, PrintReportProgress};
 use diagnostics::{bounded_u32, collect_hms_diagnostics, print_error_payload, trimmed_string};
 
-#[cfg(test)]
-pub(crate) fn print_report_from_report(
+pub(super) fn project_print_report(
     endpoint: &BambuPrinterEndpoint,
-    report: &MachineReport,
-) -> PrintReportProgress {
-    let observed_at = created_at_now();
-    let printer_materials_json = report
-        .materials()
-        .and_then(|report| normalize_material_patch(report, &observed_at))
-        .and_then(|patch| serde_json::to_string(&patch).ok())
-        .unwrap_or_default();
-
-    print_report_from_parsed_report(
-        endpoint,
-        report.print(),
-        report.raw_print_payload(),
-        observed_at,
-        printer_materials_json,
-    )
-}
-
-pub(crate) fn print_report_from_parsed_report(
-    endpoint: &BambuPrinterEndpoint,
-    envelope: Option<&PrintReportEnvelope>,
+    envelope: &PrintReportEnvelope,
     raw_print: Option<MachineReportDiagnosticPayload>,
     observed_at: String,
     printer_materials_json: String,
 ) -> PrintReportProgress {
-    let default_envelope = PrintReportEnvelope::default();
-    let envelope = envelope.unwrap_or(&default_envelope);
     let print = &envelope.print;
     let subtask_id = trimmed_string(print.subtask_id.as_deref());
 

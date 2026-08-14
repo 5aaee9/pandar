@@ -366,10 +366,7 @@ fn print_job_report_event_preserves_print_error_and_printer_job_id_presence() {
     assert_eq!(explicit.printer_job_id, "");
     assert!(explicit.has_printer_job_id);
 
-    let absent = print_job_report_event(
-        &config(),
-        print_report_from_json(&endpoint(), &serde_json::json!({"print": {}})),
-    );
+    let absent = print_job_report_event(&config(), progress_with_job_attr(None));
     let Some(agent_event::Event::PrintJobReport(absent)) = absent.event else {
         panic!("expected print job report event");
     };

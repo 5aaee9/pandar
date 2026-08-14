@@ -129,5 +129,12 @@ pub(crate) fn decode_json_payload<T>(payload: &Value) -> Option<T>
 where
     T: for<'de> Deserialize<'de>,
 {
-    T::deserialize(payload).ok()
+    decode_json_payload_result(payload).ok()
+}
+
+pub(crate) fn decode_json_payload_result<T>(payload: &Value) -> serde_json::Result<T>
+where
+    T: for<'de> Deserialize<'de>,
+{
+    T::deserialize(payload)
 }

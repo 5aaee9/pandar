@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use super::RuntimeBambuMachineGateway;
 use crate::{
     commands::authoritative_printer_snapshot_event,
-    machine::{BambuPrinterEndpoint, mqtt::snapshot_from_parsed_report},
+    machine::{BambuPrinterEndpoint, mqtt::snapshot_from_endpoint},
     protocol::agent::v1::AgentEvent,
 };
 
@@ -18,7 +18,7 @@ impl RuntimeBambuMachineGateway {
             sender
                 .send(authoritative_printer_snapshot_event(
                     &self.config,
-                    snapshot_from_parsed_report(endpoint, None),
+                    snapshot_from_endpoint(endpoint),
                 ))
                 .await
                 .with_context(|| {

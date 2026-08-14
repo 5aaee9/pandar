@@ -187,17 +187,6 @@ impl MachineReport {
                 && identity.sequence_id.as_deref() == Some(sequence_id)
         }))
     }
-
-    pub(crate) fn has_non_firmware_print_telemetry(&self) -> bool {
-        self.raw
-            .get("print")
-            .and_then(Value::as_object)
-            .is_some_and(|print| {
-                print
-                    .keys()
-                    .any(|key| !matches!(key.as_str(), "command" | "msg" | "cfg" | "upgrade_state"))
-            })
-    }
 }
 
 #[derive(Debug)]
