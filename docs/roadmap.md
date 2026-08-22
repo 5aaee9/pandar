@@ -16,6 +16,8 @@
 
 ## Completed
 
+- Restored the Nix `pandar-nextest` quality check on main. The personal-preset synchronization work added a new pinned-source contract test binary that requires the gitignored `reference/BambuStudio` checkout, which does not exist in the Nix build sandbox; the check's nextest filter now excludes it alongside the two existing pinned contract binaries, and the check builds green again.
+
 - Deepened Agent Machine report interpretation behind one consuming, pure interface. Each decoded Bambu MQTT message now produces one owned operational result containing print progress, Machine snapshot, material patch JSON, feature observations, normalized nozzle reducer input, typed authority/classification facts, and section diagnostics; refresh, forwarding, feature probing, and tests consume that result while transport, presence, firmware sessions, reducers, and wire projection remain outside. Invalid optional sections retain their error causes without discarding valid sibling outputs. Next: consolidate the duplicated Machine snapshot-to-Agent-event projection as a separate focused refactor.
 
 - Changed authenticated Bambu Studio plugin profiles to use the owning Pandar user's display name with a ` [pandar]` suffix instead of the fixed tenant-token label `Bambu Studio plugin`. Studio now displays names such as `Alice [pandar]`, while no-auth sessions keep their explicit local-plugin identity. Next: confirm the updated label in a packaged authenticated Studio session.
@@ -340,9 +342,9 @@
   `pandar-bambu-source` implements the pinned 21-entry local-media ABI for bounded JPEG samples while
   rejecting arbitrary hosts and direct credentials. Targeted cross-crate tests, the positive compiled
   four-model Studio ABI probe, 26/26 release-smoke, strict workspace Clippy, 1,923/1,923 workspace
-  Nextest with one configured skip, six x86_64 Linux Nix package/quality checks, and Linux release
+  Nextest with one configured skip, six x86*64 Linux Nix package/quality checks, and Linux release
   export inspection pass; the `02.08.01` build exposes 130 network-plugin exports and the companion
-  sentinel plus exactly 21 `Bambu_*` exports. Packaged cross-platform evidence, real Studio playback,
+  sentinel plus exactly 21 `Bambu*\*` exports. Packaged cross-platform evidence, real Studio playback,
   and real camera hardware remain separate acceptance work.
 
 - Completed source-backed AMS Lite routing for A2L (`N9`). Agent material normalization now decodes

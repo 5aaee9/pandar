@@ -718,7 +718,7 @@
             inherit cargoArtifacts;
             pname = "pandar-nextest";
             # These contract gates require an external pinned BambuStudio Git checkout.
-            cargoNextestExtraArgs = "--workspace -E 'not (binary(studio_print_contract_red) | binary(studio_projection_contract))'";
+            cargoNextestExtraArgs = "--workspace -E 'not (binary(studio_print_contract_red) | binary(studio_projection_contract) | binary(personal_presets))'";
           }
         );
 
