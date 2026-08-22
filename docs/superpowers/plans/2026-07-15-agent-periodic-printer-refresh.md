@@ -309,7 +309,7 @@ Record exact pass counts and production LOC.
 output, Agent test output, and production LOC.
 
 - [ ] Dispatch a fresh independent Codex reviewer to judge spec compliance, test adequacy, ownership,
-  error chains, missed-tick behavior, and unintended scope. Require the exact implementation verdict:
+      error chains, missed-tick behavior, and unintended scope. Require the exact implementation verdict:
 
 ```text
 VERDICT: APPROVE | REVISE
@@ -322,8 +322,9 @@ REQUIRED_CHANGES:
 ```
 
 - [ ] If the reviewer returns `REVISE` or omits literal approval, fix only the identified gaps, rerun
-focused and Agent verification, and re-dispatch a fresh reviewer. Do not update delivery docs before
-literal `VERDICT: APPROVE`.
+      focused and Agent verification, and re-dispatch a fresh reviewer. Do not update delivery docs before
+      literal `VERDICT: APPROVE`.
+
 ---
 
 ### Task 6: Mandatory Post-Approval Documentation and Delivery

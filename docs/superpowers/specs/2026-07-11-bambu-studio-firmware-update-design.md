@@ -55,11 +55,17 @@ network plugin's `bambu_network_get_printer_firmware` ABI
 
 ```json
 {
-  "devices": [{
-    "dev_id": "<serial>",
-    "firmware": [{"version": "...", "url": "...", "description": "..."}],
-    "ams": [{"firmware": [{"version": "...", "url": "...", "description": "..."}]}]
-  }]
+  "devices": [
+    {
+      "dev_id": "<serial>",
+      "firmware": [{ "version": "...", "url": "...", "description": "..." }],
+      "ams": [
+        {
+          "firmware": [{ "version": "...", "url": "...", "description": "..." }]
+        }
+      ]
+    }
+  ]
 }
 ```
 
@@ -77,13 +83,24 @@ without adding its own visibility or beta policy.
 Studio's normal update button sends:
 
 ```json
-{"upgrade":{"command":"upgrade_confirm","sequence_id":"...","src_id":1}}
+{
+  "upgrade": { "command": "upgrade_confirm", "sequence_id": "...", "src_id": 1 }
+}
 ```
 
 Consistency repair sends `consistency_confirm`. A retry or explicit catalog entry sends:
 
 ```json
-{"upgrade":{"command":"start","sequence_id":"...","url":"...","module":"ota|ams","version":"...","src_id":1}}
+{
+  "upgrade": {
+    "command": "start",
+    "sequence_id": "...",
+    "url": "...",
+    "module": "ota|ams",
+    "version": "...",
+    "src_id": 1
+  }
+}
 ```
 
 These payloads are constructed in
@@ -94,7 +111,14 @@ but Pandar does not need to find or create one.
 The AMS firmware selector sends:
 
 ```json
-{"upgrade":{"command":"mc_for_ams_firmware_upgrade","sequence_id":"...","src_id":1,"id":2}}
+{
+  "upgrade": {
+    "command": "mc_for_ams_firmware_upgrade",
+    "sequence_id": "...",
+    "src_id": 1,
+    "id": 2
+  }
+}
 ```
 
 and waits for sequence-correlated data on a short control deadline
@@ -433,7 +457,7 @@ entry, inserts the URL into process-local pending memory, and sends `ExecuteFirm
 waits for the Agent's bounded terminal result or session/generation cancellation, distinguishing
 pre-publish failure, printer acknowledgement/rejection, and published-without-acknowledgement, then
 returns only the typed URL-free outcome and optional transient firmware state after it is
-   redacted and durably recorded.
+redacted and durably recorded.
 
 Prepared tokens are at-most-once, expire with the Agent reservation, and cannot be recreated from
 the command record. The plugin never automatically retries execute.
@@ -486,7 +510,7 @@ FFI functions.
 `bambu_network_get_printer_firmware` calls the Rust firmware-state client and returns HTTP 200 with:
 
 ```json
-{"devices":[{"dev_id":"<serial>","firmware":[],"ams":[]}]}
+{ "devices": [{ "dev_id": "<serial>", "firmware": [], "ams": [] }] }
 ```
 
 until real catalog records exist. If a real record is present, Rust maps printer main records to
@@ -792,4 +816,4 @@ not attempt to cancel it or assert its outcome.
 9. The C++ shim contains only ABI adaptation; Rust owns firmware business logic and typed serde
    parsing.
 10. SQLite and PostgreSQL behavior is equivalent, all focused/ABI/workspace checks pass, and no real
-   firmware update is executed during verification.
+    firmware update is executed during verification.

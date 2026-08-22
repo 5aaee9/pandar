@@ -2,7 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { computeAttention, computeHealth, topSeverityOf } from "../../dashboard-attention";
+import {
+  computeAttention,
+  computeHealth,
+  topSeverityOf,
+} from "../../dashboard-attention";
 import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
 import { jobsRouteQuery } from "../../route-data";
@@ -32,40 +36,45 @@ export function JobsPageClient({
   if (error) {
     return (
       <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-        Failed to load jobs: {error instanceof Error ? error.message : "Unknown error"}
+        Failed to load jobs:{" "}
+        {error instanceof Error ? error.message : "Unknown error"}
       </div>
     );
   }
 
-  const { jobs, printers, agents } = data ?? { jobs: [], printers: [], agents: [] };
+  const { jobs, printers, agents } = data ?? {
+    jobs: [],
+    printers: [],
+    agents: [],
+  };
   const health = computeHealth(agents, printers, jobs);
   const attentionItems = computeAttention({ agents, printers, jobs, nowMs: 0 });
 
   return (
     <QueryErrorBoundary>
       <DashboardViewContent
-      view="jobs"
-      auth={auth}
-      selectedTenant={selectedTenant}
-      printers={printers}
-      agents={agents}
-      jobs={jobs}
-      health={health}
-      attentionItems={attentionItems}
-      topSeverity={topSeverityOf(attentionItems)}
-      liveState="idle"
-      lastEventAt={null}
-      fleetEmpty={printers.length === 0}
-      nowMs={0}
-      selectedCommand={null}
-      commandData={null}
-      notifications={[]}
-      tenantTokens={[]}
-      auditEvents={[]}
-      adminUnavailable={false}
-      adminLoadError={false}
-      canManageJobs={canManageJobs}
-    />
+        view="jobs"
+        auth={auth}
+        selectedTenant={selectedTenant}
+        printers={printers}
+        agents={agents}
+        jobs={jobs}
+        health={health}
+        attentionItems={attentionItems}
+        topSeverity={topSeverityOf(attentionItems)}
+        liveState="idle"
+        lastEventAt={null}
+        fleetEmpty={printers.length === 0}
+        nowMs={0}
+        selectedCommand={null}
+        commandData={null}
+        notifications={[]}
+        tenantTokens={[]}
+        auditEvents={[]}
+        adminUnavailable={false}
+        adminLoadError={false}
+        canManageJobs={canManageJobs}
+      />
     </QueryErrorBoundary>
   );
 }

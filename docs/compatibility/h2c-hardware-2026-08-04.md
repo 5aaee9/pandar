@@ -35,11 +35,11 @@ A protected FTPS root listing completed through `PBSZ 0` plus `PROT P` and retur
 
 Direct Agent MQTT and the isolated Hub plugin HTTP boundary (`plugin HTTP -> Hub -> gRPC -> Agent -> printer MQTT`) produced the same correlated results:
 
-| Request | Correlation | Printer result | Version | Physical mapping / failure |
-| --- | --- | --- | --- | --- |
-| V1, sequence `820001` | command and sequence matched | `success` | `1` | `[1, -1 x31]` |
-| V0, sequence `820002` | command and sequence matched | `success` | omitted, interpreted as V0 | `[1, -1 x31]`; unknown `PA_used` retained |
-| V1 unavailable group, sequence `820003` | command and sequence matched | `fail` | `1` | `errno: 4`, no mapping |
+| Request                                 | Correlation                  | Printer result | Version                    | Physical mapping / failure                |
+| --------------------------------------- | ---------------------------- | -------------- | -------------------------- | ----------------------------------------- |
+| V1, sequence `820001`                   | command and sequence matched | `success`      | `1`                        | `[1, -1 x31]`                             |
+| V0, sequence `820002`                   | command and sequence matched | `success`      | omitted, interpreted as V0 | `[1, -1 x31]`; unknown `PA_used` retained |
+| V1 unavailable group, sequence `820003` | command and sequence matched | `fail`         | `1`                        | `errno: 4`, no mapping                    |
 
 Pandar accepted both successful responses only after validating the exact requested version and physical IDs. The correlated printer-declared failure remained a valid terminal response and preserved its observed `errno`, even though this firmware supplied no `reason` or `detail`.
 

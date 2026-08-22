@@ -71,8 +71,6 @@ describe("plugin return target", () => {
         "https://pandar.example/auth/betterauth/callback?return_to=%2Fevil&source=issuer",
         null,
       ),
-    ).toBe(
-      "https://pandar.example/auth/betterauth/callback?source=issuer",
-    );
+    ).toBe("https://pandar.example/auth/betterauth/callback?source=issuer");
   });
 });

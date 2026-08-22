@@ -21,11 +21,7 @@ fn canonical_export_map_is_exact_for_each_abi_series() {
     assert_eq!(symbols.network_count, 109);
     assert_eq!(symbols.file_transfer_count, 21);
     assert_eq!(symbols.all.len(), 130);
-    assert!(
-        symbols
-            .all
-            .contains("bambu_network_sync_ams_filaments")
-    );
+    assert!(symbols.all.contains("bambu_network_sync_ams_filaments"));
 
     let older = pandar_studio_profile::abi_series("02.06.00").unwrap();
     let symbols = expected_symbols(repo_root, older).unwrap();

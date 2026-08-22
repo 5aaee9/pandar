@@ -192,11 +192,11 @@ no-auth recovery boundary.
 
 Expected artifact names:
 
-| OS      | CLI          | Network plugin                    | BambuSource companion          |
-| ------- | ------------ | --------------------------------- | ------------------------------ |
-| Linux   | `pandar`     | `libpandar_network_plugin.so`     | `libpandar_bambu_source.so`    |
-| macOS   | `pandar`     | `libpandar_network_plugin.dylib`  | `libpandar_bambu_source.dylib` |
-| Windows | `pandar.exe` | `pandar_network_plugin.dll`       | `pandar_bambu_source.dll`      |
+| OS      | CLI          | Network plugin                   | BambuSource companion          |
+| ------- | ------------ | -------------------------------- | ------------------------------ |
+| Linux   | `pandar`     | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    |
+| macOS   | `pandar`     | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` |
+| Windows | `pandar.exe` | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      |
 
 The current target-architecture release-smoke scope covers `linux-amd64`, `macos-amd64`,
 `macos-arm64`, and `windows-amd64`. Both macOS targets build on Apple Silicon; amd64 runs its CLI,
@@ -279,21 +279,21 @@ Studio checklist item remains `untested` until Studio is launched and exercised 
 
 ## Smoke Checklist
 
-| Step                                | Expected Result                                                           | Status     | Evidence |
-| ----------------------------------- | ------------------------------------------------------------------------- | ---------- | -------- |
-| Studio loads both libraries         | No missing-library, missing-symbol, or dynamic-loader error.               | `passed` | Final16 used the official AppImage and packaged plugin/companion in the controlled harness; the package had already passed its native loader and release-smoke gates. |
-| Historical Final16 BambuSource gate | Companion sentinel is present and `Bambu_*` exports are absent.       | `passed` | The final16 package passed one-sentinel/zero-`Bambu_*` inspection. This predates the local-camera implementation and remains historical package evidence only. |
-| Current BambuSource local ABI       | Companion sentinel and exactly 21 expected `Bambu_*` exports are present; arbitrary hosts and malformed relay credentials are rejected. | `untested` | Requires a new packaged candidate; source-level release-smoke and Linux export inspection pass. |
-| A1/A1 Mini/P1S/A2L live view        | Studio receives a one-use loopback URL and displays relayed camera frames without printer or Hub credentials in the URL or evidence. | `untested` | Requires a capable current Agent session, matching hardware, and a real Studio playback run. |
-| Login opens Pandar sign-in          | Studio WebView displays Pandar sign-in.                                   | `untested` |          |
-| Localhost ticket callback completes | Studio receives plugin ticket through its local callback.                 | `untested` |          |
-| Token exchange completes            | Studio exchanges the plugin ticket for a tenant-scoped plugin credential. | `untested` |          |
-| Profile loads                       | Studio receives Bambu-shaped login state.                                 | `untested` |          |
-| Printer list loads                  | Hub-backed printers display or an empty list is accepted.                 | `untested` |          |
-| Job list loads                      | `get_user_tasks` returns the Hub-backed authorized page; a legitimately empty Hub page is accepted. | `untested` |          |
-| Selected-only model-task callback   | Automatic selection of the sole fixture printer can request and return its model task without an explicit add-subscription call. | `passed` | Final16 produced exactly one model-task request/200 and the four request-started, response-accepted, callback-started, and callback-returned events once in order. This is a synthetic session/loopback-mock boundary, not a real backend or downstream encrypted-log claim. |
-| Logout                              | Studio receives `studio_useroffline`.                                     | `untested` |          |
-| Direct-printer and `ft_*` paths     | Unsupported behavior is stable and does not open machine sockets.         | `untested` |          |
+| Step                                | Expected Result                                                                                                                         | Status     | Evidence                                                                                                                                                                                                                                                                     |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Studio loads both libraries         | No missing-library, missing-symbol, or dynamic-loader error.                                                                            | `passed`   | Final16 used the official AppImage and packaged plugin/companion in the controlled harness; the package had already passed its native loader and release-smoke gates.                                                                                                        |
+| Historical Final16 BambuSource gate | Companion sentinel is present and `Bambu_*` exports are absent.                                                                         | `passed`   | The final16 package passed one-sentinel/zero-`Bambu_*` inspection. This predates the local-camera implementation and remains historical package evidence only.                                                                                                               |
+| Current BambuSource local ABI       | Companion sentinel and exactly 21 expected `Bambu_*` exports are present; arbitrary hosts and malformed relay credentials are rejected. | `untested` | Requires a new packaged candidate; source-level release-smoke and Linux export inspection pass.                                                                                                                                                                              |
+| A1/A1 Mini/P1S/A2L live view        | Studio receives a one-use loopback URL and displays relayed camera frames without printer or Hub credentials in the URL or evidence.    | `untested` | Requires a capable current Agent session, matching hardware, and a real Studio playback run.                                                                                                                                                                                 |
+| Login opens Pandar sign-in          | Studio WebView displays Pandar sign-in.                                                                                                 | `untested` |                                                                                                                                                                                                                                                                              |
+| Localhost ticket callback completes | Studio receives plugin ticket through its local callback.                                                                               | `untested` |                                                                                                                                                                                                                                                                              |
+| Token exchange completes            | Studio exchanges the plugin ticket for a tenant-scoped plugin credential.                                                               | `untested` |                                                                                                                                                                                                                                                                              |
+| Profile loads                       | Studio receives Bambu-shaped login state.                                                                                               | `untested` |                                                                                                                                                                                                                                                                              |
+| Printer list loads                  | Hub-backed printers display or an empty list is accepted.                                                                               | `untested` |                                                                                                                                                                                                                                                                              |
+| Job list loads                      | `get_user_tasks` returns the Hub-backed authorized page; a legitimately empty Hub page is accepted.                                     | `untested` |                                                                                                                                                                                                                                                                              |
+| Selected-only model-task callback   | Automatic selection of the sole fixture printer can request and return its model task without an explicit add-subscription call.        | `passed`   | Final16 produced exactly one model-task request/200 and the four request-started, response-accepted, callback-started, and callback-returned events once in order. This is a synthetic session/loopback-mock boundary, not a real backend or downstream encrypted-log claim. |
+| Logout                              | Studio receives `studio_useroffline`.                                                                                                   | `untested` |                                                                                                                                                                                                                                                                              |
+| Direct-printer and `ft_*` paths     | Unsupported behavior is stable and does not open machine sockets.                                                                       | `untested` |                                                                                                                                                                                                                                                                              |
 
 ### No-Auth Development Evidence
 
@@ -445,13 +445,13 @@ unchanged-process, loader, credential, network, and cleanup assertion passed.
 The 2026-07-22 final11 exact-AppImage run historically established this same-process regression result.
 It does not fill any current final16 row:
 
-| Check | Status | Evidence |
-| ----- | ------ | -------- |
-| Packaged plugin starts while Hub is unavailable | `passed` | Historical final11 only: both libraries mapped with four map lines each, the post-agent getter appeared three times, and two proven pre-delivery connection failures were recorded. |
-| Same Studio process bootstraps after Hub becomes ready | `passed` | PID `2176` and start ticks `190073915` did not change. The failures were followed by one HTTP 200 commit; `retry_attempts=2`, `commits=1`, and `discarded=0`. |
-| Credential creation remains singular | `passed` | One active session, one token-create audit, zero revoke audits, and one mode-`0600` 343-byte login file remained after recovery. |
-| Loader and certificate boundary remains clean | `passed` | Undefined-symbol, `dlopen`, and certificate error counts were all zero. |
-| Authenticated WebView, printer/task UI, and requested logout UI | `untested` | No authenticated account, ticket exchange, Studio printer/task UI, or logout interaction was exercised. Automated account/task/logout tests do not promote this row. |
+| Check                                                           | Status     | Evidence                                                                                                                                                                            |
+| --------------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Packaged plugin starts while Hub is unavailable                 | `passed`   | Historical final11 only: both libraries mapped with four map lines each, the post-agent getter appeared three times, and two proven pre-delivery connection failures were recorded. |
+| Same Studio process bootstraps after Hub becomes ready          | `passed`   | PID `2176` and start ticks `190073915` did not change. The failures were followed by one HTTP 200 commit; `retry_attempts=2`, `commits=1`, and `discarded=0`.                       |
+| Credential creation remains singular                            | `passed`   | One active session, one token-create audit, zero revoke audits, and one mode-`0600` 343-byte login file remained after recovery.                                                    |
+| Loader and certificate boundary remains clean                   | `passed`   | Undefined-symbol, `dlopen`, and certificate error counts were all zero.                                                                                                             |
+| Authenticated WebView, printer/task UI, and requested logout UI | `untested` | No authenticated account, ticket exchange, Studio printer/task UI, or logout interaction was exercised. Automated account/task/logout tests do not promote this row.                |
 
 The redacted final11 result, timeline, and component summaries are retained in the historical evidence
 bundle only. Their hashes are intentionally not reused as current-candidate evidence.

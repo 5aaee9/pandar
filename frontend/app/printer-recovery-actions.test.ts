@@ -26,11 +26,12 @@ describe("handlePrintError", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ id: "command-1", status: "sent" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ id: "command-1", status: "sent" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
       ),
     );
   });
@@ -43,7 +44,9 @@ describe("handlePrintError", () => {
     formData.set("task_generation", "7");
     formData.set("sequence_id", "12345");
 
-    await expect(handlePrintError({ status: "idle" }, formData)).resolves.toEqual({
+    await expect(
+      handlePrintError({ status: "idle" }, formData),
+    ).resolves.toEqual({
       status: "sent",
     });
 
@@ -74,7 +77,9 @@ describe("handlePrintError", () => {
       }),
     );
 
-    await expect(handlePrintError({ status: "idle" }, validFormData())).resolves.toEqual({
+    await expect(
+      handlePrintError({ status: "idle" }, validFormData()),
+    ).resolves.toEqual({
       status: "error",
       error: "printer_operation_unavailable",
     });
@@ -160,15 +165,20 @@ describe("handlePrintError", () => {
     ["error_generation", ""],
     ["error_generation", "0"],
     ["error_generation", "1.5"],
-  ])("rejects invalid FormData field %s=%s at the server boundary", async (name, value) => {
-    const formData = validFormData();
-    formData.set(name, value);
+  ])(
+    "rejects invalid FormData field %s=%s at the server boundary",
+    async (name, value) => {
+      const formData = validFormData();
+      formData.set(name, value);
 
-    await expect(handlePrintError({ status: "idle" }, formData)).resolves.toEqual({
-      status: "error",
-      error: "invalid_printer_control",
-    });
-    expect(requireAuth).toHaveBeenCalledTimes(1);
-    expect(fetch).not.toHaveBeenCalled();
-  });
+      await expect(
+        handlePrintError({ status: "idle" }, formData),
+      ).resolves.toEqual({
+        status: "error",
+        error: "invalid_printer_control",
+      });
+      expect(requireAuth).toHaveBeenCalledTimes(1);
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
 });

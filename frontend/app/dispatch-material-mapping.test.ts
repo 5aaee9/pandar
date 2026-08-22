@@ -69,20 +69,32 @@ describe("dispatch material mapping", () => {
     const slots = printerAmsSlots(fixturePrinter());
     const byKey = new Map(slots.map((slot) => [slot.key, slot]));
 
-    expect(slotIneligibility(filament, byKey.get("ams:1:0")!, slots)).toBeNull();
-    expect(slotIneligibility(filament, byKey.get("ams:0:0")!, slots)).toBe("wrong_nozzle");
-    expect(slotIneligibility(filament, byKey.get("ams:1:1")!, slots))
-      .toBe("material_type_mismatch");
-    expect(slotIneligibility(filament, byKey.get("ams:0:2")!, slots)).toBe("empty");
-    expect(slotIneligibility(filament, byKey.get("external:254")!, slots)).toBeNull();
-    expect(slotIneligibility(filament, byKey.get("external:255")!, slots))
-      .toBe("wrong_nozzle");
+    expect(
+      slotIneligibility(filament, byKey.get("ams:1:0")!, slots),
+    ).toBeNull();
+    expect(slotIneligibility(filament, byKey.get("ams:0:0")!, slots)).toBe(
+      "wrong_nozzle",
+    );
+    expect(slotIneligibility(filament, byKey.get("ams:1:1")!, slots)).toBe(
+      "material_type_mismatch",
+    );
+    expect(slotIneligibility(filament, byKey.get("ams:0:2")!, slots)).toBe(
+      "empty",
+    );
+    expect(
+      slotIneligibility(filament, byKey.get("external:254")!, slots),
+    ).toBeNull();
+    expect(slotIneligibility(filament, byKey.get("external:255")!, slots)).toBe(
+      "wrong_nozzle",
+    );
     const unknownRoute = slot({
       key: "ams:3:0",
       toolhead: null,
       routingRequired: true,
     });
-    expect(slotIneligibility(filament, unknownRoute, [unknownRoute])).toBe("unknown_route");
+    expect(slotIneligibility(filament, unknownRoute, [unknownRoute])).toBe(
+      "unknown_route",
+    );
     const unknownSwitchExternal = slot({
       amsId: 254,
       filamentSwitchInstalled: null,
@@ -92,8 +104,11 @@ describe("dispatch material mapping", () => {
       toolhead: "L",
       unitId: "254",
     });
-    expect(slotIneligibility(filament, unknownSwitchExternal, [unknownSwitchExternal]))
-      .toBe("unknown_route");
+    expect(
+      slotIneligibility(filament, unknownSwitchExternal, [
+        unknownSwitchExternal,
+      ]),
+    ).toBe("unknown_route");
   });
 
   it("auto maps only compatible material sources on the sliced nozzle side", () => {
@@ -101,12 +116,13 @@ describe("dispatch material mapping", () => {
     const slots = printerAmsSlots(fixturePrinter());
 
     expect(autoMapProjectFilaments(filaments, slots)).toEqual([4, 1]);
-    expect(autoMapSlotSelections(filaments, slots)).toEqual(new Map([
-      [0, "ams:1:0"],
-      [1, "ams:0:1"],
-    ]));
+    expect(autoMapSlotSelections(filaments, slots)).toEqual(
+      new Map([
+        [0, "ams:1:0"],
+        [1, "ams:0:1"],
+      ]),
+    );
   });
-
 
   it("prefers a compatible AMS over a closer external spool for auto mapping", () => {
     const filament = {
@@ -116,8 +132,9 @@ describe("dispatch material mapping", () => {
       trayInfoIdx: null,
     };
 
-    expect(autoMapSlotSelections([filament], printerAmsSlots(fixturePrinter())))
-      .toEqual(new Map([[0, "ams:0:0"]]));
+    expect(
+      autoMapSlotSelections([filament], printerAmsSlots(fixturePrinter())),
+    ).toEqual(new Map([[0, "ams:0:0"]]));
   });
 
   it("builds all three Studio mapping payloads with sliced nozzle ids and colors", () => {
@@ -170,7 +187,10 @@ describe("dispatch material mapping", () => {
 
     expect(payload.amsMapping).toEqual([-1]);
     expect(payload.amsMapping2).toEqual([{ ams_id: 254, slot_id: 0 }]);
-    expect(payload.amsMappingInfo?.[0]).toMatchObject({ ams: 254, nozzleId: 1 });
+    expect(payload.amsMappingInfo?.[0]).toMatchObject({
+      ams: 254,
+      nozzleId: 1,
+    });
     expect(payload.externalTypeMismatch).toBe(true);
     expect(payload.usesAms).toBe(false);
   });
@@ -197,22 +217,28 @@ describe("dispatch material mapping", () => {
     );
     expect(legacyPayload.amsMappingInfo).toBeNull();
     expect(legacyPayload.mappingValid).toBe(false);
-    expect(materialMappingPayload([sparse[0]], slots, new Map()).mappingValid)
-      .toBe(false);
+    expect(
+      materialMappingPayload([sparse[0]], slots, new Map()).mappingValid,
+    ).toBe(false);
   });
-
 
   it("maps only external spools when Use AMS is off and derives use_ams false", () => {
     const filaments = projectFilamentsForPlate(fixtureMetadata(), 1);
     const slots = printerAmsSlots(fixturePrinter());
     const selections = autoMapSlotSelections(filaments, slots, false);
 
-    expect(selections).toEqual(new Map([
-      [0, "external:254"],
-      [1, "external:255"],
-    ]));
-    expect(slotIneligibility(filaments[0], slots[0], slots, false)).toBe("ams_disabled");
-    expect(materialMappingPayload(filaments, slots, selections, false)).toMatchObject({
+    expect(selections).toEqual(
+      new Map([
+        [0, "external:254"],
+        [1, "external:255"],
+      ]),
+    );
+    expect(slotIneligibility(filaments[0], slots[0], slots, false)).toBe(
+      "ams_disabled",
+    );
+    expect(
+      materialMappingPayload(filaments, slots, selections, false),
+    ).toMatchObject({
       amsMapping: [-1, -1],
       amsMapping2: [
         { ams_id: 254, slot_id: 0 },
@@ -243,7 +269,9 @@ describe("dispatch material mapping", () => {
     const slots = [rightAms, external];
 
     expect(slotIneligibility(filament, rightAms, slots)).toBeNull();
-    expect(slotIneligibility(filament, external, slots)).toBe("filament_switch_external");
+    expect(slotIneligibility(filament, external, slots)).toBe(
+      "filament_switch_external",
+    );
   });
 
   it("ranks the project filament id independently from a slot setting id", () => {
@@ -268,8 +296,9 @@ describe("dispatch material mapping", () => {
       settingId: "GFA00",
     });
 
-    expect(autoMapSlotSelections([filament], [matchingFilament, matchingColor]))
-      .toEqual(new Map([[0, "ams:1:0"]]));
+    expect(
+      autoMapSlotSelections([filament], [matchingFilament, matchingColor]),
+    ).toEqual(new Map([[0, "ams:1:0"]]));
   });
 
   it("uses the AMS-HT unit id as its legacy flat mapping value", () => {
@@ -281,8 +310,9 @@ describe("dispatch material mapping", () => {
       trays: [{ tray_id: "0", type: "PLA", color: "000000", exists: true }],
     });
 
-    expect(printerAmsSlots(printer).find((candidate) => candidate.amsId === 128))
-      .toMatchObject({ globalTrayId: 128, legacyTrayId: 128, slotId: 0 });
+    expect(
+      printerAmsSlots(printer).find((candidate) => candidate.amsId === 128),
+    ).toMatchObject({ globalTrayId: 128, legacyTrayId: 128, slotId: 0 });
   });
 });
 
@@ -291,35 +321,37 @@ function fixtureMetadata(): ArtifactMetadata {
     display_name: "project",
     default_plate_id: 1,
     warnings: [],
-    plates: [{
-      plate_id: 1,
-      name: "Plate 1",
-      estimated_time_seconds: null,
-      filament_weight_grams: null,
-      object_count: 1,
-      objects: ["part"],
-      filaments: [
-        {
-          filament_id: "1",
-          tray_info_idx: "GFA00",
-          nozzle_id: 1,
-          filament_type: "PLA",
-          color: "#000000",
-          used_grams: 10,
-          used_meters: 3,
-        },
-        {
-          filament_id: "2",
-          tray_info_idx: "GFG00",
-          nozzle_id: 0,
-          filament_type: "PETG",
-          color: "#FFFF00",
-          used_grams: 4,
-          used_meters: 1,
-        },
-      ],
-      has_thumbnail: false,
-    }],
+    plates: [
+      {
+        plate_id: 1,
+        name: "Plate 1",
+        estimated_time_seconds: null,
+        filament_weight_grams: null,
+        object_count: 1,
+        objects: ["part"],
+        filaments: [
+          {
+            filament_id: "1",
+            tray_info_idx: "GFA00",
+            nozzle_id: 1,
+            filament_type: "PLA",
+            color: "#000000",
+            used_grams: 10,
+            used_meters: 3,
+          },
+          {
+            filament_id: "2",
+            tray_info_idx: "GFG00",
+            nozzle_id: 0,
+            filament_type: "PETG",
+            color: "#FFFF00",
+            used_grams: 4,
+            used_meters: 1,
+          },
+        ],
+        has_thumbnail: false,
+      },
+    ],
   };
 }
 

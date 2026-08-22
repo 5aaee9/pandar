@@ -24,7 +24,12 @@ export type PlateRecoveryIssue = {
 };
 
 const SUPPORTED_FAMILIES = new Set(["093", "094", "20P", "22E", "239", "31B"]);
-const NATIVE_ACTIVE_STATES = new Set(["PREPARE", "SLICING", "RUNNING", "PAUSE"]);
+const NATIVE_ACTIVE_STATES = new Set([
+  "PREPARE",
+  "SLICING",
+  "RUNNING",
+  "PAUSE",
+]);
 const COARSE_VETO = new Set(["IDLE", "OFFLINE", "FAILED"]);
 
 export function plateMismatchActions(

@@ -86,14 +86,14 @@ The first implementation uses hard deletion. Studio represents deletion through 
 
 Bambu Studio loads and saves the feature through these existing ABI functions:
 
-| ABI function | Required behavior |
-| --- | --- |
-| `bambu_network_get_setting_list2` | List the complete owner catalogue, call `CheckFn` once per item, fetch/cache full content only when requested, retain metadata entries for skipped items, report bounded progress, and honor cancellation. |
-| `bambu_network_get_setting_list` | Compatibility form that downloads every listed preset. |
-| `bambu_network_get_user_presets` | Atomically drain the cache produced by the last successful list cycle into Studio's nested map. A second drain is empty. |
-| `bambu_network_request_setting_id` | Create an owned preset, return its opaque id, set HTTP status, and replace `values_map["updated_time"]` with the Hub timestamp. |
-| `bambu_network_put_setting` | Update an owned preset by id, set HTTP status, and replace `values_map["updated_time"]`. |
-| `bambu_network_delete_setting` | Idempotently delete an owned preset by id. |
+| ABI function                       | Required behavior                                                                                                                                                                                          |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bambu_network_get_setting_list2`  | List the complete owner catalogue, call `CheckFn` once per item, fetch/cache full content only when requested, retain metadata entries for skipped items, report bounded progress, and honor cancellation. |
+| `bambu_network_get_setting_list`   | Compatibility form that downloads every listed preset.                                                                                                                                                     |
+| `bambu_network_get_user_presets`   | Atomically drain the cache produced by the last successful list cycle into Studio's nested map. A second drain is empty.                                                                                   |
+| `bambu_network_request_setting_id` | Create an owned preset, return its opaque id, set HTTP status, and replace `values_map["updated_time"]` with the Hub timestamp.                                                                            |
+| `bambu_network_put_setting`        | Update an owned preset by id, set HTTP status, and replace `values_map["updated_time"]`.                                                                                                                   |
+| `bambu_network_delete_setting`     | Idempotently delete an owned preset by id.                                                                                                                                                                 |
 
 ### Catalogue completeness invariant
 
@@ -152,13 +152,13 @@ Exceeding the count limit returns HTTP `409` with response code `14`, allowing S
 
 Add authenticated routes under the existing plugin surface:
 
-| Method and path | Purpose |
-| --- | --- |
-| `GET /api/v1/plugin/presets?bundle_version=...` | Complete metadata catalogue for the current owner. |
-| `GET /api/v1/plugin/presets/{setting_id}` | Full preset body for the current owner. |
-| `POST /api/v1/plugin/presets` | Create and return `setting_id` plus `updated_time`. |
-| `PATCH /api/v1/plugin/presets/{setting_id}` | Replace the preset name/metadata/options and return `updated_time`. |
-| `DELETE /api/v1/plugin/presets/{setting_id}` | Idempotent owner-scoped deletion. |
+| Method and path                                 | Purpose                                                             |
+| ----------------------------------------------- | ------------------------------------------------------------------- |
+| `GET /api/v1/plugin/presets?bundle_version=...` | Complete metadata catalogue for the current owner.                  |
+| `GET /api/v1/plugin/presets/{setting_id}`       | Full preset body for the current owner.                             |
+| `POST /api/v1/plugin/presets`                   | Create and return `setting_id` plus `updated_time`.                 |
+| `PATCH /api/v1/plugin/presets/{setting_id}`     | Replace the preset name/metadata/options and return `updated_time`. |
+| `DELETE /api/v1/plugin/presets/{setting_id}`    | Idempotent owner-scoped deletion.                                   |
 
 All request and response shapes use typed serde structs. The open-ended option map is the only dynamic JSON portion.
 
@@ -190,16 +190,16 @@ Create is replay-safe for an ambiguous network failure: when the same owner retr
 
 ### Hub errors
 
-| HTTP | Stable error | Studio mapping |
-| --- | --- | --- |
-| `400` | `invalid_personal_preset` / `personal_preset_too_large` | create `-7`, update `-8`, list `-9` |
-| `401` | `invalid_auth_token` | existing plugin account-loss/session handling, then operation failure |
-| `403` | `role_forbidden` / `personal_presets_require_user` | operation-specific failure |
-| `404` | `personal_preset_not_found` | update failure; owner-scoped DELETE still succeeds |
-| `409` | `personal_preset_name_conflict` | create/update failure |
-| `409` + `code: 14` | `personal_preset_limit_exceeded` | preserve `values_map["code"] = "14"` |
-| `413` | `personal_preset_too_large` | create/update failure |
-| `5xx` | `internal_server_error` | operation-specific failure with full redacted cause retained in Hub logs |
+| HTTP               | Stable error                                            | Studio mapping                                                           |
+| ------------------ | ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `400`              | `invalid_personal_preset` / `personal_preset_too_large` | create `-7`, update `-8`, list `-9`                                      |
+| `401`              | `invalid_auth_token`                                    | existing plugin account-loss/session handling, then operation failure    |
+| `403`              | `role_forbidden` / `personal_presets_require_user`      | operation-specific failure                                               |
+| `404`              | `personal_preset_not_found`                             | update failure; owner-scoped DELETE still succeeds                       |
+| `409`              | `personal_preset_name_conflict`                         | create/update failure                                                    |
+| `409` + `code: 14` | `personal_preset_limit_exceeded`                        | preserve `values_map["code"] = "14"`                                     |
+| `413`              | `personal_preset_too_large`                             | create/update failure                                                    |
+| `5xx`              | `internal_server_error`                                 | operation-specific failure with full redacted cause retained in Hub logs |
 
 ## Persistence
 

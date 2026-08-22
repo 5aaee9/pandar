@@ -31,10 +31,12 @@ export default async function JobsPage() {
     return <div>No tenant selected</div>;
   }
 
-  const membership = auth.provider !== "none"
-    ? await getMembershipForRequest(selectedTenant.id)
-    : { role: null, error: null };
-  const canManageJobs = auth.provider === "none" || membership.role !== "viewer";
+  const membership =
+    auth.provider !== "none"
+      ? await getMembershipForRequest(selectedTenant.id)
+      : { role: null, error: null };
+  const canManageJobs =
+    auth.provider === "none" || membership.role !== "viewer";
 
   return (
     <JobsPageClient

@@ -69,53 +69,53 @@ The field order is the ABI order in pinned
 `PrintJob.hpp:50-115` prove the ordinary print producer; `SelectMachine.cpp:3136-3143,3165-3201`
 proves that calibration, nozzle, AMS, internal-timelapse, and eMMC values are normal Studio input.
 
-| # | Field | Disposition | Admission and ownership contract |
-| ---: | --- | --- | --- |
-| 1 | `dev_id` | `preserve` | Resolve the Studio device id/serial to an authorized Hub printer. Forward only the Hub printer id internally; return the Studio id in task JSON. Empty or unknown is invalid. |
-| 2 | `task_name` | `preserve` | Preserve as task display metadata. Do not collapse it into `project_name`. |
-| 3 | `project_name` | `preserve` | Preserve independently as project metadata. |
-| 4 | `preset_name` | `preserve` | Preserve as profile/preset metadata. |
-| 5 | `filename` | `preserve` | This is a plugin-local artifact source path. Read that file, send its bytes, and preserve only its basename/typed artifact metadata. Never send or persist the local path. |
-| 6 | `config_filename` | `preserve` | This is plugin-local input for typed slice/config metadata. Preserve only parsed typed values; never send or persist the local path. |
-| 7 | `plate_index` | `preserve` | Preserve the positive final ABI value end to end and persist it as the Studio plate index. Pinned `PrintJob.cpp:191-204,259` converts zero-based `job_data.plate_idx` to this one-based value, including calibration jobs; reject `0`, negatives, and overflow. |
-| 8 | `ftp_folder` | `default` | Accept Studio's normal cloud value, use only for local admission if needed, then scrub. It gives no authority to bypass Hub. |
-| 9 | `ftp_file` | `reject` | Empty is the only legal Hub-route value. A non-empty value requests a different file-transfer operation. |
-| 10 | `ftp_file_md5` | `reject` | Empty is the only legal Hub-route value. Pandar does not claim an ignored checksum was verified. |
-| 11 | `nozzle_mapping` | `preserve` | Parse as its known JSON schema and preserve typed data end to end. Pinned Studio's exact empty-string sentinel means the typed empty array; reject every other malformed or schema-invalid value. |
-| 12 | `ams_mapping` | `preserve` | Parse as its known JSON schema and preserve typed data end to end. Pinned Studio's exact empty-string sentinel means the typed empty array; reject every other malformed or schema-invalid value. |
-| 13 | `ams_mapping2` | `preserve` | Parse as its known JSON schema and preserve typed data end to end. Pinned Studio's exact empty-string sentinel means the typed empty array; reject every other malformed or schema-invalid value. |
-| 14 | `ams_mapping_info` | `preserve` | Parse as its known JSON schema and preserve typed data end to end. Pinned Studio's exact empty-string sentinel means the typed empty array; reject every other malformed or schema-invalid value. |
-| 15 | `nozzles_info` | `preserve` | Parse as its known JSON schema and preserve typed data as job metadata and in a printer command only where the exact printer contract consumes it. Pinned Studio's exact empty-string sentinel means the typed empty array; reject every other malformed or schema-invalid value. |
-| 16 | `connection_type` | `preserve` | Validate at the plugin boundary. Canonical status projects `cloud`; before the first status, pinned Studio may pass its exact empty default through the cloud print entrypoint, which is normalized to `cloud`. The supported route rejects every other value and still uses plugin -> Hub -> Agent; it never selects direct Agent/MQTT or Bambu cloud behavior. |
-| 17 | `comments` | `preserve` | Preserve as typed task metadata; do not interpret it as printer policy. |
-| 18 | `origin_profile_id` | `preserve` | Preserve as Studio profile metadata. It may become `profileId` when positive. |
-| 19 | `stl_design_id` | `preserve` | Preserve as Studio design metadata and expose it as numeric `designId`. |
-| 20 | `origin_model_id` | `preserve` | Preserve as opaque Studio model metadata. |
-| 21 | `print_type` | `preserve` | Validate at the plugin boundary. The supported submission accepts `from_normal`; `from_sdcard_view` belongs to the explicitly unsupported SD-card entrypoint. |
-| 22 | `dst_file` | `unsupported` | Any non-empty value requests SD-card destination behavior, which is not implemented by this route. |
-| 23 | `dev_name` | `preserve` | Preserve as submitted metadata only when useful for audit; task output should prefer the authoritative joined printer name. |
-| 24 | `dev_ip` | `default` | Accept Studio's normal value, then scrub it. It is not Hub printer identity and must not be logged, sent, or persisted. |
-| 25 | `use_ssl_for_ftp` | `default` | Accept and scrub. Hub/Agent transport policy is authoritative. |
-| 26 | `use_ssl_for_mqtt` | `default` | Accept and scrub. Hub/Agent transport policy is authoritative. |
-| 27 | `username` | `default` | Accept Studio's normal local username and scrub it. Do not log, send, or persist it. |
-| 28 | `password` | `default` | Accept and immediately scrub this secret. Do not log, send, persist, or place it in an error/callback. |
-| 29 | `task_bed_leveling` | `preserve` | Preserve as typed printer behavior end to end. |
-| 30 | `task_flow_cali` | `preserve` | Preserve as typed printer behavior end to end. |
-| 31 | `task_vibration_cali` | `preserve` | Preserve as typed printer behavior end to end; do not hard-code `false`. |
-| 32 | `task_layer_inspect` | `preserve` | Preserve as typed printer behavior end to end; do not hard-code `false`. |
-| 33 | `task_record_timelapse` | `preserve` | Preserve as typed printer behavior end to end. |
-| 34 | `task_timelapse_use_internal` | `preserve` | Preserve end to end. Pinned `ProjectTask.hpp:226` defines it as task `cfg` bit 2. |
-| 35 | `task_use_ams` | `preserve` | Preserve as typed printer behavior end to end. |
-| 36 | `task_bed_type` | `preserve` | Preserve one of the five concrete values emitted by pinned `bed_type_to_gcode_string` (`supertack_plate`, `cool_plate`, `eng_plate`, `hot_plate`, or `textured_plate`) end to end. Reject `unknown`, legacy `auto`, and arbitrary strings instead of silently replacing them. |
-| 37 | `extra_options` | `reject` | Empty is the only legal value until an exact typed schema exists. Do not accept open-ended JSON or strings. |
-| 38 | `auto_bed_leveling` | `preserve` | Preserve end to end and accept only the pinned modes `0`, `1`, or `2`. |
-| 39 | `auto_flow_cali` | `preserve` | Preserve end to end and accept only the pinned modes `0`, `1`, or `2`. |
-| 40 | `auto_offset_cali` | `preserve` | Preserve end to end and accept only the pinned modes `0`, `1`, or `2`. |
-| 41 | `extruder_cali_manual_mode` | `preserve` | Preserve end to end and accept only `-1`, `0`, or `1`. Pinned `SelectMachine.cpp:3190-3201` normally emits `0` or `1`. |
-| 42 | `task_ext_change_assist` | `unsupported` | `false` is admitted. The status projection clears pinned Studio `fun` bit 48 so the checkbox remains hidden; a caller-supplied `true` is still rejected until an exact downstream command encoding is proven. |
-| 43 | `try_emmc_print` | `preserve` | Preserve as transfer policy: `false` prohibits BRTC/eMMC, while `true` permits it only when the Agent reports exact support. It never guarantees eMMC use. |
-| 44 | `svc_context` | `preserve` | Preserve as opaque Hub task metadata; never interpret it as printer policy. |
-| 45 | `slicer_uid` | `preserve` | Preserve as opaque Hub task metadata; never send it to the printer. |
+|   # | Field                         | Disposition   | Admission and ownership contract                                                                                                                                                                                                                                                                                                                                 |
+| --: | ----------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|   1 | `dev_id`                      | `preserve`    | Resolve the Studio device id/serial to an authorized Hub printer. Forward only the Hub printer id internally; return the Studio id in task JSON. Empty or unknown is invalid.                                                                                                                                                                                    |
+|   2 | `task_name`                   | `preserve`    | Preserve as task display metadata. Do not collapse it into `project_name`.                                                                                                                                                                                                                                                                                       |
+|   3 | `project_name`                | `preserve`    | Preserve independently as project metadata.                                                                                                                                                                                                                                                                                                                      |
+|   4 | `preset_name`                 | `preserve`    | Preserve as profile/preset metadata.                                                                                                                                                                                                                                                                                                                             |
+|   5 | `filename`                    | `preserve`    | This is a plugin-local artifact source path. Read that file, send its bytes, and preserve only its basename/typed artifact metadata. Never send or persist the local path.                                                                                                                                                                                       |
+|   6 | `config_filename`             | `preserve`    | This is plugin-local input for typed slice/config metadata. Preserve only parsed typed values; never send or persist the local path.                                                                                                                                                                                                                             |
+|   7 | `plate_index`                 | `preserve`    | Preserve the positive final ABI value end to end and persist it as the Studio plate index. Pinned `PrintJob.cpp:191-204,259` converts zero-based `job_data.plate_idx` to this one-based value, including calibration jobs; reject `0`, negatives, and overflow.                                                                                                  |
+|   8 | `ftp_folder`                  | `default`     | Accept Studio's normal cloud value, use only for local admission if needed, then scrub. It gives no authority to bypass Hub.                                                                                                                                                                                                                                     |
+|   9 | `ftp_file`                    | `reject`      | Empty is the only legal Hub-route value. A non-empty value requests a different file-transfer operation.                                                                                                                                                                                                                                                         |
+|  10 | `ftp_file_md5`                | `reject`      | Empty is the only legal Hub-route value. Pandar does not claim an ignored checksum was verified.                                                                                                                                                                                                                                                                 |
+|  11 | `nozzle_mapping`              | `preserve`    | Parse as its known JSON schema and preserve typed data end to end. Pinned Studio's exact empty-string sentinel means the typed empty array; reject every other malformed or schema-invalid value.                                                                                                                                                                |
+|  12 | `ams_mapping`                 | `preserve`    | Parse as its known JSON schema and preserve typed data end to end. Pinned Studio's exact empty-string sentinel means the typed empty array; reject every other malformed or schema-invalid value.                                                                                                                                                                |
+|  13 | `ams_mapping2`                | `preserve`    | Parse as its known JSON schema and preserve typed data end to end. Pinned Studio's exact empty-string sentinel means the typed empty array; reject every other malformed or schema-invalid value.                                                                                                                                                                |
+|  14 | `ams_mapping_info`            | `preserve`    | Parse as its known JSON schema and preserve typed data end to end. Pinned Studio's exact empty-string sentinel means the typed empty array; reject every other malformed or schema-invalid value.                                                                                                                                                                |
+|  15 | `nozzles_info`                | `preserve`    | Parse as its known JSON schema and preserve typed data as job metadata and in a printer command only where the exact printer contract consumes it. Pinned Studio's exact empty-string sentinel means the typed empty array; reject every other malformed or schema-invalid value.                                                                                |
+|  16 | `connection_type`             | `preserve`    | Validate at the plugin boundary. Canonical status projects `cloud`; before the first status, pinned Studio may pass its exact empty default through the cloud print entrypoint, which is normalized to `cloud`. The supported route rejects every other value and still uses plugin -> Hub -> Agent; it never selects direct Agent/MQTT or Bambu cloud behavior. |
+|  17 | `comments`                    | `preserve`    | Preserve as typed task metadata; do not interpret it as printer policy.                                                                                                                                                                                                                                                                                          |
+|  18 | `origin_profile_id`           | `preserve`    | Preserve as Studio profile metadata. It may become `profileId` when positive.                                                                                                                                                                                                                                                                                    |
+|  19 | `stl_design_id`               | `preserve`    | Preserve as Studio design metadata and expose it as numeric `designId`.                                                                                                                                                                                                                                                                                          |
+|  20 | `origin_model_id`             | `preserve`    | Preserve as opaque Studio model metadata.                                                                                                                                                                                                                                                                                                                        |
+|  21 | `print_type`                  | `preserve`    | Validate at the plugin boundary. The supported submission accepts `from_normal`; `from_sdcard_view` belongs to the explicitly unsupported SD-card entrypoint.                                                                                                                                                                                                    |
+|  22 | `dst_file`                    | `unsupported` | Any non-empty value requests SD-card destination behavior, which is not implemented by this route.                                                                                                                                                                                                                                                               |
+|  23 | `dev_name`                    | `preserve`    | Preserve as submitted metadata only when useful for audit; task output should prefer the authoritative joined printer name.                                                                                                                                                                                                                                      |
+|  24 | `dev_ip`                      | `default`     | Accept Studio's normal value, then scrub it. It is not Hub printer identity and must not be logged, sent, or persisted.                                                                                                                                                                                                                                          |
+|  25 | `use_ssl_for_ftp`             | `default`     | Accept and scrub. Hub/Agent transport policy is authoritative.                                                                                                                                                                                                                                                                                                   |
+|  26 | `use_ssl_for_mqtt`            | `default`     | Accept and scrub. Hub/Agent transport policy is authoritative.                                                                                                                                                                                                                                                                                                   |
+|  27 | `username`                    | `default`     | Accept Studio's normal local username and scrub it. Do not log, send, or persist it.                                                                                                                                                                                                                                                                             |
+|  28 | `password`                    | `default`     | Accept and immediately scrub this secret. Do not log, send, persist, or place it in an error/callback.                                                                                                                                                                                                                                                           |
+|  29 | `task_bed_leveling`           | `preserve`    | Preserve as typed printer behavior end to end.                                                                                                                                                                                                                                                                                                                   |
+|  30 | `task_flow_cali`              | `preserve`    | Preserve as typed printer behavior end to end.                                                                                                                                                                                                                                                                                                                   |
+|  31 | `task_vibration_cali`         | `preserve`    | Preserve as typed printer behavior end to end; do not hard-code `false`.                                                                                                                                                                                                                                                                                         |
+|  32 | `task_layer_inspect`          | `preserve`    | Preserve as typed printer behavior end to end; do not hard-code `false`.                                                                                                                                                                                                                                                                                         |
+|  33 | `task_record_timelapse`       | `preserve`    | Preserve as typed printer behavior end to end.                                                                                                                                                                                                                                                                                                                   |
+|  34 | `task_timelapse_use_internal` | `preserve`    | Preserve end to end. Pinned `ProjectTask.hpp:226` defines it as task `cfg` bit 2.                                                                                                                                                                                                                                                                                |
+|  35 | `task_use_ams`                | `preserve`    | Preserve as typed printer behavior end to end.                                                                                                                                                                                                                                                                                                                   |
+|  36 | `task_bed_type`               | `preserve`    | Preserve one of the five concrete values emitted by pinned `bed_type_to_gcode_string` (`supertack_plate`, `cool_plate`, `eng_plate`, `hot_plate`, or `textured_plate`) end to end. Reject `unknown`, legacy `auto`, and arbitrary strings instead of silently replacing them.                                                                                    |
+|  37 | `extra_options`               | `reject`      | Empty is the only legal value until an exact typed schema exists. Do not accept open-ended JSON or strings.                                                                                                                                                                                                                                                      |
+|  38 | `auto_bed_leveling`           | `preserve`    | Preserve end to end and accept only the pinned modes `0`, `1`, or `2`.                                                                                                                                                                                                                                                                                           |
+|  39 | `auto_flow_cali`              | `preserve`    | Preserve end to end and accept only the pinned modes `0`, `1`, or `2`.                                                                                                                                                                                                                                                                                           |
+|  40 | `auto_offset_cali`            | `preserve`    | Preserve end to end and accept only the pinned modes `0`, `1`, or `2`.                                                                                                                                                                                                                                                                                           |
+|  41 | `extruder_cali_manual_mode`   | `preserve`    | Preserve end to end and accept only `-1`, `0`, or `1`. Pinned `SelectMachine.cpp:3190-3201` normally emits `0` or `1`.                                                                                                                                                                                                                                           |
+|  42 | `task_ext_change_assist`      | `unsupported` | `false` is admitted. The status projection clears pinned Studio `fun` bit 48 so the checkbox remains hidden; a caller-supplied `true` is still rejected until an exact downstream command encoding is proven.                                                                                                                                                    |
+|  43 | `try_emmc_print`              | `preserve`    | Preserve as transfer policy: `false` prohibits BRTC/eMMC, while `true` permits it only when the Agent reports exact support. It never guarantees eMMC use.                                                                                                                                                                                                       |
+|  44 | `svc_context`                 | `preserve`    | Preserve as opaque Hub task metadata; never interpret it as printer policy.                                                                                                                                                                                                                                                                                      |
+|  45 | `slicer_uid`                  | `preserve`    | Preserve as opaque Hub task metadata; never send it to the printer.                                                                                                                                                                                                                                                                                              |
 
 `nozzle_mapping`, `ams_mapping`, `ams_mapping2`, `ams_mapping_info`, and `nozzles_info` are typed JSON
 arrays. Pinned `PrintJob.hpp:65`, `PrintJob.cpp:266`, and `SelectMachine.cpp:1354-1367,3163-3168`
@@ -131,16 +131,16 @@ Pinned stages are defined in `bambu_networking.hpp:153-163`. `PrintJob.cpp:397-4
 Studio progress/error UI, and `PrintJob.cpp:502-553` consumes the wait callback. Pandar must emit the
 following monotonic sequence; it must not emit callbacks while holding an internal state lock.
 
-| Stage | Observable fact | Facts that are not yet proven |
-| --- | --- | --- |
-| `PrintingStageCreate` (`0`) | Parameters, identity, authorization, and printer admission passed. | No artifact byte has reached Hub. |
-| `PrintingStageUpload` (`1`) | Artifact bytes are being streamed plugin -> Hub. The callback code is bounded progress `0..100`. | No durable Hub job exists until the request commits. |
-| `PrintingStageWaiting` (`2`) | Hub returned `201` after atomically persisting artifact, job, command, and stable Studio id. Hub state is `JobStatus::Queued` and `PrintStatus::Pending`. | The Agent has not accepted the command; the printer has not received it; physical printing has not started. |
-| `PrintingStageSending` (`3`) | Hub reports `JobStatus::Acknowledged`; the Agent accepted the command and started work. | Printer upload/MQTT publish and physical printing are not proven. |
-| `PrintingStageRecord` (`4`) | Hub reports persisted `JobStatus::Succeeded`, meaning the Agent uploaded the artifact to the machine and published the typed print command. | A publish result is delivery completion, not evidence that the printer entered a printing state. |
-| `PrintingStageWaitPrinter` (`5`) | Pandar is about to invoke `OnWaitFn` outside locks with the stable Studio job id. | The callback can return on timeout/cancel in pinned Studio and therefore cannot prove physical start. |
-| `PrintingStageFinished` (`6`) | Record/delivery completed and `OnWaitFn` returned `true`. Preserve Studio's success body `"3"`. | This means "successfully sent", never "physical printing started". |
-| `PrintingStageERROR` (`7`) | A pre-terminal admission, upload, Hub, Agent, polling, or wait failure occurred; the callback code is the stable negative error. | A post-`201` error does not erase or cancel a durable job by itself. |
+| Stage                            | Observable fact                                                                                                                                           | Facts that are not yet proven                                                                               |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `PrintingStageCreate` (`0`)      | Parameters, identity, authorization, and printer admission passed.                                                                                        | No artifact byte has reached Hub.                                                                           |
+| `PrintingStageUpload` (`1`)      | Artifact bytes are being streamed plugin -> Hub. The callback code is bounded progress `0..100`.                                                          | No durable Hub job exists until the request commits.                                                        |
+| `PrintingStageWaiting` (`2`)     | Hub returned `201` after atomically persisting artifact, job, command, and stable Studio id. Hub state is `JobStatus::Queued` and `PrintStatus::Pending`. | The Agent has not accepted the command; the printer has not received it; physical printing has not started. |
+| `PrintingStageSending` (`3`)     | Hub reports `JobStatus::Acknowledged`; the Agent accepted the command and started work.                                                                   | Printer upload/MQTT publish and physical printing are not proven.                                           |
+| `PrintingStageRecord` (`4`)      | Hub reports persisted `JobStatus::Succeeded`, meaning the Agent uploaded the artifact to the machine and published the typed print command.               | A publish result is delivery completion, not evidence that the printer entered a printing state.            |
+| `PrintingStageWaitPrinter` (`5`) | Pandar is about to invoke `OnWaitFn` outside locks with the stable Studio job id.                                                                         | The callback can return on timeout/cancel in pinned Studio and therefore cannot prove physical start.       |
+| `PrintingStageFinished` (`6`)    | Record/delivery completed and `OnWaitFn` returned `true`. Preserve Studio's success body `"3"`.                                                           | This means "successfully sent", never "physical printing started".                                          |
+| `PrintingStageERROR` (`7`)       | A pre-terminal admission, upload, Hub, Agent, polling, or wait failure occurred; the callback code is the stable negative error.                          | A post-`201` error does not erase or cancel a durable job by itself.                                        |
 
 The successful callback order is exactly `Create -> Upload* -> Waiting -> Sending -> Record ->
 WaitPrinter -> Finished`. An HTTP `201` may emit `Waiting`; it must not immediately emit `Finished`
@@ -149,7 +149,7 @@ or call `OnWaitFn`. Downstream Agent failure must emit `ERROR`, not `Finished`.
 `OnWaitFn` receives `BAMBU_NETWORK_SUCCESS` and a JSON object with a numeric stable id:
 
 ```json
-{"job_id":38191}
+{ "job_id": 38191 }
 ```
 
 Additional Pandar identifiers may be present under separately named keys, but `job_id` remains a
@@ -215,13 +215,13 @@ neither replace nor retain ownership of that pointer.
 
 For an ordinary, authorized Pandar submission, Hub returns exactly these fields:
 
-| Field | Value |
-| ----- | ----- |
-| `job_id`, `task_id` | The same canonical positive `studio_submission_id` requested by Studio. |
-| `design_id`, `profile_id`, `instance_id` | `0`. |
-| `model_id` | Empty string. |
-| `model_name` | The real nonempty persisted project name. |
-| `profile_name` | The real nonempty persisted preset name. |
+| Field                                    | Value                                                                   |
+| ---------------------------------------- | ----------------------------------------------------------------------- |
+| `job_id`, `task_id`                      | The same canonical positive `studio_submission_id` requested by Studio. |
+| `design_id`, `profile_id`, `instance_id` | `0`.                                                                    |
+| `model_id`                               | Empty string.                                                           |
+| `model_name`                             | The real nonempty persisted project name.                               |
+| `profile_name`                           | The real nonempty persisted preset name.                                |
 
 `instance_id=0` is an explicit no-rating sentinel. It must never be filled with the submission id or
 another synthetic value. Any MakerWorld marker (`stl_design_id != 0`, `origin_profile_id != 0`, or a
@@ -283,10 +283,10 @@ only as a real tenant-authorized URL; the safe default is the empty string.
 
 Studio status mapping is deterministic:
 
-| Pandar state | Studio `status` |
-| --- | ---: |
-| `PrintStatus::Completed` | `2` (success) |
-| `JobStatus::Failed`, `PrintStatus::Failed`, or `PrintStatus::Cancelled` | `3` (failed) |
+| Pandar state                                                                    |            Studio `status` |
+| ------------------------------------------------------------------------------- | -------------------------: |
+| `PrintStatus::Completed`                                                        |              `2` (success) |
+| `JobStatus::Failed`, `PrintStatus::Failed`, or `PrintStatus::Cancelled`         |               `3` (failed) |
 | queued, sent, acknowledged, delivery-succeeded-but-pending, stalled, or running | `1` (printing/in progress) |
 
 Status `4` is reserved until a distinct pinned semantic is proven. A Hub outage, invalid JSON, or
@@ -308,7 +308,7 @@ HTTP `200` and this exact type shape:
     "plates": [
       {
         "index": 7,
-        "thumbnail": {"url": ""},
+        "thumbnail": { "url": "" },
         "prediction": 3600,
         "weight": 12.5,
         "filaments": [

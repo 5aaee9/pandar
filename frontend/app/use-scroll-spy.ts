@@ -23,7 +23,10 @@ export function useScrollSpy(sectionIds: readonly string[]): string {
       }
       const lastId = sectionIds[sectionIds.length - 1];
       const last = lastId ? document.getElementById(lastId) : null;
-      if (last && last.getBoundingClientRect().top <= window.innerHeight * 0.6) {
+      if (
+        last &&
+        last.getBoundingClientRect().top <= window.innerHeight * 0.6
+      ) {
         next = lastId;
       }
       setActiveId(next);

@@ -5,10 +5,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 
 import { QueryErrorBoundary } from "../../query-error-boundary";
-import {
-  settingsAdminRouteQuery,
-  settingsRouteQuery,
-} from "../../route-data";
+import { settingsAdminRouteQuery, settingsRouteQuery } from "../../route-data";
 import { SettingsDashboard } from "../../settings-dashboard";
 import type { AuthMetadata, Tenant } from "../../dashboard-types";
 
@@ -49,7 +46,9 @@ export function SettingsPageClient({
         <div className="font-medium">{t("loadErrorTitle")}</div>
         <p className="mt-1 text-destructive/90">{t("loadErrorDescription")}</p>
         <details className="mt-2 text-xs">
-          <summary className="cursor-pointer font-medium">{t("errorDetails")}</summary>
+          <summary className="cursor-pointer font-medium">
+            {t("errorDetails")}
+          </summary>
           <div className="mt-1 break-all">
             {workspaceQuery.error instanceof Error
               ? workspaceQuery.error.message

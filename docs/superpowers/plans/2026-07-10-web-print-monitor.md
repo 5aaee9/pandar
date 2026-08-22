@@ -50,6 +50,7 @@
 ### Task 1: Add the Agent Wire Capability and Presence-Preserving `job_attr`
 
 **Files:**
+
 - Modify: `proto/pandar/agent/v1/agent.proto:25-28,83-108`
 - Modify: `crates/pandar-agent/src/lib.rs:183-194`
 - Modify: `crates/pandar-agent/src/machine/mqtt/commands.rs:104-123`
@@ -61,6 +62,7 @@
 - Modify: `crates/pandar-agent/src/tests.rs:96-114`
 
 **Interfaces:**
+
 - Produces `AgentCapability::HandlePrintErrorSequenceZeroPubackOnly` from protobuf enum value `2`.
 - Adds `job_attr: Option<u32>` to `PrintReportProgress` and protobuf fields `job_attr/has_job_attr` at tags `25/26`.
 - Preserves explicit `job_attr = 0`; absence never overwrites Hub state.
@@ -192,6 +194,7 @@ Expected: all selected tests pass; every production Rust module remains below 40
 ### Task 2: Dispatch Sequence-Zero Recovery on a Fresh MQTT Connection
 
 **Files:**
+
 - Create: `crates/pandar-agent/src/machine/mqtt/recovery.rs`
 - Create: `crates/pandar-agent/src/machine/mqtt/tests/recovery.rs`
 - Modify: `crates/pandar-agent/src/machine/mqtt.rs:3-45`
@@ -204,6 +207,7 @@ Expected: all selected tests pass; every production Rust module remains below 40
 - Test: `crates/pandar-agent/src/machine/tests/print_error.rs`
 
 **Interfaces:**
+
 - Produces `dispatch_sequence_zero_recovery(endpoint, command) -> anyhow::Result<PrinterOperationDispatchResult>`.
 - Uses one unique client ID, no subscription, one QoS1 PUBLISH, and one five-second end-to-end deadline per call.
 - Returns `sequence_id: Some("0")` only after the matching connection-scoped PUBACK.
@@ -335,6 +339,7 @@ Expected: clean recovery tests pass, nonzero Studio correlation remains unchange
 ### Task 3: Add Equivalent Revision, Generation, and Session Schema
 
 **Files:**
+
 - Create: `crates/pandar-hub/migrations/sqlite/20260710000000_web_print_monitor.sql`
 - Create: `crates/pandar-hub/migrations/postgres/20260710000000_web_print_monitor.sql`
 - Modify: `crates/pandar-hub/src/entities/printers.rs:5-35`
@@ -344,6 +349,7 @@ Expected: clean recovery tests pass, nonzero Studio correlation remains unchange
 - Modify: `crates/pandar-hub/src/repositories/tests/postgres.rs:426-432`
 
 **Interfaces:**
+
 - Produces `state_revision >= 1`, task/error generation counters, raw `print_job_attr`, exact error marker fields, and `agents.current_session_id` on both backends.
 - Extends `PrinterWithLiveStatus` with `state_revision: u64`; extends `PrinterLiveStatus` with generation/raw marker data needed by later repository code.
 - Database default `state_revision = 1` is authoritative for legacy inserts that omit every new column.
@@ -462,6 +468,7 @@ Expected: SQLite always passes; PostgreSQL executes and passes when `PANDAR_TEST
 ### Task 4: Linearize Agent Session Claims and Agent-Owned Printer State Mutations
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/repositories/agents/connections.rs`
 - Create: `crates/pandar-hub/src/sessions/transitions.rs`
 - Modify: `crates/pandar-hub/src/repositories/agents.rs` (split connection methods out; keep below 400 LOC)
@@ -481,6 +488,7 @@ Expected: SQLite always passes; PostgreSQL executes and passes when `PANDAR_TEST
 - Modify: `crates/pandar-hub/src/grpc/tests/printer_materials.rs`
 
 **Interfaces:**
+
 - Produces `SessionRegistry::transition_lease(agent_id) -> OwnedMutexGuard<()>`, stable across AgentSession replacement.
 - Produces repository session claim/heartbeat/offline helpers and `begin_current_agent_transaction` with SQLite immediate / PostgreSQL Agent-row-first locking.
 - Changes snapshot/report/material handlers to accept the authenticated `SessionToken` and commit only if `agents.current_session_id` still matches.
@@ -625,6 +633,7 @@ Expected: every old-session write is rejected before commit; B remains online/cu
 ### Task 5: Merge Task/Error Generations and Atomically Revise Printer State
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/repositories/printers/live_status/merge.rs`
 - Create: `crates/pandar-hub/src/repositories/printers/live_status/persistence.rs`
 - Create: `crates/pandar-hub/src/repositories/printers/queries.rs`
@@ -639,6 +648,7 @@ Expected: every old-session write is rejected before commit; B remains online/cu
 - Modify: `crates/pandar-hub/src/grpc/tests/print_reports/live_status.rs`
 
 **Interfaces:**
+
 - Produces pure `merge_live_report(stored, patch, session_id, received_at) -> MergedPrinterLiveStatus`.
 - Produces `AppliedPrintReport { printer_id, live_status_changed, ... }` and post-commit enriched reload.
 - Atomically increments `state_revision` for snapshot, print/last-seen, and user-visible printer edits; material-only writes retain independent ordering.
@@ -727,6 +737,7 @@ Expected: every truth-table case and atomic increment passes on SQLite and confi
 ### Task 6: Publish Enriched REST/WebSocket State and Repair Event Loss
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/printer_events.rs:17-220`
 - Modify: `crates/pandar-hub/src/routes/printers.rs:70-119`
 - Modify: `crates/pandar-hub/src/routes/printers/responses.rs`
@@ -748,6 +759,7 @@ Expected: every truth-table case and atomic increment passes on SQLite and confi
 - Modify: `crates/pandar-hub/src/grpc/tests/printer_materials.rs`
 
 **Interfaces:**
+
 - Produces optional-compatible `PrinterEventPrinter.state_revision` and `PrinterEventPrinter.print` while every upgraded producer supplies `Some`.
 - Produces `PrinterEventPrint` with required generations/HMS and nullable device fields; raw `job_attr` and authorization markers remain private.
 - Produces `PrinterEventHub::{subscribe_epoch,invalidate_epoch}`; lag/publish/receive/EOF faults close sockets without adding a public event discriminator.
@@ -867,6 +879,7 @@ Expected: enriched shape, no leaks, socket invalidation, and retry semantics all
 ### Task 7: Add Server-Authoritative Web Build-Plate Recovery
 
 **Files:**
+
 - Create: `crates/pandar-hub/src/routes/printer_operations/plate_mismatch.rs`
 - Create: `crates/pandar-hub/src/routes/printer_operations/web_recovery.rs`
 - Create: `crates/pandar-hub/src/repositories/commands/audit/printer_operations/recovery.rs`
@@ -884,6 +897,7 @@ Expected: enriched shape, no leaks, socket invalidation, and retry semantics all
 - Modify: `crates/pandar-hub/src/grpc/tests/commands/print_error.rs`
 
 **Interfaces:**
+
 - Adds tenant request `{action:"handle_print_error", error_action, error_generation}` and rejects all client transport/state fields.
 - Produces `create_web_print_error_sent_with_audit` that locks Agent then printer, validates exact current occurrence/session/state/catalog, performs shared native single-flight, and returns a typed `PersistedLivePrinterOperation` containing the command, locked serial number, and server-owned sequence `0` operation.
 - Generalizes the existing exact-token live dispatcher into `dispatch_persisted_live_command`, which calls the existing `SessionRegistry::try_dispatch_live_command_with_capability`; Web holds the stable transition lease through transaction and enqueue.
@@ -894,7 +908,11 @@ Expected: enriched shape, no leaks, socket invalidation, and retry semantics all
 Use typed request fixtures. The accepted body is exactly:
 
 ```json
-{"action":"handle_print_error","error_action":"resume","error_generation":9}
+{
+  "action": "handle_print_error",
+  "error_action": "resume",
+  "error_generation": 9
+}
 ```
 
 Add rejection cases for Viewer, wrong tenant, missing printer, unknown/extra/missing fields, client `print_error/job_id/job_attr/job_state/task_generation/sequence_id`, wrong/cleared/different error, stale generation, marker task/session mismatch, missing receive time, native state outside `PREPARE|SLICING|RUNNING|PAUSE`, coarse IDLE/OFFLINE/FAILED, family miss, Resume/Ignore with missing or `>1` job state, missing new capability, offline/replaced Agent, ownership race, publish failure, and duplicate native command.
@@ -1035,6 +1053,7 @@ Expected: one concurrent request persists/sends, plugin/Web overlap is excluded,
 ### Task 8: Reconcile Web Printer State Across Future-Only and Lost Events
 
 **Files:**
+
 - Create: `frontend/app/printer-live-types.ts`
 - Create: `frontend/app/printer-reconciliation.ts`
 - Create: `frontend/app/printer-reconciliation.test.ts`
@@ -1047,6 +1066,7 @@ Expected: one concurrent request persists/sends, plugin/Web overlap is excluded,
 - Create: `frontend/app/api/tenants/[tenantId]/printers/route.test.ts`
 
 **Interfaces:**
+
 - Models the optional-compatible Hub envelope while treating upgraded `state_revision` and `print` as present on authoritative responses.
 - Adds a pure revision/observation merge reducer plus a token-owned reconciliation coordinator.
 - Moves dashboard event ownership out of the over-limit runtime component and implements socket-first buffered bootstrap, serialized periodic repair, bounded fetches, visibility repair, and fail-closed enriched state.
@@ -1058,22 +1078,22 @@ Define the narrow client contract:
 
 ```ts
 export type PrinterPrintState = {
-  task_generation: number
-  error_generation: number
-  hms: Array<{ attr: number; code: number }>
-  job_state: number | null
-  gcode_state: string | null
-  task_id: string | null
-  subtask_id: string | null
-  subtask_name: string | null
-  gcode_file: string | null
-  progress_percent: number | null
-  remaining_time_minutes: number | null
-  current_layer: number | null
-  total_layers: number | null
-  print_error: number | null
-  printer_job_id: string | null
-}
+  task_generation: number;
+  error_generation: number;
+  hms: Array<{ attr: number; code: number }>;
+  job_state: number | null;
+  gcode_state: string | null;
+  task_id: string | null;
+  subtask_id: string | null;
+  subtask_name: string | null;
+  gcode_file: string | null;
+  progress_percent: number | null;
+  remaining_time_minutes: number | null;
+  current_layer: number | null;
+  total_layers: number | null;
+  print_error: number | null;
+  printer_job_id: string | null;
+};
 ```
 
 Import `PrinterPrintState` into `dashboard-types.ts` and add `state_revision?: number` and `print?: PrinterPrintState | null` directly to the existing `Printer`. Optionality exists only for rolling decode; upgraded authoritative responses must supply both fields.
@@ -1098,12 +1118,12 @@ Use explicit reducer outputs rather than side effects:
 type MergeResult =
   | { kind: "applied"; printers: Printer[] }
   | { kind: "ignored"; printers: Printer[] }
-  | { kind: "resync"; printers: Printer[] }
+  | { kind: "resync"; printers: Printer[] };
 
 export function mergePrinterEvent(
   current: Printer[],
   incoming: Printer,
-): MergeResult
+): MergeResult;
 ```
 
 Represent each authoritative fetch with a monotonically increasing token. Immediately before replacing state, require that token to still own the coordinator. Do the same immediately before replaying buffered events so an older response cannot overwrite a newer reconnect.
@@ -1128,12 +1148,12 @@ Cover the exact state machine:
 Follow the existing ticket proxy's authenticated server-side forwarding. Forward the Hub status and JSON body without caching:
 
 ```ts
-export const dynamic = "force-dynamic"
+export const dynamic = "force-dynamic";
 
 export async function GET(
   request: Request,
   context: { params: Promise<{ tenantId: string }> },
-): Promise<Response>
+): Promise<Response>;
 ```
 
 Forward `request.signal` to the upstream fetch so the browser's deadline cancels proxy work. Tests must prove tenant path encoding, authenticated API forwarding, abort propagation, no-store semantics, upstream status preservation, and no credential/API URL exposure in the browser response.
@@ -1144,13 +1164,13 @@ Move WebSocket/notification ownership from `dashboard-runtime.tsx` into `use-das
 
 ```ts
 type DashboardRuntimeEvents = {
-  liveState: LiveState
-  lastEventAt: string | null
-  notifications: RuntimeNotification[]
-  printers: Printer[]
-  jobs: Job[]
-  retry: () => void
-}
+  liveState: LiveState;
+  lastEventAt: string | null;
+  notifications: RuntimeNotification[];
+  printers: Printer[];
+  jobs: Job[];
+  retry: () => void;
+};
 ```
 
 Pass the existing `apiUrl`, auth source, selected tenant, initial printers, and initial jobs into the hook. The timer is serialized and measured start-to-start. Its 40-second silent-loss guarantee is algorithmic only while the page scheduler is active and a REST attempt completes inside its full-body deadline; the immediate visibility/pageshow repair covers browser suspension. Do not display a stronger wall-clock claim.
@@ -1170,6 +1190,7 @@ Expected: ordering/race tests pass, `dashboard-runtime.tsx` is below 400 LOC, an
 ### Task 9: Render Native-Style Print Status and Build-Plate Recovery in Web
 
 **Files:**
+
 - Create: `frontend/app/printer-print-status.tsx`
 - Create: `frontend/app/printer-print-status.test.tsx`
 - Create: `frontend/app/printer-mismatch-dialog.tsx`
@@ -1194,6 +1215,7 @@ Expected: ordering/race tests pass, `dashboard-runtime.tsx` is below 400 LOC, an
 - Modify: `mobile/android/app/src/test/kotlin/zip/iptables/pandar/android/data/remote/dto/PrinterEventsDecoderTest.kt`
 
 **Interfaces:**
+
 - Replaces the card's coarse-only Running presentation with native live details when enriched data exists, while retaining the coarse status as an availability/state fallback.
 - Centralizes one build-plate mismatch dialog for the selected occurrence and uses a dedicated `useActionState` server action that submits only semantic action plus `error_generation` upstream.
 - Derives actions from the same closed native Studio catalog encoded on the Hub and never clears the warning optimistically.
@@ -1219,12 +1241,12 @@ Run the presentation cases under both English and Chinese message providers so e
 Implement one pure client helper mirroring the server catalog for presentation only:
 
 ```ts
-export type PlateMismatchAction = "resume" | "ignore" | "stop"
+export type PlateMismatchAction = "resume" | "ignore" | "stop";
 
 export function plateMismatchActions(
   serialNumber: string,
   print: PrinterPrintState,
-): PlateMismatchAction[]
+): PlateMismatchAction[];
 ```
 
 Test exact `print_error` code `83918929`, families `093|094|20P|22E|239|31B`, empty catalog for `26A`/unknown, Resume/Ignore only with present `job_state <= 1`, Stop independent of job state, active exact state `PREPARE|SLICING|RUNNING|PAUSE`, and coarse `IDLE|OFFLINE|FAILED` as a complete veto. Unsupported combinations render localized printer-only guidance. Stop uses destructive styling, with the mismatch dialog itself as its confirmation surface rather than a second nested confirmation. The Hub remains authoritative and must reject any stale or forged request.
@@ -1232,7 +1254,11 @@ Test exact `print_error` code `83918929`, families `093|094|20P|22E|239|31B`, em
 Dialog tests cover the displayed code `0500-8051` and approved English/Chinese mismatch explanation, auto-open once per `printer.id:error_generation`, dismissal across unavailable/reconnect with the same generation, clear/reappear auto-open with a higher generation, inline-warning reopen, clear/different-error close, stable printer-list selection when multiple printers are affected, Resume/Ignore/Stop labels and native ordering, no action for an unsupported state, busy-state deduplication, accessible focus/close behavior, and the exact upstream request body:
 
 ```json
-{"action":"handle_print_error","error_action":"resume","error_generation":9}
+{
+  "action": "handle_print_error",
+  "error_action": "resume",
+  "error_generation": 9
+}
 ```
 
 Assert that the body contains no HMS code, printer job ID, job state, task generation, or sequence ID. The server action validates its `FormData` boundary, calls `requireAuth`, encodes tenant/printer path segments, does not redirect, and returns a typed `idle | sent | error` state; its success wording is `sent`, never `queued` or `completed`.
@@ -1251,8 +1277,10 @@ const response = await fetch(
       error_generation: errorGeneration,
     }),
   },
-)
-return response.ok ? { status: "sent" } : { status: "error", error: await responseError(response) }
+);
+return response.ok
+  ? { status: "sent" }
+  : { status: "error", error: await responseError(response) };
 ```
 
 - [x] **Step 3: Run the component/helper tests and confirm failure**
@@ -1324,6 +1352,7 @@ Expected: the Web UI exposes full live details and only native valid mismatch ac
 ### Task 10: Update Documentation, Run Fresh Verification, Commit Once, and Push
 
 **Files:**
+
 - Modify: `docs/roadmap.md`
 - Modify: `docs/development.md`
 - Modify: `docs/architecture.md`
@@ -1331,6 +1360,7 @@ Expected: the Web UI exposes full live details and only native valid mismatch ac
 - Verify only: all implementation files from Tasks 1–9
 
 **Interfaces:**
+
 - Documents the shipped live-monitor/reconciliation/recovery behavior, operational rollout order, and failure semantics only after the implementation is independently approved.
 - Performs a fresh, evidence-producing final verification with no physical printer recovery command.
 - Creates one Conventional Commit for the reviewed change set and pushes the current branch.

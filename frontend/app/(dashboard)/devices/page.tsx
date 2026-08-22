@@ -30,10 +30,5 @@ export default async function DevicesPage() {
     return <div>No tenant selected</div>;
   }
 
-  return (
-    <DevicesPageClient
-      auth={auth}
-      selectedTenant={selectedTenant}
-    />
-  );
+  return <DevicesPageClient auth={auth} selectedTenant={selectedTenant} />;
 }

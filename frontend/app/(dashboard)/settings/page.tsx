@@ -31,9 +31,10 @@ export default async function SettingsPage() {
     return <div>No tenant selected</div>;
   }
 
-  const membership = auth.provider !== "none"
-    ? await getMembershipForRequest(selectedTenant.id)
-    : { role: null, error: null };
+  const membership =
+    auth.provider !== "none"
+      ? await getMembershipForRequest(selectedTenant.id)
+      : { role: null, error: null };
 
   return (
     <SettingsPageClient

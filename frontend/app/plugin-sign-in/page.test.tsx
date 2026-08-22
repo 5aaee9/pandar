@@ -40,15 +40,19 @@ vi.mock("./external-auth-status", () => ({
 }));
 
 vi.mock("./plugin-ticket-form", () => ({
-  PluginTicketForm: ({ selectedTenant }: { selectedTenant: { display_name: string } }) => (
-    <div>plugin ticket tenant: {selectedTenant.display_name}</div>
-  ),
+  PluginTicketForm: ({
+    selectedTenant,
+  }: {
+    selectedTenant: { display_name: string };
+  }) => <div>plugin ticket tenant: {selectedTenant.display_name}</div>,
 }));
 
 vi.mock("../mobile-sign-in/mobile-ticket-form", () => ({
-  MobileTicketForm: ({ selectedTenant }: { selectedTenant: { display_name: string } }) => (
-    <div>mobile ticket tenant: {selectedTenant.display_name}</div>
-  ),
+  MobileTicketForm: ({
+    selectedTenant,
+  }: {
+    selectedTenant: { display_name: string };
+  }) => <div>mobile ticket tenant: {selectedTenant.display_name}</div>,
 }));
 
 describe("PluginSignInPage", () => {
@@ -58,25 +62,32 @@ describe("PluginSignInPage", () => {
     fetchMock.mockImplementation(async (input: string | URL | Request) => {
       const url = input.toString();
       if (url.endsWith("/api/v1/me")) {
-        return new Response(JSON.stringify({
-          identity: {
-            provider: "betterauth",
-            subject: "user-1",
-            email: "user@example.com",
-            email_verified: true,
-            display_name: "User",
-          },
-          tenants: [{
-            tenant_id: "tenant-1",
-            tenant_slug: "acme",
-            display_name: "Acme Labs",
-            role: "tenant_admin",
-          }],
-          can_self_create_tenant: true,
-        }), { status: 200 });
+        return new Response(
+          JSON.stringify({
+            identity: {
+              provider: "betterauth",
+              subject: "user-1",
+              email: "user@example.com",
+              email_verified: true,
+              display_name: "User",
+            },
+            tenants: [
+              {
+                tenant_id: "tenant-1",
+                tenant_slug: "acme",
+                display_name: "Acme Labs",
+                role: "tenant_admin",
+              },
+            ],
+            can_self_create_tenant: true,
+          }),
+          { status: 200 },
+        );
       }
       if (url.endsWith("/api/v1/tenants")) {
-        return new Response(JSON.stringify({ error: "forbidden" }), { status: 403 });
+        return new Response(JSON.stringify({ error: "forbidden" }), {
+          status: 403,
+        });
       }
       throw new Error(`Unexpected fetch: ${url}`);
     });
@@ -87,8 +98,12 @@ describe("PluginSignInPage", () => {
 
     render(await PluginSignInPage({ searchParams: Promise.resolve({}) }));
 
-    expect(screen.queryByText("Tenant lookup returned 403")).not.toBeInTheDocument();
-    expect(screen.getByText("plugin ticket tenant: Acme Labs")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Tenant lookup returned 403"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("plugin ticket tenant: Acme Labs"),
+    ).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/me",
       expect.objectContaining({ cache: "no-store" }),
@@ -100,12 +115,17 @@ describe("PluginSignInPage", () => {
   });
 
   it("uses identity memberships for mobile sign-in too", async () => {
-    const { default: MobileSignInPage } = await import("../mobile-sign-in/page");
+    const { default: MobileSignInPage } =
+      await import("../mobile-sign-in/page");
 
     render(await MobileSignInPage({ searchParams: Promise.resolve({}) }));
 
-    expect(screen.queryByText("Tenant lookup returned 403")).not.toBeInTheDocument();
-    expect(screen.getByText("mobile ticket tenant: Acme Labs")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Tenant lookup returned 403"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("mobile ticket tenant: Acme Labs"),
+    ).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8080/api/v1/me",
       expect.objectContaining({ cache: "no-store" }),

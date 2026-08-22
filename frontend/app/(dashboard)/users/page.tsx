@@ -31,11 +31,17 @@ export default async function UsersPage() {
     return <div>No tenant selected</div>;
   }
 
-  const membership = auth.provider !== "none"
-    ? await getMembershipForRequest(selectedTenant.id)
-    : { role: null, error: null };
-  const adminUnavailable = auth.provider !== "none" && (membership.role !== "tenant_admin" || membership.error !== null);
-  const adminLoadError = auth.provider !== "none" && membership.role === "tenant_admin" && membership.error !== null;
+  const membership =
+    auth.provider !== "none"
+      ? await getMembershipForRequest(selectedTenant.id)
+      : { role: null, error: null };
+  const adminUnavailable =
+    auth.provider !== "none" &&
+    (membership.role !== "tenant_admin" || membership.error !== null);
+  const adminLoadError =
+    auth.provider !== "none" &&
+    membership.role === "tenant_admin" &&
+    membership.error !== null;
 
   return (
     <UsersPageClient

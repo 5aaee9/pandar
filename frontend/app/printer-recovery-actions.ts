@@ -7,7 +7,9 @@ import type { PlateMismatchAction } from "./plate-mismatch-actions";
 const apiUrl = process.env.APP_API_URL ?? "http://localhost:8080";
 
 export type PrinterRecoveryActionState =
-  { status: "idle" } | { status: "sent" } | { status: "error"; error: string };
+  | { status: "idle" }
+  | { status: "sent" }
+  | { status: "error"; error: string };
 
 export async function handlePrintError(
   _previousState: PrinterRecoveryActionState,

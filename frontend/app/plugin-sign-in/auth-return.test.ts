@@ -4,18 +4,12 @@ import {
   decodePluginSignInReturnTarget,
   encodePluginSignInReturnTarget,
 } from "../auth/betterauth/callback-redirect";
-import {
-  pluginAuthSignInUrl,
-  pluginSignInReturnTarget,
-} from "./auth-return";
+import { pluginAuthSignInUrl, pluginSignInReturnTarget } from "./auth-return";
 
 describe("plugin authentication return", () => {
   it("preserves the Studio callback and selected tenant", () => {
     expect(
-      pluginSignInReturnTarget(
-        "tenant-1",
-        "http://localhost:13618/callback",
-      ),
+      pluginSignInReturnTarget("tenant-1", "http://localhost:13618/callback"),
     ).toBe(
       "/plugin-sign-in?tenant=tenant-1&redirect_url=http%3A%2F%2Flocalhost%3A13618%2Fcallback",
     );

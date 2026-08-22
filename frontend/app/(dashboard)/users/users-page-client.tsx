@@ -50,12 +50,17 @@ export function UsersPageClient({
   if (error) {
     return (
       <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-        Failed to load users: {error instanceof Error ? error.message : "Unknown error"}
+        Failed to load users:{" "}
+        {error instanceof Error ? error.message : "Unknown error"}
       </div>
     );
   }
 
-  const { users, identities, joinLinks } = data ?? { users: [], identities: [], joinLinks: [] };
+  const { users, identities, joinLinks } = data ?? {
+    users: [],
+    identities: [],
+    joinLinks: [],
+  };
 
   return (
     <QueryErrorBoundary>

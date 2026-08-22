@@ -137,7 +137,11 @@ export function agentsRouteQuery(
   discoveryId: string | null = null,
 ) {
   return queryOptions({
-    queryKey: [...routeDataKeys.agents(tenantId), commandId, discoveryId] as const,
+    queryKey: [
+      ...routeDataKeys.agents(tenantId),
+      commandId,
+      discoveryId,
+    ] as const,
     queryFn: async (): Promise<AgentsRouteData> => {
       const [agents, printers, command, listedDiscoveryCommand] =
         await Promise.all([

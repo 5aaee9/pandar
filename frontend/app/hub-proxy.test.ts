@@ -26,7 +26,9 @@ function mutationRequest(url: string, init?: RequestInit) {
 type UpstreamInit = RequestInit & { duplex?: "half" };
 
 type FetchMock = ReturnType<
-  typeof vi.fn<(input: RequestInfo | URL, init?: UpstreamInit) => Promise<Response>>
+  typeof vi.fn<
+    (input: RequestInfo | URL, init?: UpstreamInit) => Promise<Response>
+  >
 >;
 
 function stubUpstream(response: Response): FetchMock {
@@ -92,7 +94,9 @@ describe("hubProxy", () => {
       { params: Promise.resolve({ tenantId: "bad tenant", jobId: "job-1" }) },
     );
     const badJob = await handler(
-      mutationRequest("https://web.example/api/tenants/tenant-1/jobs/bad%20job"),
+      mutationRequest(
+        "https://web.example/api/tenants/tenant-1/jobs/bad%20job",
+      ),
       { params: Promise.resolve({ tenantId: "tenant-1", jobId: "bad job" }) },
     );
 
@@ -278,7 +282,9 @@ describe("hubProxy", () => {
     });
 
     const response = await handler(
-      new Request("https://web.example/api/tenants/tenant-1/printers/p1/camera.mp4"),
+      new Request(
+        "https://web.example/api/tenants/tenant-1/printers/p1/camera.mp4",
+      ),
       { params: Promise.resolve({ tenantId: "tenant-1", printerId: "p1" }) },
     );
 

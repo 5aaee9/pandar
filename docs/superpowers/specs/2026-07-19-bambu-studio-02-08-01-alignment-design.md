@@ -17,7 +17,7 @@
   16.14, and Windows MSVC native package/ABI gates, then failed promotion when Linux full validation
   exposed a background-refresh/firmware-callback race. Its compiled fixture succeeded, but its wrapper
   rejected the run after `pandar printer status refresh discarded: credentials changed during
-  request`. Final12 hashes and passed gates are historical evidence only.
+request`. Final12 hashes and passed gates are historical evidence only.
 - Status: historical final13 repairs the discovered race. A background heartbeat uses stale-
   while-revalidate only while its refresh request is in flight; foreground Studio print-info still
   invalidates immediately and fails closed. Directed tests freeze both policies. The firmware fixture

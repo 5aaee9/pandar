@@ -305,7 +305,9 @@ describe("controlPrinter axis operations", () => {
       formData.set("delta_mm", deltaMm);
       formData.set("feedrate_mm_per_min", String(feedrateMmPerMin));
 
-      await expect(controlPrinter(null, formData)).resolves.toEqual({ ok: true });
+      await expect(controlPrinter(null, formData)).resolves.toEqual({
+        ok: true,
+      });
 
       const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
       expect(JSON.parse(String(init.body))).toEqual({

@@ -45,7 +45,11 @@ export default async function DashboardLayout({
     auth.provider,
   );
 
-  if (effectiveTenants.length === 0 && auth.provider !== "none" && identity.me) {
+  if (
+    effectiveTenants.length === 0 &&
+    auth.provider !== "none" &&
+    identity.me
+  ) {
     return <OnboardingPanel me={identity.me} />;
   }
 

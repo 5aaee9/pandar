@@ -13,27 +13,56 @@ const hubBase = "https://hub.internal.example/base";
 async function loadRoutes() {
   vi.resetModules();
   vi.stubEnv("APP_API_URL", hubBase);
-  const [jobs, job, reprint, printers, printerJobs, metadata, camera, agents, users, joinLinks, tenantTokens, auditEvents, command] =
-    await Promise.all([
-      import("./api/tenants/[tenantId]/jobs/route"),
-      import("./api/tenants/[tenantId]/jobs/[jobId]/route"),
-      import("./api/tenants/[tenantId]/jobs/[jobId]/reprint/route"),
-      import("./api/tenants/[tenantId]/printers/route"),
-      import("./api/tenants/[tenantId]/printers/[printerId]/jobs/route"),
-      import("./api/tenants/[tenantId]/artifact-metadata-preview/route"),
-      import("./api/tenants/[tenantId]/printers/[printerId]/camera.mp4/route"),
-      import("./api/tenants/[tenantId]/agents/route"),
-      import("./api/tenants/[tenantId]/users/route"),
-      import("./api/tenants/[tenantId]/join-links/route"),
-      import("./api/tenants/[tenantId]/tenant-tokens/route"),
-      import("./api/tenants/[tenantId]/audit-events/route"),
-      import("./api/tenants/[tenantId]/commands/[commandId]/route"),
-    ]);
-  return { jobs, job, reprint, printers, printerJobs, metadata, camera, agents, users, joinLinks, tenantTokens, auditEvents, command };
+  const [
+    jobs,
+    job,
+    reprint,
+    printers,
+    printerJobs,
+    metadata,
+    camera,
+    agents,
+    users,
+    joinLinks,
+    tenantTokens,
+    auditEvents,
+    command,
+  ] = await Promise.all([
+    import("./api/tenants/[tenantId]/jobs/route"),
+    import("./api/tenants/[tenantId]/jobs/[jobId]/route"),
+    import("./api/tenants/[tenantId]/jobs/[jobId]/reprint/route"),
+    import("./api/tenants/[tenantId]/printers/route"),
+    import("./api/tenants/[tenantId]/printers/[printerId]/jobs/route"),
+    import("./api/tenants/[tenantId]/artifact-metadata-preview/route"),
+    import("./api/tenants/[tenantId]/printers/[printerId]/camera.mp4/route"),
+    import("./api/tenants/[tenantId]/agents/route"),
+    import("./api/tenants/[tenantId]/users/route"),
+    import("./api/tenants/[tenantId]/join-links/route"),
+    import("./api/tenants/[tenantId]/tenant-tokens/route"),
+    import("./api/tenants/[tenantId]/audit-events/route"),
+    import("./api/tenants/[tenantId]/commands/[commandId]/route"),
+  ]);
+  return {
+    jobs,
+    job,
+    reprint,
+    printers,
+    printerJobs,
+    metadata,
+    camera,
+    agents,
+    users,
+    joinLinks,
+    tenantTokens,
+    auditEvents,
+    command,
+  };
 }
 
 type FetchMock = ReturnType<
-  typeof vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>
+  typeof vi.fn<
+    (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+  >
 >;
 
 function stubUpstream(): FetchMock {
@@ -86,7 +115,11 @@ describe("hub proxy route wiring", () => {
       { params: Promise.resolve({ tenantId: "tenant-1" }) },
     );
 
-    expectUpstreamCall(fetchMock, `${hubBase}/api/v1/tenants/tenant-1/jobs`, "DELETE");
+    expectUpstreamCall(
+      fetchMock,
+      `${hubBase}/api/v1/tenants/tenant-1/jobs`,
+      "DELETE",
+    );
   });
 
   it("proxies a single job delete", async () => {
@@ -202,7 +235,11 @@ describe("hub proxy route wiring", () => {
       { params: Promise.resolve({ tenantId: "tenant-1" }) },
     );
 
-    expectUpstreamCall(fetchMock, `${hubBase}/api/v1/tenants/tenant-1/jobs`, "GET");
+    expectUpstreamCall(
+      fetchMock,
+      `${hubBase}/api/v1/tenants/tenant-1/jobs`,
+      "GET",
+    );
   });
 
   it("proxies the agents list", async () => {

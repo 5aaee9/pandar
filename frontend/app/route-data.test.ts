@@ -105,9 +105,7 @@ describe("route query cache policies", () => {
 
   it("polls the agents view quickly while a tracked command is pending", () => {
     const refetchInterval = agentsRouteQuery("t1", "cmd-1")
-      .refetchInterval as (query: {
-      state: { data?: unknown };
-    }) => number;
+      .refetchInterval as (query: { state: { data?: unknown } }) => number;
 
     expect(refetchInterval({ state: { data: undefined } })).toBe(60_000);
     expect(

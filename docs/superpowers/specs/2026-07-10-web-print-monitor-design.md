@@ -72,9 +72,7 @@ An upgraded Hub logically adds a required top-level `state_revision` and nested 
     "subtask_name": "Cube",
     "print_error": 83918929,
     "printer_job_id": "<printer-native job id>",
-    "hms": [
-      { "attr": 83887616, "code": 131184 }
-    ]
+    "hms": [{ "attr": 83887616, "code": 131184 }]
   }
 }
 ```

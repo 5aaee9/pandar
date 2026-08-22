@@ -30,7 +30,9 @@ type TenantFetchResult = {
   error: string | null;
 };
 
-async function fetchTenants(provider: AuthProvider): Promise<TenantFetchResult> {
+async function fetchTenants(
+  provider: AuthProvider,
+): Promise<TenantFetchResult> {
   const [tenantResult, identityResult] = await Promise.all([
     getTenantsForRequest(),
     getIdentityForRequest(),

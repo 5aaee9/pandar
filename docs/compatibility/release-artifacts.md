@@ -15,25 +15,25 @@ and aws-lc exports are included.
 
 ## Status Values
 
-| Status | Meaning |
-| --- | --- |
-| `passed` | Verified in the named environment with evidence captured. |
-| `failed` | Attempted and failed; the failure boundary is recorded. |
-| `blocked` | A named dependency or environment prevented the attempt. |
-| `unsupported` | Intentionally unsupported by Pandar. |
-| `untested` | No evidence has been recorded. |
+| Status        | Meaning                                                                  |
+| ------------- | ------------------------------------------------------------------------ |
+| `passed`      | Verified in the named environment with evidence captured.                |
+| `failed`      | Attempted and failed; the failure boundary is recorded.                  |
+| `blocked`     | A named dependency or environment prevented the attempt.                 |
+| `unsupported` | Intentionally unsupported by Pandar.                                     |
+| `untested`    | No evidence has been recorded.                                           |
 | `in_progress` | Implementation exists, but one or more named final gates remain pending. |
 
 ## Required ABI-Series Candidate Layout
 
 Each candidate archive has exactly three top-level files:
 
-| Target | CLI | Network plugin | BambuSource companion |
-| --- | --- | --- | --- |
-| `linux-amd64` | `pandar` | `libpandar_network_plugin.so` | `libpandar_bambu_source.so` |
-| `macos-amd64` | `pandar` | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` |
-| `macos-arm64` | `pandar` | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` |
-| `windows-amd64` | `pandar.exe` | `pandar_network_plugin.dll` | `pandar_bambu_source.dll` |
+| Target          | CLI          | Network plugin                   | BambuSource companion          |
+| --------------- | ------------ | -------------------------------- | ------------------------------ |
+| `linux-amd64`   | `pandar`     | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    |
+| `macos-amd64`   | `pandar`     | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` |
+| `macos-arm64`   | `pandar`     | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` |
+| `windows-amd64` | `pandar.exe` | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      |
 
 The network plugin must expose the complete pinned 124-, 129-, or 130-name Studio contract set for its
 named ABI series; this check does not require the binary to have only that many total exports. The
@@ -112,8 +112,8 @@ Release-commit Checks run `31502775271`, tagged Checks run `31506224611`, Releas
 2026-08-11 with 60 assets: 24 desktop archives, six Windows Studio hook bundles, and one SHA-256
 sidecar for each archive or bundle. All 30 downloaded sidecars passed `sha256sum --check --strict`.
 
-| ABI series | Linux amd64 | macOS amd64 | macOS arm64 | Windows amd64 | Windows hook |
-| --- | --- | --- | --- | --- | --- |
+| ABI series | Linux amd64                                                        | macOS amd64                                                        | macOS arm64                                                        | Windows amd64                                                      | Windows hook                                                       |
+| ---------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
 | `02.06.00` | `691cf33b36e587916446d68503d5f4fcca4e3cf3239a19d8966ab015872913e4` | `f5923c8bf102a051ef8ce887ed41fef73de07881aa5966948f65e049e3d460e7` | `bff612b71c4ad9f9c28d2d4705aee6a2a20599d41d533cfcab8e7741eb855966` | `7e05a03dbcd2d01e7549dfbbb96ac262306ba32df0d9a9cc5a56ae596906e6ad` | `3395f5cdc04075c6cfd1df5c637da77d9a2dda10ebdf79cd0090785f67ba9256` |
 | `02.06.01` | `e1b670e8e70778d6b5401586634abb90255472ed0256a0bcd154e2b4b7eeee6f` | `444ac0fd21796eaf148f7561166777cd9541803f5790ad4b04354b7cdaf1e14f` | `528604a0527ef8349cfa4bad14585d165cbce1c975f0c0f62e785d8df61f1e53` | `97d8cf33c4ea4a9ea9057eabefdc2015b5841c4614467441d6b191c0ec9000e7` | `54127dd7b7ab24755824306ea3000c5f5af56fc098fd6d8be3887fa92b70a4b1` |
 | `02.07.00` | `d516e29d0a992e6e8b47f27843336bc5339ee503e2b26ab8974a8eb76bb564fd` | `384431e4af1c81a409570d34a6cc86c8288941cd21a8e9dd9d4501e71fe0189b` | `36af5b83ab0e705f8fd93b5b1f66ddcbfd23ac74d2ede46d0f3766bd0dc96d8f` | `482bd339c76864198c35507f5ed7fea4caf024b3e7bfefc49c403b466d052073` | `63c47759ba0017d5faba9a8f69bf428261307f7952db96224332670931b55545` |
@@ -140,8 +140,8 @@ Release-commit Checks run `31476142181`, tagged Checks run `31479109340`, Releas
 2026-08-11 with 60 assets: 24 desktop archives, six Windows Studio hook bundles, and one SHA-256
 sidecar for each archive or bundle. All 30 downloaded sidecars passed `sha256sum --check --strict`.
 
-| ABI series | Linux amd64 | macOS amd64 | macOS arm64 | Windows amd64 | Windows hook |
-| --- | --- | --- | --- | --- | --- |
+| ABI series | Linux amd64                                                        | macOS amd64                                                        | macOS arm64                                                        | Windows amd64                                                      | Windows hook                                                       |
+| ---------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
 | `02.06.00` | `7e2f082a0c780223b9d732e22078cac07a452380a02c2edbcd755a15a1879f95` | `e3d0b66ac3c2c2cfa1028942c4b45fb57e62d7dc5a05c31ea56e000b570444fb` | `217ae7f189cc76a8215f0646dd97679bb4812124f794e6eeeb14afeffc05a455` | `3c5cd615e01ec2f3122d87cd065aca2e1f9b56707923556ec6540b23b45ed6da` | `ca4e868821d110157306b96094050d8fb28cd326b68895857d9fb1db23680419` |
 | `02.06.01` | `60bc6603b7279d5f1bf442ecdd4eff5242fdabaff465e5432bad88ab5d6c088d` | `0cf1021e34ead6e140636585b59c4d107e7a643de5e9d7838fef3d2f08724fdb` | `0dc0ca8339f9c8e88f5f56b929f44592ddb93b2219c69c239f4972d677bd118b` | `2765cad5de45049c491a7ec36a9bed0fc27306962819acd84b165540bcfbc580` | `5076cf8bdbffe42637eddb93d460e0789dcc77f78e8919295420bfca099540b4` |
 | `02.07.00` | `a3cdae9405694fc0e76fa1c437c81922183454f9165b082de95f985363008b04` | `046d454609c9f63a61c2c255c326247e6542d6c33bfabce5c1121e86a0572df6` | `3d54136ddcb0f9ed9d9197fdde45f31a798f67ffb09752f4c8ef15c1fb631cb7` | `e5f66aebfa61b56cfb144ef4aa231ae496ea55c81c794b5618df4b0015af7f30` | `2f22af2117fb48414da59ca71762579cc5d481be6c6dc6a8c3787a4fa6613afc` |
@@ -168,8 +168,8 @@ Release-commit Checks run `31412501153`, tagged Checks run `31415669877`, Releas
 2026-08-10 with 60 assets: 24 desktop archives, six Windows Studio hook bundles, and one SHA-256
 sidecar for each archive or bundle. All 30 downloaded sidecars passed `sha256sum --check --strict`.
 
-| ABI series | Linux amd64 | macOS amd64 | macOS arm64 | Windows amd64 | Windows hook |
-| --- | --- | --- | --- | --- | --- |
+| ABI series | Linux amd64                                                        | macOS amd64                                                        | macOS arm64                                                        | Windows amd64                                                      | Windows hook                                                       |
+| ---------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
 | `02.06.00` | `65b396793fe85b26c3cc9ec50b6504a29d98f35ab0dde4cd6bb9107d48d20913` | `7ddade0fd17e2244fcfaada3716fb75306dd2d0cb4e80165058128a8e194e57a` | `7e723b5e7231ff93b51ba1d766328f50c351528a2a62f264def1d9326b46ed5a` | `b10079a2b6c08be8f057bf259fdc09620e799e20e92035b598a72f8b3e6ddf55` | `b1fe816d746bc103d67d4d345023d96c208c93ef871ce833ed4f1d121e3e1077` |
 | `02.06.01` | `5587ec3046fa97ef3130190b53afa62b57dacf5893dfec2c39d0e215619b6359` | `7ea93a4ee4a4d210067d4dd45e49cf08f37f6435c683c1a7fea87c043a6b2126` | `1355a476b4caeae7ccf294d71f1d191856dbaafea392388c0fae7d6308ff481f` | `42341f5b821d4892a200422d195b70f174ff88c062307e03867412b81efbebc8` | `78132a6974133758aafc70445d8eab5e18b6c2e294a0c24f4eb84833dce9d763` |
 | `02.07.00` | `6905e23da962440700a46f69579292582890da95e01edf4794791f81e2398b13` | `2ad3c0a3b37324874d2a2e60d73a5b2c250ee816e86faaf47687d199ee3c197b` | `d4c602559fd9e7578e67b1ff7f2f102b86ae94c841b34a71045eaa32cac06004` | `7d3c20f8a9729c6fd9ffb719d387fbec75104603609205694fbb07bbaf3b9bb5` | `4f9fce57995d2281e0333c6a11c0ab5b000a6ac7e81bc3f7c2a9b68761620fac` |
@@ -196,8 +196,8 @@ Release-commit Checks run `31367299202`, tagged Checks run `31370250709`, Releas
 2026-08-10 with 60 assets: 24 desktop archives, six Windows Studio hook bundles, and one SHA-256
 sidecar for each archive or bundle. All 30 downloaded sidecars passed `sha256sum -c`.
 
-| ABI series | Linux amd64 | macOS amd64 | macOS arm64 | Windows amd64 | Windows hook |
-| --- | --- | --- | --- | --- | --- |
+| ABI series | Linux amd64                                                        | macOS amd64                                                        | macOS arm64                                                        | Windows amd64                                                      | Windows hook                                                       |
+| ---------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
 | `02.06.00` | `b4c12035349af110ed857b56520b4b6c5f7e79b9e57728f110c0e10be6d0d0f1` | `e5c06d80dbe687df4f7d1d37b3d71856951679335765d7689f99b9c03e4a3047` | `3d970bcd0d73ef61c0c299a1a293d0b773d4a6269336599783a0896a1cbdd92b` | `d52c8771391841df2c01fbe907fd9aaa6838b410ff0af42d0e91ea40a373f957` | `10ec41b662ae65379824ee3de04b934df932817e7898bcc2c528f3a5b60f7bf7` |
 | `02.06.01` | `4515ede4b2afe442cc51ed989fdbe759ed95f20943a19dac8537eba377470128` | `d51f5d125bbd2e863d7b0803a16ffe37b0178921169e624145e8310b63b7e847` | `7e4638ccb9217f0597e4e251cfb915427fcdf452d26c0946dfde256f2ca1782b` | `34d6dc4e9cefbe8dc380362436d7ecb778ed1dd029c3f4811d99a4995588dd31` | `7ab97339dc61d30a3a3f171e4ef63e4bb4eb0027254fb648ba37ddb666cbcef8` |
 | `02.07.00` | `9e7de83b6aabdbe8b102fab65d06ebeb34d03959002b3571e3f8c6afadc3294b` | `bd60644e956d3ee1ea40d9a1ed0b41854ef10b06197352cd4885eb9bc9d8db91` | `1c8159726b70efea79c7cd3804256bf5032e556fa06a8847e820cec31cf8c247` | `8d6981833bee1c936ac850917aa7abafe7994d757b0ce560b753524a27d05071` | `b75ede3703904ac257291bf5bfaafd6f597e7c0037c397bca3ca5399fc952552` |
@@ -225,11 +225,11 @@ publication, all three downloaded sidecars passed `sha256sum --check --strict`; 
 had exactly their declared three top-level files, and the Studio hook ZIP had exactly
 `pandar_studio_hook.dll`, `pandar_network_plugin.dll`, and `pandar_bambu_source.dll`.
 
-| Target | Archive SHA-256 | CLI startup | Exact three-file layout | 130-name Studio contract set | Companion sentinel/no `Bambu_*` | Native ABI probe | Exact Studio load |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `linux-amd64` | `ec6d60492afb101cde66c270b9550447185d281dbac51a3868d98be4f43fbd10` | `passed` | `passed` | `passed` | `passed` | `passed` | `untested` for this tagged artifact; historical final16 AppImage evidence remains separate |
-| `windows-amd64` | `3e21f6c0a6c67ec47d9b826f45ebe40888acb8f8d8e3bcd5dad8496d082a15b8` | `passed` | `passed` | `passed` | `passed` | `passed` | `untested` |
-| macOS | `unsupported` | `unsupported` | `unsupported` | `unsupported` | `unsupported` | `unsupported` | `unsupported` |
+| Target          | Archive SHA-256                                                    | CLI startup   | Exact three-file layout | 130-name Studio contract set | Companion sentinel/no `Bambu_*` | Native ABI probe | Exact Studio load                                                                          |
+| --------------- | ------------------------------------------------------------------ | ------------- | ----------------------- | ---------------------------- | ------------------------------- | ---------------- | ------------------------------------------------------------------------------------------ |
+| `linux-amd64`   | `ec6d60492afb101cde66c270b9550447185d281dbac51a3868d98be4f43fbd10` | `passed`      | `passed`                | `passed`                     | `passed`                        | `passed`         | `untested` for this tagged artifact; historical final16 AppImage evidence remains separate |
+| `windows-amd64` | `3e21f6c0a6c67ec47d9b826f45ebe40888acb8f8d8e3bcd5dad8496d082a15b8` | `passed`      | `passed`                | `passed`                     | `passed`                        | `passed`         | `untested`                                                                                 |
+| macOS           | `unsupported`                                                      | `unsupported` | `unsupported`           | `unsupported`                | `unsupported`                   | `unsupported`    | `unsupported`                                                                              |
 
 The Linux network plugin SHA-256 is
 `374d9e6a3213e64b1f3245e1b5744186fde4677e4a5d12b11491f6faa0c01387`; its BambuSource
@@ -263,11 +263,11 @@ SHA-256 is `c62c92167f466a915400953ec2d0e126bc34b3c6509a747ddee17dce8d52bf30`. T
 pre-fix freeze whose SHA-256 begins `6318d190` and ends `ab473` was rejected by the P1 review and
 must never be used as a current candidate.
 
-| Target | Source identity | Archive SHA-256 | CLI startup | Exact three-file layout | 130-name Studio contract set | Companion sentinel/no `Bambu_*` | Native ABI probe | Exact Studio load |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `linux-amd64` | final16: `2ba0d1f2755501ea9e7d4babcf176db40638f643 + 24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039` | `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3` | `passed` | `passed` | `passed` | `passed` | `passed` | `passed` (official `02.08.01.55` AppImage; synthetic persisted session and loopback mock only) |
-| `windows-amd64` | final16 source frozen; no final16 native package | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` |
-| macOS | `none` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` |
+| Target          | Source identity                                                                                                        | Archive SHA-256                                                    | CLI startup | Exact three-file layout | 130-name Studio contract set | Companion sentinel/no `Bambu_*` | Native ABI probe | Exact Studio load                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------- | ----------------------- | ---------------------------- | ------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------- |
+| `linux-amd64`   | final16: `2ba0d1f2755501ea9e7d4babcf176db40638f643 + 24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039` | `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3` | `passed`    | `passed`                | `passed`                     | `passed`                        | `passed`         | `passed` (official `02.08.01.55` AppImage; synthetic persisted session and loopback mock only) |
+| `windows-amd64` | final16 source frozen; no final16 native package                                                                       | `untested`                                                         | `untested`  | `untested`              | `untested`                   | `untested`                      | `untested`       | `untested`                                                                                     |
+| macOS           | `none`                                                                                                                 | `untested`                                                         | `untested`  | `untested`              | `untested`                   | `untested`                      | `untested`       | `untested`                                                                                     |
 
 Final16 Linux Nextest run `c9c96abe-5b80-4478-be33-9ceffef62a53` passed 1,808/1,808 executed
 tests with one configured skip. Fmt, strict workspace Clippy, and module-size checks passed; the
@@ -319,11 +319,11 @@ member-list, and freeze-evidence SHA-256 values are
 `5b32472c9372a992c23315d9b33691a0f269248b65db312590ed00556e21aac0`, and
 `70d545770086c6acde271d3181508adf4f0d91fc8213771363ec78b2792f5ec3`.
 
-| Target | Source identity | Archive SHA-256 | CLI startup | Exact three-file layout | 130-name Studio contract set | Companion sentinel/no `Bambu_*` | Native ABI probe | Exact Studio load |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `linux-amd64` | final14: `2ba0d1f2755501ea9e7d4babcf176db40638f643 + c422d80d89052732db6b8ae87b68fd1e4145c64f588d8382deafef3345d86681` | `4e91f2457197532102544b02d4edac5354dc2982ec55fa707a057cbcba518b68` | `passed` | `passed` | `passed` | `passed` | `passed` | `passed` (official `02.08.01.55` AppImage; development no-auth only) |
-| `windows-amd64` | final14 source frozen; no final14 native package | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` |
-| macOS | `none` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` |
+| Target          | Source identity                                                                                                        | Archive SHA-256                                                    | CLI startup | Exact three-file layout | 130-name Studio contract set | Companion sentinel/no `Bambu_*` | Native ABI probe | Exact Studio load                                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------- | ----------------------- | ---------------------------- | ------------------------------- | ---------------- | -------------------------------------------------------------------- |
+| `linux-amd64`   | final14: `2ba0d1f2755501ea9e7d4babcf176db40638f643 + c422d80d89052732db6b8ae87b68fd1e4145c64f588d8382deafef3345d86681` | `4e91f2457197532102544b02d4edac5354dc2982ec55fa707a057cbcba518b68` | `passed`    | `passed`                | `passed`                     | `passed`                        | `passed`         | `passed` (official `02.08.01.55` AppImage; development no-auth only) |
+| `windows-amd64` | final14 source frozen; no final14 native package                                                                       | `untested`                                                         | `untested`  | `untested`              | `untested`                   | `untested`                      | `untested`       | `untested`                                                           |
+| macOS           | `none`                                                                                                                 | `untested`                                                         | `untested`  | `untested`              | `untested`                   | `untested`                      | `untested`       | `untested`                                                           |
 
 Final14 Linux Nextest run `d2231751-1284-46b0-aee6-2e041ca1a203` completed 1,781/1,781
 executed tests with one separately reported skip in 812.413 seconds. Module-size checks passed 2/2.
@@ -387,11 +387,11 @@ regenerated archive matched byte-for-byte. Unsafe member, duplicate, case-collis
 point, extracted reparse-point, membership-diff, and content-diff counts were all zero. Pre-freeze
 plugin run `da32fbc4-f37e-4198-af5e-c35f73512dcb` passed 368/368 with one separately reported skip.
 
-| Target | Source identity | Archive SHA-256 | CLI startup | Exact three-file layout | 130-name Studio contract set | Companion sentinel/no `Bambu_*` | Native ABI probe | Exact Studio load |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `linux-amd64` | final13: `2ba0d1f2755501ea9e7d4babcf176db40638f643 + 71080abb1e7392b0440a179b5bca9fd80638de74a614105b8dc11a0f70959c34` | `4166e6012e6c1bf7cdf056ba3bfb28f0fbc9d216c31e5ed2e8620adb8b5fcccc` | `passed` | `passed` | `passed` | `passed` | `passed` | `passed` (official `02.08.01.55` AppImage; authenticated session remains untested) |
-| `windows-amd64` | final13: `2ba0d1f2755501ea9e7d4babcf176db40638f643 + 71080abb1e7392b0440a179b5bca9fd80638de74a614105b8dc11a0f70959c34` | `6c50e77a0b4008ce46d86de51411117061c5118e18849ca1fb94f4a3f319db64` | `passed` | `passed` | `passed` (271 total PE exports) | `passed` | `passed` | `untested` |
-| macOS | `none` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` |
+| Target          | Source identity                                                                                                        | Archive SHA-256                                                    | CLI startup | Exact three-file layout | 130-name Studio contract set    | Companion sentinel/no `Bambu_*` | Native ABI probe | Exact Studio load                                                                  |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------- | ----------------------- | ------------------------------- | ------------------------------- | ---------------- | ---------------------------------------------------------------------------------- |
+| `linux-amd64`   | final13: `2ba0d1f2755501ea9e7d4babcf176db40638f643 + 71080abb1e7392b0440a179b5bca9fd80638de74a614105b8dc11a0f70959c34` | `4166e6012e6c1bf7cdf056ba3bfb28f0fbc9d216c31e5ed2e8620adb8b5fcccc` | `passed`    | `passed`                | `passed`                        | `passed`                        | `passed`         | `passed` (official `02.08.01.55` AppImage; authenticated session remains untested) |
+| `windows-amd64` | final13: `2ba0d1f2755501ea9e7d4babcf176db40638f643 + 71080abb1e7392b0440a179b5bca9fd80638de74a614105b8dc11a0f70959c34` | `6c50e77a0b4008ce46d86de51411117061c5118e18849ca1fb94f4a3f319db64` | `passed`    | `passed`                | `passed` (271 total PE exports) | `passed`                        | `passed`         | `untested`                                                                         |
+| macOS           | `none`                                                                                                                 | `untested`                                                         | `untested`  | `untested`              | `untested`                      | `untested`                      | `untested`       | `untested`                                                                         |
 
 The final13 Windows clean run `90cb6a69-08a5-4421-a661-58e696c374a3` passed 1,778/1,778 with one
 separately reported skip in 1,050.084 seconds; the firmware probe passed in 28.858 seconds. Fmt,
@@ -561,11 +561,11 @@ archive SHA-256. Freeze evidence SHA-256 is
 checkout, generated `probe-*` directories, and local SDD progress ledger are not build inputs; native
 gates inject the separately pinned clean Studio checkout explicitly.
 
-| Target | Source identity | Archive SHA-256 | CLI startup | Exact three-file layout | 130-name Studio contract set | Companion sentinel/no `Bambu_*` | Native ABI probe | Real Studio |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `linux-amd64` | historical final12: `2ba0d1f2755501ea9e7d4babcf176db40638f643 + 17371828ef7a26cace73cfbed321d094bf38323670e8fa6ccf69d6cbfd4b7eee` | `untested` (not produced) | `untested` | `untested` | `untested` | `untested` | `failed`: full wrapper rejected the otherwise successful C++ fixture on the exact stale-generation diagnostic | `untested` |
-| `windows-amd64` | historical final12: `2ba0d1f2755501ea9e7d4babcf176db40638f643 + 17371828ef7a26cace73cfbed321d094bf38323670e8fa6ccf69d6cbfd4b7eee` | `b4f6913eef7c1d09da9377fbce36b0ab759add25caac2baa0604c07a595440cb` | `passed` | `passed` | `passed` (271 total PE exports) | `passed` | `passed` | `untested`; entire candidate is non-promotable |
-| macOS | `none` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` | `untested` |
+| Target          | Source identity                                                                                                                   | Archive SHA-256                                                    | CLI startup | Exact three-file layout | 130-name Studio contract set    | Companion sentinel/no `Bambu_*` | Native ABI probe                                                                                              | Real Studio                                    |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------- | ----------------------- | ------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `linux-amd64`   | historical final12: `2ba0d1f2755501ea9e7d4babcf176db40638f643 + 17371828ef7a26cace73cfbed321d094bf38323670e8fa6ccf69d6cbfd4b7eee` | `untested` (not produced)                                          | `untested`  | `untested`              | `untested`                      | `untested`                      | `failed`: full wrapper rejected the otherwise successful C++ fixture on the exact stale-generation diagnostic | `untested`                                     |
+| `windows-amd64` | historical final12: `2ba0d1f2755501ea9e7d4babcf176db40638f643 + 17371828ef7a26cace73cfbed321d094bf38323670e8fa6ccf69d6cbfd4b7eee` | `b4f6913eef7c1d09da9377fbce36b0ab759add25caac2baa0604c07a595440cb` | `passed`    | `passed`                | `passed` (271 total PE exports) | `passed`                        | `passed`                                                                                                      | `untested`; entire candidate is non-promotable |
+| macOS           | `none`                                                                                                                            | `untested`                                                         | `untested`  | `untested`              | `untested`                      | `untested`                      | `untested`                                                                                                    | `untested`                                     |
 
 The historical frozen final12 Windows clean gate passed fmt, strict Clippy, module-size 2/2, ABI-tool 21/21,
 release-smoke-tool 21/21, frontend 37 files/324 tests, typecheck, zero-warning lint, and production
@@ -713,14 +713,14 @@ target. These archives contained only the CLI plus network plugin and checked a 
 set. They are retained as historical Phase 24 evidence, not as current `02.08.01.55` install
 candidates.
 
-| Run or artifact | Date | Targets | Historical result |
-| --- | --- | --- | --- |
-| `local-a79bcae` | 2026-06-24 | `linux-amd64` | Two-file local archive passed checksum, layout, CLI startup, and 129-name contract inspection. No release or real Studio claim. |
-| workflow dispatch `28098334876` | 2026-06-24 | Linux, Windows, macOS | Linux artifacts uploaded; Windows plugin packaging and macOS CLI linking failed. Historical workflow evidence only. |
-| workflow dispatch `28099917011` | 2026-06-24 | Linux, Windows, macOS | Linux two-file/129-name contract checks passed; Windows C++ runtime linking and macOS export checks failed. Historical workflow evidence only. |
+| Run or artifact                 | Date       | Targets                                                   | Historical result                                                                                                                                                                                                                                    |
+| ------------------------------- | ---------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `local-a79bcae`                 | 2026-06-24 | `linux-amd64`                                             | Two-file local archive passed checksum, layout, CLI startup, and 129-name contract inspection. No release or real Studio claim.                                                                                                                      |
+| workflow dispatch `28098334876` | 2026-06-24 | Linux, Windows, macOS                                     | Linux artifacts uploaded; Windows plugin packaging and macOS CLI linking failed. Historical workflow evidence only.                                                                                                                                  |
+| workflow dispatch `28099917011` | 2026-06-24 | Linux, Windows, macOS                                     | Linux two-file/129-name contract checks passed; Windows C++ runtime linking and macOS export checks failed. Historical workflow evidence only.                                                                                                       |
 | workflow dispatch `28102001464` | 2026-06-24 | Linux amd64/arm64, Windows amd64/arm64, macOS amd64/arm64 | Old two-file checks passed for Linux amd64/arm64, Windows amd64, and both macOS targets; Windows arm64 inspection failed. A clean Linux amd64 host also passed checksum/unpack/CLI/file inspection. None included BambuSource or proved real Studio. |
-| workflow dispatch `28103772270` | 2026-06-24 | all old targets | Blocked before build steps; no artifact evidence was produced. |
-| downloaded-artifact follow-up | 2026-06-25 | Linux arm64, Windows amd64, macOS amd64/arm64 | Cross-host static checks preserved the old archive/checksum/file-shape evidence. They did not prove target-host installation or Studio loading. |
+| workflow dispatch `28103772270` | 2026-06-24 | all old targets                                           | Blocked before build steps; no artifact evidence was produced.                                                                                                                                                                                       |
+| downloaded-artifact follow-up   | 2026-06-25 | Linux arm64, Windows amd64, macOS amd64/arm64             | Cross-host static checks preserved the old archive/checksum/file-shape evidence. They did not prove target-host installation or Studio loading.                                                                                                      |
 
 No current verification uses GitHub Actions. The old workflow identifiers above are immutable
 historical provenance only and are not instructions to re-run or modify a workflow.

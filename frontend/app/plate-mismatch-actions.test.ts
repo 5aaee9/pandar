@@ -42,9 +42,21 @@ const printer: Printer = {
 };
 
 const additionalPlateRecoveryCatalog = [
-  [83_918_945, ["093", "094", "20P", "22E", "239", "31B"], ["ignore", "resume"]],
-  [83_918_988, ["093", "094", "20P", "22E", "239", "31B"], ["ignore", "resume"]],
-  [83_919_003, ["093", "094", "20P", "22E", "239", "31B"], ["ignore", "resume"]],
+  [
+    83_918_945,
+    ["093", "094", "20P", "22E", "239", "31B"],
+    ["ignore", "resume"],
+  ],
+  [
+    83_918_988,
+    ["093", "094", "20P", "22E", "239", "31B"],
+    ["ignore", "resume"],
+  ],
+  [
+    83_919_003,
+    ["093", "094", "20P", "22E", "239", "31B"],
+    ["ignore", "resume"],
+  ],
   [83_919_008, ["093", "094", "20P", "239", "31B"], ["resume", "ignore"]],
 ] as const;
 
@@ -70,11 +82,9 @@ describe("plateMismatchActions", () => {
   it.each(["093", "094", "20P", "22E", "239", "31B"])(
     "uses native Resume, Ignore, Stop order for family %s",
     (family) => {
-      expect(plateMismatchActions(`${family.toLowerCase()}-serial`, print)).toEqual([
-        "resume",
-        "ignore",
-        "stop",
-      ]);
+      expect(
+        plateMismatchActions(`${family.toLowerCase()}-serial`, print),
+      ).toEqual(["resume", "ignore", "stop"]);
     },
   );
 
@@ -118,18 +128,19 @@ describe("plateMismatchActions", () => {
   );
 
   it.each([0, 1])("allows Resume and Ignore for job_state %s", (jobState) => {
-    expect(plateMismatchActions("20P123", { ...print, job_state: jobState })).toEqual([
-      "resume",
-      "ignore",
-      "stop",
-    ]);
+    expect(
+      plateMismatchActions("20P123", { ...print, job_state: jobState }),
+    ).toEqual(["resume", "ignore", "stop"]);
   });
 
-  it.each([null, 2, 15])("retains only cataloged Stop for unsafe job_state %s", (jobState) => {
-    expect(plateMismatchActions("20P123", { ...print, job_state: jobState })).toEqual([
-      "stop",
-    ]);
-  });
+  it.each([null, 2, 15])(
+    "retains only cataloged Stop for unsafe job_state %s",
+    (jobState) => {
+      expect(
+        plateMismatchActions("20P123", { ...print, job_state: jobState }),
+      ).toEqual(["stop"]);
+    },
+  );
 
   it.each(["PREPARE", "SLICING", "RUNNING", "PAUSE"])(
     "permits only exact native active state %s",
@@ -153,7 +164,9 @@ describe("plateMismatchActions", () => {
     expect(
       plateMismatchActions("20P123", { ...print, print_error: 83_918_928 }),
     ).toEqual([]);
-    expect(plateMismatchActions("20P123", { ...print, print_error: null })).toEqual([]);
+    expect(
+      plateMismatchActions("20P123", { ...print, print_error: null }),
+    ).toEqual([]);
   });
 
   it.each(["IDLE", "offline", "Failed"])(

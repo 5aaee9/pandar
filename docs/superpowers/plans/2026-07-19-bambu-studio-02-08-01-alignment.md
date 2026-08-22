@@ -136,36 +136,36 @@ SeaORM/SQLite/PostgreSQL, tonic/prost, Tokio, cargo-nextest, Bambu Studio `02.08
 not change production symbols, version, status, commands, or Hub behavior.
 
 - [x] Require an upstream source path, verify its `origin` is the official repository and `HEAD` is the
-  pinned commit, and read Studio/network-agent versions from that checkout. Reject tracked changes to
-  the contract source files or a wrong commit; unrelated untracked build output is not contract drift.
+      pinned commit, and read Studio/network-agent versions from that checkout. Reject tracked changes to
+      the contract source files or a wrong commit; unrelated untracked build output is not contract drift.
 - [x] Extract all target `get_network_function(...)` names directly from upstream `NetworkAgent.cpp`
-  and all symbols loaded by `InitFTModule`/`FileTransferUtils.cpp`. Compare the built plugin against
-  both sets rather than the historical Phase 21 list.
+      and all symbols loaded by `InitFTModule`/`FileTransferUtils.cpp`. Compare the built plugin against
+      both sets rather than the historical Phase 21 list.
 - [x] Compile the target contract source against the actual upstream headers and upstream's pinned
-  Boost `1.84.0` dependency. Verify its archive SHA-256 and `BOOST_VERSION`; do not copy or shadow an
-  upstream ABI or transitive dependency header with a Pandar-authored minimal header.
+      Boost `1.84.0` dependency. Verify its archive SHA-256 and `BOOST_VERSION`; do not copy or shadow an
+      upstream ABI or transitive dependency header with a Pandar-authored minimal header.
 - [x] Add target calls including an unsupported bind invocation with timezone/callback, print invocation
-  with sentinel values including `slicer_uid`, and AMS sync lookup.
+      with sentinel values including `slicer_uid`, and AMS sync lookup.
 - [x] Compile-check File Transfer callback/options/result/handle declarations from upstream
-  `FileTransferUtils.hpp`, then call every loaded `ft_*` entrypoint through the target typedef and
-  verify stable unsupported results without a socket or crash. Run 256 create/retain/release cycles
-  with callback cookies, boundary canaries, exact values, and exact cardinality, plus an isolated Linux
-  ASan/LSan scope that instruments the current C++ FT implementation and native caller and fails on
-  callback corruption, use-after-free, double release, or ownership leak. Verify an
-  `__asan_report_load*`/`__asan_report_store*` reference and the final `libasan` dependency; do not
-  describe the Rust code as instrumented merely because its linker flags load the sanitizer runtime.
-  Apply the runtime-link flags to the explicit Linux target only, so host build scripts are neither
-  mislabeled as instrumented nor made dependent on a late-loaded ASan runtime.
+      `FileTransferUtils.hpp`, then call every loaded `ft_*` entrypoint through the target typedef and
+      verify stable unsupported results without a socket or crash. Run 256 create/retain/release cycles
+      with callback cookies, boundary canaries, exact values, and exact cardinality, plus an isolated Linux
+      ASan/LSan scope that instruments the current C++ FT implementation and native caller and fails on
+      callback corruption, use-after-free, double release, or ownership leak. Verify an
+      `__asan_report_load*`/`__asan_report_store*` reference and the final `libasan` dependency; do not
+      describe the Rust code as instrumented merely because its linker flags load the sanitizer runtime.
+      Apply the runtime-link flags to the explicit Linux target only, so host build scripts are neither
+      mislabeled as instrumented nor made dependent on a late-loaded ASan runtime.
 - [x] Add explicit version-gate coverage using Studio's first-eight-character comparison.
 - [x] Record the target platform/toolchain matrix: Studio compiler, Rust target, C++ compiler/version,
-  Standard Library ABI/runtime, architecture, and which native runner executes the probe. The current
-  Ubuntu/Zig Windows GNU plugin path must be recorded as RED for an MSVC host.
+      Standard Library ABI/runtime, architecture, and which native runner executes the probe. The current
+      Ubuntu/Zig Windows GNU plugin path must be recorded as RED for an MSVC host.
 - [x] Prove RED for the current code: version family mismatch, normalized bind signature mismatch,
-  target `PrintParams` layout/sentinel mismatch, and missing `bambu_network_sync_ams_filaments`.
-  Record each expected failure in the ledger with the exact upstream source location.
+      target `PrintParams` layout/sentinel mismatch, and missing `bambu_network_sync_ams_filaments`.
+      Record each expected failure in the ledger with the exact upstream source location.
 - [x] Have a fresh reviewer inspect the checker output and target-compiled caller against the pinned
-  upstream source and return
-  `VERDICT: APPROVE` before Task 2.
+      upstream source and return
+      `VERDICT: APPROVE` before Task 2.
 
 Focused verification:
 
@@ -213,25 +213,25 @@ contract reviewer returned `VERDICT: APPROVE` before Task 2 production changes w
 Direct bind and AMS cloud sync may still be explicitly unsupported, but their ABI shapes are exact.
 
 - [x] Introduce one Rust-owned target network-agent version value, exactly `02.08.01.52`, exposed
-  through flat FFI; the C++ export only returns the adapted string.
+      through flat FFI; the C++ export only returns the adapted string.
 - [x] Declare every target export once in `shim_exports.hpp`, include it in the production shim, and
-  make the upstream contract translation unit compare each declaration with the real upstream
-  function-pointer type. Production definitions that diverge from the declaration must fail compile.
+      make the upstream contract translation unit compare each declaration with the real upstream
+      function-pointer type. Production definitions that diverge from the declaration must fail compile.
 - [x] Make `build.rs` derive the macOS export allowlist from that reviewed declaration map and assert
-  that it contains the complete 109+21 target set; do not keep using the historical 129-symbol Phase
-  21 floor as the target allowlist.
+      that it contains the complete 109+21 target set; do not keep using the historical 129-symbol Phase
+      21 floor as the target allowlist.
 - [x] Add the bind timezone parameter in the exact target position and preserve an explicit bind
-  failure without invoking or corrupting the callback.
+      failure without invoking or corrupting the callback.
 - [x] Add `slicer_uid` in the exact target `PrintParams` layout.
 - [x] Add `bambu_network_sync_ams_filaments` with the exact target by-value signature. Until its later
-  disposition is implemented, return the target AMS-sync failure and a stable redacted body.
+      disposition is implemented, return the target AMS-sync failure and a stable redacted body.
 - [x] Make all Task 1 RED cases GREEN, including target function-pointer calls and struct layout checks.
 - [x] Run the plugin test suite under the default Nextest profile and confirm the existing eight heavy
-  ABI cases retain their exclusive scheduling configuration.
+      ABI cases retain their exclusive scheduling configuration.
 - [x] On Windows, build and run the contract probe with `x86_64-pc-windows-msvc` and MSVC C++17. Do not
-  use the current GNU/MinGW release artifact as proof.
+      use the current GNU/MinGW release artifact as proof.
 - [x] Obtain fresh independent ABI review approval before advertising exact Studio `02.08.01.55`
-  support in docs or artifacts.
+      support in docs or artifacts.
 
 Focused verification:
 
@@ -273,25 +273,25 @@ The independent ABI reviewer returned `VERDICT: APPROVE`.
 state. Recovery requires a fresh successful observation.
 
 - [x] Write deterministic RED coverage for `200 online -> dev_online=false -> timeout/500 -> 200
-  recovery`, including cloud callbacks and the two-second heartbeat window.
+recovery`, including cloud callbacks and the two-second heartbeat window.
 - [x] Make `connect_server` perform one bounded request to the public Hub health/readiness boundary.
-  Transport failure, timeout, or not-ready response changes server connectivity; authenticated
-  plugin-route `401/403` instead changes authentication state while preserving proven reachability.
+      Transport failure, timeout, or not-ready response changes server connectivity; authenticated
+      plugin-route `401/403` instead changes authentication state while preserving proven reachability.
 - [x] Make `refresh_connection` incapable of recovering from a nonempty URL alone; callback only on
-  an actual state transition.
+      an actual state transition.
 - [x] Preserve `dev_online` in typed cache state. Remove offline devices from online-producing
-  heartbeat targets, emit the reference-backed offline transition, and reject stale epoch/session
-  refreshes.
+      heartbeat targets, emit the reference-backed offline transition, and reject stale epoch/session
+      refreshes.
 - [x] A failed refresh keeps diagnostic cache only; it does not emit stale `push_status` or connected
-  signals as current state.
+      signals as current state.
 - [x] Preserve the last confirmed cache during an in-flight background heartbeat refresh, while keeping
-  foreground Studio print-info invalidation fail closed. Freeze the distinction with
-  `background_refresh_preserves_last_confirmed_cache_while_in_flight` and
-  `foreground_refresh_invalidates_cache_while_in_flight`.
+      foreground Studio print-info invalidation fail closed. Freeze the distinction with
+      `background_refresh_preserves_last_confirmed_cache_while_in_flight` and
+      `foreground_refresh_invalidates_cache_while_in_flight`.
 - [x] Move connectivity decisions and heartbeat eligibility out of C++ into `connection.rs`; C++ keeps
-  only ABI-owned values, callback invocation, and required synchronization.
+      only ABI-owned values, callback invocation, and required synchronization.
 - [x] Verify reentrant callback, logout, subscribe/unsubscribe, current local-device, and generation
-  invalidation behavior remains deadlock-free.
+      invalidation behavior remains deadlock-free.
 - [x] Obtain fresh independent review approval.
 
 Focused verification:
@@ -344,16 +344,16 @@ its Windows, PostgreSQL, corrected Linux native/ASan, and exact-AppImage load/no
 invalid, or an individually justified benign no-op. There is no fallthrough success.
 
 - [x] Build the target command inventory from pinned Studio call sites and record command envelope,
-  capability/UI gate, Cloud/LAN caller, Pandar disposition, and alternative workflow.
+      capability/UI gate, Cloud/LAN caller, Pandar disposition, and alternative workflow.
 - [x] Add RED tests for no selected device, empty `dev_id`, unknown envelopes, `skip_objects`,
-  `set_fan`, `set_airduct`, camera controls, buzzer, calibration, and advanced AMS commands.
+      `set_fan`, `set_airduct`, camera controls, buzzer, calibration, and advanced AMS commands.
 - [x] Change blanket cloud unsupported success to stable non-success with
-  `unsupported_printer_operation`, explicitly superseding the prior native-print-error table row.
+      `unsupported_printer_operation`, explicitly superseding the prior native-print-error table row.
 - [x] Preserve the exact valid/invalid native Resume/Ignore/Stop candidate behavior.
 - [x] For each command marked `handled`, create a separate reviewed implementation brief covering
-  typed Core/Hub/Agent contracts, capability gates, dispatch lifecycle, and reference-exact MQTT.
+      typed Core/Hub/Agent contracts, capability gates, dispatch lifecycle, and reference-exact MQTT.
 - [x] For each command left unsupported, ensure Studio is not told the capability is present and no
-  Hub/Agent request is made.
+      Hub/Agent request is made.
 - [x] Obtain fresh independent review approval for the complete matrix and parser behavior.
 
 Focused verification:
@@ -395,17 +395,17 @@ successfully and returned `VERDICT: APPROVE` for the complete matrix and parser 
 from an authoritative current observation. Unknown data stays unknown/unavailable.
 
 - [x] Add RED fixtures for no capabilities, partial telemetry, complete telemetry, offline state, and
-  stale partial updates.
+      stale partial updates.
 - [x] Remove fixed `100%` signals, `sdcard:true`, `connect_type:lan`, `bind_state:free`, and universal
-  chamber support.
+      chamber support.
 - [x] Carry Hub chamber target temperature through the typed input and packed Studio payload without
-  defaulting a known target to zero.
+      defaulting a known target to zero.
 - [x] Define camera protocol and callback availability together. Return a Studio-accepted URL only
-  when that path is usable; otherwise advertise no live view and return an explicit unavailable result.
+      when that path is usable; otherwise advertise no live view and return an explicit unavailable result.
 - [x] Move status envelope construction, capability decisions, and camera selection into Rust. Leave
-  `shim_status.hpp` with timer/callback adaptation only; it must not build JSON or choose policy.
+      `shim_status.hpp` with timer/callback adaptation only; it must not build JSON or choose policy.
 - [x] Preserve nozzle, bed, AMS, `cfg`, `aux`, `stat`, feature-bitmap, firmware-generation, and partial
-  update semantics.
+      update semantics.
 - [x] Run a target Studio parser fixture proving unavailable SD-card/chamber/camera controls stay hidden.
 - [x] Obtain fresh independent review approval.
 
@@ -452,19 +452,19 @@ does not overstate delivery, and Studio tasks reflect authorized Hub jobs.
 
 - [x] Create the complete field disposition table and RED tests for every nondefault target field.
 - [x] Preserve supported fields end to end with typed contracts. Reject unsupported nondefault fields
-  before artifact submission; do not silently discard them.
+      before artifact submission; do not silently discard them.
 - [x] Trace the target Studio `OnUpdateStatusFn`, `OnWaitFn`, and cancellation call sequence. Document
-  the exact Pandar milestone represented by each Studio stage before changing production callbacks.
+      the exact Pandar milestone represented by each Studio stage before changing production callbacks.
 - [x] Emit `PrintingStageERROR` for pre-terminal Hub/artifact/task failures and never imply physical
-  printer start from a mere HTTP acceptance.
+      printer start from a mere HTTP acceptance.
 - [x] Implement `get_user_tasks` through `/api/v1/plugin/jobs`, honoring device/status/offset/limit,
-  tenant authorization, bounded refresh, and stable errors.
+      tenant authorization, bounded refresh, and stable errors.
 - [x] Return real plate/subtask/slice metadata when stored; otherwise return explicit unavailable, not
-  empty success.
+      empty success.
 - [x] Test queued/running/succeeded/failed states, downstream Agent failure, cancellation races,
-  pagination, cross-tenant access, and Hub outage.
+      pagination, cross-tenant access, and Hub outage.
 - [x] Run equivalent SQLite and real PostgreSQL tests. An unset `PANDAR_TEST_POSTGRES_URL` blocks this
-  slice's completion claim.
+      slice's completion claim.
 - [x] Obtain fresh independent review approval.
 
 Current Task 6 implementation status: `get_user_tasks` is Hub-backed and no longer returns a synthetic
@@ -505,19 +505,19 @@ weakening firmware ownership, secrecy, or replay invariants.
 
 - [x] Add RED target fixture coverage for `wtm_upgrade` and the AMS sync ABI call.
 - [x] Select the capability-driven explicit-unsupported WTM branch allowed by the design: clear pinned
-  Studio `fun` bit 60 in the plugin projection and reject an injected exact `wtm_upgrade` envelope
-  before Hub publish. Do not create a firmware token, package, fallback, or replay path.
+      Studio `fun` bit 60 in the plugin projection and reject an injected exact `wtm_upgrade` envelope
+      before Hub publish. Do not create a firmware token, package, fallback, or replay path.
 - [x] Capability/session mismatch fails before publish with no fallback because the WTM capability is
-  never advertised and an injected command is rejected at the typed parser/FFI boundary.
+      never advertised and an injected command is rejected at the typed parser/FFI boundary.
 - [x] Claim the immutable firmware request snapshot generation before catalog, refresh, or send I/O,
-  and fence completion so an older A/B request cannot publish or overwrite newer state. Keep request
-  errors request-owned; do not share a mutable `last_error` across concurrent calls.
+      and fence completion so an older A/B request cannot publish or overwrite newer state. Keep request
+      errors request-owned; do not share a mutable `last_error` across concurrent calls.
 - [x] Either implement AMS sync through a reviewed Hub-backed typed contract or preserve the exact ABI
-  while returning the documented AMS sync failure. Do not add filament cloud CRUD implicitly.
+      while returning the documented AMS sync failure. Do not add filament cloud CRUD implicitly.
 - [x] Keep the package catalog empty and do not add a live firmware test.
 - [x] Make the compiled fixture arm a version-heartbeat callback sentinel and wait for its commit before
-  firmware command assertions. The wrapper may accept only the exact stale-generation diagnostic and
-  must reject every other stderr line.
+      firmware command assertions. The wrapper may accept only the exact stale-generation diagnostic and
+      must reject every other stderr line.
 - [x] Run focused firmware suites, full plugin/Hub/Agent suites, and fresh independent review.
 
 The selected Task 7 boundary passed a pinned focused review on 2026-07-21. The compiled Studio
@@ -569,36 +569,36 @@ are diagnostic/stress facts, not final13 gate completion.
 unsupported platform or function is promoted to passed.
 
 - [x] Add the same-target `pandar-bambu-source` companion required by pinned Studio's startup gate.
-  Require it in `install-network-plugin`, install it under Studio's exact platform filename, export one
-  Pandar sentinel and no `Bambu_*` camera/media entrypoint, and preserve Studio's fake-source fallback.
+      Require it in `install-network-plugin`, install it under Studio's exact platform filename, export one
+      Pandar sentinel and no `Bambu_*` camera/media entrypoint, and preserve Studio's fake-source fallback.
 - [x] Define the native candidate build policy for CLI, network plugin, and companion. Build the Windows x86-64
-  libraries on a Windows
-  runner with `x86_64-pc-windows-msvc`/MSVC; use native Apple Clang for macOS; document and enforce
-  the official Studio-compatible compiler/libstdc++ ABI for Linux. Do not publish a claimed-compatible
-  plugin for an unverified architecture.
+      libraries on a Windows
+      runner with `x86_64-pc-windows-msvc`/MSVC; use native Apple Clang for macOS; document and enforce
+      the official Studio-compatible compiler/libstdc++ ABI for Linux. Do not publish a claimed-compatible
+      plugin for an unverified architecture.
 - [x] Make release smoke inspect and execute the packaged plugin artifact on its native runner, not a
-  separately compiled development library. Require the companion in the exact archive layout, hash it,
-  require its sentinel, and reject `Bambu_*` exports while ABI-probing only the network plugin. Record
-  Rust/C++ toolchains, runtime ABI, and SHA-256 for both libraries.
+      separately compiled development library. Require the companion in the exact archive layout, hash it,
+      require its sentinel, and reject `Bambu_*` exports while ABI-probing only the network plugin. Record
+      Rust/C++ toolchains, runtime ABI, and SHA-256 for both libraries.
 - [ ] Run the no-print desktop smoke on every platform Pandar will claim for exact Studio
-  `02.08.01.55`, recording exact Studio/Hub/Agent versions, current `HEAD`, the exact dirty source
-  snapshot SHA-256, artifact hashes, and redacted evidence.
+      `02.08.01.55`, recording exact Studio/Hub/Agent versions, current `HEAD`, the exact dirty source
+      snapshot SHA-256, artifact hashes, and redacted evidence.
 - [ ] Verify load/version/agent creation, login/ticket/token/profile, printers, Hub-backed tasks, Hub
-  outage/recovery, logout, and explicit unsupported results that require no machine action.
+      outage/recovery, logout, and explicit unsupported results that require no machine action.
 - [x] Keep automated print-field/lifecycle/cancellation/command evidence separate. A safely authorized
-  hardware print, cancel, or command run is optional later evidence and is not a completion condition
-  for the no-print desktop smoke. Never flash firmware in this verification.
+      hardware print, cancel, or command run is optional later evidence and is not a completion condition
+      for the no-print desktop smoke. Never flash firmware in this verification.
 - [x] Update the existing manifest rows. A platform without evidence remains `blocked` or `untested`.
 - [x] Update architecture/development with the final command/status/print ownership and exact rollout/
-  rollback sequence. Update Phase 23 and Immediate Next without inventing a new roadmap phase.
+      rollback sequence. Update Phase 23 and Immediate Next without inventing a new roadmap phase.
 - [x] Run the final evidence-document review. The reviewer checked the design, plan, pinned contract,
-  previous findings, exact diff membership, and completed evidence without promoting untested
-  authenticated Linux, real Windows Studio, macOS, hardware, or live-firmware surfaces. Its sole Minor
-  terminology finding was corrected.
+      previous findings, exact diff membership, and completed evidence without promoting untested
+      authenticated Linux, real Windows Studio, macOS, hardware, or live-firmware surfaces. Its sole Minor
+      terminology finding was corrected.
 - [x] Freeze final13 and rerun the complete Windows workspace, PostgreSQL, and Windows native gates from
-  that immutable input.
+      that immutable input.
 - [x] Complete corrected Ubuntu-native attempt 2 and promote sanitizer results only from the wholly
-  successful harness. Preserve attempt 1 as non-promotable infrastructure history.
+      successful harness. Preserve attempt 1 as non-promotable infrastructure history.
 - [x] Run the exact-AppImage gate from the same immutable input and passed final13 Linux archive.
 
 ### Task 9: No-Auth Session Recovery And Credential Hygiene
@@ -617,38 +617,38 @@ unsupported platform or function is promoted to passed.
 an authenticated-session claim, and do not add machine access or hidden fallback behavior.
 
 - [x] Preserve the final5 official-AppImage failure/success pair as historical regression evidence.
-  With both libraries loaded, starting Studio before Hub and then recovering Hub left
-  login/token/audit counts at zero for 30 seconds; restarting only Studio created exactly one redacted
-  `plugin:studio` session. Historical redacted evidence bundle SHA-256:
-  `7f103873d222b8b51e1209c4836f2acc2579515cff9729dd89c4271032e801b0`. Final11 later proved same-PID
-  recovery, but that package is historical. Final13 attempt 8 independently proved its then-current
-  package's same-PID development no-auth recovery and is now historical; final14 attempt 1 supplies the
-  corresponding current Linux package evidence with `authenticated_session_claim=false`.
+      With both libraries loaded, starting Studio before Hub and then recovering Hub left
+      login/token/audit counts at zero for 30 seconds; restarting only Studio created exactly one redacted
+      `plugin:studio` session. Historical redacted evidence bundle SHA-256:
+      `7f103873d222b8b51e1209c4836f2acc2579515cff9729dd89c4271032e801b0`. Final11 later proved same-PID
+      recovery, but that package is historical. Final13 attempt 8 independently proved its then-current
+      package's same-PID development no-auth recovery and is now historical; final14 attempt 1 supplies the
+      corresponding current Linux package evidence with `authenticated_session_claim=false`.
 - [x] Add bounded in-process retry only for a connection-stage failure that the Rust HTTP boundary can
-  prove occurred before request delivery. Serialize it with account mutation; fence logout, destroy,
-  Hub-configuration, token, and account-epoch changes; never retry an ambiguous timeout/response-loss
-  or HTTP response. Prove repeated wakeups leave exactly one server token, token-create audit, persisted
-  profile, and Studio callback.
+      prove occurred before request delivery. Serialize it with account mutation; fence logout, destroy,
+      Hub-configuration, token, and account-epoch changes; never retry an ambiguous timeout/response-loss
+      or HTTP response. Prove repeated wakeups leave exactly one server token, token-create audit, persisted
+      profile, and Studio callback.
 - [x] Require exactly one tenant for no-auth bootstrap. The repository list is already ordered; do not
-  silently turn its oldest item into the development-session tenant. Return a stable conflict and
-  create no credential or audit when multiple tenants exist.
+      silently turn its oldest item into the development-session tenant. Return a stable conflict and
+      create no credential or audit when multiple tenants exist.
 - [x] Define and implement the server-token disposition for Studio logout. If self-revocation is the
-  contract, make it tenant-safe, idempotent, redacted, and covered on SQLite and PostgreSQL.
+      contract, make it tenant-safe, idempotent, redacted, and covered on SQLite and PostgreSQL.
 - [x] Serialize every persisted account mutation across processes with
-  `.pandar-plugin-account.lock`. Accept login, pending-revocation, and direct-intent changes only after
-  `MutationDurability::Confirmed`; treat `ChangedUnconfirmed` as published but not durability-proven.
+      `.pandar-plugin-account.lock`. Accept login, pending-revocation, and direct-intent changes only after
+      `MutationDurability::Confirmed`; treat `ChangedUnconfirmed` as published but not durability-proven.
 - [x] Before an unstaged requested DELETE, persist a direct-revocation intent. On success or idempotent
-  `401`/`410`, record a completed tombstone with canonical Hub URL plus token SHA-256 before clearing
-  matching login/intent state, so stale processes cannot restore the revoked login.
+      `401`/`410`, record a completed tombstone with canonical Hub URL plus token SHA-256 before clearing
+      matching login/intent state, so stale processes cannot restore the revoked login.
 - [x] Apply the same `401`/`410` no-auth refresh-and-single-retry semantics to Studio task list/detail
-  requests that printer refresh already uses, with stale-account rejection.
+      requests that printer refresh already uses, with stale-account rejection.
 - [x] Rerun focused probes, the complete Windows workspace gate, and both database backends where
-  persistence changes. Final13 Windows run `90cb6a69-08a5-4421-a661-58e696c374a3` passed 1,778/1,778;
-  both PostgreSQL 16.14 runs passed 55/55. Fresh independent code review returned `APPROVE` with no
-  Blocking, Important, or Minor finding.
+      persistence changes. Final13 Windows run `90cb6a69-08a5-4421-a661-58e696c374a3` passed 1,778/1,778;
+      both PostgreSQL 16.14 runs passed 55/55. Fresh independent code review returned `APPROVE` with no
+      Blocking, Important, or Minor finding.
 - [x] Rerun the exact-AppImage no-auth recovery sequence with the final13 packaged Linux candidate.
-  Attempt 8 passed; final11 is retained only as historical regression evidence. The final evidence-
-  document review passed under Task 8.
+      Attempt 8 passed; final11 is retained only as historical regression evidence. The final evidence-
+      document review passed under Task 8.
 
 Task 9 completion semantics are intentionally narrow. No-auth retries only a proven pre-delivery
 connection failure, with at most five attempts including the initial request, a two-second initial
@@ -689,20 +689,20 @@ change-assist support, widen the callback allowlist, place a JWT in `return_to`,
 evidence for code it does not contain.
 
 - [x] Clear pinned Studio `fun` bit 48 in the Studio projection while preserving other supported and
-  unknown bits; keep `task_ext_change_assist=true` rejected before Hub I/O.
+      unknown bits; keep `task_ext_change_assist=true` rejected before Hub I/O.
 - [x] Pin and compile the `DeviceManager.cpp:4393` consumer and prove Cloud/LAN projection plus all 45
-  print-field dispositions.
+      print-field dispositions.
 - [x] Carry tenant plus the exact Studio localhost callback as a bounded canonical base64url value
-  through magic-link, direct passkey, optional passkey completion, and dashboard callback hops.
+      through magic-link, direct passkey, optional passkey completion, and dashboard callback hops.
 - [x] Fail closed on malformed, overlong, non-canonical, invalid-path, cross-origin, backslash, and
-  fragment values; keep the JWT out of the return target.
+      fragment values; keep the JWT out of the return target.
 - [x] Exercise the real Better Auth 1.6.23 magic-link handler and cross-app codec interoperability.
 - [x] Obtain independent implementation review approval.
 - [x] Freeze the post-final13 successor and rerun required workspace, frontend, native Linux, and
-  exact-AppImage gates before naming a current candidate.
+      exact-AppImage gates before naming a current candidate.
 - [x] Complete a fresh evidence-document review after the successor results are recorded. The final14
-  review returned `APPROVE` with no Blocking, Important, or Minor finding after correcting warning and
-  candidate-identity wording.
+      review returned `APPROVE` with no Blocking, Important, or Minor finding after correcting warning and
+      candidate-identity wording.
 
 ### Task 11: Pinned Model-Task `get_subtask` Consumer
 
@@ -720,11 +720,11 @@ metadata to fill Studio's caller-owned `BBLModelTask`; do not invent model/desig
 return empty success, or invoke the callback after failure.
 
 - [x] Pin `StatusPanel.cpp:4145-4162`, the target `BBLModelTask` layout, and the NetworkAgent forwarding
-  boundary from exact Studio `02.08.01.55`.
+      boundary from exact Studio `02.08.01.55`.
 - [x] Add a compiled RED consumer proving the current 501/no-callback gap.
 - [x] Define the minimum real task metadata and backend-neutral query needed by the pinned consumer.
 - [x] Fill the caller-owned object and invoke its callback exactly once only after successful,
-  current-account, authorized retrieval; missing data remains explicit non-success.
+      current-account, authorized retrieval; missing data remains explicit non-success.
 - [x] Prove SQLite/PostgreSQL parity, tenant isolation, stale-session rejection, and no fake metadata.
 - [x] Run focused and full gates and obtain independent review before updating evidence.
 
@@ -917,7 +917,7 @@ zero-warning lint, and production build. Real PostgreSQL verification passed the
 named above. The source archive contains 1,543 regular members and has member-list SHA-256
 `87a6ad1dfaa404731ed30d7e265303cca64fc4278a478f9c12192c09373eb880`; an independently generated
 second archive matched byte-for-byte. That candidate became non-promotable when later Linux stress
-  exposed the background-refresh race.
+exposed the background-refresh race.
 
 Historical final13 verification passed `cargo fmt --all -- --check`, strict workspace Clippy with zero
 warnings, module-size 2/2, ABI/release tools 21/21, frontend 37 files/324 tests plus typecheck/lint/
@@ -942,36 +942,36 @@ selected-target correction and final16 evidence. It supersedes all final14 curre
 above.
 
 - [x] Define the effective cloud target as selected or explicitly subscribed, with heartbeat planning
-  over the deduplicated union.
+      over the deduplicated union.
 - [x] Preserve a target when either ownership source remains. Only absence from both sources retires
-  cloud state and Cloud delivery tickets; cloud retirement never cancels or advances a Local
-  generation or Local ticket.
+      cloud state and Cloud delivery tickets; cloud retirement never cancels or advances a Local
+      generation or Local ticket.
 - [x] Preserve final15/run6 as non-promotable historical evidence. That run selected the synthetic
-  printer, but Studio's single-device path did not add an explicit subscription, so the pre-correction
-  plugin did not deliver the fixture transition or request the model task.
+      printer, but Studio's single-device path did not add an explicit subscription, so the pre-correction
+      plugin did not deliver the fixture transition or request the model task.
 - [x] Freeze final16 from source archive SHA-256
-  `24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039` against exact Studio
-  commit `ba049f6a2e08c3b6033660bb84da80c08722974b`, version `02.08.01.55`.
+      `24b45dd30c3509c02b609548409f05fa72490512525621dbc0574a05aa62a039` against exact Studio
+      commit `ba049f6a2e08c3b6033660bb84da80c08722974b`, version `02.08.01.55`.
 - [x] Pass immutable Linux verification: workspace Nextest 1,808/1,808 with one configured skip, fmt,
-  strict workspace Clippy, module-size, ABI tools 22/22, release-smoke tools 25/25, packaged tasks
-  18/18, exactly 109 network plus 21 File Transfer exports, all 21 File Transfer entrypoints x 256
-  ASan/LSan cycles, and PostgreSQL 16.14 at 7/7 with zero runtime skips. The release archive SHA-256
-  is `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3`; the Linux evidence
-  archive SHA-256 is `fe35290675aac4e6ce323a8ebc75bde1c34d373b1df7506f7f8a65b69ffea950`.
+      strict workspace Clippy, module-size, ABI tools 22/22, release-smoke tools 25/25, packaged tasks
+      18/18, exactly 109 network plus 21 File Transfer exports, all 21 File Transfer entrypoints x 256
+      ASan/LSan cycles, and PostgreSQL 16.14 at 7/7 with zero runtime skips. The release archive SHA-256
+      is `023dcad198674c8ad1c20eb9bc34df9ef9685f49dfeca6e6b5ea58188f3a24a3`; the Linux evidence
+      archive SHA-256 is `fe35290675aac4e6ce323a8ebc75bde1c34d373b1df7506f7f8a65b69ffea950`.
 - [x] Pass the bounded official-AppImage proof using AppImage SHA-256
-  `e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995` and packaged plugin
-  SHA-256 `3bcce9085205d6af67dc9671cf58cd6f9fb694d5a587b43d160dc8b6a9b0712f`. The fail-closed
-  loopback mock observed exactly one model-task HTTP 200 and four lifecycle events exactly once and
-  in order: request started, response accepted, callback started, callback returned. The redacted
-  evidence manifest SHA-256 is
-  `c6ba9b6282581119d3baec720e26990ad63efc20eb394b0c71dced89081d5fd9`. The deterministic
-  245,225-byte redacted official-AppImage evidence archive SHA-256 is
-  `f07c369ad9e0354ef40142294d9385e9c454fd534a04badce4be000f49c06eca`; an independent second
-  generation matched byte-for-byte.
+      `e633a116e900a2652915d4a8897f6e48122f0431bf10f642a62796505bb68995` and packaged plugin
+      SHA-256 `3bcce9085205d6af67dc9671cf58cd6f9fb694d5a587b43d160dc8b6a9b0712f`. The fail-closed
+      loopback mock observed exactly one model-task HTTP 200 and four lifecycle events exactly once and
+      in order: request started, response accepted, callback started, callback returned. The redacted
+      evidence manifest SHA-256 is
+      `c6ba9b6282581119d3baec720e26990ad63efc20eb394b0c71dced89081d5fd9`. The deterministic
+      245,225-byte redacted official-AppImage evidence archive SHA-256 is
+      `f07c369ad9e0354ef40142294d9385e9c454fd534a04badce4be000f49c06eca`; an independent second
+      generation matched byte-for-byte.
 - [x] Record the claim boundary: synthetic persisted authenticated-shaped session and fail-closed
-  loopback mock only; no downstream encrypted-log claim and no real authentication, Hub, Agent,
-  database, hardware, print, control, cancel, or firmware action. GitHub Actions and Windows Studio
-  were not used.
+      loopback mock only; no downstream encrypted-log claim and no real authentication, Hub, Agent,
+      database, hardware, print, control, cancel, or firmware action. GitHub Actions and Windows Studio
+      were not used.
 
 Final16 is current and its bounded Linux evidence chain is complete. Independent final
 evidence-document and code/evidence reviews found no remaining issue and returned `APPROVE`; Codex

@@ -42,16 +42,18 @@ function a2lPrinter(): Pick<Printer, "materials" | "model"> {
       observed_at: "2026-08-01T00:00:00Z",
       active_tray: null,
       external_spools: [],
-      ams_units: [{
-        unit_id: "0",
-        unit_kind: "ams_lite_mixed",
-        trays: Array.from({ length: 4 }, (_, slot) => ({
-          tray_id: String(slot),
-          type: slot === 0 ? "PLA" : "PETG",
-          color: slot === 0 ? "FF0000" : "00FF00",
-          exists: true,
-        })),
-      }],
+      ams_units: [
+        {
+          unit_id: "0",
+          unit_kind: "ams_lite_mixed",
+          trays: Array.from({ length: 4 }, (_, slot) => ({
+            tray_id: String(slot),
+            type: slot === 0 ? "PLA" : "PETG",
+            color: slot === 0 ? "FF0000" : "00FF00",
+            exists: true,
+          })),
+        },
+      ],
     },
   };
 }

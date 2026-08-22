@@ -17,10 +17,12 @@ Implement route-level loading states, component code splitting, and React Server
 ### Task 0: Create Bundle Measurement Script and Generate Baseline
 
 **Files**:
+
 - `scripts/measure-bundle.sh` (new)
 - `scripts/bundle-baseline.json` (new, generated)
 
 **Actions**:
+
 1. Create `scripts/measure-bundle.sh` with `--generate-baseline` and `--compare` commands:
    - `--generate-baseline <commit>`: Creates isolated git worktree at `<commit>`, runs `npm --prefix frontend install && npm --prefix frontend run build` in worktree, measures bundle sizes, writes to `scripts/bundle-baseline.json` in caller's checkout, cleans up worktree (success or failure)
    - `--compare`: Runs `npm --prefix frontend run build`, measures bundle sizes, compares against `scripts/bundle-baseline.json`, outputs reduction percentage, returns nonzero if CSS constraint violated
@@ -34,43 +36,51 @@ Implement route-level loading states, component code splitting, and React Server
 9. Fail-closed: Script fails if expected baseline or post-migration manifest keys are absent (no misleading successful comparison)
 
 **Validation**:
+
 - `./scripts/measure-bundle.sh --generate-baseline 9a478dd` (before implementation)
 - `./scripts/measure-bundle.sh --compare` (after implementation)
 
 ### Task 1: Add Request-Memoized Server Utilities
 
 **Files**:
+
 - `frontend/app/dashboard-data.tsx` (modified)
 
 **Actions**:
+
 1. Add `getTenantsForRequest()` function that caches tenant list per request using React `cache()`:
    ```tsx
-   import { cache } from 'react'
+   import { cache } from "react";
    export const getTenantsForRequest = cache(async () => {
      // existing tenant fetch logic, returns { tenants: Tenant[], error: string | null }
-   })
+   });
    ```
 2. Add `getIdentityForRequest()` function that caches identity per request using React `cache()`:
    ```tsx
    export const getIdentityForRequest = cache(async () => {
      // existing /api/v1/me fetch logic, returns { me: MeResponse | null, error: string | null, status: number | null }
-   })
+   });
    ```
 3. Add `getMembershipForRequest(tenantId: string)` function that caches membership per request using React `cache()` (authoritative source for membership roles, derives from `getIdentityForRequest()`):
    ```tsx
    export const getMembershipForRequest = cache(async (tenantId: string) => {
-     const { me, error: identityError } = await getIdentityForRequest()
+     const { me, error: identityError } = await getIdentityForRequest();
      if (identityError) {
-       return { role: null, error: identityError }
+       return { role: null, error: identityError };
      }
-     const membership = me?.tenants.find((t) => t.tenant_id === tenantId)
-     return { role: membership?.role ?? null, error: null }
-   })
+     const membership = me?.tenants.find((t) => t.tenant_id === tenantId);
+     return { role: membership?.role ?? null, error: null };
+   });
    ```
 4. Add `getAuthForRequest()` function that caches auth per request using React `cache()` (wraps existing `authSource()`, returns complete `AuthMetadata` including provider URLs)
 5. Add `resolveEffectiveTenants(tenants, identity, configuredTenantId, authProvider)` function that normalizes effective tenant list (external identity tenants + synthesized `APP_TENANT_ID` + deduplication):
    ```tsx
-   export function resolveEffectiveTenants(tenants: Tenant[], identity: MeResponse | null, configuredTenantId: string | undefined, authProvider: string): Tenant[] {
+   export function resolveEffectiveTenants(
+     tenants: Tenant[],
+     identity: MeResponse | null,
+     configuredTenantId: string | undefined,
+     authProvider: string,
+   ): Tenant[] {
      // If configuredTenantId, return synthesized tenant
      // If authProvider === 'none', return fetched tenants
      // If external onboarding, return identity tenants
@@ -83,33 +93,75 @@ Implement route-level loading states, component code splitting, and React Server
    - Empty tenants (return null)
    - External tenants (already normalized in effectiveTenants)
    - `APP_TENANT_ID` (already synthesized in effectiveTenants)
-6. Add typed route loaders:
+7. Add typed route loaders:
    ```tsx
-   export async function loadDevicesRoute(tenantId: string): Promise<{ printers: Printer[], agents: Agent[], jobs: Job[], error: string | null }>
-   export async function loadJobsRoute(tenantId: string): Promise<{ jobs: Job[], printers: Printer[], agents: Agent[], error: string | null }>
-   export async function loadAgentsRoute(tenantId: string, commandId: string | null): Promise<{ agents: Agent[], printers: Printer[], command: Command | null, commandData: CommandData | null, error: string | null }>
-   export async function loadUsersRoute(tenantId: string): Promise<{ users: User[], identities: UserIdentity[], joinLinks: JoinLink[], adminError: string | null }>
-   export async function loadSettingsRoute(tenantId: string): Promise<{ tenantTokens: TenantToken[], agents: Agent[], printers: Printer[], auditEvents: AuditEvent[], adminError: string | null }>
+   export async function loadDevicesRoute(
+     tenantId: string,
+   ): Promise<{
+     printers: Printer[];
+     agents: Agent[];
+     jobs: Job[];
+     error: string | null;
+   }>;
+   export async function loadJobsRoute(
+     tenantId: string,
+   ): Promise<{
+     jobs: Job[];
+     printers: Printer[];
+     agents: Agent[];
+     error: string | null;
+   }>;
+   export async function loadAgentsRoute(
+     tenantId: string,
+     commandId: string | null,
+   ): Promise<{
+     agents: Agent[];
+     printers: Printer[];
+     command: Command | null;
+     commandData: CommandData | null;
+     error: string | null;
+   }>;
+   export async function loadUsersRoute(
+     tenantId: string,
+   ): Promise<{
+     users: User[];
+     identities: UserIdentity[];
+     joinLinks: JoinLink[];
+     adminError: string | null;
+   }>;
+   export async function loadSettingsRoute(
+     tenantId: string,
+   ): Promise<{
+     tenantTokens: TenantToken[];
+     agents: Agent[];
+     printers: Printer[];
+     auditEvents: AuditEvent[];
+     adminError: string | null;
+   }>;
    ```
+
    - All loaders use `cache: 'no-store'` for real-time data
    - All loaders return typed result shapes with error field
    - `loadAgentsRoute` includes `parseCommandResult` for command data (returns `CommandResultData`)
    - `loadUsersRoute` and `loadSettingsRoute` use `adminError` for administrative endpoint failures (users, join-links, tenant-tokens, audit-events)
    - Membership roles fetched separately via `getMembershipForRequest()` (not in loaders)
-7. Export functions for use in route pages
-8. Preserve existing behavior: onboarding, redirects, membership roles
+8. Export functions for use in route pages
+9. Preserve existing behavior: onboarding, redirects, membership roles
 
 **Validation**:
+
 - `npm --prefix frontend run typecheck`
 - `npm --prefix frontend run lint`
 
 ### Task 2: Create Dashboard Shell Provider and Layout
 
 **Files**:
+
 - `frontend/app/dashboard-shell-provider.tsx` (new)
 - `frontend/app/dashboard-shell-layout.tsx` (new)
 
 **Actions**:
+
 1. Create `DashboardShellProvider` client component that:
    - Props: `initialTenants: Tenant[]`, `initialAuth: AuthMetadata`, `sidebarDefaultOpen: boolean`, `apiUrl: string`
    - Owns shell state, event subscriptions, navigation
@@ -136,30 +188,33 @@ Implement route-level loading states, component code splitting, and React Server
    - Absent or invalid tenant parameter selects first effective tenant (R1.10)
 
 **Validation**:
+
 - `npm --prefix frontend run typecheck`
 - `npm --prefix frontend run lint`
 
 ### Task 3: Create Route Registrar and Consumer
 
 **Files**:
+
 - `frontend/app/dashboard-route-registrar.tsx` (new)
 - `frontend/app/dashboard-route-consumer.tsx` (new)
 
 **Actions**:
+
 1. Create `DashboardRouteRegistrar` client component that:
    - Consumes `DashboardShellContext`
    - Calls `registerRouteData` on mount with `RouteRegistrationInput` payload:
      ```tsx
      type RouteRegistrationInput = {
-       view: DashboardView
-       tenant: Tenant | null
-       command: string | null
-       status: string | null
-       errors: string[]
-       actionStatus: string | null
-       initialPrinters: Printer[]
-       initialJobs: Job[]
-     }
+       view: DashboardView;
+       tenant: Tenant | null;
+       command: string | null;
+       status: string | null;
+       errors: string[];
+       actionStatus: string | null;
+       initialPrinters: Printer[];
+       initialJobs: Job[];
+     };
      ```
    - Receives UUID token from `registerRouteData` (provider generates token, returns string)
    - Calls `unregisterRouteData(token)` on unmount
@@ -179,26 +234,64 @@ Implement route-level loading states, component code splitting, and React Server
    - Does NOT render `DashboardRouteRegistrar` (route pages render registrar as sibling, single registration owner)
    - Type definitions:
      ```tsx
-     type RouteData = 
-       | { view: 'devices', printers: Printer[], agents: Agent[], jobs: Job[], error: string | null }
-       | { view: 'jobs', jobs: Job[], printers: Printer[], agents: Agent[], membership: { role: string | null, error: string | null }, error: string | null }
-       | { view: 'agents', agents: Agent[], printers: Printer[], command: Command | null, commandData: CommandResultData | null, membership: { role: string | null, error: string | null }, error: string | null }
-       | { view: 'users', users: User[], identities: UserIdentity[], joinLinks: JoinLink[], membership: { role: string | null, error: string | null }, adminError: string | null }
-       | { view: 'settings', tenantTokens: TenantToken[], agents: Agent[], printers: Printer[], auditEvents: AuditEvent[], membership: { role: string | null, error: string | null }, adminError: string | null }
+     type RouteData =
+       | {
+           view: "devices";
+           printers: Printer[];
+           agents: Agent[];
+           jobs: Job[];
+           error: string | null;
+         }
+       | {
+           view: "jobs";
+           jobs: Job[];
+           printers: Printer[];
+           agents: Agent[];
+           membership: { role: string | null; error: string | null };
+           error: string | null;
+         }
+       | {
+           view: "agents";
+           agents: Agent[];
+           printers: Printer[];
+           command: Command | null;
+           commandData: CommandResultData | null;
+           membership: { role: string | null; error: string | null };
+           error: string | null;
+         }
+       | {
+           view: "users";
+           users: User[];
+           identities: UserIdentity[];
+           joinLinks: JoinLink[];
+           membership: { role: string | null; error: string | null };
+           adminError: string | null;
+         }
+       | {
+           view: "settings";
+           tenantTokens: TenantToken[];
+           agents: Agent[];
+           printers: Printer[];
+           auditEvents: AuditEvent[];
+           membership: { role: string | null; error: string | null };
+           adminError: string | null;
+         };
      type RscSlots = {
-       settingsStaticPanels?: ReactNode
-       tenantSettingsStatic?: ReactNode
-       usersStaticPanels?: ReactNode
-     }
+       settingsStaticPanels?: ReactNode;
+       tenantSettingsStatic?: ReactNode;
+       usersStaticPanels?: ReactNode;
+     };
      ```
 
 **Validation**:
+
 - `npm --prefix frontend run typecheck`
 - `npm --prefix frontend run lint`
 
 ### Task 4: Create RSC Static Panels
 
 **Files**:
+
 - `frontend/app/settings-static-panels.tsx` (new)
 - `frontend/app/tenant-settings-static.tsx` (new)
 - `frontend/app/users-static-panels.tsx` (new)
@@ -206,6 +299,7 @@ Implement route-level loading states, component code splitting, and React Server
 - `frontend/app/dashboard-admin-views.tsx` (modified)
 
 **Actions**:
+
 1. Create `SettingsStaticPanels` RSC component that:
    - Props: `languageSwitcher: ReactNode`, `themeSwitcher: ReactNode`
    - Renders: `LanguageSettingsPanel` and `ThemeSettingsPanel` static layout (section headers, descriptions)
@@ -229,6 +323,7 @@ Implement route-level loading states, component code splitting, and React Server
 6. Update `UsersView` in `dashboard-admin-views.tsx` to accept `usersStaticPanels` prop, render it when provided
 
 **Validation**:
+
 - `npm --prefix frontend run typecheck`
 - `npm --prefix frontend run lint`
 - `npm --prefix frontend run test -- --run app/dashboard-shell.test.tsx`
@@ -236,27 +331,33 @@ Implement route-level loading states, component code splitting, and React Server
 ### Task 5: Verify Sidebar Navigation
 
 **Files**:
+
 - `frontend/components/app-sidebar.tsx` (no changes required)
 
 **Actions**:
+
 1. Verify `frontend/components/app-sidebar.tsx` already uses `prefetch={false}` and tenant-preserving helpers (no changes required)
 
 **Validation**:
+
 - Manual review
 
 ### Task 6: Extract DiagnosticsSection for Code Splitting
 
 **Files**:
+
 - `frontend/app/diagnostics-section.tsx` (new)
 - `frontend/app/diagnostics-panel.tsx` (modified)
 - `frontend/app/dashboard-view-content.tsx` (modified)
 
 **Actions**:
+
 1. Create `frontend/app/diagnostics-section.tsx` with `DiagnosticsSection` component (extracted from `diagnostics-panel.tsx`)
 2. Modify `diagnostics-panel.tsx` to export only `LinkedAgentsSection`
 3. Modify `dashboard-view-content.tsx` to lazy-load `DiagnosticsSection` via `next/dynamic` with `Skeleton` fallback (SSR enabled, no `ssr: false`)
 
 **Validation**:
+
 - `npm --prefix frontend run typecheck`
 - `npm --prefix frontend run lint`
 - `npm --prefix frontend run test -- --run app/dashboard-view-content.test.tsx`
@@ -264,12 +365,15 @@ Implement route-level loading states, component code splitting, and React Server
 ### Task 7: Lazy-Load DispatchForm
 
 **Files**:
+
 - `frontend/app/dispatch-dialog.tsx` (modified)
 
 **Actions**:
+
 1. Modify `dispatch-dialog.tsx` to lazy-load `DispatchForm` via `next/dynamic` with `Skeleton` fallback (SSR enabled, no `ssr: false`)
 
 **Validation**:
+
 - `npm --prefix frontend run typecheck`
 - `npm --prefix frontend run lint`
 - `npm --prefix frontend run test -- --run app/dispatch-form.test.tsx`
@@ -277,6 +381,7 @@ Implement route-level loading states, component code splitting, and React Server
 ### Task 8: Create Route Group Layout Structure
 
 **Files**:
+
 - `frontend/app/(dashboard)/layout.tsx` (new)
 - `frontend/app/(dashboard)/devices/page.tsx` (new)
 - `frontend/app/(dashboard)/jobs/page.tsx` (new)
@@ -296,6 +401,7 @@ Implement route-level loading states, component code splitting, and React Server
 - `frontend/app/dashboard-view-content.tsx` (modified)
 
 **Actions**:
+
 1. Create `frontend/app/(dashboard)/layout.tsx` server component that:
    - Fetches tenants via `getTenantsForRequest()` (skip if external onboarding or `APP_TENANT_ID` configured), identity via `getIdentityForRequest()` (skip if auth.provider === 'none'), auth via `getAuthForRequest()`
    - Calls `resolveEffectiveTenants(tenants, identity, configuredTenantId, auth.provider)` to get effective tenant list (handles external onboarding, APP_TENANT_ID, auth-disabled mode)
@@ -333,6 +439,7 @@ Implement route-level loading states, component code splitting, and React Server
 5. Delete old route pages: `frontend/app/devices/page.tsx`, `frontend/app/jobs/page.tsx`, etc. (atomic cutover, same task)
 
 **Validation**:
+
 - `npm --prefix frontend run typecheck`
 - `npm --prefix frontend run lint`
 - `npm --prefix frontend run build`
@@ -340,12 +447,14 @@ Implement route-level loading states, component code splitting, and React Server
 ### Task 9: Remove Old Static Paths and Runtime
 
 **Files**:
+
 - `frontend/app/dashboard-admin-views.tsx` (modified)
 - `frontend/app/dashboard-runtime-sections.tsx` (modified)
 - `frontend/app/dashboard-runtime.tsx` (deleted)
 - `frontend/app/dashboard-data.tsx` (modified)
 
 **Actions**:
+
 1. Remove `LanguageSettingsPanel` and `ThemeSettingsPanel` static layout from `dashboard-admin-views.tsx`
 2. Remove `TenantSettings` static layout from `dashboard-runtime-sections.tsx`
 3. Remove `UsersAdminSection` static layout from `dashboard-admin-views.tsx`
@@ -354,6 +463,7 @@ Implement route-level loading states, component code splitting, and React Server
 6. Verify root route (`frontend/app/page.tsx`) still works (no changes required, redirects preserved)
 
 **Validation**:
+
 - `npm --prefix frontend run typecheck`
 - `npm --prefix frontend run lint`
 - `npm --prefix frontend run test -- --run app/dashboard-shell.test.tsx app/dashboard-view-content.test.tsx`
@@ -361,9 +471,11 @@ Implement route-level loading states, component code splitting, and React Server
 ### Task 10: Add Revalidation to Server Actions
 
 **Files**:
+
 - `frontend/app/admin-actions.ts` (modified)
 
 **Actions**:
+
 1. Inventory all tenant-creation, membership-change, and tenant-deletion actions:
    - Tenant creation: `createTenantFromExternal` in `admin-actions.ts`
    - Membership changes: `acceptJoinLink` in `admin-actions.ts`, `updateTenantUserRole` in `admin-actions.ts`
@@ -374,12 +486,14 @@ Implement route-level loading states, component code splitting, and React Server
    - `updateTenantUserRole` in `admin-actions.ts` (membership updates)
 
 **Validation**:
+
 - `npm --prefix frontend run typecheck`
 - `npm --prefix frontend run lint`
 
 ### Task 11: Add Automated Tests
 
 **Files**:
+
 - `frontend/app/dashboard-runtime.test.tsx` (deleted or updated)
 - `frontend/app/dashboard-shell.test.tsx` (modified)
 - `frontend/app/dashboard-route-registrar.test.tsx` (new)
@@ -393,6 +507,7 @@ Implement route-level loading states, component code splitting, and React Server
 - `frontend/app/tenant-settings-live-printers.test.tsx` (new)
 
 **Actions**:
+
 - Tests are added alongside their corresponding implementation tasks (not as a separate phase):
   - Task 1: Memoization tests (getTenantsForRequest, getIdentityForRequest, getMembershipForRequest, getAuthForRequest), selected-tenant edge cases (string arrays, invalid IDs, empty tenants, external tenants, APP_TENANT_ID), auth-disabled authorization behavior, auth-disabled mode (no identity request), external-auth mode (no general tenants endpoint), configured-tenant behavior in `dashboard-data.test.tsx`
   - Task 2: Obsolete subscription updates (updates from cancelled subscriptions are ignored) in `dashboard-shell-provider.test.tsx`
@@ -404,11 +519,13 @@ Implement route-level loading states, component code splitting, and React Server
   - Task 10: Successful-versus-failed revalidation calls in `admin-actions.test.tsx`
 
 **Validation**:
+
 - `npm --prefix frontend run test`
 
 ### Task 12: Measure Fast 3G Loading-Skeleton Timing
 
 **Actions**:
+
 1. Run production build: `npm --prefix frontend run build`
 2. Start production server: `npm --prefix frontend run start`
 3. Navigate from `/settings` to `/devices` with Fast 3G throttling (400ms RTT, 400kbps) 5 times
@@ -416,25 +533,30 @@ Implement route-level loading states, component code splitting, and React Server
 5. Record timing in `docs/roadmap.md`
 
 **Validation**:
+
 - Timing recorded
 
 ### Task 13: Update Documentation
 
 **Files**:
+
 - `docs/roadmap.md` (modified)
 - `DESIGN.md` (modified)
 
 **Actions**:
+
 1. Run bundle comparison: `./scripts/measure-bundle.sh --compare`
 2. Update `docs/roadmap.md` with completion status, actual bundle size reduction (from comparison), and Fast 3G loading-skeleton timing (median of 5 runs, from Task 12)
 3. Update `DESIGN.md` with loading state pattern, provider/context architecture, route-data ownership model
 
 **Validation**:
+
 - Manual review
 
 ### Task 14: Final Verification
 
 **Actions**:
+
 1. Run all tests: `npm --prefix frontend run test`
 2. Run typecheck: `npm --prefix frontend run typecheck`
 3. Run lint: `npm --prefix frontend run lint`
@@ -461,18 +583,21 @@ Implement route-level loading states, component code splitting, and React Server
    - Fast 3G loading-skeleton timing (5 runs, median, document in `docs/roadmap.md`)
 
 **Conditional checks** (non-gating, require external services, record "not run" with prerequisites when unavailable):
+
 - Verify auth flow works (login, logout) with `APP_AUTH_PROVIDER=logto` (requires Logto endpoint and credentials)
 - Verify device creation works (requires Hub API and printer)
 - Verify job dispatch works (requires Hub API, printer, and 3MF file)
 - Verify settings update works (requires Hub API and tenant admin role)
 
 **Backward-compatibility checks** (non-gating, no external services required):
+
 - Verify locale switching works (en/zh)
 - Verify theme persistence (set theme, reload, verify theme persists)
 - Verify language persistence (set language, reload, verify language persists)
 - Verify sidebar-state persistence (toggle sidebar, reload, verify sidebar state persists)
 
 **Validation**:
+
 - All commands pass
 - Manual checklist complete (mandatory + conditional with "not run" records)
 

@@ -2,7 +2,11 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { computeAttention, computeHealth, topSeverityOf } from "../../dashboard-attention";
+import {
+  computeAttention,
+  computeHealth,
+  topSeverityOf,
+} from "../../dashboard-attention";
 import { DashboardViewContent } from "../../dashboard-view-content";
 import { QueryErrorBoundary } from "../../query-error-boundary";
 import { agentsRouteQuery } from "../../route-data";
@@ -36,51 +40,63 @@ export function AgentsPageClient({
   if (error) {
     return (
       <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-        Failed to load agents: {error instanceof Error ? error.message : "Unknown error"}
+        Failed to load agents:{" "}
+        {error instanceof Error ? error.message : "Unknown error"}
       </div>
     );
   }
 
-  const { agents, printers, command, commandData, discoveryCommand, discoveryData } =
-    data ?? {
-      agents: [],
-      printers: [],
-      command: null,
-      commandData: null,
-      discoveryCommand: null,
-      discoveryData: null,
-    };
+  const {
+    agents,
+    printers,
+    command,
+    commandData,
+    discoveryCommand,
+    discoveryData,
+  } = data ?? {
+    agents: [],
+    printers: [],
+    command: null,
+    commandData: null,
+    discoveryCommand: null,
+    discoveryData: null,
+  };
 
   const health = computeHealth(agents, printers, []);
-  const attentionItems = computeAttention({ agents, printers, jobs: [], nowMs: 0 });
+  const attentionItems = computeAttention({
+    agents,
+    printers,
+    jobs: [],
+    nowMs: 0,
+  });
 
   return (
     <QueryErrorBoundary>
       <DashboardViewContent
-      view="agents"
-      auth={auth}
-      selectedTenant={selectedTenant}
-      printers={printers}
-      agents={agents}
-      jobs={[]}
-      health={health}
-      attentionItems={attentionItems}
-      topSeverity={topSeverityOf(attentionItems)}
-      liveState="idle"
-      lastEventAt={null}
-      fleetEmpty={printers.length === 0}
-      nowMs={0}
-      selectedCommand={command}
-      commandData={commandData}
-      discoveryCommand={discoveryCommand}
-      discoveryData={discoveryData}
-      notifications={[]}
-      tenantTokens={[]}
-      auditEvents={[]}
-      adminUnavailable={adminUnavailable}
-      adminLoadError={false}
-      canManageJobs={true}
-    />
+        view="agents"
+        auth={auth}
+        selectedTenant={selectedTenant}
+        printers={printers}
+        agents={agents}
+        jobs={[]}
+        health={health}
+        attentionItems={attentionItems}
+        topSeverity={topSeverityOf(attentionItems)}
+        liveState="idle"
+        lastEventAt={null}
+        fleetEmpty={printers.length === 0}
+        nowMs={0}
+        selectedCommand={command}
+        commandData={commandData}
+        discoveryCommand={discoveryCommand}
+        discoveryData={discoveryData}
+        notifications={[]}
+        tenantTokens={[]}
+        auditEvents={[]}
+        adminUnavailable={adminUnavailable}
+        adminLoadError={false}
+        canManageJobs={true}
+      />
     </QueryErrorBoundary>
   );
 }

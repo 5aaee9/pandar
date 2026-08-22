@@ -63,7 +63,10 @@ describe("prepareDispatchSubmission", () => {
     data.set("auto_offset_cali", "0");
     data.set("timelapse", "false");
     data.set("ams_mapping", "[4,0]");
-    data.set("ams_mapping2", '[{"ams_id":1,"slot_id":0},{"ams_id":0,"slot_id":0}]');
+    data.set(
+      "ams_mapping2",
+      '[{"ams_id":1,"slot_id":0},{"ams_id":0,"slot_id":0}]',
+    );
     data.set(
       "ams_mapping_info",
       '[{"ams":4,"filamentType":"PLA","nozzleId":1}]',
@@ -85,9 +88,7 @@ describe("prepareDispatchSubmission", () => {
         { ams_id: 1, slot_id: 0 },
         { ams_id: 0, slot_id: 0 },
       ],
-      ams_mapping_info: [
-        { ams: 4, filamentType: "PLA", nozzleId: 1 },
-      ],
+      ams_mapping_info: [{ ams: 4, filamentType: "PLA", nozzleId: 1 }],
     });
   });
 

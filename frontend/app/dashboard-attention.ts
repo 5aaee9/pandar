@@ -5,7 +5,12 @@ export type Severity = "critical" | "warning" | "success" | "info";
 export const OFFLINE_PRINTER_STATUSES = new Set(["offline", "problem"]);
 const ONLINE_AGENT_STATUSES = new Set(["online"]);
 const HEALTHY_AGENT_STATUSES = new Set(["online", "connecting"]);
-const TERMINAL_JOB_STATUSES = new Set(["stalled", "completed", "failed", "cancelled"]);
+const TERMINAL_JOB_STATUSES = new Set([
+  "stalled",
+  "completed",
+  "failed",
+  "cancelled",
+]);
 
 const SEVERITY_RANK: Record<Severity, number> = {
   critical: 0,

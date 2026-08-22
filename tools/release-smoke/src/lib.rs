@@ -8,8 +8,8 @@ mod process;
 use std::time::Duration;
 
 use abi::{
-    SOURCE_MEDIA_EXPORTS, SOURCE_SENTINEL, expected_symbols, inspect_exports, inspect_source_exports,
-    validate_exact_exports, validate_source_exports,
+    SOURCE_MEDIA_EXPORTS, SOURCE_SENTINEL, expected_symbols, inspect_exports,
+    inspect_source_exports, validate_exact_exports, validate_source_exports,
 };
 use archive::{sha256_hex, stage_archive, validate_checksum};
 use args::parse_args;

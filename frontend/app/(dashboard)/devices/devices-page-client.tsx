@@ -38,40 +38,45 @@ export function DevicesPageClient({
   if (error) {
     return (
       <div className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-        Failed to load devices: {error instanceof Error ? error.message : "Unknown error"}
+        Failed to load devices:{" "}
+        {error instanceof Error ? error.message : "Unknown error"}
       </div>
     );
   }
 
-  const { printers, agents, jobs } = data ?? { printers: [], agents: [], jobs: [] };
+  const { printers, agents, jobs } = data ?? {
+    printers: [],
+    agents: [],
+    jobs: [],
+  };
   const health = computeHealth(agents, printers, jobs);
   const attentionItems = computeAttention({ agents, printers, jobs, nowMs });
 
   return (
     <QueryErrorBoundary>
       <DashboardViewContent
-      view="devices"
-      auth={auth}
-      selectedTenant={selectedTenant}
-      printers={printers}
-      agents={agents}
-      jobs={jobs}
-      health={health}
-      attentionItems={attentionItems}
-      topSeverity={topSeverityOf(attentionItems)}
-      liveState="idle"
-      lastEventAt={null}
-      fleetEmpty={printers.length === 0}
-      nowMs={nowMs}
-      selectedCommand={null}
-      commandData={null}
-      notifications={[]}
-      tenantTokens={[]}
-      auditEvents={[]}
-      adminUnavailable={false}
-      adminLoadError={false}
-      canManageJobs={true}
-    />
+        view="devices"
+        auth={auth}
+        selectedTenant={selectedTenant}
+        printers={printers}
+        agents={agents}
+        jobs={jobs}
+        health={health}
+        attentionItems={attentionItems}
+        topSeverity={topSeverityOf(attentionItems)}
+        liveState="idle"
+        lastEventAt={null}
+        fleetEmpty={printers.length === 0}
+        nowMs={nowMs}
+        selectedCommand={null}
+        commandData={null}
+        notifications={[]}
+        tenantTokens={[]}
+        auditEvents={[]}
+        adminUnavailable={false}
+        adminLoadError={false}
+        canManageJobs={true}
+      />
     </QueryErrorBoundary>
   );
 }

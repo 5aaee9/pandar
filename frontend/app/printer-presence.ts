@@ -1,1 +1,1 @@
-export const PRINTER_ONLINE_AGE_MS = 180_000
+export const PRINTER_ONLINE_AGE_MS = 180_000;

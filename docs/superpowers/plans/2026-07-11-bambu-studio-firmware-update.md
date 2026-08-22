@@ -101,6 +101,7 @@
 ### Task 1: Add the Shared Typed Model and Additive Protobuf Contract
 
 **Files:**
+
 - Create: `crates/pandar-core/src/firmware.rs`
 - Modify: `crates/pandar-core/src/lib.rs`
 - Create: `crates/pandar-core/src/tests/firmware.rs`
@@ -109,6 +110,7 @@
 - Create/modify focused generated-wire tests in Agent and Hub protocol test modules
 
 **Interfaces:**
+
 - Produces `PrinterFirmwareModule`, `PrinterFirmwareVersion`, `AmsFirmwareDescriptor`, `AmsFirmwareSwitchState`, `PrinterUpgradeState`, `PrinterFirmwareState`, `FirmwareCatalogEntry`, `FirmwareCatalogTarget`, `FirmwareControlMetadata`, `FirmwareCommand`, `FirmwareAcknowledgement`, and `FirmwareTerminalOutcome`.
 - Produces `AgentCapability::FirmwareControl = 5`.
 - Produces exact Agent event oneof tags: modules snapshot `18`, status snapshot `19`, invalidated `20`, prepared `21`, and published `22`.
@@ -256,6 +258,7 @@ Append test counts, RED reason, changed paths, reviewer verdict, and LOC evidenc
 **Files:** Agent observation/cache/reducer files listed above, plus focused tests.
 
 **Interfaces:**
+
 - Produces `FirmwareObservationCache` keyed by serial, with a per-serial transition lease, current
   endpoint, generation, module revision, status revision, ordered typed modules/status/cfg, and
   reservation state. The raw reconstructed `Value` is never shared.
@@ -362,6 +365,7 @@ approval, fix via RED→GREEN, then update progress without committing.
 **Files:** Hub migrations/entity/repository/inbound event/batch response files listed above.
 
 **Interfaces:**
+
 - Produces `PrinterFirmwareUpdateOutcome::{Applied, Stale}` and repository operations:
 
 ```rust
@@ -469,6 +473,7 @@ preservation, and batch exposure. Fix and re-review; do not commit.
 **Files:** Agent firmware command/session/runtime/transport files listed above.
 
 **Interfaces:**
+
 - Produces the independent Agent interface:
 
 ```rust
@@ -615,6 +620,7 @@ redaction, and capability timing. Fix via failing tests and re-review; do not co
 **Files:** Hub command repository, sessions firmware registry, firmware control service, gRPC inbound/result files, redaction, and focused tests.
 
 **Interfaces:**
+
 - Produces URL-free durable `firmware_refresh` and `firmware_control` command records.
 - Produces a process-local `PendingFirmwareCommands` registry owned once by `SessionRegistry` (not
   embedded in `AgentSession`), keyed by command id and opaque one-use prepared token, storing exact
@@ -727,6 +733,7 @@ one-active-Hub behavior, and URL absence. Fix/re-review; do not commit.
 **Files:** Hub plugin firmware route/types, routes wiring, batch response integration tests.
 
 **Interfaces:**
+
 - `GET /api/v1/plugin/printers/{printer_id}/firmware`: current typed state and typed catalog; catalog initially empty.
 - `POST /api/v1/plugin/printers/{printer_id}/firmware/refresh`: `{ "sequence_id": "..." }` and a fresh typed version result.
 - `POST /api/v1/plugin/printers/{printer_id}/firmware/prepare`: URL-free `FirmwareControlMetadata`; returns `{command_id, prepared_token}`.
@@ -793,6 +800,7 @@ semantics, batch parity, and URL-free output. Fix/re-review; do not commit.
 **Files:** Rust network-plugin firmware modules, printer refresh/status/http integrations, focused tests.
 
 **Interfaces:**
+
 - Produces `StudioFirmwareParse::{NotFirmware, Firmware(StudioFirmwareCommand), InvalidFirmware}`
   through a presence-preserving top-level `upgrade` wrapper.
 - Produces a per-plugin-generation `FirmwarePluginSession` containing Hub credentials, typed cache,
@@ -878,7 +886,7 @@ Test exact upgrade-state keys and presence, progress string, cfg, complete AMS s
 ordered modules, and catalog envelope:
 
 ```json
-{"devices":[{"dev_id":"SERIAL","firmware":[],"ams":[]}]}
+{ "devices": [{ "dev_id": "SERIAL", "firmware": [], "ams": [] }] }
 ```
 
 Inject typed real main and AMS-target records and prove only records with non-empty real URLs become
@@ -976,6 +984,7 @@ callback ownership/deadlines, URL redaction, and module sizes. Fix/re-review; do
 **Files:** `shim.cpp`, compiled probe fixture/harness/mock Hub firmware modules.
 
 **Interfaces:**
+
 - Consumes Task 7 flat FFI only.
 - Produces no firmware policy in C++; only opaque handle/token ownership, string transfer, callback
   selection, mutex/thread lifecycle, and ABI return-code mapping.

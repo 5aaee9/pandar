@@ -49,10 +49,7 @@ export async function retryDispatchJobs(formData: FormData) {
   );
   const allOk = responses.every((response) => response.ok);
   redirect(
-    statusUrlForForm(
-      formData,
-      allOk ? "retry_queued" : "retry_partial",
-    ),
+    statusUrlForForm(formData, allOk ? "retry_queued" : "retry_partial"),
   );
 }
 

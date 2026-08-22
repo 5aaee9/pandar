@@ -16,15 +16,39 @@ Restore Bambu Studio's native printer-error dialog and its native recovery actio
 - Resume and Ignore first run `check_resume_condition()` and emit nothing when `jobState_ > 1`; Stop has no such guard (`DeviceManager.cpp:1436-1472,1593-1600`). When emitted on the normal FDM path, those methods serialize one of these payloads and call the selected Cloud/LAN ABI with QoS 1 and flag `0`:
 
 ```json
-{"print":{"command":"resume","err":"83918929","job_id":"<job-id>","param":"reserve","sequence_id":"<sequence>"}}
+{
+  "print": {
+    "command": "resume",
+    "err": "83918929",
+    "job_id": "<job-id>",
+    "param": "reserve",
+    "sequence_id": "<sequence>"
+  }
+}
 ```
 
 ```json
-{"print":{"command":"ignore","err":"83918929","job_id":"<job-id>","param":"reserve","sequence_id":"<sequence>"}}
+{
+  "print": {
+    "command": "ignore",
+    "err": "83918929",
+    "job_id": "<job-id>",
+    "param": "reserve",
+    "sequence_id": "<sequence>"
+  }
+}
 ```
 
 ```json
-{"print":{"command":"stop","err":"83918929","job_id":"<job-id>","param":"reserve","sequence_id":"<sequence>"}}
+{
+  "print": {
+    "command": "stop",
+    "err": "83918929",
+    "job_id": "<job-id>",
+    "param": "reserve",
+    "sequence_id": "<sequence>"
+  }
+}
 ```
 
 `reference/bambuddy` corroborates the direct-LAN topic `device/<serial>/request` and QoS 1 (`mqtt_bridge.py:729-746`, `bambu_mqtt.py:4096-4107`). Its Paho call omits `retain`, which uses Paho's default `false`; Pandar must set retain disabled explicitly and preserve the same fields and types across its remote bridge.
@@ -201,12 +225,12 @@ The A→B reassignment window is exercised with a `cfg(test)`-only ownership pau
 
 The current Hub has only a link-printer-specific subset of the required cleanup behavior. The implementation must modify or add each path explicitly:
 
-| Session path | Current behavior | Required behavior |
-| --- | --- | --- |
-| Inbound stream closes | `grpc/inbound.rs::fail_pending_live_commands_on_close` drains pending commands only after `remove_if_current`, with hard-coded `printer link` wording. | Generalize it into the transition-serialized shared helper and use the native-operation close reason. |
-| Forced local/cluster close | `SessionRegistry::close_local_agent` removes the session, sends close, returns `()`, and discards the pending map; the cluster `AgentClose` handler calls the same method. | Return the exact removed `AgentSession` and make both call sites clean it. |
-| Stale-session expiry | `SessionRegistry::expire_stale` returns exact removed sessions after marking Agents offline, but its caller currently counts and discards them. | The runtime caller cleans every returned session before reporting the count. |
-| Replacement registration | `SessionRegistry::register` returns the exact previous session, but gRPC setup ignores the return value. | Clean that previous session before starting the replacement pumps. |
+| Session path               | Current behavior                                                                                                                                                           | Required behavior                                                                                     |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Inbound stream closes      | `grpc/inbound.rs::fail_pending_live_commands_on_close` drains pending commands only after `remove_if_current`, with hard-coded `printer link` wording.                     | Generalize it into the transition-serialized shared helper and use the native-operation close reason. |
+| Forced local/cluster close | `SessionRegistry::close_local_agent` removes the session, sends close, returns `()`, and discards the pending map; the cluster `AgentClose` handler calls the same method. | Return the exact removed `AgentSession` and make both call sites clean it.                            |
+| Stale-session expiry       | `SessionRegistry::expire_stale` returns exact removed sessions after marking Agents offline, but its caller currently counts and discards them.                            | The runtime caller cleans every returned session before reporting the count.                          |
+| Replacement registration   | `SessionRegistry::register` returns the exact previous session, but gRPC setup ignores the return value.                                                                   | Clean that previous session before starting the replacement pumps.                                    |
 
 All four paths are implementation work for this change; none may rely on the old inbound helper's link-printer-only wording or behavior.
 
@@ -293,14 +317,14 @@ The dedicated `live_printer_operation_hub_command` maps the typed `HandlePrintEr
 
 The typed Studio parser classifies a message before mapping it:
 
-| Studio `print` message | Classification | Result |
-| --- | --- | --- |
-| `command:"ignore"` with any fields | Native candidate | Require the complete valid native shape; otherwise reject. |
-| `command:"resume"` or `"stop"` with `err` present | Native candidate | Require the complete valid native shape; otherwise reject. |
-| `command:"resume"` or `"stop"` with any present `param` other than the empty string | Native candidate | Require the complete valid native shape; only the exact string `"reserve"` can pass validation. |
+| Studio `print` message                                                               | Classification   | Result                                                                                                                                                         |
+| ------------------------------------------------------------------------------------ | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `command:"ignore"` with any fields                                                   | Native candidate | Require the complete valid native shape; otherwise reject.                                                                                                     |
+| `command:"resume"` or `"stop"` with `err` present                                    | Native candidate | Require the complete valid native shape; otherwise reject.                                                                                                     |
+| `command:"resume"` or `"stop"` with any present `param` other than the empty string  | Native candidate | Require the complete valid native shape; only the exact string `"reserve"` can pass validation.                                                                |
 | `command:"resume"` or `"stop"` without `err` and with `param` absent or exactly `""` | Ordinary control | Preserve the existing ordinary Resume/Stop mapping; `job_id` or `sequence_id` alone does not make it native because Studio's normal Stop may include a job ID. |
-| Other recognized Studio controls | Ordinary control | Preserve existing mapping. |
-| Everything else | Unsupported | Do not create a Hub request. |
+| Other recognized Studio controls                                                     | Ordinary control | Preserve existing mapping.                                                                                                                                     |
+| Everything else                                                                      | Unsupported      | Do not create a Hub request.                                                                                                                                   |
 
 A missing or non-string `print.command` is unsupported because no native candidate can be identified. “Partial native candidate” means a command-known Resume/Ignore/Stop candidate from the rows above with one of its remaining required native fields missing or invalid. In particular, `job_id` or `sequence_id` alone—even when present with a wrong type—does not turn an otherwise ordinary Resume/Stop into a native candidate.
 
@@ -316,11 +340,11 @@ Partial candidates never fall back to an ordinary Resume or Stop. `ignore` is ac
 
 ### Cloud and local ABI behavior
 
-| Parser outcome | `bambu_network_send_message` | `bambu_network_send_message_to_printer` |
-| --- | --- | --- |
-| Valid operation | Submit exactly one Hub request; propagate submit success/failure. | Submit exactly one Hub request; propagate submit success/failure. |
-| Unsupported noncandidate | Preserve current cloud behavior: return `BAMBU_NETWORK_SUCCESS`, do not change `last_error`, and make no Hub request. | Preserve current local behavior: set `last_error` to `{"error":"unsupported_printer_operation"}`, return `BAMBU_NETWORK_ERR_INVALID_RESULT`, and make no Hub request. |
-| Invalid native candidate | Set `last_error` to `{"error":"unsupported_printer_operation"}`, return `BAMBU_NETWORK_ERR_INVALID_RESULT`, and make no Hub request. | Set the same `last_error`, return the same error, and make no Hub request. |
+| Parser outcome           | `bambu_network_send_message`                                                                                                         | `bambu_network_send_message_to_printer`                                                                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Valid operation          | Submit exactly one Hub request; propagate submit success/failure.                                                                    | Submit exactly one Hub request; propagate submit success/failure.                                                                                                     |
+| Unsupported noncandidate | Preserve current cloud behavior: return `BAMBU_NETWORK_SUCCESS`, do not change `last_error`, and make no Hub request.                | Preserve current local behavior: set `last_error` to `{"error":"unsupported_printer_operation"}`, return `BAMBU_NETWORK_ERR_INVALID_RESULT`, and make no Hub request. |
+| Invalid native candidate | Set `last_error` to `{"error":"unsupported_printer_operation"}`, return `BAMBU_NETWORK_ERR_INVALID_RESULT`, and make no Hub request. | Set the same `last_error`, return the same error, and make no Hub request.                                                                                            |
 
 The shim only branches on the typed Rust parser outcome and adapts it to the ABI return code. Candidate recognition, validation, and operation construction remain in Rust.
 

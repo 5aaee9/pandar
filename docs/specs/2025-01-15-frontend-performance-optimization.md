@@ -26,6 +26,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 **R1.2** Loading states must use the existing `Skeleton` component from `@/components/ui/skeleton`.
 
 **R1.3** Loading states must match the layout structure of the actual page content area (not the shared shell). Specifically:
+
 - Route-local section header with title/subtitle skeleton (not a duplicate shell header)
 - Content area with 2-4 skeleton cards/rows
 - No sidebar skeleton (sidebar is part of shared shell)
@@ -33,6 +34,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 **R1.4** Loading states must respect reduced motion preferences (no pulse animation when `prefers-reduced-motion` is set).
 
 **R1.5** Loading states must replace only route content, not the shared dashboard shell (sidebar, header). This requires restructuring:
+
 - **Shell ownership**: `DashboardRuntime` currently owns the shell (sidebar, header). Split into:
   - `DashboardShellProvider` (new client component, owns shell state, event subscriptions, navigation)
   - `DashboardShellLayout` (new client component, renders shell UI, receives `children` as route content)
@@ -49,6 +51,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 - **Implicit Suspense**: `loading.tsx` files provide implicit Suspense boundaries (no additional explicit `<Suspense>` required)
 
 **R1.6** Data ownership:
+
 - Shared data (tenants, auth): Fetched by `(dashboard)/layout.tsx` server component
 - Selected tenant: Determined by each route page from `searchParams` (not layout)
 - Route data: Fetched by each route page server component:
@@ -61,10 +64,12 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 - Membership roles: Route pages access membership roles via request-memoized server utility `getMembershipForRequest(tenantId)` (new function in `dashboard-data.tsx`) that caches membership per request (no duplicate API calls)
 
 **R1.7** Error ownership:
+
 - Shared data errors: Handled by `(dashboard)/layout.tsx` (redirect to login or show error)
 - Route data errors: Handled by each route page (pass error state as props to client components)
 
 **R1.8** Loading state visibility: When navigating between routes with prefetch disabled, loading state appearance is measured as a target (observational, not gating). Measurement procedure:
+
 - Open Chrome DevTools Performance tab
 - Start recording
 - Navigate from `/settings` to `/devices` via `<Link prefetch={false}>` sidebar link
@@ -76,6 +81,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 - Target: 500ms (document actual timing in `docs/roadmap.md`)
 
 **R1.9** Shell event ownership: `DashboardShellProvider` owns event subscriptions and exposes client context:
+
 - `DashboardShellProvider` provides `DashboardShellContext` (new client context) with `registerRouteData` and `unregisterRouteData` methods
 - Route pages render `DashboardRouteRegistrar` (new client component) that consumes `DashboardShellContext` and calls `registerRouteData` on mount, `unregisterRouteData` on unmount
 - When route changes, `DashboardRouteRegistrar` unregisters old data, registers new data, `DashboardShellProvider` re-initializes subscriptions
@@ -86,18 +92,19 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 - Registration payload: `RouteRegistration` shape:
   ```tsx
   type RouteRegistration = {
-    token: string // UUID from DashboardShellProvider
-    view: DashboardView
-    tenant: Tenant | null
-    command: string | null
-    status: string | null
-    errors: string[]
-    actionStatus: string | null
-    initialPrinters: Printer[]
-    initialJobs: Job[]
-  }
+    token: string; // UUID from DashboardShellProvider
+    view: DashboardView;
+    tenant: Tenant | null;
+    command: string | null;
+    status: string | null;
+    errors: string[];
+    actionStatus: string | null;
+    initialPrinters: Printer[];
+    initialJobs: Job[];
+  };
   ```
 - Example:
+
   ```tsx
   // (dashboard)/layout.tsx (server component)
   <DashboardShellProvider>
@@ -122,6 +129,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
   ```
 
 **R1.10** Selected tenant resolution: Route pages determine selected tenant as follows:
+
 - Read `searchParams.tenant` (string or string[])
 - Call `getTenantsForRequest()` to get tenant list (request-memoized, no duplicate API calls)
 - If valid tenant ID exists in tenants list, use it
@@ -132,6 +140,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 - Preserve existing behavior: Handle `APP_TENANT_ID` (synthesize tenant), external provider tenants (from `/api/v1/me`), onboarding (empty tenants), redirects, and membership roles
 
 **R1.11** Live route state ownership: `DashboardShellProvider` owns live route state (printers, jobs) and exposes it via `DashboardShellContext`:
+
 - `DashboardShellContext` provides `livePrinters: Printer[]`, `liveJobs: Job[]`, `liveView: DashboardView | null`, `liveTenantId: string | null`
 - Route pages render `DashboardRouteConsumer` (new client component) that consumes `DashboardShellContext` and passes live data to route views
 - Initial render: Route views receive `initialPrinters` and `initialJobs` props from server, render immediately (no empty state)
@@ -141,6 +150,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 - Registration identity: `DashboardRouteRegistrar` registers with unique key `${view}:${selectedTenant?.id ?? 'none'}`, `DashboardShellProvider` tracks active registration, clears on unregister or new registration
 
 **R1.12** Tenant navigation: Shell tenant selector updates `searchParams` via `useRouter`:
+
 - Tenant selector in `DashboardShellLayout` calls `router.push(`/devices?tenant=${tenantId}`)` (or current view)
 - Sidebar links preserve tenant via `<Link href={`/devices?tenant=${tenantId}`}>` (or current tenant)
 - Route data refetches: When `searchParams.tenant` changes, route page re-renders, fetches new data, `DashboardRouteRegistrar` registers new data
@@ -148,12 +158,14 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 **R1.13** Settings data freshness: `TenantSettingsStatic` receives server-fetched printer props for initial render. Live printer updates are preserved via client island: `TenantSettingsStatic` accepts `livePrintersSlot: ReactNode` prop that renders a client component (`TenantSettingsLivePrinters`) which consumes `DashboardShellContext` for real-time printer updates. This preserves existing live-update behavior while keeping static layout in RSC.
 
 **R1.14** Route-dependent shell state: `DashboardShellProvider` receives route-dependent state (view, selected tenant, command, status, errors, action status) via `DashboardRouteRegistrar` registration:
+
 - First render: Shell renders with client-safe initial state (view from `usePathname()`, tenant from `useSearchParams()`), route content renders immediately
 - Post-hydration: `DashboardRouteRegistrar` registers route data, `DashboardShellProvider` updates shell state
 - Context contract: `DashboardShellContext` provides `shellView: DashboardView`, `shellTenant: Tenant | null`, `shellCommand: string | null`, `shellStatus: string | null`, `shellErrors: string[]`, `shellActionStatus: string | null`
 - Client-safe initial state: `DashboardShellProvider` uses `usePathname()` and `useSearchParams()` to determine initial state on client (no server parsing, no hydration mismatch)
 
 **R1.15** Tenant/auth freshness: Layout tenant list is synchronized with page tenant list via server revalidation:
+
 - Mutation owners: Server actions in `frontend/app/actions.ts` (tenant creation, membership updates) and `frontend/app/admin-actions.ts` (tenant deletion) call `revalidatePath('/(dashboard)', 'layout')` after mutations
 - Refresh triggers: Tenant creation, membership role change, tenant deletion
 - Loop prevention: Revalidation only triggers on explicit mutations (not on route data changes)
@@ -174,6 +186,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 **R2.5** SSR must remain enabled for lazy-loaded components (no `ssr: false`).
 
 **R2.6** Exclusion from initial route chunk must be verified via network request analysis:
+
 - **Hard load**: Open Chrome DevTools Network tab, navigate directly to `/jobs` or `/agents` (not client navigation):
   - `/jobs`: Verify `DispatchForm` chunk is NOT requested on initial page load (only when dialog opens)
   - `/agents`: Verify `DiagnosticsSection` chunk is requested during initial page load (hydration chunk, not entry chunk)
@@ -186,6 +199,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 ### R3: React Server Components Migration
 
 **R3.1** **Settings page static sections**: Extract the following into separate server component files:
+
 - `SettingsStaticPanels` in `frontend/app/settings-static-panels.tsx` (new file, RSC):
   - Props: `languageSwitcher: ReactNode`, `themeSwitcher: ReactNode`
   - Renders: `LanguageSettingsPanel` and `ThemeSettingsPanel` static layout (section headers, descriptions)
@@ -199,6 +213,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
   - Note: Live printer updates preserved via client island (`TenantSettingsLivePrinters`)
 
 **R3.2** **Users page static sections**: Extract the following into separate server component files:
+
 - `UsersStaticPanels` in `frontend/app/users-static-panels.tsx` (new file, RSC):
   - Props: `usersTable: ReactNode`, `emptyState: ReactNode`
   - Renders: `UsersAdminSection` static layout (section header, empty state)
@@ -213,6 +228,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
     ```
 
 **R3.3** **Composition**: RSC components are rendered by route page server components (`(dashboard)/settings/page.tsx`, `(dashboard)/users/page.tsx`) and passed as props to client components (`DashboardViewContent`). Example:
+
 ```tsx
 // (dashboard)/settings/page.tsx (server component)
 <DashboardViewContent
@@ -236,6 +252,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 ```
 
 **R3.4** **DashboardViewContent slot contract**: `DashboardViewContent` (client component) must accept new props:
+
 - `settingsStaticPanels?: ReactNode` (RSC component for settings page)
 - `tenantSettingsStatic?: ReactNode` (RSC component for settings page)
 - `usersStaticPanels?: ReactNode` (RSC component for users page)
@@ -251,11 +268,13 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 **R3.9** **Data freshness**: Route page server components fetch data with `cache: 'no-store'` to ensure real-time dashboard data (existing pattern).
 
 **R3.10** **RSC verification**: RSC components must be verified as server-only by:
+
 - Absence of `'use client'` directive in the file
 - Manual code review confirming the module is not imported into any client component graph
 - Server-side rendering verification (no hydration errors in console)
 
 **R3.11** **Old static path removal**: Old static client-render paths in `dashboard-admin-views.tsx` must be removed (not just supplemented) to guarantee bundle reduction. Specifically:
+
 - Remove `LanguageSettingsPanel` and `ThemeSettingsPanel` static layout from `dashboard-admin-views.tsx` (moved to `SettingsStaticPanels`)
 - Remove `TenantSettings` static layout from `dashboard-runtime-sections.tsx` (moved to `TenantSettingsStatic`)
 - Remove `UsersAdminSection` static layout from `dashboard-admin-views.tsx` (moved to `UsersStaticPanels`)
@@ -265,6 +284,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 **R4.1** **Goal**: Measure bundle size reduction for `/settings` route after Phase 1 changes.
 
 **R4.2** **Baseline**: Total size of initial JS chunks for `/settings` route after `npm --prefix frontend run build` on implementation branch merge-base, compressed via `gzip -9` per file, summed. Baseline stored in `scripts/bundle-baseline.json` (placeholder values, must be regenerated):
+
 ```json
 {
   "settings": {
@@ -279,6 +299,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 **R4.3** **Target**: Same measurement on feature branch. **No mandatory reduction threshold** (measurement only). Document actual reduction in `docs/roadmap.md`. If reduction is 0% or negative, document reason and defer further optimization to Phase 2.
 
 **R4.4** **Measurement procedure**:
+
 - Script: `scripts/measure-bundle.sh`
 - Two commands:
   - `./scripts/measure-bundle.sh --generate-baseline <commit>`: Creates isolated git worktree at `<commit>`, runs `npm --prefix frontend install && npm --prefix frontend run build` in worktree, measures bundle sizes, writes to `scripts/bundle-baseline.json` in caller's checkout, cleans up worktree
@@ -301,6 +322,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 **R4.6** **CSS bundle**: Must not increase (Tailwind classes must be reused). CSS size measured via `frontend/.next/static/css/` directory scan, compressed via `gzip -9` per file, summed.
 
 **R4.7** **Expected savings source**:
+
 - Code splitting: `DispatchForm` (~50KB) and `DiagnosticsSection` (~30KB) moved to separate chunks
 - RSC migration: Static panels (~20KB) moved to server components
 - Total expected savings: ~100KB (~8% of 1.3MB)
@@ -317,6 +339,7 @@ Pandar's frontend currently ships 35 client components in a single bundle with l
 **R5.4** Persisted settings must be unchanged (theme, language, sidebar state).
 
 **R5.5** All existing functionality must work identically (no feature regressions), verified via:
+
 - All 385 existing tests pass
 - Manual testing of critical flows (login, device creation, job dispatch, settings update) - **non-gating** (requires external services)
 - New tests for `?tenant=` navigation and route-data refresh
@@ -406,6 +429,7 @@ npm --prefix frontend run start
 ## Manual Verification Checklist
 
 **Mandatory checks** (gating):
+
 - [ ] Verify lazy-loaded components load correctly (no broken UI, no console errors)
 - [ ] Verify RSC components render correctly (no hydration errors in console)
 - [ ] Verify keyboard navigation works (Tab, Shift+Tab, Enter, Esc)
@@ -424,10 +448,12 @@ npm --prefix frontend run start
 - [ ] Verify initial shell state on SSR (view from URL path, tenant from `?tenant=` param, no hydration mismatch)
 
 **Observational checks** (non-gating):
+
 - [ ] Navigate from `/settings` to `/devices` with Fast 3G throttling (400ms RTT, 400kbps), verify loading state appears (document actual timing in `docs/roadmap.md`)
 - [ ] Verify locale switching works (en/zh)
 
 **Conditional checks** (non-gating, require external services):
+
 - [ ] Verify auth flow works (login, logout) with `APP_AUTH_PROVIDER=logto` (requires Logto endpoint and credentials)
 - [ ] Verify device creation works (requires Hub API and printer)
 - [ ] Verify job dispatch works (requires Hub API, printer, and 3MF file)

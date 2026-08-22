@@ -39,12 +39,19 @@ export default async function AgentsPage({
     return <div>No tenant selected</div>;
   }
 
-  const membership = auth.provider !== "none"
-    ? await getMembershipForRequest(selectedTenant.id)
-    : { role: null, error: null };
-  const commandId = Array.isArray(params.command) ? params.command[0] : params.command ?? null;
-  const discoveryId = Array.isArray(params.discovery) ? params.discovery[0] : params.discovery ?? null;
-  const adminUnavailable = auth.provider !== "none" && (membership.role !== "tenant_admin" || membership.error !== null);
+  const membership =
+    auth.provider !== "none"
+      ? await getMembershipForRequest(selectedTenant.id)
+      : { role: null, error: null };
+  const commandId = Array.isArray(params.command)
+    ? params.command[0]
+    : (params.command ?? null);
+  const discoveryId = Array.isArray(params.discovery)
+    ? params.discovery[0]
+    : (params.discovery ?? null);
+  const adminUnavailable =
+    auth.provider !== "none" &&
+    (membership.role !== "tenant_admin" || membership.error !== null);
 
   return (
     <AgentsPageClient

@@ -79,6 +79,7 @@
 ### Task 1: Add the Wire Contract and Exact Agent MQTT Path
 
 **Files:**
+
 - Modify: `proto/pandar/agent/v1/agent.proto`
 - Modify: `crates/pandar-agent/src/lib.rs`
 - Modify: `crates/pandar-agent/src/tests.rs`
@@ -92,6 +93,7 @@
 - Modify: `crates/pandar-agent/src/machine/tests.rs`
 
 **Interfaces:**
+
 - Produces: `AgentCapability::GcodeLine`, protobuf `GcodeLineOperation { param: String }`, and `printer_operation::Operation::GcodeLine` at oneof tag 26.
 - Produces: `machine::PrinterOperation::GcodeLine { param: String }`.
 - Produces: `mqtt::GcodeLineCommand { param: String }` whose serializer emits `param` unchanged.
@@ -246,6 +248,7 @@ to `.superpowers/sdd/progress.md`. Do not stage, commit, or push.
 ### Task 2: Add Plugin-only Hub Persistence and HTTP Boundary Behavior
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/repositories/commands/operations.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands/operations/audit.rs`
 - Modify: `crates/pandar-hub/src/repositories/tests/commands.rs`
@@ -257,6 +260,7 @@ to `.superpowers/sdd/progress.md`. Do not stage, commit, or push.
 - Modify: `crates/pandar-hub/src/grpc/commands/conversion.rs` (minimal exhaustive compile fallout)
 
 **Interfaces:**
+
 - Produces: persisted `PrinterOperationKind::GcodeLine { param }` with action `"gcode_line"`.
 - Produces: plugin-only request `{"action":"gcode_line","param":<string>}`.
 - Consumes: no gRPC behavior; Task 3 consumes this persisted operation.
@@ -347,6 +351,7 @@ ledger. Do not stage, commit, or push.
 ### Task 3: Add Hub Protobuf Conversion and Exact-session Agent Capability Gating
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/grpc/commands.rs`
 - Create: `crates/pandar-hub/src/grpc/commands/agent_capabilities.rs`
 - Modify: `crates/pandar-hub/src/grpc/commands/device_features.rs`
@@ -356,6 +361,7 @@ ledger. Do not stage, commit, or push.
 - Create: `crates/pandar-hub/src/grpc/tests/commands/gcode_line.rs`
 
 **Interfaces:**
+
 - Consumes: Task 1 protobuf `GcodeLineOperation` and `AgentCapability::GcodeLine`.
 - Consumes: Task 2 persisted `PrinterOperationKind::GcodeLine { param }` and its minimal exact mapping
   arm required for Hub compilation.
@@ -434,6 +440,7 @@ ledger. Do not stage, commit, or push.
 ### Task 4: Add Semantic-first Plugin Fallback and Compiled Cloud/LAN ABI Coverage
 
 **Files:**
+
 - Modify: `crates/pandar-network-plugin/src/gcode/operation.rs`
 - Modify: `crates/pandar-network-plugin/src/gcode/studio_json.rs`
 - Modify: `crates/pandar-network-plugin/tests/operation_parser.rs`
@@ -444,6 +451,7 @@ ledger. Do not stage, commit, or push.
 - Modify: `crates/pandar-network-plugin/tests/studio_abi_probe/mock_hub/operations.rs`
 
 **Interfaces:**
+
 - Consumes: Task 2 plugin route body `{"action":"gcode_line","param":String}`.
 - Produces: `PrinterOperation::GcodeLine { param }` only for an actual typed Studio wrapper whose
   `gcode_line.param` is not recognized semantically.
@@ -570,12 +578,14 @@ Append RED→GREEN output, compiled ABI evidence, test counts, module LOC, and c
 ### Task 5: Final Reviews, Documentation, Fresh Verification, Commit, and Push
 
 **Files:**
+
 - Modify after final implementation approval: `docs/compatibility/bambu-studio-plugin.md`
 - Modify after final implementation approval: `docs/development.md`
 - Modify after final implementation approval: `docs/roadmap.md`
 - Modify: `.superpowers/sdd/progress.md` (ignored process ledger)
 
 **Interfaces:**
+
 - Consumes: all implemented tasks and their review reports.
 - Produces: reviewed documentation, one verified Conventional Commit, and an exact remote SHA
   readback.

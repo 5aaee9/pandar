@@ -44,6 +44,7 @@
 ### Task 1: Additive Protocol, Agent Capability, and Tolerant Printer-State Parsing
 
 **Files:**
+
 - Modify: `crates/pandar-agent/Cargo.toml`
 - Modify: `proto/pandar/agent/v1/agent.proto`
 - Modify: `crates/pandar-agent/src/machine/mqtt.rs`
@@ -58,6 +59,7 @@
 - Modify initializers found by: `rg -n "AgentHello \{|PrintJobReport \{" crates`
 
 **Interfaces:**
+
 - Produces generated `AgentCapability::{Unspecified, HandlePrintError}` and an Agent hello containing `capabilities: vec![AgentCapability::HandlePrintError as i32]`.
 - Adds `print_error: Option<u32>` and `printer_job_id: Option<String>` to the existing `PrintReportProgress` fields without changing the other fields.
 - Produces protobuf presence pairs `print_error/has_print_error` and `printer_job_id/has_printer_job_id` without changing existing `PrintJobReport.job_id` task-ID semantics.
@@ -249,6 +251,7 @@ Expected: all selected tests pass, explicit zero has `has_print_error == true`, 
 ### Task 2: Persist and Expose Live Numeric Error State on Both Database Backends
 
 **Files:**
+
 - Create: `crates/pandar-hub/migrations/sqlite/20260709010000_printer_print_error.sql`
 - Create: `crates/pandar-hub/migrations/postgres/20260709010000_printer_print_error.sql`
 - Modify: `crates/pandar-hub/src/entities/printers.rs`
@@ -262,6 +265,7 @@ Expected: all selected tests pass, explicit zero has `has_print_error == true`, 
 - Modify: `crates/pandar-hub/src/routes/tests/plugin/live_status.rs`
 
 **Interfaces:**
+
 - Consumes Task 1's `PrintJobReport.print_error/has_print_error` and `printer_job_id/has_printer_job_id`.
 - Adds `print_error: Option<u32>` and `printer_job_id: Option<String>` to the existing `PrinterLiveStatus` and `PrinterLiveStatusPatch` fields, where each patch `Option` means “patch present”.
 - Produces plugin API fields `print_error: Option<u32>` and `job_id: Option<String>` for Task 5.
@@ -374,6 +378,7 @@ Expected: plugin device JSON has optional numeric `print_error` and optional str
 ### Task 3: Serialize and Execute Exact Native Error Actions in the Agent
 
 **Files:**
+
 - Modify: `crates/pandar-agent/src/machine/mqtt/commands.rs`
 - Modify: `crates/pandar-agent/src/machine/mqtt/commands/payload.rs`
 - Create: `crates/pandar-agent/src/machine/mqtt/commands/print_error.rs`
@@ -389,6 +394,7 @@ Expected: plugin device JSON has optional numeric `print_error` and optional str
 - Create: `crates/pandar-agent/src/machine/tests/print_error.rs`
 
 **Interfaces:**
+
 - Consumes Task 1's generated `PrintErrorAction` and `HandlePrintErrorOperation`.
 - Produces Agent domain `PrintErrorAction` and `PrinterOperation::HandlePrintError { error_action, print_error, printer_job_id, sequence_id }`.
 - Produces `BambuMqttCommand::HandlePrintError(HandlePrintErrorCommand)` whose `BambuMqttCommandPayload.sequence_id` is the supplied Studio sequence.
@@ -489,6 +495,7 @@ Expected: all three exact payloads, transport properties, supplied sequence corr
 ### Task 4: Add the Plugin-Only Semantic Operation and Capability/Token-Bound Hub Dispatch
 
 **Files:**
+
 - Modify: `crates/pandar-hub/src/repositories/commands/operations.rs`
 - Create: `crates/pandar-hub/src/repositories/commands/operations/audit.rs`
 - Modify: `crates/pandar-hub/src/repositories/commands/audit.rs`
@@ -531,6 +538,7 @@ Expected: all three exact payloads, transport properties, supplied sequence corr
 - Modify initializers found by: `rg -n "AgentSession \{" crates/pandar-hub/src`
 
 **Interfaces:**
+
 - Produces repository `PrintErrorAction` and `PrinterOperationKind::HandlePrintError { error_action, print_error, printer_job_id, sequence_id }`.
 - Produces `PrinterOperationRequest::into_plugin_operation() -> Result<PluginPrinterOperation, ApiError>` where `PluginPrinterOperation::{Queued, Live}` separates the route behaviors; existing `into_operation()` remains tenant-safe and rejects the new action.
 - Produces `CommandRepository::create_printer_operation_sent_with_audit(tenant_id: TenantId, printer_id: &str, expected_agent_id: AgentId, operation: PrinterOperationKind, actor: AuditActor) -> RepositoryResult<CommandRecord>`.
@@ -546,11 +554,11 @@ Add exact-body tests for `resume`, `ignore`, and `stop`:
 
 ```json
 {
-  "action":"handle_print_error",
-  "error_action":"resume",
-  "print_error":83918929,
-  "printer_job_id":"job-7",
-  "sequence_id":20042
+  "action": "handle_print_error",
+  "error_action": "resume",
+  "print_error": 83918929,
+  "printer_job_id": "job-7",
+  "sequence_id": 20042
 }
 ```
 
@@ -723,6 +731,7 @@ Expected: exact request/payload/audit/protobuf tests pass; tenant route rejectio
 ### Task 5: Emit Native Error State in Synthesized Studio Telemetry
 
 **Files:**
+
 - Modify: `crates/pandar-network-plugin/Cargo.toml`
 - Modify: `crates/pandar-network-plugin/src/studio_status.rs`
 - Modify: `crates/pandar-network-plugin/src/studio_status/input.rs`
@@ -737,6 +746,7 @@ Expected: exact request/payload/audit/protobuf tests pass; tenant route rejectio
 - Create: `crates/pandar-network-plugin/tests/studio_abi_probe/native_print_error.rs`
 
 **Interfaces:**
+
 - Consumes Task 2's plugin JSON `print_error: Option<u32>` and `job_id: Option<String>`.
 - Produces optional typed `print_error` and `job_id` fields in the Rust-generated `print.push_status` telemetry fragment; `shim.cpp` continues to insert that fragment without interpretation.
 - Produces explicit cloud `on_message` versus LAN `on_local_message` status routing, native `on_local_connect` connection signaling, separate local `get_version`/`pushall` responses, and an active-local heartbeat target without changing printer-operation policy.
@@ -810,6 +820,7 @@ Expected: nonzero and zero remain JSON numbers, unknown fields are omitted, job 
 ### Task 6: Parse Native Studio Actions, Preserve ABI Differences, and Log Full Redacted HTTP Causes
 
 **Files:**
+
 - Modify: `crates/pandar-network-plugin/src/gcode/operation.rs`
 - Modify: `crates/pandar-network-plugin/src/gcode/studio_json.rs`
 - Modify: `crates/pandar-network-plugin/src/gcode.rs`
@@ -824,6 +835,7 @@ Expected: nonzero and zero remain JSON numbers, unknown fields are omitted, job 
 - Modify: `crates/pandar-network-plugin/tests/studio_abi_probe/native_print_error.rs`
 
 **Interfaces:**
+
 - Extends plugin `PrinterOperation` with REST variant `HandlePrintError { error_action, print_error, printer_job_id, sequence_id }` and lower-case `PrintErrorAction`.
 - Produces `StudioOperationParse::{Operation(PrinterOperation), Unsupported, InvalidNativeCandidate}` entirely in Rust.
 - Exposes those three outcomes across the flat C ABI using stable integer statuses documented beside the export; C++ only adapts them to the two Studio entrypoint contracts.
@@ -860,11 +872,11 @@ At the flat Rust parser FFI boundary, assert statuses 1 and 2 both return the ex
 
 `get_version` and `pushall` are transport/status requests handled before `StudioOperationParse`; they are not unsupported printer operations in either ABI and retain Task 5's zero-POST success behavior.
 
-| Outcome | Cloud send | Local send |
-| --- | --- | --- |
-| Valid | submit once; propagate result | submit once; propagate result |
-| Unsupported | success; last error unchanged; zero POSTs | invalid result; `unsupported_printer_operation`; zero POSTs |
-| Invalid native | invalid result; `unsupported_printer_operation`; zero POSTs | invalid result; same error; zero POSTs |
+| Outcome        | Cloud send                                                  | Local send                                                  |
+| -------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
+| Valid          | submit once; propagate result                               | submit once; propagate result                               |
+| Unsupported    | success; last error unchanged; zero POSTs                   | invalid result; `unsupported_printer_operation`; zero POSTs |
+| Invalid native | invalid result; `unsupported_printer_operation`; zero POSTs | invalid result; same error; zero POSTs                      |
 
 In the internal `http/tests.rs`, call the writer-injected helper against a refused local connection and assert:
 
@@ -1003,12 +1015,14 @@ Expected: parser matrix, distinct cloud/local outcomes, exact request count, Tas
 ### Task 7: Independent Final Gate, Documentation, Fresh Verification, Commit, Push, and Safe Smoke Test
 
 **Files:**
+
 - Modify only after both final implementation reviewers approve: `docs/roadmap.md`
 - Modify only after both final implementation reviewers approve: `docs/development.md`
 - Verify: `docs/superpowers/specs/2026-07-09-studio-native-print-error-design.md`
 - Verify: `docs/superpowers/plans/2026-07-09-studio-native-print-error.md`
 
 **Interfaces:**
+
 - Consumes all prior task outputs and the SDD final-review verdicts.
 - Produces documentation evidence, one clean Conventional Commit, and a pushed current branch.
 

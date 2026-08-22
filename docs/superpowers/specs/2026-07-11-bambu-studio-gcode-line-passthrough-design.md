@@ -5,7 +5,13 @@
 Bambu Studio sends interactive legacy G-code through one MQTT-style command:
 
 ```json
-{"print":{"command":"gcode_line","param":"<string>","sequence_id":"<string>"}}
+{
+  "print": {
+    "command": "gcode_line",
+    "param": "<string>",
+    "sequence_id": "<string>"
+  }
+}
 ```
 
 `param` is one string. It can contain multiple LF-delimited commands, trailing spaces, comments,
@@ -146,7 +152,13 @@ normalizing it. The typed `GcodeLineCommand` stores the exact `param` string, an
 builder emits:
 
 ```json
-{"print":{"command":"gcode_line","param":"<exact string>","sequence_id":"<new Studio-style ID>"}}
+{
+  "print": {
+    "command": "gcode_line",
+    "param": "<exact string>",
+    "sequence_id": "<new Studio-style ID>"
+  }
+}
 ```
 
 Existing semantic operations that synthesize G-code construct their canonical parameter string

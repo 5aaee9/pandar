@@ -15,7 +15,10 @@ import {
 } from "./action-helpers";
 import { apiHeaders, requireAuth } from "./api-auth";
 import { apiIdSegment } from "./api-path";
-import type { LinkPrinterActionState, MutationActionState } from "./action-state";
+import type {
+  LinkPrinterActionState,
+  MutationActionState,
+} from "./action-state";
 
 export async function discoverPrinters(formData: FormData) {
   await requireAuth();
@@ -131,9 +134,7 @@ export async function deleteAgent(formData: FormData) {
     },
   );
   redirect(
-    agentsStatusUrl(
-      response.ok ? "agent_deleted" : await errorCode(response),
-    ),
+    agentsStatusUrl(response.ok ? "agent_deleted" : await errorCode(response)),
   );
 }
 

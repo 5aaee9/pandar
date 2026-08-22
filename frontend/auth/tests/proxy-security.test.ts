@@ -26,8 +26,8 @@ describe("Auth security proxy", () => {
   it("rejects a malformed Dashboard callback URL", () => {
     process.env.PANDAR_AUTH_DASHBOARD_CALLBACK_URL = "not a valid URL";
 
-    expect(() => proxy(new NextRequest("https://auth.example/sign-in"))).toThrow(
-      "PANDAR_AUTH_DASHBOARD_CALLBACK_URL must be a valid URL",
-    );
+    expect(() =>
+      proxy(new NextRequest("https://auth.example/sign-in")),
+    ).toThrow("PANDAR_AUTH_DASHBOARD_CALLBACK_URL must be a valid URL");
   });
 });

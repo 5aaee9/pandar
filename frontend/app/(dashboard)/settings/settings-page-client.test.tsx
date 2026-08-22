@@ -61,7 +61,9 @@ function stubWorkspaceFetch() {
   return fetchMock;
 }
 
-function expectNoAdminRequests(fetchMock: ReturnType<typeof stubWorkspaceFetch>) {
+function expectNoAdminRequests(
+  fetchMock: ReturnType<typeof stubWorkspaceFetch>,
+) {
   expect(fetchMock.mock.calls.map(([input]) => String(input))).not.toEqual(
     expect.arrayContaining([
       expect.stringContaining("tenant-tokens"),

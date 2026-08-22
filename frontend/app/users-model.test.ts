@@ -67,16 +67,22 @@ describe("inviteStatus", () => {
   });
 
   it("marks links at their use limit as exhausted", () => {
-    expect(
-      inviteStatus(joinLink({ used_count: 2, max_uses: 2 }), NOW),
-    ).toBe("exhausted");
+    expect(inviteStatus(joinLink({ used_count: 2, max_uses: 2 }), NOW)).toBe(
+      "exhausted",
+    );
   });
 });
 
 describe("sortJoinLinks", () => {
   it("sorts active links first, newest first within each group", () => {
-    const oldActive = joinLink({ id: "old-active", created_at: "2026-06-01T00:00:00Z" });
-    const newActive = joinLink({ id: "new-active", created_at: "2026-06-30T00:00:00Z" });
+    const oldActive = joinLink({
+      id: "old-active",
+      created_at: "2026-06-01T00:00:00Z",
+    });
+    const newActive = joinLink({
+      id: "new-active",
+      created_at: "2026-06-30T00:00:00Z",
+    });
     const expired = joinLink({
       id: "expired",
       expires_at: "2026-06-01T00:00:00Z",
@@ -84,7 +90,9 @@ describe("sortJoinLinks", () => {
     });
 
     expect(
-      sortJoinLinks([oldActive, expired, newActive], NOW).map((link) => link.id),
+      sortJoinLinks([oldActive, expired, newActive], NOW).map(
+        (link) => link.id,
+      ),
     ).toEqual(["new-active", "old-active", "expired"]);
   });
 });
@@ -109,19 +117,33 @@ describe("sortUsers", () => {
 
 describe("filterUsers", () => {
   const users = [
-    user({ id: "1", display_name: "Ada Lovelace", email: "ada@example.test", role: "tenant_admin" }),
-    user({ id: "2", display_name: "Grace Hopper", email: "grace@example.test", role: "operator" }),
+    user({
+      id: "1",
+      display_name: "Ada Lovelace",
+      email: "ada@example.test",
+      role: "tenant_admin",
+    }),
+    user({
+      id: "2",
+      display_name: "Grace Hopper",
+      email: "grace@example.test",
+      role: "operator",
+    }),
   ];
 
   it("matches name and email case-insensitively", () => {
-    expect(filterUsers(users, "ADA", "all").map((entry) => entry.id)).toEqual(["1"]);
+    expect(filterUsers(users, "ADA", "all").map((entry) => entry.id)).toEqual([
+      "1",
+    ]);
     expect(
       filterUsers(users, "grace@EXAMPLE", "all").map((entry) => entry.id),
     ).toEqual(["2"]);
   });
 
   it("applies the role filter", () => {
-    expect(filterUsers(users, "", "operator").map((entry) => entry.id)).toEqual(["2"]);
+    expect(filterUsers(users, "", "operator").map((entry) => entry.id)).toEqual(
+      ["2"],
+    );
     expect(filterUsers(users, "ada", "viewer")).toEqual([]);
   });
 
@@ -147,7 +169,12 @@ describe("isLastTenantAdmin", () => {
     const admin = user({ id: "a", role: "tenant_admin" });
     const viewer = user({ id: "v", role: "viewer" });
     expect(isLastTenantAdmin(admin, [admin, viewer])).toBe(true);
-    expect(isLastTenantAdmin(admin, [admin, user({ id: "b", role: "tenant_admin" })])).toBe(false);
+    expect(
+      isLastTenantAdmin(admin, [
+        admin,
+        user({ id: "b", role: "tenant_admin" }),
+      ]),
+    ).toBe(false);
     expect(isLastTenantAdmin(viewer, [viewer])).toBe(false);
   });
 });

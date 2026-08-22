@@ -10,12 +10,12 @@ Release `v0.1.4` is published at <https://github.com/ProjectPandar/pandar/releas
 
 Select the archive that matches the operator host OS and CPU architecture:
 
-| Host                 | Target label    | Archive                                                                            |
-| -------------------- | --------------- | ---------------------------------------------------------------------------------- |
-| Linux x86_64/amd64   | `linux-amd64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-linux-amd64.tar.gz`     |
-| macOS x86_64/amd64   | `macos-amd64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-macos-amd64.tar.gz`     |
-| macOS Apple Silicon  | `macos-arm64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-macos-arm64.tar.gz`     |
-| Windows x86_64/amd64 | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-windows-amd64.tar.gz`   |
+| Host                 | Target label    | Archive                                                                          |
+| -------------------- | --------------- | -------------------------------------------------------------------------------- |
+| Linux x86_64/amd64   | `linux-amd64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-linux-amd64.tar.gz`   |
+| macOS x86_64/amd64   | `macos-amd64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-macos-amd64.tar.gz`   |
+| macOS Apple Silicon  | `macos-arm64`   | `pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-macos-arm64.tar.gz`   |
+| Windows x86_64/amd64 | `windows-amd64` | `pandar-release-<tag-or-sanitized-ref>-studio-<abi-series>-windows-amd64.tar.gz` |
 
 The immutable `v0.1.0` release predates macOS desktop archives. The current tag workflow additionally
 publishes macOS amd64 and arm64 archives. Both use an Apple Silicon runner: arm64 executes natively,
@@ -211,8 +211,8 @@ Use root-owned runtime `EnvironmentFile` paths outside `/nix/store` for every Ni
 Every supported Studio ABI series requires the network plugin and BambuSource companion before agent
 creation. Use the platform files from the archive matching the installed ABI series:
 
-| OS      | Network plugin                   | BambuSource companion          | Current validation                    |
-| ------- | -------------------------------- | ------------------------------ | ------------------------------------- |
+| OS      | Network plugin                   | BambuSource companion          | Current validation                   |
+| ------- | -------------------------------- | ------------------------------ | ------------------------------------ |
 | Linux   | `libpandar_network_plugin.so`    | `libpandar_bambu_source.so`    | next tagged archive remains untested |
 | Windows | `pandar_network_plugin.dll`      | `pandar_bambu_source.dll`      | next tagged archive remains untested |
 | macOS   | `libpandar_network_plugin.dylib` | `libpandar_bambu_source.dylib` | local arm64 validated; untagged      |
@@ -424,14 +424,14 @@ Historical final13 PostgreSQL 16.14 harness `0c292295-f9ab-459b-89c2-ea74f2c9ff5
 `7e04ae355f7bca3fb409bbc700b5c8f160194c0d2f9ec82df823c859566a2db7`; source read-only and
 cleanup checks passed.
 
-| Target label    | Current operator status | Current ABI-series evidence                                                                                              | Next action                                                                                   |
-| --------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| `linux-amd64`   | `untested`              | No current six-series tagged package or real Studio run exists; final16 is historical Public Beta evidence only.        | Run the tag workflow and exact Studio checklist for each supported ABI series.                 |
-| `windows-amd64` | `untested`              | The ABI-series hook/package contract is configured, but no current native package or real Studio run exists.            | Run the native MSVC release job and exact Studio checklist for each supported ABI series.      |
-| `linux-arm64`   | `untested`              | No current three-file native candidate exists.                                                                          | Do not publish a Studio compatibility claim.                                                  |
-| `windows-arm64` | `untested`              | No current three-file native candidate exists.                                                                          | Do not publish a Studio compatibility claim.                                                  |
-| `macos-amd64`   | `untested`              | The Apple Silicon/Rosetta release job is configured but has not run; no matching real Studio evidence exists.           | Run the tag workflow and exact Studio checklist under Rosetta.                                |
-| `macos-arm64`   | `in_progress`           | Local native package/ABI/release-smoke and exact-version module load passed; no tagged artifact or authenticated session exists. | Run the tag workflow and authenticated checklist before claiming full compatibility.          |
+| Target label    | Current operator status | Current ABI-series evidence                                                                                                      | Next action                                                                               |
+| --------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `linux-amd64`   | `untested`              | No current six-series tagged package or real Studio run exists; final16 is historical Public Beta evidence only.                 | Run the tag workflow and exact Studio checklist for each supported ABI series.            |
+| `windows-amd64` | `untested`              | The ABI-series hook/package contract is configured, but no current native package or real Studio run exists.                     | Run the native MSVC release job and exact Studio checklist for each supported ABI series. |
+| `linux-arm64`   | `untested`              | No current three-file native candidate exists.                                                                                   | Do not publish a Studio compatibility claim.                                              |
+| `windows-arm64` | `untested`              | No current three-file native candidate exists.                                                                                   | Do not publish a Studio compatibility claim.                                              |
+| `macos-amd64`   | `untested`              | The Apple Silicon/Rosetta release job is configured but has not run; no matching real Studio evidence exists.                    | Run the tag workflow and exact Studio checklist under Rosetta.                            |
+| `macos-arm64`   | `in_progress`           | Local native package/ABI/release-smoke and exact-version module load passed; no tagged artifact or authenticated session exists. | Run the tag workflow and authenticated checklist before claiming full compatibility.      |
 
 ## Operations Runbook
 

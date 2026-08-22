@@ -96,10 +96,7 @@ export function countByRole(
   return counts;
 }
 
-export function isLastTenantAdmin(
-  user: User,
-  users: readonly User[],
-): boolean {
+export function isLastTenantAdmin(user: User, users: readonly User[]): boolean {
   return (
     user.role === "tenant_admin" &&
     users.filter((candidate) => candidate.role === "tenant_admin").length <= 1

@@ -18,8 +18,7 @@ assert.deepEqual(
   {
     ok: true,
     token: validToken,
-    target:
-      "/plugin-sign-in?redirect_url=http://localhost:13618/callback",
+    target: "/plugin-sign-in?redirect_url=http://localhost:13618/callback",
     status: 303,
   },
 );
