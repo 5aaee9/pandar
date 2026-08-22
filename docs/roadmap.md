@@ -16,7 +16,7 @@
 
 ## Completed
 
-- Restored the Nix `pandar-nextest` quality check on main. The personal-preset synchronization work added a new pinned-source contract test binary that requires the gitignored `reference/BambuStudio` checkout, which does not exist in the Nix build sandbox; the check's nextest filter now excludes it alongside the two existing pinned contract binaries, and the check builds green again.
+- Restored the Checks workflow on main. The personal-preset synchronization work added a new pinned-source contract test binary that requires the gitignored `reference/BambuStudio` checkout, which does not exist in the Nix build sandbox; the check's nextest filter now excludes it alongside the two existing pinned contract binaries. A newly published RUSTSEC-2026-0258 advisory against `h2 0.4.15` broke the Rust security audit job; the lockfile-only bump to patched `h2 0.4.16` clears it.
 
 - Deepened Agent Machine report interpretation behind one consuming, pure interface. Each decoded Bambu MQTT message now produces one owned operational result containing print progress, Machine snapshot, material patch JSON, feature observations, normalized nozzle reducer input, typed authority/classification facts, and section diagnostics; refresh, forwarding, feature probing, and tests consume that result while transport, presence, firmware sessions, reducers, and wire projection remain outside. Invalid optional sections retain their error causes without discarding valid sibling outputs. Next: consolidate the duplicated Machine snapshot-to-Agent-event projection as a separate focused refactor.
 
